@@ -2,7 +2,7 @@
  * Human-facing `/cost` command over the session usage log. Folds each
  * `assistant/message` usage record against the latest `request/header` model
  * route and the deployment price table from Config.
- * @module @jianxx/dsh-cc-command-cost
+ * @module @dsh-cc/command-cost
  */
 
 import type { Context } from '@deepseek-ai/cordis'

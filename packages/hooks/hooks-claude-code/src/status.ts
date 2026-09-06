@@ -2,7 +2,7 @@
  * The `/doctor`-facing load report for the hooks-claude-code bridge. Built once
  * in {@link ../index!apply | apply} and stored on the plugin's own context as
  * `hookBridgeStatus` (instance-scoped, no module-level singleton).
- * @module @jianxx/dsh-cc-hooks-claude-code/status
+ * @module @dsh-cc/hooks-claude-code/status
  */
 
 import { resolve } from 'node:path'

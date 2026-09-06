@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-session-cwd
+# @dsh-cc/session-cwd
 
 Session-scoped working directory for DeepSeek Harness CC — the WS1 + WS2
 foundation of the [worktree-session-isolation design](../../../docs/plans/worktree-session-isolation.md).

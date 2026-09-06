@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-settings-cascade
+# @dsh-cc/settings-cascade
 
 [English](README.md) | 中文
 

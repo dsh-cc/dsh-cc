@@ -3,7 +3,7 @@
  * opening, active-task text capping, window-title sanitizing, and the
  * double-press quit window.
  * Deliberately a leaf — must not import root.ts.
- * @module @jianxx/dsh-cc-tui/components/root-utils
+ * @module @dsh-cc/tui/components/root-utils
  */
 
 import { spawn } from 'node:child_process'

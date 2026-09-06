@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-skill-loader
+# @dsh-cc/skill-loader
 
 [English](README.md) | 中文
 

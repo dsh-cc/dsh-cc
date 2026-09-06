@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-settings-migrations
+# @dsh-cc/settings-migrations
 
 [English](README.md) | 中文
 
@@ -11,7 +11,7 @@
 ## 机制
 
 ```ts
-import { defineMigration, runMigrations, readMigrationState } from '@jianxx/dsh-cc-settings-migrations'
+import { defineMigration, runMigrations, readMigrationState } from '@dsh-cc/settings-migrations'
 
 defineMigration({
   version: 1,
@@ -61,7 +61,7 @@ await ctx.plugin(SettingsMigrations, { dshHome, autoRunOnMount: true })
 ## 安装 / 注册
 
 ```ts
-import * as SettingsMigrations from '@jianxx/dsh-cc-settings-migrations'
+import * as SettingsMigrations from '@dsh-cc/settings-migrations'
 await ctx.plugin(SettingsMigrations)
 ```
 

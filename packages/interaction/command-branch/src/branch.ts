@@ -2,7 +2,7 @@
  * Pure `/branch` rendering helpers: fork-success and fork-failure formatting.
  * Session forking happens in the command handler via the session store; these
  * functions only shape the result, so they are unit-testable without cordis.
- * @module @jianxx/dsh-cc-command-branch/branch
+ * @module @dsh-cc/command-branch/branch
  */
 
 /**

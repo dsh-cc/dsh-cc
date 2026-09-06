@@ -4,7 +4,7 @@
  * `summarize()` hook folds into the summarizer input as an extra user
  * message. Everything else (selection, retention, durability) stays the
  * proven upstream replay.
- * @module @jianxx/dsh-cc-compaction-basic-cc
+ * @module @dsh-cc/compaction-basic-cc
  */
 
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'

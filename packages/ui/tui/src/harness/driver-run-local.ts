@@ -7,7 +7,7 @@
  * and is read through getters / by-reference holders — never a stale snapshot —
  * because createDriver rebinds `state` on every emit.
  *
- * @module @jianxx/dsh-cc-tui/harness/driver-run-local
+ * @module @dsh-cc/tui/harness/driver-run-local
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'

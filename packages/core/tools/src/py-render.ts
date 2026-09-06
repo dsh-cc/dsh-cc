@@ -5,7 +5,7 @@
  * declarations and `typing` symbols a full render needs. Split out of
  * `py-types.ts` for the line budget; `jsonSchemaToPy` and `renderToolsSdkPy`
  * remain the public entries, re-exported from `py-types.ts`.
- * @module @jianxx/dsh-cc-tools/src/py-render
+ * @module @dsh-cc/tools/src/py-render
  */
 
 import { assertSupportedJsonSchema } from './json-schema.ts'

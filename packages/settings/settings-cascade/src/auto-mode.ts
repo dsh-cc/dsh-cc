@@ -7,7 +7,7 @@
  * cascade registers no root `autoMode` namespace). Exported as a standalone
  * value so the settings cascade and the permission-rules plugin (which
  * hand-mirrors the shape) share one definition of the section.
- * @module @jianxx/dsh-cc-settings-cascade/auto-mode
+ * @module @dsh-cc/settings-cascade/auto-mode
  */
 
 import z from '@deepseek-ai/schemastery'

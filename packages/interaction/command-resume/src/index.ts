@@ -4,7 +4,7 @@
  * optional `sessionQuery` service mounted by session-query; when that service
  * is absent it reports the seam gracefully. Resume/switching is host-owned —
  * the command only lists and points the user at `dsh --resume <id>`.
- * @module @jianxx/dsh-cc-command-resume
+ * @module @dsh-cc/command-resume
  */
 
 import type { Context } from '@deepseek-ai/cordis'

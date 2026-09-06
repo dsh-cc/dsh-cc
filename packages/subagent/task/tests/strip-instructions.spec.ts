@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import { apply, isAgentInstructions, isDelegated, mountStripWorkspaceInstructions } from '../src/index.ts'
 
 interface FakeInbox {

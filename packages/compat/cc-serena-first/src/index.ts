@@ -26,7 +26,7 @@
  * every assembly, so a mid-session disconnect stops the steering on the next
  * turn. Scope-less assemblies pass through — there is no per-scope keying
  * possible (mirrors `tool-append-order`).
- * @module @jianxx/dsh-cc-serena-first
+ * @module @dsh-cc/serena-first
  */
 
 import type { Context } from '@deepseek-ai/cordis'

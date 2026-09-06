@@ -1,8 +1,8 @@
-# @jianxx/dsh-cc-tool-structured-output
+# @dsh-cc/tool-structured-output
 
 [English](README.md) | 中文
 
-模型侧 `StructuredOutput` 工具：根据调用方提供的 JSON schema 校验模型最终的结构化输出，并原样回显，语义对齐 Claude Code 的 `SyntheticOutputTool`。输入使用 `@jianxx/dsh-cc-tools` 共享的 JSON-schema 子集校验，因此非法值会以与 harness 其余工具参数错误一致的错误语义被拒绝。
+模型侧 `StructuredOutput` 工具：根据调用方提供的 JSON schema 校验模型最终的结构化输出，并原样回显，语义对齐 Claude Code 的 `SyntheticOutputTool`。输入使用 `@dsh-cc/tools` 共享的 JSON-schema 子集校验，因此非法值会以与 harness 其余工具参数错误一致的错误语义被拒绝。
 
 ## 工具
 
@@ -26,9 +26,9 @@
 ## 插件
 
 ```ts
-import * as ToolStructuredOutput from '@jianxx/dsh-cc-tool-structured-output'
+import * as ToolStructuredOutput from '@dsh-cc/tool-structured-output'
 
-await ctx.plugin(ToolRuntime)                        // @jianxx/dsh-cc-tools
+await ctx.plugin(ToolRuntime)                        // @dsh-cc/tools
 await ctx.plugin(ToolStructuredOutput)               // 未声明 schema -> 不注册工具
 await ctx.plugin(ToolStructuredOutput, { schema })   // 声明 schema  -> 注册 StructuredOutput
 ```
@@ -53,15 +53,15 @@ ctx.tools.register(tool)
 ## 语义取舍
 
 - **构造时早期 schema 断言**：在工厂创建阶段即拒绝不支持的子 schema。
-- **共享校验**：通过 `@jianxx/dsh-cc-tools` 使结构化输出的错误与所有其它工具的参数错误保持一致。
+- **共享校验**：通过 `@dsh-cc/tools` 使结构化输出的错误与所有其它工具的参数错误保持一致。
 - **CC 对齐信封**（`data` + `structured_output`）：复现 SyntheticOutputTool 的 `call()` 返回结构。
 - **并发安全**：`StructuredOutput` 可与兄弟调用重叠。
 
 ## 构建顺序
 
-`tool-structured-output` 仅依赖工作区 `@jianxx/dsh-cc-tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-invariants`）。只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
+`tool-structured-output` 仅依赖工作区 `@dsh-cc/tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-invariants`）。只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
 
 ## 已知限制
 
 - CC 仅在非交互会话中启用 `StructuredOutput`（`isSyntheticOutputToolEnabled`）；本工具没有会话模式门控——是否注册完全取决于是否配置了 schema。
-- schema 必须落在强制的 `@jianxx/dsh-cc-tools` 子集内（不支持 `anyOf`、pattern、format、数值边界等），而非 CC 编译所用的完整 Ajv 方言。
+- schema 必须落在强制的 `@dsh-cc/tools` 子集内（不支持 `anyOf`、pattern、format、数值边界等），而非 CC 编译所用的完整 Ajv 方言。

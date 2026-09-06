@@ -25,7 +25,7 @@ Success: a CC CLI session can fetch a public URL; `WebFetch(domain:example.com)`
 1. **Do not edit deepseek-harness.** No patches to `dsh-web`, `dsh-web-fetch-http`, `dsh-tool-web`, or `dsh-bundle-base`. Consume public exports only.
 2. **Do not import unpublished subpaths.** `validateFetchUrl` is **not** re-exported from `@deepseek-ai/dsh-web-fetch-http` (entry exports `HttpFetchProvider`, `LOCAL_FETCH_PROVIDER_ID`, `DEFAULT_USER_AGENT`, `apply`). `files` is `lib/` only — `./src/*` works in a path-link checkout and breaks on npm. Reimplement URL hygiene in dsh-cc.
 3. **`HttpFetchProvider` is constructable** from the package entry. The wrapper `new`s it and does **not** call the upstream `apply()` (that would register a second `id: 'http'`).
-4. **Same-name replacement stays.** `tool-web fetch: false` + `@jianxx/dsh-cc-tool-web-fetch` inside `cc-services`. Do not wrap stock `web_fetch`.
+4. **Same-name replacement stays.** `tool-web fetch: false` + `@dsh-cc/tool-web-fetch` inside `cc-services`. Do not wrap stock `web_fetch`.
 5. **Output schema stays `WebFetchResult`.** `{ url, statusCode, body: { kind: 'html'\|'text', content }, truncated }` so `WebFetchResultView` / session replay keep working.
 6. **Cheap lane is `ccModelRoutes.resolve('haiku')`.** No second alias, no new settings namespace.
 7. **No new `cc-services` isolate keys.** The **six-key** `toEqual` in `packages/preset/cc/tests/composition.spec.ts` (`toolSearch`, `microcompactor`, `ccModelRoutes`, `resumePinStore`, `mcpConnections`, `hookBridgeStatus`) stays. The fetch provider is host-plane (`cc-shell`), not in the isolate group.
@@ -71,13 +71,13 @@ This is a **behavior change** for sessions that already pass `prompt` without ha
 ## Architecture
 
 ```
-model  →  web_fetch({url, prompt?})          @jianxx/dsh-cc-tool-web-fetch
+model  →  web_fetch({url, prompt?})          @dsh-cc/tool-web-fetch
        →  parseFetchArgs                     @deepseek-ai/dsh-tool-web (public)
-       →  tools/pre-execute                  @jianxx/dsh-cc-permission-rules
+       →  tools/pre-execute                  @dsh-cc/permission-rules
             subject = canonicalizeHostname(url)
             WebFetch(domain:…) content rules
        →  ctx.web.fetch({url}, signal)       @deepseek-ai/dsh-web (unmodified)
-            CcHttpFetchProvider.id = 'http'  @jianxx/dsh-cc-web-fetch-http  NEW
+            CcHttpFetchProvider.id = 'http'  @dsh-cc/web-fetch-http  NEW
               gateAndRewrite → WEB_BLOCKED_URL / WEB_INVALID_URL
               inner HttpFetchProvider        @deepseek-ai/dsh-web-fetch-http (unmodified)
        →  no prompt: return seam result
@@ -138,7 +138,7 @@ Session-scoped grants (`SessionAllowlist.matches`) already consult content match
 
 `packages/ui/tui/src/harness/approval-preview.ts` `allowRuleOf`:
 
-- The TUI already depends on `@jianxx/dsh-cc-permission-rules`. Export `canonicalizeHostname` (and `isWebFetchRuleTool` if useful) from `permission-rules/src/index.ts`.
+- The TUI already depends on `@dsh-cc/permission-rules`. Export `canonicalizeHostname` (and `isWebFetchRuleTool` if useful) from `permission-rules/src/index.ts`.
 - If `toolName` is `WebFetch` or `web_fetch` (approval payloads use the CC spelling) and `preview.kind === 'args'`, JSON-parse `preview.json`, read `url`, canonicalize hostname; on success return `ruleString('WebFetch', 'domain:' + hostname)` → `WebFetch(domain:example.com)`.
 - Persist the **exact host**, not `*.host`.
 - If URL/host cannot be parsed, keep today's whole-tool `WebFetch`.
@@ -177,7 +177,7 @@ Key 3 (always) and key 4 (session) both go through `allowRuleOf` (`driver-approv
 
 ### New package
 
-`packages/web/fetch-http` (`@jianxx/dsh-cc-web-fetch-http`). Copy the `tool-sleep` skeleton (plugin + invariant + README pair + `README.i18n.yaml` + tests). Workspace glob is `packages/*/*`, so this path is a package.
+`packages/web/fetch-http` (`@dsh-cc/web-fetch-http`). Copy the `tool-sleep` skeleton (plugin + invariant + README pair + `README.i18n.yaml` + tests). Workspace glob is `packages/*/*`, so this path is a package.
 
 | | |
 |---|---|
@@ -231,7 +231,7 @@ Inner still follows **same-origin** redirects only. Same host ⇒ the literal ga
 | `maxBodyChars` | `100_000` | same as upstream |
 | `timeoutMs` | `20_000` | inner resource backstop; tool budget stays 30s |
 | `maxRedirects` | `3` | same as today's cc-shell test fixture |
-| `userAgent` | `dsh-cc/<version> (+https://github.com/jianxx/dsh-cc)` | product UA, never a browser disguise |
+| `userAgent` | `dsh-cc/<version> (+https://github.com/dsh-cc/dsh-cc)` | product UA, never a browser disguise |
 | `upgradeInsecure` | `true` | public http→https |
 | `blockPrivateNetwork` | `true` | SSRF gate |
 
@@ -243,7 +243,7 @@ Numeric validation mirrors upstream (positive finite caps; `maxRedirects` non-ne
 
 ```yaml
 - id: web-fetch-http-cc
-  name: '@jianxx/dsh-cc-web-fetch-http'
+  name: '@dsh-cc/web-fetch-http'
   config:
     timeoutMs: 20000
     maxResponseBytes: 2000000
@@ -252,7 +252,7 @@ Numeric validation mirrors upstream (positive finite caps; `maxRedirects` non-ne
     blockPrivateNetwork: true
 ```
 
-- Add `@jianxx/dsh-cc-web-fetch-http` as a **runtime `dependencies`** of `@jianxx/dsh-cc-bundle-shell` (the patch names it; a missing runtime dep is the v0.4.1 dangling-link class of bug).
+- Add `@dsh-cc/web-fetch-http` as a **runtime `dependencies`** of `@dsh-cc/bundle-shell` (the patch names it; a missing runtime dep is the v0.4.1 dangling-link class of bug).
 - The new package's `peerDependencies` include `@deepseek-ai/dsh-web-fetch-http`, `@deepseek-ai/dsh-web`, `@deepseek-ai/cordis`, `@deepseek-ai/schemastery`, `@deepseek-ai/dsh-invariants`.
 - `devDependencies` path-link the harness packages the same way `tool-web-fetch` does.
 - Do **not** put this row in `packages/preset/cc/agent.cordis.yml`. The preset comment about "web-fetch-http unshipped" is updated to point at the cc-shell wrapper.
@@ -271,10 +271,10 @@ Transport tests that need a real loopback server set `blockPrivateNetwork: false
 
 Follow `tool-sleep` / `tool-web-fetch` **including the publish manifest**, not just the source layout:
 
-- `package.json` version `0.4.1`; `publishConfig.access: "public"`; `license: "Apache-2.0"`; `repository.url` `git+https://github.com/jianxx/dsh-cc.git` with `directory: "packages/web/fetch-http"`; `files: ["lib"]`; `exports` for `"."`, `"./invariant"`, `"./src/*"`, `"./package.json"` (same shape as tool-sleep). **No `link:` in `dependencies`** (devDeps path-link harness packages; peers are `>=0.1.1-rc.2` / `workspace:^`).
+- `package.json` version `0.4.1`; `publishConfig.access: "public"`; `license: "Apache-2.0"`; `repository.url` `git+https://github.com/dsh-cc/dsh-cc.git` with `directory: "packages/web/fetch-http"`; `files: ["lib"]`; `exports` for `"."`, `"./invariant"`, `"./src/*"`, `"./package.json"` (same shape as tool-sleep). **No `link:` in `dependencies`** (devDeps path-link harness packages; peers are `>=0.1.1-rc.2` / `workspace:^`).
 - `tsconfig.json` (`extends` tsconfig.base, `rootDir: src`, `outDir: lib`)
 - `tsconfig.packages.json` reference
-- `tsconfig.base.json` path: `"@jianxx/dsh-cc-web-fetch-http": ["./packages/web/fetch-http/src/index.ts"]`
+- `tsconfig.base.json` path: `"@dsh-cc/web-fetch-http": ["./packages/web/fetch-http/src/index.ts"]`
 - invariant companion (`./invariant` export) — empty installer, same jscpd-ignore pattern as tool-web-fetch
 - README.md + README.zh.md + README.i18n.yaml; after the pair is consistent, `pnpm run verify-translation-pairing --write packages/web/fetch-http/README.md` (and the same for any other README pair this PR edits)
 - `pnpm install` in the worktree after adding the workspace package (updates the lockfile). Worktree harness `link:` targets resolve via the existing untracked symlink `.claude/worktrees/deepseek-harness` → `github.com/deepseek-harness`; do not invent a second one.
@@ -364,7 +364,7 @@ Add `packages/interaction/command-doctor/tests/collect-web.spec.ts` (or extend a
 
 Edit `docs/claude-code-capabilities.yaml` (authored SoT), then `pnpm docs:parity` in the same commit:
 
-- `engine.web-fetch` deviation: mounted via `@jianxx/dsh-cc-tool-web-fetch`; fetch executor is `@jianxx/dsh-cc-web-fetch-http` wrapping `HttpFetchProvider`; optional prompt hard-fails without haiku; `WebFetch(domain:)` content rules; literal SSRF gate. Residual: no DNS pinning, no Anthropic preflight, no 15‑min cache, no pre-approved docs domains.
+- `engine.web-fetch` deviation: mounted via `@dsh-cc/tool-web-fetch`; fetch executor is `@dsh-cc/web-fetch-http` wrapping `HttpFetchProvider`; optional prompt hard-fails without haiku; `WebFetch(domain:)` content rules; literal SSRF gate. Residual: no DNS pinning, no Anthropic preflight, no 15‑min cache, no pre-approved docs domains.
 - `behavioral` stays **partial** (those residuals).
 - `webfetch-ssrf-allowlist` problem text: CLI now mounts a wrapper; the remaining gap is DNS-pin / per-hop re-validation inside harness `web-fetch-http`. `needed_for` still `engine.web-fetch`.
 

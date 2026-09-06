@@ -19,7 +19,7 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import Tools from '@deepseek-ai/dsh-tools'
 import PlanMode, { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
-import * as commandPermissions from '@jianxx/dsh-cc-command-permissions'
+import * as commandPermissions from '@dsh-cc/command-permissions'
 
 async function boot(): Promise<{
   ctx: Context

@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-mcp-client
+# @dsh-cc/mcp-client
 
 English | [中文](README.zh.md)
 
@@ -10,7 +10,7 @@ One plugin instance per MCP server in `cordis.yml`:
 
 ```yaml
 - id: mcp-github
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
   config:
     serverName: github
     transport: stdio
@@ -20,7 +20,7 @@ One plugin instance per MCP server in `cordis.yml`:
       GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN
 
 - id: mcp-web
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
   config:
     serverName: web
     transport: streamable-http
@@ -29,7 +29,7 @@ One plugin instance per MCP server in `cordis.yml`:
       Authorization: !!js '`Bearer ${process.env.MCP_TOKEN}`'
 
 - id: mcp-feed
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
   config:
     serverName: feed
     transport: sse

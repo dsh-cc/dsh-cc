@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mergeHookOutputs } from '@jianxx/dsh-cc-hook-protocol'
-import type { HookOutput } from '@jianxx/dsh-cc-hook-protocol'
+import { mergeHookOutputs } from '@dsh-cc/hook-protocol'
+import type { HookOutput } from '@dsh-cc/hook-protocol'
 
 function out(over: Partial<HookOutput> = {}): HookOutput {
   return { exitCode: 0, stderr: '', stdout: '', ...over }

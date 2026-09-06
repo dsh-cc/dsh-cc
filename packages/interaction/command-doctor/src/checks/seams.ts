@@ -1,7 +1,7 @@
 /**
  * `seams` compatibility checks for `/doctor`: today's seven seam names,
  * presence-only (absence is expected, so not-mounted is `skip`, not `fail`).
- * @module @jianxx/dsh-cc-command-doctor/checks/seams
+ * @module @dsh-cc/command-doctor/checks/seams
  */
 
 import type { Context } from '@deepseek-ai/cordis'

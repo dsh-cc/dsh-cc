@@ -1,7 +1,7 @@
 /**
  * In-process protocol driver: session/event → UI store, followup/steer/cancel
  * back into the agent. Only this directory imports `@deepseek-ai/*`.
- * @module @jianxx/dsh-cc-tui/harness/driver
+ * @module @dsh-cc/tui/harness/driver
  */
 
 import { randomUUID } from 'node:crypto'

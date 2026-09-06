@@ -524,7 +524,7 @@ covering it via case 7's path if schedulable.
 ## 10. Branch, review, and release
 
 - **Branch:** `feat/collectable-continuable-handle` on the fork
-  `jianxx/deepseek-harness`, based on `b150a551b8` (0.1.1-rc.2 release
+  `dsh-cc/deepseek-harness`, based on `b150a551b8` (0.1.1-rc.2 release
   merge — the checkout's detached HEAD; rebase onto `upstream/main` before
   opening the PR if upstream has moved). PR target: `deepseek-ai/deepseek-harness`
   `main`. Follow the repo's commit convention (`feat(subagent): …`, as in

@@ -3,10 +3,10 @@
  * this module handles only overlay answers, permission cycling, interrupt,
  * and quit. Reads the live driver snapshot so keystrokes never land on a
  * stale closure.
- * @module @jianxx/dsh-cc-tui/input
+ * @module @dsh-cc/tui/input
  */
 
-import { Key, decodeKittyPrintable, matchesKey } from '@jianxx/dsh-cc-pi-tui'
+import { Key, decodeKittyPrintable, matchesKey } from '@dsh-cc/pi-tui'
 import type { ApprovalAnswerKind } from './state/driver-types.ts'
 import type { TuiState } from './store.ts'
 

@@ -2,7 +2,7 @@
  * Pure `/status` folding and rendering: the latest routed model, plus the
  * per-line status summary where absent fields are omitted. No cordis imports,
  * so the fold and formatting are unit-testable in isolation.
- * @module @jianxx/dsh-cc-command-status/status
+ * @module @dsh-cc/command-status/status
  */
 
 import type { SessionEvent } from '@deepseek-ai/dsh-session'

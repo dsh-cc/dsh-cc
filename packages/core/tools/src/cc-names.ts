@@ -6,7 +6,7 @@
  * to `tools.restrict()` fails the whole session because restrict validates
  * names strictly. This module owns the canonical mapping between the two
  * vocabularies so plugins never hand-code the table.
- * @module @jianxx/dsh-cc-tools/src/cc-names
+ * @module @dsh-cc/tools/src/cc-names
  */
 
 /**

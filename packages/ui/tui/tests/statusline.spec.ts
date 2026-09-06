@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { formatModeLine, formatStatusLine, formatTokens } from '@jianxx/dsh-cc-tui/statusline.ts'
+import { formatModeLine, formatStatusLine, formatTokens } from '@dsh-cc/tui/statusline.ts'
 
 describe('formatModeLine', () => {
   it('joins the mode and the shared key hints', () => {

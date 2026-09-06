@@ -3,7 +3,7 @@
  * management.md doc D1/D8a/D8c): the duck-typed write-capable settings seam,
  * the revision-guarded path-op write, and the agent-default-model seed.
  * Split out of provider-command.ts purely for line budget.
- * @module @jianxx/dsh-cc-tui/provider-command-settings
+ * @module @dsh-cc/tui/provider-command-settings
  */
 import { isSettingsConflict } from './harness/approval-preview.ts'
 import { PROVIDER_SETTINGS_NAMESPACE, type SettingsDescribeLike } from './provider-read.ts'

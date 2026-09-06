@@ -1,7 +1,7 @@
-# @jianxx/dsh-cc-tui
+# @dsh-cc/tui
 
 Claude Code-style terminal surface for DeepSeek Harness. Mounted by
-`@jianxx/dsh-cc-bundle-tui` on the **`tui`** profile; new sessions compose the
+`@dsh-cc/bundle-tui` on the **`tui`** profile; new sessions compose the
 **`cc`** agent preset.
 
 This package is a protocol driver: it observes `session/event` and drives
@@ -11,8 +11,8 @@ those stay on `packages/preset/cc`.
 ## Boot
 
 ```sh
-dsh plugin --profile tui add @jianxx/dsh-cc-bundle-permissions \
-  @jianxx/dsh-cc-bundle-shell @jianxx/dsh-cc-bundle-tui
+dsh plugin --profile tui add @dsh-cc/bundle-permissions \
+  @dsh-cc/bundle-shell @dsh-cc/bundle-tui
 dsh --profile tui
 ```
 

@@ -5,7 +5,7 @@
  *
  * Residual: a public hostname that resolves to a private address (DNS
  * rebinding) is NOT detected here; see the package README "Known limits".
- * @module @jianxx/dsh-cc-web-fetch-http/ssrf
+ * @module @dsh-cc/web-fetch-http/ssrf
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'

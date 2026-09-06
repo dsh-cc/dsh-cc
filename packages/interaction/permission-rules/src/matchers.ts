@@ -5,7 +5,7 @@
  *
  * @module
  */
-import { ccToolAliases, type ToolExecution } from '@jianxx/dsh-cc-tools'
+import { ccToolAliases, type ToolExecution } from '@dsh-cc/tools'
 import { canonicalizeHostname } from './domain.ts'
 import { contentMatches } from './parser.ts'
 import type { PermissionRule } from './types.ts'

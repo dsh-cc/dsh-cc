@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createCcTranscriptMirror,
   translateEventsToCcTranscript,
-} from '@jianxx/dsh-cc-tui/harness/statusline-cc-transcript.ts'
+} from '@dsh-cc/tui/harness/statusline-cc-transcript.ts'
 
 /**
  * Slice C — CC-shape transcript mirror: translator purity cases and the

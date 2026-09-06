@@ -1,6 +1,6 @@
 /**
  * Boot wiring: packaged CC preset, TTY lease, driver, pi-tui mount.
- * @module @jianxx/dsh-cc-tui/plugin
+ * @module @dsh-cc/tui/plugin
  */
 
 import type { Context } from '@deepseek-ai/cordis'

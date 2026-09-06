@@ -5,7 +5,7 @@
  * When either side exceeds DIFF_LCS_LINE_CAP lines, computation falls back to
  * the cheaper common prefix/suffix heuristic (a single coarse middle hunk) so
  * pathological inputs stay fast and allocation-light.
- * @module @jianxx/dsh-cc-tui/components/diff-hunks
+ * @module @dsh-cc/tui/components/diff-hunks
  */
 
 /**

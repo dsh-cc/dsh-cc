@@ -2,7 +2,7 @@
  * Version and Node engines helpers for `/doctor`. Reads this package's own
  * manifest (mirroring `/version`) and implements the repo's single engines
  * range without a `semver` dependency.
- * @module @jianxx/dsh-cc-command-doctor/version
+ * @module @dsh-cc/command-doctor/version
  */
 
 import { readFileSync } from 'node:fs'

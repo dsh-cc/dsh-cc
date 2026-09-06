@@ -3,7 +3,7 @@
  * (name/description/type) plus a Markdown body. Binary parsing and the body
  * are deliberately decoupled so recall, the system-prompt section index, and
  * consolidation can each consume only what they need.
- * @module @jianxx/dsh-cc-memory/parser
+ * @module @dsh-cc/memory/parser
  */
 
 import { parseMemoryType, type MemoryFrontmatter, type MemoryType } from './types.ts'

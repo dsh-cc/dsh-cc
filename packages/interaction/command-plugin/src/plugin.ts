@@ -3,7 +3,7 @@
  * rescan-summary formatting. The ccPlugins seam lives in the host composition,
  * so these functions only shape already-loaded data and are unit-testable
  * without mounting the glue.
- * @module @jianxx/dsh-cc-command-plugin/plugin
+ * @module @dsh-cc/command-plugin/plugin
  */
 
 /** One mounted plugin's public summary from the ccPlugins seam. */

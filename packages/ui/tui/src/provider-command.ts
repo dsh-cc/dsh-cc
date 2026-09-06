@@ -4,9 +4,9 @@
  * open/close, the runtime dispatch surface, and live-refresh event wiring.
  * Read paths live in provider-read.ts; the wizard engines in
  * provider-actions.ts; detail/manage/remove in provider-detail.ts.
- * @module @jianxx/dsh-cc-tui/provider-command
+ * @module @dsh-cc/tui/provider-command
  */
-import { Input } from '@jianxx/dsh-cc-pi-tui'
+import { Input } from '@dsh-cc/pi-tui'
 import { MaskedInput } from './components/masked-input.ts'
 import { upsertRow, setProviderOverlay, type TuiState } from './store.ts'
 import {

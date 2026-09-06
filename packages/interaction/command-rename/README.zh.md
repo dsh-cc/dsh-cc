@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-rename
+# @dsh-cc/command-rename
 
 [English](README.md) | 中文
 
@@ -19,7 +19,7 @@
 
 ```yaml
 - id: command-rename
-  name: '@jianxx/dsh-cc-command-rename'
+  name: '@dsh-cc/command-rename'
 ```
 
 ## 模型体验

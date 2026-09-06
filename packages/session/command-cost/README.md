@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-cost
+# @dsh-cc/command-cost
 
 English | [中文](README.zh.md)
 
@@ -18,7 +18,7 @@ All prices live in the plugin `Config` in your `cordis.yml`; nothing is hardcode
 
 ```yaml
 - id: command-cost
-  name: '@jianxx/dsh-cc-command-cost'
+  name: '@dsh-cc/command-cost'
   config:
     modelTable:
       - model: deepseek-chat
@@ -42,7 +42,7 @@ The producer injects `commands`. A custom app mounts their owners plus this plug
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-cost
-  name: '@jianxx/dsh-cc-command-cost'
+  name: '@dsh-cc/command-cost'
 ```
 
 Without a `modelTable`, every model is reported as unpriced — token usage still shows, but no cost estimate does.

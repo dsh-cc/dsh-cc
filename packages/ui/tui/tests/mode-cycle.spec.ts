@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPermissionMode, nextPermissionMode, PERMISSION_CYCLE } from '@jianxx/dsh-cc-tui/mode-cycle.ts'
+import { isPermissionMode, nextPermissionMode, PERMISSION_CYCLE } from '@dsh-cc/tui/mode-cycle.ts'
 
 describe('nextPermissionMode', () => {
   it('cycles the five CC modes in /permissions order', () => {

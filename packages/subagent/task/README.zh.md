@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-subagent-task
+# @dsh-cc/subagent-task
 
 [English](README.md) | 中文
 
@@ -9,7 +9,7 @@
 - 保留的工具名(`subagent`、`workflow`),使被禁用的 harness 行仍可被 restrict;
 - 一个 pre-step 剥离监听器,把 harness `agent-instructions` 的工作区基线(CLAUDE.md / AGENTS.md)从被委派的 Task child 中移除。
 
-`ccModelRoutes` 服务(来自 `@jianxx/dsh-cc-model-aliases`)提供派发时的别名解析器;当其缺席时,每个 child 继承父路由(内置 fallback)。
+`ccModelRoutes` 服务(来自 `@dsh-cc/model-aliases`)提供派发时的别名解析器;当其缺席时,每个 child 继承父路由(内置 fallback)。
 
 ## 是什么
 
@@ -73,7 +73,7 @@ harness 的 `agent-instructions` 插件会在**每个**会话(包括 Task child)
 
 ## 挂载
 
-由 `cc` preset 的 `tool-task` 行(`@jianxx/dsh-cc-subagent-task`)挂载在 `cc-services` 组内,旁边是提供别名解析器的 `cc-model-routes`(`@jianxx/dsh-cc-model-aliases`)。cc preset **禁用** harness 的 `tool-subagent` 与 `tool-subagent-fork` 两行以改用本工具,避免 `subagent_fork` 名被重复注册。
+由 `cc` preset 的 `tool-task` 行(`@dsh-cc/subagent-task`)挂载在 `cc-services` 组内,旁边是提供别名解析器的 `cc-model-routes`(`@dsh-cc/model-aliases`)。cc preset **禁用** harness 的 `tool-subagent` 与 `tool-subagent-fork` 两行以改用本工具,避免 `subagent_fork` 名被重复注册。
 
 ## 已知限制
 

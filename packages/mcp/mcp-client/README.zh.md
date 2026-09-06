@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-mcp-client
+# @dsh-cc/mcp-client
 
 [English](README.md) | 中文
 
@@ -10,7 +10,7 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
 
 ```yaml
 - id: mcp-github
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
   config:
     serverName: github
     transport: stdio
@@ -20,7 +20,7 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
       GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN
 
 - id: mcp-web
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
   config:
     serverName: web
     transport: streamable-http
@@ -29,7 +29,7 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
       Authorization: !!js '`Bearer ${process.env.MCP_TOKEN}`'
 
 - id: mcp-feed
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
   config:
     serverName: feed
     transport: sse

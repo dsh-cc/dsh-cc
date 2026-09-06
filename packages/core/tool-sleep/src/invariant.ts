@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-tool-sleep`.
- * @module @jianxx/dsh-cc-tool-sleep/invariant
+ * Package-owned invariant companion for `@dsh-cc/tool-sleep`.
+ * @module @dsh-cc/tool-sleep/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-tool-sleep'
+const PACKAGE_NAME = '@dsh-cc/tool-sleep'
 
 /** Cordis companion plugin name. */
 export const name = 'tool-sleep-invariant'

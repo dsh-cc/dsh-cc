@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-skills
+# @dsh-cc/command-skills
 
 English | [中文](README.zh.md)
 
@@ -22,7 +22,7 @@ The plugin injects `commands` and `skills`. A custom app mounts the owners plus 
 - id: skills
   name: '@deepseek-ai/dsh-skill'
 - id: command-skills
-  name: '@jianxx/dsh-cc-command-skills'
+  name: '@dsh-cc/command-skills'
 ```
 
 ## Model Experience

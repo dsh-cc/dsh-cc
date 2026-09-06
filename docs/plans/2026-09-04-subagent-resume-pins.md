@@ -119,7 +119,7 @@ runtime-config fields later — see §9).
 
 ## 4. Design
 
-New package `packages/subagent/resume-pins` (`@jianxx/dsh-cc-subagent-resume-pins`)
+New package `packages/subagent/resume-pins` (`@dsh-cc/subagent-resume-pins`)
 with four exports: pin types + `fingerprint` utilities, `PinStore`, `capturePin`
 (used by the Task tool), and a cordis `apply(ctx)` plugin (gate + overlay +
 settings namespace).

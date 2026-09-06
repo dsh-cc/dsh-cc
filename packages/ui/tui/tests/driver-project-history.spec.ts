@@ -3,9 +3,9 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { loadHistory, saveHistory } from '@jianxx/dsh-cc-tui/history.ts'
-import { readProjectSessionIds } from '@jianxx/dsh-cc-tui/project-sessions.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { loadHistory, saveHistory } from '@dsh-cc/tui/history.ts'
+import { readProjectSessionIds } from '@dsh-cc/tui/project-sessions.ts'
 
 /**
  * Per-project composer history: boot buckets history under

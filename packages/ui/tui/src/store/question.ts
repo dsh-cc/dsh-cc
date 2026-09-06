@@ -1,6 +1,6 @@
 /**
  * Ask-user-question reducers: focus/toggle/type navigation over QuestionView.
- * @module @jianxx/dsh-cc-tui/store/question
+ * @module @dsh-cc/tui/store/question
  */
 import type { QuestionView, TuiState } from './views.ts'
 

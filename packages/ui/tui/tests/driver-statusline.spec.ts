@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { formatModeLine } from '@jianxx/dsh-cc-tui/statusline.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { formatModeLine } from '@dsh-cc/tui/statusline.ts'
 
 /**
  * Slice 4 — driver wiring for the custom status line (plan §4/Slice 4).

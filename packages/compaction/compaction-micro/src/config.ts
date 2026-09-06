@@ -1,6 +1,6 @@
 /**
  * Configuration resolution and placeholder vocabulary for microcompaction.
- * @module @jianxx/dsh-cc-compaction-micro/config
+ * @module @dsh-cc/compaction-micro/config
  */
 
 import { deepFreeze } from '@deepseek-ai/dsh-llm'

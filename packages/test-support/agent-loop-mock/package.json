@@ -1,5 +1,5 @@
 {
-  "name": "@jianxx/dsh-cc-agent-loop-mock",
+  "name": "@dsh-cc/agent-loop-mock",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -12,7 +12,7 @@
  *   post-execute payloads), so a failing send can never leak its notice into
  *   a later call: only the very same execution may take them.
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/serialize
+ * @module @dsh-cc/subagent-resume-pins/serialize
  */
 
 /** Run `task` after any pending same-key task settles; keyed FIFO order. */

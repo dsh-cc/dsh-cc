@@ -1,6 +1,6 @@
 /**
  * `/doctor` flag parsing and usage text. Pure and cordis-free.
- * @module @jianxx/dsh-cc-command-doctor/flags
+ * @module @dsh-cc/command-doctor/flags
  */
 
 export type DoctorFlags =

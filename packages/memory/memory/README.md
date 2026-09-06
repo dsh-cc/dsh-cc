@@ -72,7 +72,7 @@ providerless host mounts memory read-only).
 
 ## Usage
 
-Load the plugin with `@jianxx/dsh-cc-memory`. Configuration knobs:
+Load the plugin with `@dsh-cc/memory`. Configuration knobs:
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -103,7 +103,7 @@ Load the plugin with `@jianxx/dsh-cc-memory`. Configuration knobs:
 > main-checkout bucket.
 
 ```ts
-import memory from '@jianxx/dsh-cc-memory'
+import memory from '@dsh-cc/memory'
 await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
 ```
 

@@ -11,14 +11,14 @@ import CommandRuntime, { type CommandResult } from '@deepseek-ai/dsh-commands'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import * as commandExport from '@jianxx/dsh-cc-command-export'
+import * as commandExport from '@dsh-cc/command-export'
 import {
   contentText,
   renderJson,
   renderMarkdown,
   renderTranscript,
-} from '@jianxx/dsh-cc-command-export/transcript'
-import { parseExport, resolveOutput } from '@jianxx/dsh-cc-command-export'
+} from '@dsh-cc/command-export/transcript'
+import { parseExport, resolveOutput } from '@dsh-cc/command-export'
 
 let tempDir: string | undefined
 
@@ -106,7 +106,7 @@ async function run(test: Awaited<ReturnType<typeof harness>>, suffix = ''): Prom
   return execution.result
 }
 
-describe('@jianxx/dsh-cc-command-export registration', () => {
+describe('@dsh-cc/command-export registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandExport.name).toBe('command-export')
     expect(commandExport.inject).toEqual(['commands', 'fs'])

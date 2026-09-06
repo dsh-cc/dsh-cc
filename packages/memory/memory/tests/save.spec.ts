@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import { FakeMemoryFs } from './helpers.ts'
 import {
   MEMORY_SAVE_TOOL,

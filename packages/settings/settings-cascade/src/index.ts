@@ -9,7 +9,7 @@
  * to the user layer: they arrive here as a complete merged section and are
  * diffed back onto the user settings file, so higher-layer contributions stay
  * read-side only.
- * @module @jianxx/dsh-cc-settings-cascade
+ * @module @dsh-cc/settings-cascade
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'

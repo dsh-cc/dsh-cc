@@ -10,10 +10,10 @@
  * auto-allowed (the classifier proxies the prompt); MEDIUM/HIGH already
  * returned above.
  *
- * @module @jianxx/dsh-cc-permission-rules/decide
+ * @module @dsh-cc/permission-rules/decide
  */
 
-import type { ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { ToolExecution } from '@dsh-cc/tools'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { evaluatePermission } from './evaluate.ts'
 import { assessBashCommand, assessFilePath, type RiskAssessment } from './classifier.ts'

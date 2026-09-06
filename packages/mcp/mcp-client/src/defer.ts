@@ -1,14 +1,14 @@
 /**
  * Optional ToolSearch deferral for MCP listed tools.
  *
- * Duck-typed so `src/` never imports `@jianxx/dsh-cc-tool-search` — the
+ * Duck-typed so `src/` never imports `@dsh-cc/tool-search` — the
  * package is a test-only devDependency; production stays pluggable.
  *
  * @module
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ToolDefinition } from '@jianxx/dsh-cc-tools'
+import type { ToolDefinition } from '@dsh-cc/tools'
 
 /**
  * Listed-tool count above which a server's deferrable tools register deferred

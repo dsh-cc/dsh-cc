@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import * as ToolAppendOrder from '@jianxx/dsh-cc-tool-append-order'
+import * as ToolAppendOrder from '@dsh-cc/tool-append-order'
 
 /** The scope keys used by the tests; any distinct objects will do. */
 const scopeA = { id: 'agent-a' }

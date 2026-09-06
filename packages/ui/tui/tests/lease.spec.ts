@@ -4,7 +4,7 @@ import {
   activeLease,
   resetTerminalForTests,
   TerminalLeaseError,
-} from '@jianxx/dsh-cc-tui/terminal/lease.ts'
+} from '@dsh-cc/tui/terminal/lease.ts'
 
 afterEach(() => {
   resetTerminalForTests()

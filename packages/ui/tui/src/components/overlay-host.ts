@@ -3,9 +3,9 @@
  * whichever modal overlay is parked in the live state, and (b) rebuilds the
  * overlay slot's child boxes from the state on every driver emit. root.ts
  * calls these two helpers so adding an overlay kind never touches the mount.
- * @module @jianxx/dsh-cc-tui/components/overlay-host
+ * @module @dsh-cc/tui/components/overlay-host
  */
-import { Container } from '@jianxx/dsh-cc-pi-tui'
+import { Container } from '@dsh-cc/pi-tui'
 import type { Driver } from '../state/driver-types.ts'
 import { routeApprovalInput, routeQuestionInput, routeEffortPickerInput, routeModelPickerInput, routePermissionPickerInput, routeSessionSwitcherInput, routeTodoPanelInput, routeUsagePanelInput, routeWorktreeExitInput, routeProviderPanelInput } from '../input.ts'
 import type { TuiState } from '../store.ts'

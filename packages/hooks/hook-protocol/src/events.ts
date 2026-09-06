@@ -3,7 +3,7 @@
  * intent and must remain turn-enclosed and invoked/result paired. Mid-turn hook
  * points satisfy that boundary; SessionStart records injected context instead
  * and does not append `hook/*` outside a turn.
- * @module @jianxx/dsh-cc-hook-protocol/events
+ * @module @dsh-cc/hook-protocol/events
  */
 
 import type { Session } from '@deepseek-ai/dsh-session'

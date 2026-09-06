@@ -9,9 +9,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
-import type { Config } from '@jianxx/dsh-cc-mcp-client'
-import { McpConnectionsService } from '@jianxx/dsh-cc-mcp-client'
+import ToolRuntime from '@dsh-cc/tools'
+import type { Config } from '@dsh-cc/mcp-client'
+import { McpConnectionsService } from '@dsh-cc/mcp-client'
 
 // ---- Mock MCP SDK (isolated to this file, as in reconnect.spec.ts) ----
 const { mockConnect, mockClose, mockListTools, mockSetNotificationHandler, MockClient, instances } = vi.hoisted(() => {
@@ -40,7 +40,7 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({ Client: MockClient
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({ StdioClientTransport: vi.fn() }))
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({ StreamableHTTPClientTransport: vi.fn() }))
 
-import { apply } from '@jianxx/dsh-cc-mcp-client/src/index.ts'
+import { apply } from '@dsh-cc/mcp-client/src/index.ts'
 
 function listing(name: string): { tools: { name: string; inputSchema: { type: string } }[]; nextCursor: undefined } {
   return { tools: [{ name, inputSchema: { type: 'object' } }], nextCursor: undefined }

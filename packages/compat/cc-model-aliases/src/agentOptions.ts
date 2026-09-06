@@ -5,7 +5,7 @@
  * survives; one-shots fill missing fields from a parent route and return
  * `undefined` when the pair is still incomplete.
  *
- * @module @jianxx/dsh-cc-model-aliases/agentOptions
+ * @module @dsh-cc/model-aliases/agentOptions
  */
 
 import type { ResolvedRoute } from './types.ts'

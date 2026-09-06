@@ -3,7 +3,7 @@ import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import CcBasicCompactionEngine, {
   setCompactHint,
   takeCompactHint,
-} from '@jianxx/dsh-cc-compaction-basic'
+} from '@dsh-cc/compaction-basic'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 
 /**

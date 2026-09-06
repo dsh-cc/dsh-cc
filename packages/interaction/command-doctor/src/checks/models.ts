@@ -1,7 +1,7 @@
 /**
  * `models` checks for `/doctor`: peer-deduped alias routes, the last request,
  * and (verbose) the LLM catalog validation.
- * @module @jianxx/dsh-cc-command-doctor/checks/models
+ * @module @dsh-cc/command-doctor/checks/models
  */
 
 import type { Context } from '@deepseek-ai/cordis'

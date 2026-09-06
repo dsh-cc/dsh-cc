@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-command-init`.
- * @module @jianxx/dsh-cc-command-init/invariant
+ * Package-owned invariant companion for `@dsh-cc/command-init`.
+ * @module @dsh-cc/command-init/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-command-init'
+const PACKAGE_NAME = '@dsh-cc/command-init'
 
 /** Cordis companion plugin name. */
 export const name = 'command-init-invariant'

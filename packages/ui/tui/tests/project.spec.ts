@@ -8,7 +8,7 @@ import {
   isProjectMember,
   resolveProject,
   type ProjectExec,
-} from '@jianxx/dsh-cc-tui/project.ts'
+} from '@dsh-cc/tui/project.ts'
 
 /**
  * Script a git conversation as a project exec: argv → result (or undefined

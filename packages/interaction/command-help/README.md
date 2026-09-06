@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-help
+# @dsh-cc/command-help
 
 English | [中文](README.zh.md)
 
@@ -21,7 +21,7 @@ The plugin injects `commands`. A custom app mounts the owners plus this plugin:
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-help
-  name: '@jianxx/dsh-cc-command-help'
+  name: '@dsh-cc/command-help'
 ```
 
 ## Model Experience

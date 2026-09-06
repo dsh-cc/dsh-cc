@@ -12,7 +12,7 @@
  * ignored, not forwarded, so a definition authored against a newer Claude
  * Code release degrades to the supported subset rather than failing to load.
  *
- * @module @jianxx/dsh-cc-claude-code-agents/types
+ * @module @dsh-cc/claude-code-agents/types
  */
 
 /**
@@ -24,7 +24,7 @@ export type AgentSource = 'user' | 'project' | 'bundled'
 
 /**
  * The per-scope tool filter the loader computes from `tools` and
- * `disallowedTools`. Structurally matches `@jianxx/dsh-cc-tools`'s
+ * `disallowedTools`. Structurally matches `@dsh-cc/tools`'s
  * `ToolRestriction` (an `allow`/`deny` pair that intersects with sibling
  * restrictions), so the value can be handed to a scoped `ctx.tools.restrict()`
  * without translation. The loader declares it locally to stay dependency-free.

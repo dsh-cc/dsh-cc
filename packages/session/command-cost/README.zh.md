@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-cost
+# @dsh-cc/command-cost
 
 [English](README.md) | 中文
 
@@ -18,7 +18,7 @@
 
 ```yaml
 - id: command-cost
-  name: '@jianxx/dsh-cc-command-cost'
+  name: '@dsh-cc/command-cost'
   config:
     modelTable:
       - model: deepseek-chat
@@ -42,7 +42,7 @@
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-cost
-  name: '@jianxx/dsh-cc-command-cost'
+  name: '@dsh-cc/command-cost'
 ```
 
 没有 `modelTable` 时，所有模型都会被报告为未定价——仍会显示 token 用量，但不做成本估算。

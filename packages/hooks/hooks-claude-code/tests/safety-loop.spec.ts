@@ -12,9 +12,9 @@ import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import { CallId, type ContentBlock } from '@deepseek-ai/dsh-llm'
-import { defineContentToolFixture, type PreToolDecision } from '@jianxx/dsh-cc-tools'
-import * as HooksClaude from '@jianxx/dsh-cc-hooks-claude-code'
-import { MockAdapter, textResponse, toolCallResponse } from '@jianxx/dsh-cc-agent-loop-mock'
+import { defineContentToolFixture, type PreToolDecision } from '@dsh-cc/tools'
+import * as HooksClaude from '@dsh-cc/hooks-claude-code'
+import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 
 /**
  * Safety-loop plan (v0.4.1) behavior tests: F1 stop-block cap + truthful

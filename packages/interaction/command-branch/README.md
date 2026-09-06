@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-branch
+# @dsh-cc/command-branch
 
 English | [中文](README.zh.md)
 
@@ -21,7 +21,7 @@ The producer injects `commands`. A custom app mounts the session store plus this
 - id: sessions
   name: '@deepseek-ai/dsh-session'
 - id: command-branch
-  name: '@jianxx/dsh-cc-command-branch'
+  name: '@dsh-cc/command-branch'
 ```
 
 The session store is discovered via `ctx` at run time; it is not injected, so the command loads even without a store (and then reports the missing seam).

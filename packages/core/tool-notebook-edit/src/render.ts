@@ -3,14 +3,14 @@
  * generic pending card naming the target notebook and the resolved edit mode,
  * and a generic result card that fences errors so a failure reads distinct
  * from a success summary.
- * @module @jianxx/dsh-cc-tool-notebook-edit/render
+ * @module @dsh-cc/tool-notebook-edit/render
  */
 
 import type {
   GenericCallView,
   ToolResult,
   ToolResultView,
-} from '@jianxx/dsh-cc-tools'
+} from '@dsh-cc/tools'
 
 /** Arguments accepted by the NotebookEdit tool. */
 export interface NotebookEditArgs {

@@ -3,7 +3,7 @@ import { parseRule } from '../src/parser.ts'
 import { decideCall, decideCallVerbose } from '../src/decide.ts'
 import type { DecideDeps } from '../src/decide.ts'
 import { EMPTY_RULE_SET, type PermissionRuleSet } from '../src/types.ts'
-import type { ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { ToolExecution } from '@dsh-cc/tools'
 
 function fakeExec(name: string, args: unknown, opts: { cwd?: string } = {}): ToolExecution {
   const agent = opts.cwd === undefined ? undefined : ({

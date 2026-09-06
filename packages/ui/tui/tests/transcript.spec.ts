@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState, clearRows, enqueue, setSessionTitle } from '@jianxx/dsh-cc-tui/store.ts'
-import { applySessionEvent } from '@jianxx/dsh-cc-tui/transcript.ts'
+import { createInitialState, clearRows, enqueue, setSessionTitle } from '@dsh-cc/tui/store.ts'
+import { applySessionEvent } from '@dsh-cc/tui/transcript.ts'
 import {
   dropRowsInRange,
   extractCompactSummary,
   isCompactCheckpointSource,
   shouldEchoCommandResult,
-} from '@jianxx/dsh-cc-tui/compact-fold.ts'
+} from '@dsh-cc/tui/compact-fold.ts'
 
 /** Build a compact checkpoint user/message replace event (real shape). */
 function compactCheckpoint(

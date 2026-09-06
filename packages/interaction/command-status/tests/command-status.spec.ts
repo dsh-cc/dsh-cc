@@ -6,8 +6,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import * as commandStatus from '@jianxx/dsh-cc-command-status'
-import { formatStatus, lastModel } from '@jianxx/dsh-cc-command-status/status'
+import * as commandStatus from '@dsh-cc/command-status'
+import { formatStatus, lastModel } from '@dsh-cc/command-status/status'
 
 function ev(type: string, data: unknown, seq: number): SessionEvent {
   return Object.freeze({ seq, time: seq * 10, type, data }) as SessionEvent
@@ -17,7 +17,7 @@ function header(seq: number, provider: string, model: string): SessionEvent {
   return ev('request/header', { header: { config: { provider, model } }, reason: 'initial' }, seq)
 }
 
-describe('@jianxx/dsh-cc-command-status registration', () => {
+describe('@dsh-cc/command-status registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandStatus.name).toBe('command-status')
     expect(commandStatus.inject).toEqual(['commands'])

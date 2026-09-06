@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-branch",
+  "name": "@dsh-cc/command-branch",
   "description": "Human-facing slash command to fork the current session into a new branch",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-branch"
   },
   "type": "module",

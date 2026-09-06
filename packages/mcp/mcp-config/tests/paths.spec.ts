@@ -6,7 +6,7 @@ import {
   claudeOnlyServers,
   readMcpServerNames,
   resolveDefaultMcpPaths,
-} from '@jianxx/dsh-cc-mcp-config/src/paths.ts'
+} from '@dsh-cc/mcp-config/src/paths.ts'
 
 let root: string
 

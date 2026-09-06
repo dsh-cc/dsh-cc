@@ -1,7 +1,7 @@
 /**
  * `hooks` checks for `/doctor`: the hook bridge load report, flag defaults,
  * and the verbose-only `serena-hooks` PATH probe.
- * @module @jianxx/dsh-cc-command-doctor/checks/hooks
+ * @module @dsh-cc/command-doctor/checks/hooks
  */
 
 import { existsSync, statSync } from 'node:fs'

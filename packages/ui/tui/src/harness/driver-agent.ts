@@ -11,7 +11,7 @@
  * Mutable state the other sections rebind (`markedContent`, `history`,
  * `bashHistory`) is owned HERE and exposed through get/set/append handles so
  * no other module captures a stale copy.
- * @module @jianxx/dsh-cc-tui/harness/driver-agent
+ * @module @dsh-cc/tui/harness/driver-agent
  */
 
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'

@@ -18,7 +18,7 @@
  * passes through verbatim as a literal model id, with a warning when it looks
  * like an intended alias.
  *
- * @module @jianxx/dsh-cc-model-aliases/resolver
+ * @module @dsh-cc/model-aliases/resolver
  */
 
 import type { AliasInspection, AliasTarget, DetailedRoute, ResolvedRoute } from './types.ts'

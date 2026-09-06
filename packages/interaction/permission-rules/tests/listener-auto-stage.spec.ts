@@ -4,10 +4,10 @@ import { CallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@jianxx/dsh-cc-tools'
+import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, CLASSIFIER_EVENT, foldClassifiers, type Config } from '@jianxx/dsh-cc-permission-rules'
+import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, CLASSIFIER_EVENT, foldClassifiers, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
 const testToolSignal = new AbortController().signal

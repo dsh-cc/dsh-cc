@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import * as CcOutputStylesInvariant from '@jianxx/dsh-cc-output-styles/invariant'
+import * as CcOutputStylesInvariant from '@dsh-cc/output-styles/invariant'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 
-describe('@jianxx/dsh-cc-output-styles invariants', () => {
+describe('@dsh-cc/output-styles invariants', () => {
   it('reserves package ownership with Loader-safe exports and disposes it', async () => {
     expect(CcOutputStylesInvariant.name).toBe('cc-output-styles-invariant')
     expect(CcOutputStylesInvariant.inject).toEqual(['invariants'])

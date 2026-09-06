@@ -2,7 +2,7 @@
 /**
  * check-deep-src-imports.mjs — presubmit gate: no package's published source
  * may import across package boundaries into another workspace package's src/
- * tree (e.g. `@jianxx/foo/src/bar.ts`).
+ * tree (e.g. `@dsh-cc/foo/src/bar.ts`).
  *
  * Why: tsc preserves such specifiers verbatim in the lib/ emit. In dev they
  * resolve through tsconfig paths, but at runtime Node must load the raw .ts

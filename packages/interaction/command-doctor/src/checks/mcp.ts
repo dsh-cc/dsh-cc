@@ -1,7 +1,7 @@
 /**
  * `mcp` checks for `/doctor`: per-connection status rows and the Serena
  * cross-check, duck-typing the `mcpConnections` seam.
- * @module @jianxx/dsh-cc-command-doctor/checks/mcp
+ * @module @dsh-cc/command-doctor/checks/mcp
  */
 
 import type { Context } from '@deepseek-ai/cordis'

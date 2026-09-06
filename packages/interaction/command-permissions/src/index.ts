@@ -25,12 +25,12 @@
  * exists so `dsh-client-modules` can discover the `dsh.client` browser half
  * (preset rows never appear in `ctx.loader.entries()`); that host apply is a
  * no-op besides the catalog wrap. The CC preset row registers the command.
- * @module @jianxx/dsh-cc-command-permissions
+ * @module @dsh-cc/command-permissions
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type {} from '@jianxx/dsh-cc-permission-rules'
+import type {} from '@dsh-cc/permission-rules'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { PERMISSION_COMMAND_MODES } from './modes.ts'
 import { planPhaseOf, type PlanPhase, type PlanUnitStateLike } from './plan-phase.ts'

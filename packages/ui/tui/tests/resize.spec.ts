@@ -3,16 +3,16 @@ import { Terminal as XtermTerminal } from '@xterm/headless'
 import {
   TuiMainScreen,
   type Terminal as PiTerminal,
-} from '@jianxx/dsh-cc-pi-tui'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
-import type { Driver } from '@jianxx/dsh-cc-tui/state/driver-types.ts'
+} from '@dsh-cc/pi-tui'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
+import type { Driver } from '@dsh-cc/tui/state/driver-types.ts'
 import {
   clearQueue,
   createInitialState,
   popQueued,
   upsertRow,
   type TuiState,
-} from '@jianxx/dsh-cc-tui/store.ts'
+} from '@dsh-cc/tui/store.ts'
 
 /**
  * Minimal pi-tui Terminal implementation that pipes write() calls into an

@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-memory-consolidation",
+  "name": "@dsh-cc/memory-consolidation",
   "description": "Background memory consolidation: turn-end extraction and three-gate dream rewrite",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/memory/memory-consolidation"
   },
   "type": "module",
@@ -36,7 +36,7 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {
-    "@jianxx/dsh-cc-memory": "workspace:^"
+    "@dsh-cc/memory": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",

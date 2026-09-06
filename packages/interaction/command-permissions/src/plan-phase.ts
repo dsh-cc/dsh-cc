@@ -6,7 +6,7 @@
  * module lifts that derivation into a single predicate every mode-switch
  * surface needs, with a session-log fold fallback for compositions without
  * the projection registry. Pure and browser-safe.
- * @module @jianxx/dsh-cc-command-permissions/plan-phase
+ * @module @dsh-cc/command-permissions/plan-phase
  */
 
 import type { SessionEvent } from '@deepseek-ai/dsh-session'

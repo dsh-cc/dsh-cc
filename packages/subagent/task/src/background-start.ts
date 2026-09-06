@@ -9,15 +9,15 @@
  * here beyond what `tool.ts` already performed — this module is a structural
  * split of that file.
  *
- * @module @jianxx/dsh-cc-subagent-task/background-start
+ * @module @dsh-cc/subagent-task/background-start
  */
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { AgentDefinition, ToolRestriction } from '@jianxx/dsh-cc-claude-code-agents'
-import { cwdOf } from '@jianxx/dsh-cc-memory'
-import type { DetailedRoute, ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
+import type { AgentDefinition, ToolRestriction } from '@dsh-cc/claude-code-agents'
+import { cwdOf } from '@dsh-cc/memory'
+import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
 import { collectFirstEpoch, type EpochEventBus, type EpochOutcome } from './epoch-collector.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
 

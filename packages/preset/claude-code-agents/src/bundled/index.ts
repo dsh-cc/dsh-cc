@@ -9,7 +9,7 @@
  * `.claude/agents` file of the same name shadows its bundled namesake,
  * matching Claude Code's precedence where local agents override built-ins.
  *
- * @module @jianxx/dsh-cc-claude-code-agents/bundled
+ * @module @dsh-cc/claude-code-agents/bundled
  */
 
 import { parseAgentMarkdown } from '../parse.ts'

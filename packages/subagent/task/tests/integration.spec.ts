@@ -26,8 +26,8 @@ import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 import * as ReportTool from '@deepseek-ai/dsh-tool-subagent-report'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { MockAdapter, textResponse, toolCallResponse } from '@jianxx/dsh-cc-agent-loop-mock'
-import { defineTool } from '@jianxx/dsh-cc-tools'
+import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
+import { defineTool } from '@dsh-cc/tools'
 import { apply as applyTask } from '../src/index.ts'
 
 const roots: string[] = []

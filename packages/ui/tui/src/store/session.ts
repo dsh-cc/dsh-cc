@@ -2,7 +2,7 @@
  * Core session reducers: transcript rows, composer draft, busy/turn anchors,
  * permission mode, notices, approval parking, HUD merge, and the
  * thinking/tool-output display toggles.
- * @module @jianxx/dsh-cc-tui/store/session
+ * @module @dsh-cc/tui/store/session
  */
 import { VERBS } from '../working-line.ts'
 import type { ApprovalView, HudView, TranscriptRow, TuiState } from './views.ts'

@@ -6,8 +6,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
-import * as commandInit from '@jianxx/dsh-cc-command-init'
-import { INIT_PROMPT, initContent } from '@jianxx/dsh-cc-command-init/init'
+import * as commandInit from '@dsh-cc/command-init'
+import { INIT_PROMPT, initContent } from '@dsh-cc/command-init/init'
 
 async function harness(): Promise<{
   ctx: Context
@@ -41,7 +41,7 @@ async function harness(): Promise<{
   return { ctx, agent, plugin, followups }
 }
 
-describe('@jianxx/dsh-cc-command-init registration', () => {
+describe('@dsh-cc/command-init registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandInit.name).toBe('command-init')
     expect(commandInit.inject).toEqual(['commands'])

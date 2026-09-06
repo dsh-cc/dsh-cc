@@ -20,7 +20,7 @@ try {
        // workspace aliases
        "compilerOptions": {
          "paths": {
-           "@jianxx/ok-tools": ["./packages/core/ok-tools/src/index.ts"],
+           "@dsh-cc/ok-tools": ["./packages/core/ok-tools/src/index.ts"],
          },
        },
      }`,
@@ -48,7 +48,7 @@ try {
       `import a from '@deepseek-ai/dsh-foo'`,
       `import b from '@deepseek-ai/dsh-foo/sub'`,
       `import c from '@deepseek-ai/dsh-peer'`,
-      `import d from '@jianxx/ok-tools'`,
+      `import d from '@dsh-cc/ok-tools'`,
       `import { it } from 'vitest'`,
       `import self from '@t/good'`,
       `import sub from '@t/good/src/extra'`,
@@ -63,13 +63,13 @@ try {
   pkg("core/bad", { name: "@t/bad" }, `import x from '@deepseek-ai/dsh-bar'\n`);
 
   // bad: workspace alias absent from declarations AND tsconfig paths
-  pkg("core/bad2", { name: "@t/bad2" }, `import y from '@jianxx/unknown-x'\n`);
+  pkg("core/bad2", { name: "@t/bad2" }, `import y from '@dsh-cc/unknown-x'\n`);
 
   const problems = findSpecImportProblems(root);
   assert.equal(problems.length, 2, JSON.stringify(problems, null, 2));
   assert.equal(problems[0].specifier, "@deepseek-ai/dsh-bar");
   assert.ok(problems[0].reason.includes("packages/core/bad/package.json"));
-  assert.equal(problems[1].specifier, "@jianxx/unknown-x");
+  assert.equal(problems[1].specifier, "@dsh-cc/unknown-x");
   console.log("fixture suite OK (2 expected problems found)");
 
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");

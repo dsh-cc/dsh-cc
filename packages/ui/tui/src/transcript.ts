@@ -1,7 +1,7 @@
 /**
  * Fold a harness session-event envelope into the TUI store. UI-only: never
  * appends new durable event types.
- * @module @jianxx/dsh-cc-tui/transcript
+ * @module @dsh-cc/tui/transcript
  */
 
 import {

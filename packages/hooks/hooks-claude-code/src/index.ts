@@ -13,7 +13,7 @@
  * executors fork a one-shot subagent when their enable flags are set. Bespoke
  * behavior should use typed native plugins on the same extension points; see the
  * [hook-bridges Agent Note](../../../../.agents/notes/implemented/feature/2026-06-30-hook-bridges.md).
- * @module @jianxx/dsh-cc-hooks-claude-code
+ * @module @dsh-cc/hooks-claude-code
  */
 
 import { readFileSync } from 'node:fs'
@@ -26,7 +26,7 @@ import {
   DEFAULT_HOOK_TIMEOUT_MS,
   DEFAULT_STDERR_SUMMARY_MAX_CHARS,
   hookDiagnosticsWriter,
-} from '@jianxx/dsh-cc-hook-protocol'
+} from '@dsh-cc/hook-protocol'
 import { parseClaudeCodeConfig, type ClaudeCodeHookConfig } from './config.ts'
 import { failedStatus, loadedStatus } from './status.ts'
 import { registerEvents } from './register-events.ts'

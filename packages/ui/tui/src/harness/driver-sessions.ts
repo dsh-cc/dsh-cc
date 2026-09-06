@@ -6,7 +6,7 @@
  * and is read through getters / by-reference holders — never a stale snapshot —
  * because createDriver rebinds `state` on every emit.
  *
- * @module @jianxx/dsh-cc-tui/harness/driver-sessions
+ * @module @dsh-cc/tui/harness/driver-sessions
  */
 
 import { SessionId } from '@deepseek-ai/dsh-session'

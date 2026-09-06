@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-settings-cascade`.
- * @module @jianxx/dsh-cc-settings-cascade/invariant
+ * Package-owned invariant companion for `@dsh-cc/settings-cascade`.
+ * @module @dsh-cc/settings-cascade/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-settings-cascade'
+const PACKAGE_NAME = '@dsh-cc/settings-cascade'
 
 /** Cordis companion plugin name. */
 export const name = 'settings-cascade-invariant'

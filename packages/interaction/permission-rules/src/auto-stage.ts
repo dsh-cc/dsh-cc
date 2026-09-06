@@ -10,12 +10,12 @@
  * unarmable ⇒ disarm with ONE warning per process (plus an `unarmed` audit
  * event when a session is available) and the legacy decision path runs.
  *
- * @module @jianxx/dsh-cc-permission-rules/auto-stage
+ * @module @dsh-cc/permission-rules/auto-stage
  */
 
 import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import type { ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { ToolExecution } from '@dsh-cc/tools'
 import { createLlmClassifier, expandSoftDeny, type ClassifierRoute, type LlmClassifier } from './llm-classifier.ts'
 import type { DecidedCall } from './decide.ts'
 

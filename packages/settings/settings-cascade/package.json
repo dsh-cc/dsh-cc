@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-settings-cascade",
+  "name": "@dsh-cc/settings-cascade",
   "description": "Claude Code-style five-level settings cascade provider (ctx.settings) for the DeepSeek Harness",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/settings/settings-cascade"
   },
   "type": "module",

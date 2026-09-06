@@ -4,7 +4,7 @@
  * instructions plus one named `TypedDict` per tool argument or output object
  * and one awaitable method per visible tool on a `Tools` protocol. Split out
  * of `py-types.ts` for the line budget; re-exported from `py-types.ts`.
- * @module @jianxx/dsh-cc-tools/src/py-sdk-doc
+ * @module @dsh-cc/tools/src/py-sdk-doc
  */
 
 import type { ToolSdkSchema } from './ts-types.ts'

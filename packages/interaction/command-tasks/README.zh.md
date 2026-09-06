@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-tasks
+# @dsh-cc/command-tasks
 
 [English](README.md) | 中文
 
@@ -20,7 +20,7 @@
 - id: jobs
   name: '@deepseek-ai/dsh-jobs-local'
 - id: command-tasks
-  name: '@jianxx/dsh-cc-command-tasks'
+  name: '@dsh-cc/command-tasks'
 ```
 
 ## 模型体验

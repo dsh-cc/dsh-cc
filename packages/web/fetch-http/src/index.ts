@@ -1,5 +1,5 @@
 /**
- * `@jianxx/dsh-cc-web-fetch-http`: the CC host-plane HTTP(S) fetch provider.
+ * `@dsh-cc/web-fetch-http`: the CC host-plane HTTP(S) fetch provider.
  * A function/namespace plugin (NOT a default-export service) that registers a
  * `CcHttpFetchProvider` into the `ctx.web` fetch registry under the id `'http'`
  * (`LOCAL_FETCH_PROVIDER_ID`). The wrapper applies the literal SSRF gate
@@ -9,7 +9,7 @@
  *
  * Residual: the gate does no DNS lookup — a public hostname that resolves to a
  * private address (DNS rebinding) is not detected; see the README.
- * @module @jianxx/dsh-cc-web-fetch-http
+ * @module @dsh-cc/web-fetch-http
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -24,7 +24,7 @@ export { LOCAL_FETCH_PROVIDER_ID, CcHttpFetchProvider, gateAndRewrite, isBlocked
 export type { GatePolicy }
 
 /** Default `User-Agent`: an explicit product agent, never a browser disguise. */
-export const DEFAULT_USER_AGENT = 'dsh-cc/0.4.1 (+https://github.com/jianxx/dsh-cc)'
+export const DEFAULT_USER_AGENT = 'dsh-cc/0.4.1 (+https://github.com/dsh-cc/dsh-cc)'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'web-fetch-http-cc'

@@ -9,7 +9,7 @@
  * host's `approval/request` hook, persists "always allow" rules through the
  * settings provider, and answers questions through the host's userQuestions
  * provider.
- * @module @jianxx/dsh-cc-tui/harness/driver-approvals
+ * @module @dsh-cc/tui/harness/driver-approvals
  */
 
 import type { ApprovalView, QuestionView, ApprovalPreview } from '../store.ts'
@@ -20,7 +20,7 @@ import {
   typeQuestionText,
 } from '../store.ts'
 import type { ApprovalAnswerKind, SettingsProviderLike } from '../state/driver-types.ts'
-import { PERMISSION_SETTINGS_NAMESPACE } from '@jianxx/dsh-cc-permission-rules'
+import { PERMISSION_SETTINGS_NAMESPACE } from '@dsh-cc/permission-rules'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import {
   UserQuestionError,

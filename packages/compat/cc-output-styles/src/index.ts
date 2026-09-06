@@ -6,7 +6,7 @@
  * command, and re-emits `system-prompt/change` so the next turn reassembles the
  * prompt.
  *
- * @module @jianxx/dsh-cc-output-styles
+ * @module @dsh-cc/output-styles
  */
 
 import type { Context } from '@deepseek-ai/cordis'

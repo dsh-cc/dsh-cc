@@ -3,7 +3,7 @@
  * management.md §4.4): detail facts, the detail action router, removal with
  * double-confirm + credential-drop, and §8-S2 model-list refresh. Split out
  * of provider-command.ts purely for line budget.
- * @module @jianxx/dsh-cc-tui/provider-command-detail
+ * @module @dsh-cc/tui/provider-command-detail
  */
 import { setProviderOverlay } from './store.ts'
 import {

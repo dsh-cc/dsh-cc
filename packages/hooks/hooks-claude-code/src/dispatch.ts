@@ -12,9 +12,9 @@ import {
   runHttpHook,
   type HookCommand,
   type HookOutput,
-} from '@jianxx/dsh-cc-hook-protocol'
-import type { ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
-import { toAgentOptions } from '@jianxx/dsh-cc-model-aliases'
+} from '@dsh-cc/hook-protocol'
+import type { ModelRoutes } from '@dsh-cc/model-aliases'
+import { toAgentOptions } from '@dsh-cc/model-aliases'
 import { contentToHookOutput, emptyHookOutput, interpolatePrompt } from './hook-output.ts'
 
 /** Everything {@link dispatchHook} needs beyond the hook itself. */

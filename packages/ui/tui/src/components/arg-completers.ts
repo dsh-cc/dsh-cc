@@ -7,12 +7,12 @@
  * completes session short ids.
  * Candidates are fetched per completion request, so catalog/session staleness
  * is bounded by the driver calls themselves.
- * @module @jianxx/dsh-cc-tui/components/arg-completers
+ * @module @dsh-cc/tui/components/arg-completers
  */
 
-import { PERMISSION_COMMAND_MODES } from '@jianxx/dsh-cc-command-permissions'
+import { PERMISSION_COMMAND_MODES } from '@dsh-cc/command-permissions'
 import { PROVIDER_SUBCOMMANDS } from '../slash.ts'
-import type { AutocompleteItem } from '@jianxx/dsh-cc-pi-tui'
+import type { AutocompleteItem } from '@dsh-cc/pi-tui'
 import type { ArgCompleterMap } from './completion.ts'
 import type { Driver } from '../state/driver-types.ts'
 import { shortenSession } from '../statusline.ts'

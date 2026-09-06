@@ -2,7 +2,7 @@
  * Human-facing `/status` command: a session status summary showing the current
  * model, permission preset, session id, and working directory. Lines whose
  * source is absent are omitted, so each adapter reports only what it can know.
- * @module @jianxx/dsh-cc-command-status
+ * @module @dsh-cc/command-status
  */
 
 import { Context } from '@deepseek-ai/cordis'

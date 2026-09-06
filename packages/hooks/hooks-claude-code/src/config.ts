@@ -9,7 +9,7 @@
  * per-handler keys outside the executor's allowlist; a `command` hook missing a string
  * `command` additionally lands in `skipped`. Nothing here is fatal except a malformed
  * matcher regex, which still throws so the bridge can reject the whole config.
- * @module @jianxx/dsh-cc-hooks-claude-code/config
+ * @module @dsh-cc/hooks-claude-code/config
  */
 
 import {
@@ -20,7 +20,7 @@ import {
   type HttpHook,
   type MatcherGroup,
   type PromptHook,
-} from '@jianxx/dsh-cc-hook-protocol'
+} from '@dsh-cc/hook-protocol'
 
 const CLAUDE_EVENTS = [
   'SessionStart',

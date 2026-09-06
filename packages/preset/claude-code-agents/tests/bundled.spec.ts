@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverBundledAgents } from '@jianxx/dsh-cc-claude-code-agents'
+import { discoverBundledAgents } from '@dsh-cc/claude-code-agents'
 
 describe('discoverBundledAgents', () => {
   it('returns exactly explore and dsh-cc-guide, both bundled + haiku', () => {

@@ -28,7 +28,7 @@ import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 import * as ReportTool from '@deepseek-ai/dsh-tool-subagent-report'
-import { MockAdapter, textResponse } from '@jianxx/dsh-cc-agent-loop-mock'
+import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 
 const roots: string[] = []
 afterEach(() => {

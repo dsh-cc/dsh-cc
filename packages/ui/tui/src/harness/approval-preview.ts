@@ -3,11 +3,11 @@
  * restoration from the session log, structured payload previews, permission
  * rule derivation, and settings-conflict detection. Pure functions over the
  * approval request and store view types — no I/O and no harness state.
- * @module @jianxx/dsh-cc-tui/harness/approval-preview
+ * @module @dsh-cc/tui/harness/approval-preview
  */
 
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import { canonicalizeHostname, isWebFetchRuleTool, ruleString } from '@jianxx/dsh-cc-permission-rules'
+import { canonicalizeHostname, isWebFetchRuleTool, ruleString } from '@dsh-cc/permission-rules'
 import type { ApprovalPreview } from '../store.ts'
 
 /**

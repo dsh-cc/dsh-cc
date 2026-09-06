@@ -1,7 +1,7 @@
 /**
  * Pure `/diff` rendering: cap long diff output to a bounded line count and
  * render the `--stat` summary. No cordis or shell imports.
- * @module @jianxx/dsh-cc-command-diff/diff
+ * @module @dsh-cc/command-diff/diff
  */
 
 /** Cap raw diff text to at most `maxLines` lines, noting truncation. */

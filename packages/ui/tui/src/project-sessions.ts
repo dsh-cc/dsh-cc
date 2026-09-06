@@ -11,7 +11,7 @@
  * access is best-effort throughout — a missing or unwritable file degrades
  * to an empty index and never breaks a session.
  *
- * @module @jianxx/dsh-cc-tui/project-sessions
+ * @module @dsh-cc/tui/project-sessions
  */
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { Config } from '@jianxx/dsh-cc-tui'
-import { highlightCodeAnsi } from '@jianxx/dsh-cc-tui/components/code-theme.ts'
-import { renderDiffLines } from '@jianxx/dsh-cc-tui/components/diff-card.ts'
-import { createMarkdownTheme } from '@jianxx/dsh-cc-tui/components/markdown-theme.ts'
-import { TranscriptView, renderRowText } from '@jianxx/dsh-cc-tui/components/transcript.ts'
+import { Config } from '@dsh-cc/tui'
+import { highlightCodeAnsi } from '@dsh-cc/tui/components/code-theme.ts'
+import { renderDiffLines } from '@dsh-cc/tui/components/diff-card.ts'
+import { createMarkdownTheme } from '@dsh-cc/tui/components/markdown-theme.ts'
+import { TranscriptView, renderRowText } from '@dsh-cc/tui/components/transcript.ts'
 import {
   createEditorTheme,
   createTheme,
   defaultTheme,
   type ThemeOverrides,
-} from '@jianxx/dsh-cc-tui/components/theme.ts'
+} from '@dsh-cc/tui/components/theme.ts'
 
 describe('createTheme defaults', () => {
   it('matches the historical fixed palette role by role', () => {

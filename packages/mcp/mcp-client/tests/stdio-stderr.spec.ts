@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
-import { createTransport } from '@jianxx/dsh-cc-mcp-client/src/transport.ts'
+import { createTransport } from '@dsh-cc/mcp-client/src/transport.ts'
 import {
   BoundedTail,
   STDERR_WARN_CAPACITY,
@@ -11,8 +11,8 @@ import {
   attachStdioStderrDrain,
   formatStdioStderrForWarn,
   stdioStderrTail,
-} from '@jianxx/dsh-cc-mcp-client/src/stdio-stderr.ts'
-import type { Config } from '@jianxx/dsh-cc-mcp-client'
+} from '@dsh-cc/mcp-client/src/stdio-stderr.ts'
+import type { Config } from '@dsh-cc/mcp-client'
 
 function stdioConfig(): Config {
   return {

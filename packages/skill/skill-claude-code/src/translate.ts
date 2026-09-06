@@ -13,7 +13,7 @@
 import { relative } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { FsObservation, FsTarget } from '@deepseek-ai/dsh-fs'
-import { translateToolNames, type ToolRestriction } from '@jianxx/dsh-cc-tools'
+import { translateToolNames, type ToolRestriction } from '@dsh-cc/tools'
 
 /** Mutating first-party fs tools that should trigger path activation. */
 const TOUCH_TOOLS = new Set(['read', 'write', 'edit'])

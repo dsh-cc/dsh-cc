@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-session-title-provider
+# @dsh-cc/session-title-provider
 
 English | [中文](README.zh.md)
 

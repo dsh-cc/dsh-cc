@@ -18,12 +18,12 @@
 # keeping the cascade first keeps boot logs readable.
 - insert:
     - id: settings-cc
-      name: '@jianxx/dsh-cc-settings-cascade'
+      name: '@dsh-cc/settings-cascade'
 
     # allow/deny/ask rule engine reading the `permissions` settings namespace.
     # bypass-immune rules ride the monotonic guard layer.
     - id: permission-rules
-      name: '@jianxx/dsh-cc-permission-rules'
+      name: '@dsh-cc/permission-rules'
 
     # Host-plane mount of the /permissions command + catalog wrap. The empty
     # host fiber is what dsh-client-modules scans for the popupSelect browser
@@ -31,4 +31,4 @@
     # still has its own command-permissions row so a composition without this
     # bundle still registers the command.
     - id: command-permissions
-      name: '@jianxx/dsh-cc-command-permissions'
+      name: '@dsh-cc/command-permissions'

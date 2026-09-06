@@ -3,10 +3,10 @@
  * set: MCP wildcards expand, unknown names drop, an emptied allow-list is
  * deny-all, and ToolSearch is auto-injected when the child holds MCP names.
  *
- * @module @jianxx/dsh-cc-subagent-task/sanitize-filter
+ * @module @dsh-cc/subagent-task/sanitize-filter
  */
 
-import type { ToolRestriction } from '@jianxx/dsh-cc-claude-code-agents'
+import type { ToolRestriction } from '@dsh-cc/claude-code-agents'
 
 /**
  * The MCP public-name prefix every bridged MCP tool carries on `ctx.tools`.

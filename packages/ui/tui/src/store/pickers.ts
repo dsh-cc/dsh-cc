@@ -1,7 +1,7 @@
 /**
  * Overlay picker reducers (/model, /effort, /permissions, /resume): a shared
  * park-or-clear plus clamped focus/move pattern per picker overlay.
- * @module @jianxx/dsh-cc-tui/store/pickers
+ * @module @dsh-cc/tui/store/pickers
  */
 import { WORKTREE_EXIT_OPTION_COUNT } from './views.ts'
 import type { EffortPickerView, ModelPickerView, PermissionPickerView, SessionSwitcherView, TuiState, WorktreeExitView } from './views.ts'

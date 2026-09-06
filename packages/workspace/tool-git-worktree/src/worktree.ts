@@ -1,9 +1,9 @@
 /**
  * Centralized git-worktree command construction and active-session state for
- * `@jianxx/dsh-cc-tool-git-worktree`. Keeping every git command in one module
+ * `@dsh-cc/tool-git-worktree`. Keeping every git command in one module
  * is the seam a future pure-JS git implementation would replace; callers never
  * construct `git ...` argument lists themselves.
- * @module @jianxx/dsh-cc-tool-git-worktree/worktree
+ * @module @dsh-cc/tool-git-worktree/worktree
  */
 
 import { basename, join } from 'node:path'

@@ -11,7 +11,7 @@
  * model-facing parts can be reused by a Claude Code plugin loader elsewhere
  * without dragging in the harness runtime.
  *
- * @module @jianxx/dsh-cc-claude-code-agents
+ * @module @dsh-cc/claude-code-agents
  */
 
 import { homedir } from 'node:os'

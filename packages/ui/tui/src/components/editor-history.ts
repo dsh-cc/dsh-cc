@@ -10,10 +10,10 @@
  * vendored line — re-vendoring to a new upstream SHA must re-check this
  * seam.
  *
- * @module @jianxx/dsh-cc-tui/components/editor-history
+ * @module @dsh-cc/tui/components/editor-history
  */
 
-import type { Editor } from '@jianxx/dsh-cc-pi-tui'
+import type { Editor } from '@dsh-cc/pi-tui'
 
 /** Runtime view of the Editor's private recall-browsing slots. */
 interface EditorHistorySlots {

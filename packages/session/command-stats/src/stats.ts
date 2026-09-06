@@ -2,7 +2,7 @@
  * Pure `/stats` folding: session events → turn/step counts, tool-call
  * distribution, and token usage totals, plus human-readable report. No cordis
  * imports, so the fold and formatting are unit-testable in isolation.
- * @module @jianxx/dsh-cc-command-stats/stats
+ * @module @dsh-cc/command-stats/stats
  */
 
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'

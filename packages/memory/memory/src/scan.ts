@@ -2,7 +2,7 @@
  * Directory scan over a memdir through the optional `ctx.fs` seam: list topic
  * files, parse their frontmatter, and read the always-loaded entrypoint. Used
  * by the system-prompt section index and by recall.
- * @module @jianxx/dsh-cc-memory/scan
+ * @module @dsh-cc/memory/scan
  */
 
 import type { FileSystem, FsError, FsTarget } from '@deepseek-ai/dsh-fs'

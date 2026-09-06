@@ -89,7 +89,7 @@
         default: cc
 
     - id: tui
-      name: '@jianxx/dsh-cc-tui'
+      name: '@dsh-cc/tui'
       inject: [agents]
       config:
         cwd: !!js process.cwd()

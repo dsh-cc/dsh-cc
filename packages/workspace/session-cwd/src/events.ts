@@ -4,7 +4,7 @@
  * load (required for persistence-layer compatibility: persistence refuses
  * unknown event types unless the type is registered there). The set is typed
  * `ReadonlySet` but is a live `Set` — same cross-repo registration pattern as
- * `permission/mode` in `@jianxx/dsh-cc-permission-rules`.
+ * `permission/mode` in `@dsh-cc/permission-rules`.
  *
  * The event payload is a local wire face (`WorktreeEnteredWire`) rather than
  * `SessionEventMap['worktree/entered']` so both the CI pin (type absent from
@@ -12,7 +12,7 @@
  * compiler-validated against the upstream event map, so appends go through a
  * widened function face.
  *
- * @module @jianxx/dsh-cc-session-cwd/events
+ * @module @dsh-cc/session-cwd/events
  */
 
 import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'

@@ -4,14 +4,14 @@
  * `{ duration }` in seconds, the wait is interruptible (a new turn cancels it
  * like CC's `interruptBehavior: 'cancel'`), and the tool is concurrency-safe
  * so it may overlap sibling calls.
- * @module @jianxx/dsh-cc-tool-sleep
+ * @module @dsh-cc/tool-sleep
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import { defineTool, TOOL_ABORTED } from '@jianxx/dsh-cc-tools'
-import type { ToolRunContext } from '@jianxx/dsh-cc-tools'
+import { defineTool, TOOL_ABORTED } from '@dsh-cc/tools'
+import type { ToolRunContext } from '@dsh-cc/tools'
 import { presentSleepCall, presentSleepResult } from './render.ts'
 
 export const name = 'tool-sleep'

@@ -2,7 +2,7 @@
  * Pure `/resume` rendering helpers: session-line folding and index formatting.
  * The session-query seam lives in the host composition; these functions only
  * shape already loaded records, so they are unit-testable without cordis.
- * @module @jianxx/dsh-cc-command-resume/resume
+ * @module @dsh-cc/command-resume/resume
  */
 
 /** One recent session as rendered by `/resume`; only real header fields. */

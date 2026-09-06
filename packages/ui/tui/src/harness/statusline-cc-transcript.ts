@@ -13,7 +13,7 @@
  * session-append hot path, so no retries, and later appends to a corrupt
  * stream are worse than silence. This module never imports harness types —
  * events are consumed structurally, matching the sibling modules' convention.
- * @module @jianxx/dsh-cc-tui/harness/statusline-cc-transcript
+ * @module @dsh-cc/tui/harness/statusline-cc-transcript
  */
 
 import {

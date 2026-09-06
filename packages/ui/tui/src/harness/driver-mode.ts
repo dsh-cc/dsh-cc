@@ -8,12 +8,12 @@
  * cross-plane write seam is the `/plan` command channel — dispatched bare,
  * never '/plan on' (the upstream handler steers any non-'off' argument into
  * the conversation as a user message).
- * @module @jianxx/dsh-cc-tui/harness/driver-mode
+ * @module @dsh-cc/tui/harness/driver-mode
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { isPermissionMode, nextPermissionMode, type PermissionCommandMode } from '../mode-cycle.ts'
-import { PERMISSION_COMMAND_MODES, planPhaseOf, type PlanUnitStateLike } from '@jianxx/dsh-cc-command-permissions'
+import { PERMISSION_COMMAND_MODES, planPhaseOf, type PlanUnitStateLike } from '@dsh-cc/command-permissions'
 import { setPermissionMode } from '../store.ts'
 import type { TuiState } from '../store.ts'
 import type { DriverModeCtx } from './driver-ctx.ts'

@@ -9,9 +9,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { type JsonValue } from '@jianxx/dsh-cc-tools'
-import DeferredToolRegistry from '@jianxx/dsh-cc-tool-search'
-import { emptyToolGeneration, syncTools, type ToolBridgeOptions } from '@jianxx/dsh-cc-mcp-client/src/tools.ts'
+import ToolRuntime, { type JsonValue } from '@dsh-cc/tools'
+import DeferredToolRegistry from '@dsh-cc/tool-search'
+import { emptyToolGeneration, syncTools, type ToolBridgeOptions } from '@dsh-cc/mcp-client/src/tools.ts'
 import { Context } from '@deepseek-ai/cordis'
 
 const testToolSignal = new AbortController().signal

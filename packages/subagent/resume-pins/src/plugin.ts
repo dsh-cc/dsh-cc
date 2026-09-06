@@ -16,7 +16,7 @@
  * clears the stored blocked state. Gate and overlay share the ONE store
  * exposed as the `resumePinStore` service (spawn capture prefers it too).
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/plugin
+ * @module @dsh-cc/subagent-resume-pins/plugin
  */
 
 import { existsSync } from 'node:fs'
@@ -33,8 +33,8 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-agent'
-import { loadAgentsDir, discoverBundledAgents, type AgentDefinition } from '@jianxx/dsh-cc-claude-code-agents'
-import { resolveDetailedAlias } from '@jianxx/dsh-cc-model-aliases'
+import { loadAgentsDir, discoverBundledAgents, type AgentDefinition } from '@dsh-cc/claude-code-agents'
+import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { evaluateGate, type GateDecision, type GateEnv, type GateResolvedConfig } from './gate.ts'
 import { PinBlockedError, applyPinOverlay } from './overlay.ts'
 import { definitionFingerprint } from './fingerprint.ts'

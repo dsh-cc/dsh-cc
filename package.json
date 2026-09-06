@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -b tsconfig.packages.json && pnpm run bundle:client",
     "prepare": "husky",
-    "bundle:client": "pnpm --filter @jianxx/dsh-cc-command-permissions run bundle",
+    "bundle:client": "pnpm --filter @dsh-cc/command-permissions run bundle",
     "typecheck": "tsc -b tsconfig.packages.json",
     "test": "vitest run",
     "test:e2e": "python3 packages/ui/tui/scripts/e2e/run_core.py",
@@ -30,6 +30,7 @@
     "test:capabilities": "node scripts/check-capability-evidence.test.mjs && node scripts/generate-parity-matrix.test.mjs",
     "release": "node scripts/release.mjs",
     "check:deep-imports": "node scripts/check-deep-src-imports.mjs",
+    "check:identity": "node scripts/check-project-identity.mjs",
     "smoke:profile-boot": "bash scripts/smoke-profile-boot.sh"
   },
   "devDependencies": {

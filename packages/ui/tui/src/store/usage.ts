@@ -1,6 +1,6 @@
 /**
  * Usage reducers: the live usage snapshot and the /usage panel overlay.
- * @module @jianxx/dsh-cc-tui/store/usage
+ * @module @dsh-cc/tui/store/usage
  */
 import type { TuiState, UsageView } from './views.ts'
 

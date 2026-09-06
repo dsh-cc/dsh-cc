@@ -277,7 +277,7 @@ Hooks: 3 issue(s) recorded (~/.dsh/hooks/diagnostics.jsonl)
   …
 ```
 
-Adds a workspace dependency `@jianxx/dsh-cc-hook-protocol` to
+Adds a workspace dependency `@dsh-cc/hook-protocol` to
 `command-doctor`'s package.json (root export only — `check:deep-imports`
 stays green).
 
@@ -380,9 +380,9 @@ carries the hook reason instead. No-agent callsites log only.
 ## Verification (the PR must show)
 
 - `bash scripts/link-worktree-deps.sh` once in a fresh worktree.
-- `pnpm --filter @jianxx/dsh-cc-hook-protocol test` and
-  `pnpm --filter @jianxx/dsh-cc-hooks-claude-code test` and
-  `pnpm --filter @jianxx/dsh-cc-command-doctor test` green.
+- `pnpm --filter @dsh-cc/hook-protocol test` and
+  `pnpm --filter @dsh-cc/hooks-claude-code test` and
+  `pnpm --filter @dsh-cc/command-doctor test` green.
 - Repo gates: `pnpm typecheck`, `pnpm test`, `pnpm check:deep-imports`,
   `pnpm check:exports`, `pnpm check:spec-deps`, `pnpm check:size`.
 - Manual contract: with a hooks.json that denies Stop 12 times, the 9th

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import type { ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { ToolExecution } from '@dsh-cc/tools'
 import type { RiskAssessment } from '../src/classifier.ts'
 import type { DecidedCall } from '../src/decide.ts'
 import type { PermissionDecision, PermissionMode } from '../src/types.ts'

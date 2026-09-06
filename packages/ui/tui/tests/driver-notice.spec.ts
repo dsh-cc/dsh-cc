@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 
 /**
  * Minimal ctx stub for notice tests: no services mounted at all, so every

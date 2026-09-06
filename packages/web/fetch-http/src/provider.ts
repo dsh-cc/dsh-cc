@@ -2,7 +2,7 @@
  * The CC fetch provider wrapper: an SSRF-gated decorator around the harness
  * `HttpFetchProvider`. The gate runs before the inner provider is handed the
  * URL, so no socket is ever opened for a blocked or invalid destination.
- * @module @jianxx/dsh-cc-web-fetch-http/provider
+ * @module @dsh-cc/web-fetch-http/provider
  */
 
 import { HttpFetchProvider, LOCAL_FETCH_PROVIDER_ID } from '@deepseek-ai/dsh-web-fetch-http'

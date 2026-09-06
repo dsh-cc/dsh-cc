@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-output-styles",
+  "name": "@dsh-cc/output-styles",
   "description": "Claude Code-compatible output style selection for the DeepSeek Harness",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/compat/cc-output-styles"
   },
   "type": "module",

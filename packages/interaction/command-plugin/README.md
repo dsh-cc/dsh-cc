@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-plugin
+# @dsh-cc/command-plugin
 
 English | [中文](README.zh.md)
 
@@ -19,9 +19,9 @@ The producer injects `commands`. A custom app mounts the glue plus this plugin:
 
 ```yaml
 - id: cc-shell-glue
-  name: '@jianxx/dsh-cc-bundle-shell'
+  name: '@dsh-cc/bundle-shell'
 - id: command-plugin
-  name: '@jianxx/dsh-cc-command-plugin'
+  name: '@dsh-cc/command-plugin'
 ```
 
 The `ccPlugins` seam is discovered via `ctx` at run time; it is not injected, so the command loads even when glue is absent (and then reports the missing seam).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import { appendHookInvoked, appendHookResult, summarizeStderr, type HookOutput } from '@jianxx/dsh-cc-hook-protocol'
+import { appendHookInvoked, appendHookResult, summarizeStderr, type HookOutput } from '@dsh-cc/hook-protocol'
 
 /** A {@link HookOutput} with the required stream fields defaulted. */
 function output(over: Partial<HookOutput> = {}): HookOutput {

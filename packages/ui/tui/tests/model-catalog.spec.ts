@@ -3,7 +3,7 @@ import {
   formatModelCatalog,
   parseModelChoice,
   type CatalogEntry,
-} from '@jianxx/dsh-cc-tui/model-catalog.ts'
+} from '@dsh-cc/tui/model-catalog.ts'
 
 const CATALOG: readonly CatalogEntry[] = [
   { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },

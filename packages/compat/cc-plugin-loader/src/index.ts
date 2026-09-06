@@ -10,7 +10,7 @@
  * itself but graceful degradation for missing host seams. Every component
  * mount is a Cordis effect, so disabling the plugin recalls all of it.
  *
- * @module @jianxx/dsh-cc-plugin-loader
+ * @module @dsh-cc/plugin-loader
  */
 
 import { resolve } from 'node:path'

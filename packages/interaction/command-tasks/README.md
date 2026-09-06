@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-tasks
+# @dsh-cc/command-tasks
 
 English | [中文](README.zh.md)
 
@@ -20,7 +20,7 @@ The producer injects `commands` and `jobs`. A custom app mounts the job registry
 - id: jobs
   name: '@deepseek-ai/dsh-jobs-local'
 - id: command-tasks
-  name: '@jianxx/dsh-cc-command-tasks'
+  name: '@dsh-cc/command-tasks'
 ```
 
 ## Model Experience

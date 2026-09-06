@@ -3,11 +3,11 @@ import {
   cacheTrajectoryReportSchema,
   loadStandardTrajectory,
   runCacheTrajectory,
-} from '@jianxx/dsh-cc-cache-trajectory'
+} from '@dsh-cc/cache-trajectory'
 import {
   startKeylessTrajectoryStack,
   type KeylessTrajectoryStack,
-} from '@jianxx/dsh-cc-cache-trajectory/testing'
+} from '@dsh-cc/cache-trajectory/testing'
 
 /**
  * cc bundle trajectory e2e: the standard cache trajectory booted the way the

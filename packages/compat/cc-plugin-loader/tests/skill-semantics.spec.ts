@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { CcSkillMetadata } from '@jianxx/dsh-cc-skill-loader'
+import type { CcSkillMetadata } from '@dsh-cc/skill-loader'
 import {
   skillToolRestriction,
   resolveSkillExecution,

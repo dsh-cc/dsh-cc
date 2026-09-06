@@ -1,8 +1,8 @@
-# @jianxx/dsh-cc-tool-sleep
+# @dsh-cc/tool-sleep
 
 [English](README.md) | 中文
 
-模型侧 `Sleep` 工具：等待指定时长，并支持协作式取消，语义对齐 Claude Code 的 `SleepTool`。通过 `@jianxx/dsh-cc-tools` 的 `ToolRuntime` 注册进 `ctx.tools`。
+模型侧 `Sleep` 工具：等待指定时长，并支持协作式取消，语义对齐 Claude Code 的 `SleepTool`。通过 `@dsh-cc/tools` 的 `ToolRuntime` 注册进 `ctx.tools`。
 
 ## 工具
 
@@ -34,9 +34,9 @@ export const Config = z.object({
 ## 安装 / 注册
 
 ```ts
-import * as ToolSleep from '@jianxx/dsh-cc-tool-sleep'
+import * as ToolSleep from '@dsh-cc/tool-sleep'
 
-await ctx.plugin(ToolRuntime)   // @jianxx/dsh-cc-tools
+await ctx.plugin(ToolRuntime)   // @dsh-cc/tools
 await ctx.plugin(ToolSleep)     // 注册 Sleep 工具
 ```
 
@@ -48,7 +48,7 @@ await ctx.plugin(ToolSleep)     // 注册 Sleep 工具
 
 ## 构建顺序
 
-`tool-sleep` 仅依赖工作区 `@jianxx/dsh-cc-tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-invariants`、`@deepseek-ai/schemastery`）。它不依赖 git-worktree 或任何其它工作区包，因此只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
+`tool-sleep` 仅依赖工作区 `@dsh-cc/tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-invariants`、`@deepseek-ai/schemastery`）。它不依赖 git-worktree 或任何其它工作区包，因此只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
 
 ## 已知限制
 

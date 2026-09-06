@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createLlmClassifier, DEFAULT_SOFT_DENY, expandSoftDeny, classificationKey }
   from '../src/llm-classifier.ts'
-import type { ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { ToolExecution } from '@dsh-cc/tools'
 
 function fakeExec(name: string, args: unknown, signal?: AbortSignal): ToolExecution {
   return { signal: signal ?? new AbortController().signal, callId: 'c1', name, arguments: args } as unknown as ToolExecution

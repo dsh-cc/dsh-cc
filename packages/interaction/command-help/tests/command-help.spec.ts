@@ -6,9 +6,9 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import type { CommandDescriptor } from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandHelp from '@jianxx/dsh-cc-command-help'
-import { formatHelpDetail, formatHelpList } from '@jianxx/dsh-cc-command-help/help'
-import type { PluginCommandInfo } from '@jianxx/dsh-cc-command-help'
+import * as commandHelp from '@dsh-cc/command-help'
+import { formatHelpDetail, formatHelpList } from '@dsh-cc/command-help/help'
+import type { PluginCommandInfo } from '@dsh-cc/command-help'
 
 const DESCRIPTORS: readonly CommandDescriptor[] = [
   Object.freeze({ name: 'memory', description: 'list memories' }),
@@ -46,7 +46,7 @@ async function harness(): Promise<{
   return { ctx, agent, plugin }
 }
 
-describe('@jianxx/dsh-cc-command-help registration', () => {
+describe('@dsh-cc/command-help registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandHelp.name).toBe('command-help')
     expect(commandHelp.inject).toEqual(['commands'])

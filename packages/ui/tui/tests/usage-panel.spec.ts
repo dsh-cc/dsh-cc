@@ -2,9 +2,9 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Container } from '@jianxx/dsh-cc-pi-tui'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { cacheHitPercent, createUsagePanelBox } from '@jianxx/dsh-cc-tui/components/overlays.ts'
+import { Container } from '@dsh-cc/pi-tui'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { cacheHitPercent, createUsagePanelBox } from '@dsh-cc/tui/components/overlays.ts'
 import {
   closeUsagePanel,
   createInitialState,
@@ -12,7 +12,7 @@ import {
   setUsage,
   type UsageTotalsView,
   type UsageView,
-} from '@jianxx/dsh-cc-tui/store.ts'
+} from '@dsh-cc/tui/store.ts'
 
 /** Render a box to stripped lines so structural assertions see plain text. */
 function boxLines(box: Container): string[] {

@@ -7,9 +7,9 @@ import { join } from 'node:path'
 
 export const PROFILE = 'tui'
 export const BUNDLES = [
-  '@jianxx/dsh-cc-bundle-permissions',
-  '@jianxx/dsh-cc-bundle-shell',
-  '@jianxx/dsh-cc-bundle-tui',
+  '@dsh-cc/bundle-permissions',
+  '@dsh-cc/bundle-shell',
+  '@dsh-cc/bundle-tui',
 ]
 
 /**

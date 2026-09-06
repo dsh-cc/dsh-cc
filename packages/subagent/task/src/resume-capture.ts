@@ -15,7 +15,7 @@
  * as a legacy/foreign child). Only the tombstone path rethrows nothing — the
  * original `startContinuable` error is rethrown unchanged by the caller.
  *
- * @module @jianxx/dsh-cc-subagent-task/resume-capture
+ * @module @dsh-cc/subagent-task/resume-capture
  */
 
 import { spawnSync } from 'node:child_process'
@@ -23,8 +23,8 @@ import { randomUUID } from 'node:crypto'
 import { isAbsolute, join } from 'node:path'
 import { realpathSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
-import type { AgentDefinition, ToolRestriction } from '@jianxx/dsh-cc-claude-code-agents'
-import type { DetailedRoute } from '@jianxx/dsh-cc-model-aliases'
+import type { AgentDefinition, ToolRestriction } from '@dsh-cc/claude-code-agents'
+import type { DetailedRoute } from '@dsh-cc/model-aliases'
 import {
   PinStore,
   definitionFingerprint,
@@ -35,7 +35,7 @@ import {
   type PinWorkspace,
   type ResumePin,
   type ResumePinDraft,
-} from '@jianxx/dsh-cc-subagent-resume-pins'
+} from '@dsh-cc/subagent-resume-pins'
 
 /** The additive `apply(ctx, config)` option that arms spawn-time capture. */
 export interface ResumePinsConfig {

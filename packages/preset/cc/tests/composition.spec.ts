@@ -198,7 +198,7 @@ describe('agent.cordis.yml composition', () => {
     expect(toolWeb.config).toMatchObject({ fetch: false })
   })
 
-  it('declares every @jianxx row name as a dependency (top level and group-nested)', () => {
+  it('declares every @dsh-cc row name as a dependency (top level and group-nested)', () => {
     const deps = Object.keys(pkgJson.dependencies ?? {})
     const rows: any[] = []
     for (const row of doc) {
@@ -208,8 +208,8 @@ describe('agent.cordis.yml composition', () => {
         rows.push(row)
       }
     }
-    const jianxxRows = rows.filter((r) => r.name && r.name.startsWith('@jianxx/'))
-    for (const row of jianxxRows) {
+    const dshCcRows = rows.filter((r) => r.name && r.name.startsWith('@dsh-cc/'))
+    for (const row of dshCcRows) {
       expect(deps, `${row.id} -> ${row.name}`).toContain(row.name)
     }
   })
@@ -305,14 +305,14 @@ describe('agent.cordis.yml composition', () => {
         // argument instead of rejecting it. Matched both directions so the
         // LCS may report the swap as one del/add pair or two one-sided ops.
         const isNameSwap =
-          ((mine.includes("name: '@jianxx/dsh-cc-compaction-basic'")
+          ((mine.includes("name: '@dsh-cc/compaction-basic'")
             && (vend === '' || vend.includes("name: '@deepseek-ai/dsh-compaction-basic'")))
-          || (mine.includes("name: '@jianxx/dsh-cc-command-compact'")
+          || (mine.includes("name: '@dsh-cc/command-compact'")
             && (vend === '' || vend.includes("name: '@deepseek-ai/dsh-command-compact'")))
           || (vend.includes("name: '@deepseek-ai/dsh-compaction-basic'")
-            && (mine === '' || mine.includes("name: '@jianxx/dsh-cc-compaction-basic'")))
+            && (mine === '' || mine.includes("name: '@dsh-cc/compaction-basic'")))
           || (vend.includes("name: '@deepseek-ai/dsh-command-compact'")
-            && (mine === '' || mine.includes("name: '@jianxx/dsh-cc-command-compact'"))))
+            && (mine === '' || mine.includes("name: '@dsh-cc/command-compact'"))))
         if (isConfigChange || isComment || isNameSwap) continue
         diffs.push(
           `${op.type === 'add' ? '+' : '-'}  mine: ${mine}\n` +

@@ -9,10 +9,10 @@
  * `ask`/`passthrough` on a non-read-only call into a deny (allow and deny
  * decisions stand). Bypass-immune rules are evaluated first and always deny;
  * the plugin additionally enforces them through the monotonic guard layer.
- * @module @jianxx/dsh-cc-permission-rules/evaluate
+ * @module @dsh-cc/permission-rules/evaluate
  */
 
-import { ccToolAliases } from '@jianxx/dsh-cc-tools'
+import { ccToolAliases } from '@dsh-cc/tools'
 import {
   PLAN_READONLY_REASON,
   SOURCE_PRIORITY,

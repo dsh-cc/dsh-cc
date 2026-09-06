@@ -6,7 +6,7 @@
  * lets `getSessionCwd` read back before the event round-trips and keeps
  * sessions independent inside one process.
  *
- * @module @jianxx/dsh-cc-session-cwd/state
+ * @module @dsh-cc/session-cwd/state
  */
 
 import type { SessionEvent } from '@deepseek-ai/dsh-session'

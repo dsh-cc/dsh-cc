@@ -9,10 +9,10 @@
  * `'1;31'`, `'38;5;208'`); unknown names and malformed codes silently fall
  * back to the built-in default. The default palette is byte-identical to the
  * historical fixed palette, so an absent config changes nothing on screen.
- * @module @jianxx/dsh-cc-tui/components/theme
+ * @module @dsh-cc/tui/components/theme
  */
 
-import type { EditorTheme } from '@jianxx/dsh-cc-pi-tui'
+import type { EditorTheme } from '@dsh-cc/pi-tui'
 
 /** Wrap text in an SGR sequence. */
 export const sgr =

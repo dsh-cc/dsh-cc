@@ -2,8 +2,8 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { VERBS } from '@jianxx/dsh-cc-tui/working-line.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { VERBS } from '@dsh-cc/tui/working-line.ts'
 
 /**
  * Turn-anchor lifecycle for the working line: where `state.turn` is set

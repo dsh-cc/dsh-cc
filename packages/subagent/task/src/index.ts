@@ -9,15 +9,15 @@
  *   workspace baseline from delegated children so each child keeps its own
  *   persona instead of also loading the parent's CLAUDE.md / AGENTS.md.
  *
- * The `ccModelRoutes` service (from `@jianxx/dsh-cc-model-aliases`) supplies
+ * The `ccModelRoutes` service (from `@dsh-cc/model-aliases`) supplies
  * the spawn-time alias resolver; when absent, every child inherits its
  * parent's route (the builtin fallback).
  *
- * @module @jianxx/dsh-cc-subagent-task
+ * @module @dsh-cc/subagent-task
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { PinStore } from '@jianxx/dsh-cc-subagent-resume-pins'
+import { PinStore } from '@dsh-cc/subagent-resume-pins'
 import {
   collectorFor,
   collectorsForSession,

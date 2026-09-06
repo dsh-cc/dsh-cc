@@ -10,7 +10,7 @@
  * makes it reconstructable from the log even without a companion event;
  * out-of-repo plugins cannot extend the upstream session vocabulary).
  *
- * @module @jianxx/dsh-cc-compaction-micro
+ * @module @dsh-cc/compaction-micro
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'

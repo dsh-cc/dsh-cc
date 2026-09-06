@@ -7,13 +7,13 @@
  * no-op. Recall needs `ctx.subagents` and a registered one-shot provider;
  * absence of either skips recall without error.
  *
- * @module @jianxx/dsh-cc-memory
+ * @module @dsh-cc/memory
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
-import { toAgentOptions } from '@jianxx/dsh-cc-model-aliases'
+import type { ModelRoutes } from '@dsh-cc/model-aliases'
+import { toAgentOptions } from '@dsh-cc/model-aliases'
 import { resolveMemoryHome } from './paths.ts'
 import { MemorySection } from './section.ts'
 import { MemoryRecall, SubagentMemorySelector } from './recall.ts'

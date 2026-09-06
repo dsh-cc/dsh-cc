@@ -1,7 +1,7 @@
 # Plan-mode switching via the `/plan` command channel
 
 Status: design, reviewed direction; implementation pending.
-Owner surface: `@jianxx/dsh-cc-command-permissions`, `@jianxx/dsh-cc-tui`.
+Owner surface: `@dsh-cc/command-permissions`, `@dsh-cc/tui`.
 
 ## 1. Problem
 
@@ -119,7 +119,7 @@ type PlanPhase = 'off' | 'entering' | 'on' | 'leaving'
 ```
 
 New pure, browser-safe helper `planPhaseOf(events, planState)` in
-`@jianxx/dsh-cc-command-permissions` (alongside `modes.ts`, which both the
+`@dsh-cc/command-permissions` (alongside `modes.ts`, which both the
 host command and the TUI already import):
 
 - `planState` is the structural minimum

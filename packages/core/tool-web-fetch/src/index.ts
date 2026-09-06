@@ -5,7 +5,7 @@
  * one-shot summarizes the fetched document against that instruction. Passing
  * a `prompt` without a configured cheap lane is a hard failure: the tool
  * throws `WebFetchError` before any network request is made.
- * @module @jianxx/dsh-cc-tool-web-fetch
+ * @module @dsh-cc/tool-web-fetch
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -13,9 +13,9 @@ import z from '@deepseek-ai/schemastery'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import { fetchMetaFromValue, formatFetchOutput, parseFetchArgs, presentFetchCall, presentFetchResult } from '@deepseek-ai/dsh-tool-web'
-import { toOneShotRoute } from '@jianxx/dsh-cc-model-aliases'
-import { defineTool } from '@jianxx/dsh-cc-tools'
-import type { ToolRunContext } from '@jianxx/dsh-cc-tools'
+import { toOneShotRoute } from '@dsh-cc/model-aliases'
+import { defineTool } from '@dsh-cc/tools'
+import type { ToolRunContext } from '@dsh-cc/tools'
 
 export const name = 'tool-web-fetch'
 export const inject = ['tools', 'web', 'systemPrompt', 'llm']

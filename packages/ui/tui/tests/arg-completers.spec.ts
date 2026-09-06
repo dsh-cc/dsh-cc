@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildArgCompleters } from '@jianxx/dsh-cc-tui/components/arg-completers.ts'
+import { buildArgCompleters } from '@dsh-cc/tui/components/arg-completers.ts'
 
 /**
  * Driver-backed slash argument completers: `/model` completes from the live

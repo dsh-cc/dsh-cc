@@ -14,7 +14,7 @@
  * current state so root.ts's reference-equality guard rebuilds the
  * autocomplete provider.
  *
- * @module @jianxx/dsh-cc-tui/harness/driver-catalog
+ * @module @dsh-cc/tui/harness/driver-catalog
  */
 
 import { upsertSubagent, type SubagentRunView } from '../store.ts'

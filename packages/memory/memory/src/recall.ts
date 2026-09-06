@@ -6,7 +6,7 @@
  * a forked child (including the selector itself) never recalls, so no chain of
  * memory-recall subagents can form. Best-effort: absence of the subagent
  * service or provider skips recall without error.
- * @module @jianxx/dsh-cc-memory/recall
+ * @module @dsh-cc/memory/recall
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -23,7 +23,7 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 // The canonical `tools/post-execute` waterfall signature comes from
-// @jianxx/dsh-cc-tools (a real dependency since save.ts); memory only observes
+// @dsh-cc/tools (a real dependency since save.ts); memory only observes
 // tool usage for recall suppression and delegates to `next()` unchanged.
 
 /** How many topic files the selector may surface per query. */

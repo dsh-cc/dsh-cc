@@ -40,7 +40,7 @@ Claude Code's `claude doctor` is a read-only install/settings scan; in-session `
 
 ## Current code (do not fight it)
 
-- `packages/interaction/command-doctor` — `gatherReport` + `formatDoctorReport`; sync handler; row is **top-level** in `packages/preset/cc/agent.cordis.yml:430`. Tests import `@jianxx/dsh-cc-command-doctor/doctor`.
+- `packages/interaction/command-doctor` — `gatherReport` + `formatDoctorReport`; sync handler; row is **top-level** in `packages/preset/cc/agent.cordis.yml:430`. Tests import `@dsh-cc/command-doctor/doctor`.
 - `cc-services` isolate (`toolSearch`, `microcompactor`, `ccModelRoutes`, `mcpConnections`). Consumers of those services (`command-mcp`, `command-plugin`) live **inside** the group. Doctor must move in. `composition.spec.ts:155` asserts exactly those inside-group command ids.
 - `/status` already folds `session.id`, `header.cwd`, last `request/header` provider/model, `permissionPresets.current(events)`. Reuse that folding; do not invent a second model source.
 - `/version` already reads this package's manifest + `ctx.get('harnessVersion')`. Reuse; do not spawn.
@@ -311,7 +311,7 @@ packages/interaction/command-doctor/src/
   checks/seams.ts   today's seven seams
 ```
 
-Keep `doctor.ts` as a re-export of `formatDoctorReport` + `DoctorReport` so `@jianxx/dsh-cc-command-doctor/doctor` and the tsconfig path keep working.
+Keep `doctor.ts` as a re-export of `formatDoctorReport` + `DoctorReport` so `@dsh-cc/command-doctor/doctor` and the tsconfig path keep working.
 
 Duck-type every optional seam locally (copy the `command-mcp` / `command-plugin` pattern). **Do not** add mcp-client, cc-shell, hooks-claude-code, or cc-model-aliases as runtime dependencies of command-doctor.
 

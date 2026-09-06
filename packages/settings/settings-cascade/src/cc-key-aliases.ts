@@ -3,7 +3,7 @@
  * top-level keys are aliased onto dsh-native kebab-case namespaces so a
  * `settings.json` shared verbatim with a real CC checkout resolves through
  * `settingsNamespace`. The whitelist map is the contract — no fuzzy matching.
- * @module @jianxx/dsh-cc-settings-cascade/cc-key-aliases
+ * @module @dsh-cc/settings-cascade/cc-key-aliases
  */
 
 /**

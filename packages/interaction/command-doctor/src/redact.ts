@@ -1,7 +1,7 @@
 /**
  * Pure report redaction: whitelist evidence primitives and scrub secret-like
  * substrings from every human string in the report. No cordis imports.
- * @module @jianxx/dsh-cc-command-doctor/redact
+ * @module @dsh-cc/command-doctor/redact
  */
 
 import type { Check, DoctorReport } from './report.ts'

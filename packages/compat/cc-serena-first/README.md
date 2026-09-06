@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-serena-first
+# @dsh-cc/serena-first
 
 Serena-first prompt steering for the CC preset (`packages/preset/cc`).
 

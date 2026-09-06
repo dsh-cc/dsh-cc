@@ -88,7 +88,7 @@ No user-visible change this round. `SKILL.md` `model:` stays in metadata. A late
 
 ### 1. `toAgentOptions`
 
-Package: `@jianxx/dsh-cc-model-aliases`.
+Package: `@dsh-cc/model-aliases`.
 
 ```ts
 export interface ModelRoutes {
@@ -144,7 +144,7 @@ const agentOptions = toAgentOptions(route)
 
 `hook.model === 'inherit'` is handled by the resolver (`folded === 'inherit' → undefined`), so the omitted/`inherit` rows of the table collapse to the same code path once `routes` exists.
 
-**Dependencies (not peer):** add `@jianxx/dsh-cc-model-aliases` to `dependencies` **and** `devDependencies` of `packages/hooks/hooks-claude-code/package.json`, matching Task (`packages/subagent/task/package.json` runtime `dependencies`, not peer). `toAgentOptions` is a runtime import.
+**Dependencies (not peer):** add `@dsh-cc/model-aliases` to `dependencies` **and** `devDependencies` of `packages/hooks/hooks-claude-code/package.json`, matching Task (`packages/subagent/task/package.json` runtime `dependencies`, not peer). `toAgentOptions` is a runtime import.
 
 Structural `ctx.get` stays lazy: missing service → inherit. In the cc preset, after the YAML move, the service is visible.
 
@@ -178,13 +178,13 @@ function resolveRecallAgentOptions(c: Context, config: Config): unknown {
 }
 ```
 
-**Dependencies (not peer):** add `@jianxx/dsh-cc-model-aliases` to `dependencies` **and** `devDependencies` of `packages/memory/memory/package.json`, same as Task. `z.any()` on `recallAgentOptions` stays.
+**Dependencies (not peer):** add `@dsh-cc/model-aliases` to `dependencies` **and** `devDependencies` of `packages/memory/memory/package.json`, same as Task. `z.any()` on `recallAgentOptions` stays.
 
 ### 5. Task + plugin-loader mechanical reuse
 
 - `packages/subagent/task/src/tool.ts`: delete local `stripUndefined`; `toAgentOptions(routes?.resolve(definition.model))`.
 - `packages/compat/cc-plugin-loader/src/agents.ts`: `resolveModelOverride` returns `toAgentOptions(resolver(model))` when a resolver is injected. **Keep the no-resolver branch** (`model !== undefined ? { model } : undefined`) — that is the documented historical fallback for a settings-less plugin-loader host, distinct from hooks (hooks never had a working literal-alias path; plugin-loader still has hosts that inject no resolver).
-- `packages/compat/cc-plugin-loader/package.json`: add `@jianxx/dsh-cc-model-aliases` to `dependencies` **and** `devDependencies` (Task pattern). Today this package has **zero** model-aliases dependency — the resolver is injected. `toAgentOptions` is a new runtime import, so the dep is required. Do not put it in `peerDependencies` (hooks' `@jianxx/dsh-cc-hook-protocol` is a peer; that is a different relationship).
+- `packages/compat/cc-plugin-loader/package.json`: add `@dsh-cc/model-aliases` to `dependencies` **and** `devDependencies` (Task pattern). Today this package has **zero** model-aliases dependency — the resolver is injected. `toAgentOptions` is a new runtime import, so the dep is required. Do not put it in `peerDependencies` (hooks' `@dsh-cc/hook-protocol` is a peer; that is a different relationship).
 
 ### 6. Docs
 
@@ -258,7 +258,7 @@ Extend `fakeSubagents` so `start` records the full request.
 - those ids are absent from the top-level row list
 - isolate map still exactly the five keys (no new isolate)
 - rename the existing `'isolates exactly the five cc-services services, hosting the two commands'` test while touching it (group now hosts more than two extra rows)
-- extend `'declares every @jianxx row name as a dependency'` to walk **group-nested** `@jianxx` rows, otherwise `memory` / `hooks-claude-code` drop out of the assertion at the moment memory gains a new runtime dep
+- extend `'declares every @dsh-cc row name as a dependency'` to walk **group-nested** `@dsh-cc` rows, otherwise `memory` / `hooks-claude-code` drop out of the assertion at the moment memory gains a new runtime dep
 
 Do **not** boot a full agent-loop for memory apply if a focused test of the `createSelector` closure is cheaper; prefer the smallest seam that observes `subagents.start`.
 

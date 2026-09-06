@@ -3,7 +3,7 @@
  * deployment price table, and human-readable report. No cordis imports, so the
  * fold, pricing, and formatting are unit-testable in isolation from plugin
  * mounting.
- * @module @jianxx/dsh-cc-command-cost/cost
+ * @module @dsh-cc/command-cost/cost
  */
 
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'

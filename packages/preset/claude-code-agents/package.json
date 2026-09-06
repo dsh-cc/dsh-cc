@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-claude-code-agents",
+  "name": "@dsh-cc/claude-code-agents",
   "description": "Load Claude Code `.claude/agents` definitions as agent presets for the DeepSeek Harness",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/preset/claude-code-agents"
   },
   "type": "module",
@@ -45,12 +45,12 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-tools": "workspace:^"
+    "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
-    "@jianxx/dsh-cc-tools": "workspace:^"
+    "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

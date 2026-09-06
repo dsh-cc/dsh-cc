@@ -7,7 +7,7 @@ import {
   dedupServers,
   buildRegistrations,
   type McpServerEntry,
-} from '@jianxx/dsh-cc-mcp-config/src/index.ts'
+} from '@dsh-cc/mcp-config/src/index.ts'
 
 const ENV: Record<string, string> = {
   TOKEN: 'secret-token',

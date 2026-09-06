@@ -5,7 +5,7 @@
  * stdout). Header interpolation is gated by an `allowedEnvVars` allowlist and
  * an `allowedHttpHookUrls` pattern allowlist, so a project-configured hook
  * cannot exfiltrate arbitrary secrets or reach arbitrary hosts.
- * @module @jianxx/dsh-cc-hook-protocol/http
+ * @module @dsh-cc/hook-protocol/http
  */
 
 import { parseHookOutput } from './codec.ts'

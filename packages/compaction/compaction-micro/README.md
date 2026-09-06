@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-compaction-micro
+# @dsh-cc/compaction-micro
 
 English | [中文](README.zh.md)
 
@@ -36,7 +36,7 @@ All values are integers; `retainResults` and `placeholderChars` are positive.
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import Microcompactor from '@jianxx/dsh-cc-compaction-micro'
+import Microcompactor from '@dsh-cc/compaction-micro'
 
 export function apply(ctx: Context): void {
   ctx.plugin(Microcompactor, { retainResults: 4 })

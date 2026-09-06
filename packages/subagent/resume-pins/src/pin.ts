@@ -13,7 +13,7 @@
  * an unsupported `version`, malformed JSON, or a missing required field
  * throws {@link PinParseError} — callers treat that as fail-closed.
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/pin
+ * @module @dsh-cc/subagent-resume-pins/pin
  */
 
 /** The only pin schema version this reader accepts. */

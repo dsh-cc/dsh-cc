@@ -58,7 +58,7 @@ async function bench(): Promise<{
   }
 }
 
-describe('@jianxx/dsh-cc-command-permissions browser plugin', () => {
+describe('@dsh-cc/command-permissions browser plugin', () => {
   it('hangs the /permissions popup decoration on the host command', async () => {
     const b = await bench()
     const c = b.decoration()!

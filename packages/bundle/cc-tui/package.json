@@ -1,5 +1,5 @@
 {
-  "name": "@jianxx/dsh-cc-bundle-tui",
+  "name": "@dsh-cc/bundle-tui",
   "version": "0.4.1",
   "description": "Terminal surface bundle for the dsh tui profile: CC-mode TUI over dsh-base",
   "type": "module",
@@ -17,16 +17,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/bundle/cc-tui"
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@jianxx/dsh-cc-tui": "workspace:^"
+    "@dsh-cc/tui": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
-    "@jianxx/dsh-cc-cache-trajectory": "workspace:^",
+    "@dsh-cc/cache-trajectory": "workspace:^",
     "js-yaml": "^4.0.9"
   },
   "publishConfig": {

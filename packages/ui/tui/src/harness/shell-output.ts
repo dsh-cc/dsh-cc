@@ -2,7 +2,7 @@
  * Shell/output helpers extracted from harness/driver.ts: `!` command budget
  * constants, git-branch probing, default `/export-md` path stamping, and
  * bash-output row assembly. Node builtins only — no store or harness imports.
- * @module @jianxx/dsh-cc-tui/harness/shell-output
+ * @module @dsh-cc/tui/harness/shell-output
  */
 
 import { execFile } from 'node:child_process'

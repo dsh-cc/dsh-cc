@@ -88,7 +88,7 @@ async function runOutputStyle(h: Harness, suffix = ''): Promise<{ kind: string; 
   return execution.result as { kind: string; text: string }
 }
 
-describe('@jianxx/dsh-cc-output-styles registration', () => {
+describe('@dsh-cc/output-styles registration', () => {
   it('is a function plugin with commands + systemPrompt injection and no default export', async () => {
     expect(ccOutputStyles.name).toBe('cc-output-styles')
     expect(ccOutputStyles.inject).toEqual(['systemPrompt', 'commands'])

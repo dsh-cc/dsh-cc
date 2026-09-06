@@ -3,8 +3,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
-import type { ToolExecution, ToolExecutionResult, ToolExecutionToken } from '@jianxx/dsh-cc-tools'
-import * as ToolsInvariant from '@jianxx/dsh-cc-tools/invariant'
+import type { ToolExecution, ToolExecutionResult, ToolExecutionToken } from '@dsh-cc/tools'
+import * as ToolsInvariant from '@dsh-cc/tools/invariant'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 
 const testToolSignal = new AbortController().signal

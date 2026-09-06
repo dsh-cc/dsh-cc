@@ -9,7 +9,7 @@ import ToolRuntime, {
   type ToolDefinition,
   type ToolExecutionInput,
   type ToolExecutionMode,
-} from '@jianxx/dsh-cc-tools'
+} from '@dsh-cc/tools'
 
 const testToolSignal = new AbortController().signal
 

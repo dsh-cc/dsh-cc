@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { HookOutput } from '@jianxx/dsh-cc-hook-protocol'
+import type { HookOutput } from '@dsh-cc/hook-protocol'
 
 /** A non-blocking hook error the subagent raised (StopFailure-style vocabulary). */
 interface HookRunError {

@@ -1,11 +1,11 @@
 /**
- * MCP workspace-configuration loader (`@jianxx/dsh-cc-mcp-config`).
+ * MCP workspace-configuration loader (`@dsh-cc/mcp-config`).
  *
  * Parses a Claude Code-style `.mcp.json` document — the `mcpServers` map of
  * stdio / HTTP(S) / SSE server definitions — validates it (malformed input
  * throws at load), expands `${VAR}` and `${VAR:-default}` environment
  * substitutions, dedupes server names, applies an enterprise allow/deny policy,
- * and translates the accepted servers into `@jianxx/dsh-cc-mcp-client`
+ * and translates the accepted servers into `@dsh-cc/mcp-client`
  * registrations ready for mount.
  *
  * The package owns the file→config *reading and validation* surface only; it
@@ -17,10 +17,10 @@
  * `src/migrate.ts` is the package's only file-WRITING surface — the atomic,
  * user-invoked `/mcp migrate` import into `$DSH_HOME/.mcp.json`.
  *
- * @module @jianxx/dsh-cc-mcp-config
+ * @module @dsh-cc/mcp-config
  */
 
-import type { Config } from '@jianxx/dsh-cc-mcp-client'
+import type { Config } from '@dsh-cc/mcp-client'
 
 /**
  * A `.mcp.json` server definition before transport normalization.

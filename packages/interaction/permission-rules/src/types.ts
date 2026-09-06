@@ -2,7 +2,7 @@
  * Shared types for the permission-rule engine: rule, source, mode, and the
  * pure evaluation decision. Browser-safe — no Cordis/session imports, so the
  * host UI (which previews what a rule hits) can import this subpath directly.
- * @module @jianxx/dsh-cc-permission-rules/types
+ * @module @dsh-cc/permission-rules/types
  */
 
 /** Where a {@link PermissionRule} came from, in descending evaluation priority. */

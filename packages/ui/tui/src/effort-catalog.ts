@@ -2,7 +2,7 @@
  * Pure reasoning-effort choice parsing and picker formatting for `/effort`.
  * Mirrors model-catalog.ts; levels always come from the resolved model's
  * advertised efforts — never a hard-coded universal list.
- * @module @jianxx/dsh-cc-tui/effort-catalog
+ * @module @dsh-cc/tui/effort-catalog
  */
 
 /** Trailing picker/status entry that resets effort to the provider default. */

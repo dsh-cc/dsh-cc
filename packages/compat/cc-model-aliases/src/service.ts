@@ -12,7 +12,7 @@
  * defaults plus the builtin fallback (an unconfigured builtin alias inherits
  * the parent route), so a settings-less host still resolves.
  *
- * @module @jianxx/dsh-cc-model-aliases/service
+ * @module @dsh-cc/model-aliases/service
  */
 
 import z from '@deepseek-ai/schemastery'

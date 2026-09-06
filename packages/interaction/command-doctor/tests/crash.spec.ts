@@ -4,7 +4,7 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandDoctor from '@jianxx/dsh-cc-command-doctor'
+import * as commandDoctor from '@dsh-cc/command-doctor'
 import { collect } from '../src/collect.ts'
 import { CLOCK, fakeInvocation, mountThrowing } from './helpers.ts'
 

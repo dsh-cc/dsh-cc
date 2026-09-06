@@ -1,5 +1,5 @@
 {
-  "name": "@jianxx/dsh-cc-bundle-shell",
+  "name": "@dsh-cc/bundle-shell",
   "version": "0.4.1",
   "description": "CC shell host-plane infra: tools registry swap (deferred-name support) + settings migrations; the glue plugin code lives here but is mounted by the CC preset (packages/preset/cc)",
   "type": "module",
@@ -25,7 +25,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/bundle/cc-shell"
   },
   "license": "Apache-2.0",
@@ -35,13 +35,13 @@
     "@deepseek-ai/dsh-settings": ">=0.1.1-rc.2"
   },
   "dependencies": {
-    "@jianxx/dsh-cc-claude-code-agents": "workspace:^",
-    "@jianxx/dsh-cc-plugin-loader": "workspace:^",
-    "@jianxx/dsh-cc-mcp-client": "workspace:^",
-    "@jianxx/dsh-cc-mcp-config": "workspace:^",
-    "@jianxx/dsh-cc-model-aliases": "workspace:^",
-    "@jianxx/dsh-cc-session-title-provider": "workspace:^",
-    "@jianxx/dsh-cc-web-fetch-http": "workspace:^"
+    "@dsh-cc/claude-code-agents": "workspace:^",
+    "@dsh-cc/plugin-loader": "workspace:^",
+    "@dsh-cc/mcp-client": "workspace:^",
+    "@dsh-cc/mcp-config": "workspace:^",
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/session-title-provider": "workspace:^",
+    "@dsh-cc/web-fetch-http": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
@@ -72,13 +72,13 @@
     "@deepseek-ai/dsh-web-fetch-http": "link:../../../../deepseek-harness/packages/web/web-fetch-http",
     "typescript": "6.0.3",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
-    "@jianxx/dsh-cc-tools": "workspace:^",
-    "@jianxx/dsh-cc-tool-notebook-edit": "workspace:^",
-    "@jianxx/dsh-cc-tool-sleep": "workspace:^",
-    "@jianxx/dsh-cc-tool-structured-output": "workspace:^",
-    "@jianxx/dsh-cc-settings-migrations": "workspace:^",
-    "@jianxx/dsh-cc-subagent-resume-pins": "workspace:^",
-    "@jianxx/dsh-cc-subagent-task": "workspace:^"
+    "@dsh-cc/tools": "workspace:^",
+    "@dsh-cc/tool-notebook-edit": "workspace:^",
+    "@dsh-cc/tool-sleep": "workspace:^",
+    "@dsh-cc/tool-structured-output": "workspace:^",
+    "@dsh-cc/settings-migrations": "workspace:^",
+    "@dsh-cc/subagent-resume-pins": "workspace:^",
+    "@dsh-cc/subagent-task": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

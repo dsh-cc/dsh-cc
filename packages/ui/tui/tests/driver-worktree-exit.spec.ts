@@ -2,13 +2,13 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 import type {
   WorktreeCleanupOutcome,
   WorktreeExitEvidence,
   WorktreeExitHooks,
   WorktreeExitSession,
-} from '@jianxx/dsh-cc-tui/harness/worktree-exit.ts'
+} from '@dsh-cc/tui/harness/worktree-exit.ts'
 
 interface FakeAgent extends Record<string, unknown> {
   options: Record<string, unknown>

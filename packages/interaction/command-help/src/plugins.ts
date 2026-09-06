@@ -3,7 +3,7 @@
  * service may be absent (behavior identical to before); when present it
  * exposes plugin commands under colon names like `codex:review` that the
  * harness command registry cannot host.
- * @module @jianxx/dsh-cc-command-help/plugins
+ * @module @dsh-cc/command-help/plugins
  */
 
 import type { Context } from '@deepseek-ai/cordis'

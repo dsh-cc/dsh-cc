@@ -7,7 +7,7 @@ import {
   BASH_STDOUT_MAX_BYTES,
   BASH_TIMEOUT_MS,
   createDriver,
-} from '@jianxx/dsh-cc-tui/harness/driver.ts'
+} from '@dsh-cc/tui/harness/driver.ts'
 
 /**
  * Driver-level contract for the `!` bash mode: a composer text with a leading

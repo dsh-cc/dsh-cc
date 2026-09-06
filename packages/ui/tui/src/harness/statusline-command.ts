@@ -7,7 +7,7 @@
  * throw, empty stdout), COLUMNS/LINES from the terminal-size getter at spawn
  * time, a 60 s hard cap with a 64 KiB stdout cap, and a dispose that aborts,
  * clears, and quiets.
- * @module @jianxx/dsh-cc-tui/harness/statusline-command
+ * @module @dsh-cc/tui/harness/statusline-command
  */
 
 import type { ShellExecutorLike, ShellRunResultLike } from '../state/driver-types.ts'

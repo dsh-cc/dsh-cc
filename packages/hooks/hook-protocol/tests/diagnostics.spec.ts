@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { hookDiagnosticsWriter, readHookDiagnostics, type HookIssue } from '@jianxx/dsh-cc-hook-protocol'
+import { hookDiagnosticsWriter, readHookDiagnostics, type HookIssue } from '@dsh-cc/hook-protocol'
 
 const dirs: string[] = []
 

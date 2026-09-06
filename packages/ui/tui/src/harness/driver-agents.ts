@@ -9,7 +9,7 @@
  * unicode-truncated) are additive on the detail view: never different ids or
  * ordering.
  *
- * @module @jianxx/dsh-cc-tui/harness/driver-agents
+ * @module @dsh-cc/tui/harness/driver-agents
  */
 
 import {
@@ -21,7 +21,7 @@ import {
   stopRunningCopy,
   unknownAgentCopy,
   type AgentRow,
-} from '@jianxx/dsh-cc-command-agents/snapshot'
+} from '@dsh-cc/command-agents/snapshot'
 import type { DriverRunLocalCtx } from './driver-ctx.ts'
 
 /** The /agents slice of runLocal: one rendered status text per invocation. */

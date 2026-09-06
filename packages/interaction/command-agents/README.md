@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-agents
+# @dsh-cc/command-agents
 
 Human-facing `/agents` command for continuable background agents (plan
 `docs/plans/2026-09-10-continuable-background-ux.md` §3.2, Slice 0 MVP).

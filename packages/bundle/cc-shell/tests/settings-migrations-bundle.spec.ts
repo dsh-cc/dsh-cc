@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import * as SettingsMigrations from '@jianxx/dsh-cc-settings-migrations'
+import * as SettingsMigrations from '@dsh-cc/settings-migrations'
 
 describe('cc-shell bundle — settings-migrations row', () => {
   it('runs a registered migration on mount against a temp home', async () => {

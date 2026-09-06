@@ -2,13 +2,13 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 import {
   legacyResumeMarkerFile,
   readResumeTarget,
   resumeMarkerFile,
   writeResumeTarget,
-} from '@jianxx/dsh-cc-tui/resume-target.ts'
+} from '@dsh-cc/tui/resume-target.ts'
 
 /**
  * Fake session shape — one entry per persisted session the harness knows.

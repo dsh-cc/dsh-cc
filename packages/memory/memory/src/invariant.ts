@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-memory`.
- * @module @jianxx/dsh-cc-memory/invariant
+ * Package-owned invariant companion for `@dsh-cc/memory`.
+ * @module @dsh-cc/memory/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-memory'
+const PACKAGE_NAME = '@dsh-cc/memory'
 
 /** Cordis companion plugin name. */
 export const name = 'memory-invariant'

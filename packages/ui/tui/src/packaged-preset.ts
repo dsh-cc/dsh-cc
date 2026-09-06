@@ -2,7 +2,7 @@
  * Materialize the CC preset into `$DSH_HOME/.agent-presets/cc`. The official
  * launcher replaces system preset roots, so the user root is the supported
  * extension seam (same pattern as dsh-TUI's packaged presets).
- * @module @jianxx/dsh-cc-tui/packaged-preset
+ * @module @dsh-cc/tui/packaged-preset
  */
 
 import {
@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 
-const OWNER = '@jianxx/dsh-cc-tui'
+const OWNER = '@dsh-cc/tui'
 const MARKER = '.dsh-cc-managed.json'
 export const CC_PRESET_ID = 'cc'
 

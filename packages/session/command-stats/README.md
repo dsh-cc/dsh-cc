@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-stats
+# @dsh-cc/command-stats
 
 English | [中文](README.zh.md)
 
@@ -20,7 +20,7 @@ The producer injects `commands`. A custom app mounts its owner plus this plugin:
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-stats
-  name: '@jianxx/dsh-cc-command-stats'
+  name: '@dsh-cc/command-stats'
 ```
 
 ## Model Experience

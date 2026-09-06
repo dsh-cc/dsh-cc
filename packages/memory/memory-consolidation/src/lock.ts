@@ -5,12 +5,12 @@
  * holder PID and the last-consolidated epoch rather than the file mtime (the
  * reference uses mtime as the timestamp). A holder is stale and reclaimable
  * once its stored timestamp passes {@link LOCK_STALE_MS}.
- * @module @jianxx/dsh-cc-memory-consolidation/lock
+ * @module @dsh-cc/memory-consolidation/lock
  */
 
 import { join } from 'node:path'
 import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
-import type { MemoryWritePolicy } from '@jianxx/dsh-cc-memory'
+import type { MemoryWritePolicy } from '@dsh-cc/memory'
 
 /** Lock filename inside the memory directory. */
 export const LOCK_FILE = '.consolidation-lock'

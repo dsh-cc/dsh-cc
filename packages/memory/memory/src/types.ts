@@ -1,7 +1,7 @@
 /**
  * Closed memory-type taxonomy and rationalized frontmatter for `dsh-memory`
  * topic files.
- * @module @jianxx/dsh-cc-memory/types
+ * @module @dsh-cc/memory/types
  */
 
 /** The four memory types a topic file may declare. */

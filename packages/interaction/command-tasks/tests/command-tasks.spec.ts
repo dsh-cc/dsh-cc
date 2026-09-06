@@ -5,20 +5,20 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandTasks from '@jianxx/dsh-cc-command-tasks'
+import * as commandTasks from '@dsh-cc/command-tasks'
 import {
   formatAgentsFooter,
   formatJobs,
   formatJobLine,
   type JobLine,
-} from '@jianxx/dsh-cc-command-tasks/tasks'
+} from '@dsh-cc/command-tasks/tasks'
 
 const ROWS: readonly JobLine[] = [
   { id: 'bash-1', kind: 'bash', status: 'running', startedAt: 1_700_000_000_000, label: 'npm test' },
   { id: 'subagent-2', kind: 'subagent', status: 'running', startedAt: 1_700_000_100_000 },
 ]
 
-describe('@jianxx/dsh-cc-command-tasks rendering (pure)', () => {
+describe('@dsh-cc/command-tasks rendering (pure)', () => {
   it('renders running jobs with id, kind, status, and start time', () => {
     const text = formatJobs(ROWS)
     expect(text).toContain('- bash-1 [bash] running started: 2023-11-14T22:13:20.000Z — npm test')

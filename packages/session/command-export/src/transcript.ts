@@ -1,7 +1,7 @@
 /**
  * Pure `/export` transcript rendering: session events → markdown or JSON text.
  * No cordis imports, so both renderers are unit-testable in isolation.
- * @module @jianxx/dsh-cc-command-export/transcript
+ * @module @dsh-cc/command-export/transcript
  */
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'

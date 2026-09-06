@@ -10,7 +10,7 @@
  * the driver's listener fan-out diffing permissionMode and the model/effort
  * selection. Feature stays inert when the shell service is absent (D6/N3 —
  * never the execFileAsync fallback).
- * @module @jianxx/dsh-cc-tui/harness/statusline-wiring
+ * @module @dsh-cc/tui/harness/statusline-wiring
  */
 
 import type { Context } from '@deepseek-ai/cordis'

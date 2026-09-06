@@ -2,7 +2,7 @@
  * Integration tests for cc-shell model-alias provisioning: the CC plugin
  * (mountCcPlugin) source path threads the spawn-time resolver into plugin-
  * shipped agents. The resolver comes from the `ccModelRoutes` routes service
- * (`@jianxx/dsh-cc-model-aliases`), whose config `modelAliases` resolve as
+ * (`@dsh-cc/model-aliases`), whose config `modelAliases` resolve as
  * routes, a live settings overlay overrides config, and a settings `null`
  * deleting a config alias falls back to the builtin behavior (inherit). With
  * no routes service mounted the resolver's trampoline degrades to `undefined`
@@ -13,9 +13,9 @@ import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsCascadeProvider } from '@jianxx/dsh-cc-settings-cascade'
-import { apply as applyModelRoutes } from '@jianxx/dsh-cc-model-aliases'
-import type { AliasTarget } from '@jianxx/dsh-cc-model-aliases'
+import { SettingsCascadeProvider } from '@dsh-cc/settings-cascade'
+import { apply as applyModelRoutes } from '@dsh-cc/model-aliases'
+import type { AliasTarget } from '@dsh-cc/model-aliases'
 import { apply, type Config } from '../src/index.ts'
 
 interface FakeBackend {

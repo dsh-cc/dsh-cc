@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-subagent-task
+# @dsh-cc/subagent-task
 
 English | [中文](README.zh.md)
 
@@ -13,7 +13,7 @@ DeepSeek Harness. It mounts:
 - a pre-step strip listener that removes the harness `agent-instructions` workspace
   baseline (CLAUDE.md / AGENTS.md) from delegated Task children.
 
-The `ccModelRoutes` service (from `@jianxx/dsh-cc-model-aliases`) supplies the spawn-time
+The `ccModelRoutes` service (from `@dsh-cc/model-aliases`) supplies the spawn-time
 alias resolver; when it is absent, every child inherits its parent's route (the builtin
 fallback).
 
@@ -157,8 +157,8 @@ from delegated children (`delegationDepth > 0`):
 
 ## Mounting
 
-Mounted by the `cc` preset's `tool-task` row (`@jianxx/dsh-cc-subagent-task`) inside the
-`cc-services` group, alongside `cc-model-routes` (`@jianxx/dsh-cc-model-aliases`) which
+Mounted by the `cc` preset's `tool-task` row (`@dsh-cc/subagent-task`) inside the
+`cc-services` group, alongside `cc-model-routes` (`@dsh-cc/model-aliases`) which
 supplies the alias resolver. The cc preset **disables** the harness `tool-subagent` and
 `tool-subagent-fork` rows in favour of this tool so there is no double registration of the
 `subagent_fork` name.

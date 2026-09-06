@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { createRequire } from 'node:module'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { TOOL_RUNTIME_SCHEDULER } from '@jianxx/dsh-cc-tools'
+import ToolRuntime, { TOOL_RUNTIME_SCHEDULER } from '@dsh-cc/tools'
 
 // Load the upstream reference through Node's own module cache, not a
 // vite-transformed static import: vite SSR instantiates node_modules deps in

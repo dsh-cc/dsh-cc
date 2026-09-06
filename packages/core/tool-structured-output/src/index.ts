@@ -3,10 +3,10 @@
  * caller-supplied JSON schema and echoes it back verbatim as the structured
  * output. Aligns with Claude Code's SyntheticOutputTool (StructuredOutput):
  * the schema subtype is asserted at creation, every call re-validates its
- * arguments through the shared `@jianxx/dsh-cc-tools` subset, and success
+ * arguments through the shared `@dsh-cc/tools` subset, and success
  * returns the CC `{ data, structured_output }` envelope. The tool is
  * concurrency-safe and reads only its own arguments.
- * @module @jianxx/dsh-cc-tool-structured-output
+ * @module @dsh-cc/tool-structured-output
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -16,8 +16,8 @@ import {
   assertSupportedJsonSchema,
   ToolArgsError,
   validateJsonSchemaValue,
-} from '@jianxx/dsh-cc-tools'
-import type { JsonSchemaNode, JsonValue, ToolDefinition, ToolRunContext } from '@jianxx/dsh-cc-tools'
+} from '@dsh-cc/tools'
+import type { JsonSchemaNode, JsonValue, ToolDefinition, ToolRunContext } from '@dsh-cc/tools'
 
 export const name = 'tool-structured-output'
 export const inject = ['tools']

@@ -16,7 +16,7 @@
  * loud rather than silent, so a broken agent is fixed, not forgotten. Unknown
  * files in the same directory are skipped.
  *
- * @module @jianxx/dsh-cc-claude-code-agents/discovery
+ * @module @dsh-cc/claude-code-agents/discovery
  */
 
 import { readdir, readFile, stat } from 'node:fs/promises'

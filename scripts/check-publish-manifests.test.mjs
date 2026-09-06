@@ -114,7 +114,7 @@ check("malformed >= floor throws", () => {
 
 const GOOD_REPO = {
   type: "git",
-  url: "git+https://github.com/jianxx/dsh-cc.git",
+  url: "git+https://github.com/dsh-cc/dsh-cc.git",
   directory: "packages/a/public-pkg",
 };
 check("normalizeRepoSlug: git+https + .git + directory", () => {
@@ -122,18 +122,18 @@ check("normalizeRepoSlug: git+https + .git + directory", () => {
 });
 check("normalizeRepoSlug: plain https url, no .git", () => {
   assert.equal(
-    normalizeRepoSlug({ url: "https://github.com/jianxx/dsh-cc" }),
+    normalizeRepoSlug({ url: "https://github.com/dsh-cc/dsh-cc" }),
     EXPECTED_REPOSITORY,
   );
 });
 check("normalizeRepoSlug: ssh scp-like form", () => {
   assert.equal(
-    normalizeRepoSlug({ url: "git@github.com:jianxx/dsh-cc.git" }),
+    normalizeRepoSlug({ url: "git@github.com:dsh-cc/dsh-cc.git" }),
     EXPECTED_REPOSITORY,
   );
 });
 check("normalizeRepoSlug: shorthand string", () => {
-  assert.equal(normalizeRepoSlug("jianxx/dsh-cc"), EXPECTED_REPOSITORY);
+  assert.equal(normalizeRepoSlug("dsh-cc/dsh-cc"), EXPECTED_REPOSITORY);
 });
 check("normalizeRepoSlug: missing / empty / wrong repo", () => {
   assert.equal(normalizeRepoSlug(undefined), null);
@@ -157,17 +157,17 @@ const BAD_DANGLING_LINK = {
   // with ERR_PNPM_CANNOT_RESOLVE_WORKSPACE_PROTOCOL on the workspace: peer.
   "packages/a/dangling-link-pkg/package.json": JSON.stringify(
     {
-      name: "@jianxx/dsh-cc-dangling-link-pkg",
+      name: "@dsh-cc/dangling-link-pkg",
       version: "0.1.0",
       publishConfig: { access: "public" },
       license: "Apache-2.0",
       repository: {
         type: "git",
-        url: "git+https://github.com/jianxx/dsh-cc.git",
+        url: "git+https://github.com/dsh-cc/dsh-cc.git",
         directory: "packages/a/dangling-link-pkg",
       },
-      peerDependencies: { "@jianxx/dsh-cc-session-cwd": "workspace:^" },
-      devDependencies: { "@jianxx/dsh-cc-session-cwd": "link:../session-cwd" },
+      peerDependencies: { "@dsh-cc/session-cwd": "workspace:^" },
+      devDependencies: { "@dsh-cc/session-cwd": "link:../session-cwd" },
     },
     null,
     2,
@@ -177,22 +177,22 @@ const BAD_RESOLVED_LINK = {
   // devDeps link: values that DO resolve to real workspace dirs are fine
   "packages/a/resolved-link-pkg/package.json": JSON.stringify(
     {
-      name: "@jianxx/dsh-cc-resolved-link-pkg",
+      name: "@dsh-cc/resolved-link-pkg",
       version: "0.1.0",
       publishConfig: { access: "public" },
       license: "Apache-2.0",
       repository: {
         type: "git",
-        url: "git+https://github.com/jianxx/dsh-cc.git",
+        url: "git+https://github.com/dsh-cc/dsh-cc.git",
         directory: "packages/a/resolved-link-pkg",
       },
-      devDependencies: { "@jianxx/dsh-cc-lib": "link:../lib" },
+      devDependencies: { "@dsh-cc/lib": "link:../lib" },
     },
     null,
     2,
   ),
   "packages/a/lib/package.json": JSON.stringify({
-    name: "@jianxx/dsh-cc-lib",
+    name: "@dsh-cc/lib",
     version: "0.1.0",
     private: true,
   }),
@@ -212,13 +212,13 @@ function makeFixture(files) {
 const GOOD_PUBLIC = {
   "packages/a/public-pkg/package.json": JSON.stringify(
     {
-      name: "@jianxx/dsh-cc-public-pkg",
+      name: "@dsh-cc/public-pkg",
       version: "0.1.0",
       publishConfig: { access: "public" },
       license: "Apache-2.0",
       repository: {
         type: "git",
-        url: "git+https://github.com/jianxx/dsh-cc.git",
+        url: "git+https://github.com/dsh-cc/dsh-cc.git",
         directory: "packages/a/public-pkg",
       },
       dependencies: {},
@@ -230,7 +230,7 @@ const GOOD_PUBLIC = {
 const BAD_NO_REPO = {
   "packages/a/norepo-pkg/package.json": JSON.stringify(
     {
-      name: "@jianxx/dsh-cc-norepo-pkg",
+      name: "@dsh-cc/norepo-pkg",
       version: "0.1.0",
       publishConfig: { access: "public" },
       dependencies: {},
@@ -242,7 +242,7 @@ const BAD_NO_REPO = {
 const BAD_WRONG_REPO = {
   "packages/a/wrongrepo-pkg/package.json": JSON.stringify(
     {
-      name: "@jianxx/dsh-cc-wrongrepo-pkg",
+      name: "@dsh-cc/wrongrepo-pkg",
       version: "0.1.0",
       publishConfig: { access: "public" },
       repository: { type: "git", url: "git+https://github.com/other/repo.git" },
@@ -255,7 +255,7 @@ const BAD_WRONG_REPO = {
 const BAD_PUBLIC = {
   "packages/a/closed-pkg/package.json": JSON.stringify(
     {
-      name: "@jianxx/dsh-cc-closed-pkg",
+      name: "@dsh-cc/closed-pkg",
       version: "0.1.0",
       dependencies: { foo: "1.0.0" },
     },
@@ -266,7 +266,7 @@ const BAD_PUBLIC = {
 const BAD_LINK = {
   "packages/a/link-pkg/package.json": JSON.stringify(
     {
-      name: "@jianxx/dsh-cc-link-pkg",
+      name: "@dsh-cc/link-pkg",
       version: "0.1.0",
       publishConfig: { access: "public" },
       dependencies: { "@deepseek-ai/dsh-llm": "link:../../../../somewhere" },
@@ -277,7 +277,7 @@ const BAD_LINK = {
 };
 const GOOD_PRIVATE = {
   "packages/a/private-pkg/package.json": JSON.stringify(
-    { name: "@jianxx/dsh-cc-private-pkg", version: "0.1.0", private: true },
+    { name: "@dsh-cc/private-pkg", version: "0.1.0", private: true },
     null,
     2,
   ),
@@ -365,7 +365,7 @@ const GOOD_PRIVATE = {
         `reason should mention non-resolution, got: ${dangling[0].reason}`,
       );
       assert.ok(
-        dangling[0].reason.includes("@jianxx/dsh-cc-session-cwd"),
+        dangling[0].reason.includes("@dsh-cc/session-cwd"),
         "reason should name the offending dependency",
       );
       assert.ok(

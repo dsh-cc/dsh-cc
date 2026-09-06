@@ -1,6 +1,6 @@
 /**
  * Footer status line for the CC-mode TUI.
- * @module @jianxx/dsh-cc-tui/statusline
+ * @module @dsh-cc/tui/statusline
  */
 
 import { homedir } from 'node:os'

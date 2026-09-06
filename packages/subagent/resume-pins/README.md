@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-subagent-resume-pins
+# @dsh-cc/subagent-resume-pins
 
 Pinned resume descriptors ("resume pins") for continuable background subagents.
 Design record: `docs/plans/2026-09-04-subagent-resume-pins.md`.

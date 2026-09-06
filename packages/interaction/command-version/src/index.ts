@@ -1,7 +1,7 @@
 /**
  * Human-facing `/version` command: prints the plugin bundle version and, when
  * the host surfaces one, the harness version. Deterministic and offline-safe.
- * @module @jianxx/dsh-cc-command-version
+ * @module @dsh-cc/command-version
  */
 
 import type { Context } from '@deepseek-ai/cordis'

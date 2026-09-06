@@ -256,7 +256,7 @@ TDD, one green slice at a time. fast-worker executes; do not "implement then spr
 3. `driver-clear.spec.ts` cases 1–4, 6, 11 red → `startFreshSession` + `runLocal` dispatch + `createHandle` wiring green (`bindSession` extracted as needed).
 4. Cases 5, 7–10, 12–13 red → drain, model `agentOptions`, cancel, `reapplyMode` (including plan), live cwd, boot-agentOptions fallback green.
 5. Comment / tui-help / parity-matrix / `clearRows` comment.
-6. `pnpm` test for `@jianxx/dsh-cc-tui` (worktree: `scripts/link-worktree-deps.sh` first; vitest via the worktree `.verify` config if `node_modules/.vite-temp` is EPERM). `pnpm check:size` must stay green.
+6. `pnpm` test for `@dsh-cc/tui` (worktree: `scripts/link-worktree-deps.sh` first; vitest via the worktree `.verify` config if `node_modules/.vite-temp` is EPERM). `pnpm check:size` must stay green.
 
 ## 9. Success criteria
 

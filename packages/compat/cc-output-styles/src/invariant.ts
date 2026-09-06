@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-output-styles`.
- * @module @jianxx/dsh-cc-output-styles/invariant
+ * Package-owned invariant companion for `@dsh-cc/output-styles`.
+ * @module @dsh-cc/output-styles/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-output-styles'
+const PACKAGE_NAME = '@dsh-cc/output-styles'
 
 /** Cordis companion plugin name. */
 export const name = 'cc-output-styles-invariant'

@@ -1,6 +1,6 @@
 /**
  * `session` checks for `/doctor`: identity, cwd, presets, and the dsh profile.
- * @module @jianxx/dsh-cc-command-doctor/checks/session
+ * @module @dsh-cc/command-doctor/checks/session
  */
 
 import type { Context } from '@deepseek-ai/cordis'

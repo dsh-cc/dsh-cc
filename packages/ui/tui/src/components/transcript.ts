@@ -4,7 +4,7 @@
  * Per-row identity caching avoids re-parsing unchanged historical markdown on
  * every streaming chunk, and a source-line budget clips the oldest rows when
  * the transcript grows very long.
- * @module @jianxx/dsh-cc-tui/components/transcript
+ * @module @dsh-cc/tui/components/transcript
  */
 
 import {
@@ -12,7 +12,7 @@ import {
   Markdown,
   Text,
   type Component,
-} from '@jianxx/dsh-cc-pi-tui'
+} from '@dsh-cc/pi-tui'
 import type { TranscriptRow } from '../store.ts'
 import { toolVerb } from '../tool-verbs.ts'
 import { renderDiffLines } from './diff-card.ts'

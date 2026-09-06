@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsdown'
 
-const ID = '@jianxx/dsh-cc-command-permissions'
+const ID = '@dsh-cc/command-permissions'
 
 /**
  * Browser-only bundle: emits the ModuleLoader factory at `lib/client.js` (the

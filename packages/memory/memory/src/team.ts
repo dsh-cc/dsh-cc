@@ -21,7 +21,7 @@
  * closed — only the final segment is lstat-checked, and the resolve/contains
  * check and the read are not atomic. Do not enable `teamEnabled` in multi-tenant
  * or untrusted-writer deployments.
- * @module @jianxx/dsh-cc-memory/team
+ * @module @dsh-cc/memory/team
  */
 
 import { join } from 'node:path'

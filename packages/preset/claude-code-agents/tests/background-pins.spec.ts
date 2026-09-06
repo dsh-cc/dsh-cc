@@ -5,7 +5,7 @@ import {
   discoverBundledAgents,
   findProjectAgentsDir,
   loadAgentsDir,
-} from '@jianxx/dsh-cc-claude-code-agents'
+} from '@dsh-cc/claude-code-agents'
 
 // Slice 1 repo guard (docs/plans/2026-09-10-continuable-background-ux.md §3.1, §3.3):
 // exactly deep-reasoner and fast-worker are pinned `background: true`; every other

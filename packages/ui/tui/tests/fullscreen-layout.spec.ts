@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { Terminal as XtermTerminal } from '@xterm/headless'
-import { type Terminal as PiTerminal } from '@jianxx/dsh-cc-pi-tui'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
-import type { Driver } from '@jianxx/dsh-cc-tui/state/driver-types.ts'
-import { formatModeLine } from '@jianxx/dsh-cc-tui/statusline.ts'
+import { type Terminal as PiTerminal } from '@dsh-cc/pi-tui'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
+import type { Driver } from '@dsh-cc/tui/state/driver-types.ts'
+import { formatModeLine } from '@dsh-cc/tui/statusline.ts'
 import {
   clearQueue,
   createInitialState,
@@ -14,8 +14,8 @@ import {
   toggleGlobalCollapse,
   upsertRow,
   type TuiState,
-} from '@jianxx/dsh-cc-tui/store.ts'
-import { VERBS } from '@jianxx/dsh-cc-tui/working-line.ts'
+} from '@dsh-cc/tui/store.ts'
+import { VERBS } from '@dsh-cc/tui/working-line.ts'
 
 /**
  * Minimal pi-tui Terminal that pipes write() calls into an @xterm/headless

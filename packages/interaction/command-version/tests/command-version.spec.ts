@@ -6,8 +6,8 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandVersion from '@jianxx/dsh-cc-command-version'
-import { FALLBACK_VERSION, formatVersion, readOwnVersion } from '@jianxx/dsh-cc-command-version/version'
+import * as commandVersion from '@dsh-cc/command-version'
+import { FALLBACK_VERSION, formatVersion, readOwnVersion } from '@dsh-cc/command-version/version'
 
 // Derived from this package's own manifest (readOwnVersion's data source),
 // not a literal: pins the version sync invariant (kept in lockstep by
@@ -51,7 +51,7 @@ async function harness(overrides: Record<string, unknown> = {}): Promise<{
   return { ctx, agent, plugin }
 }
 
-describe('@jianxx/dsh-cc-command-version registration', () => {
+describe('@dsh-cc/command-version registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandVersion.name).toBe('command-version')
     expect(commandVersion.inject).toEqual(['commands'])
@@ -69,8 +69,8 @@ describe('/version report', () => {
     const own = await readOwnVersion()
     expect(typeof own).toBe('string')
     expect(own.length).toBeGreaterThan(0)
-    expect(formatVersion(own, undefined)).toBe(`@jianxx/dsh-cc-plugins ${own}`)
-    expect(formatVersion(own, '0.1.0-rc.5')).toBe(`@jianxx/dsh-cc-plugins ${own}\nharness 0.1.0-rc.5`)
+    expect(formatVersion(own, undefined)).toBe(`@dsh-cc/plugins ${own}`)
+    expect(formatVersion(own, '0.1.0-rc.5')).toBe(`@dsh-cc/plugins ${own}\nharness 0.1.0-rc.5`)
   })
   it('falls back to the compile-time constant', () => {
     expect(FALLBACK_VERSION).toBe(OWN_VERSION)
@@ -83,7 +83,7 @@ describe('/version human command', () => {
     const execution = await ctx.commands.execute(agent, '/version', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
     const text = (execution?.result as { text: string }).text
-    expect(text).toContain(`@jianxx/dsh-cc-plugins ${OWN_VERSION}`)
+    expect(text).toContain(`@dsh-cc/plugins ${OWN_VERSION}`)
   })
   it('includes a harness line when the host surfaces one', async () => {
     const { ctx, agent } = await harness()

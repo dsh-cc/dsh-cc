@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Terminal as XtermTerminal } from '@xterm/headless'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Terminal as PiTerminal } from '@jianxx/dsh-cc-pi-tui'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
+import type { Terminal as PiTerminal } from '@dsh-cc/pi-tui'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
 
 /**
  * Zero-polling proof, whitelist edition: the HUD/todo strip/statusline are

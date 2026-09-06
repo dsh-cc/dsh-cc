@@ -13,7 +13,7 @@
  * (`@deepseek-ai/dsh-subagent`'s continuation settlement delivery). This
  * package adds the coordinator role and its naming/messaging surface around
  * those seams and documents the reuse.
- * @module @jianxx/dsh-cc-coordinator
+ * @module @dsh-cc/coordinator
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -21,7 +21,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-subagent'
-import { defineTool, type ToolRestriction } from '@jianxx/dsh-cc-tools'
+import { defineTool, type ToolRestriction } from '@dsh-cc/tools'
 import { COORDINATOR_SECTION_ORDER, COORDINATOR_SECTION_TEXT } from './section.ts'
 
 /**

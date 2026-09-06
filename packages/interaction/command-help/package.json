@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-help",
+  "name": "@dsh-cc/command-help",
   "description": "Human-facing slash command to list or detail available slash commands",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-help"
   },
   "type": "module",

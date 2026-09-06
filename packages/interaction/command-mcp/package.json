@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-mcp",
+  "name": "@dsh-cc/command-mcp",
   "description": "Human-facing slash command to list and drive MCP connections",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-mcp"
   },
   "type": "module",
@@ -31,10 +31,10 @@
     "@deepseek-ai/cordis": ">=0.1.1-rc.2"
   },
   "dependencies": {
-    "@jianxx/dsh-cc-mcp-config": "workspace:^"
+    "@dsh-cc/mcp-config": "workspace:^"
   },
   "devDependencies": {
-    "@jianxx/dsh-cc-mcp-config": "workspace:^",
+    "@dsh-cc/mcp-config": "workspace:^",
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",

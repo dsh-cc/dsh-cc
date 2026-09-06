@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-compaction-micro
+# @dsh-cc/compaction-micro
 
 [English](README.md) | 中文
 
@@ -36,7 +36,7 @@
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import Microcompactor from '@jianxx/dsh-cc-compaction-micro'
+import Microcompactor from '@dsh-cc/compaction-micro'
 
 export function apply(ctx: Context): void {
   ctx.plugin(Microcompactor, { retainResults: 4 })

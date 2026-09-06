@@ -2,7 +2,7 @@
  * Compact-fold helpers: duck-typed reads over the compact checkpoint shape
  * and pure transcript-row operations shared by the fold and the driver's
  * command-echo path. UI-layer only — no harness imports.
- * @module @jianxx/dsh-cc-tui/compact-fold
+ * @module @dsh-cc/tui/compact-fold
  */
 import type { TranscriptRow } from './store.ts'
 

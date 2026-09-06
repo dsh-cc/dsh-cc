@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { interpolateEnvVars, runHttpHook } from '@jianxx/dsh-cc-hook-protocol/src/http.ts'
-import type { HttpHook } from '@jianxx/dsh-cc-hook-protocol/src/types.ts'
+import { interpolateEnvVars, runHttpHook } from '@dsh-cc/hook-protocol/src/http.ts'
+import type { HttpHook } from '@dsh-cc/hook-protocol/src/types.ts'
 
 /**
  * HTTP-executor protocol tests. The response→exit-code contract and the

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import WebRuntime from '@deepseek-ai/dsh-web'
-import * as WebFetchHttpCc from '@jianxx/dsh-cc-web-fetch-http'
+import * as WebFetchHttpCc from '@dsh-cc/web-fetch-http'
 
 describe('cc-shell bundle — web-fetch-http-cc row (SSRF-gated provider over a real seam)', () => {
   it('mounts the CC wrapper (not stock web-fetch-http) and registers exactly one id "http"', async () => {

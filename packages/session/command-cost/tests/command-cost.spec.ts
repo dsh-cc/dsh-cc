@@ -7,9 +7,9 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
-import * as commandCost from '@jianxx/dsh-cc-command-cost'
-import type { ModelPrice } from '@jianxx/dsh-cc-command-cost/cost'
-import { callCost, foldCost, formatCostReport, formatUsd, resolvePrice } from '@jianxx/dsh-cc-command-cost/cost'
+import * as commandCost from '@dsh-cc/command-cost'
+import type { ModelPrice } from '@dsh-cc/command-cost/cost'
+import { callCost, foldCost, formatCostReport, formatUsd, resolvePrice } from '@dsh-cc/command-cost/cost'
 
 const PRICE: ModelPrice = {
   model: 'deepseek-chat',
@@ -35,7 +35,7 @@ function usage(seq: number, usage: TokenUsage): SessionEvent {
   return ev('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [] }, usage }, seq)
 }
 
-describe('@jianxx/dsh-cc-command-cost registration', () => {
+describe('@dsh-cc/command-cost registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)

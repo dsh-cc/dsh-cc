@@ -8,8 +8,8 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import { isJsonValue } from '@deepseek-ai/dsh-session'
-import { parameterSchemaSpecToJsonSchema, validateArgs } from '@jianxx/dsh-cc-tools'
-import type { ParameterPropertySpec, ParameterSchemaSpec, ValueSchemaSpec } from '@jianxx/dsh-cc-tools'
+import { parameterSchemaSpecToJsonSchema, validateArgs } from '@dsh-cc/tools'
+import type { ParameterPropertySpec, ParameterSchemaSpec, ValueSchemaSpec } from '@dsh-cc/tools'
 
 /** Remove parameter-only requiredness before nesting a schema as an array item. */
 function asValueSchema(prop: ParameterPropertySpec): ValueSchemaSpec {

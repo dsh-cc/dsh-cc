@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-command-rename`.
- * @module @jianxx/dsh-cc-command-rename/invariant
+ * Package-owned invariant companion for `@dsh-cc/command-rename`.
+ * @module @dsh-cc/command-rename/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-command-rename'
+const PACKAGE_NAME = '@dsh-cc/command-rename'
 
 /** Cordis companion plugin name. */
 export const name = 'command-rename-invariant'

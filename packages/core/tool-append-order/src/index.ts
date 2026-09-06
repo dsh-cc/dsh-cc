@@ -22,7 +22,7 @@
  * outermost regardless of roster position; the preset row itself stays last
  * (the composition drift gate expects cc rows at the bottom). The Item 6 L0
  * prefix-stability e2e is the long-term sentinel for that contract.
- * @module @jianxx/dsh-cc-tool-append-order
+ * @module @dsh-cc/tool-append-order
  */
 
 import type { Context } from '@deepseek-ai/cordis'

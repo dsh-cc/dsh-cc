@@ -9,7 +9,7 @@
  * A persisted `resume.state='blocked'` never short-circuits: policy flips and
  * recovered conditions are authoritative, the stored state is derived.
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/gate
+ * @module @dsh-cc/subagent-resume-pins/gate
  */
 
 import type {

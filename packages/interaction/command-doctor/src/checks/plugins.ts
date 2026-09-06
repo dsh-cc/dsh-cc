@@ -1,7 +1,7 @@
 /**
  * `plugins` checks for `/doctor`: per-plugin component load results,
  * duck-typing the `ccPlugins` seam (same spirit as `/plugin`).
- * @module @jianxx/dsh-cc-command-doctor/checks/plugins
+ * @module @dsh-cc/command-doctor/checks/plugins
  */
 
 import type { Context } from '@deepseek-ai/cordis'

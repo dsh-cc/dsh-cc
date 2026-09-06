@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DIFF_LINE_CAP, renderDiffLines } from '@jianxx/dsh-cc-tui/components/diff-card.ts'
-import { computeHunks, DIFF_LCS_LINE_CAP } from '@jianxx/dsh-cc-tui/components/diff-hunks.ts'
-import type { FileDiff } from '@jianxx/dsh-cc-tui/tool-card.ts'
+import { DEFAULT_DIFF_LINE_CAP, renderDiffLines } from '@dsh-cc/tui/components/diff-card.ts'
+import { computeHunks, DIFF_LCS_LINE_CAP } from '@dsh-cc/tui/components/diff-hunks.ts'
+import type { FileDiff } from '@dsh-cc/tui/tool-card.ts'
 
 /** Strip SGR sequences for readability in assertions that check structure. */
 function strip(s: string): string {

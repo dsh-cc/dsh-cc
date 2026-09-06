@@ -1,6 +1,6 @@
 /**
  * Subagent-run reducers: capped run list, oldest-settled-first eviction.
- * @module @jianxx/dsh-cc-tui/store/subagents
+ * @module @dsh-cc/tui/store/subagents
  */
 import type { SubagentRunView, TuiState } from './views.ts'
 

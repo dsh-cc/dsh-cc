@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { WorkingLine } from '@jianxx/dsh-cc-tui/components/working-line.ts'
-import { formatElapsed, formatWorkingLine, VERBS, type TurnAnchor } from '@jianxx/dsh-cc-tui/working-line.ts'
+import { WorkingLine } from '@dsh-cc/tui/components/working-line.ts'
+import { formatElapsed, formatWorkingLine, VERBS, type TurnAnchor } from '@dsh-cc/tui/working-line.ts'
 
 /** Identity styler — keeps the rendered text plain for string assertions. */
 const identity = (text: string): string => text

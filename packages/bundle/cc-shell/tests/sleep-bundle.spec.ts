@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { CallId } from '@deepseek-ai/dsh-llm'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
-import * as ToolSleep from '@jianxx/dsh-cc-tool-sleep'
+import ToolRuntime from '@dsh-cc/tools'
+import * as ToolSleep from '@dsh-cc/tool-sleep'
 
 /** Mount the vendored ToolRuntime swap + the tool-sleep bundle row. */
 async function mountToolSleep(): Promise<{ ctx: Context; dispose: () => Promise<void> }> {

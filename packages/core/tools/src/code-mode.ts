@@ -3,7 +3,7 @@
  * tools through nested executions scheduled under the native concurrency
  * contract; each sub-dispatch is logged for reconstruction, while only the
  * outer curated result enters model history.
- * @module @jianxx/dsh-cc-tools/src/code-mode
+ * @module @dsh-cc/tools/src/code-mode
  */
 
 import { CallId } from '@deepseek-ai/dsh-llm'

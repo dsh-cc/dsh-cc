@@ -1,11 +1,11 @@
-/** Package-owned tool-pipeline invariants. @module @jianxx/dsh-cc-tools/invariant */
+/** Package-owned tool-pipeline invariants. @module @dsh-cc/tools/invariant */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import type { ToolExecution, ToolExecutionResult } from './index.ts'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-tools'
+const PACKAGE_NAME = '@dsh-cc/tools'
 
 /** Cordis companion plugin name. */
 export const name = 'tools-invariant'

@@ -7,8 +7,8 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SettingsProvider, { settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
-import * as commandConfig from '@jianxx/dsh-cc-command-config'
-import { keyAllowed, parseConfigArgs, parseValue, renderConfig } from '@jianxx/dsh-cc-command-config/config'
+import * as commandConfig from '@dsh-cc/command-config'
+import { keyAllowed, parseConfigArgs, parseValue, renderConfig } from '@dsh-cc/command-config/config'
 
 /** Minimal in-memory settings provider for the test. */
 class MemorySettings extends SettingsProvider {
@@ -54,7 +54,7 @@ async function harness(): Promise<{
   return { ctx, agent, plugin }
 }
 
-describe('@jianxx/dsh-cc-command-config registration', () => {
+describe('@dsh-cc/command-config registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandConfig.name).toBe('command-config')
     expect(commandConfig.inject).toEqual(['commands', 'settings'])

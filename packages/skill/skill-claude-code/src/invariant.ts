@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-skill-loader`.
- * @module @jianxx/dsh-cc-skill-loader/invariant
+ * Package-owned invariant companion for `@dsh-cc/skill-loader`.
+ * @module @dsh-cc/skill-loader/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-skill-loader'
+const PACKAGE_NAME = '@dsh-cc/skill-loader'
 
 /** Cordis companion plugin name. */
 export const name = 'skill-claude-code-invariant'

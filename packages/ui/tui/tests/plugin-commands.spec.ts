@@ -2,9 +2,9 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createCatalogSection } from '@jianxx/dsh-cc-tui/harness/driver-catalog.ts'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { parseSlash, setPluginSlashNames } from '@jianxx/dsh-cc-tui/slash.ts'
+import { createCatalogSection } from '@dsh-cc/tui/harness/driver-catalog.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { parseSlash, setPluginSlashNames } from '@dsh-cc/tui/slash.ts'
 
 /**
  * Plugin-command wiring: the cc-shell `ccPlugins` service (duck-typed, colon

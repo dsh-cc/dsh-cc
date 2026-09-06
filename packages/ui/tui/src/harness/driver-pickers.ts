@@ -9,11 +9,11 @@
  * submit reads-then-closes before validating. The bare model switch writes
  * synchronously; a carried effort validates detached via resolveEfforts /
  * stalePair, kept in createDriver and passed in.
- * @module @jianxx/dsh-cc-tui/harness/driver-pickers
+ * @module @dsh-cc/tui/harness/driver-pickers
  */
 
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import { BYPASS_MODE, PERMISSION_MODE_OPTIONS } from '@jianxx/dsh-cc-command-permissions'
+import { BYPASS_MODE, PERMISSION_MODE_OPTIONS } from '@dsh-cc/command-permissions'
 import {
   moveEffortPickerFocus,
   moveModelPickerFocus,

@@ -3,9 +3,9 @@
  * management.md §4.3 add-preset, §4.4 rotate, §4.6 custom, §8-S2 verify probe):
  * the wizard text field, step submissions, persistence, and the settings
  * path-op write. Split out of provider-command.ts purely for line budget.
- * @module @jianxx/dsh-cc-tui/provider-command-actions
+ * @module @dsh-cc/tui/provider-command-actions
  */
-import { Input } from '@jianxx/dsh-cc-pi-tui'
+import { Input } from '@dsh-cc/pi-tui'
 import { MaskedInput } from './components/masked-input.ts'
 import { setProviderOverlay } from './store.ts'
 import {

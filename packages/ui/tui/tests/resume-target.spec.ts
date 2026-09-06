@@ -17,8 +17,8 @@ import {
   readResumeTarget,
   resumeMarkerFile,
   writeResumeTarget,
-} from '@jianxx/dsh-cc-tui/resume-target.ts'
-import { __clearProjectCache, resolveProject } from '@jianxx/dsh-cc-tui/project.ts'
+} from '@dsh-cc/tui/resume-target.ts'
+import { __clearProjectCache, resolveProject } from '@dsh-cc/tui/project.ts'
 
 /** Legacy (cwd-bucketed) key: sha256 of `resolve(cwd)`, first 16 hex. */
 function legacyKeyOf(cwd: string): string {

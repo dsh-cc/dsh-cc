@@ -10,7 +10,7 @@
  *
  * See the README for configuration, merge, and fallback semantics.
  *
- * @module @jianxx/dsh-cc-model-aliases
+ * @module @dsh-cc/model-aliases
  */
 
 export { BUILTIN_ALIASES, CC_ALIASES, LANE_ALIASES, LANE_PEERS, mergeAliasMaps, createModelResolver, createModelInspector, type ModelResolver } from './resolver.ts'

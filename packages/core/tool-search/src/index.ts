@@ -24,16 +24,16 @@
  * they actually hold. The first deferred registration brings ToolSearch into
  * the model-visible set; it then stays (hysteresis) so the assembled tool
  * order never shifts mid-session.
- * @module @jianxx/dsh-cc-tool-search
+ * @module @dsh-cc/tool-search
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { NamedEntries, ScopedLayers, scopeOf } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
-import { defineTool } from '@jianxx/dsh-cc-tools'
-import type { ToolResultView, ToolCallView } from '@jianxx/dsh-cc-tools'
+import { defineTool } from '@dsh-cc/tools'
+import type { ToolResultView, ToolCallView } from '@dsh-cc/tools'
 // Type-only: brings the `ctx.tools` Context merge into this program.
-import type {} from '@jianxx/dsh-cc-tools'
+import type {} from '@dsh-cc/tools'
 
 /** The model-facing ToolSearch tool name. */
 export const TOOL_SEARCH_NAME = 'ToolSearch'

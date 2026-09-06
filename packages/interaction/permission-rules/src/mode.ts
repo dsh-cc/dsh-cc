@@ -15,7 +15,7 @@
  * shape) typecheck. PermissionModeEventData carries `auto` and
  * `resumeSandbox`, which postdate both of those catalogs.
  *
- * @module @jianxx/dsh-cc-permission-rules/mode
+ * @module @dsh-cc/permission-rules/mode
  */
 
 import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'

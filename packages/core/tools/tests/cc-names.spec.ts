@@ -12,7 +12,7 @@ import {
   ccCanonicalToolName,
   ccToolAliases,
   translateToolNames,
-} from '@jianxx/dsh-cc-tools'
+} from '@dsh-cc/tools'
 
 /**
  * The authoritative harness global tool set, mirrored here so a mismatch with

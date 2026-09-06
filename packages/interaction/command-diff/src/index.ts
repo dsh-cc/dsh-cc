@@ -2,7 +2,7 @@
  * Human-facing `/diff` command: show `git diff --stat` (no arg) or a capped
  * `git diff <path>` through `ctx.shell`. Timeboxed; a non-git working directory
  * yields a friendly message, never a thrown error.
- * @module @jianxx/dsh-cc-command-diff
+ * @module @dsh-cc/command-diff
  */
 
 import type { Context } from '@deepseek-ai/cordis'

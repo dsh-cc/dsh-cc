@@ -11,7 +11,7 @@
  *
  * The module is browser-safe (pure string logic) so the host UI that previews
  * rule hits can import it directly.
- * @module @jianxx/dsh-cc-permission-rules/parser
+ * @module @dsh-cc/permission-rules/parser
  */
 
 import type { ContentMatcher, PermissionBehavior, PermissionRule, PermissionRuleSource } from './types.ts'

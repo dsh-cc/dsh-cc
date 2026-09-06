@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-hooks-claude-code",
+  "name": "@dsh-cc/hooks-claude-code",
   "description": "Bridge plugin: run a Claude Code hooks.json / settings hook config on the DeepSeek Harness interception seams",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/hooks/hooks-claude-code"
   },
   "type": "module",
@@ -25,19 +25,19 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "@jianxx/dsh-cc-model-aliases": "workspace:^"
+    "@dsh-cc/model-aliases": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-agent": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-jobs": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-user-approval": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-hook-protocol": "workspace:^",
+    "@dsh-cc/hook-protocol": "workspace:^",
     "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-session": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-session-persistence": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-subagent": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
@@ -48,8 +48,8 @@
     "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
     "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
     "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
-    "@jianxx/dsh-cc-hook-protocol": "workspace:^",
-    "@jianxx/dsh-cc-model-aliases": "workspace:^",
+    "@dsh-cc/hook-protocol": "workspace:^",
+    "@dsh-cc/model-aliases": "workspace:^",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-jobs": "link:../../../../deepseek-harness/packages/jobs/jobs",
     "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
@@ -60,12 +60,12 @@
     "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/dsh-subagent-spawn-in-process": "link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
     "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
-    "@jianxx/dsh-cc-agent-loop-mock": "workspace:^"
+    "@dsh-cc/agent-loop-mock": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

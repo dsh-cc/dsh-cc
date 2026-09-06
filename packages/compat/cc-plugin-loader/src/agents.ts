@@ -13,9 +13,9 @@
  */
 
 import { join, resolve } from 'node:path'
-import { loadAgentsDir } from '@jianxx/dsh-cc-claude-code-agents'
-import type { AgentDefinition } from '@jianxx/dsh-cc-claude-code-agents'
-import { toAgentOptions } from '@jianxx/dsh-cc-model-aliases'
+import { loadAgentsDir } from '@dsh-cc/claude-code-agents'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
+import { toAgentOptions } from '@dsh-cc/model-aliases'
 import type { CcPluginManifest } from './types.ts'
 import { ComponentTally } from './seams.ts'
 
@@ -25,7 +25,7 @@ import { ComponentTally } from './seams.ts'
  * inherits the parent's route). When the function is absent, providers keep the
  * historical byte-identical behavior of overlaying the literal model id. The
  * optional fields admit explicit `undefined` (per-field inheritance), matching
- * the `ResolvedRoute` shape from `@jianxx/dsh-cc-model-aliases`.
+ * the `ResolvedRoute` shape from `@dsh-cc/model-aliases`.
  */
 export type ResolveModel = (model: string | undefined) => {
   readonly provider?: string | undefined

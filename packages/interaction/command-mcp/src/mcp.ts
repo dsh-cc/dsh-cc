@@ -2,10 +2,10 @@
  * Pure `/mcp` parsing and rendering helpers. Input tokenization and connection
  * formatting live here so they are unit-testable without cordis or an
  * mcpConnections seam.
- * @module @jianxx/dsh-cc-command-mcp
+ * @module @dsh-cc/command-mcp
  */
 
-import type { ClaudeOnlySource, McpMigrationResult } from '@jianxx/dsh-cc-mcp-config'
+import type { ClaudeOnlySource, McpMigrationResult } from '@dsh-cc/mcp-config'
 
 /** The connection lifecycle state of one MCP server. */
 export type McpConnectionState = 'connecting' | 'ready' | 'error' | 'disconnected'

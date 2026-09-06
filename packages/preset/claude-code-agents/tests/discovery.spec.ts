@@ -7,7 +7,7 @@ import {
   findProjectAgentsDir,
   loadAgentsDir,
   loadClaudeCodeAgents,
-} from '@jianxx/dsh-cc-claude-code-agents'
+} from '@dsh-cc/claude-code-agents'
 
 const AGENT_MD = (body: string): string => `---
 description: test agent

@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-version
+# @dsh-cc/command-version
 
 [English](README.md) | 中文
 
@@ -8,7 +8,7 @@
 
 | 输入 | 结果 |
 |---|---|
-| `/version` | 打印 `@jianxx/dsh-cc-plugins <版本>`，并在宿主暴露时附加 `harness <版本>` 行。无需网络。 |
+| `/version` | 打印 `@dsh-cc/plugins <版本>`，并在宿主暴露时附加 `harness <版本>` 行。无需网络。 |
 
 内置版本在调用时读取本包 `package.json`（带编译期兜底），因此确定且离线安全。harness 行仅在存在兼容的宿主值时出现。
 
@@ -20,7 +20,7 @@
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-version
-  name: '@jianxx/dsh-cc-command-version'
+  name: '@dsh-cc/command-version'
 ```
 
 ## 模型体验

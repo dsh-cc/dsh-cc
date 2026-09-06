@@ -2,7 +2,7 @@
  * Format provider-neutral tool presentation views for the transcript trail.
  * Structural types only — no harness or tools-package imports, so the Ink
  * tree stays behind the adapter boundary.
- * @module @jianxx/dsh-cc-tui/tool-card
+ * @module @dsh-cc/tui/tool-card
  */
 
 export interface FileDiff {

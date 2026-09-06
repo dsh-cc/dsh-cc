@@ -10,7 +10,7 @@
  * disposing the old instance and creating a new one; identical `serverName`
  * reproduces identical public tool names.
  *
- * @module @jianxx/dsh-cc-mcp-client
+ * @module @dsh-cc/mcp-client
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,7 +21,7 @@ import type { ConnectionHandle, ConnectionOutcome, ReconnectConfig } from './con
 import type { OAuthConfig } from './auth.ts'
 import { McpConnectionsService, type McpConnectionControl } from './registry.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
-import type {} from '@jianxx/dsh-cc-tools'
+import type {} from '@dsh-cc/tools'
 
 export type { McpResult } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy, ConnectionHandle } from './connection.ts'

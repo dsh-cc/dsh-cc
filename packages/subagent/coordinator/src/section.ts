@@ -3,7 +3,7 @@
  * available delegation tools, and the result-return protocol a coordinator agent
  * runs under.
  *
- * @module @jianxx/dsh-cc-coordinator/section
+ * @module @dsh-cc/coordinator/section
  */
 
 /** Prompt order: within the tool-guidance band, before per-tool sections. */

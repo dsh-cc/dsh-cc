@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-mcp
+# @dsh-cc/command-mcp
 
 English | [中文](README.zh.md)
 
@@ -21,9 +21,9 @@ The producer injects `commands`. A custom app mounts mcp-client (which provides 
 
 ```yaml
 - id: mcp-client
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
 - id: command-mcp
-  name: '@jianxx/dsh-cc-command-mcp'
+  name: '@dsh-cc/command-mcp'
 ```
 
 The `mcpConnections` seam is discovered via `ctx` at run time; it is not injected, so the command loads even when mcp-client is absent (and then reports the missing seam).

@@ -1,7 +1,7 @@
 /**
  * Human-facing `/memory` command: list the memdir memory files (name, type,
  * first line) or print one memory's body by name, reading through `ctx.fs`.
- * @module @jianxx/dsh-cc-command-memory
+ * @module @dsh-cc/command-memory
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -14,7 +14,7 @@ import {
   resolveProjectMemoryRoot,
   type MemoryDirectoryState,
   type MemoryIndexEntry,
-} from '@jianxx/dsh-cc-memory'
+} from '@dsh-cc/memory'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { firstLine, formatIndex, formatMemory, type MemoryIndexLine } from './memory.ts'
 

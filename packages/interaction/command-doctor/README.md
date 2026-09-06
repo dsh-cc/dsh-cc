@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-doctor
+# @dsh-cc/command-doctor
 
 English | [中文](README.zh.md)
 
@@ -30,7 +30,7 @@ The producer injects `commands`. In the `cc` preset it lives inside the `cc-serv
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-doctor
-  name: '@jianxx/dsh-cc-command-doctor'
+  name: '@dsh-cc/command-doctor'
 ```
 
 Every optional seam is duck-typed via `ctx.get`; an absent seam is a `skip` row, not a failure. Each check group is try/catch-isolated, so a throwing seam degrades to one failing row while the command itself still succeeds.

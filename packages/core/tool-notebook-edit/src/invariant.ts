@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-tool-notebook-edit`.
- * @module @jianxx/dsh-cc-tool-notebook-edit/invariant
+ * Package-owned invariant companion for `@dsh-cc/tool-notebook-edit`.
+ * @module @dsh-cc/tool-notebook-edit/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-tool-notebook-edit'
+const PACKAGE_NAME = '@dsh-cc/tool-notebook-edit'
 
 /** Cordis companion plugin name. */
 export const name = 'tool-notebook-edit-invariant'

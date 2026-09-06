@@ -8,14 +8,14 @@
  * structured fields, the plugin generates the frontmatter, maintains the
  * MEMORY.md pointer, and writes host-side under a per-call policy confined to
  * the memory directory (see `writeback.ts`).
- * @module @jianxx/dsh-cc-memory/save
+ * @module @dsh-cc/memory/save
  */
 
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
-import { defineTool } from '@jianxx/dsh-cc-tools'
+import { defineTool } from '@dsh-cc/tools'
 import { MEMORY_TYPES } from './types.ts'
 import { ENTRYPOINT_NAME } from './truncate.ts'
 import { validateMemoryWrites, writeMemoryFiles } from './writeback.ts'

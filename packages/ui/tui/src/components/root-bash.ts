@@ -9,10 +9,10 @@
  * in root.ts's input listener is deliberate). Paste normalization lives at
  * the driver's submit — a `!`-prefixed line runs locally no matter how it
  * got into the buffer.
- * @module @jianxx/dsh-cc-tui/components/root-bash
+ * @module @dsh-cc/tui/components/root-bash
  */
 
-import type { Editor, TUI } from '@jianxx/dsh-cc-pi-tui'
+import type { Editor, TUI } from '@dsh-cc/pi-tui'
 import type { Theme } from './theme.ts'
 import type { Driver } from '../state/driver-types.ts'
 import { parseSlash } from '../slash.ts'

@@ -14,7 +14,7 @@ n=5 after one discarded warm-up; harness scripts retained under the untracked
   `packages/ui/tui/src/components/root.ts:78`): **median 7.09 s**, min 5.50,
   max 10.14.
 - Main-process JS is busy only ~1.41 s of that (node internals 557 ms,
-  `@deepseek-ai/*` 241 ms, `@jianxx/*` 60 ms). **~86 % of wall time is waiting
+  `@deepseek-ai/*` 241 ms, `@dsh-cc/*` 60 ms). **~86 % of wall time is waiting
   on spawned subprocesses.**
 - Child-process timeline: git probes ~0.7 s; `npx -y @upstash/context7-mcp`
   spawned at 1.26 s; serena (python) at 2.59 s; `npx -y sequential-thinking`
@@ -179,11 +179,11 @@ Single-invalid behavior is unchanged. Concurrency test uses `vi.spyOn` on
 flight — no wall-clock assertions. Expected win is single-digit ms; lands only
 because it is nearly free.
 
-### W7 (P2, gated): bundling `@jianxx/*` runtime packages
+### W7 (P2, gated): bundling `@dsh-cc/*` runtime packages
 
 Attempt **only if**, after W1–W4+W6 land, a fresh `--cpu-prof` re-measure
-still shows ≥ 300 ms of module-load cost attributable to `@jianxx/*` lib
-files. `@jianxx/*` self time is currently ~60 ms of 1.41 s busy and W3 already
+still shows ≥ 300 ms of module-load cost attributable to `@dsh-cc/*` lib
+files. `@dsh-cc/*` self time is currently ~60 ms of 1.41 s busy and W3 already
 attacks the internals bucket, so the expected outcome is "record the
 measurement, close as not-worth-it". If the gate triggers: esbuild
 single-file `lib/` per boot-path package, keeping `exports` targets intact;

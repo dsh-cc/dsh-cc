@@ -52,7 +52,7 @@ side-query 进行动态召回。所有文件访问都走可选的 `ctx.fs` 缝�
 
 ## 使用
 
-以 `@jianxx/dsh-cc-memory` 加载插件。配置项：
+以 `@dsh-cc/memory` 加载插件。配置项：
 
 | Key | 默认值 | 含义 |
 |---|---|---|
@@ -78,7 +78,7 @@ side-query 进行动态召回。所有文件访问都走可选的 `ctx.fs` 缝�
 > 留在磁盘上不再写入；新写入落在主 checkout 的桶里。
 
 ```ts
-import memory from '@jianxx/dsh-cc-memory'
+import memory from '@dsh-cc/memory'
 await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
 ```
 

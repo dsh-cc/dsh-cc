@@ -4,7 +4,7 @@
  * and protected/externally-scoped file writes escalate before the normal rule
  * waterfall. Pure functions — no Cordis/session coupling — mirroring the
  * {@link evaluatePermission} style, so hosts can classify a call directly.
- * @module @jianxx/dsh-cc-permission-rules/classifier
+ * @module @dsh-cc/permission-rules/classifier
  */
 
 import { isAbsolute, relative, resolve } from 'node:path'

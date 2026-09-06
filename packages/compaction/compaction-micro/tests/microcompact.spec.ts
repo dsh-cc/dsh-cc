@@ -13,8 +13,8 @@ import Microcompactor, {
   isMicrocompactPlaceholder,
   resolveConfig,
   reuseSpillLocator,
-} from '@jianxx/dsh-cc-compaction-micro'
-import type { MicrocompactConfig } from '@jianxx/dsh-cc-compaction-micro'
+} from '@dsh-cc/compaction-micro'
+import type { MicrocompactConfig } from '@dsh-cc/compaction-micro'
 
 const MODEL = 'test-model'
 
@@ -307,11 +307,11 @@ describe('Microcompactor content guard', () => {
   it('invariant companion loads as a plugin and reserves its package name', async () => {
     const ctx = new Context()
     await ctx.plugin(InvariantRegistry)
-    const MicroInvariant = await import('@jianxx/dsh-cc-compaction-micro/invariant')
+    const MicroInvariant = await import('@dsh-cc/compaction-micro/invariant')
     await ctx.plugin(MicroInvariant)
     // The plugin install reserves the package name against duplicate registration.
     expect(() => {
-      ctx.invariants.register('@jianxx/dsh-cc-compaction-micro', () => {})
+      ctx.invariants.register('@dsh-cc/compaction-micro', () => {})
     }).toThrow(/already registered/)
   })
 })

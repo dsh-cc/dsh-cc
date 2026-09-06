@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { definitionFingerprint } from '../src/fingerprint.ts'
 import { refingerprintDefinition } from '../src/plugin.ts'
-import { loadAgentsDir } from '@jianxx/dsh-cc-claude-code-agents'
+import { loadAgentsDir } from '@dsh-cc/claude-code-agents'
 import type { ResumePin } from '../src/pin.ts'
 
 const roots: string[] = []

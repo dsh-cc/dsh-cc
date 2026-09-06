@@ -68,7 +68,7 @@ Upstream facts that shape the design:
 ## Design
 
 New package `packages/compat/cc-serena-first`
-(`@jianxx/dsh-cc-serena-first`): a default cordis function plugin with
+(`@dsh-cc/serena-first`): a default cordis function plugin with
 `inject = ['systemPrompt']`, mounted as a row inside the `cc-services`
 group of `packages/preset/cc/agent.cordis.yml`.
 

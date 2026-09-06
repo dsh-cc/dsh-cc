@@ -3,7 +3,7 @@
  * text the model programs against (the `tools:sdk` prompt section). Sibling of
  * `json-schema.ts` — `schemas()` (native function calling) and this module (the generated
  * `declare const tools` API) are two projections of the same store.
- * @module @jianxx/dsh-cc-tools/src/ts-types
+ * @module @dsh-cc/tools/src/ts-types
  */
 
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'

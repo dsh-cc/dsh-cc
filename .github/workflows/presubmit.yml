@@ -19,7 +19,7 @@
 # deepseek-harness pin 升级流程:harness master 验证通过后,更新上方 env 的
 # DSH_HARNESS_REF 到新 SHA 并连同本仓适配修改一起提交。改 ref 即换 cache key,
 # PR 与合入 main 各冷构建一次(缓存按分支隔离),此后全部命中;旧 entry 闲置
-# 7 天自动淘汰。注意这是个人 fork:删除/转私有/force-push GC 都会让 CI 失效。
+# 7 天自动淘汰。注意这是组织内固定 fork:删除/转私有/force-push GC 都会让 CI 失效。
 # =============================================================================
 name: PreSubmit
 
@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: jianxx/deepseek-harness
+          repository: dsh-cc/deepseek-harness
           ref: ${{ env.DSH_HARNESS_REF }}
           path: deepseek-harness
 
@@ -74,6 +74,10 @@ jobs:
       - name: Spec dependency declarations (check:spec-deps)
         working-directory: dsh-cc
         run: node scripts/check-spec-deps.mjs
+
+      - name: Canonical project identity (check:identity)
+        working-directory: dsh-cc
+        run: node scripts/check-project-identity.mjs
 
       - name: Publishable manifest invariants (check:publish)
         working-directory: dsh-cc

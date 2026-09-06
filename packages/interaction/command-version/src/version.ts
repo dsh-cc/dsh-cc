@@ -3,7 +3,7 @@
  * runtime (deterministic, no network), falling back to a compile-time constant
  * when the file cannot be located in a bundled deploy. The renderer appends a
  * harness version line only when the host surfaces one.
- * @module @jianxx/dsh-cc-command-version/version
+ * @module @dsh-cc/command-version/version
  */
 
 import { dirname, join } from 'node:path'
@@ -43,7 +43,7 @@ export async function readOwnVersion(): Promise<string> {
  * @returns the multi-line version report.
  */
 export function formatVersion(own: string, harness: HarnessVersion): string {
-  const lines = [`@jianxx/dsh-cc-plugins ${own}`]
+  const lines = [`@dsh-cc/plugins ${own}`]
   if (harness !== undefined && harness.length > 0) lines.push(`harness ${harness}`)
   return lines.join('\n')
 }

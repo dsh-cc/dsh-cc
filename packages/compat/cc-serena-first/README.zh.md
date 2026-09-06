@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-serena-first
+# @dsh-cc/serena-first
 
 CC 预设的 serena 优先提示词引导（参见 `README.md`）。
 

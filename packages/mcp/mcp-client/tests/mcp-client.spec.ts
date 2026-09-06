@@ -4,11 +4,11 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Context } from '@deepseek-ai/cordis'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { type JsonValue } from '@jianxx/dsh-cc-tools'
-import { emptyToolGeneration, publicToolName, syncTools, type ToolBridgeOptions } from '@jianxx/dsh-cc-mcp-client/src/tools.ts'
-import { createTransport } from '@jianxx/dsh-cc-mcp-client/src/transport.ts'
-import { stdioStderrTail } from '@jianxx/dsh-cc-mcp-client/src/stdio-stderr.ts'
-import type { Config } from '@jianxx/dsh-cc-mcp-client'
+import ToolRuntime, { type JsonValue } from '@dsh-cc/tools'
+import { emptyToolGeneration, publicToolName, syncTools, type ToolBridgeOptions } from '@dsh-cc/mcp-client/src/tools.ts'
+import { createTransport } from '@dsh-cc/mcp-client/src/transport.ts'
+import { stdioStderrTail } from '@dsh-cc/mcp-client/src/stdio-stderr.ts'
+import type { Config } from '@dsh-cc/mcp-client'
 
 const testToolSignal = new AbortController().signal
 

@@ -2,10 +2,10 @@
  * Pure presentation (presentCall / presentResult) for the Sleep tool: a
  * generic pending card naming the requested duration, and a generic result
  * card that fences errors so a failure reads distinct from a success summary.
- * @module @jianxx/dsh-cc-tool-sleep/render
+ * @module @dsh-cc/tool-sleep/render
  */
 
-import type { GenericCallView, ToolResult, ToolResultView } from '@jianxx/dsh-cc-tools'
+import type { GenericCallView, ToolResult, ToolResultView } from '@dsh-cc/tools'
 
 /** Arguments accepted by the Sleep tool. */
 export interface SleepToolArgs {

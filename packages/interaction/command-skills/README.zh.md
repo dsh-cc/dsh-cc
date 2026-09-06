@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-skills
+# @dsh-cc/command-skills
 
 [English](README.md) | 中文
 
@@ -22,7 +22,7 @@
 - id: skills
   name: '@deepseek-ai/dsh-skill'
 - id: command-skills
-  name: '@jianxx/dsh-cc-command-skills'
+  name: '@dsh-cc/command-skills'
 ```
 
 ## 模型体验

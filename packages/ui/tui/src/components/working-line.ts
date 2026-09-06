@@ -4,10 +4,10 @@
  * own 80ms interval — it is the SINGLE file in tui/src allowed to create one
  * (whitelisted in tests/no-polling.spec.ts; any new exemption means touching
  * that test first).
- * @module @jianxx/dsh-cc-tui/components/working-line
+ * @module @dsh-cc/tui/components/working-line
  */
 
-import { Text } from '@jianxx/dsh-cc-pi-tui'
+import { Text } from '@dsh-cc/pi-tui'
 
 /** Spinner frames — the same braille set as pi-tui's Loader. */
 const FRAMES: readonly string[] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']

@@ -3,7 +3,7 @@
  * and single-memory formatting. Filesystem access and body reads happen in the
  * command's handler; these functions only shape already-loaded data, so they
  * are unit-testable without cordis or an fs seam.
- * @module @jianxx/dsh-cc-command-memory/memory
+ * @module @dsh-cc/command-memory/memory
  */
 
 /** A compact index line for one memory topic. */

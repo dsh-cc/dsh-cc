@@ -5,12 +5,12 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandResume from '@jianxx/dsh-cc-command-resume'
+import * as commandResume from '@dsh-cc/command-resume'
 import {
   formatResumeIndex,
   formatSessionLine,
   type SessionLine,
-} from '@jianxx/dsh-cc-command-resume/resume'
+} from '@dsh-cc/command-resume/resume'
 
 const LINES: readonly SessionLine[] = [
   {
@@ -30,7 +30,7 @@ const LINES: readonly SessionLine[] = [
   },
 ]
 
-describe('@jianxx/dsh-cc-command-resume rendering (pure)', () => {
+describe('@dsh-cc/command-resume rendering (pure)', () => {
   it('renders id, title, cwd, parent, availability, and creation time', () => {
     const text = formatResumeIndex(LINES)
     expect(text).toContain('- sess-1 — Implement search — cwd: /work/repo — parent: sess-0 — available — created 2023-11-14T22:13:20.000Z')

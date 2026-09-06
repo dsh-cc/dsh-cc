@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { TranscriptView } from '@jianxx/dsh-cc-tui/components/transcript.ts'
-import { bootBannerRows, bootBannerText, whaleBannerArt } from '@jianxx/dsh-cc-tui/harness/boot-banner.ts'
+import { TranscriptView } from '@dsh-cc/tui/components/transcript.ts'
+import { bootBannerRows, bootBannerText, whaleBannerArt } from '@dsh-cc/tui/harness/boot-banner.ts'
 
 describe('whaleBannerArt', () => {
   it('is exactly 6 lines, each closed with a reset SGR', () => {

@@ -1,7 +1,7 @@
 /**
  * TUI-local slash parsing. Harness commands still dispatch through
  * `ctx.commands`; these names are owned by the terminal surface.
- * @module @jianxx/dsh-cc-tui/slash
+ * @module @dsh-cc/tui/slash
  */
 
 /** Slash names the TUI handles without calling `ctx.commands`. */

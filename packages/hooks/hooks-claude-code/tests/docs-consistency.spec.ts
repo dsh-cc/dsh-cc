@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SUPPORTED_CLAUDE_EVENTS } from '@jianxx/dsh-cc-hooks-claude-code/src/config.ts'
+import { SUPPORTED_CLAUDE_EVENTS } from '@dsh-cc/hooks-claude-code/src/config.ts'
 
 /**
  * Docs-consistency gate (F7): each README's supported enumeration must match

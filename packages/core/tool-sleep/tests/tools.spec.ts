@@ -9,8 +9,8 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { TOOL_ABORTED } from '@jianxx/dsh-cc-tools'
-import * as ToolSleep from '@jianxx/dsh-cc-tool-sleep'
+import ToolRuntime, { TOOL_ABORTED } from '@dsh-cc/tools'
+import * as ToolSleep from '@dsh-cc/tool-sleep'
 
 async function setup() {
   const ctx = new Context()

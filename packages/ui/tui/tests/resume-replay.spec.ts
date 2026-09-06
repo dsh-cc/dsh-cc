@@ -2,19 +2,19 @@ import { describe, expect, it, vi } from 'vitest'
 import { Terminal as XtermTerminal } from '@xterm/headless'
 import {
   type Terminal as PiTerminal,
-} from '@jianxx/dsh-cc-pi-tui'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
-import type { Driver } from '@jianxx/dsh-cc-tui/state/driver-types.ts'
+} from '@dsh-cc/pi-tui'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
+import type { Driver } from '@dsh-cc/tui/state/driver-types.ts'
 import {
   createInitialState,
   toggleGlobalCollapse,
   type TuiState,
-} from '@jianxx/dsh-cc-tui/store.ts'
+} from '@dsh-cc/tui/store.ts'
 import {
   applySessionEvent,
   type SessionEventLike,
   type ToolPresenters,
-} from '@jianxx/dsh-cc-tui/transcript.ts'
+} from '@dsh-cc/tui/transcript.ts'
 
 /**
  * Minimal pi-tui Terminal implementation that pipes write() calls into an

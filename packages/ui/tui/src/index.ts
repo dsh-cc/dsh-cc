@@ -1,7 +1,7 @@
 /**
  * Cordis plugin surface for the CC-mode TUI. Heavy wiring lives behind a
  * dynamic import so a boot failure is a plugin error, not a module-load crash.
- * @module @jianxx/dsh-cc-tui
+ * @module @dsh-cc/tui
  */
 
 import type { Context } from '@deepseek-ai/cordis'
