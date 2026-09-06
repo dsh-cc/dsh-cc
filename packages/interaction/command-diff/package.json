@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-diff",
   "description": "Human-facing slash command to show git diff summary or file diff via the shell",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

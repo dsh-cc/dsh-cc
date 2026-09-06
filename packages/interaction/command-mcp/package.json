@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-mcp",
   "description": "Human-facing slash command to list and drive MCP connections",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

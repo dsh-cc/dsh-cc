@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-rename",
   "description": "Human-facing slash command to rename the current session via the session-title service",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
