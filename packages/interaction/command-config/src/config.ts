@@ -2,7 +2,7 @@
  * Pure `/config` logic: parse a `[key] [value] [scope]` update into an args
  * tuple, render the effective config from settings descriptors, and enforce the
  * restricted write allowlist. No cordis imports.
- * @module @jianxx/dsh-cc-command-config/config
+ * @module @dsh-cc/command-config/config
  */
 
 import type { SettingsDescriptor } from '@deepseek-ai/dsh-settings'

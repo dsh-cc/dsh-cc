@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-plugin",
+  "name": "@dsh-cc/command-plugin",
   "description": "Human-facing slash commands to list and reload mounted Claude Code plugins",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-plugin"
   },
   "type": "module",

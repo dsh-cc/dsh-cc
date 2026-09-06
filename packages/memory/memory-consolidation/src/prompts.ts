@@ -6,7 +6,7 @@
  * driver-injected `structured_output` tool, and the plugin writes the files
  * host-side (see `writeback.ts`). The prompts below are the model-facing half
  * of that contract.
- * @module @jianxx/dsh-cc-memory-consolidation/prompts
+ * @module @dsh-cc/memory-consolidation/prompts
  */
 
 import { MEMORY_AGENT_TOOLS } from './tools.ts'

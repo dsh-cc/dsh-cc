@@ -8,12 +8,12 @@
  * (`source`, `baseDir`, `filename`) is deliberately excluded: the same file
  * discovered from a different layer must keep its identity.
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/fingerprint
+ * @module @dsh-cc/subagent-resume-pins/fingerprint
  */
 
 import { createHash } from 'node:crypto'
 import { canonicalJson } from './pin.ts'
-import type { AgentDefinition } from '@jianxx/dsh-cc-claude-code-agents'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 
 /** sha256 hex of `input`, prefixed `sha256:`. */
 export function sha256Prefixed(input: string): string {

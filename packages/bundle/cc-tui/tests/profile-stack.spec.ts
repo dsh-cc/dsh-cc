@@ -44,14 +44,14 @@ describe('tui profile stack (permissions + shell + tui)', () => {
 
   it('keeps the CC tools swap and permission engine from earlier bundles', () => {
     expect(stacked.get('tools')?.disabled).toBe(true)
-    expect(stacked.get('tools-cc')?.name).toBe('@jianxx/dsh-cc-tools')
+    expect(stacked.get('tools-cc')?.name).toBe('@dsh-cc/tools')
     expect(stacked.get('settings')?.disabled).toBe(true)
-    expect(stacked.get('permission-rules')?.name).toBe('@jianxx/dsh-cc-permission-rules')
+    expect(stacked.get('permission-rules')?.name).toBe('@dsh-cc/permission-rules')
   })
 
   it('defaults the roster to cc and mounts the TUI driver', () => {
     expect(stacked.get('agent-presets')?.config?.default).toBe('cc')
-    expect(stacked.get('tui')?.name).toBe('@jianxx/dsh-cc-tui')
+    expect(stacked.get('tui')?.name).toBe('@dsh-cc/tui')
     expect(stacked.get('tui')?.config?.agentPreset).toBe('cc')
   })
 

@@ -77,7 +77,7 @@ After README edits: `pnpm run verify-translation-pairing --write packages/subage
 - `packages/mcp/mcp-client/src/connection.ts` — pass default threshold; expose generation size on the handle
 - `packages/mcp/mcp-client/src/index.ts` — stop counting `schemas()`
 - `packages/mcp/mcp-client/tests/defer.spec.ts` (new; keep `mcp-client.spec.ts` on the eager path)
-- `packages/mcp/mcp-client/package.json` — `@jianxx/dsh-cc-tool-search` as **devDependency only**. Production code duck-types `ctx.get('toolSearch')`. **Do not** add it as a required peer; **do not** change `inject = ['tools']`.
+- `packages/mcp/mcp-client/package.json` — `@dsh-cc/tool-search` as **devDependency only**. Production code duck-types `ctx.get('toolSearch')`. **Do not** add it as a required peer; **do not** change `inject = ['tools']`.
 - `packages/mcp/mcp-client/README.md` (+ zh; re-record pairing)
 - `docs/cc-parity-matrix.md` MCP / ToolSearch / Subagents rows
 
@@ -116,7 +116,7 @@ Fingerprint skip unchanged (same client + same fingerprint → return `previous`
 
 **Generation swap unloads activated tools.** Dispose previous first, then publish next. Reconnect (new client) and `tools/list_changed` (same client, new fingerprint) both drop previously ToolSearch-loaded MCP tools; the model must search again. Acceptable v1. Do not preserve activation across swaps. Stale-client executors cannot survive: old deferred entries are disposed before new ones are published, and `activate` is synchronous.
 
-Duck-type, do not import `@jianxx/dsh-cc-tool-search` from `src/`.
+Duck-type, do not import `@dsh-cc/tool-search` from `src/`.
 
 ### `countServerTools`
 
@@ -136,7 +136,7 @@ Do **not** count `ctx.tools.schemas()` (deferred names are invisible there). Cou
 
 ### Tests — write these first (failing) in `defer.spec.ts`
 
-Reuse `createMockClient` / `mountRegistry` patterns from `mcp-client.spec.ts` (copy the small helpers; do not export from the spec file). Mount `ToolRuntime` + (when testing defer) `DeferredToolRegistry` from `@jianxx/dsh-cc-tool-search`. Default threshold 8 so existing 1–3 tool tests stay eager.
+Reuse `createMockClient` / `mountRegistry` patterns from `mcp-client.spec.ts` (copy the small helpers; do not export from the spec file). Mount `ToolRuntime` + (when testing defer) `DeferredToolRegistry` from `@dsh-cc/tool-search`. Default threshold 8 so existing 1–3 tool tests stay eager.
 
 | # | Case | Assert |
 |---|---|---|

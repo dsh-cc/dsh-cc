@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-export
+# @dsh-cc/command-export
 
 [English](README.md) | 中文
 
@@ -20,7 +20,7 @@ markdown transcript 会把每个对模型可见的事件（用户、助手、工
 
 ```yaml
 - id: command-export
-  name: '@jianxx/dsh-cc-command-export'
+  name: '@dsh-cc/command-export'
   config:
     defaultDir: ./exports
 ```
@@ -37,7 +37,7 @@ markdown transcript 会把每个对模型可见的事件（用户、助手、工
 - id: fs
   name: '@deepseek-ai/dsh-fs-local'
 - id: command-export
-  name: '@jianxx/dsh-cc-command-export'
+  name: '@dsh-cc/command-export'
 ```
 
 ## 模型体验

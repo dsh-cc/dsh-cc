@@ -1,5 +1,5 @@
 {
-  "name": "@jianxx/dsh-cc-pi-tui",
+  "name": "@dsh-cc/pi-tui",
   "version": "0.4.1",
   "description": "Vendored upstream pi-tui renderer (earendil-works/pi packages/tui) — see PORTING.md",
   "type": "module",
@@ -20,7 +20,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/ui/pi-tui"
   },
   "engines": {

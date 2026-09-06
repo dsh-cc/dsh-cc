@@ -2,7 +2,7 @@
  * Present-tense verb for a running tool row. Lowercase match on the tool name;
  * unknown names fall back to "Calling". Completed rows drop the verb and show
  * only a glyph, so this map only drives the in-progress label.
- * @module @jianxx/dsh-cc-tui/tool-verbs
+ * @module @dsh-cc/tui/tool-verbs
  */
 
 const VERBS: Readonly<Record<string, string>> = {

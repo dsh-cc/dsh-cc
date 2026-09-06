@@ -1,8 +1,8 @@
-# @jianxx/dsh-cc-tool-structured-output
+# @dsh-cc/tool-structured-output
 
 English | [中文](README.zh.md)
 
-Model-facing `StructuredOutput` tool that validates the model's final structured output against a caller-supplied JSON schema and echoes it back verbatim, aligned to Claude Code's `SyntheticOutputTool`. Input is validated with the shared `@jianxx/dsh-cc-tools` JSON-schema subset, so an invalid value is rejected with the same error semantics the rest of the harness uses for bad tool arguments.
+Model-facing `StructuredOutput` tool that validates the model's final structured output against a caller-supplied JSON schema and echoes it back verbatim, aligned to Claude Code's `SyntheticOutputTool`. Input is validated with the shared `@dsh-cc/tools` JSON-schema subset, so an invalid value is rejected with the same error semantics the rest of the harness uses for bad tool arguments.
 
 ## Tools
 
@@ -26,9 +26,9 @@ The tool is created by the `createStructuredOutputTool(jsonSchema)` factory:
 ## Plugin
 
 ```ts
-import * as ToolStructuredOutput from '@jianxx/dsh-cc-tool-structured-output'
+import * as ToolStructuredOutput from '@dsh-cc/tool-structured-output'
 
-await ctx.plugin(ToolRuntime)                        // @jianxx/dsh-cc-tools
+await ctx.plugin(ToolRuntime)                        // @dsh-cc/tools
 await ctx.plugin(ToolStructuredOutput)               // no schema declared -> no tool registered
 await ctx.plugin(ToolStructuredOutput, { schema })   // schema declared  -> registers StructuredOutput
 ```
@@ -53,15 +53,15 @@ ctx.tools.register(tool)
 ## Choice of semantics
 
 - **Early schema assertion** at factory construction rejects unsupported subschemas up front, before any call.
-- **Shared validation** through `@jianxx/dsh-cc-tools` keeps structured-output errors consistent with every other tool's argument errors.
+- **Shared validation** through `@dsh-cc/tools` keeps structured-output errors consistent with every other tool's argument errors.
 - **CC-aligned envelope** (`data` + `structured_output`) reproduces SyntheticOutputTool's `call()` return shape.
 - **Concurrency-safe** so `StructuredOutput` may overlap sibling calls.
 
 ## Build order
 
-`tool-structured-output` depends only on the workspace `@jianxx/dsh-cc-tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/schemastery`, `@deepseek-ai/dsh-invariants`). It builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
+`tool-structured-output` depends only on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/schemastery`, `@deepseek-ai/dsh-invariants`). It builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
 
 ## Known limitations
 
 - CC enables `StructuredOutput` only in non-interactive sessions (`isSyntheticOutputToolEnabled`); this tool has no session-mode gate — registration is purely driven by whether a schema is configured.
-- The schema must stay within the enforced `@jianxx/dsh-cc-tools` subset (no `anyOf`, pattern, format, numeric bounds, etc.) rather than the full Ajv dialect CC compiles.
+- The schema must stay within the enforced `@dsh-cc/tools` subset (no `anyOf`, pattern, format, numeric bounds, etc.) rather than the full Ajv dialect CC compiles.

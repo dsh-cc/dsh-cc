@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver, gitBranchOf } from '@jianxx/dsh-cc-tui/harness/driver.ts'
+import { createDriver, gitBranchOf } from '@dsh-cc/tui/harness/driver.ts'
 
 /**
  * Fake sessionProjections service: `stateOf` reads a per-session key→state

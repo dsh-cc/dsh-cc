@@ -1,10 +1,10 @@
-# @jianxx/dsh-cc-plugin-loader
+# @dsh-cc/plugin-loader
 
 [English](README.md) | 中文
 
 加载 Claude Code 插件的 `plugin.json` 清单，并把每个组件挂载为内存中的 dsh 插件。
 
-这个兼容性加载器读取 CC 插件清单子集，用 [`@jianxx/dsh-cc-skill-loader`](../../skill/skill-claude-code/README.md) 与 [`@jianxx/dsh-cc-claude-code-agents`](../../preset/claude-code-agents/README.md) 的纯函数翻译每个组件，并通过 `ctx.get(...)` 读取该组件的宿主 seam。它不是运行时：它产出类型化挂载与结构化报告，把执行交给它注册到的 seam。
+这个兼容性加载器读取 CC 插件清单子集，用 [`@dsh-cc/skill-loader`](../../skill/skill-claude-code/README.md) 与 [`@dsh-cc/claude-code-agents`](../../preset/claude-code-agents/README.md) 的纯函数翻译每个组件，并通过 `ctx.get(...)` 读取该组件的宿主 seam。它不是运行时：它产出类型化挂载与结构化报告，把执行交给它注册到的 seam。
 
 ## 发现
 

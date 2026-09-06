@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-memory",
+  "name": "@dsh-cc/command-memory",
   "description": "Human-facing slash command to list or print memdir memory files",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-memory"
   },
   "type": "module",

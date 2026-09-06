@@ -21,7 +21,7 @@
  * it only drops `subagent-settled` messages whose sender is in the collected
  * set, and pop-once semantics make double consultation impossible.
  *
- * @module @jianxx/dsh-cc-subagent-task/suppress-settled
+ * @module @dsh-cc/subagent-task/suppress-settled
  */
 
 import type { Context } from '@deepseek-ai/cordis'

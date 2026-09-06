@@ -21,8 +21,8 @@ import {
   ReadResourceResultSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ToolDefinition, ToolExecution } from '@jianxx/dsh-cc-tools'
-import type { JsonValue } from '@jianxx/dsh-cc-tools'
+import type { ToolDefinition, ToolExecution } from '@dsh-cc/tools'
+import type { JsonValue } from '@dsh-cc/tools'
 
 /** Registered disposers for the two resource bridges; shared shape with tools. */
 export type ResourceDisposers = Map<string, () => void>

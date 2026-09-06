@@ -1,7 +1,7 @@
 /**
  * Root pi-tui mount: regular mode inlines on the main screen; fullscreen mode
  * takes over the alternate screen with a docked layout.
- * @module @jianxx/dsh-cc-tui/components/root
+ * @module @dsh-cc/tui/components/root
  */
 
 import {
@@ -20,7 +20,7 @@ import {
 	type Component,
 	type TUI,
 	type TuiMode,
-} from '@jianxx/dsh-cc-pi-tui'
+} from '@dsh-cc/pi-tui'
 import type { Driver } from '../state/driver-types.ts'
 import { overlayOpen, renderOverlayChildren, routeOverlayInput } from './overlay-host.ts'
 import { todoSummary } from '../store.ts'

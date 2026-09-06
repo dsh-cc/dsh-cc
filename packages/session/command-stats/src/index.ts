@@ -1,7 +1,7 @@
 /**
  * Human-facing `/stats` command over the session event log: turn and step
  * counts, tool-call distribution, and token usage totals.
- * @module @jianxx/dsh-cc-command-stats
+ * @module @dsh-cc/command-stats
  */
 
 import type { Context } from '@deepseek-ai/cordis'

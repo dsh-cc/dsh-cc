@@ -1,7 +1,7 @@
 /**
  * Public `/doctor` report surface: the structured types and the text
- * formatter, so `@jianxx/dsh-cc-command-doctor/doctor` keeps resolving.
- * @module @jianxx/dsh-cc-command-doctor/doctor
+ * formatter, so `@dsh-cc/command-doctor/doctor` keeps resolving.
+ * @module @dsh-cc/command-doctor/doctor
  */
 
 export { formatDoctorReport, type RenderOptions } from './render.ts'

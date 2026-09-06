@@ -2,12 +2,12 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { HISTORY_CAP } from '@jianxx/dsh-cc-tui/history.ts'
+import { HISTORY_CAP } from '@dsh-cc/tui/history.ts'
 import {
   bashHistoryFilePath,
   loadBashHistory,
   saveBashHistory,
-} from '@jianxx/dsh-cc-tui/bash-history.ts'
+} from '@dsh-cc/tui/bash-history.ts'
 
 /**
  * The bash-mode history file. Mirrors the composer history contract (same

@@ -2,7 +2,7 @@
  * Outbox queue, submit, and interrupt pipeline extracted from harness/driver.ts.
  * Free-function collaborator: takes a {@link DriverQueueCtx} instead of closing
  * over createDriver's locals, so the harness factory stays out of this leaf.
- * @module @jianxx/dsh-cc-tui/harness/driver-queue
+ * @module @dsh-cc/tui/harness/driver-queue
  */
 
 import { createUserMessage } from '@deepseek-ai/dsh-llm'

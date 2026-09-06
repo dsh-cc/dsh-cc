@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-export
+# @dsh-cc/command-export
 
 English | [中文](README.zh.md)
 
@@ -20,7 +20,7 @@ The plugin `Config` carries the default export directory:
 
 ```yaml
 - id: command-export
-  name: '@jianxx/dsh-cc-command-export'
+  name: '@dsh-cc/command-export'
   config:
     defaultDir: ./exports
 ```
@@ -37,7 +37,7 @@ The producer injects `commands` and `fs`. A custom app mounts their owners plus 
 - id: fs
   name: '@deepseek-ai/dsh-fs-local'
 - id: command-export
-  name: '@jianxx/dsh-cc-command-export'
+  name: '@dsh-cc/command-export'
 ```
 
 ## Model Experience

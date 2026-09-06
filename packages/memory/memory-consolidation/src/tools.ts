@@ -12,7 +12,7 @@
  *
  * `read_image` pairs with `read` to mirror Claude Code's `Read`, which covers
  * both text and images (the harness splits image reading into its own tool).
- * @module @jianxx/dsh-cc-memory-consolidation/tools
+ * @module @dsh-cc/memory-consolidation/tools
  */
 
 /** Harness tool names a memory subagent may exercise. */

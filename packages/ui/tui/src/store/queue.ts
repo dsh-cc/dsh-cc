@@ -1,7 +1,7 @@
 /**
  * Outbox queue reducers: pending steering texts submitted while the agent
  * is busy.
- * @module @jianxx/dsh-cc-tui/store/queue
+ * @module @dsh-cc/tui/store/queue
  */
 import type { TuiState } from './views.ts'
 

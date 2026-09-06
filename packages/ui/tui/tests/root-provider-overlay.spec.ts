@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Terminal as XtermTerminal } from '@xterm/headless'
-import type { Terminal as PiTerminal } from '@jianxx/dsh-cc-pi-tui'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
-import type { Driver } from '@jianxx/dsh-cc-tui/state/driver-types.ts'
-import { createInitialState, setProviderOverlay, openProviderPanel, type TuiState } from '@jianxx/dsh-cc-tui/store.ts'
-import { moveCursor, type ProviderPanelState } from '@jianxx/dsh-cc-tui/store/provider-panel.ts'
+import type { Terminal as PiTerminal } from '@dsh-cc/pi-tui'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
+import type { Driver } from '@dsh-cc/tui/state/driver-types.ts'
+import { createInitialState, setProviderOverlay, openProviderPanel, type TuiState } from '@dsh-cc/tui/store.ts'
+import { moveCursor, type ProviderPanelState } from '@dsh-cc/tui/store/provider-panel.ts'
 
 /**
  * Minimal pi-tui Terminal piping writes into @xterm/headless so the real

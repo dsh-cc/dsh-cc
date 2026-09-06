@@ -11,8 +11,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
-import type { MergedHookOutcome } from '@jianxx/dsh-cc-hook-protocol'
-import type { HookIssue } from '@jianxx/dsh-cc-hook-protocol'
+import type { MergedHookOutcome } from '@dsh-cc/hook-protocol'
+import type { HookIssue } from '@dsh-cc/hook-protocol'
 
 /** The `{kind:'plugin'}` source stamped on context/steer messages from this module. */
 const PLUGIN_SOURCE: { kind: 'plugin'; plugin: string } = { kind: 'plugin', plugin: 'hooks-claude-code' }

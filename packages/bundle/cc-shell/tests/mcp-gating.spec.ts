@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import { apply } from '../src/index.ts'
 
 /** A ZERO-dependency MCP stdio server: newline-delimited JSON-RPC on stdio. */

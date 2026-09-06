@@ -2,7 +2,7 @@
  * Usage/projection state types shared by the HUD, the `/usage` panel and
  * `/cost`. Extracted from driver-types.ts to keep that file focused on the
  * Driver interface and its structural service seams.
- * @module @jianxx/dsh-cc-tui/state/driver-usage-types
+ * @module @dsh-cc/tui/state/driver-usage-types
  */
 
 /**

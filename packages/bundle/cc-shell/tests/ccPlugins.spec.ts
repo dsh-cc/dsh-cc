@@ -11,8 +11,8 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { apply, Config as GlueConfig, type Config } from '@jianxx/dsh-cc-bundle-shell/src/index.ts'
-import { CcPluginsService } from '@jianxx/dsh-cc-bundle-shell/src/ccPlugins.ts'
+import { apply, Config as GlueConfig, type Config } from '@dsh-cc/bundle-shell/src/index.ts'
+import { CcPluginsService } from '@dsh-cc/bundle-shell/src/ccPlugins.ts'
 
 /** A commands seam that tracks live (undisposed) command names. */
 function createCommandsSeam(): { register: (d: { name: string }) => () => void; live: () => string[] } {
@@ -58,7 +58,7 @@ afterEach(async () => {
   rmSync(tmpRoot, { recursive: true, force: true })
 })
 
-describe('@jianxx/dsh-cc-bundle-shell ccPlugins registry', () => {
+describe('@dsh-cc/bundle-shell ccPlugins registry', () => {
   it('tracks the initially mounted plugin in list()', async () => {
     const dir = join(tmpRoot, 'alpha')
     writePlugin(dir, 'alpha', 'alpha-command')
@@ -168,7 +168,7 @@ describe('@jianxx/dsh-cc-bundle-shell ccPlugins registry', () => {
   })
 })
 
-describe('@jianxx/dsh-cc-bundle-shell plugin command channel', () => {
+describe('@dsh-cc/bundle-shell plugin command channel', () => {
   it('lists plugin commands with colon display names, including plugin == command as x:x', async () => {
     const plain = join(tmpRoot, 'alpha')
     writePlugin(plain, 'alpha', 'alpha-command')
@@ -257,7 +257,7 @@ describe('@jianxx/dsh-cc-bundle-shell plugin command channel', () => {
  * resolve `ccPlugins` against the root realm. A realm-scoped Service.provide
  * is invisible across that boundary — this suite pins the cross-scope contract.
  */
-describe('@jianxx/dsh-cc-bundle-shell cross-scope visibility (real bundle topology)', () => {
+describe('@dsh-cc/bundle-shell cross-scope visibility (real bundle topology)', () => {
   it('a sibling bundle fiber resolves ccPlugins, receives ccPlugins/change, and degrades after glue dispose', async () => {
     writePlugin(join(tmpRoot, 'alpha'), 'alpha', 'alpha-command')
 

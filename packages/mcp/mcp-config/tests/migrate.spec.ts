@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { migrateMcpServers } from '@jianxx/dsh-cc-mcp-config/src/migrate.ts'
+import { migrateMcpServers } from '@dsh-cc/mcp-config/src/migrate.ts'
 
 let root: string
 

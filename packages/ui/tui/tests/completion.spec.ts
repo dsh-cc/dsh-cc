@@ -2,8 +2,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { TuiAutocompleteProvider } from '@jianxx/dsh-cc-tui/components/completion.ts'
-import type { CommandItem } from '@jianxx/dsh-cc-tui/components/completion.ts'
+import { TuiAutocompleteProvider } from '@dsh-cc/tui/components/completion.ts'
+import type { CommandItem } from '@dsh-cc/tui/components/completion.ts'
 
 const COMMANDS: readonly CommandItem[] = [
   { name: 'model', description: 'pick adapter' },

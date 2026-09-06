@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-rename
+# @dsh-cc/command-rename
 
 English | [中文](README.zh.md)
 
@@ -19,7 +19,7 @@ The producer injects `commands`. Mount it wherever the session-title service is 
 
 ```yaml
 - id: command-rename
-  name: '@jianxx/dsh-cc-command-rename'
+  name: '@dsh-cc/command-rename'
 ```
 
 ## Model Experience

@@ -2,11 +2,11 @@
  * Approval and question overlay containers. Rendered inline (not as pi-tui
  * overlays) so they participate in the main-screen scrollback flow, matching
  * the previous Ink layout.
- * @module @jianxx/dsh-cc-tui/components/overlays
+ * @module @dsh-cc/tui/components/overlays
  */
 
-import { Container, Markdown, Text } from '@jianxx/dsh-cc-pi-tui'
-import { BYPASS_CONFIRMATION } from '@jianxx/dsh-cc-command-permissions'
+import { Container, Markdown, Text } from '@dsh-cc/pi-tui'
+import { BYPASS_CONFIRMATION } from '@dsh-cc/command-permissions'
 import type {
   ApprovalView,
   EffortPickerView,

@@ -6,7 +6,7 @@
  * the result summary, or a `…running` marker) plus a fenced `diff` block when
  * structured diffs are present, status → italics (errors get a ⚠ marker), banner
  * → skipped (pre-styled UI chrome must not leak raw SGR/block glyphs).
- * @module @jianxx/dsh-cc-tui/export-markdown
+ * @module @dsh-cc/tui/export-markdown
  */
 
 import type { FileDiff } from './tool-card.ts'

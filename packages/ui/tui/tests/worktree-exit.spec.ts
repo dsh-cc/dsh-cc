@@ -7,7 +7,7 @@ import {
   WORKTREE_ENV,
   type WorktreeExec,
   type WorktreeExitSession,
-} from '@jianxx/dsh-cc-tui/harness/worktree-exit.ts'
+} from '@dsh-cc/tui/harness/worktree-exit.ts'
 
 /**
  * Scripted git conversation. `map[key]` keys are `argv.join(' ')` and values

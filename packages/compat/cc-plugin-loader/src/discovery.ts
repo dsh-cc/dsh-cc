@@ -14,7 +14,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
-import { resolveLocalSettingsDir } from '@jianxx/dsh-cc-settings-cascade/local-root'
+import { resolveLocalSettingsDir } from '@dsh-cc/settings-cascade/local-root'
 
 /** One discovered plugin root plus the name used to match marketplace overlays. */
 export interface DiscoveredCcPlugin {

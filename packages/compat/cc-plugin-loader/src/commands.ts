@@ -11,7 +11,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { parseCcFrontmatter, parseCcFrontmatterDocument } from '@jianxx/dsh-cc-skill-loader'
+import { parseCcFrontmatter, parseCcFrontmatterDocument } from '@dsh-cc/skill-loader'
 import { basename, join, resolve } from 'node:path'
 import type { CcPluginManifest, CcCommand } from './types.ts'
 import { ComponentTally } from './seams.ts'

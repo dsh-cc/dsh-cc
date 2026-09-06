@@ -41,8 +41,8 @@ import {
   type SubagentRunView,
   type TodoItemView,
   type TuiState,
-} from '@jianxx/dsh-cc-tui/store.ts'
-import { VERBS } from '@jianxx/dsh-cc-tui/working-line.ts'
+} from '@dsh-cc/tui/store.ts'
+import { VERBS } from '@dsh-cc/tui/working-line.ts'
 
 function questionState(overrides: Partial<QuestionView> = {}): TuiState {
   const question: QuestionView = {

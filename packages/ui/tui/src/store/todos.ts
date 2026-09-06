@@ -1,7 +1,7 @@
 /**
  * Todo reducers: whole-list writes from the projection feed and the Ctrl+T
  * panel overlay.
- * @module @jianxx/dsh-cc-tui/store/todos
+ * @module @dsh-cc/tui/store/todos
  */
 import type { TodoItemView, TodoPanelView, TuiState } from './views.ts'
 

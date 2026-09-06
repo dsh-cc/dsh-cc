@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createModelResolver } from '@jianxx/dsh-cc-model-aliases'
-import type { DetailedRoute } from '@jianxx/dsh-cc-model-aliases'
-import type { AliasTarget } from '@jianxx/dsh-cc-model-aliases'
+import { createModelResolver } from '@dsh-cc/model-aliases'
+import type { DetailedRoute } from '@dsh-cc/model-aliases'
+import type { AliasTarget } from '@dsh-cc/model-aliases'
 
 /** Build a resolver over a static effective alias map (already merged). */
 function resolverOf(aliases: Record<string, AliasTarget>, warn?: (m: string) => void) {

@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-tool-search`.
- * @module @jianxx/dsh-cc-tool-search/invariant
+ * Package-owned invariant companion for `@dsh-cc/tool-search`.
+ * @module @dsh-cc/tool-search/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-tool-search'
+const PACKAGE_NAME = '@dsh-cc/tool-search'
 
 /** Cordis companion plugin name. */
 export const name = 'tool-search-invariant'

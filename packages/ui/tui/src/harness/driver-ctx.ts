@@ -5,7 +5,7 @@
  * cluster that migrates out of driver.ts grows a `*.Ctx` here.
  *
  * All TS-only; erased at runtime.
- * @module @jianxx/dsh-cc-tui/harness/driver-ctx
+ * @module @dsh-cc/tui/harness/driver-ctx
  */
 
 import type { TuiState, UsageView } from '../store.ts'

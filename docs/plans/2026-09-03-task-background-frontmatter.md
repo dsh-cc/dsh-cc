@@ -6,9 +6,9 @@ backgrounding forbidden until `isolation: worktree` is wired, pin escape
 hatch (`run_in_background: false`) documented. Product north star is
 Claude Code's human heuristic, not flipping the tool-schema default.
 Date: 2026-09-03
-Scope: `@jianxx/dsh-cc-subagent-task` (CC `Task` tool), orchestrator
+Scope: `@dsh-cc/subagent-task` (CC `Task` tool), orchestrator
 `CLAUDE.md`, task-package READMEs, `docs/cc-parity-matrix.md`, and one
-clause in `@jianxx/dsh-cc-claude-code-agents` READMEs. No harness
+clause in `@dsh-cc/claude-code-agents` READMEs. No harness
 (`@deepseek-ai/dsh-*`) changes. No TUI Ctrl+B promote (follow-up).
 
 ## 1. Problem

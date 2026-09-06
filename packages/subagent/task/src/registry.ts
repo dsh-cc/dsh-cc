@@ -9,11 +9,11 @@
  * for a workspace whose cache entry has not yet been created, and on process
  * restart otherwise.
  *
- * @module @jianxx/dsh-cc-subagent-task/registry
+ * @module @dsh-cc/subagent-task/registry
  */
 
-import { loadClaudeCodeAgents } from '@jianxx/dsh-cc-claude-code-agents'
-import type { AgentDefinition } from '@jianxx/dsh-cc-claude-code-agents'
+import { loadClaudeCodeAgents } from '@dsh-cc/claude-code-agents'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 
 /** Options for the registry, mostly injectable seams for tests. */
 export interface AgentRegistryOptions {

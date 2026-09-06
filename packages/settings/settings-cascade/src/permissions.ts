@@ -2,7 +2,7 @@
  * Claude Code-compatible `permissions` field schema, exported as a standalone
  * value so the permission-rule engine (B2) and the settings cascade share one
  * definition of the settings.json `permissions` shape.
- * @module @jianxx/dsh-cc-settings-cascade/permissions
+ * @module @dsh-cc/settings-cascade/permissions
  */
 
 import z from '@deepseek-ai/schemastery'

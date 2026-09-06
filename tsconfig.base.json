@@ -26,268 +26,268 @@
       "node"
     ],
     "paths": {
-      "@jianxx/dsh-cc-settings-cascade": [
+      "@dsh-cc/settings-cascade": [
         "./packages/settings/settings-cascade/src/index.ts"
       ],
-      "@jianxx/dsh-cc-settings-cascade/local-root": [
+      "@dsh-cc/settings-cascade/local-root": [
         "./packages/settings/settings-cascade/src/local-root.ts"
       ],
-      "@jianxx/dsh-cc-settings-migrations": [
+      "@dsh-cc/settings-migrations": [
         "./packages/settings/settings-migrations/src/index.ts"
       ],
-      "@jianxx/dsh-cc-permission-rules": [
+      "@dsh-cc/permission-rules": [
         "./packages/interaction/permission-rules/src/index.ts"
       ],
-      "@jianxx/dsh-cc-permission-rules/types": [
+      "@dsh-cc/permission-rules/types": [
         "./packages/interaction/permission-rules/src/types.ts"
       ],
-      "@jianxx/dsh-cc-mcp-config": [
+      "@dsh-cc/mcp-config": [
         "./packages/mcp/mcp-config/src/index.ts"
       ],
-      "@jianxx/dsh-cc-mcp-client": [
+      "@dsh-cc/mcp-client": [
         "./packages/mcp/mcp-client/src/index.ts"
       ],
-      "@jianxx/dsh-cc-hook-protocol": [
+      "@dsh-cc/hook-protocol": [
         "./packages/hooks/hook-protocol/src/index.ts"
       ],
-      "@jianxx/dsh-cc-hooks-claude-code": [
+      "@dsh-cc/hooks-claude-code": [
         "./packages/hooks/hooks-claude-code/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tools": [
+      "@dsh-cc/tools": [
         "./packages/core/tools/src/index.ts"
       ],
-      "@jianxx/dsh-cc-subagent-resume-pins": [
+      "@dsh-cc/subagent-resume-pins": [
         "./packages/subagent/resume-pins/src/index.ts"
       ],
-      "@jianxx/dsh-cc-skill-loader": [
+      "@dsh-cc/skill-loader": [
         "./packages/skill/skill-claude-code/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tool-search": [
+      "@dsh-cc/tool-search": [
         "./packages/core/tool-search/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tool-append-order": [
+      "@dsh-cc/tool-append-order": [
         "./packages/core/tool-append-order/src/index.ts"
       ],
-      "@jianxx/dsh-cc-serena-first": [
+      "@dsh-cc/serena-first": [
         "./packages/compat/cc-serena-first/src/index.ts"
       ],
-      "@jianxx/dsh-cc-claude-code-agents": [
+      "@dsh-cc/claude-code-agents": [
         "./packages/preset/claude-code-agents/src/index.ts"
       ],
-      "@jianxx/dsh-cc-plugin-loader": [
+      "@dsh-cc/plugin-loader": [
         "./packages/compat/cc-plugin-loader/src/index.ts"
       ],
-      "@jianxx/dsh-cc-model-aliases": [
+      "@dsh-cc/model-aliases": [
         "./packages/compat/cc-model-aliases/src/index.ts"
       ],
-      "@jianxx/dsh-cc-memory": [
+      "@dsh-cc/memory": [
         "./packages/memory/memory/src/index.ts"
       ],
-      "@jianxx/dsh-cc-memory-consolidation": [
+      "@dsh-cc/memory-consolidation": [
         "./packages/memory/memory-consolidation/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tool-git-worktree": [
+      "@dsh-cc/tool-git-worktree": [
         "./packages/workspace/tool-git-worktree/src/index.ts"
       ],
-      "@jianxx/dsh-cc-session-cwd": [
+      "@dsh-cc/session-cwd": [
         "./packages/workspace/session-cwd/src/index.ts"
       ],
-      "@jianxx/dsh-cc-session-cwd/*": [
+      "@dsh-cc/session-cwd/*": [
         "./packages/workspace/session-cwd/src/*"
       ],
-      "@jianxx/dsh-cc-tool-sleep": [
+      "@dsh-cc/tool-sleep": [
         "./packages/core/tool-sleep/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tool-structured-output": [
+      "@dsh-cc/tool-structured-output": [
         "./packages/core/tool-structured-output/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tool-notebook-edit": [
+      "@dsh-cc/tool-notebook-edit": [
         "./packages/core/tool-notebook-edit/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tool-web-fetch": [
+      "@dsh-cc/tool-web-fetch": [
         "./packages/core/tool-web-fetch/src/index.ts"
       ],
-      "@jianxx/dsh-cc-web-fetch-http": [
+      "@dsh-cc/web-fetch-http": [
         "./packages/web/fetch-http/src/index.ts"
       ],
-      "@jianxx/dsh-cc-output-styles": [
+      "@dsh-cc/output-styles": [
         "./packages/compat/cc-output-styles/src/index.ts"
       ],
-      "@jianxx/dsh-cc-session-title-provider": [
+      "@dsh-cc/session-title-provider": [
         "./packages/compat/session-title-provider/src/index.ts"
       ],
-      "@jianxx/dsh-cc-coordinator": [
+      "@dsh-cc/coordinator": [
         "./packages/subagent/coordinator/src/index.ts"
       ],
-      "@jianxx/dsh-cc-compaction-micro": [
+      "@dsh-cc/compaction-micro": [
         "./packages/compaction/compaction-micro/src/index.ts"
       ],
-      "@jianxx/dsh-cc-compaction-basic": [
+      "@dsh-cc/compaction-basic": [
         "./packages/compaction/compaction-basic-cc/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-compact": [
+      "@dsh-cc/command-compact": [
         "./packages/interaction/command-compact/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-cost": [
+      "@dsh-cc/command-cost": [
         "./packages/session/command-cost/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-export": [
+      "@dsh-cc/command-export": [
         "./packages/session/command-export/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-stats": [
+      "@dsh-cc/command-stats": [
         "./packages/session/command-stats/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-status": [
+      "@dsh-cc/command-status": [
         "./packages/interaction/command-status/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-doctor": [
+      "@dsh-cc/command-doctor": [
         "./packages/interaction/command-doctor/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-cost/cost": [
+      "@dsh-cc/command-cost/cost": [
         "./packages/session/command-cost/src/cost.ts"
       ],
-      "@jianxx/dsh-cc-command-doctor/doctor": [
+      "@dsh-cc/command-doctor/doctor": [
         "./packages/interaction/command-doctor/src/doctor.ts"
       ],
-      "@jianxx/dsh-cc-command-export/transcript": [
+      "@dsh-cc/command-export/transcript": [
         "./packages/session/command-export/src/transcript.ts"
       ],
-      "@jianxx/dsh-cc-command-stats/stats": [
+      "@dsh-cc/command-stats/stats": [
         "./packages/session/command-stats/src/stats.ts"
       ],
-      "@jianxx/dsh-cc-command-status/status": [
+      "@dsh-cc/command-status/status": [
         "./packages/interaction/command-status/src/status.ts"
       ],
-      "@jianxx/dsh-cc-permission-rules/invariant": [
+      "@dsh-cc/permission-rules/invariant": [
         "./packages/interaction/permission-rules/src/invariant.ts"
       ],
-      "@jianxx/dsh-cc-output-styles/invariant": [
+      "@dsh-cc/output-styles/invariant": [
         "./packages/compat/cc-output-styles/src/invariant.ts"
       ],
-      "@jianxx/dsh-cc-session-title-provider/invariant": [
+      "@dsh-cc/session-title-provider/invariant": [
         "./packages/compat/session-title-provider/src/invariant.ts"
       ],
-      "@jianxx/dsh-cc-hook-protocol/invariant": [
+      "@dsh-cc/hook-protocol/invariant": [
         "./packages/hooks/hook-protocol/src/invariant.ts"
       ],
-      "@jianxx/dsh-cc-tools/invariant": [
+      "@dsh-cc/tools/invariant": [
         "./packages/core/tools/src/invariant.ts"
       ],
-      "@jianxx/dsh-cc-agent-loop-mock": [
+      "@dsh-cc/agent-loop-mock": [
         "./packages/test-support/agent-loop-mock/src/index.ts"
       ],
-      "@jianxx/dsh-cc-cache-trajectory": [
+      "@dsh-cc/cache-trajectory": [
         "./packages/test-support/cache-trajectory/src/index.ts"
       ],
-      "@jianxx/dsh-cc-cache-trajectory/*": [
+      "@dsh-cc/cache-trajectory/*": [
         "./packages/test-support/cache-trajectory/src/*"
       ],
-      "@jianxx/dsh-cc-bundle-shell": [
+      "@dsh-cc/bundle-shell": [
         "./packages/bundle/cc-shell/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-memory": [
+      "@dsh-cc/command-memory": [
         "./packages/interaction/command-memory/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-memory/memory": [
+      "@dsh-cc/command-memory/memory": [
         "./packages/interaction/command-memory/src/memory.ts"
       ],
-      "@jianxx/dsh-cc-command-plugin": [
+      "@dsh-cc/command-plugin": [
         "./packages/interaction/command-plugin/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-plugin/plugin": [
+      "@dsh-cc/command-plugin/plugin": [
         "./packages/interaction/command-plugin/src/plugin.ts"
       ],
-      "@jianxx/dsh-cc-command-mcp": [
+      "@dsh-cc/command-mcp": [
         "./packages/interaction/command-mcp/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-mcp/mcp": [
+      "@dsh-cc/command-mcp/mcp": [
         "./packages/interaction/command-mcp/src/mcp.ts"
       ],
-      "@jianxx/dsh-cc-command-agents": [
+      "@dsh-cc/command-agents": [
         "./packages/interaction/command-agents/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-agents/snapshot": [
+      "@dsh-cc/command-agents/snapshot": [
         "./packages/interaction/command-agents/src/snapshot.ts"
       ],
-      "@jianxx/dsh-cc-subagent-task": [
+      "@dsh-cc/subagent-task": [
         "./packages/subagent/task/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-tasks": [
+      "@dsh-cc/command-tasks": [
         "./packages/interaction/command-tasks/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-tasks/tasks": [
+      "@dsh-cc/command-tasks/tasks": [
         "./packages/interaction/command-tasks/src/tasks.ts"
       ],
-      "@jianxx/dsh-cc-command-resume": [
+      "@dsh-cc/command-resume": [
         "./packages/interaction/command-resume/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-resume/resume": [
+      "@dsh-cc/command-resume/resume": [
         "./packages/interaction/command-resume/src/resume.ts"
       ],
-      "@jianxx/dsh-cc-command-rename": [
+      "@dsh-cc/command-rename": [
         "./packages/interaction/command-rename/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-branch": [
+      "@dsh-cc/command-branch": [
         "./packages/interaction/command-branch/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-branch/branch": [
+      "@dsh-cc/command-branch/branch": [
         "./packages/interaction/command-branch/src/branch.ts"
       ],
-      "@jianxx/dsh-cc-command-skills": [
+      "@dsh-cc/command-skills": [
         "./packages/interaction/command-skills/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-skills/skills": [
+      "@dsh-cc/command-skills/skills": [
         "./packages/interaction/command-skills/src/skills.ts"
       ],
-      "@jianxx/dsh-cc-command-help": [
+      "@dsh-cc/command-help": [
         "./packages/interaction/command-help/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-help/help": [
+      "@dsh-cc/command-help/help": [
         "./packages/interaction/command-help/src/help.ts"
       ],
-      "@jianxx/dsh-cc-command-config": [
+      "@dsh-cc/command-config": [
         "./packages/interaction/command-config/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-config/config": [
+      "@dsh-cc/command-config/config": [
         "./packages/interaction/command-config/src/config.ts"
       ],
-      "@jianxx/dsh-cc-command-permissions": [
+      "@dsh-cc/command-permissions": [
         "./packages/interaction/command-permissions/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-permissions/permissions": [
+      "@dsh-cc/command-permissions/permissions": [
         "./packages/interaction/command-permissions/src/permissions.ts"
       ],
-      "@jianxx/dsh-cc-command-version": [
+      "@dsh-cc/command-version": [
         "./packages/interaction/command-version/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-version/version": [
+      "@dsh-cc/command-version/version": [
         "./packages/interaction/command-version/src/version.ts"
       ],
-      "@jianxx/dsh-cc-command-release-notes": [
+      "@dsh-cc/command-release-notes": [
         "./packages/interaction/command-release-notes/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-release-notes/release-notes": [
+      "@dsh-cc/command-release-notes/release-notes": [
         "./packages/interaction/command-release-notes/src/release-notes.ts"
       ],
-      "@jianxx/dsh-cc-command-diff": [
+      "@dsh-cc/command-diff": [
         "./packages/interaction/command-diff/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-diff/diff": [
+      "@dsh-cc/command-diff/diff": [
         "./packages/interaction/command-diff/src/diff.ts"
       ],
-      "@jianxx/dsh-cc-command-init": [
+      "@dsh-cc/command-init": [
         "./packages/interaction/command-init/src/index.ts"
       ],
-      "@jianxx/dsh-cc-command-init/init": [
+      "@dsh-cc/command-init/init": [
         "./packages/interaction/command-init/src/init.ts"
       ],
-      "@jianxx/dsh-cc-tui": [
+      "@dsh-cc/tui": [
         "./packages/ui/tui/src/index.ts"
       ],
-      "@jianxx/dsh-cc-tui/*": [
+      "@dsh-cc/tui/*": [
         "./packages/ui/tui/src/*"
       ],
-      "@jianxx/dsh-cc-pi-tui": [
+      "@dsh-cc/pi-tui": [
         "./packages/ui/pi-tui/src/index.ts"
       ]
     },

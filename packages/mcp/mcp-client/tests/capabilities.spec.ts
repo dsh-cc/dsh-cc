@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
-import { promptSkillName, syncPrompts } from '@jianxx/dsh-cc-mcp-client/src/prompts.ts'
+import { promptSkillName, syncPrompts } from '@dsh-cc/mcp-client/src/prompts.ts'
 import { isSkillName } from '@deepseek-ai/dsh-skill'
-import { syncResources, resourcePublicName } from '@jianxx/dsh-cc-mcp-client/src/resources.ts'
+import { syncResources, resourcePublicName } from '@dsh-cc/mcp-client/src/resources.ts'
 
 // ---- Mock MCP Client (tools + resources + prompts) ----
 

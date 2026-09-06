@@ -2,7 +2,7 @@
  * Memdir root resolution: the default harness-home memory directory plus an
  * optional per-project `.claude/memory` overlay. All reads go through the
  * optional `ctx.fs` seam so remote backends work unchanged.
- * @module @jianxx/dsh-cc-memory/paths
+ * @module @dsh-cc/memory/paths
  */
 
 import { spawnSync } from 'node:child_process'

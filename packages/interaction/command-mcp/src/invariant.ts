@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-command-mcp`.
- * @module @jianxx/dsh-cc-command-mcp/invariant
+ * Package-owned invariant companion for `@dsh-cc/command-mcp`.
+ * @module @dsh-cc/command-mcp/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-command-mcp'
+const PACKAGE_NAME = '@dsh-cc/command-mcp'
 
 /** Cordis companion plugin name. */
 export const name = 'command-mcp-invariant'

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { renderRowText, rowSourceLines } from '@jianxx/dsh-cc-tui/components/transcript.ts'
-import type { TranscriptRow } from '@jianxx/dsh-cc-tui/store.ts'
-import { defaultTheme } from '@jianxx/dsh-cc-tui/components/theme.ts'
+import { renderRowText, rowSourceLines } from '@dsh-cc/tui/components/transcript.ts'
+import type { TranscriptRow } from '@dsh-cc/tui/store.ts'
+import { defaultTheme } from '@dsh-cc/tui/components/theme.ts'
 
 const manual: TranscriptRow = {
   kind: 'compact',

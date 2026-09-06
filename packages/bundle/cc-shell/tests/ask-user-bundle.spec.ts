@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { CallId } from '@deepseek-ai/dsh-llm'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import UserQuestionService, {
   type AskUserQuestionAnswer,
   type AskUserQuestionRequest,

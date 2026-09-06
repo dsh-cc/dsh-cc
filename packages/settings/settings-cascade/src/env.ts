@@ -3,7 +3,7 @@
  * variables apply in the first stage; environment-altering variables
  * (`LD_PRELOAD`, `PATH`, and similar) defer to `applyTrustedEnv`, run only
  * after the user grants trust for them. Values are coerced to strings.
- * @module @jianxx/dsh-cc-settings-cascade/env
+ * @module @dsh-cc/settings-cascade/env
  */
 
 /** Environment variables that alter process behavior or library loading. */

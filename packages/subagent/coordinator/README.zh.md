@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-coordinator
+# @dsh-cc/coordinator
 
 [English](README.md) | 中文
 

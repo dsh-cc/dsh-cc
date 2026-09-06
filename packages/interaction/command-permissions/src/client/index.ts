@@ -1,5 +1,5 @@
 /**
- * Browser half of `@jianxx/dsh-cc-command-permissions`. Hangs a popupSelect
+ * Browser half of `@dsh-cc/command-permissions`. Hangs a popupSelect
  * DECORATION on the host `/permissions` command. The decoration owns only the
  * bare invocation; the host command keeps its catalog row, the argued path
  * (`/permissions <mode>` still switches directly), and the lifecycle logging.
@@ -10,7 +10,7 @@
  * only covers `/permissions`. The composer chip still executes
  * `/permission <preset>` against the global handler.
  *
- * @module @jianxx/dsh-cc-command-permissions/client
+ * @module @dsh-cc/command-permissions/client
  */
 import type { ClientContext, ISessions, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CommandUiContract, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'

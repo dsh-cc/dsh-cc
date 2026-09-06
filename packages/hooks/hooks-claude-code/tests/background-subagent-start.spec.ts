@@ -17,10 +17,10 @@ import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SubagentRuntime, { type SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
-import { MockAdapter, textResponse } from '@jianxx/dsh-cc-agent-loop-mock'
+import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
-import * as HooksClaude from '@jianxx/dsh-cc-hooks-claude-code'
+import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 
 const dirs: string[] = []
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })

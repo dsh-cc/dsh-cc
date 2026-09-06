@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-tool-git-worktree
+# @dsh-cc/tool-git-worktree
 
 English | [中文](README.zh.md)
 

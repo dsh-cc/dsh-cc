@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { Container } from '@jianxx/dsh-cc-pi-tui'
-import { createWorktreeExitBox } from '@jianxx/dsh-cc-tui/components/overlays.ts'
-import type { WorktreeExitView } from '@jianxx/dsh-cc-tui/store.ts'
+import { Container } from '@dsh-cc/pi-tui'
+import { createWorktreeExitBox } from '@dsh-cc/tui/components/overlays.ts'
+import type { WorktreeExitView } from '@dsh-cc/tui/store.ts'
 
 /** Render a box to stripped lines so structural assertions see plain text. */
 function boxLines(box: Container): string[] {

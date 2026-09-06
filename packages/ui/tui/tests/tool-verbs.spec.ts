@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toolVerb } from '@jianxx/dsh-cc-tui/tool-verbs.ts'
+import { toolVerb } from '@dsh-cc/tui/tool-verbs.ts'
 
 describe('toolVerb', () => {
   it('maps bash and shell to Running (case-insensitive)', () => {

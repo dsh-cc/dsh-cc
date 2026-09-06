@@ -2,9 +2,9 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { renderPermissions } from '@jianxx/dsh-cc-command-permissions/permissions'
-import type { PermissionRuleSet } from '@jianxx/dsh-cc-permission-rules/types'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
+import { renderPermissions } from '@dsh-cc/command-permissions/permissions'
+import type { PermissionRuleSet } from '@dsh-cc/permission-rules/types'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 
 describe('TUI /permissions listing', () => {
   it('reuses the command renderer so the TUI and /permissions stay aligned', () => {

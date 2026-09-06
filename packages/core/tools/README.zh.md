@@ -69,7 +69,7 @@ tools:
 ```ts
 import { readFile } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
-import { defineTool } from '@jianxx/dsh-cc-tools'
+import { defineTool } from '@dsh-cc/tools'
 
 declare const ctx: Context
 

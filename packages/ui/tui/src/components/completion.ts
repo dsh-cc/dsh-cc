@@ -4,7 +4,7 @@
  * can drive it via `setAutocompleteProvider`. Slash suggestions come from an
  * injected command catalog (local + harness); `@`-paths come from OUR OWN
  * workspace walk (recursive readdir, no `fd` dependency).
- * @module @jianxx/dsh-cc-tui/components/completion
+ * @module @dsh-cc/tui/components/completion
  */
 
 import { readdirSync, statSync } from 'node:fs'
@@ -13,8 +13,8 @@ import type {
   AutocompleteItem,
   AutocompleteProvider,
   AutocompleteSuggestions,
-} from '@jianxx/dsh-cc-pi-tui'
-import { fuzzyFilter } from '@jianxx/dsh-cc-pi-tui'
+} from '@dsh-cc/pi-tui'
+import { fuzzyFilter } from '@dsh-cc/pi-tui'
 
 /** A command in the injected catalog. */
 export interface CommandItem {

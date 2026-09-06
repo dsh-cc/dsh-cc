@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-plugin
+# @dsh-cc/command-plugin
 
 [English](README.md) | 中文
 
@@ -19,9 +19,9 @@
 
 ```yaml
 - id: cc-shell-glue
-  name: '@jianxx/dsh-cc-bundle-shell'
+  name: '@dsh-cc/bundle-shell'
 - id: command-plugin
-  name: '@jianxx/dsh-cc-command-plugin'
+  name: '@dsh-cc/command-plugin'
 ```
 
 `ccPlugins` 衔接服务在运行时经 `ctx` 发现，并非注入项，因此即便缺少 glue，命令也能加载（此时会报告缺少该衔接服务）。

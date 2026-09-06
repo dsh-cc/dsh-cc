@@ -6,7 +6,7 @@
  * section is diffed against the last-published shadow and only the leaf-level
  * change ops are applied onto the user file's own section. File writes are
  * atomic (temp + rename) so a crash never leaves a half-written document.
- * @module @jianxx/dsh-cc-settings-cascade/persist
+ * @module @dsh-cc/settings-cascade/persist
  */
 
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'

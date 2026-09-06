@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-tool-git-worktree`.
- * @module @jianxx/dsh-cc-tool-git-worktree/invariant
+ * Package-owned invariant companion for `@dsh-cc/tool-git-worktree`.
+ * @module @dsh-cc/tool-git-worktree/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-tool-git-worktree'
+const PACKAGE_NAME = '@dsh-cc/tool-git-worktree'
 
 /** Cordis companion plugin name. */
 export const name = 'tool-git-worktree-invariant'

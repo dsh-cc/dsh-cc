@@ -8,15 +8,15 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import * as commandMcp from '@jianxx/dsh-cc-command-mcp'
+import * as commandMcp from '@dsh-cc/command-mcp'
 import {
   formatConnections,
   formatDiscoveryNotice,
   formatMigrateReport,
   parseMcpInput,
   type McpConnectionEntry,
-} from '@jianxx/dsh-cc-command-mcp/mcp'
-import type { ClaudeOnlySource, McpMigrationResult } from '@jianxx/dsh-cc-mcp-config'
+} from '@dsh-cc/command-mcp/mcp'
+import type { ClaudeOnlySource, McpMigrationResult } from '@dsh-cc/mcp-config'
 
 const SAMPLE: readonly McpConnectionEntry[] = [
   { name: 'files', state: 'ready', toolCount: 12 },

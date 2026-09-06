@@ -9,7 +9,7 @@
  * the merge and lookup semantics live in `resolver.ts` and the configuration
  * schemas in `schema.ts`.
  *
- * @module @jianxx/dsh-cc-model-aliases/types
+ * @module @dsh-cc/model-aliases/types
  */
 
 /**

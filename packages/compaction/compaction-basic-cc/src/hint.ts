@@ -7,7 +7,7 @@
  * hint as one extra user message so the summary preserves what the user
  * asked for. WeakMap keying means hints never leak across agents and die
  * with the agent object.
- * @module @jianxx/dsh-cc-compaction-basic-cc/hint
+ * @module @dsh-cc/compaction-basic-cc/hint
  */
 
 import { createUserMessage } from '@deepseek-ai/dsh-llm'

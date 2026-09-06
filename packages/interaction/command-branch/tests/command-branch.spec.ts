@@ -5,8 +5,8 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
-import * as commandBranch from '@jianxx/dsh-cc-command-branch'
-import { formatBranchError, formatBranchSuccess } from '@jianxx/dsh-cc-command-branch/branch'
+import * as commandBranch from '@dsh-cc/command-branch'
+import { formatBranchError, formatBranchSuccess } from '@dsh-cc/command-branch/branch'
 
 /** A minimal agent whose session is whatever object we pass. */
 function fakeAgent(session: { id: SessionId }): Agent {
@@ -27,7 +27,7 @@ function fakeAgent(session: { id: SessionId }): Agent {
   }
 }
 
-describe('@jianxx/dsh-cc-command-branch rendering (pure)', () => {
+describe('@dsh-cc/command-branch rendering (pure)', () => {
   it('renders a success report with the child id and entry instructions', () => {
     const text = formatBranchSuccess('child-1', '')
     expect(text).toContain('Forked new session: child-1')

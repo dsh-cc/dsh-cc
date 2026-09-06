@@ -2,7 +2,7 @@
  * Pure session-list helpers for the /resume picker: last-activity sort,
  * scope/query filtering, and row formatting. No imports — shared by the
  * driver, the overlay renderer, and the specs.
- * @module @jianxx/dsh-cc-tui/harness/session-list
+ * @module @dsh-cc/tui/harness/session-list
  */
 
 /** One persisted session as the picker sees it (persistence header + extras). */

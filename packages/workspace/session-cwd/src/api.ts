@@ -4,7 +4,7 @@
  * session header → fallback); `setSessionCwd` records the change durably by
  * appending a `worktree/entered` event and updating the live overlay.
  *
- * @module @jianxx/dsh-cc-session-cwd/api
+ * @module @dsh-cc/session-cwd/api
  */
 
 import { isAbsolute, resolve } from 'node:path'

@@ -3,7 +3,7 @@
  * per line) that bridges append to and `/doctor` reads back. Every filesystem
  * error is swallowed — diagnostics must never break a hook run, and a torn or
  * foreign line is skipped by readers rather than trusted.
- * @module @jianxx/dsh-cc-hook-protocol/diagnostics
+ * @module @dsh-cc/hook-protocol/diagnostics
  */
 
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'

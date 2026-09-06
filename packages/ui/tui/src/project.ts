@@ -13,7 +13,7 @@
  * All git probing runs through an injectable synchronous exec so tests never
  * spawn git; any failure or timeout degrades to the directory identity.
  *
- * @module @jianxx/dsh-cc-tui/project
+ * @module @dsh-cc/tui/project
  */
 
 import { createHash } from 'node:crypto'

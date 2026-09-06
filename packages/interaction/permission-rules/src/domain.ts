@@ -3,7 +3,7 @@
  * content rules matched against the canonicalized URL hostname. Browser-safe
  * (pure URL/string logic, no harness or alias imports) so the parser and the
  * TUI can both import this module.
- * @module @jianxx/dsh-cc-permission-rules/domain
+ * @module @dsh-cc/permission-rules/domain
  */
 
 import type { ContentMatcher } from './types.ts'

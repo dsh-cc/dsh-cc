@@ -1,7 +1,7 @@
 /**
  * Human-facing `/skills` command: lists every available skill with its
  * description, source, and invocation policy.
- * @module @jianxx/dsh-cc-command-skills
+ * @module @dsh-cc/command-skills
  */
 
 import type { Context } from '@deepseek-ai/cordis'

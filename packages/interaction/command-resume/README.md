@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-resume
+# @dsh-cc/command-resume
 
 English | [中文](README.zh.md)
 
@@ -20,7 +20,7 @@ The producer injects `commands`. A custom app mounts the session-query backend (
 - id: session-query
   name: '@deepseek-ai/dsh-session-query-sqlite'
 - id: command-resume
-  name: '@jianxx/dsh-cc-command-resume'
+  name: '@dsh-cc/command-resume'
 ```
 
 The `sessionQuery` seam is discovered via `ctx` at run time; it is not injected, so the command loads even without a query backend (and then reports the missing seam).

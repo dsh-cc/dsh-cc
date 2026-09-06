@@ -15,7 +15,7 @@ npmjs 并打 GitHub Release。CI 校验 tag 与版本清单一致(`scripts/check
 
 1. **npm granular access token**(为什么:授权范围最小、无全局写入权):
    在 npmjs → Access Tokens 创建一个 granular token,权限 **Read+Write**,
-   scope 选 `@jianxx`(若平台不提供 scope 粒度,先选 **All packages**,发布后
+   scope 选 `@dsh-cc`(若平台不提供 scope 粒度,先选 **All packages**,发布后
    收窄回 scope 粒度)。过期时间最长 **1 年**。
    然后到 GitHub repo → Settings → Secrets and variables → Actions,新建仓库
    secret **`NPM_TOKEN`**,值填该 token。发布 workflow 的发布时间(bootstrap)
@@ -67,7 +67,7 @@ git push origin main vX.Y.Z
 把静态 token 换成 OIDC 短时凭据;发布 workflow 已内置兼容,无需改文件。
 
 1. npmjs 里对**每个包**:Settings → Trusted Publisher ➜ 新增 trusted publisher,
-   填 `jianxx` / `dsh-cc` / `publish.yml` / `npm-publish`。
+   填 `dsh-cc` / `dsh-cc` / `publish.yml` / `npm-publish`。
 2. 全部包配完后,删除 GitHub 的 `NPM_TOKEN` secret。
 3. 用**下一个 rc tag** 验证 OIDC 路径确能发布,再切换日常流程。
 4. 若 OIDC 失败,回退 = 重新补上 `NPM_TOKEN` secret(不必动别的)。

@@ -1,7 +1,7 @@
 /**
  * Human-facing `/help` command: lists every registered slash command or shows
  * the detail for one named command, including its input hint.
- * @module @jianxx/dsh-cc-command-help
+ * @module @dsh-cc/command-help
  */
 
 import type { Context } from '@deepseek-ai/cordis'

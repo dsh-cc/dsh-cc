@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { MODEL_ALIASES_NAMESPACE, resolveAlias } from '@jianxx/dsh-cc-model-aliases'
-import type { ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
+import { MODEL_ALIASES_NAMESPACE, resolveAlias } from '@dsh-cc/model-aliases'
+import type { ModelRoutes } from '@dsh-cc/model-aliases'
 
 /** Route the fakes resolve `haiku` to; every other alias inherits (undefined). */
 const CHEAP = { provider: 'p', model: 'cheap' }

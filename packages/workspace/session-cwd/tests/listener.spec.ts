@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { PreToolDecision, ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
 import {
   DEFAULT_FS_TOOLS,
   boundaryDecision,

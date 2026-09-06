@@ -13,7 +13,7 @@
  * `permission/mode` in `./mode.ts`) so the persistence layer resumes logs
  * containing it.
  *
- * @module @jianxx/dsh-cc-permission-rules/session-allowlist
+ * @module @dsh-cc/permission-rules/session-allowlist
  */
 
 import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'

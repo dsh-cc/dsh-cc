@@ -21,11 +21,11 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import { CallId } from '@deepseek-ai/dsh-llm'
-import { apply } from '@jianxx/dsh-cc-mcp-client/src/index.ts'
-import { publicToolName } from '@jianxx/dsh-cc-mcp-client/src/tools.ts'
-import type { Config } from '@jianxx/dsh-cc-mcp-client'
+import { apply } from '@dsh-cc/mcp-client/src/index.ts'
+import { publicToolName } from '@dsh-cc/mcp-client/src/tools.ts'
+import type { Config } from '@dsh-cc/mcp-client'
 
 const testToolSignal = new AbortController().signal
 

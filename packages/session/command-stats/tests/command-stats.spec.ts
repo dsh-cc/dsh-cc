@@ -8,8 +8,8 @@ import { CallId } from '@deepseek-ai/dsh-llm'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import * as commandStats from '@jianxx/dsh-cc-command-stats'
-import { foldStats, formatStatsReport } from '@jianxx/dsh-cc-command-stats/stats'
+import * as commandStats from '@dsh-cc/command-stats'
+import { foldStats, formatStatsReport } from '@dsh-cc/command-stats/stats'
 
 function ev(type: string, data: unknown, seq: number): SessionEvent {
   return Object.freeze({ seq, time: seq * 10, type, data }) as SessionEvent
@@ -77,7 +77,7 @@ async function run(test: Awaited<ReturnType<typeof harness>>): Promise<NonNullab
   return execution.result
 }
 
-describe('@jianxx/dsh-cc-command-stats registration', () => {
+describe('@dsh-cc/command-stats registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandStats.name).toBe('command-stats')
     expect(commandStats.inject).toEqual(['commands'])

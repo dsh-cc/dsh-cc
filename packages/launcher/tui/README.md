@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc
+# @dsh-cc/cli
 
 Optional `dsh-cc` bin. Canonical command is still `dsh --profile tui`.
 

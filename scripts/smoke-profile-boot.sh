@@ -19,7 +19,7 @@
 # healProfilesModuleFallback(INSTALL_ANCHOR), materializing the shared
 # fallback from the harness CLI's install tree — same composition as the
 # published npm `@deepseek-ai/dsh` dependency closure, and therefore exactly
-# the pool a real user's plugins resolve against. The @jianxx/* copies come
+# the pool a real user's plugins resolve against. The @dsh-cc/* copies come
 # from scripts/sync-local-profile.sh (built lib/ + plain-npm runtime
 # `dependencies` copied into the profile root node_modules).
 #

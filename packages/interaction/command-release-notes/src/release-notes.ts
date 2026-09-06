@@ -3,7 +3,7 @@
  * repository's tracked history and README. The full changelog rides a TS string
  * constant so the command is offline-safe and deterministic — no filesystem or
  * network at call time.
- * @module @jianxx/dsh-cc-command-release-notes/release-notes
+ * @module @dsh-cc/command-release-notes/release-notes
  */
 
 /** The bundled changelog, newest section first. */

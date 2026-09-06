@@ -1,7 +1,7 @@
 /**
  * Tool registry, model presentation modes, and pre/guard/around/post/result
  * execution pipeline.
- * @module @jianxx/dsh-cc-tools
+ * @module @dsh-cc/tools
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -77,7 +77,7 @@ export { jsonSchemaToPy, renderToolsSdkPy } from './py-types.ts'
 export { defineContentToolFixture, type ContentToolFixtureOptions } from './testing.ts'
 
 // The render-intent vocabulary a tool declares via `presentCall`/`presentResult`
-// lives in its own UI-facing module; re-export it so `@jianxx/dsh-cc-tools`
+// lives in its own UI-facing module; re-export it so `@dsh-cc/tools`
 // stays the single public API for tool producers and UI adapters.
 export type {
   ToolCallKind,

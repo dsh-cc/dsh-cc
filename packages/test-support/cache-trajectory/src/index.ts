@@ -1,7 +1,7 @@
 /**
  * Cache-hit-rate benchmark (Item 6): standard trajectory schema, deterministic
  * runner, report fold, and regression thresholds. Public API re-exports.
- * @module @jianxx/dsh-cc-cache-trajectory
+ * @module @dsh-cc/cache-trajectory
  */
 
 export {

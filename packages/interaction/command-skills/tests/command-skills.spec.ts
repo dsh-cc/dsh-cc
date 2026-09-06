@@ -7,8 +7,8 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { bindScopeParent, createScope, scopeOf } from '@deepseek-ai/dsh-scope'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
-import * as commandSkills from '@jianxx/dsh-cc-command-skills'
-import { formatSkill, formatSkills, invocationLabel } from '@jianxx/dsh-cc-command-skills/skills'
+import * as commandSkills from '@dsh-cc/command-skills'
+import { formatSkill, formatSkills, invocationLabel } from '@dsh-cc/command-skills/skills'
 
 function stubAgent(session: ReturnType<Context['sessions']['create']>): Agent {
   return {
@@ -51,7 +51,7 @@ async function harness(): Promise<{
   return { ctx, agent, plugin }
 }
 
-describe('@jianxx/dsh-cc-command-skills registration', () => {
+describe('@dsh-cc/command-skills registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandSkills.name).toBe('command-skills')
     expect(commandSkills.inject).toEqual(['commands', 'skills'])

@@ -4,7 +4,7 @@ import {
   formatSessionRow,
   sortByActivity,
   type SessionListEntry,
-} from '@jianxx/dsh-cc-tui/harness/session-list.ts'
+} from '@dsh-cc/tui/harness/session-list.ts'
 
 const entries = (...list: SessionListEntry[]): SessionListEntry[] => list
 

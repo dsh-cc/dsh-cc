@@ -5,7 +5,7 @@ import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { SessionTitleProviderId } from '@deepseek-ai/dsh-session-title'
 import type { SessionTitleProvider, SessionTitleProviderRequest } from '@deepseek-ai/dsh-session-title'
-import * as provider from '@jianxx/dsh-cc-session-title-provider'
+import * as provider from '@dsh-cc/session-title-provider'
 
 const SCRIPT: StreamChunk[] = [
   { type: 'block-start', index: 0, blockType: 'text' },
@@ -88,7 +88,7 @@ async function harness(options: BootOptions = {}): Promise<{
   return { ctx, adapter, registrations }
 }
 
-describe('@jianxx/dsh-cc-session-title-provider', () => {
+describe('@dsh-cc/session-title-provider', () => {
   it('stamps the haiku route from the ccModelRoutes service', async () => {
     const { ctx, adapter, registrations } = await harness({
       ccModelRoutes: {

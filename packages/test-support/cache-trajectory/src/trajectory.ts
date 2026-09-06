@@ -5,7 +5,7 @@
  * first request), deterministic content tools, and an ordered turn list whose
  * first turn forces a tool call so the very first turn produces a follow-up
  * request over an extended prefix.
- * @module @jianxx/dsh-cc-cache-trajectory/trajectory
+ * @module @dsh-cc/cache-trajectory/trajectory
  */
 
 import { readFileSync } from 'node:fs'

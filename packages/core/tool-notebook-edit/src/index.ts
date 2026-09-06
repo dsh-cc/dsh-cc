@@ -19,7 +19,7 @@
  * write counts as the latest read baseline. The seam exposes an authoritative
  * opaque version token rather than an mtime; comparing that token is the seam's
  * native staleness check and is strictly stronger than CC's mtime comparison.
- * @module @jianxx/dsh-cc-tool-notebook-edit
+ * @module @dsh-cc/tool-notebook-edit
  */
 
 import { extname } from 'node:path'
@@ -27,8 +27,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { FsObservation, FsTarget, FsVersion } from '@deepseek-ai/dsh-fs'
-import { defineTool } from '@jianxx/dsh-cc-tools'
-import type { ToolResult, ToolRunContext } from '@jianxx/dsh-cc-tools'
+import { defineTool } from '@dsh-cc/tools'
+import type { ToolResult, ToolRunContext } from '@dsh-cc/tools'
 import {
   findCellIndex,
   languageOf,

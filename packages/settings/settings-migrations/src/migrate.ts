@@ -9,7 +9,7 @@
  * so the next run re-attempts the failing survivors. A guard returning `false`
  * skips a migration without blocking version advancement (mirroring Claude Code).
  * Migrations MUST be idempotent — see the README for the contract.
- * @module @jianxx/dsh-cc-settings-migrations
+ * @module @dsh-cc/settings-migrations
  */
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'

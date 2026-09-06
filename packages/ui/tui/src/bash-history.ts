@@ -10,7 +10,7 @@
  * multi-line commands (embedded newlines are escaped by JSON.stringify, so a
  * single entry never spans multiple physical lines).
  *
- * @module @jianxx/dsh-cc-tui/bash-history
+ * @module @dsh-cc/tui/bash-history
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'

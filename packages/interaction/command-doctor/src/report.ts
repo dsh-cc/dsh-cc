@@ -2,7 +2,7 @@
  * Structured `/doctor` report data model: check types, report shape, and the
  * summary counter fold. No cordis imports, so the types and fold are
  * unit-testable in isolation.
- * @module @jianxx/dsh-cc-command-doctor/report
+ * @module @dsh-cc/command-doctor/report
  */
 
 /** One check's outcome severity. */

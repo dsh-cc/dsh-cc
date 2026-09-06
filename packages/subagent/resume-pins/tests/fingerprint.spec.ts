@@ -10,9 +10,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { loadAgentsDir } from '@jianxx/dsh-cc-claude-code-agents'
+import { loadAgentsDir } from '@dsh-cc/claude-code-agents'
 import { definitionFingerprint, personaHash } from '../src/fingerprint.ts'
-import type { AgentDefinition } from '@jianxx/dsh-cc-claude-code-agents'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 
 const roots: string[] = []
 

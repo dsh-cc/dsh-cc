@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver, formatCostReport } from '@jianxx/dsh-cc-tui/harness/driver.ts'
+import { createDriver, formatCostReport } from '@dsh-cc/tui/harness/driver.ts'
 
 /** Minimal ctx stub: a sessionProjections service with a tokenUsage state. */
 function makeCostCtx(usage: unknown) {

@@ -6,7 +6,7 @@
  * realm as `ccAgents` so the TUI local-slash path — a host-plane sibling that
  * cannot resolve realm-interior mounts — consumes the SAME snapshot
  * (ccPlugins root-publication pattern).
- * @module @jianxx/dsh-cc-command-agents
+ * @module @dsh-cc/command-agents
  */
 
 import type { Context } from '@deepseek-ai/cordis'

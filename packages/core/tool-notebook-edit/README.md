@@ -1,8 +1,8 @@
-# @jianxx/dsh-cc-tool-notebook-edit
+# @dsh-cc/tool-notebook-edit
 
 English | [中文](README.zh.md)
 
-Model-facing `NotebookEdit` tool that edits Jupyter notebook (.ipynb) cells, aligned to Claude Code's `NotebookEditTool` replace/insert/delete semantics and cell addressing. It registers into `ctx.tools` via the `@jianxx/dsh-cc-tools` `ToolRuntime` and reads/writes through the harness `ctx.fs` seam.
+Model-facing `NotebookEdit` tool that edits Jupyter notebook (.ipynb) cells, aligned to Claude Code's `NotebookEditTool` replace/insert/delete semantics and cell addressing. It registers into `ctx.tools` via the `@dsh-cc/tools` `ToolRuntime` and reads/writes through the harness `ctx.fs` seam.
 
 ## Tools
 
@@ -39,11 +39,11 @@ Each `apply(ctx, config)` call registers the `NotebookEdit` tool into `ctx.tools
 ## Install / registration
 
 ```ts
-import * as ToolNotebookEdit from '@jianxx/dsh-cc-tool-notebook-edit'
+import * as ToolNotebookEdit from '@dsh-cc/tool-notebook-edit'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 
 await ctx.plugin(SystemPrompt)
-await ctx.plugin(ToolRuntime)            // @jianxx/dsh-cc-tools
+await ctx.plugin(ToolRuntime)            // @dsh-cc/tools
 await ctx.plugin(LocalFileSystem, { cwd }) // ctx.fs backend
 await ctx.plugin(ToolNotebookEdit)        // registers the NotebookEdit tool + listener
 ```
@@ -56,7 +56,7 @@ await ctx.plugin(ToolNotebookEdit)        // registers the NotebookEdit tool + l
 
 ## Build order
 
-`tool-notebook-edit` depends on the workspace `@jianxx/dsh-cc-tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-fs`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-invariants`, `@deepseek-ai/schemastery`). It has no dependency on any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
+`tool-notebook-edit` depends on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-fs`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-invariants`, `@deepseek-ai/schemastery`). It has no dependency on any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
 
 ## Known limitations
 

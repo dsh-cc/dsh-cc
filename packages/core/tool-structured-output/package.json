@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-tool-structured-output",
+  "name": "@dsh-cc/tool-structured-output",
   "description": "StructuredOutput tool that validates model input against a caller-supplied JSON schema and returns it verbatim, aligned with Claude Code's SyntheticOutputTool",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/core/tool-structured-output"
   },
   "type": "module",
@@ -23,14 +23,14 @@
   "peerDependencies": {
     "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt"

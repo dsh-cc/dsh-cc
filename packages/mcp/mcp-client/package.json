@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-mcp-client",
+  "name": "@dsh-cc/mcp-client",
   "description": "MCP client bridge: connects to MCP servers and registers their tools on ctx.tools",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/mcp/mcp-client"
   },
   "type": "module",
@@ -31,7 +31,7 @@
     "@deepseek-ai/dsh-skill": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-subprocess": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-timeout": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
@@ -47,14 +47,14 @@
     "@deepseek-ai/dsh-skill": "link:../../../../deepseek-harness/packages/skill/skill",
     "@deepseek-ai/dsh-subprocess": "link:../../../../deepseek-harness/packages/subprocess/subprocess",
     "@deepseek-ai/dsh-timeout": "link:../../../../deepseek-harness/packages/util/timeout",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@modelcontextprotocol/server-everything": "^2026.7.4",
     "@modelcontextprotocol/server-filesystem": "^2026.7.4",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
-    "@jianxx/dsh-cc-tool-search": "workspace:^"
+    "@dsh-cc/tool-search": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

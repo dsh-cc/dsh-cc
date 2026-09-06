@@ -4,7 +4,7 @@ import {
   formatResultCard,
   type ToolCallView,
   type ToolResultView,
-} from '@jianxx/dsh-cc-tui/tool-card.ts'
+} from '@dsh-cc/tui/tool-card.ts'
 
 describe('formatCallCard', () => {
   it('renders a generic pending card from the title, not the raw JSON args', () => {

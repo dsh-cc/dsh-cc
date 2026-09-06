@@ -9,7 +9,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { ccToolAliases } from '@jianxx/dsh-cc-tools'
+import { ccToolAliases } from '@dsh-cc/tools'
 import {
   appendHookInvoked,
   appendHookResult,
@@ -19,7 +19,7 @@ import {
   type HookOutput,
   type MatcherGroup,
   type MergedHookOutcome,
-} from '@jianxx/dsh-cc-hook-protocol'
+} from '@dsh-cc/hook-protocol'
 import type { ClaudeCodeHookConfig } from './config.ts'
 import { dispatchHook } from './dispatch.ts'
 

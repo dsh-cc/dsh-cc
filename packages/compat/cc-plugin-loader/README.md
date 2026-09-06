@@ -1,10 +1,10 @@
-# @jianxx/dsh-cc-plugin-loader
+# @dsh-cc/plugin-loader
 
 English | [中文](README.zh.md)
 
 Load a Claude Code plugin's `plugin.json` manifest and mount each component as an in-memory dsh plugin.
 
-This compatibility loader reads a CC plugin manifest subset, translates each component with the pure helpers from [`@jianxx/dsh-cc-skill-loader`](../../skill/skill-claude-code/README.md) and [`@jianxx/dsh-cc-claude-code-agents`](../../preset/claude-code-agents/README.md), and consults the host seam for that component through `ctx.get(...)`. It is not a runtime: it produces typed mounts and a structural report, leaving execution to the seams it registers onto.
+This compatibility loader reads a CC plugin manifest subset, translates each component with the pure helpers from [`@dsh-cc/skill-loader`](../../skill/skill-claude-code/README.md) and [`@dsh-cc/claude-code-agents`](../../preset/claude-code-agents/README.md), and consults the host seam for that component through `ctx.get(...)`. It is not a runtime: it produces typed mounts and a structural report, leaving execution to the seams it registers onto.
 
 ## Discovery
 

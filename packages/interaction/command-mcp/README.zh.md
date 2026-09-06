@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-mcp
+# @dsh-cc/command-mcp
 
 [English](README.md) | 中文
 
@@ -21,9 +21,9 @@
 
 ```yaml
 - id: mcp-client
-  name: '@jianxx/dsh-cc-mcp-client'
+  name: '@dsh-cc/mcp-client'
 - id: command-mcp
-  name: '@jianxx/dsh-cc-command-mcp'
+  name: '@dsh-cc/command-mcp'
 ```
 
 `mcpConnections` 衔接服务在运行时经 `ctx` 发现，并非注入项，因此即便缺少 mcp-client，命令也能加载（此时会报告缺少该服务）。

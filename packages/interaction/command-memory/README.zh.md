@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-memory
+# @dsh-cc/command-memory
 
 [English](README.md) | 中文
 
@@ -21,7 +21,7 @@
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-memory
-  name: '@jianxx/dsh-cc-command-memory'
+  name: '@dsh-cc/command-memory'
 ```
 
 文件系统服务提供 `fs` 接口。可通过 `memoryHome` 配置指向显式目录。

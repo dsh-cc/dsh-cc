@@ -1,7 +1,7 @@
 /**
  * Human-facing `/export` command: writes the current session transcript to a
  * file through `ctx.fs` as markdown (default) or lossless JSON.
- * @module @jianxx/dsh-cc-command-export
+ * @module @dsh-cc/command-export
  */
 
 import type { Context } from '@deepseek-ai/cordis'

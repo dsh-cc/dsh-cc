@@ -17,10 +17,10 @@
  * through verbatim so `tools.restrict()` fails loudly at agent-load time with
  * its own clear error rather than silently dropping a typo.
  *
- * @module @jianxx/dsh-cc-claude-code-agents/restrict
+ * @module @dsh-cc/claude-code-agents/restrict
  */
 
-import { translateToolNames } from '@jianxx/dsh-cc-tools'
+import { translateToolNames } from '@dsh-cc/tools'
 import type { ToolRestriction } from './types.ts'
 
 /**

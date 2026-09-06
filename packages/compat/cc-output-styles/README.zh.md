@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-output-styles
+# @dsh-cc/output-styles
 
 [English](README.md) | 中文
 
@@ -51,7 +51,7 @@ Your concise coding and communication instructions here.
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: cc-output-styles
-  name: '@jianxx/dsh-cc-output-styles'
+  name: '@dsh-cc/output-styles'
   config:
     outputStyle: Explanatory
 ```

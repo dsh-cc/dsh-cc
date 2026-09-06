@@ -10,7 +10,7 @@
  * `PINNED_TOOL_UNAVAILABLE`, and `PIN_UNREADABLE` always block regardless of
  * this policy: no safe fallback exists for them.
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/policy
+ * @module @dsh-cc/subagent-resume-pins/policy
  */
 
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'

@@ -11,8 +11,8 @@ import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
-import * as ToolNotebookEdit from '@jianxx/dsh-cc-tool-notebook-edit'
+import ToolRuntime from '@dsh-cc/tools'
+import * as ToolNotebookEdit from '@dsh-cc/tool-notebook-edit'
 
 /** Temp dirs for this bundle spec, cleaned up in afterEach. */
 const dirs: string[] = []

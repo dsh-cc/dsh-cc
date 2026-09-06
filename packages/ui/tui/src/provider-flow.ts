@@ -4,7 +4,7 @@
  * route normalization/collision, profile materialization, model-list parsing,
  * and the verify-probe request builder. All functions are pure — seams and
  * data arrive as plain values (D6 `*Like` pattern).
- * @module @jianxx/dsh-cc-tui/provider-flow
+ * @module @dsh-cc/tui/provider-flow
  */
 import type { LlmLike } from './state/driver-types.ts'
 import { PRESETS, presetByRoute, deriveCredentialRef, type ProviderPreset } from './provider-presets.ts'

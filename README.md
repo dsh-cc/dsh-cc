@@ -18,14 +18,14 @@
 Install DeepSeek Harness and the `dsh-cc` launcher, then start coding:
 
 ```sh
-npm install -g @deepseek-ai/dsh @jianxx/dsh-cc
+npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
 Already have `dsh` **>= 0.1.0-rc.5**? Install only the launcher:
 
 ```sh
-npm install -g @jianxx/dsh-cc
+npm install -g @dsh-cc/cli
 dsh-cc
 ```
 
@@ -33,9 +33,9 @@ The launcher creates and boots the CC-oriented `tui` profile. To compose the pro
 
 ```sh
 dsh plugin --profile tui add \
-  @jianxx/dsh-cc-bundle-permissions \
-  @jianxx/dsh-cc-bundle-shell \
-  @jianxx/dsh-cc-bundle-tui
+  @dsh-cc/bundle-permissions \
+  @dsh-cc/bundle-shell \
+  @dsh-cc/bundle-tui
 dsh --profile tui
 ```
 
@@ -43,8 +43,8 @@ The same backend also works with the dsh web UI:
 
 ```sh
 dsh plugin --profile web add \
-  @jianxx/dsh-cc-bundle-permissions \
-  @jianxx/dsh-cc-bundle-shell
+  @dsh-cc/bundle-permissions \
+  @dsh-cc/bundle-shell
 dsh web
 ```
 
@@ -360,7 +360,7 @@ See **[docs/dev.md](docs/dev.md)** for offline development details and repositor
 
 ## Packages and releases
 
-Published plugins use the `@jianxx` npm scope. The root monorepo package is private; installable packages are released individually through the repository release tooling.
+Published plugins use the `@dsh-cc` npm scope. The root monorepo package is private; installable packages are released individually through the repository release tooling.
 
 Release process details: **[docs/release.md](docs/release.md)**.
 
@@ -377,7 +377,7 @@ Contributions, compatibility reports, and focused upstream extension proposals a
 - upstream extension proposals that reduce vendored code;
 - real-project model-routing and workflow examples.
 
-**[Open an issue](https://github.com/jianxx/dsh-cc/issues) · [View pull requests](https://github.com/jianxx/dsh-cc/pulls)**
+**[Open an issue](https://github.com/dsh-cc/dsh-cc/issues) · [View pull requests](https://github.com/dsh-cc/dsh-cc/pulls)**
 
 ## License
 

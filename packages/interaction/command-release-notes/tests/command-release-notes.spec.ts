@@ -5,8 +5,8 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandReleaseNotes from '@jianxx/dsh-cc-command-release-notes'
-import { CHANGELOG, renderReleaseNotes } from '@jianxx/dsh-cc-command-release-notes/release-notes'
+import * as commandReleaseNotes from '@dsh-cc/command-release-notes'
+import { CHANGELOG, renderReleaseNotes } from '@dsh-cc/command-release-notes/release-notes'
 
 async function harness(): Promise<{
   ctx: Context
@@ -38,7 +38,7 @@ async function harness(): Promise<{
   return { ctx, agent, plugin }
 }
 
-describe('@jianxx/dsh-cc-command-release-notes registration', () => {
+describe('@dsh-cc/command-release-notes registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandReleaseNotes.name).toBe('command-release-notes')
     expect(commandReleaseNotes.inject).toEqual(['commands'])

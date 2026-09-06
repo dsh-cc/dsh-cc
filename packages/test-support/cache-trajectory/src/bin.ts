@@ -26,7 +26,7 @@
  * Calibration tool, not a gate: ALWAYS exits 0. The verdict lives in the
  * report (`verdict`/`failures`); collect distributions with --out before
  * tightening the formal thresholds.
- * @module @jianxx/dsh-cc-cache-trajectory/bin
+ * @module @dsh-cc/cache-trajectory/bin
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'

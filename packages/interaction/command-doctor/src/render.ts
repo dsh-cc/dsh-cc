@@ -1,7 +1,7 @@
 /**
  * `/doctor` text rendering: default (ok collapsed) and verbose (everything
  * expanded) views over one redacted report. ASCII-only, no emoji.
- * @module @jianxx/dsh-cc-command-doctor/render
+ * @module @dsh-cc/command-doctor/render
  */
 
 import { CHECK_GROUPS, type Check, type DoctorReport } from './report.ts'

@@ -8,7 +8,7 @@
  * string: it stays synchronous, dependency-light, and unit-testable, and the
  * caller owns reading the bytes.
  *
- * @module @jianxx/dsh-cc-claude-code-agents/parse
+ * @module @dsh-cc/claude-code-agents/parse
  */
 
 import { load as loadYaml } from 'js-yaml'

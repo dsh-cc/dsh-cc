@@ -4,7 +4,7 @@
  * N reads into one summary line can only happen here — after the transcript's
  * line-budget clipping and purely for rendering. Nothing in this module feeds
  * back into state.
- * @module @jianxx/dsh-cc-tui/components/read-group
+ * @module @dsh-cc/tui/components/read-group
  */
 
 import type { TranscriptRow } from '../store.ts'

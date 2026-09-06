@@ -14,7 +14,7 @@
  * Validation rejects the WHOLE batch on any violation — a partial write would
  * leave the index and its topic files inconsistent with no signal back to the
  * fork that produced them.
- * @module @jianxx/dsh-cc-memory-consolidation/writeback
+ * @module @dsh-cc/memory-consolidation/writeback
  */
 
 import { join } from 'node:path'

@@ -4,7 +4,7 @@ import {
   parseAgentJson,
   parseAgentMarkdown,
   splitFrontmatter,
-} from '@jianxx/dsh-cc-claude-code-agents'
+} from '@dsh-cc/claude-code-agents'
 
 const MD = (name: string): string => join('/tmp/agents', `${name}.md`)
 

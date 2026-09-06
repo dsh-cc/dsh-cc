@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 // the `approval/*` (user-approval) payload fields below typecheck.
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { JobId } from '@deepseek-ai/dsh-jobs'
-import { ccCanonicalToolName, type ToolExecution, type ToolExecutionResult } from '@jianxx/dsh-cc-tools'
+import { ccCanonicalToolName, type ToolExecution, type ToolExecutionResult } from '@dsh-cc/tools'
 
 /**
  * The `agent_type` value the bridge reports for SubagentStart/Stop. The harness

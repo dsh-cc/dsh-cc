@@ -21,8 +21,8 @@ import { CallId } from '@deepseek-ai/dsh-llm'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
-import * as ToolNotebookEdit from '@jianxx/dsh-cc-tool-notebook-edit'
+import ToolRuntime from '@dsh-cc/tools'
+import * as ToolNotebookEdit from '@dsh-cc/tool-notebook-edit'
 
 let callCounter = 0
 

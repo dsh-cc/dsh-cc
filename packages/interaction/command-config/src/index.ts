@@ -2,7 +2,7 @@
  * Human-facing `/config` command: render the effective configuration from the
  * settings service, or write an allowlisted key/value into a namespace scope.
  * Invalid keys or scopes produce a friendly message, never a thrown error.
- * @module @jianxx/dsh-cc-command-config
+ * @module @dsh-cc/command-config
  */
 
 import type { Context } from '@deepseek-ai/cordis'

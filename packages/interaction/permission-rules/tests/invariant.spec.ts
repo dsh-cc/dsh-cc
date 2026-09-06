@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
-import * as permissionRulesInvariant from '@jianxx/dsh-cc-permission-rules/invariant'
-import { name, inject } from '@jianxx/dsh-cc-permission-rules/invariant'
+import * as permissionRulesInvariant from '@dsh-cc/permission-rules/invariant'
+import { name, inject } from '@dsh-cc/permission-rules/invariant'
 import { assertPermissionModeEvent } from '../src/invariant.ts'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 

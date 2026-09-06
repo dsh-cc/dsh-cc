@@ -2,7 +2,7 @@
  * Boot banner art + info text for the CC transcript. Brand art is
  * theme-independent: the whale renders through a fixed deep-to-light blue
  * 256-color ramp regardless of the configured palette.
- * @module @jianxx/dsh-cc-tui/harness/boot-banner
+ * @module @dsh-cc/tui/harness/boot-banner
  */
 import { sgr } from '../components/theme.ts'
 import type { TranscriptRow } from '../store.ts'

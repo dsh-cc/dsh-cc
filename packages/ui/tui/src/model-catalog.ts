@@ -1,6 +1,6 @@
 /**
  * Pure LLM catalog formatting and choice parsing for `/model`.
- * @module @jianxx/dsh-cc-tui/model-catalog
+ * @module @dsh-cc/tui/model-catalog
  */
 
 export interface CatalogEntry {

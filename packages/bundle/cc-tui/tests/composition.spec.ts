@@ -53,7 +53,7 @@ describe('cc-tui bundle patch', () => {
     expect(presets?.name).toBe('@deepseek-ai/dsh-agent-presets')
     expect(presets?.config?.default).toBe('cc')
     const tui = rows.find(row => row.id === 'tui')
-    expect(tui?.name).toBe('@jianxx/dsh-cc-tui')
+    expect(tui?.name).toBe('@dsh-cc/tui')
     expect(tui?.config?.agentPreset).toBe('cc')
   })
 
@@ -67,7 +67,7 @@ describe('cc-tui bundle patch', () => {
   })
 
   it('depends on the TUI runtime package', () => {
-    expect(Object.keys(pkgJson.dependencies ?? {})).toContain('@jianxx/dsh-cc-tui')
+    expect(Object.keys(pkgJson.dependencies ?? {})).toContain('@dsh-cc/tui')
   })
 
   it('does not ship @deepseek-ai/cordis', () => {

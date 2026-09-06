@@ -10,7 +10,7 @@
  * ships ~36 common languages and resolves cleanly under the repo's ESM
  * `moduleResolution: bundler` tsconfig (the package's `exports` map points the
  * `./lib/common` subpath at the ESM build with sibling `.d.ts` files).
- * @module @jianxx/dsh-cc-tui/components/code-theme
+ * @module @dsh-cc/tui/components/code-theme
  */
 
 import hljs from 'highlight.js/lib/common'

@@ -6,8 +6,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
-import * as HooksClaude from '@jianxx/dsh-cc-hooks-claude-code'
-import type { HookBridgeStatus } from '@jianxx/dsh-cc-hooks-claude-code/src/index.ts'
+import * as HooksClaude from '@dsh-cc/hooks-claude-code'
+import type { HookBridgeStatus } from '@dsh-cc/hooks-claude-code/src/index.ts'
 
 /**
  * `hookBridgeStatus` tests: the plugin exposes its live load report on its own

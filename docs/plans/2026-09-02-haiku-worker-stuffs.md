@@ -53,7 +53,7 @@ Do **not** invent a second title generator. Reuse `generateSessionTitleWithLlm` 
 
 - insert:
     - id: session-title-llm-cc
-      name: '@jianxx/dsh-cc-session-title-provider'
+      name: '@dsh-cc/session-title-provider'
       config:
         targetWords: 5
         targetCjkCharacters: 10
@@ -208,7 +208,7 @@ Do **not** add `ModelRoutes.smallFast()` (same version-skew reason as the previo
 
 ### 2b. Host-plane title provider overlay
 
-New package `packages/compat/session-title-provider` (`@jianxx/dsh-cc-session-title-provider`).
+New package `packages/compat/session-title-provider` (`@dsh-cc/session-title-provider`).
 
 Copies the numeric schema of `@deepseek-ai/dsh-session-title-first-prompt-llm` (required `targetWords` / `targetCjkCharacters` / `maxInputBytes` / `maxOutputTokens` / `timeoutMs`; optional paired `provider`/`model` kept as an escape hatch). `inject = ['sessionTitle', 'llm', 'sessions']`.
 
@@ -239,9 +239,9 @@ ctx.sessionTitle.register({
 })
 ```
 
-`packages/bundle/cc-shell/cordis.patch.yml` — disable the stock row, then insert ours (see mount mechanism above). The patch-string test asserts `disabled: true` on `session-title-llm` and an insert named `@jianxx/dsh-cc-session-title-provider`.
+`packages/bundle/cc-shell/cordis.patch.yml` — disable the stock row, then insert ours (see mount mechanism above). The patch-string test asserts `disabled: true` on `session-title-llm` and an insert named `@dsh-cc/session-title-provider`.
 
-Add `@jianxx/dsh-cc-session-title-provider` to `cc-shell` `dependencies` (the host loader resolves patch `name:`s from the bundle). Peer/devDeps of the new package: `dsh-session-title`, `dsh-session-title-llm`, `dsh-llm`, `dsh-session`, `dsh-cc-model-aliases`, `cordis`, `schemastery`, `dsh-invariants` — follow `command-resume`'s peer+dev link pattern. Include `./invariant` stub (copy tool-sleep / command-resume).
+Add `@dsh-cc/session-title-provider` to `cc-shell` `dependencies` (the host loader resolves patch `name:`s from the bundle). Peer/devDeps of the new package: `dsh-session-title`, `dsh-session-title-llm`, `dsh-llm`, `dsh-session`, `dsh-cc-model-aliases`, `cordis`, `schemastery`, `dsh-invariants` — follow `command-resume`'s peer+dev link pattern. Include `./invariant` stub (copy tool-sleep / command-resume).
 
 Tests (`packages/compat/session-title-provider/tests/provider.spec.ts`):
 
@@ -256,7 +256,7 @@ Drive with a fake `sessionTitle.register` that captures the provider, plus a fak
 
 ### 2c. `/rename`
 
-New package `packages/interaction/command-rename` (`@jianxx/dsh-cc-command-rename`), copy `command-resume` layout (`src/index.ts`, `src/invariant.ts`, tests, README pair, `package.json` exports `.` + `./invariant`).
+New package `packages/interaction/command-rename` (`@dsh-cc/command-rename`), copy `command-resume` layout (`src/index.ts`, `src/invariant.ts`, tests, README pair, `package.json` exports `.` + `./invariant`).
 
 ```ts
 export const inject = ['commands']
@@ -286,7 +286,7 @@ Tests (`packages/interaction/command-rename/tests/command-rename.spec.ts`): copy
 - Thrown validation error → kind `error` with that message.
 - Does **not** call rename when input is empty.
 
-`packages/preset/cc/tests/composition.spec.ts`: no isolate-key change. The `'declares every @jianxx row name as a dependency'` test will pick up the new row automatically. Baseline-16 test is additive-safe.
+`packages/preset/cc/tests/composition.spec.ts`: no isolate-key change. The `'declares every @dsh-cc row name as a dependency'` test will pick up the new row automatically. Baseline-16 test is additive-safe.
 
 TUI: no change. Titles already decorate; a user rename is a `session/title` event with `source.kind === 'user'` which pins against later automatic revisions (harness behavior).
 
@@ -300,7 +300,7 @@ TUI: no change. Titles already decorate; a user rename is a `session/title` even
 
 ## Feature 3 — WebFetch optional `prompt`
 
-New package `packages/core/tool-web-fetch` (`@jianxx/dsh-cc-tool-web-fetch`). Copy `tool-sleep` (plugin + render + invariant + tests).
+New package `packages/core/tool-web-fetch` (`@dsh-cc/tool-web-fetch`). Copy `tool-sleep` (plugin + render + invariant + tests).
 
 `inject = ['tools', 'web', 'systemPrompt', 'llm']`. Lazy `ctx.get('ccModelRoutes')` — **row lives in `cc-services`** so the service is visible.
 
@@ -313,7 +313,7 @@ New package `packages/core/tool-web-fetch` (`@jianxx/dsh-cc-tool-web-fetch`). Co
 
 ```yaml
 - id: tool-web-fetch
-  name: '@jianxx/dsh-cc-tool-web-fetch'
+  name: '@dsh-cc/tool-web-fetch'
 ```
 
 3. Add the package to `packages/preset/cc/package.json` dependencies.

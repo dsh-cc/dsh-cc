@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-coordinator`.
- * @module @jianxx/dsh-cc-coordinator/invariant
+ * Package-owned invariant companion for `@dsh-cc/coordinator`.
+ * @module @dsh-cc/coordinator/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-coordinator'
+const PACKAGE_NAME = '@dsh-cc/coordinator'
 
 /** Cordis companion plugin name. */
 export const name = 'coordinator-invariant'

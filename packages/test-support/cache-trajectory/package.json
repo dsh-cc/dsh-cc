@@ -1,5 +1,5 @@
 {
-  "name": "@jianxx/dsh-cc-cache-trajectory",
+  "name": "@dsh-cc/cache-trajectory",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -25,6 +25,6 @@
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
     "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
-    "@jianxx/dsh-cc-compaction-micro": "workspace:^"
+    "@dsh-cc/compaction-micro": "workspace:^"
   }
 }

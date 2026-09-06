@@ -15,7 +15,7 @@ describe('settings-cascade invariant', () => {
     const ctx = new Context()
     await ctx.plugin(InvariantRegistry)
     await ctx.plugin(CascadeInvariant)
-    expect(() => ctx.invariants.register('@jianxx/dsh-cc-settings-cascade', () => {}))
+    expect(() => ctx.invariants.register('@dsh-cc/settings-cascade', () => {}))
       .toThrow(/already registered/)
   })
 })

@@ -2,7 +2,7 @@
  * Structural Driver interface for UI components. Components import from here
  * (not from harness/driver.ts) so the boundary gate keeps harness imports
  * out of the view layer.
- * @module @jianxx/dsh-cc-tui/state/driver-types
+ * @module @dsh-cc/tui/state/driver-types
  */
 
 import type { CatalogEntry } from '../model-catalog.ts'

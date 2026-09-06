@@ -2,7 +2,7 @@
  * Pure helpers for the live working line (claude-code style spinner row).
  * Deliberately a leaf module: the store imports `VERBS`/`TurnAnchor` from
  * here, so nothing here may import back from the store or components.
- * @module @jianxx/dsh-cc-tui/working-line
+ * @module @dsh-cc/tui/working-line
  */
 
 import { formatTokens } from './statusline.ts'

@@ -3,7 +3,7 @@
  * namespace (the cascade aliases CC's camelCase `statusLine` key onto it), a
  * tolerant schema, and the activation/normalization predicate. No driver or
  * shell imports — this file is the seam-free half of the feature.
- * @module @jianxx/dsh-cc-tui/harness/statusline-settings
+ * @module @dsh-cc/tui/harness/statusline-settings
  */
 
 import z from '@deepseek-ai/schemastery'

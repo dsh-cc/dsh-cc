@@ -1,7 +1,7 @@
 /**
  * Compose an unpublished agent from the CC preset. Call from `agents.create`
  * / `resume` `setup` so a failed mount rolls the whole creation back.
- * @module @jianxx/dsh-cc-tui/harness/preset
+ * @module @dsh-cc/tui/harness/preset
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -40,7 +40,7 @@ export async function composePreset(
   if (presets === undefined) {
     throw new Error(
       `dsh-cc-tui: agent preset roster is not mounted; cannot start CC mode. `
-        + `Boot with dsh --profile tui (or run dsh-cc) so @jianxx/dsh-cc-bundle-tui is composed.`,
+        + `Boot with dsh --profile tui (or run dsh-cc) so @dsh-cc/bundle-tui is composed.`,
     )
   }
   const resolved = await presets.resolve(requested)

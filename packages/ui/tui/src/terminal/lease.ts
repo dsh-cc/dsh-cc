@@ -2,7 +2,7 @@
  * Single-writer terminal lease: raw mode + DEC-mode reset on every exit path.
  * Replaces ad-hoc setRawMode/process.on wiring with a checked handle so a
  * second mount fails loudly instead of double-registering handlers.
- * @module @jianxx/dsh-cc-tui/terminal/lease
+ * @module @dsh-cc/tui/terminal/lease
  */
 
 const RESET = [

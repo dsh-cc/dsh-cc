@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { highlightCodeAnsi } from '@jianxx/dsh-cc-tui/components/code-theme.ts'
+import { highlightCodeAnsi } from '@dsh-cc/tui/components/code-theme.ts'
 
 /** Strip every SGR sequence so assertions can compare against raw source. */
 const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, '')

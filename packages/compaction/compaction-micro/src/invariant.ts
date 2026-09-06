@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-compaction-micro`.
- * @module @jianxx/dsh-cc-compaction-micro/invariant
+ * Package-owned invariant companion for `@dsh-cc/compaction-micro`.
+ * @module @dsh-cc/compaction-micro/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-compaction-micro'
+const PACKAGE_NAME = '@dsh-cc/compaction-micro'
 
 /** Cordis companion plugin name. */
 export const name = 'compaction-micro-invariant'

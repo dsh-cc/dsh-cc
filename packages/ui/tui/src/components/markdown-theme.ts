@@ -2,10 +2,10 @@
  * Markdown theme derived from the injected TUI palette. Assistant rows pass
  * through the vendored Markdown component with this theme; fenced code blocks
  * are syntax-highlighted via the `highlightCode` seam (see `code-theme.ts`).
- * @module @jianxx/dsh-cc-tui/components/markdown-theme
+ * @module @dsh-cc/tui/components/markdown-theme
  */
 
-import type { MarkdownTheme } from '@jianxx/dsh-cc-pi-tui'
+import type { MarkdownTheme } from '@dsh-cc/pi-tui'
 import { highlightCodeAnsi } from './code-theme.ts'
 import { defaultTheme, type Theme } from './theme.ts'
 

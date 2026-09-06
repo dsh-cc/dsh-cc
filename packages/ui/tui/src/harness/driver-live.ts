@@ -4,13 +4,13 @@
  * LIVE session working directory (the session-cwd plugin's durable
  * `worktree/entered` fold, then the boot-time header cwd).
  *
- * @module @jianxx/dsh-cc-tui/harness/driver-live
+ * @module @dsh-cc/tui/harness/driver-live
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
-import { foldPermissionMode } from '@jianxx/dsh-cc-permission-rules'
-import { foldSessionCwd } from '@jianxx/dsh-cc-session-cwd'
+import { foldPermissionMode } from '@dsh-cc/permission-rules'
+import { foldSessionCwd } from '@dsh-cc/session-cwd'
 
 export function liveMode(agent: Agent, fallback: string): string {
   if (foldPlanMode(agent.session.events)) return 'plan'

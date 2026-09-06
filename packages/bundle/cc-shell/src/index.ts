@@ -3,7 +3,7 @@
  * cannot express statically — Claude Code plugin directories on disk and MCP
  * server configs from `.mcp.json`. Base CC-agent discovery moved to the
  * subagent/task package (per-workspace), and the `model-aliases` namespace is
- * owned by the `@jianxx/dsh-cc-model-aliases` routes service. Discovery is
+ * owned by the `@dsh-cc/model-aliases` routes service. Discovery is
  * best-effort: every absent path simply mounts nothing.
  *
  * MCP config discovery is source-separated: dsh-native config
@@ -16,14 +16,14 @@
  * all-merge behavior, and an explicit `mcpConfigFiles` list is always honored
  * verbatim with no gating and no notice.
  *
- * @module @jianxx/dsh-cc-bundle-shell
+ * @module @dsh-cc/bundle-shell
  */
 
 import { existsSync, readFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
+import type { ModelRoutes } from '@dsh-cc/model-aliases'
 import {
   buildRegistrations,
   claudeOnlyServers,
@@ -32,8 +32,8 @@ import {
   type ClaudeOnlySource,
   type McpConfigFile,
   type ResolvedMcpPaths,
-} from '@jianxx/dsh-cc-mcp-config'
-import * as CcMcpClient from '@jianxx/dsh-cc-mcp-client'
+} from '@dsh-cc/mcp-config'
+import * as CcMcpClient from '@dsh-cc/mcp-client'
 import { CcPluginsService } from './ccPlugins.ts'
 
 /** Plugin config: which on-disk CC surfaces to mount. */
@@ -93,7 +93,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     })
   }
 
-  // The spawn-time model resolver is provided by the `@jianxx/dsh-cc-model-aliases`
+  // The spawn-time model resolver is provided by the `@dsh-cc/model-aliases`
   // routes service (`ccModelRoutes`). Query it lazily on every spawn so mount
   // order doesn't matter and an unmounted routes service degrades to inherit.
   const resolveModel = (model: string | undefined) =>
@@ -113,7 +113,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     results.push(`cc-plugin ${summary.name}: ${loaded} loaded/${skipped} skipped`)
   }
 
-  // 2. `.mcp.json` documents → per-server @jianxx/dsh-cc-mcp-client instances.
+  // 2. `.mcp.json` documents → per-server @dsh-cc/mcp-client instances.
   //    An explicit `mcpConfigFiles` list is honored verbatim — no gating, no
   //    notice. Discovery mode resolves the default paths and gates the Claude
   //    Code files behind a non-empty dsh-native config (≥ 1 declared server):

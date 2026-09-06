@@ -4,7 +4,7 @@
  * optional `ccPlugins` service mounted by cc-shell-glue; when that service is
  * absent (a composition without the glue) they report the seam gracefully
  * rather than failing.
- * @module @jianxx/dsh-cc-command-plugin
+ * @module @dsh-cc/command-plugin
  */
 
 import { Context } from '@deepseek-ai/cordis'

@@ -22,5 +22,5 @@ cpSync(join(repoPreset, 'agent.cordis.yml'), join(dest, 'agent.cordis.yml'))
 cpSync(join(repoPreset, 'preset.yml'), join(dest, 'preset.yml'))
 writeFileSync(
   join(dest, '.dsh-cc-managed.json'),
-  `${JSON.stringify({ owner: '@jianxx/dsh-cc-tui', preset: 'cc', revision: '0.1.0' }, null, 2)}\n`,
+  `${JSON.stringify({ owner: '@dsh-cc/tui', preset: 'cc', revision: '0.1.0' }, null, 2)}\n`,
 )

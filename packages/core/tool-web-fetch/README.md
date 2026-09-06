@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-tool-web-fetch
+# @dsh-cc/tool-web-fetch
 
 CC-style `web_fetch` replacement with an optional `prompt`. This package replaces the
 stock `@deepseek-ai/dsh-tool-web` `web_fetch` when the CC preset sets `tool-web` to
@@ -26,7 +26,7 @@ or produces no text fails the call as an `isError` tool result.
 ## Provider requirement
 
 CC deployments get a fetch executor from the cc-shell bundle, which mounts
-`@jianxx/dsh-cc-web-fetch-http` (wrapping `HttpFetchProvider`, with a literal
+`@dsh-cc/web-fetch-http` (wrapping `HttpFetchProvider`, with a literal
 SSRF gate). This package itself does not register a provider; tests fake
 `ctx.web.fetch`.
 
@@ -39,7 +39,7 @@ from the `web_search` system-prompt section. This package re-registers the
 ## Known limits
 
 - No host allowlist in this package: the literal SSRF gate (private/loopback/
-  link-local literals blocked) lives in the `@jianxx/dsh-cc-web-fetch-http`
+  link-local literals blocked) lives in the `@dsh-cc/web-fetch-http`
   wrapper mounted from cc-shell. Residual risk: DNS rebinding — upstream
   webfetch-ssrf-allowlist (DNS-pin / per-hop re-validation) remains a follow-up.
 - Tavily / Firecrawl are plugins/skills, not fetch backends for this tool.

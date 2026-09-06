@@ -6,7 +6,7 @@
  * `updatedMCPToolOutput`) fold by LAST writer wins: each non-undefined value
  * overwrites the previous one (the newest hook's replacement is the one that
  * would be applied by the reference engine, which applies hooks in order).
- * @module @jianxx/dsh-cc-hook-protocol/merge
+ * @module @dsh-cc/hook-protocol/merge
  */
 
 import type { HookOutput } from './types.ts'

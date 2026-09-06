@@ -8,7 +8,7 @@
  *
  * This batch ships no real migrations: cc/dsh has no legacy format to migrate yet.
  * The first concrete migration will land with the first settings-shape change.
- * @module @jianxx/dsh-cc-settings-migrations
+ * @module @dsh-cc/settings-migrations
  */
 
 import type { Context } from '@deepseek-ai/cordis'

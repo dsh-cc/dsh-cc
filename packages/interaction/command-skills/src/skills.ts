@@ -1,7 +1,7 @@
 /**
  * Pure `/skills` rendering: sort skill summaries and render each with its
  * description, source, and invocation policy. No cordis imports.
- * @module @jianxx/dsh-cc-command-skills/skills
+ * @module @dsh-cc/command-skills/skills
  */
 
 import { isModelInvocable, isUserInvocable, type SkillSummary } from '@deepseek-ai/dsh-skill'

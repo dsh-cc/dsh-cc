@@ -11,7 +11,7 @@
  * `system-prompt/change` fires only when a fragment actually changed. The
  * section always renders for a top-level agent (a memoryless layer shows a
  * placeholder) so the save guidance never disappears.
- * @module @jianxx/dsh-cc-memory/section
+ * @module @dsh-cc/memory/section
  */
 
 import type { Context } from '@deepseek-ai/cordis'

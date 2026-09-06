@@ -22,7 +22,7 @@
 - insert:
     # Remount below (in the insert list) with fetch enabled and the fetch provider.
     - id: tools-cc
-      name: '@jianxx/dsh-cc-tools'
+      name: '@dsh-cc/tools'
       config:
         # Carry the base tools row's DSH_TOOLS_MODE toggle forward (dsh-web-app
         # patches `tools` with it). Absent env ⇒ undefined, the established semantics.
@@ -31,13 +31,13 @@
     # Settings migrations: apply version-gated settings.json migrations at startup
     # (equivalent to CC's runMigrations). Empty registry — mechanism only — for now.
     - id: settings-migrations
-      name: '@jianxx/dsh-cc-settings-migrations'
+      name: '@dsh-cc/settings-migrations'
 
     # Host-plane first-prompt session titles on the CC cheap lane: stamps
     # resolve('haiku') when configured, else inherits the logged main route
     # (explicit provider+model config in this row would win over the alias).
     - id: session-title-llm-cc
-      name: '@jianxx/dsh-cc-session-title-provider'
+      name: '@dsh-cc/session-title-provider'
       config:
         targetWords: 5
         targetCjkCharacters: 10
@@ -48,7 +48,7 @@
     # CC fetch provider: SSRF-gated wrapper around the harness HttpFetchProvider.
     # Do NOT also mount the stock web-fetch-http plugin — duplicate id 'http'.
     - id: web-fetch-http-cc
-      name: '@jianxx/dsh-cc-web-fetch-http'
+      name: '@dsh-cc/web-fetch-http'
       config:
         timeoutMs: 20000
         maxResponseBytes: 2000000

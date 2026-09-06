@@ -1,7 +1,7 @@
 /**
  * View-layer types for the TUI store: transcript rows, overlay/picker views,
  * and the aggregate TuiState. Pure types — no reducer logic lives here.
- * @module @jianxx/dsh-cc-tui/store/views
+ * @module @dsh-cc/tui/store/views
  */
 import type { FileDiff } from '../tool-card.ts'
 import type { TurnAnchor } from '../working-line.ts'

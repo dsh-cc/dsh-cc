@@ -1,15 +1,15 @@
-# @jianxx/dsh-cc-mcp-config
+# @dsh-cc/mcp-config
 
 English | [中文](README.zh.md)
 
-Claude Code-style MCP workspace-configuration loader: parses a `.mcp.json` document, validates it, expands environment substitutions, applies an enterprise allow/deny policy, and translates the accepted servers into `@jianxx/dsh-cc-mcp-client` registrations ready to mount.
+Claude Code-style MCP workspace-configuration loader: parses a `.mcp.json` document, validates it, expands environment substitutions, applies an enterprise allow/deny policy, and translates the accepted servers into `@dsh-cc/mcp-client` registrations ready to mount.
 
-This package owns the file→config *reading and validation* surface only. It performs no network I/O and mounts nothing; consumers feed its output to `@jianxx/dsh-cc-mcp-client` instances.
+This package owns the file→config *reading and validation* surface only. It performs no network I/O and mounts nothing; consumers feed its output to `@dsh-cc/mcp-client` instances.
 
 ## Usage
 
 ```ts
-import { buildRegistrations, type McpConfigPolicy } from '@jianxx/dsh-cc-mcp-config'
+import { buildRegistrations, type McpConfigPolicy } from '@dsh-cc/mcp-config'
 import { readFileSync } from 'node:fs'
 
 const body = JSON.parse(readFileSync('.mcp.json', 'utf8'))
@@ -62,7 +62,7 @@ A `.mcp.json` `mcpServers` map values are the Claude Code server definitions:
 
 ## Config mapping
 
-Each accepted server translates to one `@jianxx/dsh-cc-mcp-client` `Config`:
+Each accepted server translates to one `@dsh-cc/mcp-client` `Config`:
 
 - The server **name** becomes `serverName`, the public namespace for the model-facing tool names (`mcp__<serverName>__*`).
 - `command`-based definitions map to the `stdio` transport.

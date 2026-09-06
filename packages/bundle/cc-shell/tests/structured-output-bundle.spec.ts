@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { CallId } from '@deepseek-ai/dsh-llm'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
-import * as ToolStructuredOutput from '@jianxx/dsh-cc-tool-structured-output'
+import ToolRuntime from '@dsh-cc/tools'
+import * as ToolStructuredOutput from '@dsh-cc/tool-structured-output'
 
 const BUGS_SCHEMA = {
   type: 'object',

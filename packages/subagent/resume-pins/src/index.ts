@@ -5,9 +5,9 @@
  * {@link PinStore}, the definition fingerprint utilities, the pure gate and
  * overlay layers, the `subagents-resume` policy namespace, and the cordis
  * plugin (gate + overlay + notices + settings). The spawn capture lives in
- * `@jianxx/dsh-cc-subagent-task` (it is cordis-facing on the Task tool side).
+ * `@dsh-cc/subagent-task` (it is cordis-facing on the Task tool side).
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins
+ * @module @dsh-cc/subagent-resume-pins
  */
 
 export { PinParseError, parsePin, writePin, canonicalJson, PIN_VERSION } from './pin.ts'

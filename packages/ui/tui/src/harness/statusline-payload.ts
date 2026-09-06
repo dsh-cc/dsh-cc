@@ -11,7 +11,7 @@
  * when present, falling back to the projected pressure sample — and are
  * omitted when neither source exists. Pure and total: no I/O, no clock, no
  * driver imports.
- * @module @jianxx/dsh-cc-tui/harness/statusline-payload
+ * @module @dsh-cc/tui/harness/statusline-payload
  */
 
 /** Structural view of the driver state the payload is built from. */

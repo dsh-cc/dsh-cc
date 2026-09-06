@@ -1,13 +1,13 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-memory-consolidation`.
- * @module @jianxx/dsh-cc-memory-consolidation/invariant
+ * Package-owned invariant companion for `@dsh-cc/memory-consolidation`.
+ * @module @dsh-cc/memory-consolidation/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-memory-consolidation'
+const PACKAGE_NAME = '@dsh-cc/memory-consolidation'
 
 /** Cordis companion plugin name. */
 export const name = 'memory-consolidation-invariant'

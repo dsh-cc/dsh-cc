@@ -8,7 +8,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 
 const { mockConnect, mockClose, MockClient, mockGetCapabilities, instances } = vi.hoisted(() => {
@@ -47,8 +47,8 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({ StdioClientTranspo
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({ StreamableHTTPClientTransport: vi.fn() }))
 vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({ SSEClientTransport: vi.fn() }))
 
-import { startConnection, resolveReconnectPolicy } from '@jianxx/dsh-cc-mcp-client/src/connection.ts'
-import type { Config } from '@jianxx/dsh-cc-mcp-client'
+import { startConnection, resolveReconnectPolicy } from '@dsh-cc/mcp-client/src/connection.ts'
+import type { Config } from '@dsh-cc/mcp-client'
 
 async function mountRegistry(): Promise<Context> {
   const ctx = new Context()

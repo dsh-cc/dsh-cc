@@ -8,7 +8,7 @@
  * provider: the harness can consume skills written for Claude Code without
  * copying the runtime that executes them.
  *
- * @module @jianxx/dsh-cc-skill-loader
+ * @module @dsh-cc/skill-loader
  */
 
 import { readFile } from 'node:fs/promises'

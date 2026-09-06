@@ -6,9 +6,9 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import type { PermissionRuleSet } from '@jianxx/dsh-cc-permission-rules/types'
-import * as commandPermissions from '@jianxx/dsh-cc-command-permissions'
-import { renderPermissions } from '@jianxx/dsh-cc-command-permissions/permissions'
+import type { PermissionRuleSet } from '@dsh-cc/permission-rules/types'
+import * as commandPermissions from '@dsh-cc/command-permissions'
+import { renderPermissions } from '@dsh-cc/command-permissions/permissions'
 
 function rule(tool: string, behavior: 'allow' | 'deny' | 'ask', source: string): { toolName: string; behavior: string; source: string } {
   return { toolName: tool, behavior, source }
@@ -84,7 +84,7 @@ function stubPlan(
   return handler
 }
 
-describe('@jianxx/dsh-cc-command-permissions registration', () => {
+describe('@dsh-cc/command-permissions registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandPermissions.name).toBe('command-permissions')
     expect(commandPermissions.inject).toEqual(['commands'])

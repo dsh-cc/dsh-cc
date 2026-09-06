@@ -105,7 +105,7 @@ Never symlink node_modules from the main checkout (the removed
 `link-worktree-deps.sh` approach): it pollutes sibling worktrees,
 misses per-package node_modules, and breaks `.bin`. dist is NOT
 needed: tsconfig `paths` and vite-tsconfig-paths resolve
-@jianxx/dsh-cc-* to source. A mid-work "Cannot find module" means:
+@dsh-cc/* to source. A mid-work "Cannot find module" means:
 install first, then re-run.
 
 ### MCP routing

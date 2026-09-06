@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import * as tui from '@jianxx/dsh-cc-tui'
+import * as tui from '@dsh-cc/tui'
 
 describe('P0 boot contract', () => {
   it('refuses a non-TTY stdout unless allowNoTty is set', async () => {

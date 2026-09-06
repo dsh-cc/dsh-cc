@@ -15,7 +15,7 @@
  * pre-P3 launchers that read it keep working during the transition. The
  * legacy dual-write is removed in 0.4.0.
  *
- * @module @jianxx/dsh-cc-tui/resume-target
+ * @module @dsh-cc/tui/resume-target
  */
 
 import { createHash } from 'node:crypto'

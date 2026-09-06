@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-tool-append-order",
+  "name": "@dsh-cc/tool-append-order",
   "description": "Cache-stable tool ordering on the system-prompt/assemble waterfall: each scope's emitted tool sequence keeps its positions and new tools append lexicographically at the tail",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/core/tool-append-order"
   },
   "type": "module",

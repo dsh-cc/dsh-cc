@@ -6,15 +6,15 @@
  * `ctx.toolSearch` seam BEFORE the child starts, so the tool is registered —
  * process-globally — by the time the child's first tool assembly runs.
  *
- * Duck-typed so `src/` never imports `@jianxx/dsh-cc-tool-search` — the
+ * Duck-typed so `src/` never imports `@dsh-cc/tool-search` — the
  * package is a test-only devDependency; production stays pluggable (mirrors
  * `packages/mcp/mcp-client/src/defer.ts`).
  *
- * @module @jianxx/dsh-cc-subagent-task/preload-tools
+ * @module @dsh-cc/subagent-task/preload-tools
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { ToolRestriction } from '@jianxx/dsh-cc-claude-code-agents'
+import type { ToolRestriction } from '@dsh-cc/claude-code-agents'
 
 /** The MCP public-name prefix every bridged MCP tool carries on `ctx.tools`. */
 const MCP_PUBLIC_PREFIX = 'mcp__'

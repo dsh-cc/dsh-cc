@@ -13,8 +13,8 @@ import {
   type ManualCompactAgentContext,
 } from '@deepseek-ai/dsh-compaction'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import * as commandCompact from '@jianxx/dsh-cc-command-compact'
-import { setCompactHint, takeCompactHint } from '@jianxx/dsh-cc-compaction-basic'
+import * as commandCompact from '@dsh-cc/command-compact'
+import { setCompactHint, takeCompactHint } from '@dsh-cc/compaction-basic'
 
 const COMPACTION_ID = CompactionId('command-compact-test')
 
@@ -124,7 +124,7 @@ async function run(
   return execution
 }
 
-describe('@jianxx/dsh-cc-command-compact registration', () => {
+describe('@dsh-cc/command-compact registration', () => {
   it('registers one hint-taking command with Loader-safe exports and disposes it', async () => {
     const test = await harness()
     expect(commandCompact.name).toBe('command-compact')

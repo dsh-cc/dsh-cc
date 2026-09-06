@@ -4,7 +4,7 @@
  * / AGENTS.md baseline) so named children keep their own agent-file persona
  * instead of also loading the parent's workspace instructions.
  *
- * @module @jianxx/dsh-cc-subagent-task/strip-instructions
+ * @module @dsh-cc/subagent-task/strip-instructions
  */
 
 import type { Context } from '@deepseek-ai/cordis'

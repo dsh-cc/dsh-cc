@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatEffortList, parseEffortChoice } from '@jianxx/dsh-cc-tui/effort-catalog.ts'
+import { formatEffortList, parseEffortChoice } from '@dsh-cc/tui/effort-catalog.ts'
 
 const EFFORTS = ['minimal', 'low', 'medium', 'high'] as const
 

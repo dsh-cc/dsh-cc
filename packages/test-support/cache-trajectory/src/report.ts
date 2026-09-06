@@ -7,7 +7,7 @@
  * harness TokenUsage buckets are disjoint and `inputTokens` is uncached input
  * only. No cacheWrite exists on DeepSeek, so a cacheWrite bucket never enters
  * the denominator.
- * @module @jianxx/dsh-cc-cache-trajectory/report
+ * @module @dsh-cc/cache-trajectory/report
  */
 
 import z from 'zod'

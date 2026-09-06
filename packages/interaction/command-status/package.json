@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-status",
+  "name": "@dsh-cc/command-status",
   "description": "Human-facing slash command for a session status summary",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-status"
   },
   "type": "module",

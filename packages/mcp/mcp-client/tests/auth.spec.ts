@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { LocalCredentialProvider } from '@deepseek-ai/dsh-credentials-local'
-import { CredentialsOAuthClientProvider } from '@jianxx/dsh-cc-mcp-client/src/auth.ts'
-import { isUnauthorized, retryUnauthorizedOnce } from '@jianxx/dsh-cc-mcp-client/src/tools.ts'
+import { CredentialsOAuthClientProvider } from '@dsh-cc/mcp-client/src/auth.ts'
+import { isUnauthorized, retryUnauthorizedOnce } from '@dsh-cc/mcp-client/src/tools.ts'
 
 const cleanups: Array<() => Promise<void>> = []
 

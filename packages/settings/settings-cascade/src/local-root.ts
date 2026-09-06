@@ -11,10 +11,10 @@
  * sync; they must not drift.
  *
  * Node builtins only: this file is imported through the
- * `@jianxx/dsh-cc-settings-cascade/local-root` subpath by packages that must
+ * `@dsh-cc/settings-cascade/local-root` subpath by packages that must
  * not pull in cordis or the settings runtime.
  *
- * @module @jianxx/dsh-cc-settings-cascade/local-root
+ * @module @dsh-cc/settings-cascade/local-root
  */
 
 import { spawnSync } from 'node:child_process'

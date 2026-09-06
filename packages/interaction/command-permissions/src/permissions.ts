@@ -1,14 +1,14 @@
 /**
  * Pure `/permissions` rendering: aggregate a permission rule set into counts
  * per source and behavior. READ-ONLY — no mode switch is performed here.
- * @module @jianxx/dsh-cc-command-permissions/permissions
+ * @module @dsh-cc/command-permissions/permissions
  */
 
 import {
   SOURCE_PRIORITY,
   type PermissionRule,
   type PermissionRuleSet,
-} from '@jianxx/dsh-cc-permission-rules/types'
+} from '@dsh-cc/permission-rules/types'
 
 /** Aggregated counts for one rule source. */
 export interface SourceCounts {

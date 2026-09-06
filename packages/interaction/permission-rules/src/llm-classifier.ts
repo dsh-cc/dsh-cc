@@ -11,11 +11,11 @@
  * session access and no I/O beyond the injected stream. Only `node:crypto` is
  * imported.
  *
- * @module @jianxx/dsh-cc-permission-rules/llm-classifier
+ * @module @dsh-cc/permission-rules/llm-classifier
  */
 
 import { createHash, type BinaryLike } from 'node:crypto'
-import type { ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { ToolExecution } from '@dsh-cc/tools'
 
 /** A model verdict. `ask` is the only escalation the stage can produce. */
 export type LlmVerdict = { verdict: 'allow'; reason: string } | { verdict: 'ask'; reason: string }

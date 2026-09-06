@@ -223,7 +223,7 @@ All public symbols re-exported from `src/index.ts`.
 - `src/index.ts`: parse before the seam check; `list` appends the discovery
   notice when non-empty; `migrate` resolves `resolveDefaultMcpPaths()` and
   calls `migrateMcpServers`; command `description`/`input.hint` updated.
-- Depends on `@jianxx/dsh-cc-mcp-config` (`workspace:^`, added to both
+- Depends on `@dsh-cc/mcp-config` (`workspace:^`, added to both
   `dependencies` and `devDependencies`, mirroring mcp-config's own
   declaration style). CI installs per-package, so the declaration plus a
   `pnpm install --lockfile-only` lockfile sync are what

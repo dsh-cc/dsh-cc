@@ -1,7 +1,7 @@
 /**
  * JSON emission: resolve the `doctor-report.json` path under `$DSH_HOME`
  * (default `~/.dsh`) and write (mkdir + overwrite) a redacted report.
- * @module @jianxx/dsh-cc-command-doctor/json
+ * @module @dsh-cc/command-doctor/json
  */
 
 import { mkdir, writeFile } from 'node:fs/promises'

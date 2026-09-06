@@ -2,7 +2,7 @@
  * `/provider` panel reducer (design doc §4.2–§4.4): pure phase transitions for
  * the list / detail / wizard / confirm-remove overlay. No I/O — rows and steps
  * arrive from the caller (see provider-flow.ts for the list merge rule).
- * @module @jianxx/dsh-cc-tui/store/provider-panel
+ * @module @dsh-cc/tui/store/provider-panel
  */
 import type { MoreProviderRow, ProviderRow } from '../provider-flow.ts'
 import type { TuiState } from './views.ts'

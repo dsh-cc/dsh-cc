@@ -2,8 +2,8 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PERMISSION_MODE_OPTIONS, type PlanUnitStateLike } from '@jianxx/dsh-cc-command-permissions'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
+import { PERMISSION_MODE_OPTIONS, type PlanUnitStateLike } from '@dsh-cc/command-permissions'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 
 /**
  * Driver-level contract tests for the TUI `/permissions` picker: bare

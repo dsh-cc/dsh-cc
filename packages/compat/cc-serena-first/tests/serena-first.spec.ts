@@ -16,8 +16,8 @@ import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import * as SerenaFirst from '@jianxx/dsh-cc-serena-first'
-import type { Config } from '@jianxx/dsh-cc-serena-first'
+import * as SerenaFirst from '@dsh-cc/serena-first'
+import type { Config } from '@dsh-cc/serena-first'
 
 /** Upstream tool-fs / tool-fs-search section texts (deepseek-harness sources), as registered at mount. */
 const FS_SECTIONS: Array<{ name: string; order: number; text: string }> = [

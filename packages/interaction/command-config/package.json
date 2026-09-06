@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-config",
+  "name": "@dsh-cc/command-config",
   "description": "Human-facing slash command to show or update effective configuration namespaces",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-config"
   },
   "type": "module",

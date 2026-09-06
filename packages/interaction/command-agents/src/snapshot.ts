@@ -6,7 +6,7 @@
  * cordis. The preset surface renders this model exactly; the TUI may ADD
  * decorations (provider/model, prompt excerpt, last stopReason) from its own
  * event fold — never different ids or ordering.
- * @module @jianxx/dsh-cc-command-agents/snapshot
+ * @module @dsh-cc/command-agents/snapshot
  */
 
 /** Per-child residency. Derivation follows the F7 pattern, not a new source. */

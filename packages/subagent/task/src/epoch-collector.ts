@@ -16,7 +16,7 @@
  * collectable continuable handle, only this file's `collectFirstEpoch`
  * implementation is replaced — the Task tool and TUI surfaces are untouched.
  *
- * @module @jianxx/dsh-cc-subagent-task/epoch-collector
+ * @module @dsh-cc/subagent-task/epoch-collector
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'

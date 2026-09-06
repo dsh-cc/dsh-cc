@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeModel, resolveToolRestriction } from '@jianxx/dsh-cc-claude-code-agents'
+import { normalizeModel, resolveToolRestriction } from '@dsh-cc/claude-code-agents'
 
 describe('resolveToolRestriction', () => {
   it('returns undefined when neither tools nor disallowedTools is declared', () => {

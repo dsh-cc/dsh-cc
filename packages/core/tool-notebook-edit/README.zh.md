@@ -1,8 +1,8 @@
-# @jianxx/dsh-cc-tool-notebook-edit
+# @dsh-cc/tool-notebook-edit
 
 [English](README.md) | 中文
 
-模型侧 `NotebookEdit` 工具：编辑 Jupyter notebook (.ipynb) 单元格，语义对齐 Claude Code 的 `NotebookEditTool` 的 replace/insert/delete 与单元格寻址。通过 `@jianxx/dsh-cc-tools` 的 `ToolRuntime` 注册进 `ctx.tools`，并通过 harness 的 `ctx.fs` seam 读写。
+模型侧 `NotebookEdit` 工具：编辑 Jupyter notebook (.ipynb) 单元格，语义对齐 Claude Code 的 `NotebookEditTool` 的 replace/insert/delete 与单元格寻址。通过 `@dsh-cc/tools` 的 `ToolRuntime` 注册进 `ctx.tools`，并通过 harness 的 `ctx.fs` seam 读写。
 
 ## 工具
 
@@ -39,11 +39,11 @@ export const Config = z.object({})
 ## 安装 / 注册
 
 ```ts
-import * as ToolNotebookEdit from '@jianxx/dsh-cc-tool-notebook-edit'
+import * as ToolNotebookEdit from '@dsh-cc/tool-notebook-edit'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 
 await ctx.plugin(SystemPrompt)
-await ctx.plugin(ToolRuntime)             // @jianxx/dsh-cc-tools
+await ctx.plugin(ToolRuntime)             // @dsh-cc/tools
 await ctx.plugin(LocalFileSystem, { cwd }) // ctx.fs 后端
 await ctx.plugin(ToolNotebookEdit)        // 注册 NotebookEdit 工具 + 监听器
 ```
@@ -56,7 +56,7 @@ await ctx.plugin(ToolNotebookEdit)        // 注册 NotebookEdit 工具 + 监听
 
 ## 构建顺序
 
-`tool-notebook-edit` 仅依赖工作区 `@jianxx/dsh-cc-tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-fs`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-invariants`、`@deepseek-ai/schemastery`）。它不依赖任何其它工作区包，因此只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
+`tool-notebook-edit` 仅依赖工作区 `@dsh-cc/tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-fs`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-invariants`、`@deepseek-ai/schemastery`）。它不依赖任何其它工作区包，因此只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
 
 ## 已知限制
 

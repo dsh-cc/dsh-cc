@@ -1,13 +1,13 @@
 /**
  * Pure Shift+Tab cycle over CC permission-rule modes. Browser-safe and
  * harness-free so the cycle cannot drift from the `/permissions` list.
- * @module @jianxx/dsh-cc-tui/mode-cycle
+ * @module @dsh-cc/tui/mode-cycle
  */
 
 import {
   PERMISSION_COMMAND_MODES,
   type PermissionCommandMode,
-} from '@jianxx/dsh-cc-command-permissions'
+} from '@dsh-cc/command-permissions'
 
 export { PERMISSION_COMMAND_MODES, type PermissionCommandMode }
 

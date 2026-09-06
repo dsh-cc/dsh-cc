@@ -1,7 +1,7 @@
 /**
  * Human-facing `/init` command: queue a CLAUDE.md initialization for the model
  * by routing a follow-up turn through `invocation.agent.followup`.
- * @module @jianxx/dsh-cc-command-init
+ * @module @dsh-cc/command-init
  */
 
 import type { Context } from '@deepseek-ai/cordis'

@@ -14,9 +14,9 @@ describe('dsh-cc launcher bootstrap', () => {
       '--profile',
       'tui',
       'add',
-      '@jianxx/dsh-cc-bundle-permissions@0.1.0',
-      '@jianxx/dsh-cc-bundle-shell@0.1.0',
-      '@jianxx/dsh-cc-bundle-tui@0.1.0',
+      '@dsh-cc/bundle-permissions@0.1.0',
+      '@dsh-cc/bundle-shell@0.1.0',
+      '@dsh-cc/bundle-tui@0.1.0',
     ])
   })
 

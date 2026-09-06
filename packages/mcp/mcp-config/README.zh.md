@@ -1,15 +1,15 @@
-# @jianxx/dsh-cc-mcp-config
+# @dsh-cc/mcp-config
 
 [English](README.md) | 中文
 
-Claude Code 风格的 MCP 工作区配置加载器：解析 `.mcp.json` 文档，进行校验、环境变量展开、企业级 allow/deny 策略过滤，并把通过的服务转换为可直接挂载的 `@jianxx/dsh-cc-mcp-client` 注册项。
+Claude Code 风格的 MCP 工作区配置加载器：解析 `.mcp.json` 文档，进行校验、环境变量展开、企业级 allow/deny 策略过滤，并把通过的服务转换为可直接挂载的 `@dsh-cc/mcp-client` 注册项。
 
-本包只负责文件→配置的**读取与校验**。它不做任何网络 I/O，也不自行挂载；下游把输出喂给 `@jianxx/dsh-cc-mcp-client` 实例。
+本包只负责文件→配置的**读取与校验**。它不做任何网络 I/O，也不自行挂载；下游把输出喂给 `@dsh-cc/mcp-client` 实例。
 
 ## 用法
 
 ```ts
-import { buildRegistrations, type McpConfigPolicy } from '@jianxx/dsh-cc-mcp-config'
+import { buildRegistrations, type McpConfigPolicy } from '@dsh-cc/mcp-config'
 import { readFileSync } from 'node:fs'
 
 const body = JSON.parse(readFileSync('.mcp.json', 'utf8'))
@@ -62,7 +62,7 @@ for (const config of registrations) {
 
 ## 配置映射
 
-每个通过的服务转换为一个 `@jianxx/dsh-cc-mcp-client` `Config`：
+每个通过的服务转换为一个 `@dsh-cc/mcp-client` `Config`：
 
 - 服务**名**成为 `serverName`，即模型可见工具名的公共命名空间（`mcp__<serverName>__*`）。
 - 基于 `command` 的定义映射为 `stdio` 传输。

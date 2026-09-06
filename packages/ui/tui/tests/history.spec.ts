@@ -8,7 +8,7 @@ import {
   historyFilePath,
   loadHistory,
   saveHistory,
-} from '@jianxx/dsh-cc-tui/history.ts'
+} from '@dsh-cc/tui/history.ts'
 
 describe('composer history file', () => {
   it('round-trips save/load and returns oldest→newest', () => {

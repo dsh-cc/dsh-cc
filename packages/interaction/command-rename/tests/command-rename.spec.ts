@@ -5,7 +5,7 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandRename from '@jianxx/dsh-cc-command-rename'
+import * as commandRename from '@dsh-cc/command-rename'
 
 type RenameFn = (session: unknown, title: string) => { title: string }
 

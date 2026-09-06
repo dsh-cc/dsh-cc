@@ -21,9 +21,9 @@ import {
   type MountedPluginCommand,
   type PluginLoadReport,
   type ResolveModel,
-} from '@jianxx/dsh-cc-plugin-loader'
+} from '@dsh-cc/plugin-loader'
 
-export type { CcPluginCommandInfo } from '@jianxx/dsh-cc-plugin-loader'
+export type { CcPluginCommandInfo } from '@dsh-cc/plugin-loader'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

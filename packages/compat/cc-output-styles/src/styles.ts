@@ -1,13 +1,13 @@
 /**
  * Output-style model, frontmatter parsing, and file loading for
- * `@jianxx/dsh-cc-output-styles`.
+ * `@dsh-cc/output-styles`.
  *
  * A style is a named, human-selected communication contract contributed to the
  * system prompt. `default` contributes nothing; built-in styles supply prose;
  * user- and project-authored styles are loaded from `output-styles/*.md`
  * directories whose file names become the style names.
  *
- * @module @jianxx/dsh-cc-output-styles/styles
+ * @module @dsh-cc/output-styles/styles
  */
 
 import { readdir, readFile } from 'node:fs/promises'

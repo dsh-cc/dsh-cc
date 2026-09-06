@@ -15,9 +15,9 @@ import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
-import ToolRuntimeCC from '@jianxx/dsh-cc-tools'
-import * as ToolWebFetch from '@jianxx/dsh-cc-tool-web-fetch'
-import type { ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
+import ToolRuntimeCC from '@dsh-cc/tools'
+import * as ToolWebFetch from '@dsh-cc/tool-web-fetch'
+import type { ModelRoutes } from '@dsh-cc/model-aliases'
 
 const FETCH_RESULT = {
   url: 'https://example.com/x',

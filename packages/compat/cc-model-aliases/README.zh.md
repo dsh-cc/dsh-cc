@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-model-aliases
+# @dsh-cc/model-aliases
 
 [English](README.md) | 中文
 
@@ -28,7 +28,7 @@ Claude Code 的 agent/CLAUDE.md frontmatter 用 alias 命名模型。没有 alia
 - `Config.modelAliases` 提供**部署默认**(alias 名 → model id 或 `{provider, model}`)。
 - `model-aliases` **settings 命名空间**的注册现在住在 `ccModelRoutes` 服务里,与其它 settings section 一样分层(user/project/local/flags)。
 - cc-shell 的 `AgentProvider` 通过**trampoline** 获得 `resolveModel`:`(model) => ctx.get('ccModelRoutes')?.resolve(model)`——**每次派发惰性查询**、现读(apply 时不快照),服务未挂载时降级为继承(`undefined` 解析 = 继承父路由,与旧 no-resolver fallback 字节兼容)。cc-shell 自己不再注册该命名空间。
-- Task 工具(`@jianxx/dsh-cc-subagent-task`)是另一消费方:它在派发时以同一个 `ccModelRoutes` 解析器解析 subagent 定义 frontmatter 的 `model`。
+- Task 工具(`@dsh-cc/subagent-task`)是另一消费方:它在派发时以同一个 `ccModelRoutes` 解析器解析 subagent 定义 frontmatter 的 `model`。
 
 ## 配置
 
@@ -91,7 +91,7 @@ alias 的查找顺序:**settings overlay → config 默认 → builtin fallback*
 
 ## `inherit` 修复说明
 
-本 package 之前,`model: inherit` 会一路原样当作字面 model id 传给 `prepareCall` 然后失败。在 CC 模式下,派发时解析器(来自 `ccModelRoutes` 服务,经 cc-shell trampoline 与 Task 工具消费)把 `inherit` 映射为「无 override」,child 因此继承父路由,符合 CC 语义。未挂载任何解析器时(`@jianxx/dsh-cc-plugin-loader` 中不设置 `resolveModel` 的非 cc 消费者),行为与之前字节一致——包括旧的 `inherit` 透传——因为无解析器 fallback 被原样保留。CC preset 无条件挂载 cc-shell(以及 routes 服务),因此 CC 模式下该修复始终生效。
+本 package 之前,`model: inherit` 会一路原样当作字面 model id 传给 `prepareCall` 然后失败。在 CC 模式下,派发时解析器(来自 `ccModelRoutes` 服务,经 cc-shell trampoline 与 Task 工具消费)把 `inherit` 映射为「无 override」,child 因此继承父路由,符合 CC 语义。未挂载任何解析器时(`@dsh-cc/plugin-loader` 中不设置 `resolveModel` 的非 cc 消费者),行为与之前字节一致——包括旧的 `inherit` 透传——因为无解析器 fallback 被原样保留。CC preset 无条件挂载 cc-shell(以及 routes 服务),因此 CC 模式下该修复始终生效。
 
 ## API
 

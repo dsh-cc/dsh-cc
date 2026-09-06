@@ -13,11 +13,11 @@ import { Context } from '@deepseek-ai/cordis'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
+import ToolRuntime from '@dsh-cc/tools'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import LocalBashExecutor from '@deepseek-ai/dsh-bash-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import * as ToolGitWorktree from '@jianxx/dsh-cc-tool-git-worktree'
+import * as ToolGitWorktree from '@dsh-cc/tool-git-worktree'
 import { clearActiveWorktreeSession } from '../src/worktree.ts'
 
 // Hook-environment hermeticity. Under a git hook (or any process inheriting

@@ -10,9 +10,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@jianxx/dsh-cc-tools'
-import { apply } from '@jianxx/dsh-cc-mcp-client/src/index.ts'
-import type { Config } from '@jianxx/dsh-cc-mcp-client'
+import ToolRuntime from '@dsh-cc/tools'
+import { apply } from '@dsh-cc/mcp-client/src/index.ts'
+import type { Config } from '@dsh-cc/mcp-client'
 
 function crashConfig(): Config {
   return {

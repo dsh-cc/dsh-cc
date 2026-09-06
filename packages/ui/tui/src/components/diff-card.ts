@@ -8,7 +8,7 @@
  * `+` lines). Output is capped so a single tool row never blows the
  * transcript line budget, and truncation respects hunk boundaries: a hunk
  * that fits in the remaining budget is never split in half.
- * @module @jianxx/dsh-cc-tui/components/diff-card
+ * @module @dsh-cc/tui/components/diff-card
  */
 
 import type { FileDiff } from '../tool-card.ts'

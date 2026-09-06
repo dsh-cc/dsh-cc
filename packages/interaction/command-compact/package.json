@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-compact",
+  "name": "@dsh-cc/command-compact",
   "description": "Human-facing /compact command with optional preservation instructions",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-compact"
   },
   "type": "module",
@@ -25,7 +25,7 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "@jianxx/dsh-cc-compaction-basic": "workspace:^"
+    "@dsh-cc/compaction-basic": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-commands": ">=0.1.1-rc.2",

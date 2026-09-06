@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { handleComposerInput, type InputSink } from '@jianxx/dsh-cc-tui/input.ts'
+import { handleComposerInput, type InputSink } from '@dsh-cc/tui/input.ts'
 import {
   closeUsagePanel,
   createInitialState,
@@ -21,7 +21,7 @@ import {
   type SessionEntryView,
   type SessionSwitcherView,
   type TuiState,
-} from '@jianxx/dsh-cc-tui/store.ts'
+} from '@dsh-cc/tui/store.ts'
 
 interface QuestionCalls {
   moved: number[]

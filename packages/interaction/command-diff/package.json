@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-diff",
+  "name": "@dsh-cc/command-diff",
   "description": "Human-facing slash command to show git diff summary or file diff via the shell",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-diff"
   },
   "type": "module",

@@ -11,10 +11,10 @@ const src = (relative) => fileURLToPath(new URL(relative, here))
 export default defineConfig({
   resolve: {
     alias: [
-      { find: /^@jianxx\/dsh-cc-session-cwd$/, replacement: src('./src/index.ts') },
-      { find: '@jianxx/dsh-cc-session-cwd/', replacement: src('./src/') },
-      { find: /^@jianxx\/dsh-cc-tools$/, replacement: src('../../core/tools/src/index.ts') },
-      { find: /^@jianxx\/dsh-cc-permission-rules$/, replacement: src('../../interaction/permission-rules/src/index.ts') },
+      { find: /^@dsh-cc\/dsh-cc-session-cwd$/, replacement: src('./src/index.ts') },
+      { find: '@dsh-cc/session-cwd/', replacement: src('./src/') },
+      { find: /^@dsh-cc\/dsh-cc-tools$/, replacement: src('../../core/tools/src/index.ts') },
+      { find: /^@dsh-cc\/dsh-cc-permission-rules$/, replacement: src('../../interaction/permission-rules/src/index.ts') },
     ],
   },
   test: {

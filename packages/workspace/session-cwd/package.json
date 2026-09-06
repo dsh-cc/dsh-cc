@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-session-cwd",
+  "name": "@dsh-cc/session-cwd",
   "description": "Session-scoped working directory state for DeepSeek Harness CC: durable worktree/entered session events, foldable cwd state, getSessionCwd/setSessionCwd APIs, and a pre-execute workspace boundary guard",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/workspace/session-cwd"
   },
   "type": "module",
@@ -26,7 +26,7 @@
     "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-session": ">=0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@jianxx/dsh-cc-tools": "workspace:^"
+    "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
@@ -34,7 +34,7 @@
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@jianxx/dsh-cc-tools": "link:../../core/tools"
+    "@dsh-cc/tools": "link:../../core/tools"
   },
   "publishConfig": {
     "access": "public"

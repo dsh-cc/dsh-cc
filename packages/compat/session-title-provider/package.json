@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-session-title-provider",
+  "name": "@dsh-cc/session-title-provider",
   "description": "CC host-plane first-prompt session-title provider on the haiku cheap lane",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/compat/session-title-provider"
   },
   "type": "module",
@@ -32,7 +32,7 @@
     "@deepseek-ai/dsh-session-title": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-session-title-llm": ">=0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@jianxx/dsh-cc-model-aliases": "workspace:^"
+    "@dsh-cc/model-aliases": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
@@ -42,7 +42,7 @@
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-title": "link:../../../../deepseek-harness/packages/session/session-title",
     "@deepseek-ai/dsh-session-title-llm": "link:../../../../deepseek-harness/packages/session/session-title-llm",
-    "@jianxx/dsh-cc-model-aliases": "workspace:^"
+    "@dsh-cc/model-aliases": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

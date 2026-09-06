@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-serena-first",
+  "name": "@dsh-cc/serena-first",
   "description": "Serena-first prompt steering on the CC preset: a registered policy section plus replace-not-mutate appends to the upstream tool:read / tool:grep sections while a serena MCP server is ready",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/compat/cc-serena-first"
   },
   "type": "module",

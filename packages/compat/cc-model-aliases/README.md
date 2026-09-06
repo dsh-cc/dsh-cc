@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-model-aliases
+# @dsh-cc/model-aliases
 
 English | [中文](README.zh.md)
 
@@ -54,7 +54,7 @@ resolves to "inherit the parent route" (the same no-override behavior as before)
   read fresh (no snapshot captured at apply time), and degrading to inherit when the service
   is not mounted (`undefined` resolution = inherit the parent route, byte-compatible with the
   old no-resolver fallback). cc-shell no longer registers the namespace itself.
-- The Task tool (`@jianxx/dsh-cc-subagent-task`) is the other consumer: it resolves a
+- The Task tool (`@dsh-cc/subagent-task`) is the other consumer: it resolves a
   subagent definition's frontmatter `model` through the same `ccModelRoutes` resolver at
   spawn time.
 
@@ -155,7 +155,7 @@ all the way to `prepareCall`, where it failed. In CC mode the spawn-time resolve
 (from the `ccModelRoutes` service, consumed via the cc-shell trampoline and the
 Task tool) maps `inherit` to "no override", so the child inherits the parent
 route, matching CC semantics. When no resolver is mounted (non-cc consumers of
-`@jianxx/dsh-cc-plugin-loader` that do not set `resolveModel`), behavior stays
+`@dsh-cc/plugin-loader` that do not set `resolveModel`), behavior stays
 byte-identical to before — including the old `inherit` pass-through — because the
 no-resolver fallback is preserved exactly. The CC preset unconditionally mounts
 cc-shell (and the routes service), so in CC mode the fix is always active.

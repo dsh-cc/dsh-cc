@@ -19,7 +19,7 @@
  * flow proceeds. Every auto-approval is audit-logged to the session log as a
  * `permission/session-allow` record with `scope: 'sandbox-auto'`.
  *
- * @module @jianxx/dsh-cc-permission-rules/approval-listener
+ * @module @dsh-cc/permission-rules/approval-listener
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'

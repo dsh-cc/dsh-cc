@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Terminal as XtermTerminal } from '@xterm/headless'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Terminal as PiTerminal } from '@jianxx/dsh-cc-pi-tui'
-import type { Driver } from '@jianxx/dsh-cc-tui/state/driver-types.ts'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
-import { createInitialState, setBusy, type TuiState } from '@jianxx/dsh-cc-tui/store.ts'
+import type { Terminal as PiTerminal } from '@dsh-cc/pi-tui'
+import type { Driver } from '@dsh-cc/tui/state/driver-types.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
+import { createInitialState, setBusy, type TuiState } from '@dsh-cc/tui/store.ts'
 
 /**
  * Root-level contract for the `!` bash mode: typing `!` on an empty composer

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { handleComposerInput, routeWorktreeExitInput, type InputSink } from '@jianxx/dsh-cc-tui/input.ts'
-import { createInitialState, setWorktreeExit, type TuiState } from '@jianxx/dsh-cc-tui/store.ts'
+import { handleComposerInput, routeWorktreeExitInput, type InputSink } from '@dsh-cc/tui/input.ts'
+import { createInitialState, setWorktreeExit, type TuiState } from '@dsh-cc/tui/store.ts'
 
 interface WorktreeExitCalls {
   moved: number[]

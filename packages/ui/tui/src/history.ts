@@ -9,7 +9,7 @@
  * single entry never spans multiple physical lines). Plain-line storage would
  * split a multi-line prompt across lines and corrupt line-based loading.
  *
- * @module @jianxx/dsh-cc-tui/history
+ * @module @dsh-cc/tui/history
  */
 
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'

@@ -5,8 +5,8 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandDoctor from '@jianxx/dsh-cc-command-doctor'
-import type { DoctorReport } from '@jianxx/dsh-cc-command-doctor/doctor'
+import * as commandDoctor from '@dsh-cc/command-doctor'
+import type { DoctorReport } from '@dsh-cc/command-doctor/doctor'
 
 function makeAgent(ctx: Context, session = ctx.sessions.create(SessionId(`doctor-${Math.random()}`))): Agent {
   return {
@@ -26,7 +26,7 @@ function makeAgent(ctx: Context, session = ctx.sessions.create(SessionId(`doctor
   }
 }
 
-describe('@jianxx/dsh-cc-command-doctor registration', () => {
+describe('@dsh-cc/command-doctor registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandDoctor.name).toBe('command-doctor')
     expect(commandDoctor.inject).toEqual(['commands'])

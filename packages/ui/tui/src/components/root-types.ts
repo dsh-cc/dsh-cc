@@ -2,10 +2,10 @@
  * Public mount contracts for the root pi-tui component, split out of root.ts
  * to keep the factory under the line budget. Deliberately a leaf — must not
  * import root.ts.
- * @module @jianxx/dsh-cc-tui/components/root-types
+ * @module @dsh-cc/tui/components/root-types
  */
 
-import type { Editor, Terminal, TUI, TuiMode } from '@jianxx/dsh-cc-pi-tui'
+import type { Editor, Terminal, TUI, TuiMode } from '@dsh-cc/pi-tui'
 import type { ThemeOverrides } from './theme.ts'
 
 export interface BuildRootOptions {

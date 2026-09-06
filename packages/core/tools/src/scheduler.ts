@@ -1,7 +1,7 @@
 /**
  * Upstream scheduler symbol binding, isolated as a leaf module so neither the
  * package barrel nor Code Mode needs to import runtime values from the other.
- * @module @jianxx/dsh-cc-tools/src/scheduler
+ * @module @dsh-cc/tools/src/scheduler
  */
 
 import { createRequire } from 'node:module'

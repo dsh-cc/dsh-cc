@@ -6,12 +6,12 @@ import { Terminal as XtermTerminal } from '@xterm/headless'
 import {
   TuiMainScreen,
   type Terminal as PiTerminal,
-} from '@jianxx/dsh-cc-pi-tui'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
-import { renderRowText } from '@jianxx/dsh-cc-tui/components/transcript.ts'
-import { whaleBannerArt } from '@jianxx/dsh-cc-tui/harness/boot-banner.ts'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import type { Driver } from '@jianxx/dsh-cc-tui/state/driver-types.ts'
+} from '@dsh-cc/pi-tui'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
+import { renderRowText } from '@dsh-cc/tui/components/transcript.ts'
+import { whaleBannerArt } from '@dsh-cc/tui/harness/boot-banner.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import type { Driver } from '@dsh-cc/tui/state/driver-types.ts'
 import {
   backspaceQuestionText,
   clearQueue,
@@ -42,7 +42,7 @@ import {
   type CatalogEntryView,
   type SessionEntryView,
   type TuiState,
-} from '@jianxx/dsh-cc-tui/store.ts'
+} from '@dsh-cc/tui/store.ts'
 
 /**
  * Minimal pi-tui Terminal implementation that pipes write() calls into an

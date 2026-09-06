@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-stats
+# @dsh-cc/command-stats
 
 [English](README.md) | 中文
 
@@ -20,7 +20,7 @@
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-stats
-  name: '@jianxx/dsh-cc-command-stats'
+  name: '@dsh-cc/command-stats'
 ```
 
 ## 模型体验

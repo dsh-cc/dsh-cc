@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-memory
+# @dsh-cc/command-memory
 
 English | [中文](README.zh.md)
 
@@ -21,7 +21,7 @@ The plugin injects `commands` and `fs`. A custom app mounts the owners plus this
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-memory
-  name: '@jianxx/dsh-cc-command-memory'
+  name: '@dsh-cc/command-memory'
 ```
 
 The filesystem service provides the `fs` seam. Pass a `memoryHome` config to point at an explicit directory.

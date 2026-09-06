@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-skills",
+  "name": "@dsh-cc/command-skills",
   "description": "Human-facing slash command to list available skills with invocation policy",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-skills"
   },
   "type": "module",

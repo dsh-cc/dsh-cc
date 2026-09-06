@@ -13,7 +13,7 @@
  * throws on the frozen seed or is invisible. Any absent/blank/non-string
  * stamp is a no-op returning the input unchanged.
  *
- * @module @jianxx/dsh-cc-model-aliases/effort
+ * @module @dsh-cc/model-aliases/effort
  */
 
 /**

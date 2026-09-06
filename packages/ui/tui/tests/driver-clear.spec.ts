@@ -2,8 +2,8 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { readResumeTarget } from '@jianxx/dsh-cc-tui/resume-target.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { readResumeTarget } from '@dsh-cc/tui/resume-target.ts'
 
 interface FakeSession {
   id: string

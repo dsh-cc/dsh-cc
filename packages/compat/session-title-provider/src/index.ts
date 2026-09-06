@@ -5,7 +5,7 @@
  * shared `generateSessionTitleWithLlm` call. An explicit `provider`+`model`
  * config pair still wins; with neither configured the request's logged main
  * route is inherited.
- * @module @jianxx/dsh-cc-session-title-provider
+ * @module @dsh-cc/session-title-provider
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -17,7 +17,7 @@ import {
   SessionTitleLlmConfigFields,
 } from '@deepseek-ai/dsh-session-title-llm'
 import type { SessionTitleLlmConfig } from '@deepseek-ai/dsh-session-title-llm'
-import { resolveAlias, toOneShotRoute } from '@jianxx/dsh-cc-model-aliases'
+import { resolveAlias, toOneShotRoute } from '@dsh-cc/model-aliases'
 
 export const name = 'cc-session-title-provider'
 export const inject = ['sessionTitle', 'llm', 'sessions']

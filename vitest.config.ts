@@ -42,7 +42,7 @@ const harnessAliases: Record<string, string | undefined> = {
   '@deepseek-ai/dsh-llm': harnessDir('packages/llm/llm/lib/index.js'),
   '@deepseek-ai/dsh-session': harnessDir('packages/core/session/lib/index.js'),
   // Not yet in tsconfig.base paths; consumed by tests and workspace links.
-  '@jianxx/dsh-cc-subagent-task': resolve('packages/subagent/task/src/index.ts'),
+  '@dsh-cc/subagent-task': resolve('packages/subagent/task/src/index.ts'),
 }
 
 /**

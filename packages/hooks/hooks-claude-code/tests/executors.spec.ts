@@ -9,10 +9,10 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
-import * as HooksClaude from '@jianxx/dsh-cc-hooks-claude-code'
-import { defineContentToolFixture } from '@jianxx/dsh-cc-tools'
-import { contentToHookOutput, interpolatePrompt } from '@jianxx/dsh-cc-hooks-claude-code'
-import { MockAdapter, textResponse, toolCallResponse } from '@jianxx/dsh-cc-agent-loop-mock'
+import * as HooksClaude from '@dsh-cc/hooks-claude-code'
+import { defineContentToolFixture } from '@dsh-cc/tools'
+import { contentToHookOutput, interpolatePrompt } from '@dsh-cc/hooks-claude-code'
+import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 
 /**
  * `prompt`/`agent` executor tests. The fork subagent seam is stubbed (a synthetic

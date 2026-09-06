@@ -1,7 +1,7 @@
 /**
  * `git` checks for `/doctor`: a verbose-only filesystem probe of the working
  * tree (worktree vs main checkout), plus an optional shell-based branch probe.
- * @module @jianxx/dsh-cc-command-doctor/checks/git
+ * @module @dsh-cc/command-doctor/checks/git
  */
 
 import { lstatSync } from 'node:fs'

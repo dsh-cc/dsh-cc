@@ -1,7 +1,7 @@
 /**
  * The three dream gates: time, session count, and lock. Combinable pure
  * predicates over inputs a caller reads from the seam, plus a composite check.
- * @module @jianxx/dsh-cc-memory-consolidation/gates
+ * @module @dsh-cc/memory-consolidation/gates
  */
 
 /** Inputs to the time and session gates. */

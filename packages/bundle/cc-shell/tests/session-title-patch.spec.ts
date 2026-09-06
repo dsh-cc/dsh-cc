@@ -7,7 +7,7 @@ const PKG = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', imp
   dependencies: Record<string, string>
 }
 
-const NAME = '@jianxx/dsh-cc-session-title-provider'
+const NAME = '@dsh-cc/session-title-provider'
 
 describe('cc-shell session-title overlay patch', () => {
   it('disables the stock session-title-llm row', () => {

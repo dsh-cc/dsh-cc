@@ -14,7 +14,7 @@
  * - childIds are UUID-ish; anything containing a path separator or `..` is
  *   rejected before it can traverse out of `pinsRoot`.
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/store
+ * @module @dsh-cc/subagent-resume-pins/store
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'

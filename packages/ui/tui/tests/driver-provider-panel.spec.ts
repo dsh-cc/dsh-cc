@@ -3,12 +3,12 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Container } from '@jianxx/dsh-cc-pi-tui'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { createProviderPanelBox } from '@jianxx/dsh-cc-tui/components/provider-box.ts'
-import { parseProviderArgs, renderProviderList } from '@jianxx/dsh-cc-tui/provider-command.ts'
-import { routeProviderPanelInput } from '@jianxx/dsh-cc-tui/input.ts'
-import { buildProviderRows, type CredentialsLike, type LlmManageLike } from '@jianxx/dsh-cc-tui/provider-flow.ts'
+import { Container } from '@dsh-cc/pi-tui'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { createProviderPanelBox } from '@dsh-cc/tui/components/provider-box.ts'
+import { parseProviderArgs, renderProviderList } from '@dsh-cc/tui/provider-command.ts'
+import { routeProviderPanelInput } from '@dsh-cc/tui/input.ts'
+import { buildProviderRows, type CredentialsLike, type LlmManageLike } from '@dsh-cc/tui/provider-flow.ts'
 
 /**
  * `/provider` read-path driver specs (§4.2): fake settings / llm / credentials

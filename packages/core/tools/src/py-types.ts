@@ -15,7 +15,7 @@
  * Line-budget layout: `py-names.ts` holds the shared naming/state/text-escape machinery,
  * `py-render.ts` the {@link renderType} walker, `py-sdk-doc.ts` the `renderToolsSdkPy`
  * document renderer; this file stays the public barrel — both exports re-exported here.
- * @module @jianxx/dsh-cc-tools/src/py-types
+ * @module @dsh-cc/tools/src/py-types
  */
 
 import { renderType } from './py-render.ts'

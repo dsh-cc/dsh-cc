@@ -3,7 +3,7 @@
  * current session through the optional host `sessionTitle` service. When no
  * session-title service is mounted the command reports the seam gracefully;
  * rename validation failures (e.g. an empty title) pass through as errors.
- * @module @jianxx/dsh-cc-command-rename
+ * @module @dsh-cc/command-rename
  */
 
 import type { Context } from '@deepseek-ai/cordis'

@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-output-styles
+# @dsh-cc/output-styles
 
 English | [中文](README.zh.md)
 
@@ -51,7 +51,7 @@ The plugin injects `systemPrompt` and `commands`. Custom apps mount their owners
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: cc-output-styles
-  name: '@jianxx/dsh-cc-output-styles'
+  name: '@dsh-cc/output-styles'
   config:
     outputStyle: Explanatory
 ```

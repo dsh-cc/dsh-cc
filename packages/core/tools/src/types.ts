@@ -1,7 +1,7 @@
 /**
  * Durable Tool event vocabulary shared with type-only consumers.
  *
- * @module @jianxx/dsh-cc-tools/types
+ * @module @dsh-cc/tools/types
  */
 
 import type { CallId } from '@deepseek-ai/dsh-llm/brand'

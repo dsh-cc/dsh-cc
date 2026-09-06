@@ -1,7 +1,7 @@
 /**
  * `storage` checks for `/doctor`: a verbose-only write probe against the
  * session persistence store.
- * @module @jianxx/dsh-cc-command-doctor/checks/storage
+ * @module @dsh-cc/command-doctor/checks/storage
  */
 
 import { unlink, writeFile } from 'node:fs/promises'

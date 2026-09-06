@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import type { AgentDefinition } from '@jianxx/dsh-cc-claude-code-agents'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { AgentRegistry } from '../src/registry.ts'
 import { mountAgentCatalog, CATALOG_SECTION_NAME } from '../src/catalog.ts'
 

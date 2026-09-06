@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-settings-migrations
+# @dsh-cc/settings-migrations
 
 English | [中文](README.zh.md)
 
@@ -11,7 +11,7 @@ This batch ships the machinery but **no concrete migrations** — neither cc nor
 ## Mechanism
 
 ```ts
-import { defineMigration, runMigrations, readMigrationState } from '@jianxx/dsh-cc-settings-migrations'
+import { defineMigration, runMigrations, readMigrationState } from '@dsh-cc/settings-migrations'
 
 defineMigration({
   version: 1,
@@ -61,7 +61,7 @@ Mounting runs pending registered migrations (equivalent to CC running migrations
 ## Install / registration
 
 ```ts
-import * as SettingsMigrations from '@jianxx/dsh-cc-settings-migrations'
+import * as SettingsMigrations from '@dsh-cc/settings-migrations'
 await ctx.plugin(SettingsMigrations)
 ```
 

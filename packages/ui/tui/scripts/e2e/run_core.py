@@ -2,7 +2,7 @@
 """PTY end-to-end boot-contract suite for the pi-tui TUI.
 
 Boots the REAL installed `dsh` CLI against a temp DSH_HOME profile that pulls
-the local @jianxx bundles (synced from this repo's lib/) plus a scripted mock
+the local @dsh-cc bundles (synced from this repo's lib/) plus a scripted mock
 LLM, then drives three scenarios inside a real PTY:
 
   a. boot + first key: title renders, a prompt streams MOCK OK, /quit exits 0,
@@ -49,7 +49,7 @@ def make_home() -> Path:
 
 
 def bootstrap(home: Path) -> Path:
-    """Write the profile package.json, build lib/, sync @jianxx packages in,
+    """Write the profile package.json, build lib/, sync @dsh-cc packages in,
     and emit the patch overlay that inserts the mock-llm plugin row."""
     pdir = home / "profiles" / PROFILE
     pdir.mkdir(parents=True, exist_ok=True)
@@ -63,9 +63,9 @@ def bootstrap(home: Path) -> Path:
                     "profile": {
                         "bundles": [
                             "@deepseek-ai/dsh-base",
-                            "@jianxx/dsh-cc-bundle-permissions",
-                            "@jianxx/dsh-cc-bundle-shell",
-                            "@jianxx/dsh-cc-bundle-tui",
+                            "@dsh-cc/bundle-permissions",
+                            "@dsh-cc/bundle-shell",
+                            "@dsh-cc/bundle-tui",
                         ]
                     }
                 },

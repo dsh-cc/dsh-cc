@@ -1,8 +1,8 @@
 /**
- * Package-owned invariant companion for `@jianxx/dsh-cc-permission-rules`.
+ * Package-owned invariant companion for `@dsh-cc/permission-rules`.
  * Guards the closed vocabulary of durable `permission/mode` session events and
  * rejects illegal payloads at the session boundary.
- * @module @jianxx/dsh-cc-permission-rules/invariant
+ * @module @dsh-cc/permission-rules/invariant
  */
 
 /* jscpd:ignore-start */
@@ -13,7 +13,7 @@ import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-inva
 import { SWITCHABLE_PERMISSION_MODES } from './types.ts'
 import type { PermissionModeEventData } from './mode.ts'
 
-const PACKAGE_NAME = '@jianxx/dsh-cc-permission-rules'
+const PACKAGE_NAME = '@dsh-cc/permission-rules'
 
 /** Cordis companion plugin name. */
 export const name = 'cc-permission-rules-invariant'

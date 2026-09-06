@@ -1,7 +1,7 @@
 /**
  * `/doctor` collection orchestration: runs every check group in stable order,
  * converting a thrown check into a `fail` row so the command always succeeds.
- * @module @jianxx/dsh-cc-command-doctor/collect
+ * @module @dsh-cc/command-doctor/collect
  */
 
 import type { Context } from '@deepseek-ai/cordis'

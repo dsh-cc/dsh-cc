@@ -12,7 +12,7 @@
 #
 # 认证两阶段:bootstrap 期在仓库 secret 配置 NPM_TOKEN(granular)走 token;
 # 升级为 npm Trusted Publishing(OIDC)时在 npmjs 为每个包配置 trusted
-# publisher(org=jianxx, repo=dsh-cc, workflow=publish.yml,
+# publisher(org=dsh-cc, repo=dsh-cc, workflow=publish.yml,
 # environment=npm-publish),然后删除 NPM_TOKEN secret —— 本文件无需改动。
 # =============================================================================
 name: Publish (npm)
@@ -72,7 +72,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: jianxx/deepseek-harness
+          repository: dsh-cc/deepseek-harness
           ref: ${{ env.DSH_HARNESS_REF }}
           path: deepseek-harness
 
@@ -92,6 +92,10 @@ jobs:
       - name: Spec dependency declarations (check:spec-deps)
         working-directory: dsh-cc
         run: node scripts/check-spec-deps.mjs
+
+      - name: Canonical project identity (check:identity)
+        working-directory: dsh-cc
+        run: node scripts/check-project-identity.mjs
 
       - name: Publishable manifest invariants (check:publish)
         working-directory: dsh-cc

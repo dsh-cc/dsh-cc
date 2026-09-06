@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LOCAL_COMMANDS, parseSlash } from '@jianxx/dsh-cc-tui/slash.ts'
+import { LOCAL_COMMANDS, parseSlash } from '@dsh-cc/tui/slash.ts'
 
 describe('LOCAL_COMMANDS', () => {
   it('has an entry for every TUI-owned slash name', () => {

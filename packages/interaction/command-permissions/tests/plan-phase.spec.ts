@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { planPhaseOf, type PlanUnitStateLike } from '@jianxx/dsh-cc-command-permissions'
+import { planPhaseOf, type PlanUnitStateLike } from '@dsh-cc/command-permissions'
 
 const planEvent = (active: boolean): SessionEvent =>
   ({ type: 'plan/mode', data: { active } }) as unknown as SessionEvent

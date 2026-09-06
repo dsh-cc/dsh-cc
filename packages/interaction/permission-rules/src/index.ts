@@ -9,7 +9,7 @@
  * load; settings hot-reloads by rebuilding merged state and re-registering
  * guards.
  *
- * @module @jianxx/dsh-cc-permission-rules
+ * @module @dsh-cc/permission-rules
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -20,9 +20,9 @@ import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
 import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { PreToolDecision, ToolExecution } from '@jianxx/dsh-cc-tools'
-import { foldSessionCwd } from '@jianxx/dsh-cc-session-cwd'
-import { resolveAlias, toOneShotRoute } from '@jianxx/dsh-cc-model-aliases'
+import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
+import { foldSessionCwd } from '@dsh-cc/session-cwd'
+import { resolveAlias, toOneShotRoute } from '@dsh-cc/model-aliases'
 import { installSettingsSection, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value

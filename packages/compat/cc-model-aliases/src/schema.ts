@@ -17,7 +17,7 @@
  * across layers to avoid `{provider, model}` field blending — see the package
  * README.
  *
- * @module @jianxx/dsh-cc-model-aliases/schema
+ * @module @dsh-cc/model-aliases/schema
  */
 
 import z from '@deepseek-ai/schemastery'

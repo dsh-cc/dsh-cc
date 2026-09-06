@@ -18,14 +18,14 @@
 安装 DeepSeek Harness 和 `dsh-cc` 启动器，然后直接启动：
 
 ```sh
-npm install -g @deepseek-ai/dsh @jianxx/dsh-cc
+npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
 如果已经安装 `dsh` **>= 0.1.0-rc.5**，只需安装启动器：
 
 ```sh
-npm install -g @jianxx/dsh-cc
+npm install -g @dsh-cc/cli
 dsh-cc
 ```
 
@@ -33,9 +33,9 @@ dsh-cc
 
 ```sh
 dsh plugin --profile tui add \
-  @jianxx/dsh-cc-bundle-permissions \
-  @jianxx/dsh-cc-bundle-shell \
-  @jianxx/dsh-cc-bundle-tui
+  @dsh-cc/bundle-permissions \
+  @dsh-cc/bundle-shell \
+  @dsh-cc/bundle-tui
 dsh --profile tui
 ```
 
@@ -43,8 +43,8 @@ dsh --profile tui
 
 ```sh
 dsh plugin --profile web add \
-  @jianxx/dsh-cc-bundle-permissions \
-  @jianxx/dsh-cc-bundle-shell
+  @dsh-cc/bundle-permissions \
+  @dsh-cc/bundle-shell
 dsh web
 ```
 
@@ -287,7 +287,7 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 
 ## Packages 与版本发布
 
-已发布插件使用 `@jianxx` npm scope。根 monorepo package 为 private；可安装 package 由仓库发布工具分别发布。
+已发布插件使用 `@dsh-cc` npm scope。根 monorepo package 为 private；可安装 package 由仓库发布工具分别发布。
 
 发布流程详见 **[docs/release.md](docs/release.md)**。
 
@@ -302,7 +302,7 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 - 能减少 vendored 代码的上游扩展点提案；
 - 来自真实项目的模型路由和工作流实践。
 
-**[提交 Issue](https://github.com/jianxx/dsh-cc/issues) · [查看 Pull Requests](https://github.com/jianxx/dsh-cc/pulls)**
+**[提交 Issue](https://github.com/dsh-cc/dsh-cc/issues) · [查看 Pull Requests](https://github.com/dsh-cc/dsh-cc/pulls)**
 
 ## License
 

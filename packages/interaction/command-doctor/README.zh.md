@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-doctor
+# @dsh-cc/command-doctor
 
 [English](README.md) | 中文
 
@@ -30,7 +30,7 @@
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-doctor
-  name: '@jianxx/dsh-cc-command-doctor'
+  name: '@dsh-cc/command-doctor'
 ```
 
 所有可选接缝都通过 `ctx.get` 鸭子类型读取；缺失的接缝报告为 `skip` 行，而不是失败。每个检查组都有独立的 try/catch，因此抛错的接缝只会退化为一行 fail，命令本身仍然成功。

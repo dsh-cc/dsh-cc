@@ -185,10 +185,10 @@ function harnessVersion(root) {
 /* ---- repository provenance gate ---- */
 
 /** The repo every publishable package must declare as its provenance. */
-export const EXPECTED_REPOSITORY = "jianxx/dsh-cc";
+export const EXPECTED_REPOSITORY = "dsh-cc/dsh-cc";
 export const EXPECTED_LICENSE = "Apache-2.0";
 export const LICENSE_EXCEPTIONS = new Map([
-  ["@jianxx/dsh-cc-pi-tui", "MIT"],
+  ["@dsh-cc/pi-tui", "MIT"],
 ]);
 
 /**

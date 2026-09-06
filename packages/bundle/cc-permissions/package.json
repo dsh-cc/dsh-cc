@@ -1,5 +1,5 @@
 {
-  "name": "@jianxx/dsh-cc-bundle-permissions",
+  "name": "@dsh-cc/bundle-permissions",
   "version": "0.4.1",
   "description": "Claude Code permission parity layer for dsh profiles: five-level settings cascade + CC permission-rule engine",
   "type": "module",
@@ -17,14 +17,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/bundle/cc-permissions"
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@jianxx/dsh-cc-settings-cascade": "workspace:^",
-    "@jianxx/dsh-cc-permission-rules": "workspace:^",
-    "@jianxx/dsh-cc-command-permissions": "workspace:^"
+    "@dsh-cc/settings-cascade": "workspace:^",
+    "@dsh-cc/permission-rules": "workspace:^",
+    "@dsh-cc/command-permissions": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

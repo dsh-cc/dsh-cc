@@ -5,7 +5,7 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandAgents from '@jianxx/dsh-cc-command-agents'
+import * as commandAgents from '@dsh-cc/command-agents'
 import {
   buildAgentsSnapshot,
   denyCodeOf,
@@ -14,7 +14,7 @@ import {
   renderAgentsList,
   type AgentRow,
   type SnapshotServices,
-} from '@jianxx/dsh-cc-command-agents/snapshot'
+} from '@dsh-cc/command-agents/snapshot'
 
 // --- fakes ------------------------------------------------------------------
 

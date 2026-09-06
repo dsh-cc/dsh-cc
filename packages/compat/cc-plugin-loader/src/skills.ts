@@ -19,7 +19,7 @@ import {
   parseCcFrontmatter,
   parseCcFrontmatterDocument,
   type CcSkillMetadata,
-} from '@jianxx/dsh-cc-skill-loader'
+} from '@dsh-cc/skill-loader'
 import { isSkillName, type SkillDefinition } from '@deepseek-ai/dsh-skill'
 import type { CcPluginManifest } from './types.ts'
 import { ComponentTally } from './seams.ts'

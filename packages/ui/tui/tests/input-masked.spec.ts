@@ -2,11 +2,11 @@
  * MaskedInput behavioral tests (ported from the reverted pi-tui
  * `tests/input-masked.spec.ts`): display shows bullets only, the value stays
  * raw, and plain `Input` is never masked.
- * @module @jianxx/dsh-cc-tui/input-masked
+ * @module @dsh-cc/tui/input-masked
  */
 import { describe, expect, it } from 'vitest'
-import { Input } from '@jianxx/dsh-cc-pi-tui'
-import { MaskedInput } from '@jianxx/dsh-cc-tui/components/masked-input.ts'
+import { Input } from '@dsh-cc/pi-tui'
+import { MaskedInput } from '@dsh-cc/tui/components/masked-input.ts'
 
 /** Strip ANSI escape sequences so assertions see plain display text. */
 function stripAnsi(s: string): string {

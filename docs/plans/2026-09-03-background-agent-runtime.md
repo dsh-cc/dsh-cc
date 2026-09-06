@@ -8,7 +8,7 @@ Review verified every load-bearing harness claim against source; no harness
 changes required (the same preset already ships spawn-continuable via
 `tool-ralph` / `workflow-worker-thread`).
 Date: 2026-09-03
-Scope: `@jianxx/dsh-cc-subagent-task` (the CC `Task` tool), the cc preset's
+Scope: `@dsh-cc/subagent-task` (the CC `Task` tool), the cc preset's
 delegation group, and the cc-shell composition. No harness (`@deepseek-ai/dsh-*`)
 changes.
 
@@ -198,7 +198,7 @@ No new tools. The work is contract alignment and guidance:
    the exact loop ("you are told when it finishes; use `list_agents` to check
    status, `send_message` to continue the same conversation, `interrupt_agent`
    to stop its current turn"). A short system-prompt section in
-   `@jianxx/dsh-cc-subagent-task` states the same contract once, so it survives
+   `@dsh-cc/subagent-task` states the same contract once, so it survives
    tool-description trimming.
 4. **Lineage rule surfaced.** Cold resume admits only the child's exact live
    direct parent (`continuation.ts:962-963`, enforced by `authorizeLineage`

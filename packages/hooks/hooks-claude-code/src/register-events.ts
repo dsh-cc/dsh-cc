@@ -2,7 +2,7 @@
  * Event-listener registration for the hooks-claude-code bridge, extracted
  * from {@link ./index!apply | apply} so the entry stays under the 500-line
  * source budget. Every listener below was previously inline in `apply()`.
- * @module @jianxx/dsh-cc-hooks-claude-code/register-events
+ * @module @dsh-cc/hooks-claude-code/register-events
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -11,8 +11,8 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { JobId } from '@deepseek-ai/dsh-jobs'
 import type { SubagentRunId } from '@deepseek-ai/dsh-subagent'
-import type { PostToolDecision, PreToolDecision, ToolExecution } from '@jianxx/dsh-cc-tools'
-import type { DetachedRuns } from '@jianxx/dsh-cc-hook-protocol'
+import type { PostToolDecision, PreToolDecision, ToolExecution } from '@dsh-cc/tools'
+import type { DetachedRuns } from '@dsh-cc/hook-protocol'
 import {
   notificationPayload,
   permissionDeniedPayload,

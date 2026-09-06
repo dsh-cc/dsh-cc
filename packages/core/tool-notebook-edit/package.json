@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-tool-notebook-edit",
+  "name": "@dsh-cc/tool-notebook-edit",
   "description": "NotebookEdit model tool that edits Jupyter notebook (.ipynb) cells over the ctx.fs seam, aligned with Claude Code's NotebookEditTool replace/insert/delete, cell addressing, and read-before-write semantics",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/core/tool-notebook-edit"
   },
   "type": "module",
@@ -32,7 +32,7 @@
     "@deepseek-ai/dsh-fs": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
@@ -41,7 +41,7 @@
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt"

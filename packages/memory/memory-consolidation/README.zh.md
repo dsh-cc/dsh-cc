@@ -49,7 +49,7 @@ job 状态反映真实结局:非 completed 的 `stopReason`、缺失/非法的�
 
 ## 使用
 
-以 `@jianxx/dsh-cc-memory-consolidation` 加载插件。配置：
+以 `@dsh-cc/memory-consolidation` 加载插件。配置：
 
 | Key | 默认值 | 含义 |
 |---|---|---|
@@ -62,7 +62,7 @@ job 状态反映真实结局:非 completed 的 `stopReason`、缺失/非法的�
 | `subagentProviderName` | `fork` | fork 使用的一次性 provider |
 
 ```ts
-import consolidation from '@jianxx/dsh-cc-memory-consolidation'
+import consolidation from '@dsh-cc/memory-consolidation'
 await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 ```
 
@@ -82,7 +82,7 @@ await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 - `MEMORY_WRITES_SCHEMA` —— 每个 fork 上报的 `outputSchema` 契约。
 - `validateMemoryWrites(input)` / `writeMemoryFiles(fs, dir, writes)` /
   `memoryWritePolicy(dir)` —— host 侧落盘(由记忆目录的拥有者
-  `@jianxx/dsh-cc-memory` 持有,此处 re-export)。
+  `@dsh-cc/memory` 持有,此处 re-export)。
 - `buildExtractionPrompt` / `buildConsolidationPrompt` —— fork 的提示词。
 
 ## 已知限制与延期工作

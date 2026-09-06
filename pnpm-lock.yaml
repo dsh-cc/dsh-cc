@@ -55,37 +55,37 @@ importers:
 
   packages/bundle/cc-permissions:
     dependencies:
-      '@jianxx/dsh-cc-command-permissions':
+      '@dsh-cc/command-permissions':
         specifier: workspace:^
         version: link:../../interaction/command-permissions
-      '@jianxx/dsh-cc-permission-rules':
+      '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../../interaction/permission-rules
-      '@jianxx/dsh-cc-settings-cascade':
+      '@dsh-cc/settings-cascade':
         specifier: workspace:^
         version: link:../../settings/settings-cascade
 
   packages/bundle/cc-shell:
     dependencies:
-      '@jianxx/dsh-cc-claude-code-agents':
+      '@dsh-cc/claude-code-agents':
         specifier: workspace:^
         version: link:../../preset/claude-code-agents
-      '@jianxx/dsh-cc-mcp-client':
+      '@dsh-cc/mcp-client':
         specifier: workspace:^
         version: link:../../mcp/mcp-client
-      '@jianxx/dsh-cc-mcp-config':
+      '@dsh-cc/mcp-config':
         specifier: workspace:^
         version: link:../../mcp/mcp-config
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@jianxx/dsh-cc-plugin-loader':
+      '@dsh-cc/plugin-loader':
         specifier: workspace:^
         version: link:../../compat/cc-plugin-loader
-      '@jianxx/dsh-cc-session-title-provider':
+      '@dsh-cc/session-title-provider':
         specifier: workspace:^
         version: link:../../compat/session-title-provider
-      '@jianxx/dsh-cc-web-fetch-http':
+      '@dsh-cc/web-fetch-http':
         specifier: workspace:^
         version: link:../../web/fetch-http
     devDependencies:
@@ -170,25 +170,25 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-settings-migrations':
+      '@dsh-cc/settings-migrations':
         specifier: workspace:^
         version: link:../../settings/settings-migrations
-      '@jianxx/dsh-cc-subagent-resume-pins':
+      '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../../subagent/resume-pins
-      '@jianxx/dsh-cc-subagent-task':
+      '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
-      '@jianxx/dsh-cc-tool-notebook-edit':
+      '@dsh-cc/tool-notebook-edit':
         specifier: workspace:^
         version: link:../../core/tool-notebook-edit
-      '@jianxx/dsh-cc-tool-sleep':
+      '@dsh-cc/tool-sleep':
         specifier: workspace:^
         version: link:../../core/tool-sleep
-      '@jianxx/dsh-cc-tool-structured-output':
+      '@dsh-cc/tool-structured-output':
         specifier: workspace:^
         version: link:../../core/tool-structured-output
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
       typescript:
@@ -197,14 +197,14 @@ importers:
 
   packages/bundle/cc-tui:
     dependencies:
-      '@jianxx/dsh-cc-tui':
+      '@dsh-cc/tui':
         specifier: workspace:^
         version: link:../../ui/tui
     devDependencies:
       '@deepseek-ai/cordis-plugin-include':
         specifier: link:../../../../deepseek-harness/vendor/include
         version: link:../../../../deepseek-harness/vendor/include
-      '@jianxx/dsh-cc-cache-trajectory':
+      '@dsh-cc/cache-trajectory':
         specifier: workspace:^
         version: link:../../test-support/cache-trajectory
       js-yaml:
@@ -321,7 +321,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-agent-loop-mock':
+      '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
 
@@ -367,10 +367,10 @@ importers:
 
   packages/compat/cc-plugin-loader:
     dependencies:
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../cc-model-aliases
-      '@jianxx/dsh-cc-settings-cascade':
+      '@dsh-cc/settings-cascade':
         specifier: workspace:^
         version: link:../../settings/settings-cascade
     devDependencies:
@@ -392,19 +392,19 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent
         version: link:../../../../deepseek-harness/packages/subagent/subagent
-      '@jianxx/dsh-cc-claude-code-agents':
+      '@dsh-cc/claude-code-agents':
         specifier: workspace:^
         version: link:../../preset/claude-code-agents
-      '@jianxx/dsh-cc-hook-protocol':
+      '@dsh-cc/hook-protocol':
         specifier: workspace:^
         version: link:../../hooks/hook-protocol
-      '@jianxx/dsh-cc-mcp-client':
+      '@dsh-cc/mcp-client':
         specifier: workspace:^
         version: link:../../mcp/mcp-client
-      '@jianxx/dsh-cc-skill-loader':
+      '@dsh-cc/skill-loader':
         specifier: workspace:^
         version: link:../../skill/skill-claude-code
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
 
@@ -452,7 +452,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../cc-model-aliases
 
@@ -491,7 +491,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
 
@@ -518,7 +518,7 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
 
@@ -539,7 +539,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
 
@@ -560,7 +560,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
 
@@ -587,10 +587,10 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
 
@@ -650,7 +650,7 @@ importers:
 
   packages/hooks/hooks-claude-code:
     dependencies:
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
     devDependencies:
@@ -714,13 +714,13 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-agent-loop-mock':
+      '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@jianxx/dsh-cc-hook-protocol':
+      '@dsh-cc/hook-protocol':
         specifier: workspace:^
         version: link:../hook-protocol
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
 
@@ -744,7 +744,7 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
-      '@jianxx/dsh-cc-subagent-resume-pins':
+      '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../../subagent/resume-pins
 
@@ -771,7 +771,7 @@ importers:
 
   packages/interaction/command-compact:
     dependencies:
-      '@jianxx/dsh-cc-compaction-basic':
+      '@dsh-cc/compaction-basic':
         specifier: workspace:^
         version: link:../../compaction/compaction-basic-cc
     devDependencies:
@@ -883,7 +883,7 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
-      '@jianxx/dsh-cc-hook-protocol':
+      '@dsh-cc/hook-protocol':
         specifier: workspace:^
         version: link:../../hooks/hook-protocol
 
@@ -934,7 +934,7 @@ importers:
 
   packages/interaction/command-mcp:
     dependencies:
-      '@jianxx/dsh-cc-mcp-config':
+      '@dsh-cc/mcp-config':
         specifier: workspace:^
         version: link:../../mcp/mcp-config
     devDependencies:
@@ -1271,13 +1271,13 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@jianxx/dsh-cc-session-cwd':
+      '@dsh-cc/session-cwd':
         specifier: link:../../workspace/session-cwd
         version: link:../../workspace/session-cwd
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
 
@@ -1325,10 +1325,10 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-tool-search':
+      '@dsh-cc/tool-search':
         specifier: workspace:^
         version: link:../../core/tool-search
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
       '@modelcontextprotocol/server-everything':
@@ -1340,7 +1340,7 @@ importers:
 
   packages/mcp/mcp-config:
     dependencies:
-      '@jianxx/dsh-cc-mcp-client':
+      '@dsh-cc/mcp-client':
         specifier: workspace:^
         version: link:../mcp-client
     devDependencies:
@@ -1356,10 +1356,10 @@ importers:
 
   packages/memory/memory:
     dependencies:
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
     devDependencies:
@@ -1399,7 +1399,7 @@ importers:
 
   packages/memory/memory-consolidation:
     dependencies:
-      '@jianxx/dsh-cc-memory':
+      '@dsh-cc/memory':
         specifier: workspace:^
         version: link:../memory
     devDependencies:
@@ -1433,133 +1433,133 @@ importers:
 
   packages/preset/cc:
     dependencies:
-      '@jianxx/dsh-cc-bundle-shell':
+      '@dsh-cc/bundle-shell':
         specifier: workspace:^
         version: link:../../bundle/cc-shell
-      '@jianxx/dsh-cc-command-agents':
+      '@dsh-cc/command-agents':
         specifier: workspace:^
         version: link:../../interaction/command-agents
-      '@jianxx/dsh-cc-command-branch':
+      '@dsh-cc/command-branch':
         specifier: workspace:^
         version: link:../../interaction/command-branch
-      '@jianxx/dsh-cc-command-compact':
+      '@dsh-cc/command-compact':
         specifier: workspace:^
         version: link:../../interaction/command-compact
-      '@jianxx/dsh-cc-command-config':
+      '@dsh-cc/command-config':
         specifier: workspace:^
         version: link:../../interaction/command-config
-      '@jianxx/dsh-cc-command-cost':
+      '@dsh-cc/command-cost':
         specifier: workspace:^
         version: link:../../session/command-cost
-      '@jianxx/dsh-cc-command-diff':
+      '@dsh-cc/command-diff':
         specifier: workspace:^
         version: link:../../interaction/command-diff
-      '@jianxx/dsh-cc-command-doctor':
+      '@dsh-cc/command-doctor':
         specifier: workspace:^
         version: link:../../interaction/command-doctor
-      '@jianxx/dsh-cc-command-export':
+      '@dsh-cc/command-export':
         specifier: workspace:^
         version: link:../../session/command-export
-      '@jianxx/dsh-cc-command-help':
+      '@dsh-cc/command-help':
         specifier: workspace:^
         version: link:../../interaction/command-help
-      '@jianxx/dsh-cc-command-init':
+      '@dsh-cc/command-init':
         specifier: workspace:^
         version: link:../../interaction/command-init
-      '@jianxx/dsh-cc-command-mcp':
+      '@dsh-cc/command-mcp':
         specifier: workspace:^
         version: link:../../interaction/command-mcp
-      '@jianxx/dsh-cc-command-memory':
+      '@dsh-cc/command-memory':
         specifier: workspace:^
         version: link:../../interaction/command-memory
-      '@jianxx/dsh-cc-command-permissions':
+      '@dsh-cc/command-permissions':
         specifier: workspace:^
         version: link:../../interaction/command-permissions
-      '@jianxx/dsh-cc-command-plugin':
+      '@dsh-cc/command-plugin':
         specifier: workspace:^
         version: link:../../interaction/command-plugin
-      '@jianxx/dsh-cc-command-release-notes':
+      '@dsh-cc/command-release-notes':
         specifier: workspace:^
         version: link:../../interaction/command-release-notes
-      '@jianxx/dsh-cc-command-rename':
+      '@dsh-cc/command-rename':
         specifier: workspace:^
         version: link:../../interaction/command-rename
-      '@jianxx/dsh-cc-command-resume':
+      '@dsh-cc/command-resume':
         specifier: workspace:^
         version: link:../../interaction/command-resume
-      '@jianxx/dsh-cc-command-skills':
+      '@dsh-cc/command-skills':
         specifier: workspace:^
         version: link:../../interaction/command-skills
-      '@jianxx/dsh-cc-command-stats':
+      '@dsh-cc/command-stats':
         specifier: workspace:^
         version: link:../../session/command-stats
-      '@jianxx/dsh-cc-command-status':
+      '@dsh-cc/command-status':
         specifier: workspace:^
         version: link:../../interaction/command-status
-      '@jianxx/dsh-cc-command-tasks':
+      '@dsh-cc/command-tasks':
         specifier: workspace:^
         version: link:../../interaction/command-tasks
-      '@jianxx/dsh-cc-command-version':
+      '@dsh-cc/command-version':
         specifier: workspace:^
         version: link:../../interaction/command-version
-      '@jianxx/dsh-cc-compaction-basic':
+      '@dsh-cc/compaction-basic':
         specifier: workspace:^
         version: link:../../compaction/compaction-basic-cc
-      '@jianxx/dsh-cc-compaction-micro':
+      '@dsh-cc/compaction-micro':
         specifier: workspace:^
         version: link:../../compaction/compaction-micro
-      '@jianxx/dsh-cc-coordinator':
+      '@dsh-cc/coordinator':
         specifier: workspace:^
         version: link:../../subagent/coordinator
-      '@jianxx/dsh-cc-hooks-claude-code':
+      '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code
-      '@jianxx/dsh-cc-memory':
+      '@dsh-cc/memory':
         specifier: workspace:^
         version: link:../../memory/memory
-      '@jianxx/dsh-cc-memory-consolidation':
+      '@dsh-cc/memory-consolidation':
         specifier: workspace:^
         version: link:../../memory/memory-consolidation
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@jianxx/dsh-cc-output-styles':
+      '@dsh-cc/output-styles':
         specifier: workspace:^
         version: link:../../compat/cc-output-styles
-      '@jianxx/dsh-cc-serena-first':
+      '@dsh-cc/serena-first':
         specifier: workspace:^
         version: link:../../compat/cc-serena-first
-      '@jianxx/dsh-cc-session-cwd':
+      '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@jianxx/dsh-cc-skill-loader':
+      '@dsh-cc/skill-loader':
         specifier: workspace:^
         version: link:../../skill/skill-claude-code
-      '@jianxx/dsh-cc-subagent-resume-pins':
+      '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../../subagent/resume-pins
-      '@jianxx/dsh-cc-subagent-task':
+      '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
-      '@jianxx/dsh-cc-tool-append-order':
+      '@dsh-cc/tool-append-order':
         specifier: workspace:^
         version: link:../../core/tool-append-order
-      '@jianxx/dsh-cc-tool-git-worktree':
+      '@dsh-cc/tool-git-worktree':
         specifier: workspace:^
         version: link:../../workspace/tool-git-worktree
-      '@jianxx/dsh-cc-tool-notebook-edit':
+      '@dsh-cc/tool-notebook-edit':
         specifier: workspace:^
         version: link:../../core/tool-notebook-edit
-      '@jianxx/dsh-cc-tool-search':
+      '@dsh-cc/tool-search':
         specifier: workspace:^
         version: link:../../core/tool-search
-      '@jianxx/dsh-cc-tool-sleep':
+      '@dsh-cc/tool-sleep':
         specifier: workspace:^
         version: link:../../core/tool-sleep
-      '@jianxx/dsh-cc-tool-structured-output':
+      '@dsh-cc/tool-structured-output':
         specifier: workspace:^
         version: link:../../core/tool-structured-output
-      '@jianxx/dsh-cc-tool-web-fetch':
+      '@dsh-cc/tool-web-fetch':
         specifier: workspace:^
         version: link:../../core/tool-web-fetch
     devDependencies:
@@ -1585,7 +1585,7 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
         version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
 
@@ -1734,7 +1734,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
 
@@ -1779,19 +1779,19 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
-      '@jianxx/dsh-cc-agent-loop-mock':
+      '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
 
   packages/subagent/resume-pins:
     dependencies:
-      '@jianxx/dsh-cc-claude-code-agents':
+      '@dsh-cc/claude-code-agents':
         specifier: workspace:^
         version: link:../../preset/claude-code-agents
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
     devDependencies:
@@ -1822,19 +1822,19 @@ importers:
 
   packages/subagent/task:
     dependencies:
-      '@jianxx/dsh-cc-claude-code-agents':
+      '@dsh-cc/claude-code-agents':
         specifier: workspace:^
         version: link:../../preset/claude-code-agents
-      '@jianxx/dsh-cc-memory':
+      '@dsh-cc/memory':
         specifier: workspace:^
         version: link:../../memory/memory
-      '@jianxx/dsh-cc-model-aliases':
+      '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@jianxx/dsh-cc-subagent-resume-pins':
+      '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../resume-pins
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
     devDependencies:
@@ -1886,10 +1886,10 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-agent-loop-mock':
+      '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@jianxx/dsh-cc-tool-search':
+      '@dsh-cc/tool-search':
         specifier: workspace:*
         version: link:../../core/tool-search
 
@@ -1934,7 +1934,7 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
-      '@jianxx/dsh-cc-compaction-micro':
+      '@dsh-cc/compaction-micro':
         specifier: workspace:^
         version: link:../../compaction/compaction-micro
       zod:
@@ -1956,19 +1956,19 @@ importers:
 
   packages/ui/tui:
     dependencies:
-      '@jianxx/dsh-cc-command-agents':
+      '@dsh-cc/command-agents':
         specifier: workspace:^
         version: link:../../interaction/command-agents
-      '@jianxx/dsh-cc-command-permissions':
+      '@dsh-cc/command-permissions':
         specifier: workspace:^
         version: link:../../interaction/command-permissions
-      '@jianxx/dsh-cc-permission-rules':
+      '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../../interaction/permission-rules
-      '@jianxx/dsh-cc-pi-tui':
+      '@dsh-cc/pi-tui':
         specifier: workspace:^
         version: link:../pi-tui
-      '@jianxx/dsh-cc-subagent-task':
+      '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
       highlight.js:
@@ -2054,7 +2054,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: link:../../core/tools
         version: link:../../core/tools
 
@@ -2099,10 +2099,10 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@jianxx/dsh-cc-session-cwd':
+      '@dsh-cc/session-cwd':
         specifier: link:../session-cwd
         version: link:../session-cwd
-      '@jianxx/dsh-cc-tools':
+      '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
 

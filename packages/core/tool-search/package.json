@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-tool-search",
+  "name": "@dsh-cc/tool-search",
   "description": "Deferred tool registration and a ToolSearch model tool that loads heavy tools on demand",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/core/tool-search"
   },
   "type": "module",
@@ -28,7 +28,7 @@
     "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-scope": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-system-prompt": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.1.1-rc.2"
   },
   "devDependencies": {
@@ -38,7 +38,7 @@
     "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
-    "@jianxx/dsh-cc-tools": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis"
   },
   "publishConfig": {

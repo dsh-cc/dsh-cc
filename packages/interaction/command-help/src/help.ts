@@ -1,7 +1,7 @@
 /**
  * Pure `/help` rendering: a sorted command index and a single-command detail
  * view. No cordis imports, so the renderers are unit-testable in isolation.
- * @module @jianxx/dsh-cc-command-help/help
+ * @module @dsh-cc/command-help/help
  */
 
 import type { CommandDescriptor } from '@deepseek-ai/dsh-commands'

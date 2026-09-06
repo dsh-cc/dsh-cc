@@ -52,7 +52,7 @@ still mean "no override" (no stamp).
 
 ## Design
 
-### 1. Alias vocabulary (`@jianxx/dsh-cc-model-aliases`)
+### 1. Alias vocabulary (`@dsh-cc/model-aliases`)
 
 `AliasTarget` object form becomes `{ provider, model, reasoningEffort? }`.
 `reasoningEffort` is an opaque non-empty string (not an enum: `max` / `xhigh` /

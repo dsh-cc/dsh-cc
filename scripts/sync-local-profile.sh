@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mirror this repo's @jianxx/* packages into a dsh profile's node_modules so
+# Mirror this repo's @dsh-cc/* packages into a dsh profile's node_modules so
 # an unpublished local build boots exactly like the published bundles would.
 #
 # Why copies, not symlinks: Node resolves modules from a package's realpath.
@@ -27,7 +27,7 @@ profile="${1:-web}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dsh_home="${DSH_HOME:-$HOME/.dsh}"
 profile_dir="$dsh_home/profiles/$profile"
-dest="$profile_dir/node_modules/@jianxx"
+dest="$profile_dir/node_modules/@dsh-cc"
 
 if [ ! -d "$profile_dir" ]; then
   echo "profile $profile not found at $profile_dir — boot it once (dsh --profile $profile) or pass another name" >&2
@@ -41,7 +41,7 @@ for pkg_dir in "$repo_root"/packages/*/*/; do
   manifest="$pkg_dir/package.json"
   [ -f "$manifest" ] || continue
   name="$(node -p "require('$manifest').name")"
-  case "$name" in @jianxx/*) ;; *) continue ;; esac
+  case "$name" in @dsh-cc/*) ;; *) continue ;; esac
   # A package whose entry point lives under lib/ must have been built, or the
   # profile will fail to mount it at boot.
   if node -e "
@@ -52,8 +52,8 @@ for pkg_dir in "$repo_root"/packages/*/*/; do
     echo "warning: $name has no lib/ — run pnpm run build first" >&2
     missing_lib=1
   fi
-  rsync -a --delete --exclude=node_modules "$pkg_dir" "$dest/${name#@jianxx/}/"
-  synced+=("${name#@jianxx/}")
+  rsync -a --delete --exclude=node_modules "$pkg_dir" "$dest/${name#@dsh-cc/}/"
+  synced+=("${name#@dsh-cc/}")
 done
 
 # Prune copies of packages that no longer exist in the repo (renames/removals),
@@ -67,7 +67,7 @@ for dest_dir in "$dest"/*/; do
   [ "$found" = false ] && { rm -rf "$dest_dir"; echo "pruned stale $short"; }
 done
 
-# Plain-npm runtime dependencies of any synced @jianxx package must also reach
+# Plain-npm runtime dependencies of any synced @dsh-cc package must also reach
 # the profile: the dsh plugin reconciler never touches packages that are not
 # profile dependencies, and @deepseek-ai/* peers resolve through the
 # ~/.dsh/profiles fallback — but third-party deps (tui's highlight.js) and
@@ -89,8 +89,8 @@ const PACKAGES = process.env.REPO_PACKAGES
 const PROFILE_NM = process.env.PROFILE_NM
 const HARNESS = fs.realpathSync(process.env.HARNESS_ROOT)
 
-// Seeds use `dependencies` only — a @jianxx package's peers are host-provided by
-// contract (@deepseek-ai/* via the profiles fallback, @jianxx/* as synced
+// Seeds use `dependencies` only — a @dsh-cc package's peers are host-provided by
+// contract (@deepseek-ai/* via the profiles fallback, @dsh-cc/* as synced
 // copies). Recursion into npm packages adds peer deps that pnpm actually
 // satisfied as container siblings (e.g. the MCP SDK's non-optional zod peer).
 const manifestDeps = (manifestPath, includePeers) => {
@@ -116,7 +116,7 @@ for (const g of fs.readdirSync(PACKAGES)) {
     const mf = path.join(dir, 'package.json')
     if (!fs.existsSync(mf)) continue
     const name = require(mf).name || ''
-    if (!name.startsWith('@jianxx/')) continue
+    if (!name.startsWith('@dsh-cc/')) continue
     for (const dep of manifestDeps(mf, false)) queue.push({ dep, nm: path.join(dir, 'node_modules') })
   }
 }
@@ -149,11 +149,11 @@ while (queue.length) {
     // materialize via the healed profiles fallback (copying schemastery here
     // would fork cordis's schema runtime into a shadow instance).
     if (dep.startsWith('@deepseek-ai/') && next.startsWith('@deepseek-ai/')) continue
-    if (next.startsWith('@jianxx/')) continue
+    if (next.startsWith('@dsh-cc/')) continue
     if (fs.existsSync(path.join(container, next))) queue.push({ dep: next, nm: container })
   }
 }
-if (done.size) console.log('synced @jianxx runtime deps (dereferenced, transitive): ' + done.size)
+if (done.size) console.log('synced @dsh-cc runtime deps (dereferenced, transitive): ' + done.size)
 NODE
 
 # The vendored pi-tui renderer has RUNTIME npm deps (marked,

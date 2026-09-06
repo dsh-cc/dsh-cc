@@ -1,7 +1,7 @@
 /**
  * Human-facing `/release-notes` command: prints the bundle's bundled changelog
  * (offline-safe, deterministic). An optional arg renders only the first N lines.
- * @module @jianxx/dsh-cc-command-release-notes
+ * @module @dsh-cc/command-release-notes
  */
 
 import type { Context } from '@deepseek-ai/cordis'

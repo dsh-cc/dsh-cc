@@ -2,7 +2,7 @@
  * Pure `/tasks` rendering helpers: background-job line and index formatting.
  * The `jobs` service lives in the harness; these functions only shape already
  * loaded snapshots, so they are unit-testable without cordis.
- * @module @jianxx/dsh-cc-command-tasks/tasks
+ * @module @dsh-cc/command-tasks/tasks
  */
 
 /** A job's lifecycle state as rendered by `/tasks`. */

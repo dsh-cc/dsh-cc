@@ -2,7 +2,7 @@
  * Pure projection→view mappers for the statusline HUD and the `/usage`
  * panel, extracted from harness/driver.ts. Structural reads over projection
  * state plus field-wise equality — no I/O and no harness state.
- * @module @jianxx/dsh-cc-tui/harness/usage-view
+ * @module @dsh-cc/tui/harness/usage-view
  */
 
 import type {

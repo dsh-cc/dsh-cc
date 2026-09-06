@@ -6,7 +6,7 @@
  * workspace boundary guard (prepend, ahead of permission-rules) that routes
  * out-of-workspace fs targets to an approval ask.
  *
- * @module @jianxx/dsh-cc-session-cwd
+ * @module @dsh-cc/session-cwd
  */
 
 import z from '@deepseek-ai/schemastery'

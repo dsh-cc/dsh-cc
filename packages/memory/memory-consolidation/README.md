@@ -62,7 +62,7 @@ instead of a silent fake-`completed`.
 
 ## Usage
 
-Load the plugin with `@jianxx/dsh-cc-memory-consolidation`. Configuration:
+Load the plugin with `@dsh-cc/memory-consolidation`. Configuration:
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -75,7 +75,7 @@ Load the plugin with `@jianxx/dsh-cc-memory-consolidation`. Configuration:
 | `subagentProviderName` | `fork` | one-shot provider for the forks |
 
 ```ts
-import consolidation from '@jianxx/dsh-cc-memory-consolidation'
+import consolidation from '@dsh-cc/memory-consolidation'
 await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 ```
 
@@ -98,7 +98,7 @@ extraction may start a short background fork.
 - `MEMORY_WRITES_SCHEMA` — the `outputSchema` contract every fork reports.
 - `validateMemoryWrites(input)` / `writeMemoryFiles(fs, dir, writes)` /
   `memoryWritePolicy(dir)` — the host-side write-back (owned by
-  `@jianxx/dsh-cc-memory`, the memory directory owner, and re-exported here).
+  `@dsh-cc/memory`, the memory directory owner, and re-exported here).
 - `buildExtractionPrompt` / `buildConsolidationPrompt` — the fork prompts.
 
 ## Known Limitations and Deferred Work

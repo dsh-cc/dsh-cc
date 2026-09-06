@@ -2,7 +2,7 @@
  * Last-model fold for `/doctor`, copied from `/status` (do not import
  * command-status): the most recent `request/header` provider/model, plus an
  * optional duck-read `reasoningEffort`.
- * @module @jianxx/dsh-cc-command-doctor/last-model
+ * @module @dsh-cc/command-doctor/last-model
  */
 
 import type { SessionEvent } from '@deepseek-ai/dsh-session'

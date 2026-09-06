@@ -5,7 +5,7 @@
  * the plugin Config schema. Kept separate from the service so the plugin
  * entry stays under the file-size gate.
  *
- * @module @jianxx/dsh-cc-permission-rules/settings-schema
+ * @module @dsh-cc/permission-rules/settings-schema
  */
 
 import z from '@deepseek-ai/schemastery'

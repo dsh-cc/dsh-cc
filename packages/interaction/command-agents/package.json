@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-agents",
+  "name": "@dsh-cc/command-agents",
   "description": "Human-facing slash command to list, inspect, and stop continuable background agents",
   "version": "0.1.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-agents"
   },
   "type": "module",
@@ -33,7 +33,7 @@
     "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
     "@deepseek-ai/dsh-session": ">=0.1.1-rc.2",
     "@deepseek-ai/cordis": ">=0.1.1-rc.2",
-    "@jianxx/dsh-cc-subagent-resume-pins": "workspace:^"
+    "@dsh-cc/subagent-resume-pins": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
@@ -42,7 +42,7 @@
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
-    "@jianxx/dsh-cc-subagent-resume-pins": "workspace:^"
+    "@dsh-cc/subagent-resume-pins": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

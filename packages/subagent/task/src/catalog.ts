@@ -18,13 +18,13 @@
  * the section still lists the bundled agents, or renders an empty string when
  * there is nothing to scope to.
  *
- * @module @jianxx/dsh-cc-subagent-task/catalog
+ * @module @dsh-cc/subagent-task/catalog
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { AgentDefinition } from '@jianxx/dsh-cc-claude-code-agents'
-import { cwdOf } from '@jianxx/dsh-cc-memory'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
+import { cwdOf } from '@dsh-cc/memory'
 import type { AgentRegistry } from './registry.ts'
 
 /** Default order slot for the catalog section (tool guidance owns 100–199). */

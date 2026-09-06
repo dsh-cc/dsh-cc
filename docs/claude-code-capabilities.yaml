@@ -63,7 +63,7 @@ upstream_dependencies:
   webfetch-ssrf-allowlist:
     title: DNS-pin SSRF for web-fetch-http
     problem: >-
-      The CLI now mounts @jianxx/dsh-cc-web-fetch-http (literal hostname/IP
+      The CLI now mounts @dsh-cc/web-fetch-http (literal hostname/IP
       gate). The remaining gap is DNS-pin / per-hop re-validation inside
       harness web-fetch-http.
     cc_contract: >-
@@ -580,9 +580,9 @@ capabilities:
     deviation:
       kind: downgrade
       summary: >-
-        Mounted via @jianxx/dsh-cc-tool-web-fetch (optional prompt summarized
+        Mounted via @dsh-cc/tool-web-fetch (optional prompt summarized
         on resolve('haiku'); prompt without haiku hard-fails before fetch).
-        Fetch executor is @jianxx/dsh-cc-web-fetch-http wrapping
+        Fetch executor is @dsh-cc/web-fetch-http wrapping
         HttpFetchProvider, mounted from cc-shell. WebFetch(domain:) content
         rules match hostnames. Literal SSRF gate blocks private/loopback/
         link-local literals. Residual: no DNS pinning, no Anthropic preflight,

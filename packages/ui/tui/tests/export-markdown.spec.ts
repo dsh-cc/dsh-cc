@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { rowsToMarkdown } from '@jianxx/dsh-cc-tui/export-markdown.ts'
-import { whaleBannerArt } from '@jianxx/dsh-cc-tui/harness/boot-banner.ts'
-import type { TranscriptRow } from '@jianxx/dsh-cc-tui/store.ts'
+import { rowsToMarkdown } from '@dsh-cc/tui/export-markdown.ts'
+import { whaleBannerArt } from '@dsh-cc/tui/harness/boot-banner.ts'
+import type { TranscriptRow } from '@dsh-cc/tui/store.ts'
 
 /** Drop the phantom empty element a trailing newline produces on split. */
 function lines(text: string): string[] {

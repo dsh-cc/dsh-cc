@@ -13,7 +13,7 @@
  * per-call policy confined to the memory directory (see `writeback.ts`). A
  * failed dream rolls back the lock so the time gate re-opens.
  *
- * @module @jianxx/dsh-cc-memory-consolidation
+ * @module @dsh-cc/memory-consolidation
  */
 
 import { join } from 'node:path'
@@ -33,14 +33,14 @@ import {
   resolveWorkspaceMemoryDir,
   validateMemoryWrites,
   writeMemoryFiles,
-} from '@jianxx/dsh-cc-memory'
+} from '@dsh-cc/memory'
 
 export { LOCK_FILE, LOCK_STALE_MS, readLastConsolidatedAt, rollbackLock, tryAcquireLock } from './lock.ts'
 export { gatesPass, timeGatePasses, sessionGatePasses } from './gates.ts'
 export type { ConsolidationGateInput } from './gates.ts'
 export { MEMORY_AGENT_TOOLS, MEMORY_TOOL_FILTER } from './tools.ts'
 export { buildConsolidationPrompt, buildExtractionPrompt } from './prompts.ts'
-// The write-back lives in @jianxx/dsh-cc-memory (the memory directory owner);
+// The write-back lives in @dsh-cc/memory (the memory directory owner);
 // re-exported here for consumers of the pre-move surface.
 export {
   MEMORY_WRITES_SCHEMA,
@@ -50,8 +50,8 @@ export {
   memoryWritePolicy,
   validateMemoryWrites,
   writeMemoryFiles,
-} from '@jianxx/dsh-cc-memory'
-export type { MemoryWrite, MemoryWritePolicy } from '@jianxx/dsh-cc-memory'
+} from '@dsh-cc/memory'
+export type { MemoryWrite, MemoryWritePolicy } from '@dsh-cc/memory'
 
 export const name = 'memory-consolidation'
 /** Services required for background jobs and the subagent provider. */

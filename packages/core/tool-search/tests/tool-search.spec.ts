@@ -14,9 +14,9 @@ import type { Scope } from '@deepseek-ai/dsh-scope'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineTool } from '@jianxx/dsh-cc-tools'
-import DeferredToolRegistry, { TOOL_SEARCH_NAME } from '@jianxx/dsh-cc-tool-search'
-import type { DeferredToolRegistration } from '@jianxx/dsh-cc-tool-search'
+import ToolRuntime, { defineTool } from '@dsh-cc/tools'
+import DeferredToolRegistry, { TOOL_SEARCH_NAME } from '@dsh-cc/tool-search'
+import type { DeferredToolRegistration } from '@dsh-cc/tool-search'
 
 const signal = new AbortController().signal
 

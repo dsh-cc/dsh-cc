@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { Terminal as XtermTerminal } from '@xterm/headless'
-import { type Terminal as PiTerminal } from '@jianxx/dsh-cc-pi-tui'
-import { buildRoot } from '@jianxx/dsh-cc-tui/components/root.ts'
+import { type Terminal as PiTerminal } from '@dsh-cc/pi-tui'
+import { buildRoot } from '@dsh-cc/tui/components/root.ts'
 import {
   groupReadRows,
   READ_GROUP_LIST_MAX_CHARS,
   readGroupCacheKey,
   renderReadGroup,
-} from '@jianxx/dsh-cc-tui/components/read-group.ts'
-import { TranscriptView } from '@jianxx/dsh-cc-tui/components/transcript.ts'
-import type { Driver } from '@jianxx/dsh-cc-tui/state/driver-types.ts'
-import { clearQueue, createInitialState, popQueued, toggleGlobalCollapse, upsertRow, type TuiState, type TranscriptRow } from '@jianxx/dsh-cc-tui/store.ts'
+} from '@dsh-cc/tui/components/read-group.ts'
+import { TranscriptView } from '@dsh-cc/tui/components/transcript.ts'
+import type { Driver } from '@dsh-cc/tui/state/driver-types.ts'
+import { clearQueue, createInitialState, popQueued, toggleGlobalCollapse, upsertRow, type TuiState, type TranscriptRow } from '@dsh-cc/tui/store.ts'
 
 /** Build a completed Read tool row targeting `filePath`. */
 function readRow(callId: string, filePath: string, overrides: Partial<Extract<TranscriptRow, { kind: 'tool' }>> = {}): TranscriptRow {

@@ -3,7 +3,7 @@
  * management.md §4.1–§4.2): settings reads, credential-state snapshots, the
  * configurable-provider directory, argument parsing, and the chat-output list
  * renderer. Split out of provider-command.ts purely for line budget.
- * @module @jianxx/dsh-cc-tui/provider-command-read
+ * @module @dsh-cc/tui/provider-command-read
  */
 import {
   type CredentialState,

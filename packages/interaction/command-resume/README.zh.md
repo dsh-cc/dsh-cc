@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-resume
+# @dsh-cc/command-resume
 
 [English](README.md) | 中文
 
@@ -20,7 +20,7 @@
 - id: session-query
   name: '@deepseek-ai/dsh-session-query-sqlite'
 - id: command-resume
-  name: '@jianxx/dsh-cc-command-resume'
+  name: '@dsh-cc/command-resume'
 ```
 
 `sessionQuery` 衔接服务在运行时经 `ctx` 发现，并非注入项，因此即便没有查询后端，命令也能加载（此时会报告缺少该服务）。

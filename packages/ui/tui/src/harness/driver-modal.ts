@@ -4,7 +4,7 @@
  * {@link DriverModalCtx} instead of closing over createDriver's locals, so the
  * harness factory stays out of this leaf. Emits re-read the current view-model
  * via `rt.state()` after every emit (createDriver rebinds `state` on emit).
- * @module @jianxx/dsh-cc-tui/harness/driver-modal
+ * @module @dsh-cc/tui/harness/driver-modal
  */
 
 import {

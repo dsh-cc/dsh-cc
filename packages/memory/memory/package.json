@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-memory",
+  "name": "@dsh-cc/memory",
   "description": "Claude Code-style file-based memory: memdir format, system-prompt section, and dynamic recall",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/memory/memory"
   },
   "type": "module",
@@ -41,8 +41,8 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {
-    "@jianxx/dsh-cc-model-aliases": "workspace:^",
-    "@jianxx/dsh-cc-tools": "workspace:^"
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
@@ -56,8 +56,8 @@
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
-    "@jianxx/dsh-cc-model-aliases": "workspace:^",
-    "@jianxx/dsh-cc-tools": "workspace:^"
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

@@ -18,7 +18,7 @@
  * `compareForkPrefix` pins the fork byte-identity invariant: a plain fork
  * child's request head (system prompt + route) must equal its parent's, since
  * prefix reuse stops at the first differing byte.
- * @module @jianxx/dsh-cc-cache-trajectory/session-log-analysis
+ * @module @dsh-cc/cache-trajectory/session-log-analysis
  */
 
 /** Minimal event shape the analysis consumes (subset of the canonical log). */

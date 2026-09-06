@@ -13,9 +13,9 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SubagentRuntime, { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
-import * as HooksClaude from '@jianxx/dsh-cc-hooks-claude-code'
-import { defineContentToolFixture } from '@jianxx/dsh-cc-tools'
-import { MockAdapter, textResponse, toolCallResponse } from '@jianxx/dsh-cc-agent-loop-mock'
+import * as HooksClaude from '@dsh-cc/hooks-claude-code'
+import { defineContentToolFixture } from '@dsh-cc/tools'
+import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 
 /**
  * Full-loop tests for the expanded observe/interception event set (the 9 events

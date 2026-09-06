@@ -161,10 +161,10 @@
     toolResultPruner: true
   config:
     - id: compaction-basic
-      name: '@jianxx/dsh-cc-compaction-basic'
+      name: '@dsh-cc/compaction-basic'
 
     - id: command-compact
-      name: '@jianxx/dsh-cc-command-compact'
+      name: '@dsh-cc/command-compact'
 
     - id: tool-result-pruner
       name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
@@ -279,9 +279,9 @@
 # the model-facing tool is per-session.
 #
 # Moved in from the cc-shell global swap. fetch is still disabled here because
-# `@jianxx/dsh-cc-tool-web-fetch` inside cc-services owns the model-facing tool
+# `@dsh-cc/tool-web-fetch` inside cc-services owns the model-facing tool
 # (adds the optional `prompt`). The HTTP executor is
-# `@jianxx/dsh-cc-web-fetch-http` mounted from cc-shell (literal SSRF gate).
+# `@dsh-cc/web-fetch-http` mounted from cc-shell (literal SSRF gate).
 # A prompt without the `haiku` route hard-fails.
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
@@ -307,7 +307,7 @@
 # `ctx.get('mcpConnections')`), which resolve to nothing outside the isolated
 # realm. `ccPlugins` is deliberately NOT isolated: the glue publishes it into
 # the ROOT realm from the root fiber (see CcPluginsService in
-# @jianxx/dsh-cc-bundle-shell) so host-plane siblings — the TUI driver and /help
+# @dsh-cc/bundle-shell) so host-plane siblings — the TUI driver and /help
 # — can resolve it; isolating the name here would shadow that publication and
 # break in-group resolution too.
 - id: cc-services
@@ -323,22 +323,22 @@
   config:
     # ToolSearch: model-called search that activates deferred tools per scope.
     - id: tool-search
-      name: '@jianxx/dsh-cc-tool-search'
+      name: '@dsh-cc/tool-search'
 
     # Model-free staleness microcompaction (auto: false by default).
     - id: compaction-micro
-      name: '@jianxx/dsh-cc-compaction-micro'
+      name: '@dsh-cc/compaction-micro'
 
     # CC plugins on disk (agents/skills/commands/hooks/mcp servers) plus the
     # base agent preset dirs and .mcp.json server wiring — see the glue plugin.
     - id: cc-shell-glue
-      name: '@jianxx/dsh-cc-bundle-shell'
+      name: '@dsh-cc/bundle-shell'
 
     - id: command-plugin
-      name: '@jianxx/dsh-cc-command-plugin'
+      name: '@dsh-cc/command-plugin'
 
     - id: command-mcp
-      name: '@jianxx/dsh-cc-command-mcp'
+      name: '@dsh-cc/command-mcp'
 
     # Serena-first prompt steering: while a serena MCP server is ready
     # (registry-only, live detection over the isolated `mcpConnections`
@@ -350,18 +350,18 @@
     # `serverName` config (default 'serena') drives detection and every
     # emitted `mcp__<serverName>__*` name.
     - id: serena-first
-      name: '@jianxx/dsh-cc-serena-first'
+      name: '@dsh-cc/serena-first'
 
     # /doctor reads ccModelRoutes, mcpConnections, and hookBridgeStatus, so it
     # shares the group realm.
     - id: command-doctor
-      name: '@jianxx/dsh-cc-command-doctor'
+      name: '@dsh-cc/command-doctor'
 
     # cc-model-routes owns the model-aliases settings namespace and resolver;
     # tool-task provides the CC Task tool (subagent_type dispatch over
     # per-workspace .claude/agents) and reserves the names 'subagent'/'workflow'.
     - id: cc-model-routes
-      name: '@jianxx/dsh-cc-model-aliases'
+      name: '@dsh-cc/model-aliases'
 
     # Resume pins (plan docs/plans/2026-09-04-subagent-resume-pins.md §4.10):
     # one PinStore + the resume gate/overlay/policy per mounted preset, exposed
@@ -373,12 +373,12 @@
     # pins always sit next to the durable sessions they pin. Must mount BEFORE
     # tool-task: the Task plugin's spawn capture prefers this service store.
     - id: cc-resume-pins
-      name: '@jianxx/dsh-cc-subagent-resume-pins'
+      name: '@dsh-cc/subagent-resume-pins'
       config:
         pinsRoot: !!js dshHomePath('sessions', 'resume-pins')
 
     - id: tool-task
-      name: '@jianxx/dsh-cc-subagent-task'
+      name: '@dsh-cc/subagent-task'
 
     # /agents: query/control surface for continuable background children
     # (plan docs/plans/2026-09-10-continuable-background-ux.md §3.2). Mounts
@@ -388,7 +388,7 @@
     # pattern) so the TUI local-slash path consumes the SAME snapshot. Must
     # mount AFTER cc-resume-pins.
     - id: command-agents
-      name: '@jianxx/dsh-cc-command-agents'
+      name: '@dsh-cc/command-agents'
 
     # Memory and the hook bridge consume `ctx.get('ccModelRoutes')` at spawn
     # time (recall small-fast lane / hook model resolution), so they share this
@@ -398,10 +398,10 @@
     # isolated on this group's isolate map — both stay mount-legal under the
     # leakedServices gate only because they sit INSIDE the group.
     - id: memory
-      name: '@jianxx/dsh-cc-memory'
+      name: '@dsh-cc/memory'
 
     - id: hooks-claude-code
-      name: '@jianxx/dsh-cc-hooks-claude-code'
+      name: '@dsh-cc/hooks-claude-code'
       # Tracked root-level hook config (serena code-intelligence plan Phase 0).
       # Relative configPath resolves against the process launch cwd, so a
       # worktree session started at the worktree root loads it by construction.
@@ -412,103 +412,103 @@
     # optional `prompt`, summarized on the cheap lane when the haiku alias is
     # configured; degrades to raw converted text + notice otherwise.
     - id: tool-web-fetch
-      name: '@jianxx/dsh-cc-tool-web-fetch'
+      name: '@dsh-cc/tool-web-fetch'
 
 # ── parallel rows ──────────────────────────────────────────────────────────
 
 # Claude Code skills from user/project/additional roots.
 - id: skill-claude-code
-  name: '@jianxx/dsh-cc-skill-loader'
+  name: '@dsh-cc/skill-loader'
 
 - id: memory-consolidation
-  name: '@jianxx/dsh-cc-memory-consolidation'
+  name: '@dsh-cc/memory-consolidation'
 
 # Render CLAUDE.md-style output styles to the system prompt.
 - id: cc-output-styles
-  name: '@jianxx/dsh-cc-output-styles'
+  name: '@dsh-cc/output-styles'
 
 # Coordinator mode: DSH_COORDINATOR_MODE=1 or config enabled.
 - id: coordinator
-  name: '@jianxx/dsh-cc-coordinator'
+  name: '@dsh-cc/coordinator'
 
 - id: schedule
   name: '@deepseek-ai/dsh-schedule'
 
 - id: session-cwd
-  name: '@jianxx/dsh-cc-session-cwd'
+  name: '@dsh-cc/session-cwd'
 
 - id: tool-git-worktree
-  name: '@jianxx/dsh-cc-tool-git-worktree'
+  name: '@dsh-cc/tool-git-worktree'
 
 - id: tool-sleep
-  name: '@jianxx/dsh-cc-tool-sleep'
+  name: '@dsh-cc/tool-sleep'
 
 # NotebookEdit: edits Jupyter notebook (.ipynb) cells over the ctx.fs seam
 # with CC's replace/insert/delete, cell addressing, and read-before-write gate.
 - id: tool-notebook-edit
-  name: '@jianxx/dsh-cc-tool-notebook-edit'
+  name: '@dsh-cc/tool-notebook-edit'
 
 # StructuredOutput: non-interactive structured-final-response channel, registered
 # only when the deployment declares a schema (CC's SyntheticOutputTool).
 - id: tool-structured-output
-  name: '@jianxx/dsh-cc-tool-structured-output'
+  name: '@dsh-cc/tool-structured-output'
 
 # ── CC parity slash commands ───────────────────────────────────────────────
 
 - id: command-cost
-  name: '@jianxx/dsh-cc-command-cost'
+  name: '@dsh-cc/command-cost'
   config:
     # Composition decides pricing → the package schema stays strict; ship an
     # empty price table by default (README "Known limits" /cost entry).
     modelTable: []
 
 - id: command-export
-  name: '@jianxx/dsh-cc-command-export'
+  name: '@dsh-cc/command-export'
 
 - id: command-stats
-  name: '@jianxx/dsh-cc-command-stats'
+  name: '@dsh-cc/command-stats'
 
 - id: command-status
-  name: '@jianxx/dsh-cc-command-status'
+  name: '@dsh-cc/command-status'
 
 - id: command-memory
-  name: '@jianxx/dsh-cc-command-memory'
+  name: '@dsh-cc/command-memory'
 
 - id: command-skills
-  name: '@jianxx/dsh-cc-command-skills'
+  name: '@dsh-cc/command-skills'
 
 - id: command-help
-  name: '@jianxx/dsh-cc-command-help'
+  name: '@dsh-cc/command-help'
 
 - id: command-config
-  name: '@jianxx/dsh-cc-command-config'
+  name: '@dsh-cc/command-config'
 
 - id: command-permissions
-  name: '@jianxx/dsh-cc-command-permissions'
+  name: '@dsh-cc/command-permissions'
 
 - id: command-version
-  name: '@jianxx/dsh-cc-command-version'
+  name: '@dsh-cc/command-version'
 
 - id: command-release-notes
-  name: '@jianxx/dsh-cc-command-release-notes'
+  name: '@dsh-cc/command-release-notes'
 
 - id: command-diff
-  name: '@jianxx/dsh-cc-command-diff'
+  name: '@dsh-cc/command-diff'
 
 - id: command-init
-  name: '@jianxx/dsh-cc-command-init'
+  name: '@dsh-cc/command-init'
 
 - id: command-tasks
-  name: '@jianxx/dsh-cc-command-tasks'
+  name: '@dsh-cc/command-tasks'
 
 - id: command-resume
-  name: '@jianxx/dsh-cc-command-resume'
+  name: '@dsh-cc/command-resume'
 
 - id: command-rename
-  name: '@jianxx/dsh-cc-command-rename'
+  name: '@dsh-cc/command-rename'
 
 - id: command-branch
-  name: '@jianxx/dsh-cc-command-branch'
+  name: '@dsh-cc/command-branch'
 
 # Cache-stable tool ordering: remembers each scope's last emitted tool-name
 # sequence on the system-prompt/assemble waterfall and appends newly appeared
@@ -521,4 +521,4 @@
 # the bottom (the Item 6 L0 prefix-stability e2e is the sentinel).
 # Publishes no Service, so it needs no isolate realm.
 - id: tool-append-order
-  name: '@jianxx/dsh-cc-tool-append-order'
+  name: '@dsh-cc/tool-append-order'

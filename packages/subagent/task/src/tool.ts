@@ -29,15 +29,15 @@
  * `./background-start.ts`; the public policy names are re-exported here to
  * keep the module's public surface unchanged.
  *
- * @module @jianxx/dsh-cc-subagent-task/tool
+ * @module @dsh-cc/subagent-task/tool
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { defineTool } from '@jianxx/dsh-cc-tools'
-import { cwdOf } from '@jianxx/dsh-cc-memory'
-import type { ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
-import { toAgentOptions } from '@jianxx/dsh-cc-model-aliases'
+import { defineTool } from '@dsh-cc/tools'
+import { cwdOf } from '@dsh-cc/memory'
+import type { ModelRoutes } from '@dsh-cc/model-aliases'
+import { toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
 import { preloadDeferredFilterTools, renderPreloadLines, type ToolSearchActivateSeam } from './preload-tools.ts'

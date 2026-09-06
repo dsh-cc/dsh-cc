@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import * as tui from '@jianxx/dsh-cc-tui'
+import * as tui from '@dsh-cc/tui'
 
-describe('@jianxx/dsh-cc-tui plugin surface', () => {
+describe('@dsh-cc/tui plugin surface', () => {
   it('exports a Loader-safe cordis plugin with agents inject', () => {
     expect(tui.name).toBe('dsh-cc-tui')
     expect(tui.inject).toEqual(['agents'])

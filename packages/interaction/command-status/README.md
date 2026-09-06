@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-status
+# @dsh-cc/command-status
 
 English | [中文](README.zh.md)
 
@@ -20,7 +20,7 @@ The producer injects `commands`. A custom app mounts their owners plus this plug
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-status
-  name: '@jianxx/dsh-cc-command-status'
+  name: '@dsh-cc/command-status'
 ```
 
 When the permission-presets stack is composed, its line appears automatically; otherwise it is omitted.

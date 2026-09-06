@@ -3,7 +3,7 @@
  * kind, status, start time, and producer label). It reads the injected `jobs`
  * service; an empty visible set renders a friendly placeholder. (Todo-style
  * items are out of scope — they live outside the background-job registry.)
- * @module @jianxx/dsh-cc-command-tasks
+ * @module @dsh-cc/command-tasks
  */
 
 import type { Context } from '@deepseek-ai/cordis'

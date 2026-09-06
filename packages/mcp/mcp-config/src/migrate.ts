@@ -10,7 +10,7 @@
  * only when an existing target is overwritten. Note the backup duplicates any
  * secrets inside `env` / `headers` entries.
  *
- * @module @jianxx/dsh-cc-mcp-config/migrate
+ * @module @dsh-cc/mcp-config/migrate
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'

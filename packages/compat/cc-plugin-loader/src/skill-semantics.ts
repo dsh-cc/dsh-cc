@@ -17,8 +17,8 @@ import {
   ccRestriction,
   registerPathActivator,
   type CcSkillMetadata,
-} from '@jianxx/dsh-cc-skill-loader'
-import type { ToolRestriction } from '@jianxx/dsh-cc-tools'
+} from '@dsh-cc/skill-loader'
+import type { ToolRestriction } from '@dsh-cc/tools'
 import type { SkillDefinition } from '@deepseek-ai/dsh-skill'
 
 /** The agent-scope surface a skill needs to apply a scoped tool restriction. */

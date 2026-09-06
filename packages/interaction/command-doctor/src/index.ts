@@ -2,7 +2,7 @@
  * Human-facing `/doctor` command: a product-grade session health report with
  * three renderings of one data object — default text, verbose text, and a
  * JSON file written under `$DSH_HOME`.
- * @module @jianxx/dsh-cc-command-doctor
+ * @module @dsh-cc/command-doctor
  */
 
 import { Context } from '@deepseek-ai/cordis'

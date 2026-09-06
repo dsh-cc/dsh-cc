@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-command-version",
+  "name": "@dsh-cc/command-version",
   "description": "Human-facing slash command that prints the plugin bundle and harness versions",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/interaction/command-version"
   },
   "type": "module",

@@ -5,13 +5,13 @@
  * invoking agent so the CC compaction engine's summarizer preserves what the
  * user asked for. The hint is cleared in a finally block, so a failed or
  * no-op compaction never leaves a stale hint parked for a later turn.
- * @module @jianxx/dsh-cc-command-compact
+ * @module @dsh-cc/command-compact
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
-import { setCompactHint, takeCompactHint } from '@jianxx/dsh-cc-compaction-basic'
+import { setCompactHint, takeCompactHint } from '@dsh-cc/compaction-basic'
 
 export const name = 'command-compact'
 export const inject = ['commands', 'compaction']

@@ -9,7 +9,7 @@
  * the derived HUD patch path. Exposes back to createDriver the pieces the
  * factory (runLocal usage panel) and switchSession still need: applyUsage,
  * projections, statusLineOf, seedHud, seedTodos, refreshBranch.
- * @module @jianxx/dsh-cc-tui/harness/driver-hud
+ * @module @dsh-cc/tui/harness/driver-hud
  */
 
 import {
@@ -37,7 +37,7 @@ import {
   type TokenUsageStateLike,
 } from '../state/driver-types.ts'
 import { formatModeLine, formatStatusLine } from '../statusline.ts'
-import { truncateToWidth } from '@jianxx/dsh-cc-pi-tui'
+import { truncateToWidth } from '@dsh-cc/pi-tui'
 import type { DriverHudCtx } from './driver-ctx.ts'
 
 /**

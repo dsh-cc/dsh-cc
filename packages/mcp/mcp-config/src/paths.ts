@@ -8,7 +8,7 @@
  * server names not shadowed by a dsh-native file. Nothing in this module
  * writes to disk; the package's only file-WRITING surface is `migrate.ts`.
  *
- * @module @jianxx/dsh-cc-mcp-config/paths
+ * @module @dsh-cc/mcp-config/paths
  */
 
 import { readFileSync } from 'node:fs'

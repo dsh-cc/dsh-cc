@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   TranscriptView,
   TRANSCRIPT_LINE_BUDGET,
-} from '@jianxx/dsh-cc-tui/components/transcript.ts'
-import type { TranscriptRow } from '@jianxx/dsh-cc-tui/store.ts'
+} from '@dsh-cc/tui/components/transcript.ts'
+import type { TranscriptRow } from '@dsh-cc/tui/store.ts'
 
 describe('markdown transcript rendering', () => {
   it('renders assistant markdown with markers transformed', () => {

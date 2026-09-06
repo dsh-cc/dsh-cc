@@ -9,7 +9,7 @@
  * `packages/launcher/tui/bootstrap.mjs` (`--worktree` flag) — keep all three
  * in sync.
  *
- * @module @jianxx/dsh-cc-tui/harness/worktree-exit
+ * @module @dsh-cc/tui/harness/worktree-exit
  */
 
 import { execFile } from 'node:child_process'

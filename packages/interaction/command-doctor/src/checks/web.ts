@@ -3,7 +3,7 @@
  * provider (a mounted provider resolves URLs, so `WEB_PROVIDER_UNAVAILABLE`
  * from the harness runtime means missing), the literal SSRF gate, and the
  * haiku summarizer lane.
- * @module @jianxx/dsh-cc-command-doctor/checks/web
+ * @module @dsh-cc/command-doctor/checks/web
  */
 
 import type { Context } from '@deepseek-ai/cordis'

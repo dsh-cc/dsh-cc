@@ -4,7 +4,7 @@
  * the command lists the resume entry point (`dsh --resume <childId>`) but does
  * not switch. Accepts an optional note rendered back to the user; the note is
  * not persisted by this command.
- * @module @jianxx/dsh-cc-command-branch
+ * @module @dsh-cc/command-branch
  */
 
 import { Context } from '@deepseek-ai/cordis'

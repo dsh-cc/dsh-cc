@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-permission-rules
+# @dsh-cc/permission-rules
 
 English | [中文](README.zh.md)
 
@@ -35,7 +35,7 @@ The plugin registers a `tools/pre-execute` listener and folds one decision per c
 ## Config
 
 ```ts
-import PermissionRules from '@jianxx/dsh-cc-permission-rules'
+import PermissionRules from '@dsh-cc/permission-rules'
 
 await ctx.plugin(PermissionRules, {
   rules: {
@@ -65,7 +65,7 @@ Modes are **durable** — `setMode(agent, mode)` appends a last-wins `permission
 
 ## Switching modes
 
-`permissionRules.setMode(agent, mode)` switches durably (see above); the `/permissions <mode>` command (in `@jianxx/dsh-cc-command-permissions`) drives it for `default | acceptEdits | plan | auto | bypassPermissions`. A human-facing notice is injected into the session's model transcript on each switch.
+`permissionRules.setMode(agent, mode)` switches durably (see above); the `/permissions <mode>` command (in `@dsh-cc/command-permissions`) drives it for `default | acceptEdits | plan | auto | bypassPermissions`. A human-facing notice is injected into the session's model transcript on each switch.
 
 ## Pure exports for host UI
 
@@ -81,6 +81,6 @@ Rule parsing and evaluation are browser-safe (pure string logic), so the type/pa
 
 ## Invariant companion
 
-`@jianxx/dsh-cc-permission-rules/invariant` validates `permission/mode` session events at the session boundary: `mode` must be switchable (never `plan`), and `resumeSandbox` — when present — must be a known sandbox mode (`read-only` | `workspace-write` | `danger-full-access`).
+`@dsh-cc/permission-rules/invariant` validates `permission/mode` session events at the session boundary: `mode` must be switchable (never `plan`), and `resumeSandbox` — when present — must be a known sandbox mode (`read-only` | `workspace-write` | `danger-full-access`).
 
 See the [Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-cc-permission-rules.md).

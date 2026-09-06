@@ -2,10 +2,10 @@
  * Pure presentation (presentCall / presentResult) and message rendering for
  * the git-worktree tools. All functions are pure in their arguments so the
  * registry can replay them against logged call metadata.
- * @module @jianxx/dsh-cc-tool-git-worktree/render
+ * @module @dsh-cc/tool-git-worktree/render
  */
 
-import type { GenericCallView, ToolResult, ToolResultView } from '@jianxx/dsh-cc-tools'
+import type { GenericCallView, ToolResult, ToolResultView } from '@dsh-cc/tools'
 
 /** Arguments accepted by the EnterWorktree tool. */
 export interface EnterWorktreeArgs {

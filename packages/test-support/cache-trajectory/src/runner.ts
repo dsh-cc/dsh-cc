@@ -4,7 +4,7 @@
  * durable event log, and folds the cache-trajectory report. Composition
  * agnostic — the caller boots the context (testkit stack, cc plugin stack, or
  * a deployed composition) and owns disposal.
- * @module @jianxx/dsh-cc-cache-trajectory/runner
+ * @module @dsh-cc/cache-trajectory/runner
  */
 
 import type { Context } from '@deepseek-ai/cordis'

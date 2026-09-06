@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-subagent-task",
+  "name": "@dsh-cc/subagent-task",
   "description": "Claude Code-compatible Task tool: subagent_type dispatch over per-workspace .claude/agents definitions for the DeepSeek Harness",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/subagent/task"
   },
   "type": "module",
@@ -41,11 +41,11 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {
-    "@jianxx/dsh-cc-claude-code-agents": "workspace:^",
-    "@jianxx/dsh-cc-memory": "workspace:^",
-    "@jianxx/dsh-cc-model-aliases": "workspace:^",
-    "@jianxx/dsh-cc-subagent-resume-pins": "workspace:^",
-    "@jianxx/dsh-cc-tools": "workspace:^"
+    "@dsh-cc/claude-code-agents": "workspace:^",
+    "@dsh-cc/memory": "workspace:^",
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/subagent-resume-pins": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
@@ -58,19 +58,19 @@
     "@deepseek-ai/dsh-tool-subagent-control": "link:../../../../deepseek-harness/packages/subagent/tool-subagent-control",
     "@deepseek-ai/dsh-tool-subagent-report": "link:../../../../deepseek-harness/packages/subagent/tool-subagent-report",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@jianxx/dsh-cc-agent-loop-mock": "workspace:^",
+    "@dsh-cc/agent-loop-mock": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
-    "@jianxx/dsh-cc-claude-code-agents": "workspace:^",
-    "@jianxx/dsh-cc-memory": "workspace:^",
-    "@jianxx/dsh-cc-model-aliases": "workspace:^",
-    "@jianxx/dsh-cc-subagent-resume-pins": "workspace:^",
-    "@jianxx/dsh-cc-tools": "workspace:^",
-    "@jianxx/dsh-cc-tool-search": "workspace:*"
+    "@dsh-cc/claude-code-agents": "workspace:^",
+    "@dsh-cc/memory": "workspace:^",
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/subagent-resume-pins": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
+    "@dsh-cc/tool-search": "workspace:*"
   },
   "publishConfig": {
     "access": "public"

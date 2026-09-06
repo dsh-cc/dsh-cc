@@ -4,7 +4,7 @@
  * `•` per grapheme instead of the raw characters; `getValue()` and `onSubmit`
  * still receive the raw value. Key handling mirrors `Input`'s behavior using
  * pi-tui's own public helpers — the vendored package itself is untouched.
- * @module @jianxx/dsh-cc-tui/components/masked-input
+ * @module @dsh-cc/tui/components/masked-input
  */
 import {
 	type Component,
@@ -13,7 +13,7 @@ import {
 	getKeybindings,
 	sliceByColumn,
 	visibleWidth,
-} from '@jianxx/dsh-cc-pi-tui'
+} from '@dsh-cc/pi-tui'
 
 // pi-tui's segmenter/word-navigation helpers are not part of the package's
 // public root surface, and deep `src/` imports are forbidden (check:deep-imports

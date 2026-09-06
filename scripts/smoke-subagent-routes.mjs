@@ -23,8 +23,8 @@
  * Profile note: the booted profile must carry the dsh-cc bundles (the stock
  * `headless` profile does NOT — it lacks the CC preset and the Task tool).
  * The `dsh-tui` profile has them but requires a TTY, so create a headless
- * variant (copy ~/.dsh/profiles/headless, add "@jianxx/dsh-cc-bundle-permissions"
- * and "@jianxx/dsh-cc-bundle-shell" to its dsh.profile.bundles, then
+ * variant (copy ~/.dsh/profiles/headless, add "@dsh-cc/bundle-permissions"
+ * and "@dsh-cc/bundle-shell" to its dsh.profile.bundles, then
  * `dsh plugin --profile <name> install`) and pass it via --profile.
  */
 

@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-permission-rules
+# @dsh-cc/permission-rules
 
 [English](README.md) | 中文
 
@@ -35,7 +35,7 @@ Claude Code 兼容的权限规则引擎。解析 `ToolName` 与 `ToolName(conten
 ## 配置
 
 ```ts
-import PermissionRules from '@jianxx/dsh-cc-permission-rules'
+import PermissionRules from '@dsh-cc/permission-rules'
 
 await ctx.plugin(PermissionRules, {
   rules: {
@@ -65,7 +65,7 @@ await ctx.plugin(PermissionRules, {
 
 ## 切换模式
 
-`permissionRules.setMode(agent, mode)` 持久切换（见上）；`/permissions <mode>` 命令（在 `@jianxx/dsh-cc-command-permissions`）为 `default | acceptEdits | plan | auto | bypassPermissions` 驱动它。每次切换都会向会话的模型转录注入一条面向人的提示。
+`permissionRules.setMode(agent, mode)` 持久切换（见上）；`/permissions <mode>` 命令（在 `@dsh-cc/command-permissions`）为 `default | acceptEdits | plan | auto | bypassPermissions` 驱动它。每次切换都会向会话的模型转录注入一条面向人的提示。
 
 ## 供宿主 UI 使用的纯导出
 
@@ -81,6 +81,6 @@ await ctx.plugin(PermissionRules, {
 
 ## Invariant 伴生插件
 
-`@jianxx/dsh-cc-permission-rules/invariant` 在会话边界校验 `permission/mode` 会话事件：`mode` 必须是可切换的（绝不能是 `plan`），且 `resumeSandbox`——若存在——必须是已知沙箱模式（`read-only` | `workspace-write` | `danger-full-access`）。
+`@dsh-cc/permission-rules/invariant` 在会话边界校验 `permission/mode` 会话事件：`mode` 必须是可切换的（绝不能是 `plan`），且 `resumeSandbox`——若存在——必须是已知沙箱模式（`read-only` | `workspace-write` | `danger-full-access`）。
 
 参见 [Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-cc-permission-rules.md)。

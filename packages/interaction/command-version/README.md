@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-version
+# @dsh-cc/command-version
 
 English | [中文](README.zh.md)
 
@@ -8,7 +8,7 @@ Human-facing `/version` command that prints the plugin bundle version and, when 
 
 | Input | Result |
 |---|---|
-| `/version` | Print `@jianxx/dsh-cc-plugins <version>`, plus a `harness <version>` line when the host exposes one. No network. |
+| `/version` | Print `@dsh-cc/plugins <version>`, plus a `harness <version>` line when the host exposes one. No network. |
 
 The bundled version is read from this package's `package.json` at call time (with a compile-time fallback), so it is deterministic and offline-safe. The harness line appears only when a compatible host value is present.
 
@@ -20,7 +20,7 @@ The plugin injects `commands`. A custom app mounts the owners plus this plugin:
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-version
-  name: '@jianxx/dsh-cc-command-version'
+  name: '@dsh-cc/command-version'
 ```
 
 ## Model Experience

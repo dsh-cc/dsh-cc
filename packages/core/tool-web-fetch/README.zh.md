@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-tool-web-fetch
+# @dsh-cc/tool-web-fetch
 
 CC 风格的 `web_fetch` 替代工具，带可选 `prompt` 参数。当 CC preset 将 `tool-web` 配置为
 `fetch: false` 并在 `cc-services` 内挂载本包时，本包取代 stock `@deepseek-ai/dsh-tool-web`
@@ -22,7 +22,7 @@ CC 风格的 `web_fetch` 替代工具，带可选 `prompt` 参数。当 CC prese
 ## Provider 要求
 
 CC 部署通过 cc-shell bundle 获得 fetch 执行器：其挂载
-`@jianxx/dsh-cc-web-fetch-http`（包装 `HttpFetchProvider`，带字面量 SSRF 门禁）。
+`@dsh-cc/web-fetch-http`（包装 `HttpFetchProvider`，带字面量 SSRF 门禁）。
 本包自身不注册 provider。测试通过 fake `ctx.web.fetch` 进行。
 
 ## Prompt 指引的相互影响
@@ -34,6 +34,6 @@ CC 部署通过 cc-shell bundle 获得 fetch 执行器：其挂载
 ## 已知限制
 
 - 本包无 host allowlist：字面量 SSRF 门禁（阻止私有/回环/链路本地字面量）位于
-  cc-shell 挂载的 `@jianxx/dsh-cc-web-fetch-http` 包装器中。残余风险：DNS rebinding——
+  cc-shell 挂载的 `@dsh-cc/web-fetch-http` 包装器中。残余风险：DNS rebinding——
   上游 webfetch-ssrf-allowlist（DNS-pin / 逐跳重校验）仍是后续事项。
 - Tavily / Firecrawl 是插件/skill，不是本工具的 fetch 后端。

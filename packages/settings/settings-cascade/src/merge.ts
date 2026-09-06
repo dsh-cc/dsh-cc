@@ -3,7 +3,7 @@
  * recursively; permission objects (`allow`/`deny`/`ask`) union their rule
  * arrays with `deny` taking precedence over `allow`; every other array and
  * scalar value from a higher layer replaces the lower layer wholesale.
- * @module @jianxx/dsh-cc-settings-cascade/merge
+ * @module @dsh-cc/settings-cascade/merge
  */
 
 /** The permission rule arrays that merge by union across layers. */

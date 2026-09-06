@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDriver } from '@jianxx/dsh-cc-tui/harness/driver.ts'
-import { rowsToMarkdown } from '@jianxx/dsh-cc-tui/export-markdown.ts'
+import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { rowsToMarkdown } from '@dsh-cc/tui/export-markdown.ts'
 
 /**
  * Minimal ctx stub (same shape the notice/todos specs use) with a seedable

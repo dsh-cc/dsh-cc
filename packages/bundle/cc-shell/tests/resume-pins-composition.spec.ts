@@ -24,11 +24,11 @@ import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 import * as ReportTool from '@deepseek-ai/dsh-tool-subagent-report'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { MockAdapter, textResponse } from '@jianxx/dsh-cc-agent-loop-mock'
-import { defineTool } from '@jianxx/dsh-cc-tools'
-import { PinStore, applyResumePinsPlugin } from '@jianxx/dsh-cc-subagent-resume-pins'
-import { apply as applyTask } from '@jianxx/dsh-cc-subagent-task'
-import { apply as applyModelRoutes, type ModelRoutes } from '@jianxx/dsh-cc-model-aliases'
+import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
+import { defineTool } from '@dsh-cc/tools'
+import { PinStore, applyResumePinsPlugin } from '@dsh-cc/subagent-resume-pins'
+import { apply as applyTask } from '@dsh-cc/subagent-task'
+import { apply as applyModelRoutes, type ModelRoutes } from '@dsh-cc/model-aliases'
 
 const roots: string[] = []
 afterEach(() => {

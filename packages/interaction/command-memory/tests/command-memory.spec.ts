@@ -9,8 +9,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import * as commandMemory from '@jianxx/dsh-cc-command-memory'
-import { firstLine, formatIndex, formatIndexLine, type MemoryIndexLine } from '@jianxx/dsh-cc-command-memory/memory'
+import * as commandMemory from '@dsh-cc/command-memory'
+import { firstLine, formatIndex, formatIndexLine, type MemoryIndexLine } from '@dsh-cc/command-memory/memory'
 
 let tempDir: string | undefined
 afterAll(async () => {
@@ -68,7 +68,7 @@ async function harness(): Promise<{
   return { ctx, agent, plugin, dir: join(tempDir, 'mem') }
 }
 
-describe('@jianxx/dsh-cc-command-memory registration', () => {
+describe('@dsh-cc/command-memory registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandMemory.name).toBe('command-memory')
     expect(commandMemory.inject).toEqual(['commands', 'fs'])

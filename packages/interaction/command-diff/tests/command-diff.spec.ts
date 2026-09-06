@@ -6,8 +6,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
-import * as commandDiff from '@jianxx/dsh-cc-command-diff'
-import { capDiff, formatDiffStat, MAX_DIFF_LINES } from '@jianxx/dsh-cc-command-diff/diff'
+import * as commandDiff from '@dsh-cc/command-diff'
+import { capDiff, formatDiffStat, MAX_DIFF_LINES } from '@dsh-cc/command-diff/diff'
 
 const LONG_DIFF = Array.from({ length: 500 }, (_, i) => `+line ${i}`).join('\n')
 
@@ -85,7 +85,7 @@ async function harness(): Promise<{
   return { ctx, agent, plugin, shell }
 }
 
-describe('@jianxx/dsh-cc-command-diff registration', () => {
+describe('@dsh-cc/command-diff registration', () => {
   it('registers one global command with Loader-safe exports and disposes it', async () => {
     expect(commandDiff.name).toBe('command-diff')
     expect(commandDiff.inject).toEqual(['commands', 'shell'])

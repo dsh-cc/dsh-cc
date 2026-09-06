@@ -5,7 +5,7 @@
  * mounted by mcp-client; when that service is absent it reports the seam
  * gracefully rather than failing, but `migrate` works regardless because it
  * is pure file I/O against the shared config paths.
- * @module @jianxx/dsh-cc-command-mcp
+ * @module @dsh-cc/command-mcp
  */
 
 import { Context } from '@deepseek-ai/cordis'
@@ -15,7 +15,7 @@ import {
   migrateMcpServers,
   readMcpServerNames,
   resolveDefaultMcpPaths,
-} from '@jianxx/dsh-cc-mcp-config'
+} from '@dsh-cc/mcp-config'
 import {
   formatConnections,
   formatDiscoveryNotice,

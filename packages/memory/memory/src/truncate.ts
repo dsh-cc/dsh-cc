@@ -2,7 +2,7 @@
  * MEMORY.md entrypoint bounds and truncation.
  * The entrypoint is the always-loaded index; its content is capped so a
  * runaway index cannot flood the system prompt.
- * @module @jianxx/dsh-cc-memory/truncate
+ * @module @dsh-cc/memory/truncate
  */
 
 /** The always-loaded index filename inside a memory directory. */

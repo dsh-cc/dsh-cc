@@ -10,7 +10,7 @@
  * a pinned child, so options cannot revert to current defaults on any resume
  * path, including ones that bypass the gate.
  *
- * @module @jianxx/dsh-cc-subagent-resume-pins/overlay
+ * @module @dsh-cc/subagent-resume-pins/overlay
  */
 
 import type { OverlayTuple, ResumePin } from './pin.ts'

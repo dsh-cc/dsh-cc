@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-branch
+# @dsh-cc/command-branch
 
 [English](README.md) | 中文
 
@@ -21,7 +21,7 @@ Fork 读取注入的会话仓库。缺少仓库的组合，或仓库拒绝的 fo
 - id: sessions
   name: '@deepseek-ai/dsh-session'
 - id: command-branch
-  name: '@jianxx/dsh-cc-command-branch'
+  name: '@dsh-cc/command-branch'
 ```
 
 会话仓库在运行时经 `ctx` 发现，并非注入项，因此即便没有仓库，命令也能加载（此时会报告缺少该服务）。

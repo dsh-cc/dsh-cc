@@ -4,7 +4,7 @@
  * runs additionally mount the dsh-cc agent-plane plugins that are mountable
  * without the deployed host plane (token meter + microcompactor, passive).
  * The caller owns the context and its disposal.
- * @module @jianxx/dsh-cc-cache-trajectory/testing
+ * @module @dsh-cc/cache-trajectory/testing
  */
 
 import { Context } from '@deepseek-ai/cordis'
@@ -17,7 +17,7 @@ import {
   type MockLlmServer,
 } from '@deepseek-ai/dsh-llm-mock-server'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
-import Microcompactor from '@jianxx/dsh-cc-compaction-micro'
+import Microcompactor from '@dsh-cc/compaction-micro'
 
 /** Options for {@link mountTrajectoryTestStack}. */
 export interface TrajectoryStackOptions {

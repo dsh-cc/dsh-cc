@@ -1,8 +1,8 @@
-# @jianxx/dsh-cc-tool-sleep
+# @dsh-cc/tool-sleep
 
 English | [中文](README.zh.md)
 
-Model-facing `Sleep` tool that waits for a specified duration with cooperative cancellation, aligned to Claude Code's `SleepTool` semantics. It registers into `ctx.tools` via the `@jianxx/dsh-cc-tools` `ToolRuntime`.
+Model-facing `Sleep` tool that waits for a specified duration with cooperative cancellation, aligned to Claude Code's `SleepTool` semantics. It registers into `ctx.tools` via the `@dsh-cc/tools` `ToolRuntime`.
 
 ## Tools
 
@@ -34,9 +34,9 @@ Each `apply(ctx, config)` call registers the `Sleep` tool into `ctx.tools`. Requ
 ## Install / registration
 
 ```ts
-import * as ToolSleep from '@jianxx/dsh-cc-tool-sleep'
+import * as ToolSleep from '@dsh-cc/tool-sleep'
 
-await ctx.plugin(ToolRuntime)   // @jianxx/dsh-cc-tools
+await ctx.plugin(ToolRuntime)   // @dsh-cc/tools
 await ctx.plugin(ToolSleep)     // registers the Sleep tool
 ```
 
@@ -48,7 +48,7 @@ await ctx.plugin(ToolSleep)     // registers the Sleep tool
 
 ## Build order
 
-`tool-sleep` depends only on the workspace `@jianxx/dsh-cc-tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-invariants`, `@deepseek-ai/schemastery`). It has no dependency on git-worktree or any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
+`tool-sleep` depends only on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-invariants`, `@deepseek-ai/schemastery`). It has no dependency on git-worktree or any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
 
 ## Known limitations
 

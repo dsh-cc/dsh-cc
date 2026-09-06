@@ -5,9 +5,9 @@
  * The wizard's live text entry is a real pi-tui `Input` owned by the runtime
  * (provider-command.ts) and rendered inside this box when a text step is
  * active; the box itself stays a pure function of the panel state.
- * @module @jianxx/dsh-cc-tui/components/provider-box
+ * @module @dsh-cc/tui/components/provider-box
  */
-import { Container, Text } from '@jianxx/dsh-cc-pi-tui'
+import { Container, Text } from '@dsh-cc/pi-tui'
 import type { ProviderPanelView } from '../store.ts'
 import type { ProviderRow } from '../provider-flow.ts'
 import { defaultTheme, type Theme } from './theme.ts'

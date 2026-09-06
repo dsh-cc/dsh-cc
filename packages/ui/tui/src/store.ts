@@ -4,7 +4,7 @@
  *
  * Implementation lives in the store/ domain modules; this file is the
  * public barrel — import from here, never from store/* internals.
- * @module @jianxx/dsh-cc-tui/store
+ * @module @dsh-cc/tui/store
  */
 export type {
   ApprovalPreview,

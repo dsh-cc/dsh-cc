@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-web-fetch-http
+# @dsh-cc/web-fetch-http
 
 [English](README.md) | 中文
 
@@ -35,7 +35,7 @@ export const Config = z.object({
   maxBodyChars: z.number().default(100_000),
   timeoutMs: z.number().default(20_000),
   maxRedirects: z.number().default(3),
-  userAgent: z.string().default('dsh-cc/0.4.1 (+https://github.com/jianxx/dsh-cc)'),
+  userAgent: z.string().default('dsh-cc/0.4.1 (+https://github.com/dsh-cc/dsh-cc)'),
   upgradeInsecure: z.boolean().default(true),
   blockPrivateNetwork: z.boolean().default(true),
 })
@@ -46,7 +46,7 @@ export const Config = z.object({
 ## 安装 / 注册
 
 ```ts
-import * as WebFetchHttpCc from '@jianxx/dsh-cc-web-fetch-http'
+import * as WebFetchHttpCc from '@dsh-cc/web-fetch-http'
 
 await ctx.plugin(WebRuntime)          // @deepseek-ai/dsh-web
 await ctx.plugin(WebFetchHttpCc, {})  // 注册带门禁的提供者

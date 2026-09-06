@@ -9,7 +9,7 @@ import ToolRuntime, {
   TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH,
   type InferArgs, type JsonValue, type ParameterSchemaSpec, type PreToolDecision, type PostToolDecision,
   type JsonSchemaNode, type ToolDefinition, type ToolDispatchExecution, type ToolExecutionResult, type ToolExecutionToken,
-} from '@jianxx/dsh-cc-tools'
+} from '@dsh-cc/tools'
 
 const testToolSignal = new AbortController().signal
 

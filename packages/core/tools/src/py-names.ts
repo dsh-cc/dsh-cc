@@ -3,7 +3,7 @@
  * (`py-types.ts`, `py-render.ts`, `py-sdk-doc.ts`). Leaf module: imports nothing
  * from its siblings, so any of them may depend on it without creating cycles.
  * Split out of `py-types.ts` for the line budget.
- * @module @jianxx/dsh-cc-tools/src/py-names
+ * @module @dsh-cc/tools/src/py-names
  */
 
 /**

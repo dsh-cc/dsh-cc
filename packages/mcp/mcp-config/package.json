@@ -1,10 +1,10 @@
 {
-  "name": "@jianxx/dsh-cc-mcp-config",
+  "name": "@dsh-cc/mcp-config",
   "description": "MCP workspace-configuration loader: parses .mcp.json into mcp-client registrations",
   "version": "0.4.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jianxx/dsh-cc.git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
     "directory": "packages/mcp/mcp-config"
   },
   "type": "module",
@@ -30,10 +30,10 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {
-    "@jianxx/dsh-cc-mcp-client": "workspace:^"
+    "@dsh-cc/mcp-client": "workspace:^"
   },
   "devDependencies": {
-    "@jianxx/dsh-cc-mcp-client": "workspace:^",
+    "@dsh-cc/mcp-client": "workspace:^",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"

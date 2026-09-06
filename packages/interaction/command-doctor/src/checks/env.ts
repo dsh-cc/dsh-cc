@@ -1,7 +1,7 @@
 /**
  * `env` checks for `/doctor`: dsh-cc version, harness version, Node engines,
  * and platform facts.
- * @module @jianxx/dsh-cc-command-doctor/checks/env
+ * @module @dsh-cc/command-doctor/checks/env
  */
 
 import type { Context } from '@deepseek-ai/cordis'

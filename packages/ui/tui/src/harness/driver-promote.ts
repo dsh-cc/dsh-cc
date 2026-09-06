@@ -2,11 +2,11 @@
  * Ctrl+B promotion section (UX plan §3.4): promote every armed foreground
  * subagent collect of the CURRENT session to background. Structural split of
  * the same logic from `./driver.ts`.
- * @module @jianxx/dsh-cc-tui/harness/driver-promote
+ * @module @dsh-cc/tui/harness/driver-promote
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { backgroundTasksDisabled } from '@jianxx/dsh-cc-subagent-task'
+import { backgroundTasksDisabled } from '@dsh-cc/subagent-task'
 
 /**
  * Create the promote handler for one driver instance. The collect path (Task

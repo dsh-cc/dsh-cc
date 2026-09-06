@@ -5,15 +5,15 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import * as commandPlugin from '@jianxx/dsh-cc-command-plugin'
+import * as commandPlugin from '@dsh-cc/command-plugin'
 import {
   formatPluginList,
   formatReloadSummary,
   type CcPluginSummary,
   type CcComponentResult,
-} from '@jianxx/dsh-cc-command-plugin/plugin'
+} from '@dsh-cc/command-plugin/plugin'
 
-describe('@jianxx/dsh-cc-command-plugin registration', () => {
+describe('@dsh-cc/command-plugin registration', () => {
   it('registers two global commands with Loader-safe exports and disposes them', async () => {
     expect(commandPlugin.name).toBe('command-plugin')
     expect(commandPlugin.inject).toEqual(['commands'])

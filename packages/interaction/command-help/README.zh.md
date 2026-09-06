@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-help
+# @dsh-cc/command-help
 
 [English](README.md) | 中文
 
@@ -21,7 +21,7 @@
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-help
-  name: '@jianxx/dsh-cc-command-help'
+  name: '@dsh-cc/command-help'
 ```
 
 ## 模型体验

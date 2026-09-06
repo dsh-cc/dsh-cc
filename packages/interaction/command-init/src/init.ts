@@ -1,7 +1,7 @@
 /**
  * Pure `/init` payload: the CC-faithful CLAUDE.md initialization prompt and its
  * assembly into user-message content. No cordis imports.
- * @module @jianxx/dsh-cc-command-init/init
+ * @module @dsh-cc/command-init/init
  */
 
 /**

@@ -7,13 +7,13 @@
  * existing audit trail). The guard is a pre-execute convenience, not a hard
  * security boundary: it does not intercept system calls.
  *
- * @module @jianxx/dsh-cc-session-cwd/listener
+ * @module @dsh-cc/session-cwd/listener
  */
 
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { PreToolDecision, ToolExecution } from '@jianxx/dsh-cc-tools'
+import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
 import { sessionCwdStore, type SessionCwdStore } from './state.ts'
 
 /** Listener configuration. */

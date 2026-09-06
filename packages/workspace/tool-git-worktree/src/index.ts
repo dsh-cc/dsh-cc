@@ -5,14 +5,14 @@
  * or removes it after a fail-closed safety gate. Software is `git` today, but
  * every command is constructed in one module so a pure-JS git backend can
  * replace it later.
- * @module @jianxx/dsh-cc-tool-git-worktree
+ * @module @dsh-cc/tool-git-worktree
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { relative, sep } from 'node:path'
-import { defineTool, TOOL_ABORTED } from '@jianxx/dsh-cc-tools'
-import type { ToolRunContext } from '@jianxx/dsh-cc-tools'
+import { defineTool, TOOL_ABORTED } from '@dsh-cc/tools'
+import type { ToolRunContext } from '@dsh-cc/tools'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -35,7 +35,7 @@ import {
 } from './worktree.ts'
 import type { GitCmd, WorktreeSession } from './worktree.ts'
 import { presentEnterCall, presentWorktreeResult, presentExitCall } from './render.ts'
-import { setSessionCwd } from '@jianxx/dsh-cc-session-cwd'
+import { setSessionCwd } from '@dsh-cc/session-cwd'
 
 export const name = 'tool-git-worktree'
 export const inject = ['tools', 'shell', 'systemPrompt', 'fs']

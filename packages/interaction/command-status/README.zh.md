@@ -1,4 +1,4 @@
-# @jianxx/dsh-cc-command-status
+# @dsh-cc/command-status
 
 [English](README.md) | 中文
 
@@ -20,7 +20,7 @@
 - id: commands
   name: '@deepseek-ai/dsh-commands'
 - id: command-status
-  name: '@jianxx/dsh-cc-command-status'
+  name: '@dsh-cc/command-status'
 ```
 
 组合了权限 preset 栈时，其行会自动出现；否则省略。
