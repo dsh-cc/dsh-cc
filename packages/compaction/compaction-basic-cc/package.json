@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/compaction-basic",
   "description": "CC BasicCompactionEngine subclass carrying per-agent /compact preservation hints",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

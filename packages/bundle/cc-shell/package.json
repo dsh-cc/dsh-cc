@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/bundle-shell",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "CC shell host-plane infra: tools registry swap (deferred-name support) + settings migrations; the glue plugin code lives here but is mounted by the CC preset (packages/preset/cc)",
   "type": "module",
   "main": "lib/index.js",

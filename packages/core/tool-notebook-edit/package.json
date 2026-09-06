@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/tool-notebook-edit",
   "description": "NotebookEdit model tool that edits Jupyter notebook (.ipynb) cells over the ctx.fs seam, aligned with Claude Code's NotebookEditTool replace/insert/delete, cell addressing, and read-before-write semantics",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
