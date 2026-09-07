@@ -87,8 +87,8 @@ describe('dsh-cc-agents install round-trip (marketplace → cache → mount)', (
     expect(result.installPath).toBe(cachePath)
     // Every shipped component made it through the cache copy.
     expect(existsSync(join(cachePath, '.claude-plugin', 'plugin.json'))).toBe(true)
-    expect(existsSync(join(cachePath, 'agents', 'deep-reasoner.md'))).toBe(true)
-    expect(existsSync(join(cachePath, 'agents', 'fast-worker.md'))).toBe(true)
+    expect(existsSync(join(cachePath, 'agents', 'critic.md'))).toBe(true)
+    expect(existsSync(join(cachePath, 'agents', 'executor.md'))).toBe(true)
     expect(existsSync(join(cachePath, 'skills', 'dsh-cc-agents-orchestration', 'SKILL.md'))).toBe(true)
 
     // 4. Discovery: the installed+enabled entry is discoverable.
@@ -117,8 +117,8 @@ describe('dsh-cc-agents install round-trip (marketplace → cache → mount)', (
     try {
       expect(mount.report.name).toBe('dsh-cc-agents')
       expect(names.sort()).toEqual([
-        'dsh-cc-agents:deep-reasoner',
-        'dsh-cc-agents:fast-worker',
+        'dsh-cc-agents:critic',
+        'dsh-cc-agents:executor',
       ])
       expect(skillNames).toEqual(['dsh-cc-agents-orchestration'])
       const agents = mount.report.components.find(c => c.kind === 'agents')

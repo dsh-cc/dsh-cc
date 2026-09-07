@@ -9,6 +9,12 @@ visibility assertion) are folded in turn. The divergence itself was the
 finding: Codex (correctly) overruled keeping `background: true` on the
 distributed fast-worker and refuted the preset-cc dependency claim, which
 deep-reasoner had recommended.
+Addendum (rename): the shipped plugin agents are renamed —
+`deep-reasoner` → `critic`, `fast-worker` → `executor` — so the scoped ids are
+`dsh-cc-agents:critic` / `dsh-cc-agents:executor` and the files are
+`agents/critic.md` / `agents/executor.md`; narrative references below keep
+the historical names (§2.1/§5/§6 concrete ids and §2.1 file names are updated
+here to match what ships).
 Date: 2026-09-07
 Scope: new content package `packages/plugin/dsh-cc-agents`, a monorepo-root
 plugin marketplace manifest, release/publish wiring, parity docs. Builds on
@@ -39,15 +45,15 @@ packages/plugin/dsh-cc-agents/
 │                                 # publishConfig.access: "public", repository.url, license
 │                                 # (check-publish-manifests.mjs asserts all three)
 ├── .claude-plugin/plugin.json    # { name: "dsh-cc-agents", version: <pkg version>, description }
-├── agents/deep-reasoner.md       # adapted, §2.3
-├── agents/fast-worker.md         # adapted, §2.3
+├── agents/critic.md              # adapted, §2.3 (renamed from deep-reasoner.md)
+├── agents/executor.md            # adapted, §2.3 (renamed from fast-worker.md)
 ├── skills/dsh-cc-agents-orchestration/SKILL.md  # unique dir name (review fix), §2.3
 └── README.md                     # prerequisites (aliases), scoped ids, usage, update flow
 ```
 
 The manifest name is the namespace prefix (sanitized by `scopedType`,
 `cc-plugin-loader/src/agents.ts:168`): users address
-`dsh-cc-agents:deep-reasoner` / `dsh-cc-agents:fast-worker`.
+`dsh-cc-agents:critic` / `dsh-cc-agents:executor`.
 
 **Release wiring (review finding — BOTH reviewers caught this):**
 `scripts/release.mjs` discovers only `packages/<group>/<pkg>/package.json`
@@ -158,7 +164,7 @@ code change is needed.**
   runtime duplicates are first-wins with a silent warn, so `orchestration`
   is collision-prone. Ship `skills/dsh-cc-agents-orchestration/SKILL.md`,
   carrying the genericized routing table with the EXACT scoped ids
-  (`dsh-cc-agents:deep-reasoner` / `dsh-cc-agents:fast-worker` — plugin
+  (`dsh-cc-agents:critic` / `dsh-cc-agents:executor` — plugin
   agents resolve only by exact scoped id), the background asymmetry above,
   and the report contracts. A skill is model-invocable by default; plugins
   cannot inject CLAUDE.md. **Skill activation must be verified**
@@ -176,7 +182,7 @@ code change is needed.**
   event-driven catalog invalidation (PR #5 remediation) drops the ids;
   `/plugin` re-enable + rescan is the recovery path.
 - Name collision → workspace `.claude/agents/deep-reasoner.md` (bare) and
-  `dsh-cc-agents:deep-reasoner` (scoped) are disjoint per the PR #5
+  `dsh-cc-agents:critic` (scoped) are disjoint per the PR #5
   resolution order; both appear in the catalog. Document the mapping; the
   plugin copies carry distinct `description` wording.
 - Second installed plugin with the same manifest name → identical
@@ -202,7 +208,7 @@ mention the official `dsh-cc` marketplace in the plugins category summary.
 
 1. `cc-plugin-loader/tests/mounts.spec.ts` (or a new spec): `mountCcPlugin`
    on the real `packages/plugin/dsh-cc-agents` dir → providers register as
-   `dsh-cc-agents:deep-reasoner` / `dsh-cc-agents:fast-worker` (branded,
+   `dsh-cc-agents:critic` / `dsh-cc-agents:executor` (branded,
    scoped); deep-reasoner's background pin folds and fast-worker has NO pin;
    the toolFilter sanitizes cleanly with a minimal tool set; an unconfigured
    alias resolves to inherit (no agentOptions); **the skills component
@@ -211,7 +217,7 @@ mention the official `dsh-cc` marketplace in the plugins category summary.
    no-op), a real-registry `list/get` assertion finds
    `dsh-cc-agents-orchestration` with `invocation.modelInvocable === true`.
 2. `subagent/task/tests/plugin-agents.spec.ts`: end-to-end Task dispatch of
-   `dsh-cc-agents:deep-reasoner` mounted from the real plugin dir; catalog
+   `dsh-cc-agents:critic` mounted from the real plugin dir; catalog
    lists both scoped ids.
 3. Package shape via `pnpm pack --dry-run --json` (Codex: inspect the packed
    file list, don't just assert the `files` array): plugin.json + agents +
@@ -236,7 +242,7 @@ so the expected line is `cc-plugin dsh-cc-agents: 3 loaded / 0 skipped`
 (2 agents + 1 skill; a silently skipped skill shows as `2 loaded / 1
 skipped`), and `/plugin` shows per-component counts as a cross-check; the
 Available subagents section lists both scoped ids;
-`Task(subagent_type: "dsh-cc-agents:deep-reasoner", …)` returns a report
+`Task(subagent_type: "dsh-cc-agents:critic", …)` returns a report
 ending in the output contract; with `opus`/`sonnet` configured the children
 route accordingly; `/plugin disable` + rescan removes the ids and the scoped
 id errors cleanly. Pre-release, verify the same flow against the worktree

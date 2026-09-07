@@ -42,8 +42,33 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
   })
 
   it('the agents directory holds both agent definitions', () => {
-    expect(existsSync(join(PKG_DIR, 'agents', 'deep-reasoner.md'))).toBe(true)
-    expect(existsSync(join(PKG_DIR, 'agents', 'fast-worker.md'))).toBe(true)
+    expect(existsSync(join(PKG_DIR, 'agents', 'critic.md'))).toBe(true)
+    expect(existsSync(join(PKG_DIR, 'agents', 'executor.md'))).toBe(true)
+  })
+
+  it('keeps the Output contract section in lockstep with the repo agents (drift guard)', () => {
+    const repoRoot = join(PKG_DIR, '..', '..', '..')
+    // repo .claude/agents file → plugin distribution copy
+    const pairs = [
+      ['deep-reasoner.md', 'critic.md'],
+      ['fast-worker.md', 'executor.md'],
+    ] as const
+    const section = (text: string): string => {
+      const match = text.match(/^## Output contract.*?$/m)
+      expect(match, '## Output contract heading exists').not.toBeNull()
+      const start = match!.index! + match![0].length
+      const rest = text.slice(start)
+      const next = rest.indexOf('\n## ')
+      return next === -1 ? rest : rest.slice(0, next)
+    }
+    for (const [repoName, pluginName] of pairs) {
+      const repo = readFileSync(join(repoRoot, '.claude', 'agents', repoName), 'utf8')
+      const plugin = readFileSync(join(PKG_DIR, 'agents', pluginName), 'utf8')
+      expect(
+        section(plugin),
+        `Output contract of plugin ${pluginName} must be identical to repo ${repoName}`,
+      ).toBe(section(repo))
+    }
   })
 
   it('the skills directory holds the uniquely-named orchestration skill', () => {

@@ -244,10 +244,10 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
     return { ctx, continuable, workspace, taskDef: taskDef! }
   }
 
-  it('dispatches dsh-cc-agents:deep-reasoner foreground: persona folds, collected text returns', async () => {
+  it('dispatches dsh-cc-agents:critic foreground: persona folds, collected text returns', async () => {
     const { continuable, workspace, taskDef } = await setup()
     const result = await taskDef.execute(
-      { subagent_type: 'dsh-cc-agents:deep-reasoner', description: 'reason', prompt: 'think hard', run_in_background: false },
+      { subagent_type: 'dsh-cc-agents:critic', description: 'reason', prompt: 'think hard', run_in_background: false },
       { agent: agentAt(workspace), signal: new AbortController().signal, token: 'tok-1' },
     )
     expect(result.status).toBe('completed')
@@ -267,8 +267,8 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
     const { ctx } = await setup()
     const index = new PluginAgentIndex(ctx)
     expect(index.knownIds().sort()).toEqual([
-      'dsh-cc-agents:deep-reasoner',
-      'dsh-cc-agents:fast-worker',
+      'dsh-cc-agents:critic',
+      'dsh-cc-agents:executor',
     ])
     const catalog = renderCatalog(
       index.list().map(entry => ({
@@ -276,8 +276,8 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
         whenToUse: entry.definition.whenToUse,
       }) as AgentDefinition),
     )
-    expect(catalog).toContain('dsh-cc-agents:deep-reasoner')
-    expect(catalog).toContain('dsh-cc-agents:fast-worker')
+    expect(catalog).toContain('dsh-cc-agents:critic')
+    expect(catalog).toContain('dsh-cc-agents:executor')
     expect(catalog).toContain('## Available subagents')
   })
 })

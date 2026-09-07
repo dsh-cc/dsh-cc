@@ -1,5 +1,5 @@
 ---
-name: deep-reasoner
+name: critic
 description: Reasoning-heavy work — complex analysis, architectural decisions, plan review as an adversarial Staff Engineer, root-cause analysis, judging ambiguous verification results. Best for high-stakes decisions where correctness matters more than speed. Official plugin build; spawns on Opus when the opus alias is configured.
 model: opus
 background: true

@@ -1,11 +1,11 @@
 /**
  * The REAL first-party plugin (`packages/plugin/dsh-cc-agents`) mounted
  * through `mountCcPlugin` — end-to-end pinning of the official
- * deep-reasoner/fast-worker distribution (plan
+ * critic/executor distribution (plan
  * docs/plans/2026-09-07-official-agents-plugin.md §5.1):
  *
  * - providers register as branded, scoped `dsh-cc-agents:*` ids;
- * - the background pin folds for deep-reasoner only (fast-worker ships none);
+ * - the background pin folds for critic only (executor ships none);
  * - the shipped `tools:` lists sanitize cleanly against a minimal built-in
  *   known-names set (no drop warnings fired);
  * - an unconfigured model alias resolves to inherit (no agentOptions);
@@ -61,8 +61,8 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       expect(agents?.loaded).toBe(2)
       expect(agents?.failed).toBe(0)
       expect(providers.map(p => p.name).sort()).toEqual([
-        'dsh-cc-agents:deep-reasoner',
-        'dsh-cc-agents:fast-worker',
+        'dsh-cc-agents:critic',
+        'dsh-cc-agents:executor',
       ])
       for (const provider of providers) {
         expect(isPluginAgentProvider(provider)).toBe(true)
@@ -70,20 +70,20 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
         expect(provider.definition.agentType).not.toContain(':')
         expect(provider.definition.systemPrompt.length).toBeGreaterThan(0)
       }
-      expect(providers.map(p => p.definition.agentType).sort()).toEqual(['deep-reasoner', 'fast-worker'])
+      expect(providers.map(p => p.definition.agentType).sort()).toEqual(['critic', 'executor'])
     } finally {
       mount.dispose()
     }
   })
 
-  it('pins background: true on deep-reasoner only; fast-worker carries no pin', async () => {
+  it('pins background: true on critic only; executor carries no pin', async () => {
     const ctx = new Context()
     const { subagents, providers } = subagentsSeam()
     const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR, seams: { subagents } })
     try {
       const byAgent = new Map(providers.map(p => [p.definition.agentType, p.definition]))
-      expect(byName(byAgent, 'deep-reasoner').background).toBe(true)
-      expect('background' in byName(byAgent, 'fast-worker')).toBe(false)
+      expect(byName(byAgent, 'critic').background).toBe(true)
+      expect('background' in byName(byAgent, 'executor')).toBe(false)
     } finally {
       mount.dispose()
     }
@@ -120,7 +120,7 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       resolveModel: () => undefined,
     })
     try {
-      const reasoner = providers.find(p => p.definition.agentType === 'deep-reasoner')!
+      const reasoner = providers.find(p => p.definition.agentType === 'critic')!
       const forwarded = (await reasoner.start({ prompt: 'x' })) as { forwarded?: Record<string, unknown> }
       const delegation = (forwarded['forwarded'] ?? forwarded) as Record<string, unknown>
       expect(delegation['agentOptions']).toBeUndefined()

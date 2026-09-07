@@ -1,5 +1,5 @@
 ---
-name: fast-worker
+name: executor
 description: Mechanical execution of pre-approved plans — code formatting, simple refactors, boilerplate, renaming, writing tests for existing code, documentation updates, running checks. Prioritizes speed and efficiency. Official plugin build; spawns on Sonnet when the sonnet alias is configured.
 model: sonnet
 tools: [Bash, BashOutput, KillBash, Read, Write, Edit, Glob, Grep, TodoWrite, NotebookEdit]

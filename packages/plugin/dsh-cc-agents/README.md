@@ -2,8 +2,8 @@
 
 Official dsh-cc plugin shipping two subagents and an orchestration skill:
 
-- **`dsh-cc-agents:deep-reasoner`** — reasoning-heavy work: complex analysis, architectural decisions, adversarial plan review, root-cause analysis. Runs on the `opus` model alias; read-only persona.
-- **`dsh-cc-agents:fast-worker`** — mechanical execution of pre-approved, fully specified plans: formatting, simple refactors, boilerplate, renames, tests, docs, checks. Runs on the `sonnet` model alias.
+- **`dsh-cc-agents:critic`** — reasoning-heavy work: complex analysis, architectural decisions, adversarial plan review, root-cause analysis. Runs on the `opus` model alias; read-only persona.
+- **`dsh-cc-agents:executor`** — mechanical execution of pre-approved, fully specified plans: formatting, simple refactors, boilerplate, renames, tests, docs, checks. Runs on the `sonnet` model alias.
 - **`dsh-cc-agents-orchestration` skill** — routing table for choosing between the two agents, the background asymmetry, and their report contracts.
 
 ## Prerequisites
@@ -35,13 +35,13 @@ the installed plugin cache:
 If your workspace defines file-based agents named `deep-reasoner` or
 `fast-worker` (e.g. `.claude/agents/deep-reasoner.md`), the bare names
 (`deep-reasoner`) resolve to your workspace definitions; the plugin copies
-resolve only by the exact scoped ids (`dsh-cc-agents:deep-reasoner`).
+resolve only by the exact scoped ids (`dsh-cc-agents:critic`).
 Both appear in the agent catalog; the plugin copies carry distinct
 "official plugin build" descriptions so you can tell them apart.
 
-## Advisory safety: deep-reasoner
+## Advisory safety: critic
 
-`deep-reasoner` retains the `Bash` tool for read-only verification (run a
+`critic` retains the `Bash` tool for read-only verification (run a
 test, reproduce a failure, inspect history). Its read-only nature is a
 **persona contract, not an enforced restriction** — the host does not block
 a mutating command from a (by default backgrounded) reasoner. Avoid handing

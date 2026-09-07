@@ -1854,7 +1854,7 @@ capabilities:
         mode). First-party exercise: the official dsh-cc-agents plugin
         (packages/plugin/dsh-cc-agents, shipped via the repo-root `dsh-cc`
         marketplace) dispatches by scoped id end-to-end —
-        dsh-cc-agents:deep-reasoner / dsh-cc-agents:fast-worker mount from the
+        dsh-cc-agents:critic / dsh-cc-agents:executor mount from the
         real plugin dir and are pinned by plugin-agents.spec.ts and the
         loader's dsh-cc-agents.spec.ts.
 
@@ -1955,7 +1955,7 @@ capabilities:
         status: true
         notes: >-
           Exercised end-to-end by a first-party plugin: packages/plugin/
-          dsh-cc-agents (the official deep-reasoner + fast-worker agents plus
+          dsh-cc-agents (the official critic + executor agents plus
           an orchestration skill) ships via the repo-root official `dsh-cc`
           marketplace (.claude-plugin/marketplace.json) and is pinned by the
           real-dir mount spec, the install→cache→mount round-trip spec, and
