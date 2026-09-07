@@ -116,7 +116,7 @@ describe('cc-shell model alias provisioning', () => {
     })
 
     expect(providers).toHaveLength(1)
-    expect(providers[0]!.name).toBe('doc')
+    expect(providers[0]!.name).toBe('typed:doc')
     await providers[0]!.start({ agentOptions: { provider: 'parent' } })
     expect(backend.last).toMatchObject({ agentOptions: { provider: 'deepseek-official', model: 'deepseek-v4-pro' } })
     expect(ctx.ccPlugins.list()).toHaveLength(1)

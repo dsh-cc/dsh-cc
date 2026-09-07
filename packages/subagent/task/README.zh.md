@@ -29,7 +29,10 @@ Claude Code 的 `Task` 工具允许主代理按 `subagent_type`(如 `deep-reason
    - `agentOptions` = 来自 `ctx.get('ccModelRoutes').resolve(def.model)` 的别名解析结果 `{ provider?, model? }`(只透传解析到值的 provider/model 字段,绝不破坏按字段继承);
    - `toolFilter` = 定义的 `toolRestriction`(allow/deny),**消毒**掉本组合已不再注册的工具名;
    - `maxDepth` = 3(与 harness 默认一致;可配置)。
-4. **其它类型**(工作区内找不到)→ **报错结果**,附带本工作区可用类型清单(或说明本工作区未定义任何 agent)。
+4. **其它不含冒号的类型**(工作区内找不到)→ **报错结果**,附带本工作区可用类型清单(或说明本工作区未定义任何 agent);类型含 `:` 时提示带冒号感知的线索。
+5. **命中插件 agent 的 scoped id(`plugin:agent`)** → 以 `spawn` 启动,折叠方式与文件定义相同(persona、消毒后的 toolFilter、别名解析的 model、`maxDepth` 3),并从 `subagents` seam **实时**枚举。插件 agent **只能用其 scoped id** 寻址——裸插件 agent 名不可寻址,与 Claude Code 一致。
+
+解析顺序是:保留哨兵(`general-purpose` / `fork`)→ 工作区文件定义 → 插件 agent scoped id。文件定义与 scoped 插件 id 占据互不相交的名字空间(`agentType` 含 `:` 的文件定义在发现时被跳过并告警),因此 scoped id 永远不会遮蔽文件类型,反之亦然。
 
 派发规则是**前台,除非显式指定或定义钉死了后台**:`run_in_background` 缺省时运行是前台——工具等待 child 跑完,非 `completed` 的 stop reason 以错误浮出,child 输出只拼接 `text` 块——除非定义钉了 `background: true`,此时缺省即后台。显式 `run_in_background: false` 覆盖钉死,强制前台。显式 `run_in_background: true`(或钉死时缺省)则把 child 作为 durable continuable 后台 agent 启动,并立即返回其 `agentId`。
 
@@ -60,7 +63,7 @@ Claude Code 的 `Task` 工具允许主代理按 `subagent_type`(如 `deep-reason
 To delegate to one, pass its name as the `subagent_type` argument of the Task tool.
 ```
 
-由于 section 文本是同步组装的而发现是异步的,未知工作区的首次组装会显示空,随后 discovery 落地后触发 `system-prompt/change`,重组即显示目录。当工作区未定义任何 agent(或没有可 scope 的 agent)时,section 渲染空串并从提示词中消失。目录只列**文件定义**——刻意**不**把 seam 后端 provider 名(`fork`/`spawn`/`codex`/`claude-code`)当作可寻址的 agent 类型来枚举。
+由于 section 文本是同步组装的而发现是异步的,未知工作区的首次组装会显示空,随后 discovery 落地后触发 `system-prompt/change`,重组即显示目录。当工作区未定义任何 agent(或没有可 scope 的 agent)时,section 渲染空串并从提示词中消失。目录列出文件定义以及按 scoped id 呈现的插件 agent——刻意**不**把 seam 后端 provider 名(`fork`/`spawn`/`codex`/`claude-code`)当作可寻址的 agent 类型来枚举;裸插件 agent 名同样不可寻址——只有 `plugin:agent` scoped id 可以。
 
 ## Task child 上的工作区指令
 
@@ -79,7 +82,6 @@ harness 的 `agent-instructions` 插件会在**每个**会话(包括 Task child)
 
 - **冷恢复丢弃其余 `agentOptions`。** 后台(continuable)派发已存在——`run_in_background: true` 或定义钉 `background: true`——但冷恢复只还原 `persona`/`toolFilter`/模型路由,丢弃其余全部 `agentOptions` 字段(别名标记的 `reasoningEffort`、`maxTokens`)。完整后台契约(父退出 drain、无 `outputFile`、fork + 后台被拒)见 parity matrix。
 - **进程级发现缓存。** 注册表按工作区 root 缓存整个进程生命周期,不监听文件系统。编辑 `.claude/agents` 定义:对缓存条目尚未创建的工作区在下次会话生效,否则在进程重启后生效。基于 mtime 的失效刷为 follow-up。
-- **v1 不做插件 agent 派发。** 只派发 `.claude/agents` 下的文件定义。seam 插件 agent(`AgentProvider`)在 v1 不被 `subagent_type` 寻址(其 start 契约不携带任务正文,且 capability 标志会拒绝 `maxDepth`)——见 parity matrix。
 - **保留类型名。** `general-purpose` 与 `fork` 是哨兵,不是文件类型。工作区文件 `.claude/agents/fork.md` 不可达;`subagent_type: "fork"` 永远表示继承父已完成轮次。
 - **指令文件仍会被扫描。** 剥离发生在 harness `agent-instructions` 插件已从磁盘读取工作区 CLAUDE.md / AGENTS.md 并注入之后;本监听器只把它们挡在 child 的模型可见批次之外,不改 harness 就无法阻止磁盘扫描。fork child 的父 seed 从不改写,seed 中已有的 CLAUDE.md 会被继承。
 
@@ -95,6 +97,5 @@ harness 的 `agent-instructions` 插件会在**每个**会话(包括 Task child)
 
 - 把缺省的 `run_in_background` 视为后台的会话级策略(Claude Code 交互式的 omit=background 规则);dsh-cc 在缺省时保持前台,除非定义钉了 `background: true`。
 - 正在运行的前台 Task 的在途转后台(TUI Ctrl+B)——follow-up,而非本包存在性上的限制。
-- seam 插件 agent 派发。
 - 把 CC frontmatter 的 `permissionMode` / `isolation` / `memory` / `effort` 投影到 child(loader 会解析,v1 不消费)。
 - cc-shell 里的 `registerBaseAgents`(base agent 发现迁至此处;见 cc-shell README)。

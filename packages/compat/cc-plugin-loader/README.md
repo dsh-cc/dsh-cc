@@ -42,7 +42,7 @@ Each component is peer-style: the loader probes the host seam via `ctx.get(...)`
 | Component | Source | Seam (probed) | Translation |
 |---|---|---|---|
 | `commands` | manifest inline/source, or default `commands/*.md` | `commands` | registers each slash command via `register`; the handler returns the command content |
-| `agents` | `agents/` dir or manifest paths | `subagents` | loads `AgentDefinition`s via `loadAgentsDir` and registers each as a named provider via `registerProvider` |
+| `agents` | `agents/` dir or manifest paths | `subagents` | loads `AgentDefinition`s via `loadAgentsDir` and registers each as a named provider via `registerProvider` — namespaced under the plugin name (`namespacePrefix: manifest.name`), so `provider.name` is the scoped id `plugin:agent` while `provider.definition.agentType` stays bare; the provider also exposes its `definition` for the Task tool's live enumeration. Mounting **without** a `namespacePrefix` keeps bare names — such agents are then **undiscoverable to the Task tool** (a back-compat escape hatch, not a supported dispatch mode) |
 | `skills` | `skills/` dir or manifest paths | `skills` | discovers `SKILL.md` via `discoverCcSkills`, parses frontmatter, and registers each as a runtime skill via `register` |
 | `hooks` | `hooks/hooks.json` or inline | `hooks` (guest) | injects the per-event hook map via `mergePluginHooks` |
 | `mcpServers` | inline record or `.mcp.json` | `mcp` (guest) | registers each server via `registerServer` (tool naming is the seam's responsibility) |
