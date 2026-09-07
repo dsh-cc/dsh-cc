@@ -45,6 +45,19 @@ export interface SubagentsSeam {
   getProvider(name: string): unknown | undefined
 }
 
+/**
+ * Brand key stamped on every `AgentProvider` this loader creates. The task
+ * package's `PluginAgentIndex` requires it (besides the structural checks)
+ * so a foreign provider cannot be adopted as a plugin agent.
+ */
+export const PLUGIN_AGENT_PROVIDER_BRAND: unique symbol = Symbol.for('dsh-cc.plugin-agent-provider')
+
+/** Whether a value was created by this loader as a plugin agent provider. */
+export function isPluginAgentProvider(value: unknown): boolean {
+  return typeof value === 'object' && value !== null
+    && (value as Record<symbol, unknown>)[PLUGIN_AGENT_PROVIDER_BRAND] === true
+}
+
 /** The execution backend a CC agent provider forwards to. */
 export interface SubagentBackend {
   /** Start a one-shot child run against a delegation request. */
@@ -53,6 +66,9 @@ export interface SubagentBackend {
 
 /** A thin forwarder provider: overlays an AgentDefinition and delegates. Exported for the cc-shell bundle's base-agent glue. */
 export class AgentProvider implements SubagentBackend {
+  /** Loader brand (see `PLUGIN_AGENT_PROVIDER_BRAND`); read via `isPluginAgentProvider`. */
+  readonly [PLUGIN_AGENT_PROVIDER_BRAND] = true
+
   private readonly backendName = 'fork'
 
   constructor(
@@ -141,16 +157,17 @@ export const STANDARD_AGENTS_DIR = 'agents'
  * Build a scoped seam-registration name for one agent type.
  *
  * The prefix is sanitized (colons and whitespace stripped so it never carries
- * its own separator); an `agentType` that already contains a `:` is used
- * verbatim, defensively against future subdirectory nesting that legitimately
- * carries colons.
+ * its own separator); the result is ALWAYS `` `${prefix}:${agentType}` `` —
+ * there is no verbatim rule. An `agentType` that already contains a `:` is
+ * rejected by `mountAgents` before this function is reached, so it can never
+ * escape the plugin namespace.
  * @param prefix - the plugin manifest-name prefix.
- * @param agentType - the bare (or already-nested) agent type.
- * @returns `` `${prefix}:${agentType}` ``, or the verbatim `agentType`.
+ * @param agentType - the bare agent type.
+ * @returns `` `${prefix}:${agentType}` ``.
  */
 export function scopedType(prefix: string, agentType: string): string {
   const clean = prefix.replace(/[:\s]/g, '')
-  return agentType.includes(':') ? agentType : `${clean}:${agentType}`
+  return `${clean}:${agentType}`
 }
 
 /** Options for mounting one plugin's agents. */
@@ -186,15 +203,37 @@ export async function mountAgents(options: MountAgentsOptions): Promise<{ dispos
   }
   const subagents = options.subagents
   const prefix = options.namespacePrefix
-  for (const definition of definitions) {
-    const provider = new AgentProvider(
-      definition,
-      name => subagents.getProvider(name) as SubagentBackend | undefined,
-      options.resolveModel,
-      ...prefix !== undefined ? [scopedType(prefix, definition.agentType)] : [],
-    )
-    disposers.push(subagents.registerProvider(provider))
-    tally.addLoaded()
+  try {
+    for (const definition of definitions) {
+      // Colon guard (mirrors the file-registry guard in discovery): a colon
+      // agentType would escape the plugin's scoped-id namespace, so it is
+      // warned and skipped — never registered verbatim.
+      if (definition.agentType.includes(':')) {
+        console.warn(`cc-plugin-loader: skipping agent "${definition.agentType}" from ${options.pluginRoot}: agent file names must be bare (a colon agent type would shadow plugin scoped ids)`)
+        tally.addSkipped(`skipped agent "${definition.agentType}": agent type contains ":" and would escape the plugin namespace`)
+        continue
+      }
+      const scopedName = prefix !== undefined ? scopedType(prefix, definition.agentType) : definition.agentType
+      // Duplicate preflight: the harness seam throws on duplicate names, so
+      // record the collision and skip rather than leaking a partial mount.
+      if (subagents.getProvider(scopedName) !== undefined) {
+        tally.addSkipped(`skipped agent "${definition.agentType}": duplicate provider name "${scopedName}" is already registered`)
+        continue
+      }
+      const provider = new AgentProvider(
+        definition,
+        name => subagents.getProvider(name) as SubagentBackend | undefined,
+        options.resolveModel,
+        ...prefix !== undefined ? [scopedName] : [],
+      )
+      disposers.push(subagents.registerProvider(provider))
+      tally.addLoaded()
+    }
+  } catch (error) {
+    // Transactional: dispose every provider THIS call already registered
+    // before propagating, so a mid-mount throw leaks no partial mount.
+    for (const dispose of disposers) dispose()
+    throw error
   }
   return { disposers, tally }
 }

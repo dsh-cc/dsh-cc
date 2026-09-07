@@ -35,7 +35,7 @@ export type { CcPluginCommandInfo, MountedPluginCommand } from './commands.ts'
 export { parsePluginManifest } from './manifest.ts'
 export { discoverCcPluginRoots, resolveClaudeHome, NESTED_MANIFEST, TOP_LEVEL_MANIFEST } from './discovery.ts'
 export type { DiscoveredCcPlugin, DiscoverCcPluginRootsOptions } from './discovery.ts'
-export { AgentProvider, STANDARD_AGENTS_DIR } from './agents.ts'
+export { AgentProvider, STANDARD_AGENTS_DIR, PLUGIN_AGENT_PROVIDER_BRAND, isPluginAgentProvider } from './agents.ts'
 export type { ResolveModel } from './agents.ts'
 export type { McpSeam, HooksSeam } from './seams.ts'
 export {
@@ -112,29 +112,38 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const disposers: (() => void)[] = []
   const components: ComponentResult[] = []
 
-  fold(components, disposers, await mountSkills({
-    ctx,
-    pluginRoot: root,
-    manifest,
-    skills: probed.skills,
-    subagentsPresent: probed.subagents !== undefined,
-  }))
-  fold(components, disposers, await mountAgents({
-    pluginRoot: root,
-    manifest,
-    subagents: probed.subagents,
-    ...options.resolveModel !== undefined ? { resolveModel: options.resolveModel } : {},
-    // Same name-resolution chain as the manifest itself: manifest name (the
-    // parse/synthesis in resolve-manifest already falls back to nameHint,
-    // then the root basename), used to namespace agent provider names.
-    namespacePrefix: manifest.name,
-  }))
-  const commandMount = mountCommands({ pluginRoot: root, manifest, commands: probed.commands })
-  components.push(commandMount.tally.result())
-  disposers.push(...commandMount.disposers)
-  fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }))
-  fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }))
-  fold(components, disposers, mountSettings({ manifest, settings: probed.settings }))
+  let commandMount: ReturnType<typeof mountCommands>
+  try {
+    fold(components, disposers, await mountSkills({
+      ctx,
+      pluginRoot: root,
+      manifest,
+      skills: probed.skills,
+      subagentsPresent: probed.subagents !== undefined,
+    }))
+    fold(components, disposers, await mountAgents({
+      pluginRoot: root,
+      manifest,
+      subagents: probed.subagents,
+      ...options.resolveModel !== undefined ? { resolveModel: options.resolveModel } : {},
+      // Same name-resolution chain as the manifest itself: manifest name (the
+      // parse/synthesis in resolve-manifest already falls back to nameHint,
+      // then the root basename), used to namespace agent provider names.
+      namespacePrefix: manifest.name,
+    }))
+    commandMount = mountCommands({ pluginRoot: root, manifest, commands: probed.commands })
+    components.push(commandMount.tally.result())
+    disposers.push(...commandMount.disposers)
+    fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }))
+    fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }))
+    fold(components, disposers, mountSettings({ manifest, settings: probed.settings }))
+  } catch (error) {
+    // Component-level rollback: a component mount that throws after earlier
+    // components succeeded recalls everything mounted so far, so a failed
+    // plugin load leaves nothing mounted.
+    for (const dispose of disposers) dispose()
+    throw error
+  }
 
   const tearDown = () => {
     for (const dispose of disposers) dispose()

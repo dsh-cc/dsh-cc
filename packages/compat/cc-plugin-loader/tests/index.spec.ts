@@ -290,6 +290,35 @@ describe('mountCcPlugin', () => {
     }
   })
 
+  it('rolls back earlier components when a later component mount throws', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'plugin.json', JSON.stringify({
+        name: 'p',
+        agents: ['./agents'],
+        skills: ['./skills/x'],
+      }))
+      await writeFileAt(root, 'skills/x/SKILL.md', '---\nname: x\ndescription: X\n---\n')
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher\n---\nYou research.')
+      const ctx = makeContext()
+      const disposed: string[] = []
+      await expect(mountCcPlugin(ctx, {
+        root,
+        seams: {
+          skills: { register: () => () => { disposed.push('skills') } },
+          subagents: {
+            registerProvider: () => { throw new Error('name already registered') },
+            getProvider: () => undefined,
+          },
+        },
+      })).rejects.toThrow(/name already registered/)
+      // Skills mounted before agents threw; its disposer must have run.
+      expect(disposed).toEqual(['skills'])
+    } finally {
+      await dispose()
+    }
+  })
+
   it('fails a marketplace overlay whose nameHint matches no entry (zero skills)', async () => {
     const { root, dispose } = await tempPluginRoot()
     try {
