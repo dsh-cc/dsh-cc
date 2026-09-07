@@ -161,6 +161,9 @@
       "path": "./packages/interaction/command-tasks"
     },
     {
+      "path": "./packages/interaction/command-usage"
+    },
+    {
       "path": "./packages/interaction/command-version"
     },
     {

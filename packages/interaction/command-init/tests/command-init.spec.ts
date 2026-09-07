@@ -78,3 +78,14 @@ describe('/init human command', () => {
     expect(text && 'text' in text ? text.text : '').toContain('Analyze the current repository')
   })
 })
+
+describe('/init help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const { ctx, agent } = await harness()
+    const execution = await ctx.commands.execute(agent, '/init help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/init')
+    expect(text).toContain('Usage:')
+  })
+})

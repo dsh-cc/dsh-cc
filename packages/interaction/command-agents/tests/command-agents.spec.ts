@@ -246,3 +246,30 @@ describe('/agents human command', () => {
     expect(services.interrupts).toHaveLength(1)
   })
 })
+
+describe('/agents help interception', () => {
+  async function harness(): Promise<{ ctx: Context; agent: Agent }> {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    const services = makeServices([])
+    ctx.provide('subagents', services)
+    ctx.provide('resumePinStore', { read: services.readPin, pathFor: services.pinPath })
+    await ctx.plugin(commandAgents)
+    const agent = makeFakeAgent(ctx, `agents-help-${Math.random()}`)
+    ctx.agents.register(agent)
+    return { ctx, agent }
+  }
+
+  it('answers a trailing help argument with formatted help text', async () => {
+    const { ctx, agent } = await harness()
+    const text = await (ctx.commands.execute(agent, '/agents help', [], new AbortController().signal) as Promise<{ result?: { text?: string } }>)
+      .then(r => r.result ?? { text: undefined })
+      .then(r => r.text ?? '')
+    expect(text).toContain('/agents')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('detail')
+    expect(text).toContain('stop')
+  })
+})

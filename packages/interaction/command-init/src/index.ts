@@ -7,6 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 import { initContent } from './init.ts'
 
 export const name = 'command-init'
@@ -27,9 +28,9 @@ function executeInit(invocation: CommandInvocation): CommandResult {
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'init',
     description: 'analyze this repository and write (or refresh) CLAUDE.md',
     handler: (invocation: CommandInvocation) => executeInit(invocation),
-  })
+  }))
 }

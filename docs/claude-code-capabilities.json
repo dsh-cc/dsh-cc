@@ -2298,7 +2298,8 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "full",
+          "notes": "dsh-cc extension — every slash command (harness-mounted and TUI-local) accepts a trailing `help` (or -h/--help) argument rendering its usage, parameters, and subcommands via @dsh-cc/command-usage; the /help index appends a tip advertising it."
         },
         "ux": {
           "status": "full"
@@ -2313,6 +2314,18 @@
         {
           "type": "test",
           "path": "packages/interaction/command-help/tests/command-help.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/command-usage/src/index.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/command-usage/tests/usage.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/slash-help.spec.ts"
         }
       ],
       "deviation": {

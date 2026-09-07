@@ -9,6 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-shell'
 import type { ShellExecRequest, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 import { capDiff, formatDiffStat, MAX_DIFF_LINES } from './diff.ts'
 
 export const name = 'command-diff'
@@ -64,10 +65,10 @@ async function executeDiff(ctx: Context, invocation: CommandInvocation): Promise
  * @param ctx - context carrying the command registry and shell service.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'diff',
     description: 'show git diff statistics, or the capped diff for one path',
     input: { hint: '[path]' },
     handler: (invocation: CommandInvocation) => executeDiff(ctx, invocation),
-  })
+  }))
 }

@@ -8,6 +8,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-rename'
 export const inject = ['commands']
@@ -43,9 +44,9 @@ function executeRename(ctx: Context, invocation: CommandInvocation): CommandResu
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'rename',
     description: 'rename the current session',
     handler: (invocation: CommandInvocation) => executeRename(ctx, invocation),
-  })
+  }))
 }

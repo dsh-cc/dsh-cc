@@ -16,6 +16,7 @@ import {
   readMcpServerNames,
   resolveDefaultMcpPaths,
 } from '@dsh-cc/mcp-config'
+import { helpable } from '@dsh-cc/command-usage'
 import {
   formatConnections,
   formatDiscoveryNotice,
@@ -109,10 +110,18 @@ async function executeMcp(ctx: Context, invocation: CommandInvocation): Promise<
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'mcp',
     description: 'list MCP connections, import Claude Code config, or reconnect/disconnect one by name',
     input: { hint: '[migrate|reconnect|disconnect <name>]' },
     handler: (invocation: CommandInvocation) => executeMcp(ctx, invocation),
-  })
+  }, {
+    usage: ['[list]', '[migrate]', '[reconnect <name>]', '[disconnect <name>]'],
+    subcommands: [
+      { word: 'list', summary: 'Show registered MCP servers and their state (the bare form)' },
+      { word: 'migrate', summary: 'Import the Claude Code MCP config into the dsh-native config' },
+      { word: 'reconnect', args: '<name>', summary: 'Reconnect one registered server by name' },
+      { word: 'disconnect', args: '<name>', summary: 'Disconnect one registered server by name' },
+    ],
+  }))
 }

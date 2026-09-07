@@ -23,6 +23,8 @@ import {
   totalsOf,
   usageViewOf,
 } from './usage-view.ts'
+import { isHelpRequest } from '@dsh-cc/command-usage'
+import { localHelpFor } from '../slash-help.ts'
 import { parseModelChoice } from '../model-catalog.ts'
 import { parseEffortChoice } from '../effort-catalog.ts'
 import { shouldEchoCommandResult } from '../compact-fold.ts'
@@ -142,6 +144,15 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
   }
 
   const runLocal = async (name: string, rawInput: string): Promise<void> => {
+    // Trailing `help` / `-h` / `--help` answers the command's own help text
+    // as a status row instead of entering the argument parsers.
+    if (rawInput !== '' && isHelpRequest(rawInput)) {
+      const help = localHelpFor(name)
+      if (help !== undefined) {
+        emit(upsertRow(rt.state(), { kind: 'status', text: help }))
+        return
+      }
+    }
     if (name === 'quit' || name === 'exit') {
       // When the session cwd is a recognized worktree, `/quit` parks a
       // confirmation overlay instead of exiting: the user decides whether to

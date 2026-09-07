@@ -734,6 +734,10 @@ importers:
         version: link:../../core/tools
 
   packages/interaction/command-agents:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -758,6 +762,10 @@ importers:
         version: link:../../subagent/resume-pins
 
   packages/interaction/command-branch:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -780,6 +788,9 @@ importers:
 
   packages/interaction/command-compact:
     dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
       '@dsh-cc/compaction-basic':
         specifier: workspace:^
         version: link:../../compaction/compaction-basic-cc
@@ -813,6 +824,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
 
   packages/interaction/command-config:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -840,6 +855,10 @@ importers:
         version: link:../../../../deepseek-harness/vendor/schemastery
 
   packages/interaction/command-diff:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -870,6 +889,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/subprocess/subprocess
 
   packages/interaction/command-doctor:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -897,6 +920,10 @@ importers:
         version: link:../../hooks/hook-protocol
 
   packages/interaction/command-help:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -918,6 +945,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
 
   packages/interaction/command-init:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -943,6 +974,9 @@ importers:
 
   packages/interaction/command-mcp:
     dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
       '@dsh-cc/mcp-config':
         specifier: workspace:^
         version: link:../../mcp/mcp-config
@@ -967,6 +1001,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
 
   packages/interaction/command-memory:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1000,6 +1038,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
 
   packages/interaction/command-permissions:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1042,6 +1084,10 @@ importers:
         version: 0.22.2(tsx@4.22.4)(typescript@6.0.3)
 
   packages/interaction/command-plugin:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1063,6 +1109,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
 
   packages/interaction/command-release-notes:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1084,6 +1134,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
 
   packages/interaction/command-rename:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1108,6 +1162,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/session/session-title
 
   packages/interaction/command-resume:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1135,6 +1193,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/session/session-title
 
   packages/interaction/command-skills:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1165,6 +1227,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/skill/skill
 
   packages/interaction/command-status:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1192,6 +1258,10 @@ importers:
         version: link:../../../../deepseek-harness/packages/shell/shell
 
   packages/interaction/command-tasks:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1215,7 +1285,17 @@ importers:
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
 
+  packages/interaction/command-usage:
+    devDependencies:
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
+
   packages/interaction/command-version:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1599,6 +1679,10 @@ importers:
         version: link:../../core/tools
 
   packages/session/command-cost:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../../interaction/command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1626,6 +1710,10 @@ importers:
         version: link:../../../../deepseek-harness/vendor/schemastery
 
   packages/session/command-export:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../../interaction/command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1659,6 +1747,10 @@ importers:
         version: link:../../../../deepseek-harness/vendor/schemastery
 
   packages/session/command-stats:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../../interaction/command-usage
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1971,6 +2063,9 @@ importers:
       '@dsh-cc/command-permissions':
         specifier: workspace:^
         version: link:../../interaction/command-permissions
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../../interaction/command-usage
       '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../../interaction/permission-rules

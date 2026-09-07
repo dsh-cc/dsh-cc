@@ -114,3 +114,37 @@ describe('/status human command', () => {
     expect(text).not.toContain('Permission preset:')
   })
 })
+
+
+describe('/status trailing help request', () => {
+  it('answers `/status help` with the rendered usage text, not a model turn', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(commandStatus)
+  const session = ctx.sessions.create(SessionId(`status-${Math.random()}`))
+  const agent: Agent = {
+    id: session.id,
+    options: {},
+    session,
+    inbox: null as never,
+    ctx: new Context(),
+    get status(): 'idle' { return 'idle' },
+    send: () => {},
+    followup: () => {},
+    steer: () => {},
+    inject: () => {},
+    cancel: () => {},
+    runMaintenance: task => task(new AbortController().signal),
+    whenIdle: () => Promise.resolve(),
+  }
+  ctx.agents.register(agent)
+  return agent
+    const execution = await ctx.commands.execute(agent, '/status help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = (execution?.result as { text: string }).text
+    expect(text).toContain('/status')
+    expect(text).toContain('Usage:')
+  })
+})

@@ -118,3 +118,15 @@ describe('/config human command', () => {
     expect((badKey?.result as { text: string }).text).toContain('is not writable')
   })
 })
+
+describe('/config help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const { ctx, agent } = await harness()
+    const execution = await ctx.commands.execute(agent, '/config help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/config')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('[key] [value] [scope]')
+  })
+})

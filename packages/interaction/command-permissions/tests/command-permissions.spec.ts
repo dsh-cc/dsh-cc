@@ -256,3 +256,42 @@ describe('CC catalog hides /permission', () => {
     expect(ctx.commands.find(agent, 'permissions')).toBeDefined()
   })
 })
+
+
+describe('/permissions trailing help request', () => {
+  it('answers `/permissions help` with the rendered usage text, not a model turn', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(commandPermissions)
+  const session = ctx.sessions.create(SessionId(`permissions-${Math.random()}`))
+  const agent: Agent = {
+    id: session.id,
+    options: {},
+    session,
+    inbox: null as never,
+    ctx: new Context(),
+    get status(): 'idle' { return 'idle' },
+    send: () => {},
+    followup: () => {},
+    steer: () => {},
+    inject: () => {},
+    cancel: () => {},
+    runMaintenance: task => task(new AbortController().signal),
+    whenIdle: () => Promise.resolve(),
+  }
+  ctx.agents.register(agent)
+  return agent
+    const execution = await ctx.commands.execute(agent, '/permissions help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = (execution?.result as { text: string }).text
+    expect(text).toContain('/permissions')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('acceptEdits')
+    expect(text).toContain('plan')
+    expect(text).toContain('auto')
+    expect(text).toContain('bypassPermissions')
+    expect(text).toContain('default')
+  })
+})

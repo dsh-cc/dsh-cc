@@ -10,6 +10,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { SessionStore, Session } from '@deepseek-ai/dsh-session'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 import { formatBranchError, formatBranchSuccess } from './branch.ts'
 
 export const name = 'command-branch'
@@ -41,10 +42,10 @@ function executeBranch(ctx: Context, invocation: CommandInvocation): CommandResu
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'branch',
     description: 'fork the current session into a new child branch',
     input: { hint: '[note]' },
     handler: (invocation: CommandInvocation) => executeBranch(ctx, invocation),
-  })
+  }))
 }

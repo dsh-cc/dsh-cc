@@ -8,6 +8,11 @@
     "src"
   ],
   "references": [
-    { "path": "../../mcp/mcp-config" }
+    {
+      "path": "../../mcp/mcp-config"
+    },
+    {
+      "path": "../command-usage"
+    }
   ]
 }

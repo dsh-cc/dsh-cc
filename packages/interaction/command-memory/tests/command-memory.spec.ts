@@ -119,3 +119,15 @@ describe('/memory human command', () => {
     expect((execution?.result as { text: string }).text).toContain('No memory named "nope".')
   })
 })
+
+describe('/memory help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const { ctx, agent } = await harness()
+    const execution = await ctx.commands.execute(agent, '/memory help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/memory')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('[name]')
+  })
+})

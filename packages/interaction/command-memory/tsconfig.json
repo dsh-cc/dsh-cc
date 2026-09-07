@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../../memory/memory"
+    },
+    {
+      "path": "../command-usage"
     }
   ]
 }

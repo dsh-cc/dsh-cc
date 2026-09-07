@@ -7,6 +7,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 import { collect } from './collect.ts'
 import { formatUsage, parseDoctorFlags } from './flags.ts'
 import { doctorJsonPath, writeDoctorReport } from './json.ts'
@@ -69,10 +70,12 @@ function statusIds(report: Parameters<typeof writeDoctorReport>[1]): string[] {
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'doctor',
     description: 'session health report',
     input: { hint: '[--verbose|--json]' },
     handler: (invocation: CommandInvocation) => executeDoctor(ctx, invocation),
-  })
+  }, {
+    notes: ['--json also collects verbose evidence and writes $DSH_HOME/tui/doctor-report.json (overwrites).'],
+  }))
 }

@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { setCompactHint, takeCompactHint } from '@dsh-cc/compaction-basic'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-compact'
 export const inject = ['commands', 'compaction']
@@ -104,11 +105,11 @@ export function apply(ctx: Context): void {
     // Yield drain before registration: composite teardown is LIFO, so no new
     // invocation can enter while already-started handler promises quiesce.
     yield async () => { await Promise.allSettled(active) }
-    yield ctx.commands.register({
+    yield ctx.commands.register(helpable({
       name: 'compact',
       description: 'Compact older conversation history',
       input: { hint: '[instructions]' },
       handler,
-    })
+    }))
   }, 'command-compact lifecycle')
 }

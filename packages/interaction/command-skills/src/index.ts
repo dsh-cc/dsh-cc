@@ -8,6 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-skill'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { formatSkills } from './skills.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-skills'
 export const inject = ['commands', 'skills']
@@ -26,9 +27,9 @@ async function executeSkills(ctx: Context, invocation: CommandInvocation): Promi
  * @param ctx - context carrying the command registry and skill registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'skills',
     description: 'list available skills with their invocation policy',
     handler: (invocation: CommandInvocation) => executeSkills(ctx, invocation),
-  })
+  }))
 }

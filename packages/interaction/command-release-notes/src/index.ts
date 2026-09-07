@@ -7,6 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { renderReleaseNotes } from './release-notes.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-release-notes'
 export const inject = ['commands']
@@ -30,10 +31,10 @@ function executeReleaseNotes(invocation: CommandInvocation): CommandResult {
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'release-notes',
     description: 'print the bundled release notes (changelog)',
     input: { hint: '[lines]' },
     handler: (invocation: CommandInvocation) => executeReleaseNotes(invocation),
-  })
+  }))
 }

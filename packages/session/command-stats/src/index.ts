@@ -7,6 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { foldStats, formatStatsReport } from './stats.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-stats'
 export const inject = ['commands']
@@ -22,9 +23,9 @@ function executeStats(invocation: CommandInvocation): CommandResult {
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'stats',
     description: 'show turn, step, tool-call, and token statistics for this session',
     handler: (invocation: CommandInvocation) => executeStats(invocation),
-  })
+  }))
 }

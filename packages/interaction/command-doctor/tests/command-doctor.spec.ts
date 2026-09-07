@@ -93,3 +93,22 @@ describe('@dsh-cc/command-doctor registration', () => {
     expect(text).toContain('summary: 1 ok, 0 warn, 1 fail, 0 skip, 0 info')
   })
 })
+
+describe('/doctor help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(commandDoctor)
+    const agent = makeAgent(ctx)
+    ctx.agents.register(agent)
+    const execution = await ctx.commands.execute(agent, '/doctor help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/doctor')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('--verbose')
+    expect(text).toContain('--json')
+  })
+})
