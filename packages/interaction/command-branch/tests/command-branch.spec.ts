@@ -116,3 +116,20 @@ describe('/branch human command', () => {
     expect((execution?.result as { text: string }).text).toContain('Could not fork the current session')
   })
 })
+
+describe('/branch help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const ctx = new Context()
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(commandBranch)
+    const agent = fakeAgent(Session.create(SessionId(`command-branch-help-${Math.random()}`)))
+    ctx.agents.register(agent)
+    const execution = await ctx.commands.execute(agent, '/branch help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = (execution?.result as { text: string }).text
+    expect(text).toContain('/branch')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('[note]')
+  })
+})

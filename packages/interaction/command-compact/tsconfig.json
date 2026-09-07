@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../../compaction/compaction-basic-cc"
+    },
+    {
+      "path": "../command-usage"
     }
   ]
 }

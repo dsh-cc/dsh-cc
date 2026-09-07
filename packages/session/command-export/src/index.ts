@@ -9,6 +9,7 @@ import type {} from '@deepseek-ai/dsh-fs'
 import z from '@deepseek-ai/schemastery'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { renderTranscript, type ExportFormat } from './transcript.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-export'
 export const inject = ['commands', 'fs']
@@ -123,12 +124,12 @@ export function apply(ctx: Context, config: Config): void {
   // web when we get here, absent when not. Relies on the loader throwing a plain
   // Error whose message matches /is already registered/ for a duplicate name.
   try {
-    ctx.commands.register({
+    ctx.commands.register(helpable({
       name: 'export',
       description: 'export this session transcript to a markdown or json file',
       input: { hint: '[json] [<path>]' },
       handler: (invocation: CommandInvocation) => executeExport(ctx, config, parseExport(invocation.rawInput), invocation),
-    })
+    }))
   } catch (error: unknown) {
     if (error instanceof Error && /is already registered/.test(error.message)) {
       ctx.logger.info('native /export present, ours skipped')

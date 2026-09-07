@@ -135,3 +135,15 @@ describe('/diff human command', () => {
     expect(text).toContain('Not a git repository')
   })
 })
+
+describe('/diff help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const { ctx, agent } = await harness()
+    const execution = await ctx.commands.execute(agent, '/diff help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/diff')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('[path]')
+  })
+})

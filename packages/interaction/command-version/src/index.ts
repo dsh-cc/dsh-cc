@@ -7,6 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { formatVersion, readOwnVersion } from './version.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-version'
 export const inject = ['commands']
@@ -34,9 +35,9 @@ async function executeVersion(ctx: Context): Promise<CommandResult> {
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'version',
     description: 'print the plugin bundle and harness versions',
     handler: (_invocation: CommandInvocation) => executeVersion(ctx),
-  })
+  }))
 }

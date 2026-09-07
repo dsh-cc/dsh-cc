@@ -139,11 +139,35 @@ describe('/help human command', () => {
     const text = (execution?.result as { text: string }).text
     expect(text).toContain('/help — ')
   })
+
+  it('appends the trailing-help-arg tip to the list output', async () => {
+    const { ctx, agent } = await harness()
+    const execution = await ctx.commands.execute(agent, '/help', [], new AbortController().signal)
+    const text = (execution?.result as { text: string }).text
+    expect(text).toContain('Tip: every command accepts a trailing `help` argument for usage details.')
+  })
   it('shows detail for a named command and a friendly message for an unknown one', async () => {
     const { ctx, agent } = await harness()
     const detail = await ctx.commands.execute(agent, '/help help', [], new AbortController().signal)
-    expect((detail?.result as { text: string }).text).toContain('usage: /help')
+    // `/help help` is now intercepted by helpable and answers with the
+    // canonical formatted help text instead of the detail renderer.
+    const detailText = (detail?.result as { text: string }).text
+    expect(detailText).toContain('Usage:')
+    expect(detailText).toContain('/help [command]')
     const missing = await ctx.commands.execute(agent, '/help nope', [], new AbortController().signal)
     expect((missing?.result as { text: string }).text).toContain('Unknown command /nope')
+  })
+})
+
+describe('/help help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const { ctx, agent } = await harness()
+    const execution = await ctx.commands.execute(agent, '/help help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/help')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('[command]')
+    expect(text).toContain('trailing')
   })
 })

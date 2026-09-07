@@ -10,6 +10,7 @@ import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { formatStatus, lastModel, type StatusFields } from './status.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-status'
 export const inject = ['commands']
@@ -47,9 +48,9 @@ function executeStatus(ctx: Context, invocation: CommandInvocation): CommandResu
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'status',
     description: 'show current model, permission preset, session, and working directory',
     handler: (invocation: CommandInvocation) => executeStatus(ctx, invocation),
-  })
+  }))
 }

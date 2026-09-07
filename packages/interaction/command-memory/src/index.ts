@@ -16,6 +16,7 @@ import {
   type MemoryIndexEntry,
 } from '@dsh-cc/memory'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 import { firstLine, formatIndex, formatMemory, type MemoryIndexLine } from './memory.ts'
 
 export const name = 'command-memory'
@@ -119,10 +120,10 @@ async function executeMemory(
  * @param config - memory directory override.
  */
 export function apply(ctx: Context, config: Config = {}): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'memory',
     description: 'list memory files (name, type, first line) or show one by name',
     input: { hint: '[name]' },
     handler: (invocation: CommandInvocation) => executeMemory(ctx, config, invocation),
-  })
+  }))
 }

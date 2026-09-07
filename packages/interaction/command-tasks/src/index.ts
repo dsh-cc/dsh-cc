@@ -10,6 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { JobSnapshot } from '@deepseek-ai/dsh-jobs'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { formatAgentsFooter, formatJobs, type JobLine } from './tasks.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-tasks'
 export const inject = ['commands', 'jobs']
@@ -58,9 +59,9 @@ async function executeTasks(ctx: Context, invocation: CommandInvocation): Promis
  * @param ctx - context carrying the command registry and jobs service.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'tasks',
     description: 'list background jobs and their status',
     handler: (invocation: CommandInvocation) => executeTasks(ctx, invocation),
-  })
+  }))
 }

@@ -151,3 +151,37 @@ describe('/plugin and /reload-plugins human commands', () => {
     expect(text).toContain('cc-b (/r/b): mount failed')
   })
 })
+
+
+describe('/reload-plugins trailing help request', () => {
+  it('answers `/reload-plugins help` with the rendered usage text, not a model turn', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(CommandRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(commandPlugin)
+  const session = ctx.sessions.create(SessionId(`reload-plugins-${Math.random()}`))
+  const agent: Agent = {
+    id: session.id,
+    options: {},
+    session,
+    inbox: null as never,
+    ctx: new Context(),
+    get status(): 'idle' { return 'idle' },
+    send: () => {},
+    followup: () => {},
+    steer: () => {},
+    inject: () => {},
+    cancel: () => {},
+    runMaintenance: task => task(new AbortController().signal),
+    whenIdle: () => Promise.resolve(),
+  }
+  ctx.agents.register(agent)
+  return agent
+    const execution = await ctx.commands.execute(agent, '/reload-plugins help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = (execution?.result as { text: string }).text
+    expect(text).toContain('/reload-plugins')
+    expect(text).toContain('Usage:')
+  })
+})

@@ -12,6 +12,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionRecord, SessionTitleObservationResult } from '@deepseek-ai/dsh-session-query'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { formatResumeIndex, type SessionLine } from './resume.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-resume'
 export const inject = ['commands']
@@ -76,9 +77,9 @@ async function executeResume(ctx: Context, invocation: CommandInvocation): Promi
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'resume',
     description: 'list recent sessions (id, title, cwd, availability) for resuming',
     handler: (invocation: CommandInvocation) => executeResume(ctx, invocation),
-  })
+  }))
 }

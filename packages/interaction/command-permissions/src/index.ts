@@ -35,6 +35,8 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 import { PERMISSION_COMMAND_MODES } from './modes.ts'
 import { planPhaseOf, type PlanPhase, type PlanUnitStateLike } from './plan-phase.ts'
 import { renderPermissions } from './permissions.ts'
+import { helpable } from '@dsh-cc/command-usage'
+import { PERMISSION_MODE_OPTIONS } from './modes.ts'
 
 export {
   BYPASS_CONFIRMATION,
@@ -180,11 +182,13 @@ function installCatalogWrap(ctx: Context): void {
  * @param ctx - context carrying the command registry and permission engine.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'permissions',
     description: 'show or switch the permission mode (default|acceptEdits|plan|auto|bypassPermissions)',
     input: { hint: '[mode]' },
     handler: (invocation: CommandInvocation) => executePermissions(ctx, invocation),
-  })
+  }, {
+    subcommands: PERMISSION_MODE_OPTIONS.map(option => ({ word: option.id, summary: option.detail })),
+  }))
   if (ctx.agent === undefined) installCatalogWrap(ctx)
 }

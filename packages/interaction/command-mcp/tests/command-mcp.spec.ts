@@ -344,3 +344,17 @@ describe('/mcp list discovery notice', () => {
     expect((execution?.result as { text: string }).text).not.toContain('migrate')
   })
 })
+describe('/mcp help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const { ctx, agent } = await harness()
+    const execution = await ctx.commands.execute(agent, '/mcp help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/mcp')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('list')
+    expect(text).toContain('migrate')
+    expect(text).toContain('reconnect')
+    expect(text).toContain('disconnect')
+  })
+})

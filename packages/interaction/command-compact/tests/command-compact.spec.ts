@@ -257,3 +257,15 @@ describe('hint store interaction', () => {
     expect(takeCompactHint(a)).toBe('only a')
   })
 })
+
+describe('/compact help interception', () => {
+  it('answers a trailing help argument with formatted help text', async () => {
+    const test = await harness()
+    const execution = await test.ctx.commands.execute(test.agent, '/compact help', [], new AbortController().signal)
+    expect(execution?.result.kind).toBe('success')
+    const text = execution?.result.text ?? ''
+    expect(text).toContain('/compact')
+    expect(text).toContain('Usage:')
+    expect(text).toContain('[instructions]')
+  })
+})

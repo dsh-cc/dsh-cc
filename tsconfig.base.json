@@ -248,6 +248,9 @@
       "@dsh-cc/command-help/help": [
         "./packages/interaction/command-help/src/help.ts"
       ],
+      "@dsh-cc/command-usage": [
+        "./packages/interaction/command-usage/src/index.ts"
+      ],
       "@dsh-cc/command-config": [
         "./packages/interaction/command-config/src/index.ts"
       ],

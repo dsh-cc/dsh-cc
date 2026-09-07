@@ -15,6 +15,7 @@ import {
   type CcPluginRescanError,
 } from './plugin.ts'
 import { executePluginManage, type CcPluginManagerSeam } from './manage.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-plugin'
 export const inject = ['commands']
@@ -62,11 +63,11 @@ async function executeReload(ctx: Context, _invocation: CommandInvocation): Prom
  * @param ctx - context carrying the command registry.
  */
 export function apply(ctx: Context): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'plugin',
     description: 'manage Claude Code plugins (list/install/uninstall/enable/disable/update/marketplace)',
     handler: (invocation: CommandInvocation) => executePlugin(ctx, invocation),
-  })
+  }))
   ctx.commands.register({
     name: 'reload-plugins',
     description: 'dispose and remount all Claude Code plugin discovery roots',

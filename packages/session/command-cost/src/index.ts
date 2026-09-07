@@ -9,6 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { foldCost, formatCostReport, type ModelPrice } from './cost.ts'
+import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-cost'
 export const inject = ['commands']
@@ -44,9 +45,9 @@ function executeCost(config: Config, invocation: CommandInvocation): CommandResu
  * @param config - deployment price table.
  */
 export function apply(ctx: Context, config: Config): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'cost',
     description: 'show per-model token usage and estimated cost for this session',
     handler: invocation => executeCost(config, invocation),
-  })
+  }))
 }

@@ -9,6 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 import { keyAllowed, parseConfigArgs, renderConfig, type AllowEntry } from './config.ts'
 
 export const name = 'command-config'
@@ -77,10 +78,12 @@ async function executeConfig(
  * @param config - default scope and write allowlist.
  */
 export function apply(ctx: Context, config: Config = {}): void {
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'config',
     description: 'show effective configuration, or set an allowlisted key (e.g. /config theme dark ui-theme)',
     input: { hint: '[key] [value] [scope]' },
     handler: (invocation: CommandInvocation) => executeConfig(ctx, config, invocation),
-  })
+  }, {
+    notes: ['Run /config with no arguments to list scopes and current values.'],
+  }))
 }

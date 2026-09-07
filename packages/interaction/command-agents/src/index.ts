@@ -13,6 +13,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { helpable } from '@dsh-cc/command-usage'
 import type { ChildEntryLike } from './snapshot.ts'
 import {
   buildAgentsSnapshot,
@@ -124,9 +125,15 @@ export function apply(ctx: Context): void {
     if (root.get('ccAgents', false) === snapshotService) root.set('ccAgents', undefined)
   }, 'command-agents: clear host-realm ccAgents publication on unload')
 
-  ctx.commands.register({
+  ctx.commands.register(helpable({
     name: 'agents',
     description: 'list, inspect, or stop continuable background agents',
     handler: (invocation: CommandInvocation) => executeAgents(snapshotServices, subagents, invocation.agent, invocation.rawInput),
-  })
+  }, {
+    usage: ['[<id>]'],
+    subcommands: [
+      { word: 'detail', args: '<id>', summary: 'Show one background agent by id (the bare form lists all)' },
+      { word: 'stop', args: '<id>', summary: 'Stop a running background agent by id' },
+    ],
+  }))
 }
