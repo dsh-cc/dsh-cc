@@ -56,14 +56,20 @@ export class AgentProvider implements SubagentBackend {
   private readonly backendName = 'fork'
 
   constructor(
-    private readonly definition: AgentDefinition,
+    private readonly agentDefinition: AgentDefinition,
     private readonly resolve: (name: string) => SubagentBackend | undefined,
     private readonly resolveModel?: ResolveModel,
+    private readonly registeredName?: string,
   ) {}
 
   /** Register-time provider name; `start` forwards to the backend. */
   get name(): string {
-    return this.definition.agentType
+    return this.registeredName ?? this.agentDefinition.agentType
+  }
+
+  /** The agent definition this provider overlays — unchanged, bare `agentType`. */
+  get definition(): AgentDefinition {
+    return this.agentDefinition
   }
 
   /** The start-time features this agent's definition requires. */
@@ -71,8 +77,8 @@ export class AgentProvider implements SubagentBackend {
     return {
       outputSchema: false,
       depthLimit: false,
-      toolFilter: this.definition.toolRestriction !== undefined,
-      persona: this.definition.permissionMode !== undefined || this.definition.isolation !== undefined,
+      toolFilter: this.agentDefinition.toolRestriction !== undefined,
+      persona: this.agentDefinition.permissionMode !== undefined || this.agentDefinition.isolation !== undefined,
     }
   }
 
@@ -91,17 +97,17 @@ export class AgentProvider implements SubagentBackend {
   async start(request: unknown): Promise<unknown> {
     const backend = this.resolve(this.backendName)
     if (backend === undefined) {
-      throw new Error(`cc-plugin-loader: no "${this.backendName}" subagent backend is registered to run agent "${this.definition.agentType}"`)
+      throw new Error(`cc-plugin-loader: no "${this.backendName}" subagent backend is registered to run agent "${this.agentDefinition.agentType}"`)
     }
     const delegation = request as Record<string, unknown>
     const modelOverride = this.resolveModelOverride()
     return backend.start({
       ...delegation,
-      prompt: this.definition.systemPrompt,
+      prompt: this.agentDefinition.systemPrompt,
       ...modelOverride !== undefined
         ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
         : {},
-      ...this.definition.toolRestriction !== undefined ? { toolFilter: this.definition.toolRestriction } : {},
+      ...this.agentDefinition.toolRestriction !== undefined ? { toolFilter: this.agentDefinition.toolRestriction } : {},
     })
   }
 
@@ -118,7 +124,7 @@ export class AgentProvider implements SubagentBackend {
    * @returns the model/provider override, or `undefined` for no override.
    */
   private resolveModelOverride(): Record<string, string> | undefined {
-    const model = this.definition.model
+    const model = this.agentDefinition.model
     const resolver = this.resolveModel
     if (resolver === undefined) {
       return model !== undefined ? { model } : undefined
@@ -130,6 +136,22 @@ export class AgentProvider implements SubagentBackend {
 
 /** Agents live under this directory in a plugin root, when present. */
 export const STANDARD_AGENTS_DIR = 'agents'
+
+/**
+ * Build a scoped seam-registration name for one agent type.
+ *
+ * The prefix is sanitized (colons and whitespace stripped so it never carries
+ * its own separator); an `agentType` that already contains a `:` is used
+ * verbatim, defensively against future subdirectory nesting that legitimately
+ * carries colons.
+ * @param prefix - the plugin manifest-name prefix.
+ * @param agentType - the bare (or already-nested) agent type.
+ * @returns `` `${prefix}:${agentType}` ``, or the verbatim `agentType`.
+ */
+export function scopedType(prefix: string, agentType: string): string {
+  const clean = prefix.replace(/[:\s]/g, '')
+  return agentType.includes(':') ? agentType : `${clean}:${agentType}`
+}
 
 /** Options for mounting one plugin's agents. */
 export interface MountAgentsOptions {
@@ -163,8 +185,14 @@ export async function mountAgents(options: MountAgentsOptions): Promise<{ dispos
     return { disposers, tally }
   }
   const subagents = options.subagents
+  const prefix = options.namespacePrefix
   for (const definition of definitions) {
-    const provider = new AgentProvider(definition, name => subagents.getProvider(name) as SubagentBackend | undefined, options.resolveModel)
+    const provider = new AgentProvider(
+      definition,
+      name => subagents.getProvider(name) as SubagentBackend | undefined,
+      options.resolveModel,
+      ...prefix !== undefined ? [scopedType(prefix, definition.agentType)] : [],
+    )
     disposers.push(subagents.registerProvider(provider))
     tally.addLoaded()
   }

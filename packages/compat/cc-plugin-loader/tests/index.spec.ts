@@ -1,3 +1,4 @@
+import { basename } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { mountCcPlugin } from '../src/index.ts'
 import { tempPluginRoot, writeFileAt, makeContext } from './helpers.ts'
@@ -188,6 +189,102 @@ describe('mountCcPlugin', () => {
       expect(mount.report.name).toBe('document-skills')
       expect(names.sort()).toEqual(['docx', 'xlsx'])
       mount.dispose()
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('threads the manifest-name prefix into agent provider names', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'plugin.json', JSON.stringify({ name: 'p' }))
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const ctx = makeContext()
+      const providers: Array<{ name: string }> = []
+      const mount = await mountCcPlugin(ctx, {
+        root,
+        seams: { subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined } },
+      })
+      expect(mount.report.name).toBe('p')
+      expect(providers.map(provider => provider.name)).toEqual(['p:researcher'])
+      mount.dispose()
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('falls back to nameHint as the agent namespace prefix when the manifest is synthesized', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const ctx = makeContext()
+      const providers: Array<{ name: string }> = []
+      const mount = await mountCcPlugin(ctx, {
+        root,
+        nameHint: 'synth',
+        seams: { subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined } },
+      })
+      expect(mount.report.name).toBe('synth')
+      expect(providers.map(provider => provider.name)).toEqual(['synth:researcher'])
+      mount.dispose()
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('falls back to the root basename as the agent namespace prefix with no manifest and no nameHint', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const ctx = makeContext()
+      const providers: Array<{ name: string }> = []
+      const mount = await mountCcPlugin(ctx, {
+        root,
+        seams: { subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined } },
+      })
+      expect(providers.map(provider => provider.name)).toEqual([`${basename(root)}:researcher`])
+      mount.dispose()
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('threads the marketplace overlay plugin name as the agent namespace prefix', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, '.claude-plugin/marketplace.json', JSON.stringify({
+        plugins: [{ name: 'document-skills', agents: ['./agents'] }],
+      }))
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const ctx = makeContext()
+      const providers: Array<{ name: string }> = []
+      const mount = await mountCcPlugin(ctx, {
+        root,
+        nameHint: 'document-skills',
+        seams: { subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined } },
+      })
+      expect(mount.report.name).toBe('document-skills')
+      expect(providers.map(provider => provider.name)).toEqual(['document-skills:researcher'])
+      mount.dispose()
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('propagates a seam registerProvider throw (duplicate-name semantics are the seam\u2019s)', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const ctx = makeContext()
+      await expect(mountCcPlugin(ctx, {
+        root,
+        seams: {
+          subagents: {
+            registerProvider: () => { throw new Error('name already registered') },
+            getProvider: () => undefined,
+          },
+        },
+      })).rejects.toThrow(/name already registered/)
     } finally {
       await dispose()
     }

@@ -400,6 +400,83 @@ describe('mountAgents', () => {
     }
   })
 
+  it('namespaces provider names with the prefix while definitions stay bare', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string; definition: { agentType: string } }> = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'p',
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      expect(providers).toHaveLength(1)
+      expect(providers[0]!.name).toBe('p:researcher')
+      expect(providers[0]!.definition.agentType).toBe('researcher')
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('exposes the definition on each provider without a prefix (back-compat)', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string; definition: { agentType: string } }> = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      expect(providers[0]!.name).toBe('researcher')
+      expect(providers[0]!.definition.agentType).toBe('researcher')
+      expect(providers[0]!.definition.systemPrompt).toMatch(/researcher/)
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('sanitizes the prefix by stripping colons and whitespace', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string }> = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'my plugin:',
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      expect(providers[0]!.name).toBe('myplugin:researcher')
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('uses an agentType that already contains a colon verbatim under the prefix', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/review:security.md', '---\ndescription: security review\n---\nYou review security.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string; definition: { agentType: string } }> = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'p',
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      // An agentType already containing a colon is used verbatim (no prefix).
+      expect(providers[0]!.name).toBe('review:security')
+      expect(providers[0]!.definition.agentType).toBe('review:security')
+    } finally {
+      await dispose()
+    }
+  })
+
   it('skips agents when the subagent seam is absent', async () => {
     const manifest = parsePluginManifest({ name: 'p' }, 'p')
     const { tally } = await mountAgents({ pluginRoot: '/tmp', manifest, subagents: undefined })

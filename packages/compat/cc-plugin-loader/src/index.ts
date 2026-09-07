@@ -124,6 +124,10 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
     manifest,
     subagents: probed.subagents,
     ...options.resolveModel !== undefined ? { resolveModel: options.resolveModel } : {},
+    // Same name-resolution chain as the manifest itself: manifest name (the
+    // parse/synthesis in resolve-manifest already falls back to nameHint,
+    // then the root basename), used to namespace agent provider names.
+    namespacePrefix: manifest.name,
   }))
   const commandMount = mountCommands({ pluginRoot: root, manifest, commands: probed.commands })
   components.push(commandMount.tally.result())

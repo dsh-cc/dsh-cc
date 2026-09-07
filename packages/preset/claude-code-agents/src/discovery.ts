@@ -116,7 +116,27 @@ export async function discoverAgents(
 
   const byName = new Map<string, AgentDefinition>()
   for (const agent of discoverBundledAgents()) byName.set(agent.agentType, agent)
-  for (const agent of user) byName.set(agent.agentType, agent)
-  for (const agent of project) byName.set(agent.agentType, agent)
+  for (const agent of user) {
+    if (skipColonAgent(agent)) continue
+    byName.set(agent.agentType, agent)
+  }
+  for (const agent of project) {
+    if (skipColonAgent(agent)) continue
+    byName.set(agent.agentType, agent)
+  }
   return Array.from(byName.values())
+}
+
+/**
+ * File-registry colon guard: a workspace file definition whose `agentType`
+ * contains `:` is warned and skipped, so it can never occupy or shadow the
+ * plugin scoped-id namespace (`plugin:agent`). This guard lives ONLY in the
+ * discovery path — never in the shared parse layer (`loadAgentsDir`), which
+ * the plugin loader also uses and whose subdirectory agentTypes legitimately
+ * carry `:`.
+ */
+function skipColonAgent(agent: AgentDefinition): boolean {
+  if (!agent.agentType.includes(':')) return false
+  console.warn(`claude-code-agents: skipping agent "${agent.agentType}" from ${agent.baseDir}: agent file names must be bare (a colon agent type would shadow plugin scoped ids)`)
+  return true
 }
