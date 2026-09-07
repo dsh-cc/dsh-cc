@@ -1,0 +1,10 @@
+{
+  "name": "dsh-cc",
+  "plugins": [
+    {
+      "name": "dsh-cc-agents",
+      "source": "./packages/plugin/dsh-cc-agents",
+      "description": "Official dsh-cc plugin shipping the deep-reasoner and fast-worker subagents with an orchestration routing skill."
+    }
+  ]
+}

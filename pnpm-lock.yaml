@@ -1520,6 +1520,8 @@ importers:
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
 
+  packages/plugin/dsh-cc-agents: {}
+
   packages/preset/cc:
     dependencies:
       '@dsh-cc/bundle-shell':
