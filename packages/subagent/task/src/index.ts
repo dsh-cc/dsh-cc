@@ -25,12 +25,14 @@ import {
 } from './epoch-collector.ts'
 import { SpawnPinCapture, type ResumePinsConfig } from './resume-capture.ts'
 import { AgentRegistry } from './registry.ts'
+import { PluginAgentIndex } from './plugin-agents.ts'
 import { registerTaskTool } from './tool.ts'
 import { mountSettledNoticeSuppression } from './suppress-settled.ts'
 import { mountAgentCatalog } from './catalog.ts'
 import { mountStripWorkspaceInstructions } from './strip-instructions.ts'
 
 export { AgentRegistry } from './registry.ts'
+export { PluginAgentIndex } from './plugin-agents.ts'
 export {
   registerTaskTool,
   TASK_TOOL,
@@ -159,8 +161,11 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
         ? new SpawnPinCapture(ctx, sharedStore)
         : undefined
       : new SpawnPinCapture(ctx, sharedStore ?? pins.store ?? new PinStore(pins.pinsRoot))
-  registerTaskTool(ctx, registry, capture)
-  mountAgentCatalog(ctx, registry)
+  // One PluginAgentIndex serves both dispatch and catalog; it reads the seam
+  // lazily on every call so effect-scoped plugin mounts after apply() are seen.
+  const pluginIndex = new PluginAgentIndex(ctx)
+  registerTaskTool(ctx, registry, capture, pluginIndex)
+  mountAgentCatalog(ctx, registry, pluginIndex)
   mountBackgroundSection(ctx)
   mountStripWorkspaceInstructions(ctx)
   mountSettledNoticeSuppression(ctx)

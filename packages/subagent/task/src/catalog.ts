@@ -26,6 +26,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { cwdOf } from '@dsh-cc/memory'
 import type { AgentRegistry } from './registry.ts'
+import { PluginAgentIndex } from './plugin-agents.ts'
 
 /** Default order slot for the catalog section (tool guidance owns 100–199). */
 export const CATALOG_SECTION_ORDER = 110
@@ -77,16 +78,26 @@ export class AgentCatalogSection {
   private readonly snapshot = new Map<string, readonly AgentDefinition[]>()
   /** Roots whose background discovery has already been kicked off. */
   private readonly seen = new Set<string>()
+  /**
+   * The plugin scoped ids seen by the LAST render. ASYMMETRY with
+   * `snapshot`/`seen`: those are per workspace root, this is global on the
+   * section instance — plugin ids are root-independent (the seam is a process
+   * service), so one diff state serves every root.
+   */
+  private lastPluginIds: string[] = []
 
   /**
    * Create a catalog cache holder bound to a registry.
    * @param ctx - the host context whose `system-prompt` seam and
    *   `system-prompt/change` channel drive refresh.
    * @param registry - the per-workspace definition cache to load from.
+   * @param pluginIndex - the live plugin agent view (defaults to a fresh
+   *   index over this context).
    */
   constructor(
     private readonly ctx: Context,
     private readonly registry: AgentRegistry,
+    private readonly pluginIndex: PluginAgentIndex = new PluginAgentIndex(ctx),
   ) {}
 
   /** Register the catalog section plus its assemble-waterfall reconciliation.
@@ -160,7 +171,38 @@ export class AgentCatalogSection {
     if (agent === undefined) return ''
     const root = cwdOf(agent)
     this.ensureDefs(root)
-    return renderCatalog(this.snapshot.get(root) ?? [])
+    // Synchronous live scan, no caching: plugin mounts are effect-scoped and
+    // may appear or disappear between renders.
+    const pluginEntries = this.pluginIndex.list()
+    this.diffPluginIds(pluginEntries.map(entry => entry.id))
+    const merged = [
+      ...(this.snapshot.get(root) ?? []),
+      ...pluginEntries.map(entry => ({
+        // Plugin entries render under their scoped id (`plugin:agent`), with
+        // the provider definition's whenToUse as the guide line. The guard is
+        // definition-presence — builtin seam providers (spawn/fork/…) carry no
+        // definition and are excluded naturally by the index.
+        agentType: entry.id,
+        whenToUse: entry.definition.whenToUse,
+      } as AgentDefinition)),
+    ].sort((a, b) => a.agentType.localeCompare(b.agentType))
+    return renderCatalog(merged)
+  }
+
+  /**
+   * Diff the plugin ids between renders; on change fire
+   * `system-prompt/change` so reassembly reveals newly mounted (or unmounted)
+   * plugins. The emit is DEFERRED: this diff runs synchronously inside the
+   * section `text()` callback (mid-assembly) and emitting there would
+   * re-enter assembly. Termination: the re-render finds no diff → emits
+   * nothing → the chain self-stabilizes after one extra assembly.
+   */
+  private diffPluginIds(ids: string[]): void {
+    const unchanged = ids.length === this.lastPluginIds.length
+      && ids.every((id, index) => id === this.lastPluginIds[index])
+    if (unchanged) return
+    this.lastPluginIds = ids
+    void Promise.resolve().then(() => this.ctx.emit('system-prompt/change'))
   }
 
   /**
@@ -191,14 +233,17 @@ export class AgentCatalogSection {
  * Mount the single global catalog section.
  * @param ctx - the plug context carrying the `systemPrompt` seam.
  * @param registry - the per-workspace definition cache.
+ * @param pluginIndex - the live plugin agent view (defaults to a fresh index
+ *   over this context).
  * @returns the exact Cordis effect disposer, or undefined when the seam is absent.
  */
 export function mountAgentCatalog(
   ctx: Context,
   registry: AgentRegistry,
+  pluginIndex?: PluginAgentIndex,
 ): (() => void) | undefined {
   if (ctx.get('systemPrompt') === undefined) return undefined
-  return new AgentCatalogSection(ctx, registry).start()
+  return new AgentCatalogSection(ctx, registry, pluginIndex).start()
 }
 
 /**

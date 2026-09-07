@@ -15,7 +15,9 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { AgentRegistry } from '../src/registry.ts'
+import { PluginAgentIndex } from '../src/plugin-agents.ts'
 import { mountAgentCatalog, CATALOG_SECTION_NAME } from '../src/catalog.ts'
+import type { SubagentsLike } from '../src/background-start.ts'
 
 const tmpRoots: string[] = []
 
@@ -42,9 +44,10 @@ afterEach(() => {
 })
 
 /** Mount the real SystemPrompt seam + catalog, returning a scoped assembler. */
-async function mount() {
+async function mount(opts: { seam?: SubagentsLike } = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
+  if (opts.seam !== undefined) ctx.provide('subagents', opts.seam)
   const registry = new AgentRegistry()
   mountAgentCatalog(ctx, registry)
   // Assemble with a scope and read our section's rendered text ('' when the
@@ -54,6 +57,35 @@ async function mount() {
     return assembly.sections.find(s => s.name === CATALOG_SECTION_NAME)?.text ?? ''
   }
   return { ctx, registry, textOf }
+}
+
+/** A plugin agent provider fixture (the AgentProvider shape on the seam). */
+function pluginSeamEntry(id: string, whenToUse: string): { name: string; definition: { agentType: string; whenToUse: string; systemPrompt: string }; start(): Promise<unknown> } {
+  return {
+    name: id,
+    definition: { agentType: id.split(':').pop()!, whenToUse, systemPrompt: `You are ${id}.` },
+    start: async () => ({}),
+  }
+}
+
+/** A mutable fake seam holding plugin agent providers. */
+function fakePluginSeam(): {
+  seam: SubagentsLike
+  register(entry: unknown): () => void
+} {
+  const byName = new Map<string, unknown>()
+  const seam = {
+    async start() { throw new Error('not used') },
+    getProvider: (name: string) => byName.get(name),
+    list: () => [...byName.keys()],
+  } as unknown as SubagentsLike
+  return {
+    seam,
+    register(entry) {
+      byName.set((entry as { name: string }).name, entry)
+      return () => { byName.delete((entry as { name: string }).name) }
+    },
+  }
 }
 
 describe('AgentCatalog section', () => {
@@ -142,6 +174,65 @@ describe('AgentCatalog section', () => {
     writeAgent(ws, 'deep-reasoner', 'Review heavy work')
     const { ctx, textOf } = await mount()
     expect(await textOf({})).toBe('')
+    await ctx.fiber.dispose()
+  })
+
+  it('lists plugin agents with their scoped ids beside the workspace definitions', async () => {
+    const ws = freshDir('ws')
+    writeAgent(ws, 'deep-reasoner', 'Review heavy work')
+    const plugin = fakePluginSeam()
+    plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
+    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    await vi.waitFor(async () => {
+      const text = await textOf(agentAt(ws))
+      expect(text).toContain('- p:researcher — Plugin research')
+      expect(text).toContain('- deep-reasoner — Review heavy work')
+    }, { timeout: 2000 })
+    // Sorted: the scoped id lands in one merged list (p after d).
+    const text = await textOf(agentAt(ws))
+    expect(text.indexOf('deep-reasoner')).toBeLessThan(text.indexOf('p:researcher'))
+    await ctx.fiber.dispose()
+  })
+
+  it('fires system-prompt/change deferred (never from inside the render frame) when the provider set changes', async () => {
+    const ws = freshDir('ws')
+    const plugin = fakePluginSeam()
+    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    const stacks: string[] = []
+    ctx.on('system-prompt/change', () => { stacks.push(new Error().stack ?? '') })
+
+    plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
+    await vi.waitFor(async () => {
+      expect(await textOf(agentAt(ws))).toContain('p:researcher')
+    }, { timeout: 2000 })
+    // The diff-driven change event(s) arrived, but NEVER synchronously from
+    // inside the section's render frame (a mid-assembly emit would re-enter
+    // assembly; the deferred microtask runs after the render frame returned).
+    expect(stacks.length).toBeGreaterThan(0)
+    expect(stacks.some(stack => /AgentCatalogSection/.test(stack))).toBe(false)
+    // A warm assembly with no diff emits nothing new.
+    const before = stacks.length
+    await textOf(agentAt(ws))
+    expect(stacks.length).toBe(before)
+    await ctx.fiber.dispose()
+  })
+
+  it('drops a plugin id after the provider is unmounted and fires the change event', async () => {
+    const ws = freshDir('ws')
+    const plugin = fakePluginSeam()
+    const disposeProvider = plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
+    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    await vi.waitFor(async () => {
+      expect(await textOf(agentAt(ws))).toContain('p:researcher')
+    }, { timeout: 2000 })
+
+    const changes = vi.fn()
+    ctx.on('system-prompt/change', changes)
+    disposeProvider()
+    await vi.waitFor(async () => {
+      expect(await textOf(agentAt(ws))).not.toContain('p:researcher')
+    }, { timeout: 2000 })
+    expect(changes).toHaveBeenCalled()
     await ctx.fiber.dispose()
   })
 })

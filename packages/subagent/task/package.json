@@ -68,6 +68,7 @@
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/plugin-loader": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@dsh-cc/tool-search": "workspace:*"

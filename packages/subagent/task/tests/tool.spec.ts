@@ -16,7 +16,10 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
 import type { ToolRestriction } from '@dsh-cc/claude-code-agents'
 import { AgentRegistry } from '../src/registry.ts'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { backgroundTasksDisabled, registerTaskTool, TASK_TOOL } from '../src/tool.ts'
+import { PinStore } from '@dsh-cc/subagent-resume-pins'
+import { SpawnPinCapture } from '../src/resume-capture.ts'
 import { BACKGROUND_SECTION_TEXT } from '../src/index.ts'
 import { collectorsForSession } from '../src/epoch-collector.ts'
 
@@ -27,6 +30,32 @@ interface FakeProvider {
   /** Present only on providers implementing the continuable-creation capability. */
   prepareContinuable?: () => Promise<unknown>
   start(request: Record<string, unknown>): Promise<{ result: Promise<{ stopReason: string; output?: readonly { type: string; text?: string }[] }> }>
+  /** Present only on plugin agent providers (the AgentProvider shape). */
+  definition?: AgentDefinition
+}
+
+/** A plugin agent provider: the AgentProvider shape the seam carries (never started by Task). */
+function pluginProvider(
+  id: string,
+  def: { agentType?: string; systemPrompt: string; toolRestriction?: ToolRestriction; background?: boolean; model?: string },
+): FakeProvider {
+  return {
+    name: id,
+    capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
+    prepareContinuable: async () => ({}),
+    start: async () => ({ result: Promise.resolve(COMPLETED) }),
+    definition: {
+      agentType: def.agentType ?? id.split(':').pop()!,
+      whenToUse: `${id} when needed`,
+      systemPrompt: def.systemPrompt,
+      source: 'project',
+      baseDir: '/plugins/p/agents',
+      filename: def.agentType ?? id,
+      ...(def.toolRestriction !== undefined ? { toolRestriction: def.toolRestriction } : {}),
+      ...(def.background !== undefined ? { background: def.background } : {}),
+      ...(def.model !== undefined ? { model: def.model } : {}),
+    } as AgentDefinition,
+  }
 }
 
 /** One recorded `startContinuable` call (the background dispatch path). */
@@ -203,6 +232,7 @@ async function mount(opts: {
   routes?: { resolve(model: string | undefined): { provider?: string; model?: string } | undefined }
   seamProviders?: FakeProvider[]
   omitStartContinuable?: boolean
+  withCapture?: boolean
 } = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
@@ -215,8 +245,16 @@ async function mount(opts: {
   ctx.provide('subagents', seam)
   if (opts.routes !== undefined) ctx.provide('ccModelRoutes', opts.routes)
   const registry = new AgentRegistry()
-  registerTaskTool(ctx, registry)
-  return { ctx, runs, continuableStarts, startedChildIds, emitEnd, registry }
+  let capture: SpawnPinCapture | undefined
+  let store: PinStore | undefined
+  if (opts.withCapture === true) {
+    const pinsRoot = mkdtempSync(join(tmpdir(), 'task-tool-pins-'))
+    tmpRoots.push(pinsRoot)
+    store = new PinStore(pinsRoot)
+    capture = new SpawnPinCapture(ctx, store)
+  }
+  registerTaskTool(ctx, registry, capture)
+  return { ctx, runs, continuableStarts, startedChildIds, emitEnd, registry, store }
 }
 
 let callCounter = 0
@@ -968,6 +1006,133 @@ describe('Task tool', () => {
         if (prev === undefined) delete process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
         else process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = prev
       }
+    })
+  })
+
+  describe('plugin agent dispatch (scoped plugin:agent ids)', () => {
+    function mountWithPlugin(opts: Parameters<typeof mount>[0] & { pluginDefs?: Parameters<typeof pluginProvider>[1][] } = {}) {
+      const plugins = (opts.pluginDefs ?? [{}]).map((def, i) => pluginProvider(`p:researcher${i > 0 ? i : ''}`, def))
+      return mount({ ...opts, seamProviders: [...defaultProviders(), ...plugins, ...(opts.seamProviders ?? [])] })
+    }
+
+    it('folds persona/toolFilter/agentOptions/maxDepth into the recorded spawn start request', async () => {
+      const routes = { resolve: (m: string | undefined) => m === 'opus' ? { provider: 'orchestrix', model: 'glm-5.2' } : undefined }
+      const { ctx, runs, continuableStarts } = await mountWithPlugin({
+        routes,
+        withCapture: false,
+        pluginDefs: [{ systemPrompt: 'You are the plugin researcher.', toolRestriction: { allow: ['read'] }, model: 'opus' }],
+      })
+      reserveNames(ctx, 'read')
+      const result = await call(ctx, {
+        subagent_type: 'p:researcher',
+        description: 'review',
+        prompt: 'audit the doc',
+        run_in_background: true,
+      }, agentAt('/any'))
+      expect(result.isError).toBe(false)
+      expect(runs).toHaveLength(0)
+      expect(continuableStarts).toHaveLength(1)
+      expect(continuableStarts[0]!.provider).toBe('spawn')
+      const req = continuableStarts[0]!.request
+      expect(req['persona']).toBe('You are the plugin researcher.')
+      expect(req['prompt']).toEqual([{ type: 'text', text: 'audit the doc' }])
+      expect(req['agentOptions']).toEqual({ provider: 'orchestrix', model: 'glm-5.2' })
+      expect(req['maxDepth']).toBe(3)
+      const filter = req['toolFilter'] as { allow?: string[] }
+      expect(filter.allow).toContain('read')
+      await assertRestrictable(ctx, filter as ToolRestriction)
+    })
+
+    it('backgrounds on omit when the plugin definition pins background: true', async () => {
+      const { ctx, runs, continuableStarts } = await mountWithPlugin({
+        pluginDefs: [{ systemPrompt: 'Pinned plugin scout.', background: true }],
+      })
+      await call(ctx, { subagent_type: 'p:researcher', description: 'pinned', prompt: 'grind' }, agentAt('/any'))
+      expect(runs).toHaveLength(0)
+      expect(continuableStarts).toHaveLength(1)
+      expect(continuableStarts[0]!.provider).toBe('spawn')
+      expect(continuableStarts[0]!.request['persona']).toBe('Pinned plugin scout.')
+    })
+
+    it('returns the collected text for a foreground plugin dispatch', async () => {
+      const { ctx, runs, continuableStarts } = await mountWithPlugin({
+        pluginDefs: [{ systemPrompt: 'Foreground plugin.' }],
+      })
+      const result = await call(ctx, { subagent_type: 'p:researcher', description: 'x', prompt: 't' }, agentAt('/any'))
+      expect(result.content[0]!.text).toBe('done')
+      expect(runs).toHaveLength(0)
+      expect(continuableStarts).toHaveLength(1)
+      expect(continuableStarts[0]!.provider).toBe('spawn')
+      expect(continuableStarts[0]!.request['persona']).toBe('Foreground plugin.')
+    })
+
+    it('does not resolve a bare plugin agent name', async () => {
+      const { ctx, continuableStarts } = await mountWithPlugin({ pluginDefs: [{ systemPrompt: 'x' }] })
+      const result = await call(ctx, { subagent_type: 'researcher', description: 'x', prompt: 't' }, agentAt('/any'))
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toMatch(/unknown subagent_type "researcher"/)
+      expect(continuableStarts).toHaveLength(0)
+    })
+
+    it('lists plugin scoped ids and the colon hint for an unknown plugin type', async () => {
+      const { ctx, continuableStarts } = await mountWithPlugin({ pluginDefs: [{ systemPrompt: 'x' }] })
+      const result = await call(ctx, { subagent_type: 'p:nope', description: 'x', prompt: 't' }, agentAt('/any'))
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toMatch(/unknown subagent_type "p:nope"/)
+      expect(result.content[0]!.text).toContain('p:researcher')
+      expect(result.content[0]!.text).toMatch(/plugin agent not found — the plugin may be unmounted or the agent renamed/)
+      expect(continuableStarts).toHaveLength(0)
+    })
+
+    it('a file definition and a plugin scoped id coexist', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'deep-reasoner', '---\nname: deep-reasoner\ndescription: Review heavy work\n---\nYou are a Staff Engineer.\n')
+      const { ctx, continuableStarts } = await mountWithPlugin({
+        pluginDefs: [{ systemPrompt: 'You are the plugin researcher.' }],
+      })
+      await call(ctx, { subagent_type: 'deep-reasoner', description: 'x', prompt: 't' }, agentAt(ws))
+      await call(ctx, { subagent_type: 'p:researcher', description: 'x', prompt: 't' }, agentAt(ws))
+      expect(continuableStarts).toHaveLength(2)
+      expect(continuableStarts[0]!.request['persona']).toBe('You are a Staff Engineer.')
+      expect(continuableStarts[1]!.request['persona']).toBe('You are the plugin researcher.')
+    })
+
+    it('a backgrounded plugin agent\u2019s resume-pin write succeeds with the plugin definition', async () => {
+      const { ctx, continuableStarts, startedChildIds, store } = await mountWithPlugin({
+        withCapture: true,
+        pluginDefs: [{ systemPrompt: 'You are the pinned plugin researcher.' }],
+      })
+      // The caller carries an explicit route so the pin's route overlay is
+      // materializable (no llm service → the preflight degrades gracefully).
+      const caller = {
+        id: 'pin-parent',
+        options: { provider: 'orchestrix', model: 'glm-5.2' },
+        session: { header: { cwd: '/any' } },
+      } as unknown as Agent
+      const result = await call(ctx, {
+        subagent_type: 'p:researcher',
+        description: 'pinned',
+        prompt: 'grind',
+        run_in_background: true,
+      }, caller)
+      expect(result.isError).toBe(false)
+      expect(continuableStarts).toHaveLength(1)
+      // The durable child id is handed out by startContinuable (the pin was
+      // preallocated to it before the creation call).
+      const childId = startedChildIds[0]
+      expect(childId).toBeDefined()
+      const pin = store!.read(childId!)
+      expect(pin).toBeDefined()
+      expect((pin as { definition?: { kind: string; agentType: string; source: string; baseDir: string } }).definition)
+        .toMatchObject({ kind: 'named', agentType: 'researcher', source: 'project', baseDir: '/plugins/p/agents' })
+      expect(result.content[0]!.text).not.toContain('resume pin capture failed')
+    })
+
+    it('teaches plugin scoped ids in the tool and parameter descriptions', async () => {
+      const { ctx } = await mountWithPlugin()
+      const def = ctx.tools.get(TASK_TOOL) as unknown as { description: string; parameters: { properties: Record<string, { description: string }> } }
+      expect(def.description).toMatch(/plugin:agent/)
+      expect(def.parameters.properties['subagent_type']!.description).toMatch(/plugin:agent/)
     })
   })
 
