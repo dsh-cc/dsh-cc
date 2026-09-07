@@ -1352,21 +1352,27 @@ capabilities:
     deviation: { kind: none }
 
   commands.plugin:
-    title: /plugin
+    title: /plugin [subcommand]
     category: commands
     plane: preset
     upstream:
-      summary: Browse and manage installed plugins/marketplaces.
+      summary: Manage plugins and marketplaces via subcommands (list/install/uninstall/enable/disable/update, marketplace-*).
       refs: []
     dimensions:
       recognized: true
       mounted: true
-      behavioral: full
-      ux: full
+      behavioral: partial
+      ux: partial
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-plugin" }
       - { type: test, path: packages/interaction/command-plugin/tests/command-plugin.spec.ts }
-    deviation: { kind: none }
+    deviation:
+      kind: downgrade
+      summary: >-
+        No interactive menu UI (text output only); a static trust-warning line
+        instead of interactive consent prompts; CC-only subcommands not
+        implemented (details/eval/init/prune/tag/validate, --config, --sparse,
+        managed scope).
 
   commands.provider:
     title: /provider
@@ -1925,6 +1931,27 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-shell-glue" }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/mounts.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/discovery.spec.ts }
+    deviation: { kind: none }
+
+  plugins.management:
+    title: Plugin management state
+    category: plugins
+    plane: preset
+    upstream:
+      summary: >-
+        State-file interoperability with Claude Code v2.1.236 (probe-verified
+        byte shapes; see docs/plans/2026-09-06-plugin-management.md).
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-shell-glue" }
+      - { type: test, path: packages/compat/cc-plugin-manager/tests/alignment.spec.ts }
+      - { type: test, path: packages/interaction/command-plugin/tests/manage.spec.ts }
+      - { type: test, path: packages/compat/cc-plugin-manager/tests/install.spec.ts }
     deviation: { kind: none }
 
   # ── settings ────────────────────────────────────────────────────────────

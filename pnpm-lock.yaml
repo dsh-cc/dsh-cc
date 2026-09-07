@@ -82,6 +82,9 @@ importers:
       '@dsh-cc/plugin-loader':
         specifier: workspace:^
         version: link:../../compat/cc-plugin-loader
+      '@dsh-cc/plugin-manager':
+        specifier: workspace:^
+        version: link:../../compat/cc-plugin-manager
       '@dsh-cc/session-title-provider':
         specifier: workspace:^
         version: link:../../compat/session-title-provider
@@ -407,6 +410,12 @@ importers:
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
+
+  packages/compat/cc-plugin-manager:
+    devDependencies:
+      '@dsh-cc/plugin-loader':
+        specifier: workspace:^
+        version: link:../cc-plugin-loader
 
   packages/compat/cc-serena-first:
     devDependencies:

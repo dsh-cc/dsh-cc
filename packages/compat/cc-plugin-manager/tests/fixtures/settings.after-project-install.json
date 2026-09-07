@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "formatter@internal": true
+  },
+  "extraKnownMarketplaces": {
+    "internal": {
+      "source": {
+        "source": "directory",
+        "path": "/tmp/cc-probe/marketplace"
+      }
+    }
+  }
+}

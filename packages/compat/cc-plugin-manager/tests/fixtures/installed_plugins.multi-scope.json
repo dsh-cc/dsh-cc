@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "plugins": {
+    "formatter@internal": [
+      {
+        "scope": "user",
+        "installPath": "/home/probe/.claude/plugins/cache/internal/formatter/1.2.0",
+        "version": "1.2.0",
+        "installedAt": "2026-09-05T08:10:00.000Z",
+        "lastUpdated": "2026-09-05T08:10:00.000Z"
+      },
+      {
+        "scope": "project",
+        "installPath": "/home/probe/.claude/plugins/cache/internal/formatter/1.2.0",
+        "version": "1.2.0",
+        "installedAt": "2026-09-05T08:11:00.000Z",
+        "lastUpdated": "2026-09-05T08:11:00.000Z",
+        "projectPath": "/tmp/cc-probe/project"
+      }
+    ]
+  }
+}

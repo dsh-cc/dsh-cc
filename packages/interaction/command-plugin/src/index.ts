@@ -10,11 +10,11 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import {
-  formatPluginList,
   formatReloadSummary,
   type CcPluginSummary,
   type CcPluginRescanError,
 } from './plugin.ts'
+import { executePluginManage, type CcPluginManagerSeam } from './manage.ts'
 
 export const name = 'command-plugin'
 export const inject = ['commands']
@@ -34,13 +34,16 @@ export interface CcPluginsSeam {
 /** Resolve the optional ccPlugins seam, or undefined when not composed. */
 function seam(ctx: Context): CcPluginsSeam | undefined {
   return ctx.get('ccPlugins') as CcPluginsSeam | undefined
-}/** Execute `/plugin`: list the mounted CC plugins. */
-async function executePlugin(ctx: Context, _invocation: CommandInvocation): Promise<CommandResult> {
-  const plugins = seam(ctx)
-  if (plugins === undefined) {
-    return { kind: 'success', text: 'No plugin registry is mounted in this composition (cc-shell-glue absent).' }
-  }
-  return { kind: 'success', text: formatPluginList(plugins.list()) }
+}
+
+/** Resolve the optional ccPluginManager seam, or undefined when not composed. */
+function managerSeam(ctx: Context): CcPluginManagerSeam | undefined {
+  return ctx.get('ccPluginManager') as CcPluginManagerSeam | undefined
+}
+/** Execute `/plugin`: list the mounted CC plugins. */
+/** Execute `/plugin`: route through the §3 subcommand grammar. */
+async function executePlugin(ctx: Context, invocation: CommandInvocation): Promise<CommandResult> {
+  return executePluginManage({ ctx, ccPlugins: seam(ctx), ccPluginManager: managerSeam(ctx) }, invocation)
 }
 
 /** Execute `/reload-plugins`: dispose and remount every discovery root. */
@@ -61,7 +64,7 @@ async function executeReload(ctx: Context, _invocation: CommandInvocation): Prom
 export function apply(ctx: Context): void {
   ctx.commands.register({
     name: 'plugin',
-    description: 'list mounted Claude Code plugins (name, root, component counts)',
+    description: 'manage Claude Code plugins (list/install/uninstall/enable/disable/update/marketplace)',
     handler: (invocation: CommandInvocation) => executePlugin(ctx, invocation),
   })
   ctx.commands.register({

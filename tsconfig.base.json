@@ -113,6 +113,9 @@
       "@dsh-cc/output-styles": [
         "./packages/compat/cc-output-styles/src/index.ts"
       ],
+      "@dsh-cc/plugin-manager": [
+        "./packages/compat/cc-plugin-manager/src/index.ts"
+      ],
       "@dsh-cc/session-title-provider": [
         "./packages/compat/session-title-provider/src/index.ts"
       ],

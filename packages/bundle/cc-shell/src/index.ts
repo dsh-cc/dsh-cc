@@ -34,6 +34,7 @@ import {
   type ResolvedMcpPaths,
 } from '@dsh-cc/mcp-config'
 import * as CcMcpClient from '@dsh-cc/mcp-client'
+import { CcPluginManagerService } from './ccPluginManager.ts'
 import { CcPluginsService } from './ccPlugins.ts'
 
 /** Plugin config: which on-disk CC surfaces to mount. */
@@ -101,6 +102,18 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   // 1. Claude Code plugins. Absent pluginDirs uses installed ∩ enabled;
   //    explicit []/null disables; a non-empty list flattens those dirs.
+  //    The plugin-state manager (install/uninstall/enable/disable/update,
+  //    marketplaces) publishes alongside the registry so `/plugin` manage
+  //    subcommands can reach it; mutations land in the same on-disk state
+  //    the registry's discovery reads.
+  if (ctx.get('ccPluginManager') === undefined) {
+    await ctx.plugin({
+      name: 'cc-plugin-manager',
+      apply(c: Context) {
+        new CcPluginManagerService(c)
+      },
+    })
+  }
   const plugins = new CcPluginsService(ctx, {
     ...config.pluginDirs !== undefined ? { pluginDirs: config.pluginDirs } : {},
     resolveModel,

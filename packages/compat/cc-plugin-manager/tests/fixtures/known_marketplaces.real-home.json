@@ -1,0 +1,19 @@
+{
+  "internal": {
+    "source": {
+      "source": "directory",
+      "path": "/tmp/cc-probe/marketplace"
+    },
+    "installLocation": "/tmp/cc-probe/marketplace",
+    "lastUpdated": "2026-09-05T08:00:00.000Z"
+  },
+  "anthropics": {
+    "source": {
+      "source": "github",
+      "repo": "anthropics/claude-code"
+    },
+    "installLocation": "/home/probe/.claude/plugins/marketplaces/anthropics",
+    "lastUpdated": "2026-09-05T08:05:00.000Z",
+    "autoUpdate": true
+  }
+}

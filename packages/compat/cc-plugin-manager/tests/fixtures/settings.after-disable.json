@@ -1,0 +1,17 @@
+{
+  "enabledPlugins": {
+    "dark-mode@anthropics": false
+  },
+  "extraKnownMarketplaces": {
+    "anthropics": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-code"
+      }
+    }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "dsh statusline"
+  }
+}

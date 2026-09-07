@@ -85,7 +85,7 @@ derived from four orthogonal dimensions (`recognized` / `mounted` / `behavioral`
 | ✅ | <a id="cap-commands.output-style"></a>/output-style | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/compat/cc-output-styles/tests/output-styles.spec.ts) | — | — |
 | ✅ | <a id="cap-commands.permissions"></a>/permissions [mode] | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/interaction/command-permissions/tests/command-permissions.spec.ts) [t2](packages/ui/tui/tests/driver-permissions.spec.ts) | — | — |
 | ✅ | <a id="cap-commands.plan"></a>/plan | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/ui/tui/tests/plan-channel.spec.ts) | — | — |
-| ✅ | <a id="cap-commands.plugin"></a>/plugin | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/interaction/command-plugin/tests/command-plugin.spec.ts) | — | — |
+| 🔶 | <a id="cap-commands.plugin"></a>/plugin [subcommand] | ✓ | ✓ | Partial | Partial | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/interaction/command-plugin/tests/command-plugin.spec.ts) | downgrade — No interactive menu UI (text output only); a static trust-warning line instead of interactive consent prompts; CC-only subcommands not implemented (details/eval/init/prune/tag/validate, --config, --sparse, managed scope). | — |
 | ✅ | <a id="cap-commands.provider"></a>/provider | ✓ | ✓ | Full | Full | [s1](packages/ui/tui/src/provider-command.ts) [s2](packages/ui/tui/src/provider-flow.ts) [s3](packages/ui/tui/src/provider-presets.ts) [t1](packages/ui/tui/tests/driver-provider-panel.spec.ts) [t2](packages/ui/tui/tests/driver-provider-actions.spec.ts) [t3](packages/ui/tui/tests/driver-provider-refresh.spec.ts) | — | — |
 | ✅ | <a id="cap-commands.release-notes"></a>/release-notes | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/interaction/command-release-notes/tests/command-release-notes.spec.ts) | — | — |
 | ✅ | <a id="cap-commands.reload-plugins"></a>/reload-plugins | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/bundle/cc-shell/tests/ccPlugins.spec.ts) | — | — |
@@ -137,6 +137,7 @@ derived from four orthogonal dimensions (`recognized` / `mounted` / `behavioral`
 | Status | Capability | Recognized | Mounted | Behavior | UX | Evidence | Deviation | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ✅ | <a id="cap-plugins.loader"></a>Plugin system | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/compat/cc-plugin-loader/tests/mounts.spec.ts) [t2](packages/compat/cc-plugin-loader/tests/discovery.spec.ts) | — | — |
+| ✅ | <a id="cap-plugins.management"></a>Plugin management state | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/compat/cc-plugin-manager/tests/alignment.spec.ts) [t2](packages/interaction/command-plugin/tests/manage.spec.ts) [t3](packages/compat/cc-plugin-manager/tests/install.spec.ts) | — | — |
 
 ## Settings
 
@@ -201,6 +202,7 @@ derived from four orthogonal dimensions (`recognized` / `mounted` / `behavioral`
 - <a id="dev-commands.exit"></a>`commands.exit` — non-goal: Host-owned by design; the dsh-native equivalents are the TUI /exit command (packages/ui/tui/src/slash.ts) and the idle double Ctrl+C gesture, so a preset-side port is out of parity scope.
 - <a id="dev-commands.init"></a>`commands.init` — downgrade: Drives a follow-up turn that writes/refreshes CLAUDE.md rather than the upstream one-shot initializer flow.
 - <a id="dev-commands.model"></a>`commands.model` — non-goal: Host-owned by design; the dsh-native equivalents are the TUI-local /model and /effort commands (packages/ui/tui/src/slash.ts, model-catalog) plus the ccModelRoutes alias service, so a preset-side port is out of parity scope.
+- <a id="dev-commands.plugin"></a>`commands.plugin` — downgrade: No interactive menu UI (text output only); a static trust-warning line instead of interactive consent prompts; CC-only subcommands not implemented (details/eval/init/prune/tag/validate, --config, --sparse, managed scope).
 - <a id="dev-commands.resume"></a>`commands.resume` — downgrade: Lists sessions; switching is host-owned (dsh --resume <id>).
 - <a id="dev-commands.rewind"></a>`commands.rewind` — upstream-blocked (upstream_dependency: session-file-snapshot-seam): Needs the session file-snapshot seam; no checkpoint/rewind design exists yet.
 - <a id="dev-commands.tasks"></a>`commands.tasks` — downgrade: Human-facing /tasks lists background jobs only; the todo-list seam is pending. The model-facing dsh-tool-todo and the TUI Ctrl+T todo panel cover the rest of the workflow. The footer cross-links to /agents (N background agents — /agents for details) when the ccAgents snapshot service resolves.
