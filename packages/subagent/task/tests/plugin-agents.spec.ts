@@ -13,11 +13,15 @@
 import { describe, expect, it, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { AgentProvider } from '@dsh-cc/plugin-loader'
+import { join, resolve } from 'node:path'
+import { Context } from '@deepseek-ai/cordis'
+import { AgentProvider, mountCcPlugin } from '@dsh-cc/plugin-loader'
 import { loadAgentsDir } from '@dsh-cc/claude-code-agents'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { PluginAgentIndex } from '../src/plugin-agents.ts'
+import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
+import { AgentRegistry } from '../src/registry.ts'
+import { renderCatalog } from '../src/catalog.ts'
 
 const tmpRoots: string[] = []
 
@@ -145,5 +149,135 @@ describe('PluginAgentIndex', () => {
     seam = real
     expect(index.list()).toHaveLength(1)
     expect(index.resolve('p:researcher')).toBeDefined()
+  })
+})
+
+/**
+ * End-to-end Task dispatch of the REAL first-party plugin's agents
+ * (docs/plans/2026-09-07-official-agents-plugin.md §5.2): the actual
+ * `packages/plugin/dsh-cc-agents` dir mounted through the loader's
+ * `mountAgents` (the exact production mount path), dispatched through the
+ * real Task tool over a scripted continuable seam.
+ */
+describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)', () => {
+  const REAL_PLUGIN_DIR = resolve(import.meta.dirname, '../../../plugin/dsh-cc-agents')
+
+  /** A minimal agent facade the Task tool reads `cwd` from. */
+  function agentAt(cwd: string): unknown {
+    return { id: 'plugin-dispatch-parent', session: { header: { cwd } } }
+  }
+
+  /**
+   * A dispatch-capable subagents seam: a continuable-capable `spawn` provider
+   * plus the registerProvider/getProvider/list surface `mountAgents` and
+   * `PluginAgentIndex` read. `startContinuable` mirrors the harness: it emits
+   * `subagent/start`, records the folded request, and settles the epoch.
+   */
+  function dispatchSeam(emit: (event: string, info: Record<string, unknown>) => void) {
+    const providers = new Map<string, unknown>()
+    providers.set('spawn', {
+      name: 'spawn',
+      prepareContinuable: async () => ({}),
+      start: async () => ({ result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text: 'REASONED OUTPUT' }] }) }),
+    })
+    const continuable: Array<Record<string, unknown>> = []
+    const seam: Record<string, unknown> = {
+      async start(name: string, request: Record<string, unknown>) {
+        const provider = providers.get(name) as { start(r: unknown): Promise<unknown> } | undefined
+        if (provider === undefined) throw new Error(`unknown provider "${name}"`)
+        return provider.start(request)
+      },
+      async startContinuable(spec: Record<string, unknown>) {
+        const childId = (spec['childId'] as string | undefined) ?? `child-${continuable.length + 1}`
+        const runId = `run-${continuable.length + 1}`
+        emit('subagent/start', { runId, provider: spec['provider'], id: childId, local: true })
+        continuable.push(spec['request'] as Record<string, unknown>)
+        void (async () => {
+          emit('subagent/end', {
+            runId, provider: spec['provider'], id: childId, local: true,
+            stopReason: 'completed',
+            lastAssistantMessage: [{ type: 'text', text: 'REASONED OUTPUT' }],
+          })
+        })()
+        return { childId, messageId: 'm-1' }
+      },
+      getProvider: (name: string) => providers.get(name),
+      list: () => [...providers.keys()],
+      registerProvider: (provider: unknown) => {
+        providers.set((provider as { name: string }).name, provider)
+        return () => { providers.delete((provider as { name: string }).name) }
+      },
+    }
+    return { seam, continuable }
+  }
+
+  /** Mount the real plugin's agents exactly as cc-shell-glue does, plus the Task tool. */
+  async function setup() {
+    const ctx = new Context()
+    const emit = (event: string, info: Record<string, unknown>): void => {
+      ;(ctx as unknown as { emit(event: string, info: unknown): void }).emit(event, info)
+    }
+    const { seam, continuable } = dispatchSeam(emit)
+    ctx.provide('subagents', seam)
+    // Minimal built-in known-names set: the shipped lists sanitize untouched.
+    let taskDef: { execute(a: unknown, e: unknown): Promise<{ text: string; status?: string }> } | undefined
+    ctx.provide('tools', {
+      register: (def: never) => { taskDef = def as never; return () => {} },
+      reserve: () => () => {},
+      get: () => undefined,
+      view: () => ({
+        restrictableNames: new Set([
+          'bash', 'read', 'read_image', 'grep', 'glob', 'write', 'edit',
+          'job_output', 'job_kill', 'todo_write', 'NotebookEdit',
+        ]),
+      }),
+    })
+    // The exact production mount path (ccPlugins.ts): the loader reads the
+    // nested `.claude-plugin/plugin.json` (name `dsh-cc-agents`) and scopes
+    // the provider names with the manifest name.
+    const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR })
+    void mount // stays mounted: the providers must remain live for the dispatch
+    const workspace = mkdtempSync(join(tmpdir(), 'plugin-agent-dispatch-'))
+    tmpRoots.push(workspace)
+    registerTaskTool(ctx, new AgentRegistry())
+    expect(taskDef, 'Task tool registered').toBeDefined()
+    return { ctx, continuable, workspace, taskDef: taskDef! }
+  }
+
+  it('dispatches dsh-cc-agents:deep-reasoner foreground: persona folds, collected text returns', async () => {
+    const { continuable, workspace, taskDef } = await setup()
+    const result = await taskDef.execute(
+      { subagent_type: 'dsh-cc-agents:deep-reasoner', description: 'reason', prompt: 'think hard', run_in_background: false },
+      { agent: agentAt(workspace), signal: new AbortController().signal, token: 'tok-1' },
+    )
+    expect(result.status).toBe('completed')
+    expect(result.text).toBe('REASONED OUTPUT')
+
+    expect(continuable).toHaveLength(1)
+    const request = continuable[0]!
+    // The persona folds into the spawn request.
+    expect(String(request['persona'])).toContain('Staff Engineer')
+    // No routes service: the opus alias is unconfigured → no agentOptions.
+    expect(request['agentOptions']).toBeUndefined()
+    // The shipped tools list sanitizes untouched against the built-in set.
+    expect(request['toolFilter']).toBeDefined()
+  })
+
+  it('the catalog lists both scoped ids', async () => {
+    const { ctx } = await setup()
+    const index = new PluginAgentIndex(ctx)
+    expect(index.knownIds().sort()).toEqual([
+      'dsh-cc-agents:deep-reasoner',
+      'dsh-cc-agents:fast-worker',
+    ])
+    const catalog = renderCatalog(
+      index.list().map(entry => ({
+        agentType: entry.id,
+        whenToUse: entry.definition.whenToUse,
+      }) as AgentDefinition),
+    )
+    expect(catalog).toContain('dsh-cc-agents:deep-reasoner')
+    expect(catalog).toContain('dsh-cc-agents:fast-worker')
+    expect(catalog).toContain('## Available subagents')
   })
 })
