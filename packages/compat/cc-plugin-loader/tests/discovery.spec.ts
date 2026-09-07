@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { discoverCcPluginRoots } from '../src/discovery.ts'
@@ -296,5 +296,108 @@ describe('local settings hoist (worktree / subdirectory)', () => {
 
     expect(discoverCcPluginRoots({ claudeHome: home, cwd: wt }).map(entry => entry.nameHint))
       .toEqual(['wt-project'])
+  })
+})
+
+describe('discoverCcPluginRoots dual-home (dshHome, S2)', () => {
+  const cwd = process.cwd() // no repo-level .claude settings exist; project/local stay empty
+  /** A dsh-home shaped tree mirroring the claude-home layout. */
+  async function dshHome(options: {
+    enabled?: Record<string, boolean>
+    installs?: Record<string, { path: string; lastUpdated?: string }[]>
+  }): Promise<string> {
+    const home = await tempDir('cc-plugin-dsh-')
+    await writeJson(join(home, 'settings.json'), { enabledPlugins: options.enabled ?? {} })
+    await writeJson(join(home, 'plugins', 'installed_plugins.json'), {
+      version: 2,
+      plugins: Object.fromEntries(
+        Object.entries(options.installs ?? {}).map(([key, entries]) => [
+          key,
+          entries.map(entry => ({
+            scope: 'user',
+            installPath: entry.path,
+            ...entry.lastUpdated !== undefined ? { lastUpdated: entry.lastUpdated } : {},
+          })),
+        ]),
+      ),
+    })
+    return home
+  }
+
+  it('discovers a claude-only install enabled in the claude settings', async () => {
+    const install = await tempDir('cc-plugin-install-')
+    await writeAt(install, '.claude-plugin/plugin.json', JSON.stringify({ name: 'tavily' }))
+    const home = (await claudeHome({
+      enabled: { 'tavily@official': true },
+      installs: { 'tavily@official': [{ path: install }] },
+    })).home
+    const dsh = await dshHome({})
+    expect(discoverCcPluginRoots({ claudeHome: home, dshHome: dsh, cwd })).toEqual([
+      { root: install, nameHint: 'tavily' },
+    ])
+  })
+
+  it('a dsh false masks a claude true (plugin does not mount)', async () => {
+    const install = await tempDir('cc-plugin-install-')
+    await writeAt(install, '.claude-plugin/plugin.json', JSON.stringify({ name: 'tavily' }))
+    const home = (await claudeHome({
+      enabled: { 'tavily@official': true },
+      installs: { 'tavily@official': [{ path: install }] },
+    })).home
+    const dsh = await dshHome({ enabled: { 'tavily@official': false } })
+    expect(discoverCcPluginRoots({ claudeHome: home, dshHome: dsh, cwd })).toEqual([])
+  })
+
+  it('a dsh true enables a claude-installed plugin', async () => {
+    const install = await tempDir('cc-plugin-install-')
+    await writeAt(install, '.claude-plugin/plugin.json', JSON.stringify({ name: 'tavily' }))
+    const home = (await claudeHome({
+      enabled: {},
+      installs: { 'tavily@official': [{ path: install }] },
+    })).home
+    const dsh = await dshHome({ enabled: { 'tavily@official': true } })
+    expect(discoverCcPluginRoots({ claudeHome: home, dshHome: dsh, cwd })).toEqual([
+      { root: install, nameHint: 'tavily' },
+    ])
+  })
+
+  it('an empty dsh installed list hides the id even when enabled', async () => {
+    const install = await tempDir('cc-plugin-install-')
+    await writeAt(install, '.claude-plugin/plugin.json', JSON.stringify({ name: 'tavily' }))
+    const home = (await claudeHome({
+      enabled: { 'tavily@official': true },
+      installs: { 'tavily@official': [{ path: install }] },
+    })).home
+    const dsh = await dshHome({ enabled: { 'tavily@official': true }, installs: { 'tavily@official': [] } })
+    expect(discoverCcPluginRoots({ claudeHome: home, dshHome: dsh, cwd })).toEqual([])
+  })
+
+  it('a dsh-installed plugin (own cache path) is discovered', async () => {
+    const dshInstall = await tempDir('cc-plugin-dsh-install-')
+    await writeAt(dshInstall, '.claude-plugin/plugin.json', JSON.stringify({ name: 'dshside' }))
+    const home = (await claudeHome({})).home
+    const dsh = await dshHome({
+      enabled: { 'dshside@official': true },
+      installs: { 'dshside@official': [{ path: dshInstall }] },
+    })
+    expect(discoverCcPluginRoots({ claudeHome: home, dshHome: dsh, cwd })).toEqual([
+      { root: dshInstall, nameHint: 'dshside' },
+    ])
+  })
+
+  it('treats a symlinked dshHome equal to claudeHome as single-root (no double read)', async () => {
+    const install = await tempDir('cc-plugin-install-')
+    await writeAt(install, '.claude-plugin/plugin.json', JSON.stringify({ name: 'tavily' }))
+    const home = (await claudeHome({
+      enabled: { 'tavily@official': true },
+      installs: { 'tavily@official': [{ path: install }] },
+    })).home
+    const linkParent = await tempDir('cc-plugin-link-')
+    const linked = join(linkParent, 'home-link')
+    await mkdir(join(linked, '..'), { recursive: true })
+    await symlink(home, linked)
+    expect(discoverCcPluginRoots({ claudeHome: home, dshHome: linked, cwd })).toEqual([
+      { root: install, nameHint: 'tavily' },
+    ])
   })
 })

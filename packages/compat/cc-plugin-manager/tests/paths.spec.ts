@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
-import { findGitMainRoot, pluginsStatePaths, settingsFileForScope } from '../src/paths.ts'
+import {
+  canonicalizeExistingPath,
+  claudePluginsStatePaths,
+  findGitMainRoot,
+  pluginsStatePaths,
+  settingsFileForScope,
+  userSettingsReadFiles,
+} from '../src/paths.ts'
 
 const temps: string[] = []
 
@@ -120,5 +127,62 @@ describe('findGitMainRoot', () => {
 
   it('returns null outside any git tree', () => {
     expect(findGitMainRoot('/definitely/not/a/repo/at/all')).toBeNull()
+  })
+})
+
+describe('dual-home paths (S1)', () => {
+  it('pluginsStatePaths roots at dshHome when provided', () => {
+    const claudeHome = '/claude'
+    const dshHome = '/dsh'
+    const paths = pluginsStatePaths({ claudeHome, dshHome, cwd: '/cwd' })
+    expect(paths.stateDir).toBe(join(dshHome, 'plugins'))
+    expect(paths.installedPluginsFile).toBe(join(dshHome, 'plugins', 'installed_plugins.json'))
+  })
+
+  it('pluginsStatePaths falls back to claudeHome when dshHome is absent (single-root)', () => {
+    const paths = pluginsStatePaths({ claudeHome: '/claude', cwd: '/cwd' })
+    expect(paths.stateDir).toBe(join('/claude', 'plugins'))
+  })
+
+  it('claudePluginsStatePaths returns null in single-root mode', async () => {
+    const home = await tempDir('pm-sr-')
+    expect(claudePluginsStatePaths({ claudeHome: home, cwd: home })).toBeNull()
+    expect(claudePluginsStatePaths({ claudeHome: home, dshHome: home, cwd: home })).toBeNull()
+  })
+
+  it('claudePluginsStatePaths returns the claude-rooted layout for split homes', async () => {
+    const claudeHome = await tempDir('pm-cl-')
+    const dshHome = await tempDir('pm-dh-')
+    const paths = claudePluginsStatePaths({ claudeHome, dshHome, cwd: claudeHome })
+    expect(paths).not.toBeNull()
+    expect(paths!.stateDir).toBe(join(claudeHome, 'plugins'))
+    expect(paths!.knownMarketplacesFile).toBe(join(claudeHome, 'plugins', 'known_marketplaces.json'))
+  })
+
+  it('claudePluginsStatePaths collapses symlinked homes to null', async () => {
+    const realHome = await tempDir('pm-real-')
+    const linkParent = await tempDir('pm-link-')
+    const linkHome = join(linkParent, 'linked-home')
+    await symlink(realHome, linkHome)
+    expect(claudePluginsStatePaths({ claudeHome: linkHome, dshHome: realHome, cwd: realHome })).toBeNull()
+  })
+
+  it("settingsFileForScope('user') returns the dsh settings file (write target)", async () => {
+    const claudeHome = await tempDir('pm-uc-')
+    const dshHome = await tempDir('pm-ud-')
+    const cwd = await tempDir('pm-up-')
+    expect(settingsFileForScope('user', { claudeHome, dshHome, cwd })).toBe(join(dshHome, 'settings.json'))
+    expect(settingsFileForScope('user', { claudeHome, cwd })).toBe(join(claudeHome, 'settings.json'))
+  })
+
+  it('userSettingsReadFiles orders claude → dsh and dedupes single-root', async () => {
+    const claudeHome = await tempDir('pm-rc-')
+    const dshHome = await tempDir('pm-rd-')
+    expect(userSettingsReadFiles({ claudeHome, dshHome, cwd: claudeHome })).toEqual([
+      join(claudeHome, 'settings.json'),
+      join(dshHome, 'settings.json'),
+    ])
+    expect(userSettingsReadFiles({ claudeHome, cwd: claudeHome })).toEqual([join(claudeHome, 'settings.json')])
+    expect(canonicalizeExistingPath(claudeHome)).toBe(claudeHome)
   })
 })

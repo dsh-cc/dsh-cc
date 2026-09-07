@@ -23,26 +23,9 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "lib"
-  ],
-  "license": "Apache-2.0",
   "dependencies": {
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/settings-cascade": "workspace:^"
-  },
-  "peerDependencies": {
-    "@dsh-cc/claude-code-agents": "workspace:^",
-    "@deepseek-ai/dsh-commands": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
-    "@dsh-cc/hook-protocol": "workspace:^",
-    "@dsh-cc/mcp-client": "workspace:^",
-    "@deepseek-ai/dsh-settings": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-skill": ">=0.1.1-rc.2",
-    "@dsh-cc/skill-loader": "workspace:^",
-    "@deepseek-ai/dsh-subagent": ">=0.1.1-rc.2",
-    "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": ">=0.1.1-rc.2"
   },
   "devDependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",
@@ -56,8 +39,27 @@
     "@dsh-cc/skill-loader": "workspace:^",
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis"
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths"
   },
+  "peerDependencies": {
+    "@dsh-cc/claude-code-agents": "workspace:^",
+    "@deepseek-ai/dsh-commands": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
+    "@dsh-cc/hook-protocol": "workspace:^",
+    "@dsh-cc/mcp-client": "workspace:^",
+    "@deepseek-ai/dsh-settings": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-skill": ">=0.1.1-rc.2",
+    "@dsh-cc/skill-loader": "workspace:^",
+    "@deepseek-ai/dsh-subagent": ">=0.1.1-rc.2",
+    "@dsh-cc/tools": "workspace:^",
+    "@deepseek-ai/cordis": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-home-paths": ">=0.1.1-rc.2"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
   "publishConfig": {
     "access": "public"
   }

@@ -11,9 +11,10 @@
  * @module
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { resolveLocalSettingsDir } from '@dsh-cc/settings-cascade/local-root'
 
 /** One discovered plugin root plus the name used to match marketplace overlays. */
@@ -31,8 +32,14 @@ export interface DiscoverCcPluginRootsOptions {
    * `[]` or `null` disables discovery; a non-empty list flattens those dirs.
    */
   readonly pluginDirs?: readonly string[] | null
-  /** Claude config home; defaults to `$CLAUDE_CONFIG_DIR` or `~/.claude`. */
+  /** Claude config home; defaults to `$CLAUDE_CONFIG_DIR` or `~/.claude`. Passing only this keeps legacy single-root behavior. */
   readonly claudeHome?: string
+  /**
+   * dsh write home (plan §3.1). Resolution chain: explicit `dshHome` →
+   * explicit `claudeHome` (legacy single-root) → `resolveDshHome()`
+   * (`$DSH_HOME` → `~/.dsh`). State merges per key with dsh winning.
+   */
+  readonly dshHome?: string
   /** Workspace used for project/local `enabledPlugins`; defaults to `process.cwd()`. */
   readonly cwd?: string
   /** Optional logger for project-scope cwd and skipped bare enablement keys. */
@@ -53,11 +60,21 @@ export const TOP_LEVEL_MANIFEST = 'plugin.json'
 export function discoverCcPluginRoots(options: DiscoverCcPluginRootsOptions = {}): DiscoveredCcPlugin[] {
   if (options.pluginDirs === null || isEmptyList(options.pluginDirs)) return []
   if (options.pluginDirs !== undefined) return flattenPluginDirs(options.pluginDirs)
-  return discoverInstalledEnabled(
-    resolveClaudeHome(options.claudeHome),
-    options.cwd ?? process.cwd(),
-    options.log,
-  )
+  const claudeHome = resolveClaudeHome(options.claudeHome)
+  // Option-level resolution (plan §3.1): explicit dsh → explicit claude
+  // (legacy single-root) → resolveDshHome() ($DSH_HOME → ~/.dsh).
+  const dshHome = options.dshHome ?? options.claudeHome ?? resolveDshHome()
+  return discoverInstalledEnabled(claudeHome, dshHome, options.cwd ?? process.cwd(), options.log)
+}
+
+/** True when both homes point at the same directory: realpath when both exist, resolve-only fallback (§3.1). */
+export function sameHome(a: string, b: string): boolean {
+  if (resolve(a) === resolve(b)) return true
+  try {
+    return existsSync(a) && existsSync(b) && realpathSync.native(a) === realpathSync.native(b)
+  } catch {
+    return false
+  }
 }
 
 /** True when an explicit `pluginDirs` list is present and empty. */
@@ -112,14 +129,20 @@ function nameHintFromRoot(dir: string): string | undefined {
   return undefined
 }
 
-/** Default path: enabledPlugins cascade ∩ installed_plugins.json. */
+/**
+ * Default path: enabledPlugins cascade ∩ merged installed_plugins.json
+ * (plan §3.3/§3.4). Single-root (homes canonicalize equal) reads each file
+ * exactly once — byte-identical to the historical behavior.
+ */
 function discoverInstalledEnabled(
   claudeHome: string,
+  dshHome: string,
   cwd: string,
   log?: { info(message: string): void; warn(message: string): void },
 ): DiscoveredCcPlugin[] {
-  const enabled = enabledKeys(claudeHome, cwd, log)
-  const installed = readInstalled(join(claudeHome, 'plugins', 'installed_plugins.json'))
+  const singleRoot = sameHome(claudeHome, dshHome)
+  const enabled = enabledKeys(claudeHome, dshHome, cwd, log)
+  const installed = readMergedInstalled(claudeHome, dshHome, singleRoot)
   const found: DiscoveredCcPlugin[] = []
   const seen = new Set<string>()
   for (const key of enabled) {
@@ -130,14 +153,42 @@ function discoverInstalledEnabled(
   return found
 }
 
+/**
+ * Merged installed paths (§3.4): per id, a dsh entry list — including an
+ * empty one — shadows the claude list; ids only in claude pass through.
+ */
+function readMergedInstalled(claudeHome: string, dshHome: string, singleRoot: boolean): Record<string, string> {
+  const dsh = readInstalledPaths(join(dshHome, 'plugins', 'installed_plugins.json'))
+  if (singleRoot) return compact(dsh)
+  const merged: Record<string, string | undefined> = {
+    ...readInstalledPaths(join(claudeHome, 'plugins', 'installed_plugins.json')),
+    ...dsh,
+  }
+  return compact(merged)
+}
+
+/** Drop keys whose picked installPath is undefined (empty/shadowed entry lists). */
+function compact(map: Record<string, string | undefined>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, path] of Object.entries(map)) {
+    if (path !== undefined) out[key] = path
+  }
+  return out
+}
+
 /** Keys whose cascaded `enabledPlugins` value is JSON `true`, in first-seen order. */
 function enabledKeys(
   claudeHome: string,
+  dshHome: string,
   cwd: string,
   log?: { info(message: string): void; warn(message: string): void },
 ): string[] {
+  // Cascade (plan §3.3): [claude-user, dsh-user, project, local] with later
+  // files overriding per key — equivalent to the doc's
+  // local → project → dsh-user → claude-user first-defined-wins order.
   const cascade: { path: string; scope: 'user' | 'project' }[] = [
     { path: join(claudeHome, 'settings.json'), scope: 'user' },
+    ...(sameHome(claudeHome, dshHome) ? [] : [{ path: join(dshHome, 'settings.json'), scope: 'user' as const }]),
     { path: join(cwd, '.claude', 'settings.json'), scope: 'project' },
     {
       // Claude Code-parity: the *local* settings file is read from the git
@@ -175,17 +226,20 @@ function enabledKeys(
   return enabled
 }
 
-/** Winning `installPath` per `name@marketplace` (latest lastUpdated, then later array element). */
-function readInstalled(path: string): Record<string, string> {
+/**
+ * Winning `installPath` per `name@marketplace` (latest lastUpdated, then later
+ * array element). An id with an empty/invalid entry list maps to `undefined`
+ * so the dsh layer can shadow it (§3.4); callers compact the merged map.
+ */
+function readInstalledPaths(path: string): Record<string, string | undefined> {
   const parsed = readJson(path)
   if (!isRecord(parsed)) return {}
   const plugins = parsed['plugins']
   if (!isRecord(plugins)) return {}
-  const out: Record<string, string> = {}
+  const out: Record<string, string | undefined> = {}
   for (const [key, raw] of Object.entries(plugins)) {
     if (!Array.isArray(raw)) continue
-    const picked = pickInstallPath(raw)
-    if (picked !== undefined) out[key] = picked
+    out[key] = pickInstallPath(raw)
   }
   return out
 }
