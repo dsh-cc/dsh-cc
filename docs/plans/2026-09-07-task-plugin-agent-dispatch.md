@@ -6,9 +6,12 @@ colon file-def shadowing, re-entrant catalog emit, no-prefix discoverability,
 plugin-def resume pins) and all four TDD gaps are folded in, and a delta
 re-review confirmed resolution (the colon guard is pinned to the
 file-registry discovery path only, never the shared parse layer). The Codex
-blind review could not run: the configured `gpt-6-astra` model is rejected by
-the installed Codex CLI (environment issue, not a plan issue) — noted as a
-review-coverage gap; re-run Codex on this doc once the CLI is fixed.
+blind review (GPT-5.6-sol via `codex exec`, after the CLI environment was
+repaired) returned **reject** against the merged implementation — its four
+findings were verified by the orchestrator and are folded in as the §9
+remediation below. The divergence itself was the finding: Codex caught the
+namespace-escape hole in the verbatim rule that both deep-reasoner rounds
+had explicitly protected.
 Date: 2026-09-07
 Scope: `@dsh-cc/subagent-task` (the CC `Task` tool),
 `@dsh-cc/cc-plugin-loader` (agent mounting), parity docs. No harness
@@ -320,3 +323,75 @@ YAML.
   changes, not the architecture.
 - `cc-plugin-manager` may call `mountCcPlugin` with its own `nameHint` —
   confirm the prefix it produces matches the catalog-displayed plugin name.
+
+## 9. Addendum — Codex blind review remediation (2026-09-07)
+
+The Codex blind review (run after implementation, against the merged code)
+returned **reject** with four findings; the orchestrator verified each
+against source. All four are folded into the implementation.
+
+### 9.1 (High) Drop the verbatim rule — colon basenames are invalid everywhere
+
+The §4.1 verbatim clause ("an agentType already containing `:` is used
+verbatim") protected the CC nested-id form `plugin:subdir:agent` — but
+`loadAgentsDir` scans a single directory and derives `agentType` from the
+basename, so nested ids can never arise from the loader. A literal
+colon-bearing basename (`agents/review:security.md`) therefore ESCAPES its
+plugin's namespace: plugin `p` registers `review:security`, colliding with a
+plugin named `review`. Fix:
+
+- `scopedType(prefix, agentType)` ALWAYS produces `` `${prefix}:${agentType}` ``.
+- `mountAgents` warns and skips any plugin agent whose `agentType` contains
+  `:` (mirroring the file-registry colon guard), recorded in the
+  `ComponentTally`. The shared parse layer (`parse.ts`/`loadAgentsDir`)
+  stays permissive; the guard lives at the loader's two consumption points
+  (file-registry discovery for workspace files, `mountAgents` for plugins).
+- If recursive subdirectory loading ever lands, nested ids are CONSTRUCTED
+  as `prefix:sub:agent` from relative paths — never taken from basenames.
+- The Unit-1 test that pinned the verbatim behavior is inverted to pin the
+  skip.
+
+### 9.2 (High) Transactional agent mounting + duplicate preflight
+
+The real harness seam THROWS on duplicate provider names
+(`deepseek-harness/packages/subagent/subagent/src/index.ts:385`). Registering
+sequentially without rollback leaks partial mounts: a collision on agent N
+leaves agents 1..N-1 registered while the plugin is reported failed.
+Fix:
+
+- `mountAgents` preflights each scoped name (`seam.getProvider`); a duplicate
+  is recorded in the tally as failed with a reason and skipped — no throw.
+- The registration loop is transactional: any throw mid-mount disposes the
+  providers this call already registered, then rethrows.
+- `mountCcPlugin` gets component-level rollback: if any component mount
+  throws after earlier components succeeded, their disposers run before the
+  error propagates, so a failed plugin leaves nothing mounted.
+
+### 9.3 (Medium) Event-driven catalog invalidation
+
+The render-time diff can only fire when an assembly already happens — a
+mount/unmount during quiet time never triggers reassembly — and same-id
+`whenToUse` changes are invisible to an id-only diff. The real seam emits
+`subagent/provider-added` / `subagent/provider-removed`. Fix:
+
+- `PluginAgentIndex` (or the catalog apply) subscribes to those events;
+  when the added/removed provider passes the brand guard (§9.4), it emits
+  `system-prompt/change` directly (no render involvement, no deferral
+  needed — the emit is not mid-assembly). Re-registration of a changed
+  definition surfaces as remove+add, so fingerprints are unnecessary.
+- `AgentCatalogSection.render` becomes side-effect-free: it renders the
+  current `pluginIndex.list()` and nothing else (the diff-state machinery
+  and deferred emit are removed).
+- Verify at implementation time that provider-lifecycle events are
+  deliverable inside the preset's isolate realm; if they are not, fall back
+  to the render-time diff (kept as the deviation note) and record the realm
+  boundary as the reason.
+
+### 9.4 (Medium) Brand the definition-source providers
+
+The structural guard (start fn + colon name + definition shape) is an
+accidental protocol — any foreign provider with those properties would be
+adopted as a plugin agent. Fix: the loader stamps `AgentProvider` with an
+exported brand (a `Symbol.for`-keyed property or an explicit
+`definitionSource: 'cc-plugin'` marker), and `PluginAgentIndex`'s guard
+REQUIRES the brand in addition to the existing shape checks.
