@@ -48,7 +48,7 @@ JSON 读失败与缺失的 `installPath` 会跳过而不是抛错。项目/local
 | `mcpServers` | 内联记录或 `.mcp.json` | `mcp`（guest）| 通过 `registerServer` 注册每个 server（工具命名是 seam 的职责）|
 | `settings` | 清单记录 | `settings`（guest）| 过滤到 allowlist（当前是 `agent`）后通过 `set` 写入 |
 
-`hooks` 与 `mcp` seam 目前没有 harness 自有的服务；希望挂载这些组件的部署应提供 guest seam，否则它们会被报告为 `skipped`。
+`hooks` 与 `mcp` seam 在本包内没有 harness 自有的服务；希望挂载这些组件的部署应提供 guest seam，否则它们会被报告为 `skipped`。dsh 的宿主接线现已提供 `mcp` seam：cc-shell glue 内置提供 `mcp` seam（`cc-shell/src/mcpSeam.ts`，即 `cc-mcp-seam` 子插件），因此在发布的部署中插件的 `mcpServers` 会真正挂载（见 docs/plans/2026-09-07-plugin-mcp-seam.md）。`hooks` 仍依赖宿主提供。
 
 ## 技能语义接线
 
@@ -61,7 +61,7 @@ JSON 读失败与缺失的 `installPath` 会跳过而不是抛错。项目/local
 
 ## 已知限制与待办工作
 
-- **harness 中缺少 guest seam** —— 除非部署提供 guest seam，否则 `hooks`、`mcp`、`settings` 会报告为 `skipped`。当前没有 harness 自有的 `ctx.mcp` 或 `ctx.hooks` 服务。
+- **harness 中的 guest seam** —— 除非部署提供 guest seam，否则 `hooks`、`settings` 会报告为 `skipped`；当前没有 harness 自有的 `ctx.hooks` 服务。`mcp` seam 现由 cc-shell glue 提供（见上文），插件的 `mcpServers` 可挂载；tally 统计的是注册时加载，被配置跳过的 server（如未设置的 env 变量）只会通过日志 warn 呈现。
 - **agent provider 转发执行** —— agents provider 以名字命名其后端（默认 `fork`）并委托 `start`；执行 CC agent 需要 subagent seam 在运行时存在 `fork` 后端。
 - **技能激活由宿主驱动** —— 加载器注册接线与激活描述符；在模型可见的时刻应用它们由宿主负责。
 - **Agents 把默认 `agents/` 目录加到清单路径上** —— Claude Code 在声明 `agents` 时替换默认目录。此处未改。

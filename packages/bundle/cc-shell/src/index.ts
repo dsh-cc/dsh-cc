@@ -36,6 +36,7 @@ import {
 import * as CcMcpClient from '@dsh-cc/mcp-client'
 import { CcPluginManagerService } from './ccPluginManager.ts'
 import { CcPluginsService } from './ccPlugins.ts'
+import { createPluginMcpSeam } from './mcpSeam.ts'
 
 /** Plugin config: which on-disk CC surfaces to mount. */
 export interface Config {
@@ -114,6 +115,22 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       },
     })
   }
+  // The plugin MCP seam must exist BEFORE CcPluginsService's mountAll runs:
+  // CC plugins mount first (below) and consult `ctx.get('mcp')` for their
+  // inline `mcpServers`. A direct provide here would be invisible (this fiber
+  // is LOADING and ctx.get is strict) — use the same child-plugin idiom as
+  // the registry above. onRegistered feeds deferredNames so the boot one-shot
+  // pending notice (section 3 below) covers plugin-declared servers too.
+  const deferredNames: string[] = []
+  if (ctx.get('mcp') === undefined) {
+    const seam = createPluginMcpSeam(ctx, { onRegistered: n => deferredNames.push(n) })
+    await ctx.plugin({
+      name: 'cc-mcp-seam',
+      apply(c: Context) {
+        c.provide('mcp', seam)
+      },
+    })
+  }
   const plugins = new CcPluginsService(ctx, {
     ...config.pluginDirs !== undefined ? { pluginDirs: config.pluginDirs } : {},
     resolveModel,
@@ -137,7 +154,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   //    activates without awaiting its MCP handshake, so the first frame is
   //    not blocked on spawned servers; the handshakes still overlap because
   //    the serial mounts each spawn their child synchronously.
-  const deferredNames: string[] = []
   let files: string[]
   let gatedPaths: ResolvedMcpPaths | undefined
   let noticeSources: ClaudeOnlySource[] = []

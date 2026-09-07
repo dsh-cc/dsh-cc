@@ -1959,16 +1959,32 @@ capabilities:
           an orchestration skill) ships via the repo-root official `dsh-cc`
           marketplace (.claude-plugin/marketplace.json) and is pinned by the
           real-dir mount spec, the install→cache→mount round-trip spec, and
-          the package-shape spec.
+          the package-shape spec. The mcp component is mounted through the
+          cc-mcp-seam child plugin provided by the cc-shell glue (built from
+          the loader's own mountMcpServers path — see
+          docs/plans/2026-09-07-plugin-mcp-seam.md; a 2026-09-07 probe
+          discovered the previous full/none claim here overstated a dead
+          feature, corrected once the seam was wired). Known limitations:
+          the mcpServers tally counts register-time loads, so config-skipped
+          servers (unset env var, malformed entry) surface only via logger
+          warns, not the tally (a richer registerServer return is a
+          follow-up); OAuth is not supported for plugin-declared servers; a
+          plugin server with the same name shadows a same-name .mcp.json
+          server (plugins mount first and mcp-client rejects duplicate
+          names).
       behavioral: full
       ux: full
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-shell-glue" }
       - { type: source, path: packages/compat/cc-plugin-loader/src/index.ts }
+      - { type: source, path: packages/bundle/cc-shell/src/mcpSeam.ts }
+      - { type: source, path: packages/bundle/cc-shell/src/index.ts, anchor: "cc-mcp-seam" }
       - { type: source, path: packages/plugin/dsh-cc-agents/.claude-plugin/plugin.json }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/mounts.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/discovery.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/dsh-cc-agents.spec.ts }
+      - { type: test, path: packages/bundle/cc-shell/tests/mcp-seam.spec.ts }
+      - { type: test, path: packages/bundle/cc-shell/tests/mcp-seam.integration.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-manager/tests/install-dsh-cc-agents.spec.ts }
       - { type: test, path: packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts }
     deviation: { kind: none }

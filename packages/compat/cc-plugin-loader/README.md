@@ -48,7 +48,7 @@ Each component is peer-style: the loader probes the host seam via `ctx.get(...)`
 | `mcpServers` | inline record or `.mcp.json` | `mcp` (guest) | registers each server via `registerServer` (tool naming is the seam's responsibility) |
 | `settings` | manifest record | `settings` (guest) | filters to the allowlist (currently `agent`) and writes via `set` |
 
-The `hooks` and `mcp` seams have no harness-owned service today; a deployment that wants those components provides a guest seam or they are reported skipped.
+The `hooks` and `mcp` seams have no harness-owned service in this package itself; a deployment that wants those components provides a guest seam or they are reported skipped. The dsh host wiring now supplies the `mcp` seam: the cc-shell glue provides a built-in `mcp` seam (`cc-shell/src/mcpSeam.ts`, the `cc-mcp-seam` child plugin), so plugin `mcpServers` mount for real in shipped deployments (see docs/plans/2026-09-07-plugin-mcp-seam.md). `hooks` remains host-depended.
 
 ## Skill semantic wiring
 
@@ -61,7 +61,7 @@ On top of the skill mount, this package is the consumer that turns `skill-claude
 
 ## Known Limitations and Deferred Work
 
-- **Guest seams are absent in the harness** — `hooks`, `mcp`, and `settings` report `skipped` unless a deployment supplies the guest seam. There is no harness-owned `ctx.mcp` or `ctx.hooks` service today.
+- **Guest seams in the harness** — `hooks`, and `settings` report `skipped` unless a deployment supplies the guest seam; there is no harness-owned `ctx.hooks` service today. The `mcp` seam is now provided by the cc-shell glue (see above), so plugin `mcpServers` mount; the tally counts register-time loads, so config-skipped servers (e.g. unset env vars) surface only via log warnings.
 - **Agent providers forward execution** — the agents provider names its backend (default `fork`) and delegates `start`; executing a CC agent requires a `fork` backend on the subagent seam at run time.
 - **Skill activation is host-driven** — the loader registers the wiring and activation descriptors; applying them at the model-facing moment is the host's responsibility.
 - **Agents ADD the default `agents/` dir to manifest paths** — Claude Code replaces the default when `agents` is declared. Unchanged here.
