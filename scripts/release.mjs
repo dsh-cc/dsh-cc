@@ -42,8 +42,71 @@ function isValidVersionShape(str) {
   return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(str);
 }
 
-/* ---- validation ---- */
+/* ---- pure planner (exported for tests) ---- */
 
+/**
+ * Pure planner (exported for tests): given a repo root and a target
+ * version, return the planned version rewrites — the private root
+ * package.json (always, see the header note), every non-private
+ * packages/<group>/<pkg>/package.json, and every existing
+ * `<pkg>/.claude-plugin/plugin.json` of a non-private package (same
+ * publishability rule as its package.json). No git side effects, no
+ * process.argv reading; the CLI entry owns those.
+ */
+export function planReleaseVersionWrites(rootDir, targetVersion) {
+  const rootManifest = join(rootDir, "package.json");
+  const packagesDir = join(rootDir, "packages");
+  const candidates = [rootManifest];
+  if (existsSync(packagesDir)) {
+    for (const group of readdirSync(packagesDir)) {
+      const groupDir = join(packagesDir, group);
+      if (!statSync(groupDir).isDirectory()) continue;
+      for (const pkg of readdirSync(groupDir)) {
+        const pkgDir = join(groupDir, pkg);
+        if (!statSync(pkgDir).isDirectory()) continue;
+        const path = join(pkgDir, "package.json");
+        if (existsSync(path)) candidates.push(path);
+      }
+    }
+  }
+
+  const planned = [];
+  for (const path of candidates) {
+    const json = JSON.parse(readFileSync(path, "utf8"));
+    // Private packages are never published, so their version is meaningless —
+    // skip them (and their nested plugin manifest). The ROOT manifest is the
+    // exception: it stays in lockstep with the release because
+    // check-release-version.mjs asserts it against the tag.
+    const isRoot = path === rootManifest;
+    if (json.private === true && !isRoot) continue;
+    if (json.version !== targetVersion) {
+      planned.push({ path, name: json.name, from: json.version, to: targetVersion });
+    }
+    // Nested plugin manifest inherits the package's publishability; a stale
+    // one would make `/plugin update` a permanent no-op for every user
+    // (cc-plugin-manager skips updates when the declared version equals the
+    // installed entry).
+    const pluginJsonPath = join(dirname(path), ".claude-plugin", "plugin.json");
+    if (!existsSync(pluginJsonPath)) continue;
+    const pluginJson = JSON.parse(readFileSync(pluginJsonPath, "utf8"));
+    if (pluginJson.version !== targetVersion) {
+      planned.push({
+        path: pluginJsonPath,
+        name: json.name,
+        from: pluginJson.version,
+        to: targetVersion,
+      });
+    }
+  }
+  return planned;
+}
+
+/* ---- validation (CLI entry; skipped on import by tests) ---- */
+
+const isDirectRun = process.argv[1] && process.argv[1].endsWith("release.mjs");
+if (!isDirectRun) {
+  // imported (e.g. by release.test.mjs for the pure planner) — no CLI side effects
+} else {
 const argVersion = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
 const label = dryRun ? "DRY-RUN" : "release";
@@ -89,36 +152,7 @@ if (tagExistsRemote) fail(`tag '${tag}' already exists on origin`);
 
 /* ---- planned writes ---- */
 
-function walkPkgJsonPaths(dir) {
-  const out = [];
-  const packagesDir = join(dir, "packages");
-  if (!existsSync(packagesDir)) return out;
-  for (const group of readdirSync(packagesDir)) {
-    const groupDir = join(packagesDir, group);
-    if (!statSync(groupDir).isDirectory()) continue;
-    for (const pkg of readdirSync(groupDir)) {
-      const pkgDir = join(groupDir, pkg);
-      if (!statSync(pkgDir).isDirectory()) continue;
-      const path = join(pkgDir, "package.json");
-      if (existsSync(path)) out.push(path);
-    }
-  }
-  return out;
-}
-
-const ROOT_MANIFEST = join(ROOT, "package.json");
-const toUpdate = [ROOT_MANIFEST, ...walkPkgJsonPaths(ROOT)];
-const planned = [];
-for (const path of toUpdate) {
-  const json = JSON.parse(readFileSync(path, "utf8"));
-  // Private packages are never published, so their version is meaningless —
-  // skip them. The ROOT manifest is the exception: it stays in lockstep with
-  // the release because check-release-version.mjs asserts it against the tag.
-  const isRoot = path === ROOT_MANIFEST;
-  if (json.private === true && !isRoot) continue;
-  if (json.version === argVersion) continue;
-  planned.push({ path, name: json.name, from: json.version, to: argVersion });
-}
+const planned = planReleaseVersionWrites(ROOT, argVersion);
 
 // FALLBACK_VERSION (command-version/version.ts) is the display value used when
 // package.json is unreadable at runtime — keep it in lockstep with the release,
@@ -164,3 +198,5 @@ git("tag", tag);
 console.log(
   `\n下一步(需手动执行): git push origin main ${tag} —— 推送后 tag 触发 publish.yml 自动发布`,
 );
+}
+
