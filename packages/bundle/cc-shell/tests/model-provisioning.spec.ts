@@ -29,7 +29,7 @@ interface ProviderRecord {
 }
 
 /** A subagents seam that captures plugin-shipped agent providers. */
-function makeSubagentsSeam(): { seam: { registerProvider: (p: unknown) => () => void; getProvider: () => unknown }; providers: ProviderRecord[]; backend: FakeBackend } {
+function makeSubagentsSeam(): { seam: { registerProvider: (p: unknown) => () => void; getProvider: (name: string) => unknown }; providers: ProviderRecord[]; backend: FakeBackend } {
   const backend: FakeBackend = {
     last: undefined,
     start: async (request) => { backend.last = request; return { forwarded: request } },
@@ -40,7 +40,9 @@ function makeSubagentsSeam(): { seam: { registerProvider: (p: unknown) => () => 
     providers,
     seam: {
       registerProvider: (p) => { providers.push(p as never); return () => {} },
-      getProvider: () => backend,
+      // Only the 'fork' backend name resolves — a wildcard answer reads as a
+      // duplicate under mountAgents' duplicate preflight and skips every agent.
+      getProvider: (name: string) => (name === 'fork' ? backend : undefined),
     },
   }
 }
@@ -62,7 +64,7 @@ async function bootWith({
   config: Config
   routes?: { modelAliases?: Record<string, AliasTarget> }
   mountRoutes?: boolean
-  subagents: { registerProvider: (p: unknown) => () => void; getProvider: () => unknown }
+  subagents: { registerProvider: (p: unknown) => () => void; getProvider: (name: string) => unknown }
 }): Promise<Context> {
   const settingsDir = tempDir('settings')
   const userPath = join(settingsDir, 'user.json')
@@ -116,7 +118,7 @@ describe('cc-shell model alias provisioning', () => {
     })
 
     expect(providers).toHaveLength(1)
-    expect(providers[0]!.name).toBe('doc')
+    expect(providers[0]!.name).toBe('typed:doc')
     await providers[0]!.start({ agentOptions: { provider: 'parent' } })
     expect(backend.last).toMatchObject({ agentOptions: { provider: 'deepseek-official', model: 'deepseek-v4-pro' } })
     expect(ctx.ccPlugins.list()).toHaveLength(1)

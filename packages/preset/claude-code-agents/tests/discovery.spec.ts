@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   discoverAgents,
   findProjectAgentsDir,
@@ -140,6 +140,30 @@ describe('discoverAgents', () => {
 })
 
 describe('loadClaudeCodeAgents', () => {
+  it('skips and warns on a file definition whose agentType contains a colon', async () => {
+    const root = await rootdir()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      await writeAgent(root, 'code', 'project body')
+      await writeAgent(root, 'p:researcher', 'shadowing body')
+
+      const agents = await loadClaudeCodeAgents(root, { userDir: join(await rootdir(), '.claude', 'agents') })
+      expect(agents.map(agent => agent.agentType)).toEqual(expect.arrayContaining(['code']))
+      expect(agents.some(agent => agent.agentType === 'p:researcher')).toBe(false)
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/p:researcher/))
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('a colon agentType loaded via loadAgentsDir still survives (guard placement)', async () => {
+    const agentsDir = join(await rootdir(), '.claude', 'agents')
+    await mkdir(agentsDir, { recursive: true })
+    await writeFile(join(agentsDir, 'review:security.md'), AGENT_MD('plugin-style body'))
+    const agents = await loadAgentsDir(agentsDir, 'project')
+    expect(agents.map(agent => agent.agentType)).toEqual(['review:security'])
+  })
+
   it('loads project and user agents through the public function', async () => {
     const root = await rootdir()
     await writeAgent(root, 'code', 'project body')

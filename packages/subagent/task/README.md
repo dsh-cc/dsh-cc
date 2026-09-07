@@ -52,8 +52,19 @@ Given a `Task(subagent_type, description, prompt)` call from a CC preset session
    - `toolFilter` = the definition's `toolRestriction` (allow/deny), **sanitized** of tool
      names this composition no longer registers;
    - `maxDepth` = 3 (matches the harness default; configurable).
-4. **Any other type** (not found in the workspace) → an **error result** listing the
-   available types in this workspace (or noting the workspace defines none).
+4. **Any other type containing no colon** (not found in the workspace) → an **error
+   result** listing the available types in this workspace (or noting the workspace
+   defines none) — with a colon-aware hint when the type contains `:`.
+5. **A type matching a plugin agent's scoped id (`plugin:agent`)** → a `spawn` with the
+   same fold as a file definition (persona, sanitized toolFilter, alias-resolved model,
+   `maxDepth` 3), enumerated live from the `subagents` seam. Plugin agents are addressed
+   **only by their scoped id** — a bare plugin agent name is not addressable, matching
+   Claude Code.
+
+The resolution order is: reserved sentinels (`general-purpose` / `fork`) → workspace file
+definitions → plugin agent scoped ids. File definitions and scoped plugin ids occupy
+disjoint name spaces (file definitions whose `agentType` contains `:` are skipped with a
+warning at discovery), so a scoped id can never shadow a file type and vice versa.
 
 The dispatch is **foreground unless the child is explicitly or definition-pinned background**:
 with `run_in_background` omitted, the run is foreground — the tool awaits the child to
@@ -133,9 +144,11 @@ Because the section text is composed synchronously but discovery is async, the f
 assembly for an unknown workspace shows nothing, then `system-prompt/change` fires once
 discovery lands and reassembly reveals the catalog. When a workspace defines no agents (or
 there is no agent to scope to) the section renders an empty string and drops out of the
-prompt. The catalog lists only file definitions — it deliberately does **not** enumerate seam
+prompt. The catalog lists file definitions plus plugin agents by their scoped ids — it
+deliberately does **not** enumerate seam
 backend provider names (`fork`/`spawn`/`codex`/`claude-code`) as if they were addressable
-agent types.
+agent types; bare plugin agent names are not addressable either — only `plugin:agent`
+scoped ids are.
 
 ## Workspace instructions on Task children
 
@@ -174,10 +187,6 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
   lifetime and does not watch the filesystem. Editing a `.claude/agents` definition takes
   effect on the next session for a workspace whose cache entry has not yet been created, and
   on process restart otherwise. mtime-based invalidation is a follow-up.
-- **No plugin-agent dispatch (v1).** Only file definitions under `.claude/agents` are
-  dispatched. Seam plugin agents (`AgentProvider`) are not addressed by `subagent_type` in v1
-  (their start contract does not carry the task text and their capability flags would reject
-  `maxDepth`) — see the parity matrix.
 - **Reserved type names.** `general-purpose` and `fork` are sentinels, not file types. A
   workspace file `.claude/agents/fork.md` is unreachable; `subagent_type: "fork"` always
   means inherit completed parent turns.
@@ -208,7 +217,6 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
   pins `background: true`.
 - In-flight promotion of a running foreground Task to background (TUI Ctrl+B) — a follow-up,
   not a limitation of the package's existence.
-- Seam plugin-agent dispatch.
 - CC frontmatter `permissionMode` / `isolation` / `memory` / `effort` projection onto the
   child (the loader parses them, v1 does not consume them).
 - `registerBaseAgents` in cc-shell (base-agent discovery moved here; see the cc-shell README).

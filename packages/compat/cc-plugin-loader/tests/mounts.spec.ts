@@ -6,7 +6,7 @@ import { mountCommands } from '../src/commands.ts'
 import { mountHooks } from '../src/hooks.ts'
 import { mountMcpServers } from '../src/mcp.ts'
 import { mountSettings } from '../src/settings.ts'
-import { mountAgents } from '../src/agents.ts'
+import { mountAgents, isPluginAgentProvider, PLUGIN_AGENT_PROVIDER_BRAND } from '../src/agents.ts'
 import { tempPluginRoot, writeFileAt } from './helpers.ts'
 
 describe('mountCommands', () => {
@@ -395,6 +395,163 @@ describe('mountAgents', () => {
       })
       expect(tally.result().loaded).toBe(1)
       expect(names).toEqual(['researcher'])
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('namespaces provider names with the prefix while definitions stay bare', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string; definition: { agentType: string } }> = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'p',
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      expect(providers).toHaveLength(1)
+      expect(providers[0]!.name).toBe('p:researcher')
+      expect(providers[0]!.definition.agentType).toBe('researcher')
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('exposes the definition on each provider without a prefix (back-compat)', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string; definition: { agentType: string } }> = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      expect(providers[0]!.name).toBe('researcher')
+      expect(providers[0]!.definition.agentType).toBe('researcher')
+      expect(providers[0]!.definition.systemPrompt).toMatch(/researcher/)
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('sanitizes the prefix by stripping colons and whitespace', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string }> = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'my plugin:',
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      expect(providers[0]!.name).toBe('myplugin:researcher')
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('skips an agentType that contains a colon instead of registering it verbatim', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/review:security.md', '---\ndescription: security review\n---\nYou review security.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: Array<{ name: string; definition: { agentType: string } }> = []
+      const { tally } = await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'p',
+        subagents: { registerProvider: (p) => { providers.push(p as never); return () => {} }, getProvider: () => undefined },
+      })
+      // A colon agentType would escape the plugin namespace; it is warned,
+      // skipped, and never registered (the verbatim rule is gone).
+      expect(providers).toEqual([])
+      const result = tally.result()
+      expect(result.loaded).toBe(0)
+      expect(result.skipped).toBe(1)
+      expect(result.reasons.some(reason => /"review:security"/.test(reason))).toBe(true)
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('records a duplicate provider name as skipped instead of throwing', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const preExisting = { name: 'p:researcher' }
+      const providers: Array<{ name: string }> = []
+      const { tally } = await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'p',
+        subagents: {
+          registerProvider: (p) => { providers.push(p as never); return () => {} },
+          getProvider: (name) => (name === 'p:researcher' ? preExisting : undefined),
+        },
+      })
+      expect(providers).toEqual([])
+      const result = tally.result()
+      expect(result.loaded).toBe(0)
+      expect(result.skipped).toBe(1)
+      expect(result.reasons.some(reason => /duplicate.*"p:researcher"/.test(reason))).toBe(true)
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('rolls back providers registered this call when registerProvider throws mid-mount', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/one.md', '---\ndescription: one\n---\nOne.')
+      await writeFileAt(root, 'agents/two.md', '---\ndescription: two\n---\nTwo.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const disposed: string[] = []
+      let call = 0
+      await expect(mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'p',
+        subagents: {
+          registerProvider: (p) => {
+            const name = (p as { name: string }).name
+            call += 1
+            if (call === 2) throw new Error('name already registered')
+            return () => { disposed.push(name) }
+          },
+          getProvider: () => undefined,
+        },
+      })).rejects.toThrow(/name already registered/)
+      // The first provider this call registered was disposed before the rethrow.
+      expect(disposed).toEqual(['p:one'])
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('stamps the plugin-agent-provider brand on every registered provider', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'agents/researcher.md', '---\ndescription: researcher agent\n---\nYou are the researcher.')
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const providers: unknown[] = []
+      await mountAgents({
+        pluginRoot: root,
+        manifest,
+        namespacePrefix: 'p',
+        subagents: { registerProvider: (p) => { providers.push(p); return () => {} }, getProvider: () => undefined },
+      })
+      expect(providers).toHaveLength(1)
+      expect(isPluginAgentProvider(providers[0])).toBe(true)
+      expect((providers[0] as Record<symbol, unknown>)[PLUGIN_AGENT_PROVIDER_BRAND]).toBe(true)
+      expect(isPluginAgentProvider({ start: () => {} })).toBe(false)
     } finally {
       await dispose()
     }

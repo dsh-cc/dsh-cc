@@ -21,7 +21,7 @@ function fakeSeam(): FakeSeam {
   return {
     providers,
     registerProvider: (p) => { providers.push(p as never); return () => {} },
-    getProvider: () => ({ start: (request: unknown) => ({ forwarded: request }) }),
+    getProvider: (name: string) => (name === 'fork' ? { start: (request: unknown) => ({ forwarded: request }) } : undefined),
   }
 }
 

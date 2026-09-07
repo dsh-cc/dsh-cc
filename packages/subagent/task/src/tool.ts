@@ -18,6 +18,10 @@
  *   task text as the first user message, a routes-resolved `agentOptions`
  *   override, and the definition's tool restriction (sanitized of tool names
  *   this composition no longer registers).
+ * - A type matching a plugin agent's scoped id (`plugin:agent`, from the
+ *   `subagents` seam's namespaced providers) → the identical fold: the
+ *   provider's `AgentDefinition` is dispatched through the same `spawn`
+ *   provider mechanics; no new start path exists for plugin agents.
  * - Any other type → an error result listing the available types.
  *
  * The seam's capability contract (`assertCapabilities`) is honoured
@@ -34,11 +38,13 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { defineTool } from '@dsh-cc/tools'
 import { cwdOf } from '@dsh-cc/memory'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
 import { toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
+import { PluginAgentIndex } from './plugin-agents.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
 import { preloadDeferredFilterTools, renderPreloadLines, type ToolSearchActivateSeam } from './preload-tools.ts'
 import { sanitizeToolFilter } from './sanitize-filter.ts'
@@ -116,6 +122,7 @@ export function registerTaskTool(
   ctx: Context,
   registry: AgentRegistry,
   capture?: SpawnPinCapture,
+  pluginIndex: PluginAgentIndex = new PluginAgentIndex(ctx),
 ): (() => void) | undefined {
   const tools = ctx.get('tools') as {
     register(def: unknown): () => void
@@ -144,7 +151,8 @@ export function registerTaskTool(
     description:
       'Delegate a well-scoped task to a subagent. The child starts with a fresh conversation: '
       + 'write a self-contained prompt (paths, constraints, what to return). Pass `subagent_type` '
-      + 'to run a named agent from the session workspace (`.claude/agents`) — see the "Available '
+      + 'to run a named agent from the session workspace (`.claude/agents`) or a plugin agent by '
+      + 'its scoped id (`plugin:agent`) — see the "Available '
       + 'subagents" section of the system prompt for the current list. Omit `subagent_type` (or '
       + 'use "general-purpose") for a plain spawn that inherits your tools but not your history. '
       + 'Pass `subagent_type: "fork"` to inherit completed parent turns (and the prompt cache, '
@@ -167,9 +175,11 @@ export function registerTaskTool(
       subagent_type: {
         type: 'string',
         description:
-          'Named agent from `.claude/agents`, or the sentinels "general-purpose" (fresh spawn) '
+          'Named agent from `.claude/agents`, a plugin agent by its scoped id ("plugin:agent"), '
+          + 'or the sentinels "general-purpose" (fresh spawn) '
           + 'and "fork" (inherit completed parent turns). "fork" is reserved and wins over a '
-          + 'workspace file of the same name.',
+          + 'workspace file of the same name. Bare plugin agent names are not addressable — use '
+          + 'the full scoped id.',
       },
       description: {
         type: 'string',
@@ -247,51 +257,70 @@ export function registerTaskTool(
       }
 
       const root = cwdOf(agent)
-      const definition = await registry.resolve(root, type)
+      let definition = await registry.resolve(root, type)
       if (definition === undefined) {
-        const available = (await registry.list(root)).map(def => def.agentType).join(', ')
+        // Fall through to the seam's plugin agents (exact scoped-id match).
+        // Builtin providers are excluded by the index's structural guard.
+        definition = pluginIndex.resolve(type)
+      }
+      if (definition === undefined) {
+        const fileTypes = (await registry.list(root)).map(def => def.agentType)
+        const pluginIds = pluginIndex.knownIds()
+        const available = [...fileTypes, ...pluginIds].join(', ')
         throw new Error(
           `unknown subagent_type "${type}"`
-          + (available.length > 0 ? `; available in this workspace: ${available}` : '; this workspace defines no agents'),
+          + (available.length > 0
+            ? `; available in this workspace: ${available}`
+            : '; this workspace defines no agents')
+          // A colon in the requested type means a scoped plugin id was
+          // intended: name the unmount/renamed causes explicitly.
+          + (type.includes(':')
+            ? ' — plugin agent not found — the plugin may be unmounted or the agent renamed'
+            : ''),
         )
       }
 
-      const routes = ctx.get('ccModelRoutes') as ModelRoutes | undefined
-      const agentOptions = toAgentOptions(routes?.resolve(definition.model))
-      // LIVE known set, read at execute time so MCP tools mounted or deferred
-      // after this plugin's apply (including hash-suffixed public names) are
-      // all restrictable candidates for the child's filter. Pass the calling
-      // agent: MCP tools live on the standing-scope layer, which the global
-      // view (no scope) does not include.
-      const knownNames = tools.view?.(agent).restrictableNames ?? new Set<string>()
-      const toolFilter = definition.toolRestriction !== undefined
-        ? sanitizeToolFilter(definition.toolRestriction, message => ctx.logger.warn(message), knownNames)
-        : undefined
-      // Spawn-time pre-activation (named definitions only): explicit deferred
-      // MCP names in the raw `tools:` allow-list are activated through the
-      // duck-typed toolSearch seam BEFORE the child starts, on BOTH dispatch
-      // paths. Activation is process-global — every admitting agent's schema
-      // grows after the spawn.
-      const preloadText = renderPreloadLines(preloadDeferredFilterTools({
-        raw: definition.toolRestriction,
-        sanitized: toolFilter,
-        toolSearch: ctx.get('toolSearch') as ToolSearchActivateSeam | undefined,
-        agent,
-        tools,
-        warn: message => ctx.logger.warn(message),
-      }))
-      const folded = {
-        ...base,
-        persona: definition.systemPrompt,
-        ...(toolFilter !== undefined ? { toolFilter } : {}),
-        ...(agentOptions !== undefined ? { agentOptions } : {}),
-      }
-      if (wantsBackground(args, definition, disabled)) {
-        const result = await startBackground(seam, preparedBackground(folded, capture, definition, routes), capture)
+      const dispatchDefinition = async (definition: AgentDefinition): Promise<
+        Awaited<ReturnType<typeof collectForeground>> | Awaited<ReturnType<typeof startBackground>>
+      > => {
+        const routes = ctx.get('ccModelRoutes') as ModelRoutes | undefined
+        const agentOptions = toAgentOptions(routes?.resolve(definition.model))
+        // LIVE known set, read at execute time so MCP tools mounted or deferred
+        // after this plugin's apply (including hash-suffixed public names) are
+        // all restrictable candidates for the child's filter. Pass the calling
+        // agent: MCP tools live on the standing-scope layer, which the global
+        // view (no scope) does not include.
+        const knownNames = tools.view?.(agent).restrictableNames ?? new Set<string>()
+        const toolFilter = definition.toolRestriction !== undefined
+          ? sanitizeToolFilter(definition.toolRestriction, message => ctx.logger.warn(message), knownNames)
+          : undefined
+        // Spawn-time pre-activation (named definitions only): explicit deferred
+        // MCP names in the raw `tools:` allow-list are activated through the
+        // duck-typed toolSearch seam BEFORE the child starts, on BOTH dispatch
+        // paths. Activation is process-global — every admitting agent's schema
+        // grows after the spawn.
+        const preloadText = renderPreloadLines(preloadDeferredFilterTools({
+          raw: definition.toolRestriction,
+          sanitized: toolFilter,
+          toolSearch: ctx.get('toolSearch') as ToolSearchActivateSeam | undefined,
+          agent,
+          tools,
+          warn: message => ctx.logger.warn(message),
+        }))
+        const folded = {
+          ...base,
+          persona: definition.systemPrompt,
+          ...(toolFilter !== undefined ? { toolFilter } : {}),
+          ...(agentOptions !== undefined ? { agentOptions } : {}),
+        }
+        if (wantsBackground(args, definition, disabled)) {
+          const result = await startBackground(seam, preparedBackground(folded, capture, definition, routes), capture)
+          return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
+        }
+        const result = await collectForeground(ctx, seam, preparedBackground(folded, capture, definition, routes), capture, exec)
         return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
       }
-      const result = await collectForeground(ctx, seam, preparedBackground(folded, capture, definition, routes), capture, exec)
-      return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
+      return dispatchDefinition(definition)
     },
   }))
 }

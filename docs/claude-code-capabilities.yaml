@@ -1736,6 +1736,9 @@ capabilities:
       - { type: test, path: packages/ui/tui/tests/promote-key.spec.ts }
       - { type: test, path: packages/subagent/resume-pins/tests/gate.spec.ts }
       - { type: test, path: packages/bundle/cc-shell/tests/resume-pins-composition.spec.ts }
+      - { type: source, path: packages/compat/cc-plugin-loader/src/agents.ts }
+      - { type: source, path: packages/subagent/task/src/plugin-agents.ts }
+      - { type: test, path: packages/subagent/task/tests/plugin-agents.spec.ts }
     deviation:
       kind: divergent
       summary: >-
@@ -1835,6 +1838,20 @@ capabilities:
         names are never activated, eager names are skipped, and outcomes
         surface in the Task result text (Preloaded deferred tools for child /
         Not preloaded: name (reason)).
+        Plugin-agent dispatch (dsh-cc-side, CC-parity): plugin agents are
+        dispatched by CC-style scoped ids `plugin:agent` — file definitions
+        and scoped ids occupy disjoint name spaces (file definitions whose
+        agentType contains `:` are skipped with a warning so the scoped-id
+        namespace stays unambiguous) and bare plugin names are not
+        addressable, matching Claude Code. Plugin definitions are enumerated
+        live from the `subagents` seam and folded identically to file
+        definitions (persona, sanitized toolFilter, alias-resolved model,
+        maxDepth 3, background pin, deferred-MCP preload, foreground collect /
+        background continuable); dispatch targets the `spawn` provider, so the
+        AgentProvider fork-inheritance semantics are not used. Mounting a
+        plugin's agents without a namespacePrefix leaves them undiscoverable
+        to the Task tool (back-compat escape hatch, not a supported dispatch
+        mode).
 
   # ── mcp ─────────────────────────────────────────────────────────────────
   mcp.client:

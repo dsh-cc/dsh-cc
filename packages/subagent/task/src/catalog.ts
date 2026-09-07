@@ -26,6 +26,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { cwdOf } from '@dsh-cc/memory'
 import type { AgentRegistry } from './registry.ts'
+import { PluginAgentIndex, isPluginAgentProvider } from './plugin-agents.ts'
 
 /** Default order slot for the catalog section (tool guidance owns 100–199). */
 export const CATALOG_SECTION_ORDER = 110
@@ -77,16 +78,26 @@ export class AgentCatalogSection {
   private readonly snapshot = new Map<string, readonly AgentDefinition[]>()
   /** Roots whose background discovery has already been kicked off. */
   private readonly seen = new Set<string>()
+  /**
+   * The scoped ids whose providers passed the brand guard when
+   * `subagent/provider-added` delivered them — so a later
+   * `subagent/provider-removed` (which carries only the NAME, not the
+   * provider) can be brand-checked by membership here.
+   */
+  private readonly brandedIds = new Set<string>()
 
   /**
    * Create a catalog cache holder bound to a registry.
    * @param ctx - the host context whose `system-prompt` seam and
    *   `system-prompt/change` channel drive refresh.
    * @param registry - the per-workspace definition cache to load from.
+   * @param pluginIndex - the live plugin agent view (defaults to a fresh
+   *   index over this context).
    */
   constructor(
     private readonly ctx: Context,
     private readonly registry: AgentRegistry,
+    private readonly pluginIndex: PluginAgentIndex = new PluginAgentIndex(ctx),
   ) {}
 
   /** Register the catalog section plus its assemble-waterfall reconciliation.
@@ -143,7 +154,37 @@ export class AgentCatalogSection {
           : section),
       }
     })
+    // Event-driven plugin invalidation (plan §9.3): the seam emits
+    // `subagent/provider-added` / `subagent/provider-removed` on the shared
+    // cordis bus. The events are declared via module augmentation in
+    // @deepseek-ai/dsh-subagent, which this package does not import — the
+    // augmentation is not in its type graph, so the same cast-through-
+    // `ctx.on` pattern other packages use applies (see
+    // packages/ui/tui/src/harness/driver-catalog.ts). The emit fires DIRECTLY
+    // from the listener — it is not mid-assembly, so no deferral is needed.
+    // A changed definition re-registers as remove+add, so no fingerprinting.
+    const providerAdded = 'subagent/provider-added' as Parameters<typeof this.ctx.on>[0]
+    const providerRemoved = 'subagent/provider-removed' as Parameters<typeof this.ctx.on>[0]
+    // Seed with providers that mounted BEFORE this listener started
+    // (production mounts cc-shell-glue before subagent-task): their add
+    // events already fired, but they are live in the index, so their
+    // removals must still invalidate the prompt — a removal is recognized
+    // only by membership in `brandedIds`.
+    for (const id of this.pluginIndex.knownIds()) this.brandedIds.add(id)
+    const disposeAdded = this.ctx.on(providerAdded, (provider: unknown) => {
+      if (!isPluginAgentProvider(provider)) return
+      this.brandedIds.add(provider.name)
+      this.ctx.emit('system-prompt/change')
+    })
+    const disposeRemoved = this.ctx.on(providerRemoved, (name: unknown) => {
+      // The removed event carries only the name; membership in `brandedIds`
+      // proves the provider passed the brand guard when it was added.
+      if (typeof name !== 'string' || !this.brandedIds.delete(name)) return
+      this.ctx.emit('system-prompt/change')
+    })
     return () => {
+      disposeAdded()
+      disposeRemoved()
       disposeListener()
       disposeSection()
     }
@@ -160,7 +201,23 @@ export class AgentCatalogSection {
     if (agent === undefined) return ''
     const root = cwdOf(agent)
     this.ensureDefs(root)
-    return renderCatalog(this.snapshot.get(root) ?? [])
+    // Synchronous live scan, no caching: plugin mounts are effect-scoped and
+    // may appear or disappear between renders. SIDE-EFFECT-FREE (plan §9.3):
+    // invalidation rides the seam's lifecycle events (subscribed in `start`),
+    // so render only reads current state.
+    const pluginEntries = this.pluginIndex.list()
+    const merged = [
+      ...(this.snapshot.get(root) ?? []),
+      ...pluginEntries.map(entry => ({
+        // Plugin entries render under their scoped id (`plugin:agent`), with
+        // the provider definition's whenToUse as the guide line. The guard is
+        // definition-presence — builtin seam providers (spawn/fork/…) carry no
+        // definition and are excluded naturally by the index.
+        agentType: entry.id,
+        whenToUse: entry.definition.whenToUse,
+      } as AgentDefinition)),
+    ].sort((a, b) => a.agentType.localeCompare(b.agentType))
+    return renderCatalog(merged)
   }
 
   /**
@@ -191,14 +248,17 @@ export class AgentCatalogSection {
  * Mount the single global catalog section.
  * @param ctx - the plug context carrying the `systemPrompt` seam.
  * @param registry - the per-workspace definition cache.
+ * @param pluginIndex - the live plugin agent view (defaults to a fresh index
+ *   over this context).
  * @returns the exact Cordis effect disposer, or undefined when the seam is absent.
  */
 export function mountAgentCatalog(
   ctx: Context,
   registry: AgentRegistry,
+  pluginIndex?: PluginAgentIndex,
 ): (() => void) | undefined {
   if (ctx.get('systemPrompt') === undefined) return undefined
-  return new AgentCatalogSection(ctx, registry).start()
+  return new AgentCatalogSection(ctx, registry, pluginIndex).start()
 }
 
 /**

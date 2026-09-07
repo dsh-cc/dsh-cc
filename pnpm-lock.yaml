@@ -1990,6 +1990,9 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
+      '@dsh-cc/plugin-loader':
+        specifier: workspace:^
+        version: link:../../compat/cc-plugin-loader
       '@dsh-cc/tool-search':
         specifier: workspace:*
         version: link:../../core/tool-search
