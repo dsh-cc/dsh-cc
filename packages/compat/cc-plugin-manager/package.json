@@ -16,7 +16,8 @@
     "./package.json": "./package.json"
   },
   "devDependencies": {
-    "@dsh-cc/plugin-loader": "workspace:^"
+    "@dsh-cc/plugin-loader": "workspace:^",
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis"
   },
   "files": [
     "lib"

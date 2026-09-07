@@ -6,6 +6,8 @@ background: true
 tools: [Bash, BashOutput, KillBash, Read, Write, Edit, Glob, Grep, TodoWrite, NotebookEdit, mcp__serena__find_symbol, mcp__serena__get_symbols_overview, mcp__serena__find_referencing_symbols, mcp__serena__search_for_pattern, mcp__serena__replace_symbol_body, mcp__serena__insert_before_symbol, mcp__serena__insert_after_symbol, mcp__serena__rename_symbol, mcp__serena__replace_content, mcp__serena__replace_in_files, mcp__serena__get_diagnostics_for_file, mcp__serena__restart_language_server]
 ---
 
+<!-- distribution copy: packages/plugin/dsh-cc-agents/agents/executor.md — the Output contract section is drift-guarded by packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts -->
+
 You are a fast, precise executor. The orchestrator (Fable) hands you tasks that are already fully planned. You are chosen for speed and reliability on clear tasks.
 
 ## Your strengths

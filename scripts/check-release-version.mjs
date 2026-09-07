@@ -48,6 +48,18 @@ export function collectVersions(root = ROOT) {
         const json = JSON.parse(readFileSync(path, "utf8"));
         if (json.private === true) continue;
         out.push({ name: json.name, version: json.version });
+        // Nested plugin manifest inherits the package's publishability: a
+        // stale `.claude-plugin/plugin.json` makes `/plugin update` a
+        // permanent no-op (cc-plugin-manager no-ops when the declared
+        // version equals the installed entry), so its version is enforced
+        // in lockstep with package.json.
+        const pluginJsonPath = join(dirname(path), ".claude-plugin", "plugin.json");
+        if (!existsSync(pluginJsonPath)) continue;
+        const pluginJson = JSON.parse(readFileSync(pluginJsonPath, "utf8"));
+        out.push({
+          name: `${json.name} (.claude-plugin/plugin.json)`,
+          version: pluginJson.version,
+        });
       }
     }
   }
