@@ -100,7 +100,9 @@ export class PluginAgentIndex {
    */
   list(): { id: string; definition: AgentDefinition }[] {
     const seam = this.getSeam()
-    if (seam === undefined) return []
+    // The seam is duck-typed: a host (or test harness) may expose a partial
+    // seam without `list` — treat that as "no plugin agents", not a crash.
+    if (seam === undefined || typeof seam.list !== 'function') return []
     const entries: { id: string; definition: AgentDefinition }[] = []
     for (const name of seam.list()) {
       const provider = seam.getProvider(name)

@@ -165,6 +165,12 @@ export class AgentCatalogSection {
     // A changed definition re-registers as remove+add, so no fingerprinting.
     const providerAdded = 'subagent/provider-added' as Parameters<typeof this.ctx.on>[0]
     const providerRemoved = 'subagent/provider-removed' as Parameters<typeof this.ctx.on>[0]
+    // Seed with providers that mounted BEFORE this listener started
+    // (production mounts cc-shell-glue before subagent-task): their add
+    // events already fired, but they are live in the index, so their
+    // removals must still invalidate the prompt — a removal is recognized
+    // only by membership in `brandedIds`.
+    for (const id of this.pluginIndex.knownIds()) this.brandedIds.add(id)
     const disposeAdded = this.ctx.on(providerAdded, (provider: unknown) => {
       if (!isPluginAgentProvider(provider)) return
       this.brandedIds.add(provider.name)

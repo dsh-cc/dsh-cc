@@ -346,6 +346,11 @@ plugin named `review`. Fix:
   `ComponentTally`. The shared parse layer (`parse.ts`/`loadAgentsDir`)
   stays permissive; the guard lives at the loader's two consumption points
   (file-registry discovery for workspace files, `mountAgents` for plugins).
+  The skip is UNCONDITIONAL (Codex delta-review Low): a no-prefix
+  `mountAgents` caller also loses colon-bearing agents — accepted, because a
+  branded colon-named provider without a prefix would otherwise become
+  Task-addressable under an ambiguous bare-colon id, defeating the disjoint
+  name spaces; the back-compat escape hatch covers bare names only.
 - If recursive subdirectory loading ever lands, nested ids are CONSTRUCTED
   as `prefix:sub:agent` from relative paths — never taken from basenames.
 - The Unit-1 test that pinned the verbatim behavior is inverted to pin the
@@ -379,13 +384,19 @@ mount/unmount during quiet time never triggers reassembly — and same-id
   `system-prompt/change` directly (no render involvement, no deferral
   needed — the emit is not mid-assembly). Re-registration of a changed
   definition surfaces as remove+add, so fingerprints are unnecessary.
+  Because the removed event carries only a NAME, brand membership is tracked
+  in a `brandedIds` set — **seeded from the live index at listener startup**,
+  since production mounts cc-shell-glue before subagent-task and initial
+  providers' add events predate the listener (Codex delta-review catch,
+  verified by its runtime probe).
 - `AgentCatalogSection.render` becomes side-effect-free: it renders the
   current `pluginIndex.list()` and nothing else (the diff-state machinery
   and deferred emit are removed).
 - Verify at implementation time that provider-lifecycle events are
   deliverable inside the preset's isolate realm; if they are not, fall back
   to the render-time diff (kept as the deviation note) and record the realm
-  boundary as the reason.
+  boundary as the reason. **Verified**: delivery works through the shared
+  cordis bus (catalog.spec realm-delivery test).
 
 ### 9.4 (Medium) Brand the definition-source providers
 

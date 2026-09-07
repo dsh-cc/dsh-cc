@@ -269,6 +269,29 @@ describe('AgentCatalog section', () => {
     await ctx.fiber.dispose()
   })
 
+  it('fires system-prompt/change when a provider mounted BEFORE the catalog listener starts is removed', async () => {
+    const ws = freshDir('ws')
+    const plugin = fakePluginSeam()
+    // Register BEFORE the catalog mounts — production mounts cc-shell-glue
+    // before subagent-task, so initial providers' add events predate the
+    // listener; their removals must still invalidate the prompt.
+    const disposeProvider = plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
+    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    plugin.notify((event, arg) => ctx.emit(event as Parameters<typeof ctx.emit>[0], arg))
+    await vi.waitFor(async () => {
+      expect(await textOf(agentAt(ws))).toContain('p:researcher')
+    }, { timeout: 2000 })
+
+    const changes = vi.fn()
+    ctx.on('system-prompt/change', changes)
+    disposeProvider()
+    await vi.waitFor(() => {
+      expect(changes).toHaveBeenCalled()
+    }, { timeout: 2000 })
+    expect(await textOf(agentAt(ws))).not.toContain('p:researcher')
+    await ctx.fiber.dispose()
+  })
+
   it('fires system-prompt/change when a provider is removed and drops the id from the next render', async () => {
     const ws = freshDir('ws')
     const plugin = fakePluginSeam()
