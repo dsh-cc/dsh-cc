@@ -99,4 +99,8 @@ describe('parsePluginArgv — malformed inputs', () => {
     expect(parsePluginArgv(['marketplace'])).toEqual({ kind: 'help' })
     expect(parsePluginArgv(['marketplace', 'bogus'])).toEqual({ kind: 'help' })
   })
+
+  it('routes the first-class help subcommand to the help grammar block', () => {
+    expect(parsePluginArgv(['help'])).toEqual({ kind: 'help' })
+  })
 })

@@ -177,6 +177,8 @@ export function parsePluginArgv(args: readonly string[]): ParseOutcome {
       return parsePluginVerb(head, args)
     case 'marketplace':
       return parseMarketplace(args)
+    case 'help':
+      return { kind: 'help' }
     default:
       return { kind: 'help' }
   }

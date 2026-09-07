@@ -111,5 +111,6 @@ export function formatPluginHelp(): string {
     '  /plugin marketplace add <source> [--scope user|project|local]',
     '  /plugin marketplace remove <name>',
     '  /plugin marketplace update [name]',
+    '  /plugin help                              show this help',
   ].join('\n')
 }

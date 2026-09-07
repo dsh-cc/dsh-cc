@@ -105,5 +105,6 @@ describe('footer, warning, and help block', () => {
     expect(help).toContain('/plugin list [--enabled|--disabled]')
     expect(help).toContain('/plugin install <plugin[@mkt]> [--scope user|project|local]')
     expect(help).toContain('/plugin marketplace update [name]')
+    expect(help).toContain('/plugin help')
   })
 })
