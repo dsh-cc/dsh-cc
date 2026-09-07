@@ -22,6 +22,7 @@ import { PinStore } from '@dsh-cc/subagent-resume-pins'
 import { SpawnPinCapture } from '../src/resume-capture.ts'
 import { BACKGROUND_SECTION_TEXT } from '../src/index.ts'
 import { collectorsForSession } from '../src/epoch-collector.ts'
+import { PLUGIN_AGENT_PROVIDER_BRAND } from '@dsh-cc/plugin-loader'
 
 /** A faithfully-capability-checking fake subagents seam (mirrors assertCapabilities). */
 interface FakeProvider {
@@ -34,7 +35,8 @@ interface FakeProvider {
   definition?: AgentDefinition
 }
 
-/** A plugin agent provider: the AgentProvider shape the seam carries (never started by Task). */
+/** A plugin agent provider: the AgentProvider shape the seam carries (never started by Task).
+ * Stamped with the loader brand so PluginAgentIndex adopts it (plan §9.4). */
 function pluginProvider(
   id: string,
   def: { agentType?: string; systemPrompt: string; toolRestriction?: ToolRestriction; background?: boolean; model?: string },
@@ -44,6 +46,7 @@ function pluginProvider(
     capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
     prepareContinuable: async () => ({}),
     start: async () => ({ result: Promise.resolve(COMPLETED) }),
+    [PLUGIN_AGENT_PROVIDER_BRAND]: true,
     definition: {
       agentType: def.agentType ?? id.split(':').pop()!,
       whenToUse: `${id} when needed`,

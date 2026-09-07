@@ -26,7 +26,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { cwdOf } from '@dsh-cc/memory'
 import type { AgentRegistry } from './registry.ts'
-import { PluginAgentIndex } from './plugin-agents.ts'
+import { PluginAgentIndex, isPluginAgentProvider } from './plugin-agents.ts'
 
 /** Default order slot for the catalog section (tool guidance owns 100–199). */
 export const CATALOG_SECTION_ORDER = 110
@@ -79,12 +79,12 @@ export class AgentCatalogSection {
   /** Roots whose background discovery has already been kicked off. */
   private readonly seen = new Set<string>()
   /**
-   * The plugin scoped ids seen by the LAST render. ASYMMETRY with
-   * `snapshot`/`seen`: those are per workspace root, this is global on the
-   * section instance — plugin ids are root-independent (the seam is a process
-   * service), so one diff state serves every root.
+   * The scoped ids whose providers passed the brand guard when
+   * `subagent/provider-added` delivered them — so a later
+   * `subagent/provider-removed` (which carries only the NAME, not the
+   * provider) can be brand-checked by membership here.
    */
-  private lastPluginIds: string[] = []
+  private readonly brandedIds = new Set<string>()
 
   /**
    * Create a catalog cache holder bound to a registry.
@@ -154,7 +154,31 @@ export class AgentCatalogSection {
           : section),
       }
     })
+    // Event-driven plugin invalidation (plan §9.3): the seam emits
+    // `subagent/provider-added` / `subagent/provider-removed` on the shared
+    // cordis bus. The events are declared via module augmentation in
+    // @deepseek-ai/dsh-subagent, which this package does not import — the
+    // augmentation is not in its type graph, so the same cast-through-
+    // `ctx.on` pattern other packages use applies (see
+    // packages/ui/tui/src/harness/driver-catalog.ts). The emit fires DIRECTLY
+    // from the listener — it is not mid-assembly, so no deferral is needed.
+    // A changed definition re-registers as remove+add, so no fingerprinting.
+    const providerAdded = 'subagent/provider-added' as Parameters<typeof this.ctx.on>[0]
+    const providerRemoved = 'subagent/provider-removed' as Parameters<typeof this.ctx.on>[0]
+    const disposeAdded = this.ctx.on(providerAdded, (provider: unknown) => {
+      if (!isPluginAgentProvider(provider)) return
+      this.brandedIds.add(provider.name)
+      this.ctx.emit('system-prompt/change')
+    })
+    const disposeRemoved = this.ctx.on(providerRemoved, (name: unknown) => {
+      // The removed event carries only the name; membership in `brandedIds`
+      // proves the provider passed the brand guard when it was added.
+      if (typeof name !== 'string' || !this.brandedIds.delete(name)) return
+      this.ctx.emit('system-prompt/change')
+    })
     return () => {
+      disposeAdded()
+      disposeRemoved()
       disposeListener()
       disposeSection()
     }
@@ -172,9 +196,10 @@ export class AgentCatalogSection {
     const root = cwdOf(agent)
     this.ensureDefs(root)
     // Synchronous live scan, no caching: plugin mounts are effect-scoped and
-    // may appear or disappear between renders.
+    // may appear or disappear between renders. SIDE-EFFECT-FREE (plan §9.3):
+    // invalidation rides the seam's lifecycle events (subscribed in `start`),
+    // so render only reads current state.
     const pluginEntries = this.pluginIndex.list()
-    this.diffPluginIds(pluginEntries.map(entry => entry.id))
     const merged = [
       ...(this.snapshot.get(root) ?? []),
       ...pluginEntries.map(entry => ({
@@ -187,22 +212,6 @@ export class AgentCatalogSection {
       } as AgentDefinition)),
     ].sort((a, b) => a.agentType.localeCompare(b.agentType))
     return renderCatalog(merged)
-  }
-
-  /**
-   * Diff the plugin ids between renders; on change fire
-   * `system-prompt/change` so reassembly reveals newly mounted (or unmounted)
-   * plugins. The emit is DEFERRED: this diff runs synchronously inside the
-   * section `text()` callback (mid-assembly) and emitting there would
-   * re-enter assembly. Termination: the re-render finds no diff → emits
-   * nothing → the chain self-stabilizes after one extra assembly.
-   */
-  private diffPluginIds(ids: string[]): void {
-    const unchanged = ids.length === this.lastPluginIds.length
-      && ids.every((id, index) => id === this.lastPluginIds[index])
-    if (unchanged) return
-    this.lastPluginIds = ids
-    void Promise.resolve().then(() => this.ctx.emit('system-prompt/change'))
   }
 
   /**

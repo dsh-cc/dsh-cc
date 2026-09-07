@@ -1,8 +1,9 @@
 /**
  * Tests for the PluginAgentIndex: live enumeration of plugin agent providers
- * from the `subagents` seam, the structural guard (function `start`, colon
- * scoped id, definition shape), exact-match resolve, and the lazy seam read
- * (plugin mounts are effect-scoped and may appear after `apply()`).
+ * from the `subagents` seam, the brand + structural guard (loader brand, plus
+ * function `start`, colon scoped id, definition shape), exact-match resolve,
+ * and the lazy seam read (plugin mounts are effect-scoped and may appear
+ * after `apply()`).
  *
  * Provider fixtures combine hand-built fakes (the tool.spec.ts fake-seam
  * pattern) with REAL `AgentProvider` instances from `@dsh-cc/plugin-loader`,
@@ -103,6 +104,20 @@ describe('PluginAgentIndex', () => {
     const index = new PluginAgentIndex({ get: () => seam })
     expect(index.list()).toEqual([])
     expect(index.knownIds()).toEqual([])
+  })
+
+  it('excludes a brandless provider even when it is definition-shaped (§9.4 brand guard)', () => {
+    const { seam, register } = fakeSeam()
+    // Shape-faked provider: start fn + colon name + definition-shaped property,
+    // but never created by the loader (no PLUGIN_AGENT_PROVIDER_BRAND).
+    register({
+      name: 'p:fake',
+      start: async () => ({}),
+      definition: { agentType: 'fake', systemPrompt: 'You are fake.', whenToUse: 'fake' },
+    })
+    const index = new PluginAgentIndex({ get: () => seam })
+    expect(index.list()).toEqual([])
+    expect(index.resolve('p:fake')).toBeUndefined()
   })
 
   it('applies the structural guard: start + colon name + definition shape', () => {

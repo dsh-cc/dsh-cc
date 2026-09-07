@@ -19,6 +19,21 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import type { SubagentsLike } from './background-start.ts'
 
+/**
+ * The loader's brand key, duplicated as a `Symbol.for` lookup instead of a
+ * runtime import of `@dsh-cc/plugin-loader` (a devDependency — a runtime
+ * import here would break published consumers). Kept in lockstep with
+ * `PLUGIN_AGENT_PROVIDER_BRAND` in the loader; both resolve to the same
+ * registry symbol.
+ */
+const PLUGIN_AGENT_PROVIDER_BRAND: unique symbol = Symbol.for('dsh-cc.plugin-agent-provider')
+
+/** Whether a value was created by the loader as a plugin agent provider. */
+function hasLoaderBrand(value: unknown): boolean {
+  return typeof value === 'object' && value !== null
+    && (value as Record<symbol, unknown>)[PLUGIN_AGENT_PROVIDER_BRAND] === true
+}
+
 /** Options for the index, mostly injectable seams for tests. */
 export interface PluginAgentIndexOptions {
   /**
@@ -34,19 +49,22 @@ export interface PluginAgentIndexOptions {
  * `definition` with a string `agentType` and `systemPrompt`. Builtin
  * providers (spawn/fork/…) carry no definition and are excluded naturally.
  *
+ * The guard additionally REQUIRES the loader brand (`Symbol.for(
+ * 'dsh-cc.plugin-agent-provider')`, plan §9.4): the structural shape alone is
+ * an accidental protocol any foreign provider could fake, so only providers
+ * the loader actually created are adopted.
+ *
  * Precondition (load-bearing): the provider only carries a scoped name when
  * `mountAgents` was given a `namespacePrefix` — no prefix at mount ⇒ the
  * agent is undiscoverable: neither addressable by Task nor listed in the
- * catalog. Residual risk: a foreign provider that structurally fakes all
- * three shapes would be listed; the guard is shape-based by design (the seam
- * contract is duck-typed).
+ * catalog.
  */
-function isPluginAgentProvider(provider: unknown): provider is {
+export function isPluginAgentProvider(provider: unknown): provider is {
   name: string
   start: unknown
   definition: AgentDefinition
 } {
-  if (typeof provider !== 'object' || provider === null) return false
+  if (!hasLoaderBrand(provider)) return false
   const candidate = provider as { name?: unknown; start?: unknown; definition?: unknown }
   if (typeof candidate.name !== 'string' || !candidate.name.includes(':')) return false
   if (typeof candidate.start !== 'function') return false

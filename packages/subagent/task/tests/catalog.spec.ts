@@ -14,6 +14,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
+import { AgentProvider } from '@dsh-cc/plugin-loader'
 import { AgentRegistry } from '../src/registry.ts'
 import { PluginAgentIndex } from '../src/plugin-agents.ts'
 import { mountAgentCatalog, CATALOG_SECTION_NAME } from '../src/catalog.ts'
@@ -59,11 +60,24 @@ async function mount(opts: { seam?: SubagentsLike } = {}) {
   return { ctx, registry, textOf }
 }
 
-/** A plugin agent provider fixture (the AgentProvider shape on the seam). */
-function pluginSeamEntry(id: string, whenToUse: string): { name: string; definition: { agentType: string; whenToUse: string; systemPrompt: string }; start(): Promise<unknown> } {
+/** A plugin agent provider fixture: a REAL loader `AgentProvider` (branded),
+ * registered under its scoped id exactly as `mountAgents` does. */
+function pluginSeamEntry(id: string, whenToUse: string): AgentProvider {
+  const bare = id.split(':').pop()!
+  const definition = {
+    agentType: bare,
+    whenToUse,
+    systemPrompt: `You are ${id}.`,
+  } as AgentDefinition
+  return new AgentProvider(definition, () => undefined, undefined, id)
+}
+
+/** A brandless provider that fakes the AgentProvider shape (plan §9.4). */
+function brandlessSeamEntry(id: string, whenToUse: string): unknown {
+  const bare = id.split(':').pop()!
   return {
     name: id,
-    definition: { agentType: id.split(':').pop()!, whenToUse, systemPrompt: `You are ${id}.` },
+    definition: { agentType: bare, whenToUse, systemPrompt: `You are ${id}.` },
     start: async () => ({}),
   }
 }
@@ -72,8 +86,12 @@ function pluginSeamEntry(id: string, whenToUse: string): { name: string; definit
 function fakePluginSeam(): {
   seam: SubagentsLike
   register(entry: unknown): () => void
+  /** Wire lifecycle-event delivery to a host context (the real seam emits
+   * `subagent/provider-added` / `subagent/provider-removed` on its ctx). */
+  notify(fn: (event: string, arg: unknown) => void): void
 } {
   const byName = new Map<string, unknown>()
+  let emit: ((event: string, arg: unknown) => void) | undefined
   const seam = {
     async start() { throw new Error('not used') },
     getProvider: (name: string) => byName.get(name),
@@ -83,8 +101,13 @@ function fakePluginSeam(): {
     seam,
     register(entry) {
       byName.set((entry as { name: string }).name, entry)
-      return () => { byName.delete((entry as { name: string }).name) }
+      emit?.('subagent/provider-added', entry)
+      return () => {
+        byName.delete((entry as { name: string }).name)
+        emit?.('subagent/provider-removed', (entry as { name: string }).name)
+      }
     },
+    notify(fn) { emit = fn },
   }
 }
 
@@ -194,34 +217,64 @@ describe('AgentCatalog section', () => {
     await ctx.fiber.dispose()
   })
 
-  it('fires system-prompt/change deferred (never from inside the render frame) when the provider set changes', async () => {
+  it('fires system-prompt/change from the lifecycle listener (never inside a render frame) when a branded provider registers after mount', async () => {
     const ws = freshDir('ws')
     const plugin = fakePluginSeam()
     const { ctx, textOf } = await mount({ seam: plugin.seam })
+    // Deliver the seam's lifecycle events on the same cordis bus the real
+    // harness seam uses (realm-delivery check: the listener must receive the
+    // event even for a provider registered AFTER the catalog mounted).
+    plugin.notify((event, arg) => ctx.emit(event as Parameters<typeof ctx.emit>[0], arg))
     const stacks: string[] = []
     ctx.on('system-prompt/change', () => { stacks.push(new Error().stack ?? '') })
 
     plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
+    await vi.waitFor(() => {
+      expect(stacks.length).toBeGreaterThan(0)
+    }, { timeout: 2000 })
+    // The change event came from the lifecycle listener, NEVER from inside a
+    // render frame (render is side-effect-free now).
+    expect(stacks.some(stack => /AgentCatalogSection/.test(stack))).toBe(false)
+    // Render is side-effect-free: warm assemblies with no lifecycle event
+    // emit nothing new.
     await vi.waitFor(async () => {
       expect(await textOf(agentAt(ws))).toContain('p:researcher')
     }, { timeout: 2000 })
-    // The diff-driven change event(s) arrived, but NEVER synchronously from
-    // inside the section's render frame (a mid-assembly emit would re-enter
-    // assembly; the deferred microtask runs after the render frame returned).
-    expect(stacks.length).toBeGreaterThan(0)
-    expect(stacks.some(stack => /AgentCatalogSection/.test(stack))).toBe(false)
-    // A warm assembly with no diff emits nothing new.
     const before = stacks.length
+    await textOf(agentAt(ws))
     await textOf(agentAt(ws))
     expect(stacks.length).toBe(before)
     await ctx.fiber.dispose()
   })
 
-  it('drops a plugin id after the provider is unmounted and fires the change event', async () => {
+  it('a brandless definition-shaped provider add does NOT fire system-prompt/change', async () => {
     const ws = freshDir('ws')
     const plugin = fakePluginSeam()
-    const disposeProvider = plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
     const { ctx, textOf } = await mount({ seam: plugin.seam })
+    plugin.notify((event, arg) => ctx.emit(event as Parameters<typeof ctx.emit>[0], arg))
+    const changes = vi.fn()
+    ctx.on('system-prompt/change', changes)
+
+    plugin.register(brandlessSeamEntry('p:fake', 'Fake research'))
+    // Settle the workspace discovery's own change event (ensureDefs) so the
+    // remaining count isolates plugin-lifecycle emits.
+    await vi.waitFor(async () => {
+      expect(await textOf(agentAt(ws))).toBeDefined()
+      expect(changes).toHaveBeenCalled()
+    }, { timeout: 2000 })
+    changes.mockClear()
+    await textOf(agentAt(ws))
+    expect(changes).not.toHaveBeenCalled()
+    expect(await textOf(agentAt(ws))).not.toContain('p:fake')
+    await ctx.fiber.dispose()
+  })
+
+  it('fires system-prompt/change when a provider is removed and drops the id from the next render', async () => {
+    const ws = freshDir('ws')
+    const plugin = fakePluginSeam()
+    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    plugin.notify((event, arg) => ctx.emit(event as Parameters<typeof ctx.emit>[0], arg))
+    const disposeProvider = plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
     await vi.waitFor(async () => {
       expect(await textOf(agentAt(ws))).toContain('p:researcher')
     }, { timeout: 2000 })
@@ -229,10 +282,10 @@ describe('AgentCatalog section', () => {
     const changes = vi.fn()
     ctx.on('system-prompt/change', changes)
     disposeProvider()
-    await vi.waitFor(async () => {
-      expect(await textOf(agentAt(ws))).not.toContain('p:researcher')
+    await vi.waitFor(() => {
+      expect(changes).toHaveBeenCalled()
     }, { timeout: 2000 })
-    expect(changes).toHaveBeenCalled()
+    expect(await textOf(agentAt(ws))).not.toContain('p:researcher')
     await ctx.fiber.dispose()
   })
 })
