@@ -2591,11 +2591,11 @@
       }
     },
     "commands.plugin": {
-      "title": "/plugin",
+      "title": "/plugin [subcommand]",
       "category": "commands",
       "plane": "preset",
       "upstream": {
-        "summary": "Browse and manage installed plugins/marketplaces.",
+        "summary": "Manage plugins and marketplaces via subcommands (list/install/uninstall/enable/disable/update, marketplace-*).",
         "refs": []
       },
       "dimensions": {
@@ -2606,10 +2606,10 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "partial"
         },
         "ux": {
-          "status": "full"
+          "status": "partial"
         }
       },
       "evidence": [
@@ -2624,7 +2624,8 @@
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "downgrade",
+        "summary": "No interactive menu UI (text output only); a static trust-warning line instead of interactive consent prompts; CC-only subcommands not implemented (details/eval/init/prune/tag/validate, --config, --sparse, managed scope)."
       }
     },
     "commands.provider": {
@@ -3563,6 +3564,51 @@
         {
           "type": "test",
           "path": "packages/compat/cc-plugin-loader/tests/discovery.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "none"
+      }
+    },
+    "plugins.management": {
+      "title": "Plugin management state",
+      "category": "plugins",
+      "plane": "preset",
+      "upstream": {
+        "summary": "State-file interoperability with Claude Code v2.1.236 (probe-verified byte shapes; see docs/plans/2026-09-06-plugin-management.md).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: cc-shell-glue"
+        },
+        {
+          "type": "test",
+          "path": "packages/compat/cc-plugin-manager/tests/alignment.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/command-plugin/tests/manage.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/compat/cc-plugin-manager/tests/install.spec.ts"
         }
       ],
       "deviation": {

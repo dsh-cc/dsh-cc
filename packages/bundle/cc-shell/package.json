@@ -37,6 +37,7 @@
   "dependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@dsh-cc/plugin-loader": "workspace:^",
+    "@dsh-cc/plugin-manager": "workspace:^",
     "@dsh-cc/mcp-client": "workspace:^",
     "@dsh-cc/mcp-config": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",

@@ -1,0 +1,10 @@
+{
+  "name": "local-tools",
+  "owner": {
+    "name": "Probe"
+  },
+  "plugins": [
+    { "name": "fmt" },
+    { "name": "lint" }
+  ]
+}

@@ -68,13 +68,13 @@ dsh web
 | --- | --- | --- | --- | --- |
 | Engine subsystems | 11 | 6 | 5 | 2 |
 | Hook events | 12 | 4 | 4 | 0 |
-| Command surface | 20 | 6 | 1 | 2 |
+| Command surface | 19 | 7 | 1 | 2 |
 | Sessions and context | 1 | 0 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
 | Skills | 0 | 1 | 0 | 0 |
 | Subagents | 0 | 1 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
-| Plugins and marketplaces | 1 | 0 | 0 | 0 |
+| Plugins and marketplaces | 2 | 0 | 0 | 0 |
 | Settings | 2 | 1 | 0 | 0 |
 | Permissions | 0 | 1 | 0 | 0 |
 | Models | 0 | 1 | 0 | 0 |

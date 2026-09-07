@@ -41,6 +41,9 @@
       "path": "./packages/compat/cc-plugin-loader"
     },
     {
+      "path": "./packages/compat/cc-plugin-manager"
+    },
+    {
       "path": "./packages/compat/cc-model-aliases"
     },
     {
