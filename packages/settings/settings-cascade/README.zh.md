@@ -30,7 +30,8 @@
 - **flag 设置先文件后内联。** 若同时存在 `--settings` 文件与内联内容，内联内容在 flag 层内部覆盖文件。
 - **坏配置加载期明确报错。** 存在但非法的设置文档（不可解析的 JSON，或非对象根）使插件加载失败；来源文件缺失不算错误，不贡献任何内容。
 - **提供方经用户层可写。** `writable` 为 `true`，seam 的进程内 `update()`/`replace()`/`mutate()` 路径被接受。写入以 surgical delta（外科手术式增量）应用到用户层设置文件（默认 `$DSH_HOME/settings.json`）：只有调用方实际改动的键才落入用户文件。写入未触及的值——即使源自更高层——也不会被带进来。校验、修订号与更新事件仍由 seam 负责；project/local/flag/policy 来源仍是只读侧贡献者。
-- **本地设置文件路径按 git 语义上提。** 启动目录位于 git worktree 或 git 仓库子目录时，`.claude/settings.local.json` 改从 git **主检出根**（worktree）或**顶层目录**（子目录启动）读取，与 Claude Code 一致。项目 `settings.json` 仍留在启动目录，会话 cwd 与 git 操作不受影响，文件内部的路径仍相对启动目录解析。以下情形回退到启动目录本身：非 git 仓库、Windows（`win32`）、仓库根为 `$HOME`、上提目标缺少 `.git` 的裸主仓库、git 探测失败，或仓库根 / `.git` / `.claude` 的属主未确认为当前用户（fail-closed）。worktree 本地的 `settings.local.json` 不会被读取（两者合并的行为在 Claude Code 中未确认）。无热重载：会话中途进入 worktree 不会重新解析。
+- **本地设置文件路径按 git 语义上提。** 启动目录位于 git worktree 或 git 仓库子目录时，`.claude/settings.local.json` 改从 git **主检出根**（worktree）或**顶层目录**（子目录启动）读取，与 Claude Code 一致。项目 `settings.json` 仍留在启动目录，会话 cwd 与 git 操作不受影响，文件内部的路径仍相对启动目录解析。以下情形回退到启动目录本身：非 git 仓库、Windows（`win32`）、仓库根为 `$HOME`、上提目标缺少 `.git` 的裸主仓库、git 探测失败，或仓库根 / `.git` / `.claude` 的属主未确认为当前用户（fail-closed）。worktree 本地的 `settings.local.json` 不会被读取（两者合并的行为在 Claude Code 中未确认）。上提解析本身仅在启动时进行：会话中途进入 worktree 不会重新解析本地路径（文件内容仍会热重载——见下）。
+- **文件来源在运行中的会话里热重载。** 提供方用 chokidar 监听已解析的设置文件路径——user、project、git 上提的本地文件、`--settings` flag 文件、以及基于文件的 managed-policy 路径——并经由 `SettingsProvider` seam 重新发布，因此每个注册消费方（permission rules、model aliases、statusline、output styles、plugin loader）都实时重新解析；会话中途编辑 `permissions` 在下一次 `decide()` 即生效。监听路径经 realpath 规范化（符号链接替换式的更新也能捕获），尚不存在的路径同样被监听（启动后创建的文件照样生效），快速连续写入会被合并。写入中途产生的非法文档保留 last-good 状态并告警，修复后自动恢复。不属于热重载范围的：内联 flag 设置、远程 policy、`hooks.json`（走 hooks bridge 的独立 seam）、以及上文所述启动时一次性完成的 git 上提解析。
 - **`env` 分两阶段应用。** 顶层 `env` 分节从合并文档中拆出，经 `getEnv()` 暴露，所有值已强制转为字符串。`applyEnv()` 赋值普通变量；`applyTrustedEnv()` 另赋值改变环境的变量（`LD_PRELOAD`、`PATH`、`DYLD_INSERT_LIBRARIES` 及其余 `DANGEROUS_ENV_VARS`），仅在用户授予信任后运行。
 
 ## 权限 schema
@@ -51,6 +52,5 @@
 - **取消继承键不落盘。** 取消一个来自更低优先级来源（project/local/flag/policy）的键无法写入用户文件；该取消对运行中的进程生效，但重启后该值重现。此外，`describe()` 的 `user` 字段反映合并段而非用户文件实含量，因此 GUI 的 override 标记为近似（既有行为）。
 - **并发写入可能丢更新。** 多个 dsh 进程并发写同一个用户设置文件可能静默丢失更新——原子 rename 只防文件损坏、不防丢写；原生提供方的跨进程锁已在本移植中移除。单进程配置（通常情况）不受影响。
 - **写入仍走用户层，而非上提后的本地文件。** `persist()` 写入用户设置文件（既有行为）；因此在 worktree 中授予的 always-allow 仍不会更新主检出的 `settings.local.json`。
-- **无文件热重载。** 任何来源文件的外部编辑均在重启后才生效（既有）。
 - **无逐来源出处。** 合并结果不记录每个解析值来自哪个来源，`describe()` 也无法像单一用户层那样标注字段在五层之间的出处。
 - **危险环境变量是静态白名单。** `DANGEROUS_ENV_VARS` 命名固定集合；部署专属变量在首次使用前需要显式的扩展点。
