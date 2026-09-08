@@ -176,6 +176,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/hooks-claude-code':
+        specifier: workspace:^
+        version: link:../../hooks/hooks-claude-code
       '@dsh-cc/settings-migrations':
         specifier: workspace:^
         version: link:../../settings/settings-migrations
@@ -753,6 +756,9 @@ importers:
       '@dsh-cc/hook-protocol':
         specifier: workspace:^
         version: link:../hook-protocol
+      '@dsh-cc/plugin-loader':
+        specifier: workspace:^
+        version: link:../../compat/cc-plugin-loader
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
