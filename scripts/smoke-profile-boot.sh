@@ -9,9 +9,10 @@
 #      tsconfig.packages.json) mounts as `Cannot find module .../lib/index.js`.
 #      `check:exports` is the cheap static filter; this boot is the proof.
 #   B. A runtime import declared as a peer that the host install does NOT carry
-#      (`@deepseek-ai/dsh-base`'s npm closure lacks
-#      `@deepseek-ai/dsh-web-fetch-http`, and profiles install with
-#      `autoInstallPeers: false`) mounts as `Cannot find package ...`.
+#      (at the time, `@deepseek-ai/dsh-base`'s npm closure lacked
+#      `@deepseek-ai/dsh-web-fetch-http` — rc.1 carries it — and profiles
+#      install with `autoInstallPeers: false`) mounts as
+#      `Cannot find package ...`.
 #      Only a boot with a user-grade resolution pool catches this.
 #
 # How the pool gets user-grade fidelity: we never pre-create
@@ -28,7 +29,7 @@
 #      boot and would make signature checks vacuous),
 #   2. the log contains `dsh cc-mode` — the TUI's first rendered frame, which
 #      can only appear after the FULL plugin tree (bundles + cc preset incl.
-#      cc-services: serena-first, web-fetch-http-cc) has mounted,
+#      cc-services: serena-first, tool-web-fetch) has mounted,
 #   3. the log has no loader-failure signatures.
 #
 # Two runs: a warm-up (loose budget, unasserted) lets the one-time fallback

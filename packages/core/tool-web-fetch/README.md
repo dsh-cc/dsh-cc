@@ -25,10 +25,11 @@ or produces no text fails the call as an `isError` tool result.
 
 ## Provider requirement
 
-CC deployments get a fetch executor from the cc-shell bundle, which mounts
-`@dsh-cc/web-fetch-http` (wrapping `HttpFetchProvider`, with a literal
-SSRF gate). This package itself does not register a provider; tests fake
-`ctx.web.fetch`.
+CC deployments use the stock `@deepseek-ai/dsh-web-fetch-http` executor from
+dsh-base (DNS-pinned, public-only per hop), with CC egress caps restated by
+the cc-shell bundle. The tool upgrades `http:` URLs to `https:` before the
+seam call (CC WebFetch parity); it never registers a provider itself — tests
+fake `ctx.web.fetch`.
 
 ## Prompt guidance interplay
 
@@ -38,8 +39,8 @@ from the `web_search` system-prompt section. This package re-registers the
 
 ## Known limits
 
-- No host allowlist in this package: the literal SSRF gate (private/loopback/
-  link-local literals blocked) lives in the `@dsh-cc/web-fetch-http`
-  wrapper mounted from cc-shell. Residual risk: DNS rebinding — upstream
-  webfetch-ssrf-allowlist (DNS-pin / per-hop re-validation) remains a follow-up.
+- No host allowlist in this package: SSRF policy lives in the executor — the
+  stock provider resolves public-only addresses and pins them per hop, so the
+  DNS-rebinding window is closed upstream (rc.1). Anything stricter belongs
+  there, not here.
 - Tavily / Firecrawl are plugins/skills, not fetch backends for this tool.

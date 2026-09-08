@@ -24,4 +24,3 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-timeout@0.1.2-rc.1'
   - '@deepseek-ai/dsh-http-proxy@0.1.2-rc.1'
-  - '@deepseek-ai/dsh-web-fetch-http@0.1.2-rc.1'

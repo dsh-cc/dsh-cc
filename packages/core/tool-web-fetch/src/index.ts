@@ -51,6 +51,22 @@ const DEFAULTS: ResolvedConfig = {
   maxSummaryInputChars: 32_000,
 }
 
+/**
+ * CC WebFetch parity: an `http:` URL is upgraded to `https:` before the fetch.
+ * Total on purpose — parseFetchArgs rejects only blank strings, so a malformed
+ * model-supplied URL passes through unchanged for the web provider to reject
+ * as WEB_INVALID_URL (a thrown TypeError here would be an untyped tool error).
+ */
+export function upgradeInsecureUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'http:') parsed.protocol = 'https:'
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
 /** Model-visible failure (maps to an isError tool result). */
 class WebFetchError extends Error {}
 
@@ -134,10 +150,11 @@ export function apply(ctx: Context, config: Config = {}): void {
       truncated: boolean
     }> {
       const input = parseFetchArgs({ url: args.url })
+      const url = upgradeInsecureUrl(input.url)
       const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
 
       if (prompt.length === 0) {
-        const result = await ctx.web.fetch({ url: input.url }, exec.signal)
+        const result = await ctx.web.fetch({ url }, exec.signal)
         return {
           url: result.url,
           statusCode: result.statusCode,
@@ -162,7 +179,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         throw new WebFetchError('web_fetch: prompt requires a configured haiku model alias')
       }
 
-      const result = await ctx.web.fetch({ url: input.url }, exec.signal)
+      const result = await ctx.web.fetch({ url }, exec.signal)
       const converted = formatFetchOutput(result, resolved.maxSummaryInputChars)
 
       // One-shot summarize on the cheap lane. `purpose` is omitted on

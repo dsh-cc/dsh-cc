@@ -120,6 +120,38 @@ describe('raw passthrough (no prompt)', () => {
   })
 })
 
+describe('http→https upgrade (CC WebFetch parity)', () => {
+  it('upgrades an http: url to https: before the web seam (raw path)', async () => {
+    const { ctx, fetchMock } = await setup()
+    const result = await call(ctx, { url: 'http://example.com/x' })
+    expect(result.isError).toBe(false)
+    expect(fetchMock).toHaveBeenCalledWith({ url: 'https://example.com/x' }, expect.anything())
+  })
+
+  it('upgrades on the summarize path too', async () => {
+    const { ctx, fetchMock } = await setup({ routes: CHEAP_ROUTES })
+    const result = await call(ctx, { url: 'http://example.com/x', prompt: 'Summarize' })
+    expect(result.isError).toBe(false)
+    expect(fetchMock).toHaveBeenCalledWith({ url: 'https://example.com/x' }, expect.anything())
+  })
+
+  it('leaves an https: url untouched', async () => {
+    const { ctx, fetchMock } = await setup()
+    const result = await call(ctx, { url: 'https://example.com/x' })
+    expect(result.isError).toBe(false)
+    expect(fetchMock).toHaveBeenCalledWith({ url: 'https://example.com/x' }, expect.anything())
+  })
+
+  // parseFetchArgs only checks non-blank, so the upgrade helper is total:
+  // garbage passes through unchanged and the provider reports WEB_INVALID_URL.
+  it('passes an unparseable url through unchanged for the provider to reject', async () => {
+    const { ctx, fetchMock } = await setup()
+    const result = await call(ctx, { url: 'not a url' })
+    expect(result.isError).toBe(false)
+    expect(fetchMock).toHaveBeenCalledWith({ url: 'not a url' }, expect.anything())
+  })
+})
+
 describe('prompt summarization on the cheap lane', () => {
   it('streams once on the resolved haiku route and returns the summary text', async () => {
     const { ctx, streams } = await setup({ routes: CHEAP_ROUTES })

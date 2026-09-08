@@ -60,17 +60,6 @@ upstream_dependencies:
     refs: []
     needed_for:
       - engine.schedule
-  webfetch-ssrf-allowlist:
-    title: DNS-pin SSRF for web-fetch-http
-    problem: >-
-      The CLI now mounts @dsh-cc/web-fetch-http (literal hostname/IP
-      gate). The remaining gap is DNS-pin / per-hop re-validation inside
-      harness web-fetch-http.
-    cc_contract: >-
-      Claude Code WebFetch enforces an SSRF allowlist before honoring fetches.
-    refs: []
-    needed_for:
-      - engine.web-fetch
   precompact-seam:
     title: PreCompact interception seam in dsh-compaction
     problem: >-
@@ -573,21 +562,23 @@ capabilities:
       ux: partial
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-web-fetch" }
-      - { type: source, path: packages/bundle/cc-shell/cordis.patch.yml, anchor: "- id: web-fetch-http-cc" }
+      - { type: source, path: packages/bundle/cc-shell/cordis.patch.yml, anchor: "- id: web-fetch-http" }
       - { type: test, path: packages/core/tool-web-fetch/tests/tools.spec.ts }
       - { type: test, path: packages/interaction/permission-rules/tests/domain.spec.ts }
-      - { type: test, path: packages/web/fetch-http/tests/ssrf.spec.ts }
+      - { type: test, path: packages/bundle/cc-shell/tests/web-fetch-http-patch.spec.ts }
     deviation:
       kind: downgrade
       summary: >-
         Mounted via @dsh-cc/tool-web-fetch (optional prompt summarized
-        on resolve('haiku'); prompt without haiku hard-fails before fetch).
-        Fetch executor is @dsh-cc/web-fetch-http wrapping
-        HttpFetchProvider, mounted from cc-shell. WebFetch(domain:) content
-        rules match hostnames. Literal SSRF gate blocks private/loopback/
-        link-local literals. Residual: no DNS pinning, no Anthropic preflight,
-        no 15-min cache, no pre-approved docs domains; upstream
-        webfetch-ssrf-allowlist remains for DNS-pin / per-hop re-validation.
+        on resolve('haiku'); prompt without haiku hard-fails before fetch);
+        the tool upgrades http: URLs to https: before the seam, CC-style.
+        Fetch executor is the stock dsh-base @deepseek-ai/dsh-web-fetch-http
+        provider with CC egress caps restated in cc-shell — upstream rc.1
+        resolves public-only addresses and pins them per redirect hop, closing
+        the DNS-rebinding residual the retired literal gate left.
+        WebFetch(domain:) content rules match hostnames. Residual: no
+        Anthropic preflight, no 15-min cache, no pre-approved docs domains,
+        no private-network escape hatch.
 
   engine.web-search:
     title: WebSearch
