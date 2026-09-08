@@ -64,6 +64,12 @@ another fork's result is the ONLY legal reason to serialize.
   assistant message). Do not background mutating `dsh-cc-agents:executor`
   / same-tree edits without that intent: `isolation: worktree` is not
   wired.
+- One task, one instance: every new delegation is a fresh `subagent_fork`
+  (a plain spawn — never `subagent_type: "fork"`, which inherits your
+  context), even when an idle child of the same type exists. `send_message`
+  continues an existing child's CURRENT assignment only (steer in flight,
+  same-task follow-ups); handing it a new task runs it inside stale history
+  with a stale definition snapshot.
 
 ### Verification is planned too
 Before verifying, specify: what behavior, how driven (script/browser/

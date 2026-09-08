@@ -31,6 +31,12 @@ the same turn) instead of serializing them.
 - **executor** MUTATES the tree, so it defaults to FOREGROUND: verify its
   report before composing on it. Pass `run_in_background: true` only when
   you want hands-free execution and will collect the result later.
+- **One task, one instance**: never re-task a finished background child via
+  `send_message`; a new task — even for the same agent type — is a fresh
+  `subagent_fork` (plain spawn, never the `fork` sentinel, which inherits
+  your context). `send_message` continues only the child's CURRENT
+  assignment (steering, same-task follow-ups); a continued child resumes
+  inside its full prior conversation and its original definition snapshot.
 
 ## Optional MCP tools
 

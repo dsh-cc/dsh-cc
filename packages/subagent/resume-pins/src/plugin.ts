@@ -76,6 +76,11 @@ export const RESUME_PIN_STORE = 'resumePinStore'
 /** The spawn-time git identity probe timeout (matches the capture probe). */
 const GIT_PROBE_TIMEOUT_MS = 2_000
 
+/** Delegation-discipline advisory suffixed to delegator-direction send_message results. */
+const DELEGATION_DISCIPLINE_ADVISORY =
+  'Delegation discipline: `send_message` continues this agent’s current assignment only; '
+  + 'a NEW task needs a fresh `subagent_fork` spawn (a plain spawn, not `subagent_type: "fork"`).'
+
 /**
  * Normalize one `git rev-parse` output to a cwd-anchored absolute path (git
  * prints repository-relative values like `.git`), realpath'ed when cheap so
@@ -320,8 +325,22 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
     if (out.kind !== 'accept') return out
     if (exec.name === 'send_message') {
       const notices = pendingNotices.take(exec.token)
-      if (notices.length > 0) {
-        return { kind: 'accept', content: [...notices.map(text => ({ type: 'text' as const, text })), ...(out.content ?? [])] }
+      const target = (exec.arguments as { subagent_id?: unknown } | null)?.subagent_id
+      const callerParent = (exec.agent as { session?: { header?: { parentSession?: unknown } } } | undefined)
+        ?.session?.header?.parentSession
+      // Child→parent result reports (explicitly instructed by the harness continuable initial
+      // prompt) are same-conversation sends: never annotate them. exec.agent === undefined or a
+      // non-matching parentSession is the delegator direction → the advisory fires.
+      const delegatorDirection = typeof target === 'string' && target.length > 0 && String(callerParent) !== target
+      if (notices.length > 0 || delegatorDirection) {
+        return {
+          kind: 'accept',
+          content: [
+            ...notices.map(text => ({ type: 'text' as const, text })),
+            ...(out.content ?? []),
+            ...(delegatorDirection ? [{ type: 'text' as const, text: DELEGATION_DISCIPLINE_ADVISORY }] : []),
+          ],
+        }
       }
       return out
     }
@@ -345,6 +364,10 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
         annotations.push(`[resume-pin] ${childId}: ${parts.join('; ')}`)
       }
       if (annotations.length > 0) {
+        annotations.push(
+          'Delegation discipline: an idle/ready child stays continuable for its CURRENT assignment only'
+          + ' — a new task needs a fresh `subagent_fork` spawn (plain spawn, not `subagent_type: "fork"`).',
+        )
         return { kind: 'accept', content: [...(out.content ?? []), { type: 'text' as const, text: annotations.join('\n') }] }
       }
     }
