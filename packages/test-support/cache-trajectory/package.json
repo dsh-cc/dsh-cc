@@ -23,6 +23,7 @@
     "@deepseek-ai/dsh-llm-deepseek": "link:../../../../deepseek-harness/packages/llm/llm-deepseek",
     "@deepseek-ai/dsh-llm-mock-server": "link:../../../../deepseek-harness/packages/test-support/llm-mock-server",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
     "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
     "@dsh-cc/compaction-micro": "workspace:^"
