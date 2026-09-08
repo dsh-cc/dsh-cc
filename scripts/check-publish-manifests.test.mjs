@@ -92,6 +92,17 @@ check("^3.18.1 satisfied by 3.18.1", () => {
 check("^3.18.1 NOT satisfied by 4.0.0", () => {
   assert.equal(rangeSatisfiedBy("^3.18.1", "4.0.0"), false);
 });
+/* caret with a prerelease base follows node-semver's prerelease-tuple rule:
+ * only prerelease versions of the SAME release tuple satisfy, so a
+ * prerelease of the next minor is refused (^0.1.2-rc.1 vs 0.1.3-alpha.2). */
+check("^0.1.2-rc.1 NOT satisfied by 0.1.3-alpha.2", () => {
+  assert.equal(rangeSatisfiedBy("^0.1.2-rc.1", "0.1.3-alpha.2"), false);
+});
+check("^0.1.2-rc.1 satisfied by same-tuple prerelease and final releases", () => {
+  assert.equal(rangeSatisfiedBy("^0.1.2-rc.1", "0.1.2-rc.1"), true);
+  assert.equal(rangeSatisfiedBy("^0.1.2-rc.1", "0.1.2-rc.2"), true);
+  assert.equal(rangeSatisfiedBy("^0.1.2-rc.1", "0.1.2"), true);
+});
 /* bare exact */
 check("exact 3.18.1 satisfied by 3.18.1, not 3.18.2", () => {
   assert.equal(rangeSatisfiedBy("3.18.1", "3.18.1"), true);

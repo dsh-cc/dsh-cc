@@ -142,7 +142,14 @@ export function rangeSatisfiedBy(range, version) {
     if (major > 0) upper = { release: [major + 1, 0, 0], prerelease: [] };
     else if (minor > 0) upper = { release: [0, minor + 1, 0], prerelease: [] };
     else upper = { release: [0, 0, patch + 1], prerelease: [] };
-    return compareVersions(v, base) >= 0 && compareVersions(v, upper) < 0;
+    return (
+      compareVersions(v, base) >= 0 &&
+      compareVersions(v, upper) < 0 &&
+      // node-semver's prerelease-tuple rule: a version carrying a prerelease
+      // only satisfies a range whose comparator shares its release tuple, so
+      // `^0.1.2-rc.1` admits 0.1.2-rc.2 but refuses 0.1.3-alpha.2.
+      (v.prerelease.length === 0 || sameRelease(v, base))
+    );
   }
 
   const exact = parseVersion(range);
