@@ -18,6 +18,7 @@ import { addMarketplace, listMarketplaces, removeMarketplace, updateMarketplaces
 import { createCcPluginManager } from '../src/index.ts'
 import { PluginManagerError } from '../src/errors.ts'
 import { canonicalizeExistingPath } from '../src/paths.ts'
+import { snapshotTree, tempDir } from './helpers.ts'
 import type { MarketplaceSource } from '../src/types.ts'
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
@@ -370,5 +371,247 @@ describe('manager factory marketplace methods', () => {
     expect(await mgr.updateMarketplaces('remote-mkt')).toEqual(['remote-mkt'])
     expect(await mgr.removeMarketplace('remote-mkt')).toEqual({ name: 'remote-mkt', removedPlugins: [] })
     expect((await mgr.listMarketplaces())).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Dual-home (S4, plan §4.5–§4.7): merged-view add, tombstone replacement,
+// promote-on-write update, dsh-only remove.
+// ---------------------------------------------------------------------------
+
+const NOW2 = () => new Date('2026-09-06T10:00:00.000Z')
+
+/** Rig with a claude-owned marketplace `claude-mkt` (github source, clone inside the claude home). */
+async function dualRig(): Promise<{ r: Rig, dshHome: string, claudeClone: string }> {
+  const r = await rig()
+  const dshHome = await tempDir('pm-mkt-dsh-')
+  const claudeClone = join(r.marketplacesDir, 'claude-mkt')
+  await mkdir(join(claudeClone, '.claude-plugin'), { recursive: true })
+  await writeFile(join(claudeClone, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: 'claude-mkt', plugins: [{ name: 'p1' }] }), 'utf8')
+  await writeFile(r.knownFile, JSON.stringify({
+    'claude-mkt': { source: { source: 'github', repo: 'acme/claude-mkt' }, installLocation: claudeClone, lastUpdated: '2026-09-01T00:00:00.000Z' },
+  }, null, 2) + '\n', 'utf8')
+  return { r, dshHome, claudeClone }
+}
+
+function dualDeps2(r: Rig, dshHome: string, git?: FakeGit): any {
+  return { claudeHome: r.claudeHome, dshHome, cwd: r.cwd, now: NOW2, ...(git ? { runGit: git.runGit } : {}) }
+}
+
+describe('marketplace add (dual-home, S4 §4.5)', () => {
+  it('same source as a claude-only entry → idempotent success, no clone, no dsh writes', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit()
+    const result = await addMarketplace(dualDeps2(r, dshHome, git), 'acme/claude-mkt')
+    expect(result).toEqual({ name: 'claude-mkt', sourceKind: 'github', pluginCount: 1 })
+    expect(git.calls).toEqual([])
+    expect(existsSync(join(dshHome, 'plugins', 'known_marketplaces.json'))).toBe(false)
+    expect(existsSync(join(dshHome, 'settings.json'))).toBe(false)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+    expect(claudeClone).toBeDefined()
+  })
+
+  it('different source, same name as a claude entry → fresh dsh clone + shadowedClaudeEntry: true; claude byte-identical', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit({ name: 'claude-mkt' })
+    const result = await addMarketplace(dualDeps2(r, dshHome, git), 'acme/other-mkt')
+    expect(result).toEqual({ name: 'claude-mkt', sourceKind: 'github', pluginCount: 2, shadowedClaudeEntry: true })
+    // clone landed in the DSH marketplaces dir
+    expect(git.calls[0]!.args[0]).toBe('clone')
+    expect(git.calls[0]!.args[2]).toContain(join(dshHome, 'plugins', 'marketplaces'))
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['claude-mkt'].installLocation).toBe(join(dshHome, 'plugins', 'marketplaces', 'claude-mkt'))
+    // declaration in the dsh user settings (never the claude file)
+    expect((await readJson(join(dshHome, 'settings.json')))['extraKnownMarketplaces']['claude-mkt']).toBeDefined()
+    expect(existsSync(join(r.claudeHome, 'settings.json'))).toBe(false)
+    // W3: the claude clone is untouched
+    expect(existsSync(claudeClone)).toBe(true)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('tombstoned name + claude same source → dsh entry REFERENCES the claude installLocation, no clone, tombstone cleared, no flag', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const { writeFile } = await import('node:fs/promises')
+    await mkdir(join(dshHome, 'plugins'), { recursive: true })
+    await writeFile(join(dshHome, 'plugins', 'known_marketplaces.json'), JSON.stringify({ 'claude-mkt': null }), 'utf8')
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit()
+
+    const result = await addMarketplace(dualDeps2(r, dshHome, git), 'acme/claude-mkt')
+    expect(result).toEqual({ name: 'claude-mkt', sourceKind: 'github', pluginCount: 1 })
+    expect(git.calls).toEqual([])
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['claude-mkt']).toMatchObject({ installLocation: claudeClone, lastUpdated: '2026-09-06T10:00:00.000Z' })
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('tombstoned name + claude different source → fresh clone + shadowedClaudeEntry: true', async () => {
+    const { r, dshHome } = await dualRig()
+    const { writeFile } = await import('node:fs/promises')
+    await mkdir(join(dshHome, 'plugins'), { recursive: true })
+    await writeFile(join(dshHome, 'plugins', 'known_marketplaces.json'), JSON.stringify({ 'claude-mkt': null }), 'utf8')
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit({ name: 'claude-mkt' })
+
+    const result = await addMarketplace(dualDeps2(r, dshHome, git), 'acme/other-mkt')
+    expect(result.shadowedClaudeEntry).toBe(true)
+    expect(git.calls).toHaveLength(1)
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['claude-mkt'].installLocation).toBe(join(dshHome, 'plugins', 'marketplaces', 'claude-mkt'))
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('tombstoned name with no claude entry → fresh clone, tombstone cleared, no flag', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const { writeFile, rm } = await import('node:fs/promises')
+    await rm(claudeClone, { recursive: true, force: true })
+    await writeFile(r.knownFile, '{}\n', 'utf8')
+    await mkdir(join(dshHome, 'plugins'), { recursive: true })
+    await writeFile(join(dshHome, 'plugins', 'known_marketplaces.json'), JSON.stringify({ 'claude-mkt': null }), 'utf8')
+    const git = fakeGit({ name: 'claude-mkt' })
+
+    const result = await addMarketplace(dualDeps2(r, dshHome, git), 'acme/claude-mkt')
+    expect(result).toEqual({ name: 'claude-mkt', sourceKind: 'github', pluginCount: 2 })
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['claude-mkt'].installLocation).toBe(join(dshHome, 'plugins', 'marketplaces', 'claude-mkt'))
+  })
+})
+
+describe('marketplace update — promote-on-write (dual-home, S4 §4.7)', () => {
+  it('claude-only github entry → fresh clone into the dsh marketplaces dir with field carry-over; claude byte-identical; no pull', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const { writeFile } = await import('node:fs/promises')
+    // claude entry with autoUpdate + an unknown extra field: both must survive
+    await writeFile(r.knownFile, JSON.stringify({
+      'claude-mkt': { source: { source: 'github', repo: 'acme/claude-mkt' }, installLocation: claudeClone, lastUpdated: '2026-09-01T00:00:00.000Z', autoUpdate: true, extraField: 'x' },
+    }, null, 2) + '\n', 'utf8')
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit({ name: 'claude-mkt' })
+
+    const updated = await updateMarketplaces(dualDeps2(r, dshHome, git), 'claude-mkt')
+    expect(updated).toEqual(['claude-mkt'])
+    expect(git.calls.some(call => call.args[0] === 'clone')).toBe(true)
+    expect(git.calls.some(call => call.args.includes('pull'))).toBe(false)
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['claude-mkt']).toEqual({
+      source: { source: 'github', repo: 'acme/claude-mkt' },
+      installLocation: join(dshHome, 'plugins', 'marketplaces', 'claude-mkt'),
+      lastUpdated: '2026-09-06T10:00:00.000Z',
+      autoUpdate: true,
+      extraField: 'x',
+    })
+    expect(existsSync(join(dshHome, 'plugins', 'marketplaces', 'claude-mkt', '.claude-plugin', 'marketplace.json'))).toBe(true)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('manifest name mismatch → typed marketplaceNameMismatch error, clone dropped, no state change', async () => {
+    const { r, dshHome } = await dualRig()
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit({ name: 'other-name' })
+    const error = await expectError(() => updateMarketplaces(dualDeps2(r, dshHome, git), 'claude-mkt'))
+    expect(error.code).toBe('MARKETPLACE_NAME_MISMATCH')
+    expect(error.message).toBe('Marketplace manifest name "other-name" does not match the entry name "claude-mkt".')
+    expect(existsSync(join(dshHome, 'plugins', 'marketplaces', 'claude-mkt'))).toBe(false)
+    expect(existsSync(join(dshHome, 'plugins', 'known_marketplaces.json'))).toBe(false)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('residue self-heal: an existing dsh clone dir with no dsh entry referencing it is removed and re-cloned', async () => {
+    const { r, dshHome } = await dualRig()
+    const residue = join(dshHome, 'plugins', 'marketplaces', 'claude-mkt')
+    await mkdir(join(residue, 'junk'), { recursive: true })
+    const git = fakeGit({ name: 'claude-mkt' })
+    await updateMarketplaces(dualDeps2(r, dshHome, git), 'claude-mkt')
+    expect(existsSync(join(residue, 'junk'))).toBe(false)
+    expect(existsSync(join(residue, '.claude-plugin', 'marketplace.json'))).toBe(true)
+  })
+
+  it('per-entry commit: a mid-batch failure persists the already-processed prefix (decision G)', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(r.knownFile, JSON.stringify({
+      'aaa-claude': { source: { source: 'github', repo: 'acme/aaa' }, installLocation: claudeClone, lastUpdated: 'T0' },
+      'claude-mkt': { source: { source: 'github', repo: 'acme/claude-mkt' }, installLocation: claudeClone, lastUpdated: 'T0' },
+    }, null, 2) + '\n', 'utf8')
+    let calls = 0
+    const flakyGit: FakeGit = {
+      calls: [],
+      runGit: async (args, runnerOpts) => {
+        calls++
+        if (args[0] === 'clone') {
+          const dest = args[2]!
+          if (dest.includes('claude-mkt')) return { code: 128, stdout: '', stderr: 'fatal: repo gone' }
+          await mkdir(join(dest, '.claude-plugin'), { recursive: true })
+          const manifestName = dest.includes('aaa-claude') ? 'aaa-claude' : 'claude-mkt'
+          await writeFile(join(dest, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: manifestName, plugins: [] }), 'utf8')
+        }
+        return { code: 0, stdout: '', stderr: '' }
+      },
+    }
+    const error = await expectError(() => updateMarketplaces(dualDeps2(r, dshHome, flakyGit)))
+    expect(error.code).toBe('GIT_FAILED')
+    // the processed prefix (aaa-claude) is persisted in the dsh known file
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['aaa-claude']).toBeDefined()
+    expect(dshKnown['claude-mkt']).toBeUndefined()
+  })
+
+  it('claude directory-source entry → dsh entry points at the same external path with refreshed lastUpdated, no clone', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(r.knownFile, JSON.stringify({
+      'claude-mkt': { source: { source: 'directory', path: claudeClone }, installLocation: claudeClone, lastUpdated: '2026-09-01T00:00:00.000Z' },
+    }, null, 2) + '\n', 'utf8')
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit()
+
+    const updated = await updateMarketplaces(dualDeps2(r, dshHome, git))
+    expect(updated).toEqual(['claude-mkt'])
+    expect(git.calls).toEqual([])
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['claude-mkt']).toEqual({ source: { source: 'directory', path: claudeClone }, installLocation: claudeClone, lastUpdated: '2026-09-06T10:00:00.000Z' })
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('dsh-owned git entry still pulls at its own installLocation; a tombstoned name is unknown', async () => {
+    const { r, dshHome } = await dualRig()
+    const { writeFile } = await import('node:fs/promises')
+    const dshClone = join(dshHome, 'plugins', 'marketplaces', 'dsh-mkt')
+    await mkdir(join(dshClone, '.claude-plugin'), { recursive: true })
+    await mkdir(join(dshHome, 'plugins'), { recursive: true })
+    await writeFile(join(dshHome, 'plugins', 'known_marketplaces.json'), JSON.stringify({
+      'dsh-mkt': { source: { source: 'github', repo: 'o/d' }, installLocation: dshClone, lastUpdated: 'T0' },
+      'dead-mkt': null,
+    }), 'utf8')
+    const git = fakeGit()
+    expect(await updateMarketplaces(dualDeps2(r, dshHome, git), 'dsh-mkt')).toEqual(['dsh-mkt'])
+    expect(git.calls).toEqual([{ args: ['-C', dshClone, 'pull', '--ff-only'], cwd: dshClone }])
+    const error = await expectError(() => updateMarketplaces(dualDeps2(r, dshHome, git), 'dead-mkt'))
+    expect(error.message).toBe('Unknown marketplace "dead-mkt". Known: claude-mkt, dsh-mkt')
+  })
+})
+
+describe('marketplace remove (dual-home, S4 §4.6)', () => {
+  it('claude-owned marketplace: claude clone + claude state kept byte-identical; dsh known file gets a null tombstone; declarations stripped from dsh user + per-repo files only', async () => {
+    const { r, dshHome, claudeClone } = await dualRig()
+    const { writeFile } = await import('node:fs/promises')
+    // declarations: claude user file (must NEVER be touched) and dsh user file
+    await writeFile(join(r.claudeHome, 'settings.json'), JSON.stringify({ extraKnownMarketplaces: { 'claude-mkt': { source: { source: 'github', repo: 'acme/claude-mkt' } } } }, null, 2) + '\n', 'utf8')
+    await writeFile(join(dshHome, 'settings.json'), JSON.stringify({ extraKnownMarketplaces: { 'claude-mkt': { source: { source: 'github', repo: 'acme/claude-mkt' } } } }, null, 2) + '\n', 'utf8')
+    const before = snapshotTree(r.claudeHome)
+
+    const result = await removeMarketplace(dualDeps2(r, dshHome), 'claude-mkt')
+    expect(result).toEqual({ name: 'claude-mkt', removedPlugins: [] })
+
+    // W3: claude clone intact; W1: claude home byte-identical
+    expect(existsSync(claudeClone)).toBe(true)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+    // dsh tombstone
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['claude-mkt']).toBeNull()
+    // dsh user declaration stripped; claude user declaration untouched (covered by byte-identity)
+    expect((await readJson(join(dshHome, 'settings.json')))['extraKnownMarketplaces']).toEqual({})
   })
 })

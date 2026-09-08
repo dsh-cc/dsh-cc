@@ -7,10 +7,11 @@
  */
 
 import { noInstallationAtScope, unknownMarketplace } from './errors.ts'
-import { currentGitSha, materializeCacheDir, orphanIfUnreferenced, readPluginManifest, resolveMutationScope, type InstallDeps } from './install.ts'
+import { currentGitSha, materializeCacheDir, orphanIfUnreferencedDsh, readPluginManifest, resolveMutationScope, type InstallDeps } from './install.ts'
 import { pluginsStatePaths } from './paths.ts'
+import { loadMergedInstalledPlugins, loadMergedKnownMarketplaces, resolutionIds } from './merged-state.ts'
 import { parsePluginId, readDeclaredPlugins, resolveInstalledPluginId } from './resolve-id.ts'
-import { loadInstalledPlugins, loadKnownMarketplaces, saveJsonFileAtomic } from './state-store.ts'
+import { loadInstalledPlugins, saveJsonFileAtomic } from './state-store.ts'
 import type { Scope } from './types.ts'
 
 export interface UpdateOptions {
@@ -33,16 +34,17 @@ export async function updatePlugin(deps: InstallDeps, arg: string, opts: UpdateO
   const now = deps.now ?? (() => new Date())
   const scope = resolveMutationScope(opts.scope)
   const paths = pluginsStatePaths(deps)
-  const installed = await loadInstalledPlugins(paths.installedPluginsFile)
-  const id = resolveInstalledPluginId(arg, Object.keys(installed.plugins))
-  const entries = installed.plugins[id] ?? []
+  // Merged installed + known views (§4.4).
+  const merged = await loadMergedInstalledPlugins(deps)
+  const id = resolveInstalledPluginId(arg, resolutionIds(merged.file))
+  const entries = merged.file.plugins[id] ?? []
   const entry = entries.find(candidate => candidate.scope === scope)
   if (entry === undefined) {
     throw noInstallationAtScope(id, scope, entries.map(candidate => candidate.scope))
   }
 
   const { name, marketplace } = parsePluginId(id)
-  const known = await loadKnownMarketplaces(paths.knownMarketplacesFile)
+  const known = (await loadMergedKnownMarketplaces(deps)).entries
   if (marketplace === undefined || known[marketplace] === undefined) {
     throw unknownMarketplace(marketplace ?? '', Object.keys(known))
   }
@@ -56,15 +58,21 @@ export async function updatePlugin(deps: InstallDeps, arg: string, opts: UpdateO
     return { upToDate: true, id, version: entry.version, scope }
   }
 
-  // Materialize the new cache dir alongside the old one (C7), then rewrite
-  // only the targeted scope's entry.
+  // Materialize the new cache dir into the DSH cache (even for a
+  // claude-owned marketplace clone — the clone is only read, W3), then
+  // rewrite the targeted scope's entry in the dsh file (§3.4).
   const installPath = await materializeCacheDir(paths.cacheDir, marketplace, name, newVersion, sourceDir)
   const updated: typeof entry = { ...entry, version: newVersion, installPath, installedAt: now().toISOString(), lastUpdated: now().toISOString() }
   const sha = await currentGitSha(deps.runGit, mktEntry.installLocation)
   if (sha !== undefined) updated.gitCommitSha = sha
   else delete updated.gitCommitSha
-  installed.plugins[id] = entries.map(candidate => (candidate === entry ? updated : candidate))
-  await saveJsonFileAtomic(paths.installedPluginsFile, installed)
-  await orphanIfUnreferenced(installed, entry.installPath, now)
+  const newEntries = entries.map(candidate => (candidate === entry ? updated : candidate))
+  const dshInstalled = await loadInstalledPlugins(paths.installedPluginsFile)
+  dshInstalled.plugins[id] = newEntries
+  await saveJsonFileAtomic(paths.installedPluginsFile, dshInstalled)
+  // W4: an old claude-owned installPath is never orphan-marked; a dsh-owned
+  // one is, when nothing in the merged view references it anymore.
+  merged.file.plugins[id] = newEntries
+  await orphanIfUnreferencedDsh(deps, merged.file, entry.installPath, now)
   return { upToDate: false, id, fromVersion: entry.version, toVersion: newVersion, scope }
 }

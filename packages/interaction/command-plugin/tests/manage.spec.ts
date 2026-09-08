@@ -111,6 +111,19 @@ describe('executePluginManage — mutations rescan and render §3 lines', () => 
     expect(ccPlugins.rescan).toHaveBeenCalledTimes(2)
   })
 
+  it('marketplace add prints a one-line notice when the result shadows a claude entry (shadowedClaudeEntry)', async () => {
+    const ccPlugins = fakeCcPlugins()
+    const manager = fakeManager({
+      addMarketplace: vi.fn(async () => ({ name: 'm', sourceKind: 'git', pluginCount: 3, shadowedClaudeEntry: true })),
+    })
+    expect((await executePluginManage(deps(ccPlugins, manager), invocation('marketplace add https://example.com/m.git'))).text)
+      .toBe([
+        'Added marketplace: m (git, declared in user settings)',
+        'Note: plugins can add hooks and MCP servers; only install from sources you trust.',
+        'This dsh-side registration shadows a Claude-home entry with a different source.',
+      ].join('\n'))
+  })
+
   it('marketplace remove and update rescan and render their lines', async () => {
     const ccPlugins = fakeCcPlugins()
     const manager = fakeManager()

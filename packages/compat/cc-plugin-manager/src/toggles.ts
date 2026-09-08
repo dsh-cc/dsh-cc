@@ -9,8 +9,9 @@
  */
 
 import { ambiguousPluginScopes, pluginNotInstalled, unknownScope } from './errors.ts'
-import { pluginsStatePaths, settingsFileForScope, type PathInputs } from './paths.ts'
-import { loadInstalledPlugins, loadSettingsFile, saveJsonFileAtomic } from './state-store.ts'
+import { loadMergedInstalledPlugins, resolutionIds } from './merged-state.ts'
+import { settingsFileForScope, type PathInputs } from './paths.ts'
+import { loadSettingsFile, saveJsonFileAtomic } from './state-store.ts'
 import { resolveInstalledPluginId } from './resolve-id.ts'
 import type { Scope, ScopeSettingsFile } from './types.ts'
 
@@ -53,10 +54,12 @@ async function resolveScope(
  * preserving all other keys (C11).
  */
 export async function togglePlugin(deps: PathInputs, arg: string, enabled: boolean, opts?: ToggleOptions): Promise<ToggleResult> {
-  const paths = pluginsStatePaths(deps)
-  const installed = await loadInstalledPlugins(paths.installedPluginsFile)
-  const id = resolveInstalledPluginId(arg, Object.keys(installed.plugins))
-  const installedScopes = (installed.plugins[id] ?? []).map(entry => entry.scope)
+  // Auto-detect over the MERGED installed lists (§4.2): an id installed only
+  // claude-side is toggleable; the flag lands where the resolved scope's file
+  // lives (user → dsh settings, §3.3).
+  const merged = await loadMergedInstalledPlugins(deps)
+  const id = resolveInstalledPluginId(arg, resolutionIds(merged.file))
+  const installedScopes = (merged.file.plugins[id] ?? []).map(entry => entry.scope)
   const scope = await resolveScope(id, installedScopes, opts)
   const settingsFile = settingsFileForScope(scope, deps)
   const settings = await loadSettingsFile(settingsFile)

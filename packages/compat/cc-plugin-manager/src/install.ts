@@ -10,13 +10,14 @@
  */
 
 import { cp, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import type { GitRunner } from './git.ts'
 import { pluginAlreadyInstalled, unknownMarketplace, unknownScope } from './errors.ts'
 import { canonicalizeExistingPath, pluginsStatePaths, type PathInputs } from './paths.ts'
+import { loadMergedInstalledPlugins, loadMergedKnownMarketplaces } from './merged-state.ts'
 import { parsePluginId, readDeclaredPlugins, resolveDeclaredPluginId } from './resolve-id.ts'
 import { applyEnabledFlag } from './settings-write.ts'
-import { loadInstalledPlugins, loadKnownMarketplaces, saveJsonFileAtomic } from './state-store.ts'
+import { loadInstalledPlugins, saveJsonFileAtomic } from './state-store.ts'
 import type { InstallEntry, InstalledPluginsFile, Scope } from './types.ts'
 
 export interface InstallDeps extends PathInputs {
@@ -108,6 +109,23 @@ export async function orphanIfUnreferenced(installed: InstalledPluginsFile, inst
   await writeOrphanMarker(installPath, now)
 }
 
+/**
+ * W4-gated orphan marking: only install paths under the DSH cache dir
+ * (realpath-prefix check) may be marked, and only when no remaining MERGED
+ * entry references the path. Claude-owned cache dirs are never touched (W3).
+ */
+export async function orphanIfUnreferencedDsh(deps: PathInputs, installed: InstalledPluginsFile, installPath: string, now: () => Date): Promise<void> {
+  const dshCacheDir = canonicalizeExistingPath(pluginsStatePaths(deps).cacheDir)
+  let canonical: string
+  try {
+    canonical = canonicalizeExistingPath(installPath)
+  } catch {
+    return
+  }
+  if (canonical !== dshCacheDir && !canonical.startsWith(dshCacheDir + sep)) return
+  await orphanIfUnreferenced(installed, installPath, now)
+}
+
 /** Commit step 1: recursively copy the source dir into the cache layout. */
 export async function materializeCacheDir(cacheDir: string, marketplace: string, plugin: string, version: string, sourceDir: string): Promise<string> {
   const dest = cacheDirFor(cacheDir, marketplace, plugin, version)
@@ -123,7 +141,7 @@ export async function installPlugin(deps: InstallDeps, arg: string, opts: Instal
   const now = deps.now ?? (() => new Date())
   const scope = resolveMutationScope(opts.scope)
   const paths = pluginsStatePaths(deps)
-  const known = await loadKnownMarketplaces(paths.knownMarketplacesFile)
+  const known = (await loadMergedKnownMarketplaces(deps)).entries
   const names = Object.keys(known)
 
   // Build the declared-id map; unreadable marketplace manifests are recorded
@@ -166,20 +184,24 @@ export async function installPlugin(deps: InstallDeps, arg: string, opts: Instal
   const manifest = await readPluginManifest(sourceDir, declaredPlugin.name)
   const version = manifest.version
 
-  const installed = await loadInstalledPlugins(paths.installedPluginsFile)
-  if ((installed.plugins[id] ?? []).some(entry => entry.scope === scope)) throw pluginAlreadyInstalled(id, scope)
+  // Merged installed view (§3.4): pluginAlreadyInstalled checks the merged
+  // list per scope, regardless of which home holds the prior entry.
+  const merged = await loadMergedInstalledPlugins(deps)
+  if ((merged.file.plugins[id] ?? []).some(entry => entry.scope === scope)) throw pluginAlreadyInstalled(id, scope)
 
-  // §4.C (1) cache copy — fails before any state mutation.
+  // §4.C (1) cache copy — fails before any state mutation (dsh cache).
   const installPath = await materializeCacheDir(paths.cacheDir, marketplace, declaredPlugin.name, version, sourceDir)
-  // (2) enabledPlugins flag at the scope's settings file.
+  // (2) enabledPlugins flag at the scope's settings file (user → dsh, §3.3).
   await applyEnabledFlag(deps, scope, id, true)
-  // (3) installed_plugins.json entry (commit).
+  // (3) installed_plugins.json entry (commit): the id's full post-mutation
+  // MERGED list is materialized into the dsh file (§3.4 materialization-on-write).
   const sha = await currentGitSha(deps.runGit, mktEntry.installLocation)
   const timestamp = now().toISOString()
   const record: InstallEntry = { scope, installPath, version, installedAt: timestamp, lastUpdated: timestamp }
   if (sha !== undefined) record.gitCommitSha = sha
   if (scope !== 'user') record.projectPath = canonicalizeExistingPath(deps.cwd)
-  ;(installed.plugins[id] ??= []).push(record)
-  await saveJsonFileAtomic(paths.installedPluginsFile, installed)
+  const dshInstalled = await loadInstalledPlugins(paths.installedPluginsFile)
+  dshInstalled.plugins[id] = [...(merged.file.plugins[id] ?? []), record]
+  await saveJsonFileAtomic(paths.installedPluginsFile, dshInstalled)
   return { id, version, scope, installPath }
 }

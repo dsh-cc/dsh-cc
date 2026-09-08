@@ -6,6 +6,8 @@
  * @module @dsh-cc/plugin-manager/test-helpers
  */
 
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -75,9 +77,33 @@ export async function readJson(file: string): Promise<any> {
   return JSON.parse(await readFile(file, 'utf8'))
 }
 
+/**
+ * Byte snapshot of a whole tree (plan W1): relative file path → sha256 of
+ * its contents. Empty (or missing) dir ⇒ empty map. Used to assert a seeded
+ * claude home is byte-identical before/after a mutation.
+ */
+export function snapshotTree(dir: string): Map<string, string> {
+  const out = new Map<string, string>()
+  if (!existsSync(dir)) return out
+  const walk = (abs: string, rel: string): void => {
+    for (const entry of readdirSync(abs, { withFileTypes: true })) {
+      const childAbs = join(abs, entry.name)
+      const childRel = rel === '' ? entry.name : `${rel}/${entry.name}`
+      if (entry.isDirectory()) walk(childAbs, childRel)
+      else if (statSync(childAbs).isFile()) out.set(childRel, createHash('sha256').update(readFileSync(childAbs)).digest('hex'))
+    }
+  }
+  walk(dir, '')
+  return out
+}
 export async function readRaw(file: string): Promise<string> {
   const { readFile } = await import('node:fs/promises')
   return readFile(file, 'utf8')
+}
+
+/** Dual-home deps: separate dsh write home (plan §3.1), optional extras (now/runGit). */
+export function dualDeps(r: Rig, dshHome: string, extra: Record<string, unknown> = {}): any {
+  return { claudeHome: r.claudeHome, dshHome, cwd: r.cwd, ...extra }
 }
 
 export async function expectError(fn: () => Promise<unknown>): Promise<Error> {

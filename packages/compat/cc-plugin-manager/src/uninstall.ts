@@ -7,11 +7,13 @@
  * @module @dsh-cc/plugin-manager/uninstall
  */
 
+import { join } from 'node:path'
 import { noInstallationAtScope, projectScopeEnabledGuard } from './errors.ts'
-import { orphanIfUnreferenced, resolveMutationScope, type InstallDeps } from './install.ts'
+import { orphanIfUnreferencedDsh, resolveMutationScope, type InstallDeps } from './install.ts'
 
 export type { InstallDeps } from './install.ts'
-import { pluginsStatePaths, settingsFileForScope } from './paths.ts'
+import { claudePluginsStatePaths, pluginsStatePaths, settingsFileForScope } from './paths.ts'
+import { loadMergedInstalledPlugins } from './merged-state.ts'
 import { resolveInstalledPluginId } from './resolve-id.ts'
 import { applyEnabledFlag } from './settings-write.ts'
 import { loadInstalledPlugins, loadSettingsFile, saveJsonFileAtomic } from './state-store.ts'
@@ -40,9 +42,13 @@ export async function uninstallPlugin(deps: InstallDeps, arg: string, opts: Unin
   const now = deps.now ?? (() => new Date())
   const scope = resolveMutationScope(opts.scope)
   const paths = pluginsStatePaths(deps)
-  const installed = await loadInstalledPlugins(paths.installedPluginsFile)
-  const id = resolveInstalledPluginId(arg, Object.keys(installed.plugins))
-  const entries = installed.plugins[id] ?? []
+  const claudePaths = claudePluginsStatePaths(deps)
+  // Merged installed view (§3.4). Uninstall resolves over ALL merged ids
+  // (not the resolution view): an id shadowed by an empty dsh list still
+  // reports `installed at: none` rather than unknown-plugin (C4 pin).
+  const merged = await loadMergedInstalledPlugins(deps)
+  const id = resolveInstalledPluginId(arg, Object.keys(merged.file.plugins))
+  const entries = merged.file.plugins[id] ?? []
   const entry = entries.find(candidate => candidate.scope === scope)
   if (entry === undefined) {
     throw noInstallationAtScope(id, scope, entries.map(candidate => candidate.scope))
@@ -54,14 +60,32 @@ export async function uninstallPlugin(deps: InstallDeps, arg: string, opts: Unin
     if (projectSettings['enabledPlugins']?.[id] === true) throw projectScopeEnabledGuard(id)
   }
 
-  // (1) remove the enabledPlugins key at the targeted scope's file only.
-  await applyEnabledFlag(deps, scope, id, null)
-  // (2) remove that scope's array entry (drop the id key when it empties).
+  // (1) remove the enabledPlugins key at the targeted scope's file only —
+  // with the §4.3 conditional user-flag shadow: dual-home AND the claude
+  // user file carries `true` ⇒ write an explicit `false` into the dsh user
+  // file instead (removal would un-shadow and resurrect the claude `true`).
+  if (scope === 'user' && claudePaths !== null) {
+    const claudeSettings = await loadSettingsFile(join(deps.claudeHome, 'settings.json'))
+    if (claudeSettings['enabledPlugins']?.[id] === true) await applyEnabledFlag(deps, scope, id, false)
+    else await applyEnabledFlag(deps, scope, id, null)
+  } else {
+    await applyEnabledFlag(deps, scope, id, null)
+  }
+  // (2) remove that scope's array entry, then materialize the id's full
+  // post-removal MERGED list into the dsh file (§3.4; `[]` allowed — it
+  // shadows the claude id). Single-root keeps C4 byte-parity: the key drops.
   const remaining = entries.filter(candidate => candidate !== entry)
-  if (remaining.length === 0) delete installed.plugins[id]
-  else installed.plugins[id] = remaining
-  await saveJsonFileAtomic(paths.installedPluginsFile, installed)
-  // (3) orphan-marker the cache dir when nothing references it anymore.
-  await orphanIfUnreferenced(installed, entry.installPath, now)
+  const dshInstalled = await loadInstalledPlugins(paths.installedPluginsFile)
+  if (claudePaths === null) {
+    if (remaining.length === 0) delete dshInstalled.plugins[id]
+    else dshInstalled.plugins[id] = remaining
+  } else {
+    dshInstalled.plugins[id] = remaining
+  }
+  await saveJsonFileAtomic(paths.installedPluginsFile, dshInstalled)
+  // (3) orphan-marker under the dsh cache only, when nothing in the merged
+  // view references the path anymore (W3/W4).
+  merged.file.plugins[id] = remaining
+  await orphanIfUnreferencedDsh(deps, merged.file, entry.installPath, now)
   return { id, scope }
 }

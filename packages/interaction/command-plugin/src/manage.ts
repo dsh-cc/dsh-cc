@@ -47,7 +47,7 @@ export interface CcPluginManagerSeam {
     | { upToDate: true, id: string, version: string, scope: string }
     | { upToDate: false, id: string, fromVersion: string, toVersion: string, scope: string }>
   listMarketplaces(): Promise<MarketplaceListRow[]>
-  addMarketplace(source: string, opts?: { scope?: string }): Promise<{ name: string, sourceKind: string }>
+  addMarketplace(source: string, opts?: { scope?: string }): Promise<{ name: string, sourceKind: string, shadowedClaudeEntry?: true }>
   removeMarketplace(name: string): Promise<{ name: string, removedPlugins: string[] }>
   updateMarketplaces(name?: string): Promise<string[]>
 }
@@ -101,8 +101,10 @@ async function runMarketplaceAdd(
   const result = await manager.addMarketplace(command.arg!, scopeOpts(command.scope))
   await rescan(ccPlugins)
   const added = formatMarketplaceAdded({ name: result.name, sourceKind: result.sourceKind, scope: command.scope ?? 'user' })
-  if (result.sourceKind === 'directory') return text(added)
-  return text(`${added}\n${TRUST_WARNING}`)
+  const lines = [added]
+  if (result.sourceKind !== 'directory') lines.push(TRUST_WARNING)
+  if (result.shadowedClaudeEntry === true) lines.push('This dsh-side registration shadows a Claude-home entry with a different source.')
+  return text(lines.join('\n'))
 }
 
 /** Execute a `/plugin` invocation that routed to the management surface. */

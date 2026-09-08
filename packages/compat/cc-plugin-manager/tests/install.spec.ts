@@ -12,7 +12,7 @@ import type { GitRunner } from '../src/git.ts'
 import { installPlugin } from '../src/install.ts'
 import { PluginManagerError } from '../src/errors.ts'
 import { canonicalizeExistingPath } from '../src/paths.ts'
-import { cleanupTemps, expectError, readJson, readRaw, rig, tempDir, type Rig } from './helpers.ts'
+import { cleanupTemps, dualDeps, expectError, readJson, readRaw, rig, snapshotTree, tempDir, type Rig } from './helpers.ts'
 
 afterEach(cleanupTemps)
 
@@ -164,5 +164,67 @@ describe('install (C2)', () => {
     const git = fakeGit()
     await installPlugin(deps(r, git.runGit), 'formatter')
     expect(git.calls).toContainEqual(['-C', r.marketplaceDir, 'rev-parse', 'HEAD'])
+  })
+})
+
+describe('install (dual-home, S3 §4.1)', () => {
+  it('installs from a claude-known marketplace: dsh cache copy, dsh installed file, dsh user flag, claude tree byte-identical', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    const before = snapshotTree(r.claudeHome)
+    const git = fakeGit()
+    const result = await installPlugin(dualDeps(r, dshHome, { now: NOW, runGit: git.runGit }), 'formatter@internal')
+
+    // W3: the claude clone stays put; the cache copy lands in the DSH cache.
+    const dshCacheDir = join(dshHome, 'plugins', 'cache')
+    const installPath = join(dshCacheDir, 'internal', 'formatter', '1.0.0')
+    expect(result).toEqual({ id: 'formatter@internal', version: '1.0.0', scope: 'user', installPath })
+    expect(existsSync(join(installPath, 'skill.md'))).toBe(true)
+    expect(existsSync(join(r.cacheDir, 'internal'))).toBe(false)
+
+    // §3.4 materialization-on-write: the id's merged list lands in the dsh file.
+    const dshInstalled = await readJson(join(dshHome, 'plugins', 'installed_plugins.json'))
+    expect(dshInstalled.plugins['formatter@internal']).toHaveLength(1)
+    expect(dshInstalled.plugins['formatter@internal'][0]).toMatchObject({ scope: 'user', version: '1.0.0', installPath })
+    // the claude installed file is never written (it does not even exist yet)
+    expect(existsSync(r.installedFile)).toBe(false)
+
+    // user-scope flag → dsh settings.json (§3.3); claude settings untouched.
+    expect(await readJson(join(dshHome, 'settings.json'))).toEqual({ enabledPlugins: { 'formatter@internal': true } })
+    expect(existsSync(join(r.claudeHome, 'settings.json'))).toBe(false)
+
+    // W1: byte-identity of the whole claude tree.
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('pluginAlreadyInstalled checks the MERGED list per scope (claude-side entry counts)', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    await mkdir(join(r.claudeHome, 'plugins'), { recursive: true })
+    await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: join(r.cacheDir, 'internal', 'formatter', '1.0.0'), version: '1.0.0', installedAt: '2026-09-05T08:00:00.000Z', lastUpdated: '2026-09-05T08:00:00.000Z' }] } }), 'utf8')
+    const before = snapshotTree(r.claudeHome)
+
+    const error = await expectError(() => installPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter'))
+    expect((error as PluginManagerError).message).toBe('Plugin "formatter@internal" is already installed at scope user on this machine.')
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('a dsh-empty-list shadow does not block a different scope; entries append to the merged list in the dsh file', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    await mkdir(join(r.claudeHome, 'plugins'), { recursive: true })
+    await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: join(r.cacheDir, 'internal', 'formatter', '1.0.0'), version: '1.0.0', installedAt: '2026-09-05T08:00:00.000Z', lastUpdated: '2026-09-05T08:00:00.000Z' }] } }), 'utf8')
+
+    const result = await installPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter', { scope: 'project' })
+    expect(result.scope).toBe('project')
+    const dshInstalled = await readJson(join(dshHome, 'plugins', 'installed_plugins.json'))
+    const entries = dshInstalled.plugins['formatter@internal']
+    expect(entries).toHaveLength(2)
+    expect(entries[0]).toMatchObject({ scope: 'user', installPath: join(r.cacheDir, 'internal', 'formatter', '1.0.0') })
+    expect(entries[1]).toMatchObject({ scope: 'project', projectPath: canonicalizeExistingPath(r.cwd) })
+    // project-scope flag is a per-repo parity write (W2)
+    expect((await readJson(join(r.cwd, '.claude', 'settings.json')))['enabledPlugins']).toEqual({ 'formatter@internal': true })
   })
 })
