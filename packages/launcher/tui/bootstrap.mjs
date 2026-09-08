@@ -315,3 +315,118 @@ export function existingWorktreeDecision({ named, pathExists }) {
 export function slugRetryDecision({ named, attempt, maxAttempts = 5 }) {
   return !named && attempt < maxAttempts ? 'retry' : 'fail'
 }
+
+// --- minimum harness version gate --------------------------------------------
+// This gate runs ONLY on the bootstrap/install path (when bootstrapCommand
+// returns non-undefined), never on every launch: docs/plans/
+// 2026-09-05-startup-boot-first-frame.md W2 deliberately removed the
+// launcher's per-launch `dsh --version` probe (~60 ms of extra Node cold
+// start before the first frame). A version check on the install path is
+// acceptable — it happens once, before the profile exists.
+
+/** Lowest harness version the published bundles are known to work with. */
+export const MIN_DSH_VERSION = '0.1.2-rc.1'
+
+const VERSION_RE = /\d+\.\d+\.\d+(?:-[\w.+-]+)?/
+
+/**
+ * Extract the first `x.y.z[-pre][+build]` version string from `dsh --version`
+ * output. Lenient on purpose: returns null when nothing matches so callers
+ * can fail open.
+ * @param {string | undefined} output - Raw stdout (may be undefined).
+ * @returns {string | null}
+ */
+export function extractDshVersion(output) {
+  if (typeof output !== 'string') return null
+  const match = output.match(VERSION_RE)
+  return match === null ? null : match[0]
+}
+
+/**
+ * Prerelease-aware semver compare (hand-rolled — the launcher has zero
+ * dependencies). Returns <0, 0, >0 as a sorts before/equal/after b.
+ * Numeric identifiers compare numerically; absence of a prerelease outranks
+ * any prerelease; alphanumeric identifiers compare lexically (alpha < rc).
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+export function compareSemver(a, b) {
+  const parse = (v) => {
+    const [core, pre = ''] = v.split('-')
+    const [numbers, build = ''] = pre.split('+')
+    return {
+      core: core.split('.').map(Number),
+      pre: numbers.length === 0 ? [] : numbers.split('.'),
+      build,
+    }
+  }
+  const pa = parse(a)
+  const pb = parse(b)
+  for (let i = 0; i < 3; i += 1) {
+    if (pa.core[i] !== pb.core[i]) return pa.core[i] - pb.core[i]
+  }
+  if (pa.pre.length !== pb.pre.length) {
+    return pa.pre.length === 0 ? 1 : pb.pre.length === 0 ? -1 : 0
+  }
+  for (let i = 0; i < pa.pre.length; i += 1) {
+    const x = pa.pre[i]
+    const y = pb.pre[i]
+    const nx = /^\d+$/.test(x)
+    const ny = /^\d+$/.test(y)
+    if (nx && ny) {
+      if (Number(x) !== Number(y)) return Number(x) - Number(y)
+    } else if (x !== y) {
+      return x < y ? -1 : 1
+    }
+  }
+  return 0
+}
+
+/**
+ * True when the found version is strictly below {@link MIN_DSH_VERSION}.
+ * @param {string} version
+ * @returns {boolean}
+ */
+export function belowMinimumVersion(version) {
+  return compareSemver(version, MIN_DSH_VERSION) < 0
+}
+
+/**
+ * Actionable below-minimum error: what was found, what is required, how to
+ * fix it.
+ * @param {string} found
+ * @returns {string}
+ */
+export function belowMinimumMessage(found) {
+  return `dsh-cc: dsh version ${found} is too old; this launcher requires >= ${MIN_DSH_VERSION}.\n`
+    + 'Upgrade the harness first, e.g.:  npm install -g @deepseek-ai/dsh@latest'
+}
+
+/**
+ * Full gate decision for the bootstrap path: run `dsh --version` (via the
+ * injectable runner, spawnSync in production), parse, compare.
+ * Garbage/unparseable output fails OPEN with a one-line warning — a parse
+ * failure must never brick the launcher.
+ * @param {() => { stdout?: string | Buffer } | undefined} runVersion
+ * @returns {{ ok: boolean, message?: string, warning?: string }}
+ */
+export function versionGate(runVersion) {
+  let result
+  try {
+    result = runVersion()
+  } catch {
+    result = undefined
+  }
+  const found = extractDshVersion(result?.stdout?.toString())
+  if (found === null) {
+    return {
+      ok: true,
+      warning: 'dsh-cc: could not parse `dsh --version` output; skipping the minimum-version check.',
+    }
+  }
+  if (belowMinimumVersion(found)) {
+    return { ok: false, message: belowMinimumMessage(found) }
+  }
+  return { ok: true }
+}
