@@ -309,7 +309,10 @@
 # the ROOT realm from the root fiber (see CcPluginsService in
 # @dsh-cc/bundle-shell) so host-plane siblings — the TUI driver and /help
 # — can resolve it; isolating the name here would shadow that publication and
-# break in-group resolution too.
+# break in-group resolution too. `mcp` (the plugin MCP seam) IS isolated:
+# only in-group loader fibers `ctx.get('mcp')`; a root-realm provide would
+# trip leakedServices (the providing fiber is the cc-mcp-seam child, inside
+# the preset mount).
 - id: cc-services
   name: cordis:group
   group: true
@@ -320,6 +323,7 @@
     resumePinStore: true
     mcpConnections: true
     hookBridgeStatus: true
+    mcp: true
   config:
     # ToolSearch: model-called search that activates deferred tools per scope.
     - id: tool-search
