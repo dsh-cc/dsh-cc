@@ -1,7 +1,7 @@
 /**
  * The dsh-cc epoch collector: inline first-epoch collection of a continuable
  * subagent child with zero harness changes (normative design:
- * `docs/plans/2026-09-10-epoch-collector-dsh-cc.md`).
+ * `docs/plans/2026-09-05-epoch-collector-dsh-cc.md`).
  *
  * One shared `subagent/start` + `subagent/end` listener pair and one watch
  * map (`Map<childId, { runId?, resolve }>`) serve every collector of the

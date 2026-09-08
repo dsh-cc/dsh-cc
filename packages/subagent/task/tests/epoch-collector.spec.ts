@@ -1,5 +1,5 @@
 /**
- * Tests for the dsh-cc epoch collector (docs/plans/2026-09-10-epoch-collector-dsh-cc.md
+ * Tests for the dsh-cc epoch collector (docs/plans/2026-09-05-epoch-collector-dsh-cc.md
  * §9): inline first-epoch collection of a continuable child over the shared
  * `subagent/start` / `subagent/end` bus listeners, with abort semantics,
  * duplicate-notice suppression bookkeeping, parallel-collector sharing, and

@@ -1,7 +1,7 @@
 # Production hardening for the auto-mode LLM classifier + live defaultMode display
 
 - **Date:** 2026-09-05
-- **Status:** Reviewed — one cold Staff-review round (deep-reasoner,
+- **Status:** Implemented — PR #122 (merged 2026-09-05). Reviewed — one cold Staff-review round (deep-reasoner,
   2026-09-05): verdict approve-with-nits. Incorporated: Shift+Tab
   cycle-membership clamp (F1), fold-beats-fallback + hot-reload re-render
   tests (F1), digest-only audit invariant pinned by test (F3), per-route

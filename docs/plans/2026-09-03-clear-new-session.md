@@ -1,7 +1,7 @@
 # `/clear` / `/new` / `/reset` — New Session In-Process
 
 **Date:** 2026-09-03
-**Status:** Ready for implementation (staff review landed; two review premises corrected against source)
+**Status:** Implemented — PR #89 (merged 2026-09-03). Original readiness record: "Ready for implementation (staff review landed; two review premises corrected against source)."
 **Scope:** `packages/ui/tui` (TUI-local slash commands + session bind path). No new package.
 
 ---

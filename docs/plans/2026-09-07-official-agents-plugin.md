@@ -1,6 +1,6 @@
 # Official `dsh-cc-agents` Plugin — deep-reasoner + fast-worker as a Loadable Plugin
 
-Status: reviewed — blind parallel review by a fresh deep-reasoner
+Status: **Implemented** — PR #7 (merged 2026-09-07). Reviewed — blind parallel review by a fresh deep-reasoner
 (**approve-with-changes**) and Codex (**reject**, 6 findings), all folded;
 delta re-reviews by both (**approve-with-changes** each) confirmed the folds,
 and their remaining minor items (advisory-safety wording for deep-reasoner's

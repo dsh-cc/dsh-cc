@@ -1,6 +1,6 @@
 # WebFetch: host-plane HTTP provider, literal SSRF gate, domain permission rules
 
-Status: Staff-approved (nits folded; 2026-09-04 cold review). Constraint: **dsh-cc only** — do not modify deepseek-harness source. This plan supersedes the stock-deploy caveat in `docs/plans/2026-09-02-haiku-worker-stuffs.md` §Feature 3 (the tool replacement stays; the "no fetch provider" / NOTICE-degrade clauses do not).
+Status: **Implemented** — PR #111 (merged 2026-09-04). Staff-approved (nits folded; 2026-09-04 cold review). Constraint: **dsh-cc only** — do not modify deepseek-harness source. This plan supersedes the stock-deploy caveat in `docs/plans/2026-09-02-haiku-worker-stuffs.md` §Feature 3 (the tool replacement stays; the "no fetch provider" / NOTICE-degrade clauses do not).
 
 ## Goal
 

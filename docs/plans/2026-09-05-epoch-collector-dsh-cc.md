@@ -1,19 +1,19 @@
 # dsh-cc Epoch Collector: inline first-epoch collection without harness changes
 
-Status: Approved (feasibility spike: FEASIBLE-WITH-CAVEATS; harness read-only constraint, user directive 2026-09-10)
-Date: 2026-09-10
+Status: **Implemented** — shipped in PR #115 (merged 2026-09-05). Approved (feasibility spike: FEASIBLE-WITH-CAVEATS; harness read-only constraint, user directive 2026-09-10).
+Date: 2026-09-05
 Scope: `packages/subagent/task` (new `epoch-collector.ts`), `packages/hooks` (suppression listener), `packages/ui/tui` (Ctrl+B), `packages/bundle/cc-shell` (registry publication), `docs/claude-code-capabilities.yaml`
 
 ## 1. Problem
 
 Ctrl+B promotion of a foreground wait and the foreground-wait semantics of
-`docs/plans/2026-09-10-continuable-background-ux.md` (§3.4) require the parent's
+`docs/plans/2026-09-05-continuable-background-ux.md` (§3.4) require the parent's
 tool call to **collect the child's first epoch inline**: await its terminal,
 return the result to the model, and — only if the user promotes — release the
 wait to background so the eventual settlement wakes the parent instead.
 
 The original plan assumed an upstream harness API (the collectable continuable
-handle, `docs/plans/2026-09-10-harness-collectable-handle.md`). That upstream PR
+handle, `docs/plans/2026-09-05-harness-collectable-handle.md`). That upstream PR
 is cancelled: **hard constraint — deepseek-harness is never modified** (local
 checkout, fork, or upstream PR; user directive 2026-09-10). A feasibility spike
 established that dsh-cc can collect the first epoch inline using only in-process
@@ -146,7 +146,7 @@ no record of a settlement that was consumed inline. Declared in the PR body.
 Put collection behind a small internal interface, e.g.
 `EpochCollector { collect(spec, exec): Promise<EpochOutcome>; abort();
 promote(); }`, implemented today by the bus-based collector (§3). When upstream
-later adopts the handle API (`docs/plans/2026-09-10-harness-collectable-handle.md`,
+later adopts the handle API (`docs/plans/2026-09-05-harness-collectable-handle.md`,
 the companion design doc), the implementation is replaced **in one file** — the
 task tool and TUI surfaces are untouched. Capability degradation: if the seam's
 environment lacks `interrupt` (M5), degrade to non-collectable foreground

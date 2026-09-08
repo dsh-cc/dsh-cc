@@ -1,7 +1,7 @@
 # Machine-readable Claude Code capability manifest
 
 - **Date:** 2026-09-03
-- **Status:** Reviewed — two cold Staff-review rounds (deep-reasoner,
+- **Status:** Implemented — PR #95 (merged 2026-09-03). Reviewed — two cold Staff-review rounds (deep-reasoner,
   2026-09-03). Round 1 (2 blockers, 6 majors): incorporated. Round 2 (0
   blockers, 2 majors — D3 wording; missing deviation↔dimension invariant I11 —
   plus minors): incorporated. Verdict: approved as the Phase 0 basis.

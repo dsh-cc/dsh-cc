@@ -1776,7 +1776,7 @@ capabilities:
         collector is a dsh-cc-INTERNAL parity instrument (bus watcher over
         subagent/start + subagent/end, one shared listener pair and watch
         map, matched by first-epoch runId; docs/plans/
-        2026-09-10-epoch-collector-dsh-cc.md), NOT a Claude Code mechanism —
+        2026-09-05-epoch-collector-dsh-cc.md), NOT a Claude Code mechanism —
         declared deviations: (1) for inline-collected epochs the settlement
         account lives only in the tool result, not the parent session log
         (the duplicated subagent-settled notice is dropped by a pop-once
@@ -2010,7 +2010,7 @@ capabilities:
     upstream:
       summary: >-
         State-file interoperability with Claude Code v2.1.236 (probe-verified
-        byte shapes; see docs/plans/2026-09-06-plugin-management.md).
+        byte shapes; see docs/plans/2026-09-07-plugin-management.md).
       refs: []
     dimensions:
       recognized: true

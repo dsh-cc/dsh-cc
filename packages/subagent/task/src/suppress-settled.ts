@@ -1,6 +1,6 @@
 /**
  * Duplicate-notice suppression for inline-collected subagent epochs
- * (`docs/plans/2026-09-10-epoch-collector-dsh-cc.md` §5): a pre-step
+ * (`docs/plans/2026-09-05-epoch-collector-dsh-cc.md` §5): a pre-step
  * waterfall listener that DROPs pending `subagent-settled` messages whose
  * `senderSessionId` is in the pop-once "collected" set, so a collected
  * epoch's settlement account lives only in the tool result and never also

@@ -1,6 +1,6 @@
 # Hook Safety Loop (v0.4.1)
 
-Date: 2026-09-03 · Status: reviewed, approved with amendments · Target release: v0.4.1
+Date: 2026-09-04 · Status: Implemented — PR #99 (merged 2026-09-04); originally reviewed and approved with amendments · Target release: v0.4.1
 
 ## Goal
 

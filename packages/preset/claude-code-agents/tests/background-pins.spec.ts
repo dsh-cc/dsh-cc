@@ -7,7 +7,7 @@ import {
   loadAgentsDir,
 } from '@dsh-cc/claude-code-agents'
 
-// Slice 1 repo guard (docs/plans/2026-09-10-continuable-background-ux.md §3.1, §3.3):
+// Slice 1 repo guard (docs/plans/2026-09-05-continuable-background-ux.md §3.1, §3.3):
 // exactly deep-reasoner and fast-worker are pinned `background: true`; every other
 // agent in the repo (project layer and bundled) stays unpinned so omitting
 // run_in_background keeps its foreground-collect default.

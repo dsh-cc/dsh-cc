@@ -1,6 +1,6 @@
 # Product-grade `/doctor` health report
 
-Status: approved (Staff cold review folded; 2026-09-03). Constraint: **dsh-cc only** — do not modify deepseek-harness.
+Status: **Implemented** — PR #100 (merged 2026-09-04). Approved at Staff cold review (folded 2026-09-03). Constraint: **dsh-cc only** — do not modify deepseek-harness.
 
 Decisions locked by the requester:
 

@@ -1,7 +1,7 @@
 # Continuable Background Agents: Background-by-Default Pins, the `/agents` Surface, and Ctrl+B Promotion
 
-Status: Approved (dual blind review deep-reasoner/Opus + Codex GPT-5.4, independent, both REVISE → findings folded → resolution check: 11/12 CLOSED, 2 verification deltas folded into Slice 0 task 1 and §3.6). 2026-09-10 product constraint: deepseek-harness is NEVER modified (local checkout, fork, or upstream PR) — Slice 2's upstream implementation is cancelled; Slices 2–3 reformulate dsh-cc-side (in-process event + session-log collector) pending a feasibility spike; the handle design doc stands as the proposal for upstream adoption.
-Date: 2026-09-10
+Status: **Implemented (dsh-cc-side scope)** — Slice 1 and Slice 3 (epoch collector) shipped in PR #115 (merged 2026-09-05); Slice 2's upstream harness change remains cancelled per the product constraint below. Approved (dual blind review deep-reasoner/Opus + Codex GPT-5.4, independent, both REVISE → findings folded → resolution check: 11/12 CLOSED, 2 verification deltas folded into Slice 0 task 1 and §3.6). 2026-09-10 product constraint: deepseek-harness is NEVER modified (local checkout, fork, or upstream PR) — Slice 2's upstream implementation is cancelled; Slices 2–3 reformulate dsh-cc-side (in-process event + session-log collector) pending a feasibility spike; the handle design doc stands as the proposal for upstream adoption.
+Date: 2026-09-05
 Scope: `packages/interaction/command-agents` (new), `packages/interaction/command-tasks`, `packages/subagent/task`, `packages/subagent/resume-pins`, `packages/ui/tui`, `packages/preset/cc`, `.claude/agents`, `CLAUDE.md`, `docs/claude-code-capabilities.yaml`, `packages/hooks`, `packages/bundle/cc-shell`; no harness changes
 
 ## 1. Problem and goals
@@ -276,9 +276,9 @@ the cordis event bus, race the epoch against abort/promotion, suppress the
 duplicated `subagent-settled` notice with a pop-once pre-step filter, and abort
 via `ctx.subagents.interrupt` (exactly once, prompt synthetic resolution). The
 normative design — collector loop, abort semantics, suppression, race register,
-and TDD plan — is `docs/plans/2026-09-10-epoch-collector-dsh-cc.md`. The
+and TDD plan — is `docs/plans/2026-09-05-epoch-collector-dsh-cc.md`. The
 harness-collectable-handle doc
-(`docs/plans/2026-09-10-harness-collectable-handle.md`) remains the upstream
+(`docs/plans/2026-09-05-harness-collectable-handle.md`) remains the upstream
 adoption path; because collection sits behind a small internal interface
 (collector doc §7), that swap is one file when upstream lands.
 

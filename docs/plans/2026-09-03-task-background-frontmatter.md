@@ -1,6 +1,6 @@
 # Honor `background:` and teach the human-facing Task heuristic
 
-Status: approved — deep-reasoner cold Staff-Engineer review returned
+Status: **Implemented** — PR #115 (merged 2026-09-05). Approved — deep-reasoner cold Staff-Engineer review returned
 **ship-with-changes**; A.1 cut to three bullets, mutating same-tree
 backgrounding forbidden until `isolation: worktree` is wired, pin escape
 hatch (`run_in_background: false`) documented. Product north star is
@@ -170,12 +170,12 @@ No claim of prompt effectiveness without a later real session.
 
 `packages/subagent/task/README.md` and `README.zh.md`:
 
-- Dispatch paragraph currently "The run is **foreground one-shot**" /
-  「运行是**前台一次性**」: foreground unless explicit true **or**
+- Dispatch paragraph currently "The run is **foreground one-shot**"
+  (and its README.zh.md equivalent): foreground unless explicit true **or**
   definition pin; explicit false wins; foreground still awaits
   completion and concatenates `text` blocks; background returns
   `async_launched` + durable id.
-- Known limits: drop "**Foreground only.**" / 「**仅前台。**」 Keep
+- Known limits: drop "**Foreground only.**" (and its README.zh.md equivalent). Keep
   drain / no `outputFile` / fork+bg rejected / cold-resume drops extra
   `agentOptions` (those live in the parity matrix; a short pointer is
   enough).
@@ -247,7 +247,7 @@ Skip:
    missing (idempotent; no-ops in a main checkout).
 2. `pnpm exec vitest run packages/subagent/task/tests/tool.spec.ts`.
 3. Grep the task READMEs: no remaining "Foreground only" /
-   "仅前台" / "`run_in_background` / continuable Task (follow-up)" as a
+   its zh-README equivalent / "`run_in_background` / continuable Task (follow-up)" as a
    non-goal.
 4. `CLAUDE.md`: no unit test. Later real session is the observation.
 

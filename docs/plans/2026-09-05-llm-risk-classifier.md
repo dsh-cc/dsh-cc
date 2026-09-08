@@ -1,7 +1,7 @@
 # LLM risk classifier for `auto` permission mode
 
 - **Date:** 2026-09-05
-- **Status:** Reviewed — one cold Staff-review round (deep-reasoner, 2026-09-05).
+- **Status:** Implemented — PR #117 (merged 2026-09-05). Reviewed — one cold Staff-review round (deep-reasoner, 2026-09-05).
   Findings incorporated: escalate-only placement (LLM may tighten a decision,
   never relax one), fail-to-ask on any classifier failure, tool-result
   exclusion from classifier input, CC-compatible `soft_deny` prose rules,

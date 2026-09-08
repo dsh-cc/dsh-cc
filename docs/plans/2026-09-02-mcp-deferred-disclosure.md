@@ -1,5 +1,7 @@
 # MCP deferred disclosure + named-subagent `mcp__*` filter
 
+Status: **Implemented** — PR #74 (merged 2026-09-02), with the deferred-MCP preload follow-up in PR #119 (2026-09-05).
+
 Two sequenced changes. Phase 1 is correctness (named Task children currently drop MCP tools). Phase 2 is token cost (MCP schemas are fully eager despite `ToolSearch` existing). Fork parent-prefix inheritance and skill catalog behavior stay out of scope.
 
 TDD is mandatory: every behavior below has a failing test before production code.
