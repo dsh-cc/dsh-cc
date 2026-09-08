@@ -58,8 +58,8 @@ export type DecideDeps = {
  */
 function effectiveMode(deps: DecideDeps, exec: ToolExecution): PermissionMode {
   const agent = exec.agent
-  if (agent !== undefined && foldPlanMode(agent.session.events)) return 'plan'
-  const recorded = agent === undefined ? undefined : foldPermissionMode(agent.session.events)
+  if (agent !== undefined && foldPlanMode(agent.session.snapshotEvents())) return 'plan'
+  const recorded = agent === undefined ? undefined : foldPermissionMode(agent.session.snapshotEvents())
   return recorded ?? deps.defaultMode()
 }
 

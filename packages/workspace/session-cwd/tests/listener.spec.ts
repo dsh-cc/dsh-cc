@@ -33,7 +33,9 @@ function exec(options: {
   const agent = {
     session: {
       id: session.id,
-      events: session.events,
+      seq: 0 as number,
+      snapshotEvents: (): readonly unknown[] => session.snapshotEvents(),
+      eventAt: (i: number): unknown => session.eventAt(i),
       append: session.append.bind(session),
       header: options.cwd === undefined ? {} : { cwd: options.cwd },
     },
@@ -95,12 +97,12 @@ describe('isInsideWorkspace', () => {
 
 describe('readPermissionMode', () => {
   it('returns undefined without a recorded mode', () => {
-    expect(readPermissionMode(exec({ name: 'Edit' }).agent!.session.events)).toBeUndefined()
+    expect(readPermissionMode(exec({ name: 'Edit' }).agent!.session.snapshotEvents())).toBeUndefined()
   })
 
   it('returns the last recorded mode', () => {
     const execution = exec({ name: 'Edit', mode: 'bypassPermissions' })
-    expect(readPermissionMode(execution.agent!.session.events)).toBe('bypassPermissions')
+    expect(readPermissionMode(execution.agent!.session.snapshotEvents())).toBe('bypassPermissions')
   })
 })
 

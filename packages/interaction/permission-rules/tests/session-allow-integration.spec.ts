@@ -59,7 +59,8 @@ function text(result: ToolExecutionResult): string {
 
 function agentWithCwd(id: string, cwd: string): Agent {
   const session = Session.create(SessionId(id), undefined, {
-    version: 0,
+    version: 2,
+    isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),
     cwd,
@@ -96,7 +97,7 @@ describe('session allowlist × decide() integration', () => {
     ctx.on('approval/request', async () => 'allowed-once')
     ctx.permissionRules.addSessionAllow(agent, 'Bash(npm )')
 
-    const event = agent.session.events[agent.session.events.length - 1] as unknown as {
+    const event = agent.session.snapshotEvents()[agent.session.seq - 1] as unknown as {
       type: string
       data: Record<string, unknown>
     }
@@ -169,7 +170,7 @@ describe('WS3 sandbox escalation auto-approval integration', () => {
     expect(text(result)).toBe('ran:ls')
     expect(reachedFallback).not.toHaveBeenCalled()
 
-    const audit = agent.session.events.map(event => event as unknown as {
+    const audit = agent.session.snapshotEvents().map(event => event as unknown as {
       type: string
       data: Record<string, unknown>
     }).filter(event => event.type === SESSION_ALLOW_EVENT)

@@ -17,15 +17,15 @@ describe('permission/mode session coupling', () => {
 
   it('folds undefined from an empty log', () => {
     const sess = session()
-    expect(foldPermissionMode(sess.events)).toBeUndefined()
-    expect(foldResumeSandbox(sess.events)).toBeUndefined()
+    expect(foldPermissionMode(sess.snapshotEvents())).toBeUndefined()
+    expect(foldResumeSandbox(sess.snapshotEvents())).toBeUndefined()
   })
 
   it('folds the last-written mode (default then acceptEdits wins)', () => {
     const sess = session()
     setPermissionMode(sess, 'default')
     setPermissionMode(sess, 'acceptEdits')
-    expect(foldPermissionMode(sess.events)).toBe('acceptEdits')
+    expect(foldPermissionMode(sess.snapshotEvents())).toBe('acceptEdits')
   })
 
   it('folds through unrelated interleaved events', () => {
@@ -33,13 +33,13 @@ describe('permission/mode session coupling', () => {
     sess.append('turn/start', { turn: 1 })
     setPermissionMode(sess, 'acceptEdits')
     sess.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
-    expect(foldPermissionMode(sess.events)).toBe('acceptEdits')
+    expect(foldPermissionMode(sess.snapshotEvents())).toBe('acceptEdits')
   })
 
   it('appends {mode} without resumeSandbox when none is provided', () => {
     const sess = session()
     setPermissionMode(sess, 'auto')
-    const event = sess.events[sess.events.length - 1]!
+    const event = sess.snapshotEvents()[sess.seq - 1]!
     expect(event.type).toBe('permission/mode')
     expect(event.data).toEqual({ mode: 'auto' })
     expect('resumeSandbox' in event.data).toBe(false)
@@ -48,7 +48,7 @@ describe('permission/mode session coupling', () => {
   it('records resumeSandbox when entering bypassPermissions', () => {
     const sess = session()
     setPermissionMode(sess, 'bypassPermissions', 'workspace-write')
-    const event = sess.events[sess.events.length - 1]!
+    const event = sess.snapshotEvents()[sess.seq - 1]!
     expect(event.data).toEqual({ mode: 'bypassPermissions', resumeSandbox: 'workspace-write' })
   })
 
@@ -56,7 +56,7 @@ describe('permission/mode session coupling', () => {
     const sess = session()
     setPermissionMode(sess, 'bypassPermissions', 'read-only')
     setPermissionMode(sess, 'acceptEdits')
-    expect(foldResumeSandbox(sess.events)).toBe('read-only')
+    expect(foldResumeSandbox(sess.snapshotEvents())).toBe('read-only')
   })
 
   it('throws for the reserved plan mode', () => {

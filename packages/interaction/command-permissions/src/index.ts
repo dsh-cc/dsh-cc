@@ -84,7 +84,7 @@ function planPhaseFor(ctx: Context, agent: Agent): PlanPhase {
     | { stateOf(session: Agent['session'], key: string): unknown }
     | undefined
   const planState = projections?.stateOf(agent.session, 'plan') as PlanUnitStateLike | undefined
-  return planPhaseOf(agent.session.events, planState)
+  return planPhaseOf(agent.session.snapshotEvents(), planState)
 }
 
 /** Execute `/permissions` against the mounted permission-rules engine. */
@@ -139,7 +139,7 @@ async function executePermissions(ctx: Context, invocation: CommandInvocation): 
 
 /** Whether this session selected the CC agent preset (last `agent-preset/selected` wins, else the creation header). */
 function isCcSession(agent: Agent): boolean {
-  const events = agent.session.events
+  const events = agent.session.snapshotEvents()
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]! as { type: string; data?: { agentPreset?: string } }
     if (event.type === 'agent-preset/selected') {

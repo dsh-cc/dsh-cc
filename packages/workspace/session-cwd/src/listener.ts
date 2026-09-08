@@ -114,10 +114,10 @@ export function boundaryDecision(
   const agent = exec.agent
   if (agent === undefined) return undefined
   const store = config.store ?? sessionCwdStore
-  const root = store.resolve(String(agent.session.id), agent.session.events) ?? agent.session.header.cwd
+  const root = store.resolve(String(agent.session.id), agent.session.snapshotEvents()) ?? agent.session.header.cwd
   if (root === undefined) return undefined
   if (isInsideWorkspace(target, root)) return undefined
-  if (readPermissionMode(agent.session.events) === 'bypassPermissions') return { kind: 'allow' }
+  if (readPermissionMode(agent.session.snapshotEvents()) === 'bypassPermissions') return { kind: 'allow' }
   return {
     kind: 'ask',
     reason: `Operation targets path outside session workspace: ${resolve(target)} (workspace: ${resolve(root)})`,

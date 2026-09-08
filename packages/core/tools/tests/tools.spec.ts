@@ -724,8 +724,17 @@ describe('ToolRuntime', () => {
      * satisfies request()'s enclosure precondition.
      */
     function fakeAgent(): Agent {
+      const events = [{ type: 'turn/start', data: { turn: 1 } }] as never[]
       return {
-        session: { events: [{ type: 'turn/start' }], append: () => ({}) },
+        session: {
+          seq: events.length,
+          snapshotEvents: (): readonly unknown[] => [...events],
+          eventAt: (seq: number): unknown => events[seq],
+          append: (type: string, data: unknown) => {
+            events.push({ type, data })
+            return {}
+          },
+        },
       } as unknown as Agent
     }
 

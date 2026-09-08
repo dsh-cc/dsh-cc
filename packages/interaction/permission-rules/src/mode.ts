@@ -147,22 +147,22 @@ export function switchSessionPermissionMode(args: SwitchSessionPermissionModeArg
     throw new Error('bypassPermissions is disabled by disableBypassPermissionsMode')
   }
   const session = agent.session
-  const current = foldPermissionMode(session.events) ?? defaultMode
+  const current = foldPermissionMode(session.snapshotEvents()) ?? defaultMode
   if (current === mode) return
 
   const wasBypass = current === 'bypassPermissions'
   const enteringBypass = mode === 'bypassPermissions'
 
   if (enteringBypass) {
-    const resume = effectiveSandboxMode(session.events) ?? shellMode
-    const alreadyFull = (effectiveSandboxMode(session.events) ?? shellMode) === 'danger-full-access'
+    const resume = effectiveSandboxMode(session.snapshotEvents()) ?? shellMode
+    const alreadyFull = (effectiveSandboxMode(session.snapshotEvents()) ?? shellMode) === 'danger-full-access'
     setPermissionMode(session, mode, resume)
     if (!alreadyFull) setSandboxMode(session, 'danger-full-access')
   } else {
     setPermissionMode(session, mode)
     if (wasBypass) {
-      const restore = foldResumeSandbox(session.events) ?? shellMode ?? 'workspace-write'
-      if ((effectiveSandboxMode(session.events) ?? shellMode) !== restore) {
+      const restore = foldResumeSandbox(session.snapshotEvents()) ?? shellMode ?? 'workspace-write'
+      if ((effectiveSandboxMode(session.snapshotEvents()) ?? shellMode) !== restore) {
         setSandboxMode(session, restore)
       }
     }

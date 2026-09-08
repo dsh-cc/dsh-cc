@@ -13,8 +13,8 @@ import { foldPermissionMode } from '@dsh-cc/permission-rules'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
 
 export function liveMode(agent: Agent, fallback: string): string {
-  if (foldPlanMode(agent.session.events)) return 'plan'
-  return foldPermissionMode(agent.session.events) ?? fallback
+  if (foldPlanMode(agent.session.snapshotEvents())) return 'plan'
+  return foldPermissionMode(agent.session.snapshotEvents()) ?? fallback
 }
 
 /** Duck-typed face of the host context carrying the permission-rules engine. */
@@ -49,5 +49,5 @@ export function liveModeWithDefault(
  * ExitWorktree moves), then the boot-time header cwd.
  */
 export function liveSessionCwd(agent: Agent, fallback: string): string {
-  return foldSessionCwd(agent.session.events) ?? agent.session.header.cwd ?? fallback
+  return foldSessionCwd(agent.session.snapshotEvents()) ?? agent.session.header.cwd ?? fallback
 }

@@ -242,8 +242,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       const entry = flight.get(sessionId)
       // Single-flight: skip while an extraction is in flight or when no new
       // events have arrived since the last spawn.
-      if (!entry?.extracting && agent.session.events.length !== entry?.lastEvents) {
-        flight.set(sessionId, { extracting: true, lastEvents: agent.session.events.length })
+      if (!entry?.extracting && agent.session.seq !== entry?.lastEvents) {
+        flight.set(sessionId, { extracting: true, lastEvents: agent.session.seq })
         void runExtraction(ctx, agent, home, provider).finally(() => {
           const cur = flight.get(sessionId)
           if (cur) cur.extracting = false
@@ -287,7 +287,7 @@ async function runExtraction(ctx: Context, agent: Agent, home: string, provider:
   // the shared home root holds only explicitly-global memories.
   const dir = resolveWorkspaceMemoryDir(home, sessionTranscriptDir(agent))
   // Only model-visible surface events count toward the batch size.
-  const surfaceCount = agent.session.events.filter((e) => SURFACE_EVENT_TYPES.has(e.type)).length
+  const surfaceCount = agent.session.snapshotEvents().filter((e) => SURFACE_EVENT_TYPES.has(e.type)).length
   // The index read happens AFTER the in-flight/content gates (runExtraction is
   // only reached once a spawn is committed), so a skipped spawn never pays the
   // fs cost. Any failure here degrades to an empty index and still spawns.

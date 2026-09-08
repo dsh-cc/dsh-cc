@@ -20,14 +20,14 @@ describe('worktree/entered event registration', () => {
 describe('worktree/entered folding', () => {
   it('folds undefined from an empty log', () => {
     const sess = session()
-    expect(foldSessionCwd(sess.events)).toBeUndefined()
+    expect(foldSessionCwd(sess.snapshotEvents())).toBeUndefined()
   })
 
   it('folds the last-entered path (last-wins)', () => {
     const sess = session()
     appendWorktreeEntered(sess, '/tmp/first')
     appendWorktreeEntered(sess, '/tmp/second')
-    expect(foldSessionCwd(sess.events)).toBe('/tmp/second')
+    expect(foldSessionCwd(sess.snapshotEvents())).toBe('/tmp/second')
   })
 
   it('folds through unrelated interleaved events', () => {
@@ -35,13 +35,13 @@ describe('worktree/entered folding', () => {
     sess.append('turn/start', { turn: 1 })
     appendWorktreeEntered(sess, '/tmp/worktree')
     sess.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
-    expect(foldSessionCwd(sess.events)).toBe('/tmp/worktree')
+    expect(foldSessionCwd(sess.snapshotEvents())).toBe('/tmp/worktree')
   })
 
   it('appends {path} payloads readable from the log', () => {
     const sess = session()
     appendWorktreeEntered(sess, '/tmp/worktree')
-    const event = sess.events[sess.events.length - 1]!
+    const event = sess.eventAt(sess.seq - 1)!
     expect(event.type).toBe('worktree/entered')
     expect(event.data).toEqual({ path: '/tmp/worktree' })
   })
@@ -50,7 +50,7 @@ describe('worktree/entered folding', () => {
     const sess = session()
     ;(sess.append as unknown as (type: string, payload: unknown) => void)('worktree/entered', {})
     appendWorktreeEntered(sess, '/tmp/valid')
-    expect(foldSessionCwd(sess.events)).toBe('/tmp/valid')
+    expect(foldSessionCwd(sess.snapshotEvents())).toBe('/tmp/valid')
   })
 })
 
@@ -69,7 +69,7 @@ describe('foldable cwd state', () => {
     const sess = session()
     appendWorktreeEntered(sess, '/tmp/a')
     appendWorktreeEntered(sess, '/tmp/b')
-    expect(foldSessionCwdState(sess.events)).toEqual({ cwd: '/tmp/b' })
+    expect(foldSessionCwdState(sess.snapshotEvents())).toEqual({ cwd: '/tmp/b' })
   })
 
   it('folds an empty log to the empty state', () => {

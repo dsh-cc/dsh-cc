@@ -13,7 +13,7 @@ function session(id = `allow-${Math.random()}`): Session {
 
 /** The last appended event through the extended face. */
 function lastEvent(sess: Session): { type: string; data: Record<string, unknown> } {
-  const event = sess.events[sess.events.length - 1]!
+  const event = sess.snapshotEvents()[sess.seq - 1]!
   return event as unknown as { type: string; data: Record<string, unknown> }
 }
 
@@ -76,7 +76,7 @@ describe('session-scoped allowlist', () => {
     const allowlist = new SessionAllowlist()
     const sess = session()
     allowlist.clear(sess)
-    expect(sess.events).toHaveLength(0)
+    expect(sess.snapshotEvents()).toHaveLength(0)
   })
 
   it('foldSessionAllows collects granted rules from a log in order', () => {
@@ -84,7 +84,7 @@ describe('session-scoped allowlist', () => {
     appendSessionAllow(sess, { rule: 'Bash(npm )', scope: 'session', toolName: 'Bash', timestamp: 1 })
     sess.append('turn/start', { turn: 1 })
     appendSessionAllow(sess, { rule: 'edit', scope: 'session', toolName: 'edit', timestamp: 2 })
-    const rules = foldSessionAllows(sess.events)
+    const rules = foldSessionAllows(sess.snapshotEvents())
     expect(rules).toHaveLength(2)
     expect(rules[0]!.toolName).toBe('Bash')
     expect(rules[1]!.toolName).toBe('edit')
@@ -95,13 +95,13 @@ describe('session-scoped allowlist', () => {
     appendSessionAllow(sess, { rule: 'Bash', scope: 'session', toolName: 'Bash', timestamp: 1 })
     appendSessionAllow(sess, { scope: 'session', toolName: '*', timestamp: 2, cleared: true })
     appendSessionAllow(sess, { rule: 'read', scope: 'session', toolName: 'read', timestamp: 3 })
-    expect(foldSessionAllows(sess.events).map(rule => rule.toolName)).toEqual(['read'])
+    expect(foldSessionAllows(sess.snapshotEvents()).map(rule => rule.toolName)).toEqual(['read'])
   })
 
   it('foldSessionAllows ignores sandbox-auto records (they carry no rule)', () => {
     const sess = session()
     appendSessionAllow(sess, { scope: 'sandbox-auto', toolName: 'Bash', timestamp: 1 })
-    expect(foldSessionAllows(sess.events)).toHaveLength(0)
+    expect(foldSessionAllows(sess.snapshotEvents())).toHaveLength(0)
   })
 
   it('seed replaces a session rule set; empty seeds clear it', () => {
@@ -122,9 +122,9 @@ describe('session-scoped allowlist', () => {
     // the sole artifact an add produces.
     const allowlist = new SessionAllowlist()
     const sess = session()
-    const before = sess.events.length
+    const before = sess.seq
     allowlist.add(sess, 'Bash')
-    expect(sess.events).toHaveLength(before + 1)
+    expect(sess.snapshotEvents()).toHaveLength(before + 1)
     expect(lastEvent(sess).type).toBe(SESSION_ALLOW_EVENT)
   })
 })

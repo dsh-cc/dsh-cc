@@ -14,7 +14,7 @@ export const inject = ['commands']
 
 /** Execute `/stats` against the invocation's own session log. */
 function executeStats(invocation: CommandInvocation): CommandResult {
-  const report = foldStats(invocation.agent.session.events)
+  const report = foldStats(invocation.agent.session.snapshotEvents())
   return { kind: 'success', text: formatStatsReport(report) }
 }
 

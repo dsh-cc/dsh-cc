@@ -31,7 +31,7 @@ export interface SessionCwdOptions {
 export function getSessionCwd(agent: Agent, options: SessionCwdOptions = {}): string {
   const { store = sessionCwdStore, fallback } = options
   const sessionId = String(agent.session.id)
-  return store.resolve(sessionId, agent.session.events)
+  return store.resolve(sessionId, agent.session.snapshotEvents())
     ?? agent.session.header.cwd
     ?? fallback
     ?? process.cwd()

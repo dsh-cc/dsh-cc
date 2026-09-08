@@ -107,7 +107,7 @@ function text(result: ToolExecutionResult): string {
 }
 
 function agentOf(id: string, cwd = '/work'): Agent {
-  const session = Session.create(SessionId(id), undefined, { version: 0, id: SessionId(id), createdAt: Date.now(), cwd })
+  const session = Session.create(SessionId(id), undefined, { version: 2, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
   session.append('turn/start', { turn: 1 })
   return { id, session, inject: () => {} } as unknown as Agent
 }
@@ -131,7 +131,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     expect(text(result)).toBe('ran:ls -la')
     expect(asked).toHaveLength(0)
     expect(llm.calls).toHaveLength(1)
-    const folded = foldClassifiers(agent.session.events)
+    const folded = foldClassifiers(agent.session.snapshotEvents())
     expect(folded).toHaveLength(1)
     expect(folded[0]).toMatchObject({ tool: 'Bash', verdict: 'allow', provider: 'fake', model: 'classifier-model' })
   })
@@ -152,7 +152,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     expect(reasons[0]).toContain('terraform apply on prod')
     expect(llm.calls).toHaveLength(1)
-    expect(foldClassifiers(agent.session.events)[0]).toMatchObject({ verdict: 'ask' })
+    expect(foldClassifiers(agent.session.snapshotEvents())[0]).toMatchObject({ verdict: 'ask' })
   })
 
   it('disarmed (enabled absent): identical legacy mapping — auto+LOW+ask proxies to allow, LLM never called', async () => {
@@ -218,7 +218,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     expect(asked).toHaveLength(0) // legacy auto-proxy ran both times
     const warns = warn.mock.calls.filter(call => String(call[0]).match(/classifier/i))
     expect(warns).toHaveLength(1)
-    const folded = foldClassifiers(agent.session.events)
+    const folded = foldClassifiers(agent.session.snapshotEvents())
     expect(folded).toHaveLength(2)
     expect(folded.every(record => record.failure === 'unarmed')).toBe(true)
   })
@@ -234,7 +234,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     ctx.permissionRules.setMode(agent, 'auto')
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     expect(reasons[0]).toMatch(/unparseable/)
-    const folded = foldClassifiers(agent.session.events)
+    const folded = foldClassifiers(agent.session.snapshotEvents())
     expect(folded[0]?.failure).toBe('malformed')
   })
 

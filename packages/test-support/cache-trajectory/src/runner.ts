@@ -133,7 +133,7 @@ export async function runCacheTrajectory(
   }
 
   const finishedAt = new Date().toISOString()
-  const events: readonly SessionEvent[] = agent.session.events
+  const events: readonly SessionEvent[] = agent.session.snapshotEvents()
 
   const rows: RequestUsageRow[] = []
   const rowsWithoutUsage: number[] = []

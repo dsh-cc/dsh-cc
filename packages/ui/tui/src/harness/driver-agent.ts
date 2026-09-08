@@ -336,7 +336,7 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
    */
   const foldHistory = (): TuiState => {
     let folded = rt.state()
-    for (const event of current.agent.session.events) {
+    for (const event of current.agent.session.snapshotEvents()) {
       folded = applySessionEvent(folded, event as SessionEventLike, presenters)
     }
     return folded

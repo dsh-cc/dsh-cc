@@ -51,7 +51,7 @@ export function createModeSection(rt: DriverModeCtx): {
       return
     }
     const phase = planPhaseOf(
-      rt.current.agent.session.events,
+      rt.current.agent.session.snapshotEvents(),
       rt.projections?.stateOf(rt.current.agent.session, 'plan') as PlanUnitStateLike | undefined,
     )
     if (phase !== 'off') {

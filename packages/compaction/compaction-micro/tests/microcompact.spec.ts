@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId, createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // Type-only: the `compaction/prune` shadow-price SessionEventMap merge.
 import type {} from '@deepseek-ai/dsh-compaction'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
+import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import Microcompactor, {
   DEFAULTS,
@@ -22,6 +23,8 @@ function service(config: MicrocompactConfig = { retainResults: 2 }): Microcompac
   const ctx = new Context()
   // Service constructors self-register, so `ctx.tokenMeter` resolves for the
   // shadow-price pricing without a full plugin boot.
+  // TokenMeter hard-injects `sessionProjections` (harness 0.1.3).
+  void new SessionProjectionRegistry(ctx)
   void new TokenMeter(ctx)
   return new Microcompactor(ctx, config)
 }
@@ -65,14 +68,14 @@ function appendToolStep(
 function surfaceToolResults(s: Session): number[] {
   const seqs: number[] = []
   for (const seq of [...s.surface.nodes]) {
-    if (s.events[seq]?.type === 'tool/result') seqs.push(seq)
+    if (s.eventAt(seq)?.type === 'tool/result') seqs.push(seq)
   }
   return seqs
 }
 
 function replacementText(s: Session, call: string): string | undefined {
   for (const seq of [...s.surface.nodes]) {
-    const event = s.events[seq]
+    const event = s.eventAt(seq)
     if (event?.type !== 'tool/result') continue
     const msg = event.data.message as SessionEvent<'tool/result'>['data']['message']
     if (msg.source.callId !== ToolCallId(call)) continue
@@ -190,7 +193,7 @@ describe('Microcompactor window + freeze', () => {
     // Each decision's replacementSeq is a current-surface node whose content is the placeholder,
     // and which cites the shadowed original — the decision reconstructs from log + code.
     for (const record of result.replaced) {
-      const replacement = s.events[record.replacementSeq] as SessionEvent<'tool/result'> | undefined
+      const replacement = s.eventAt(SessionSeq(record.replacementSeq)) as SessionEvent<'tool/result'> | undefined
       expect(replacement?.type).toBe('tool/result')
       const block = replacement!.data.message.content[0]
       expect(block?.type === 'tool-result' && block.content[0]?.type === 'text'
@@ -236,13 +239,13 @@ describe('Microcompactor single-pass batch folding', () => {
     for (const record of result.replaced) {
       // Shadow-price protocol: the metering event is appended synchronously
       // adjacent, immediately before its surface replacement.
-      const prune = s.events[record.replacementSeq - 1] as SessionEvent<'compaction/prune'> | undefined
+      const prune = s.eventAt(SessionSeq(record.replacementSeq - 1)) as SessionEvent<'compaction/prune'> | undefined
       expect(prune?.type).toBe('compaction/prune')
       expect(prune!.data.shadowedSeqs).toEqual([record.originalSeq])
       expect(prune!.data.shadowedRange).toEqual({ start: record.originalSeq, end: record.originalSeq })
       expect(prune!.data.shadowedTokenCount).toBeGreaterThan(0)
       // The priced replacement shadows exactly the metered node.
-      const replacement = s.events[record.replacementSeq] as SessionEvent<'tool/result'> | undefined
+      const replacement = s.eventAt(SessionSeq(record.replacementSeq)) as SessionEvent<'tool/result'> | undefined
       expect(replacement?.type).toBe('tool/result')
       expect(replacement!.sourceEventSeqs).toEqual([record.originalSeq])
     }
@@ -255,9 +258,9 @@ describe('Microcompactor single-pass batch folding', () => {
 
     const first = micro.microcompactSession(s)
     expect(first.replaced).toHaveLength(3)
-    const logBytesBefore = JSON.stringify(s.events)
+    const logBytesBefore = JSON.stringify(s.snapshotEvents())
     const surfaceBytesBefore = JSON.stringify(
-      [...s.surface.nodes].map(seq => s.events[seq]),
+      [...s.surface.nodes].map(seq => s.eventAt(seq)),
     )
 
     const second = micro.microcompactSession(s)
@@ -266,8 +269,8 @@ describe('Microcompactor single-pass batch folding', () => {
     expect(second.stable).toBe(true)
     // Nothing appended and nothing rewritten: the event log and the projected
     // surface are byte-identical after the no-op second pass.
-    expect(JSON.stringify(s.events)).toBe(logBytesBefore)
-    expect(JSON.stringify([...s.surface.nodes].map(seq => s.events[seq]))).toBe(surfaceBytesBefore)
+    expect(JSON.stringify(s.snapshotEvents())).toBe(logBytesBefore)
+    expect(JSON.stringify([...s.surface.nodes].map(seq => s.eventAt(seq)))).toBe(surfaceBytesBefore)
   })
 
   it('folds exactly one node when the window overflows by exactly one (steady state)', () => {

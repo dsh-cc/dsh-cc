@@ -17,7 +17,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { freezeMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, ToolResultBlock } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionEvent, ToolResultMessage } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 // Type-only: the `compaction/prune` shadow-price SessionEventMap merge.
 import type {} from '@deepseek-ai/dsh-compaction'
@@ -51,7 +51,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 interface SnapshotCandidate {
-  readonly seq: number
+  readonly seq: SessionSeq
   readonly event: SessionEvent<'tool/result'>
 }
 
@@ -201,7 +201,7 @@ export class Microcompactor extends Service {
 function snapshotCandidates(session: Session): SnapshotCandidate[] {
   const candidates: SnapshotCandidate[] = []
   for (const seq of [...session.surface.nodes]) {
-    const event = session.events[seq]
+    const event = session.eventAt(seq)
     /* v8 ignore next -- surface seqs are validated contiguous log references. */
     if (event?.type === 'tool/result') candidates.push({ seq, event })
   }
