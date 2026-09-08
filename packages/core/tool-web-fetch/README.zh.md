@@ -21,9 +21,10 @@ CC 风格的 `web_fetch` 替代工具，带可选 `prompt` 参数。当 CC prese
 
 ## Provider 要求
 
-CC 部署通过 cc-shell bundle 获得 fetch 执行器：其挂载
-`@dsh-cc/web-fetch-http`（包装 `HttpFetchProvider`，带字面量 SSRF 门禁）。
-本包自身不注册 provider。测试通过 fake `ctx.web.fetch` 进行。
+CC 部署使用 dsh-base 自带的 stock `@deepseek-ai/dsh-web-fetch-http` 执行器
+(DNS 钉定、逐跳仅公网),CC 出口上限由 cc-shell bundle 重述。本工具在调用
+seam 之前把 `http:` URL 升级为 `https:`(CC WebFetch 对齐);自身不注册
+provider,测试通过 fake `ctx.web.fetch` 进行。
 
 ## Prompt 指引的相互影响
 
@@ -33,7 +34,7 @@ CC 部署通过 cc-shell bundle 获得 fetch 执行器：其挂载
 
 ## 已知限制
 
-- 本包无 host allowlist：字面量 SSRF 门禁（阻止私有/回环/链路本地字面量）位于
-  cc-shell 挂载的 `@dsh-cc/web-fetch-http` 包装器中。残余风险：DNS rebinding——
-  上游 webfetch-ssrf-allowlist（DNS-pin / 逐跳重校验）仍是后续事项。
+- 本包无 host allowlist:SSRF 策略在执行器一侧——stock provider 解析并钉定
+  仅公网地址、逐跳重校验,DNS rebinding 窗口已在上游(rc.1)关闭。更严格的
+  限制应放在执行器,而不是本工具。
 - Tavily / Firecrawl 是插件/skill，不是本工具的 fetch 后端。

@@ -71,9 +71,6 @@
       "path": "./packages/core/tool-web-fetch"
     },
     {
-      "path": "./packages/web/fetch-http"
-    },
-    {
       "path": "./packages/core/tool-structured-output"
     },
     {

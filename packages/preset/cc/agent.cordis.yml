@@ -282,8 +282,9 @@
 #
 # Moved in from the cc-shell global swap. fetch is still disabled here because
 # `@dsh-cc/tool-web-fetch` inside cc-services owns the model-facing tool
-# (adds the optional `prompt`). The HTTP executor is
-# `@dsh-cc/web-fetch-http` mounted from cc-shell (literal SSRF gate).
+# (adds the optional `prompt` and upgrades http: URLs to https: before the
+# seam). The HTTP executor is the stock `@deepseek-ai/dsh-web-fetch-http`
+# provider from dsh-base, with CC egress caps restated in cc-shell's patch.
 # A prompt without the `haiku` route hard-fails.
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'

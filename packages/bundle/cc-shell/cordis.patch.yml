@@ -19,6 +19,24 @@
 - id: session-title-llm
   disabled: true
 
+# Web fetch executor: restate dsh-base's stock provider row at top level.
+# Same-id restatement replaces the base row's config wholesale (last writer
+# wins per row), so the CC egress caps live here. Upstream rc.1 already does
+# DNS-pinned public-only fetching, subsuming the retired literal-gate wrapper
+# that once held this seam (web/…/fetch-http in git history). The http→https
+# upgrade moved to the tool layer (@dsh-cc/tool-web-fetch) — this stays live
+# only as long as every tool-web mount keeps fetch: false.
+# WARNING: this row MUST stay top-level. Inside `- insert:` it would compose a
+# SECOND loader entry with the same id as dsh-base's and boot hard-fails on
+# the duplicate loader entry id.
+- id: web-fetch-http
+  name: '@deepseek-ai/dsh-web-fetch-http'
+  config:
+    timeoutMs: 20000
+    maxResponseBytes: 2000000
+    maxRedirects: 3
+    userAgent: 'dsh-cc/0.4.1 (+https://github.com/dsh-cc/dsh-cc)'
+
 - insert:
     # Remount below (in the insert list) with fetch enabled and the fetch provider.
     - id: tools-cc
@@ -44,14 +62,3 @@
         maxInputBytes: 4096
         maxOutputTokens: 64
         timeoutMs: 60000
-
-    # CC fetch provider: SSRF-gated wrapper around the harness HttpFetchProvider.
-    # Do NOT also mount the stock web-fetch-http plugin — duplicate id 'http'.
-    - id: web-fetch-http-cc
-      name: '@dsh-cc/web-fetch-http'
-      config:
-        timeoutMs: 20000
-        maxResponseBytes: 2000000
-        maxRedirects: 3
-        upgradeInsecure: true
-        blockPrivateNetwork: true

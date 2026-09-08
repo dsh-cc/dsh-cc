@@ -71,8 +71,9 @@ done
 # the profile: the dsh plugin reconciler never touches packages that are not
 # profile dependencies, and @deepseek-ai/* peers resolve through the
 # ~/.dsh/profiles fallback — but third-party deps (tui's highlight.js) and
-# deps dsh-base does not carry (fetch-http's @deepseek-ai/dsh-web-fetch-http,
-# now a real dependency) resolve only via Node's upward node_modules walk.
+# deps dsh-base does not carry (historical example: the retired fetch-http
+# wrapper's dsh-web-fetch-http, which rc.1's dsh-base now carries itself)
+# resolve only via Node's upward node_modules walk.
 #
 # The copy must be TRANSITIVE: pnpm's strict layout never nests a dep's own
 # deps inside the dep (they sit as siblings in the .pnpm container), so
@@ -142,9 +143,9 @@ while (queue.length) {
   let container = fs.realpathSync(src)
   while (path.basename(container) !== 'node_modules') container = path.dirname(container)
   for (const next of manifestDeps(path.join(fs.realpathSync(src), 'package.json'), includePeers)) {
-    // Only the SEED seed-step copies @deepseek-ai-@scope packages (e.g.
-    // @deepseek-ai/dsh-web-fetch-http, a dsh-cc runtime dep absent from
-    // dsh-base). When recursing FROM an @deepseek-ai package, its own
+    // Only the SEED seed-step copies @deepseek-ai-@scope packages (the
+    // historical case was a dsh-cc runtime dep absent from dsh-base; none
+    // exists today, but the rule stands for the next one). When recursing FROM an @deepseek-ai package, its own
     // @deepseek-ai deps must stay unpicked: they belong to the host plane and
     // materialize via the healed profiles fallback (copying schemastery here
     // would fork cordis's schema runtime into a shadow instance).

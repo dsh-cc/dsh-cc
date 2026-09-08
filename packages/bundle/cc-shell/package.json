@@ -42,8 +42,7 @@
     "@dsh-cc/mcp-client": "workspace:^",
     "@dsh-cc/mcp-config": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
-    "@dsh-cc/session-title-provider": "workspace:^",
-    "@dsh-cc/web-fetch-http": "workspace:^"
+    "@dsh-cc/session-title-provider": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
