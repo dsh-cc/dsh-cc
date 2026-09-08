@@ -1,0 +1,5 @@
+{
+  "name": "dsh-cc-shunt",
+  "description": "Official dsh-cc plugin: hard PreToolUse gates redirect bulk reads/boilerplate generation to cheap-lane shunt-worker subagents to save main-context tokens.",
+  "version": "0.5.0"
+}
