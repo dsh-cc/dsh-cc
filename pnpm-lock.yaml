@@ -110,6 +110,9 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: link:../../../../deepseek-harness/packages/fs/fs-local
         version: link:../../../../deepseek-harness/packages/fs/fs-local
+      '@deepseek-ai/dsh-home-paths':
+        specifier: link:../../../../deepseek-harness/packages/util/home-paths
+        version: link:../../../../deepseek-harness/packages/util/home-paths
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -383,6 +386,9 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
+      '@deepseek-ai/dsh-home-paths':
+        specifier: link:../../../../deepseek-harness/packages/util/home-paths
+        version: link:../../../../deepseek-harness/packages/util/home-paths
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -416,6 +422,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-home-paths':
+        specifier: link:../../../../deepseek-harness/packages/util/home-paths
+        version: link:../../../../deepseek-harness/packages/util/home-paths
       '@dsh-cc/plugin-loader':
         specifier: workspace:^
         version: link:../cc-plugin-loader

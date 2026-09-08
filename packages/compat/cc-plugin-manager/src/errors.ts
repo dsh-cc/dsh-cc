@@ -15,6 +15,7 @@ export type PluginManagerErrorCode =
   | 'UNKNOWN_SCOPE'
   | 'UNKNOWN_MARKETPLACE'
   | 'MARKETPLACE_CONFLICT'
+  | 'MARKETPLACE_NAME_MISMATCH'
   | 'MARKETPLACE_BAD_SOURCE'
   | 'MARKETPLACE_MANIFEST_MISSING'
   | 'MARKETPLACE_PLUGIN_NOT_DECLARED'
@@ -87,6 +88,14 @@ export function marketplaceConflict(name: string, existingKind: string): PluginM
   return new PluginManagerError(
     'MARKETPLACE_CONFLICT',
     `Marketplace "${name}" is already registered from a different source (${existingKind}).`,
+  )
+}
+
+/** `Marketplace manifest name "<actual>" does not match the entry name "<expected>".` (§4.7 promote guard) */
+export function marketplaceNameMismatch(expected: string, actual: string): PluginManagerError {
+  return new PluginManagerError(
+    'MARKETPLACE_NAME_MISMATCH',
+    `Marketplace manifest name "${actual}" does not match the entry name "${expected}".`,
   )
 }
 

@@ -13,7 +13,7 @@ import { installPlugin } from '../src/install.ts'
 import { removeMarketplace } from '../src/marketplace.ts'
 import { disablePlugin } from '../src/toggles.ts'
 import { PluginManagerError } from '../src/errors.ts'
-import { cleanupTemps, expectError, readJson, rig, type Rig } from './helpers.ts'
+import { cleanupTemps, dualDeps, expectError, readJson, rig, snapshotTree, tempDir, type Rig } from './helpers.ts'
 
 afterEach(cleanupTemps)
 
@@ -61,5 +61,50 @@ describe('marketplace remove cascade (C6)', () => {
     const result = await removeMarketplace(deps(r), 'internal')
     expect(result).toEqual({ name: 'internal', removedPlugins: [] })
     expect(await readJson(r.knownFile)).toEqual({})
+  })
+})
+
+describe('marketplace remove cascade (dual-home, S4 §4.6)', () => {
+  it('claude-installed plugins are cascade-uninstalled per §4.3: dsh shadow, claude byte-identical, orphan markers only under the dsh cache', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    // seed a claude-owned install of formatter (cache copy inside the claude home)
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    const claudeCachePath = join(r.cacheDir, 'internal', 'formatter', '1.0.0')
+    await mkdir(join(claudeCachePath, '.claude-plugin'), { recursive: true })
+    await writeFile(join(claudeCachePath, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'formatter', version: '1.0.0' }), 'utf8')
+    await mkdir(join(r.claudeHome, 'plugins'), { recursive: true })
+    await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: claudeCachePath, version: '1.0.0', installedAt: '2026-09-05T08:00:00.000Z', lastUpdated: '2026-09-05T08:00:00.000Z' }] } }), 'utf8')
+    await writeFile(join(r.claudeHome, 'settings.json'), JSON.stringify({ enabledPlugins: { 'formatter@internal': true } }, null, 2) + '\n', 'utf8')
+    const before = snapshotTree(r.claudeHome)
+
+    const result = await removeMarketplace(dualDeps(r, dshHome, { now: NOW }), 'internal')
+    expect(result).toEqual({ name: 'internal', removedPlugins: ['formatter@internal'] })
+
+    // dsh shadow: empty list materialized
+    const dshInstalled = await readJson(join(dshHome, 'plugins', 'installed_plugins.json'))
+    expect(dshInstalled.plugins['formatter@internal']).toEqual([])
+    // §4.3 conditional shadow in the dsh user file
+    expect((await readJson(join(dshHome, 'settings.json')))['enabledPlugins']).toEqual({ 'formatter@internal': false })
+    // dsh tombstone
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['internal']).toBeNull()
+    // W1/W3/W4: the claude home (installed file, settings, cache dir incl. no orphan marker) is byte-identical
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+    expect(existsSync(claudeCachePath)).toBe(true)
+  })
+
+  it('dsh-owned installs of the removed marketplace are uninstalled with orphan markers under the dsh cache', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    await installPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    const before = snapshotTree(r.claudeHome)
+
+    const result = await removeMarketplace(dualDeps(r, dshHome, { now: NOW }), 'internal')
+    expect(result).toEqual({ name: 'internal', removedPlugins: ['formatter@internal'] })
+    expect(existsSync(join(dshHome, 'plugins', 'cache', 'internal', 'formatter', '1.0.0', '.orphaned_at'))).toBe(true)
+    const dshKnown = await readJson(join(dshHome, 'plugins', 'known_marketplaces.json'))
+    expect(dshKnown['internal']).toBeNull()
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
   })
 })

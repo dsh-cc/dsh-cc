@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { installPlugin } from '../src/install.ts'
 import { updatePlugin } from '../src/update.ts'
 import { PluginManagerError } from '../src/errors.ts'
-import { cleanupTemps, expectError, readJson, rig, type Rig } from './helpers.ts'
+import { cleanupTemps, dualDeps, expectError, readJson, rig, snapshotTree, tempDir, type Rig } from './helpers.ts'
 
 afterEach(cleanupTemps)
 
@@ -93,5 +93,59 @@ describe('update (C7)', () => {
     await writeFile(join(r.marketplaceDir, 'plugins', 'formatter', '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'formatter' }), 'utf8')
     const result = await updatePlugin(deps(r), 'formatter')
     expect(result).toMatchObject({ upToDate: false, toVersion: 'unknown' })
+  })
+})
+
+describe('update (dual-home, S3 §4.4)', () => {
+  it('claude-owned install + stale version: new version materializes into the DSH cache; claude tree byte-identical; claude installPath never orphan-marked', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    // claude-owned install whose recorded version is stale vs the marketplace manifest (1.0.0)
+    const claudeCachePath = join(r.cacheDir, 'internal', 'formatter', '0.9.0')
+    await mkdir(claudeCachePath, { recursive: true })
+    await mkdir(join(r.claudeHome, 'plugins'), { recursive: true })
+    await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: claudeCachePath, version: '0.9.0', installedAt: '2026-09-05T08:00:00.000Z', lastUpdated: '2026-09-05T08:00:00.000Z' }] } }), 'utf8')
+    const before = snapshotTree(r.claudeHome)
+
+    const result = await updatePlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    expect(result).toEqual({ upToDate: false, id: 'formatter@internal', fromVersion: '0.9.0', toVersion: '1.0.0', scope: 'user' })
+
+    const dshCachePath = join(dshHome, 'plugins', 'cache', 'internal', 'formatter', '1.0.0')
+    expect(existsSync(join(dshCachePath, 'skill.md'))).toBe(true)
+    // §3.4/§4.4: the dsh installed file carries the rewritten merged list
+    const dshInstalled = await readJson(join(dshHome, 'plugins', 'installed_plugins.json'))
+    const entries = dshInstalled.plugins['formatter@internal']
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ scope: 'user', version: '1.0.0', installPath: dshCachePath, installedAt: '2026-09-06T10:00:00.000Z' })
+    // W3: old claude-owned installPath untouched, never orphan-marked
+    expect(existsSync(claudeCachePath)).toBe(true)
+    expect(existsSync(join(claudeCachePath, '.orphaned_at'))).toBe(false)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('a dsh-owned old install dir IS orphan-marked under the dsh cache; claude tree byte-identical (marketplace bump excluded)', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    await installPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    await bump(r, '2.0.0')
+    const before = snapshotTree(r.claudeHome)
+    await updatePlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    expect(existsSync(join(dshHome, 'plugins', 'cache', 'internal', 'formatter', '1.0.0', '.orphaned_at'))).toBe(true)
+    expect(existsSync(join(dshHome, 'plugins', 'cache', 'internal', 'formatter', '2.0.0', 'skill.md'))).toBe(true)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('up-to-date claude-owned install → no-op, no dsh writes', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    await mkdir(join(r.claudeHome, 'plugins'), { recursive: true })
+    await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: '/x', version: '1.0.0', installedAt: 'x', lastUpdated: 'x' }] } }), 'utf8')
+    const before = snapshotTree(r.claudeHome)
+    const result = await updatePlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    expect(result).toEqual({ upToDate: true, id: 'formatter@internal', version: '1.0.0', scope: 'user' })
+    expect(existsSync(join(dshHome, 'plugins', 'installed_plugins.json'))).toBe(false)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
   })
 })

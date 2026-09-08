@@ -8,15 +8,23 @@ This compatibility loader reads a CC plugin manifest subset, translates each com
 
 ## Discovery
 
-`discoverCcPluginRoots({ pluginDirs?, claudeHome?, cwd? })` is the glue's on-disk finder:
+`discoverCcPluginRoots({ pluginDirs?, claudeHome?, dshHome?, cwd? })` is the glue's on-disk finder:
 
 | `pluginDirs` | Behavior |
 |---|---|
-| `undefined` (default) | Intersection of `enabledPlugins` (user → project → local settings cascade) and `{claudeHome}/plugins/installed_plugins.json`. Keys must be exact `name@marketplace`. `$CLAUDE_CONFIG_DIR` (else `~/.claude`) is the Claude home. |
+| `undefined` (default) | Intersection of `enabledPlugins` (claude-user → dsh-user → project → local settings cascade, later files overriding per key) and the merged `installed_plugins.json` of both homes. Keys must be exact `name@marketplace`. The Claude home is `$CLAUDE_CONFIG_DIR` (else `~/.claude`); the dsh home is the explicit `dshHome` → the explicit `claudeHome` (legacy single-root) → `$DSH_HOME` (else `~/.dsh`). |
 | `[]` or `null` | Empty — discovery disabled. |
 | non-empty | Flatten those dirs: the dir itself, or one-level children, that hold `.claude-plugin/plugin.json` or top-level `plugin.json`. Marketplace-only dirs are not flatten roots. |
 
 Unreadable JSON and missing `installPath`s skip rather than throw. Project/local `enabledPlugins` are boot-cwd-biased (host-plane singleton); `/reload-plugins` re-reads the cascade.
+
+### Dual-home state (compat-read `~/.claude`, write `~/.dsh`)
+
+Plugin state is dual-home: the Claude home (`$CLAUDE_CONFIG_DIR` / `~/.claude`) stays fully **read-visible** for Claude Code compatibility, while the dsh home (`$DSH_HOME` / `~/.dsh`) is the **write root**. When both homes carry state, the merge is per key with dsh-wins: a dsh `enabledPlugins` entry shadows the claude one (the dsh cascade layer sits between the claude-user and project layers), and a dsh `installed_plugins.json` entry list — including an empty list — shadows the claude list for that plugin id. Consequences worth knowing:
+
+- The fork is one-way: dsh-cc sees both homes; real Claude Code sees only its own.
+- **Takeover staleness:** once dsh-cc writes an id into the dsh `installed_plugins.json`, later claude-side changes to that id become invisible to dsh-cc (dsh has taken over the id).
+- A caller passing **only `claudeHome`** (no `dshHome`) keeps the legacy single-root behavior: that directory is both the read and the write root.
 
 ## Loader
 

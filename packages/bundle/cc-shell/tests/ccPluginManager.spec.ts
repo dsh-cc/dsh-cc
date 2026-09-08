@@ -32,35 +32,63 @@ function seedState(): { claudeHome: string, settingsFile: string } {
   return { claudeHome, settingsFile }
 }
 
+/** Both env vars must be seeded to tmp dirs: `createSessionCcPluginManager`
+ * resolves dual-home, and an unset `DSH_HOME` would point writes at the real
+ * `~/.dsh`. */
+function seedHomes(): { dshHome: string, previous: { dsh: string | undefined, claude: string | undefined } } {
+  const dshHome = mkdtempSync(join(tmpdir(), 'cc-plugin-manager-dsh-'))
+  tmpRoots.push(dshHome)
+  const previous = {
+    dsh: process.env['DSH_HOME'],
+    claude: process.env['CLAUDE_CONFIG_DIR'],
+  }
+  process.env['DSH_HOME'] = dshHome
+  return { dshHome, previous }
+}
+
+function restoreHomes(previous: { dsh: string | undefined, claude: string | undefined }): void {
+  if (previous.dsh === undefined) delete process.env['DSH_HOME']
+  else process.env['DSH_HOME'] = previous.dsh
+  if (previous.claude === undefined) delete process.env['CLAUDE_CONFIG_DIR']
+  else process.env['CLAUDE_CONFIG_DIR'] = previous.claude
+}
+
 describe('ccPluginManager service', () => {
   it('registers under `ccPluginManager` via createSessionCcPluginManager (manager surface present)', () => {
-    const manager = createSessionCcPluginManager()
-    expect(typeof manager.list).toBe('function')
-    expect(typeof manager.enable).toBe('function')
-    expect(typeof manager.disable).toBe('function')
-    expect(typeof manager.install).toBe('function')
-    expect(typeof manager.uninstall).toBe('function')
-    expect(typeof manager.update).toBe('function')
-    expect(typeof manager.listMarketplaces).toBe('function')
-    expect(typeof manager.addMarketplace).toBe('function')
-    expect(typeof manager.removeMarketplace).toBe('function')
-    expect(typeof manager.updateMarketplaces).toBe('function')
+    const { previous } = seedHomes()
+    try {
+      const manager = createSessionCcPluginManager()
+      expect(typeof manager.list).toBe('function')
+      expect(typeof manager.enable).toBe('function')
+      expect(typeof manager.disable).toBe('function')
+      expect(typeof manager.install).toBe('function')
+      expect(typeof manager.uninstall).toBe('function')
+      expect(typeof manager.update).toBe('function')
+      expect(typeof manager.listMarketplaces).toBe('function')
+      expect(typeof manager.addMarketplace).toBe('function')
+      expect(typeof manager.removeMarketplace).toBe('function')
+      expect(typeof manager.updateMarketplaces).toBe('function')
+    } finally {
+      restoreHomes(previous)
+    }
   })
 
-  it('binds the tmp CLAUDE_CONFIG_DIR state root: a disable survives end-to-end', async () => {
+  it('writes plugin state to the dsh home: a disable lands in $DSH_HOME settings end-to-end', async () => {
     const { claudeHome, settingsFile } = seedState()
-    const previous = process.env['CLAUDE_CONFIG_DIR']
+    const { dshHome, previous } = seedHomes()
     process.env['CLAUDE_CONFIG_DIR'] = claudeHome
     try {
       const manager = createSessionCcPluginManager()
       const result = await manager.disable('foo')
       expect(result).toEqual({ id: 'foo@bar', scope: 'user', enabled: false })
-      // The disable landed in the tmp settings file (key kept, value false).
-      const settings = JSON.parse(readFileSync(settingsFile, 'utf8')) as { enabledPlugins: Record<string, boolean> }
-      expect(settings.enabledPlugins['foo@bar']).toBe(false)
+      // The disable landed in the dsh user settings (key kept, value false);
+      // the Claude-home settings file stays untouched.
+      const dshSettings = JSON.parse(readFileSync(join(dshHome, 'settings.json'), 'utf8')) as { enabledPlugins: Record<string, boolean> }
+      expect(dshSettings.enabledPlugins['foo@bar']).toBe(false)
+      const claudeSettings = JSON.parse(readFileSync(settingsFile, 'utf8')) as { enabledPlugins: Record<string, boolean> }
+      expect(claudeSettings.enabledPlugins['foo@bar']).toBe(true)
     } finally {
-      if (previous === undefined) delete process.env['CLAUDE_CONFIG_DIR']
-      else process.env['CLAUDE_CONFIG_DIR'] = previous
+      restoreHomes(previous)
     }
   })
 })

@@ -21,8 +21,8 @@ import {
   unknownPlugin,
   unsupportedPluginSource,
 } from './errors.ts'
-import { pluginsStatePaths, type PathInputs } from './paths.ts'
-import { loadKnownMarketplaces } from './state-store.ts'
+import { loadMergedKnownMarketplaces } from './merged-state.ts'
+import type { PathInputs } from './paths.ts'
 
 export interface ParsedPluginId {
   name: string
@@ -90,8 +90,9 @@ export interface DeclaredPlugin {
  * manifest-missing error.
  */
 export async function readDeclaredPlugins(deps: PathInputs, marketplaceName: string): Promise<DeclaredPlugin[]> {
-  const paths = pluginsStatePaths(deps)
-  const known = await loadKnownMarketplaces(paths.knownMarketplacesFile)
+  // Merged known map (§3.2): a claude-known marketplace's declarations are
+  // readable for install/update; its clone is only ever read.
+  const known = (await loadMergedKnownMarketplaces(deps)).entries
   const entry = known[marketplaceName]
   if (entry === undefined) throw unknownMarketplace(marketplaceName, Object.keys(known))
   const dir = entry.installLocation

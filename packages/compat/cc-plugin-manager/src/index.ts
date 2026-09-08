@@ -9,6 +9,7 @@
  * @module @dsh-cc/plugin-manager
  */
 
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { GitRunner } from './git.ts'
@@ -60,8 +61,19 @@ export { createSystemGitRunner, gitFailure, type GitRunner, type GitRunnerOption
 export { unknownMarketplace, marketplaceConflict, invalidMarketplaceSource, marketplaceManifestMissing } from './errors.ts'
 
 export interface CcPluginManagerOptions {
-  /** Defaults to `process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')`. */
+  /**
+   * Compat-read (Claude) home. Defaults to `process.env.CLAUDE_CONFIG_DIR ??
+   * join(homedir(), '.claude')`. Passing ONLY this keeps legacy single-root
+   * behavior: the dsh home falls back to it, so reads and writes share it.
+   */
   claudeHome?: string
+  /**
+   * dsh write home (plan §3.1). Resolution chain: explicit `dshHome` →
+   * explicit `claudeHome` (legacy single-root) → `resolveDshHome()`
+   * (`$DSH_HOME` → `~/.dsh`), so a no-options production caller is always
+   * dual-home and never writes into the real `~/.claude`.
+   */
+  dshHome?: string
   /** Defaults to `process.cwd()`. */
   cwd?: string
   /** Injectable clock for future timestamped mutations. */
@@ -91,8 +103,12 @@ export interface CcPluginManager {
 }
 
 export function createCcPluginManager(options: CcPluginManagerOptions = {}): CcPluginManager {
+  const claudeHome = options.claudeHome ?? process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude')
   const deps: PathInputs = {
-    claudeHome: options.claudeHome ?? process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude'),
+    claudeHome,
+    // Option-level resolution (plan §3.1): explicit dsh → explicit claude
+    // (legacy single-root) → resolveDshHome() ($DSH_HOME → ~/.dsh).
+    dshHome: options.dshHome ?? options.claudeHome ?? resolveDshHome(),
     cwd: options.cwd ?? process.cwd(),
   }
   const marketplaceDeps: MarketplaceDeps = { ...deps }

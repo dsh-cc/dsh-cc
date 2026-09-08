@@ -17,6 +17,11 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 
 export interface PathInputs {
   claudeHome: string
+  /**
+   * dsh write home. Defaults to `claudeHome` (legacy single-root semantics,
+   * plan §3.1): an explicit `claudeHome` alone always means single-root.
+   */
+  dshHome?: string
   cwd: string
 }
 
@@ -46,9 +51,14 @@ export function canonicalizeExistingPath(path: string): string {
   return join(canonicalParent, absolute.slice(parent.length + 1))
 }
 
-/** Layout of the plugin state root `<claudeHome>/plugins/` (§2.2). */
-export function pluginsStatePaths({ claudeHome }: PathInputs): PluginsStatePaths {
-  const stateDir = join(claudeHome, 'plugins')
+/** Resolve both homes: the dsh home (write root) defaults to `claudeHome` (§3.1). */
+function resolveHomes({ claudeHome, dshHome }: PathInputs): { dshHome: string; claudeHome: string } {
+  return { claudeHome, dshHome: dshHome ?? claudeHome }
+}
+
+/** State layout under one home root (§2.2). */
+function statePathsIn(home: string): PluginsStatePaths {
+  const stateDir = join(home, 'plugins')
   return {
     stateDir,
     knownMarketplacesFile: join(stateDir, 'known_marketplaces.json'),
@@ -57,6 +67,25 @@ export function pluginsStatePaths({ claudeHome }: PathInputs): PluginsStatePaths
     cacheDir: join(stateDir, 'cache'),
     dataDir: join(stateDir, 'data'),
   }
+}
+
+/**
+ * Layout of the plugin state root `<dshHome>/plugins/` — the WRITE root
+ * (plan §1 R2). In single-root mode `dshHome` falls back to `claudeHome`.
+ */
+export function pluginsStatePaths(deps: PathInputs): PluginsStatePaths {
+  return statePathsIn(resolveHomes(deps).dshHome)
+}
+
+/**
+ * Claude-side state layout (compat READ root, plan §1 R1), or `null` when
+ * both homes canonicalize to the same directory (symlinked homes collapse;
+ * single-root merge is a no-op).
+ */
+export function claudePluginsStatePaths(deps: PathInputs): PluginsStatePaths | null {
+  const { claudeHome, dshHome } = resolveHomes(deps)
+  if (canonicalizeExistingPath(claudeHome) === canonicalizeExistingPath(dshHome)) return null
+  return statePathsIn(claudeHome)
 }
 
 /**
@@ -130,7 +159,8 @@ function resolveGitEntry(gitPath: string): string | null {
 
 /**
  * Settings file per scope (C1/C3):
- * - user:    `<claudeHome>/settings.json`
+ * - user:    `<dshHome>/settings.json` — the WRITE target (plan §3.3; the
+ *   dsh home defaults to `claudeHome`, so single-root keeps the claude path)
  * - project: `<cwd>/.claude/settings.json`
  * - local:   `<gitMainRoot>/.claude/settings.local.json` (gitMainRoot
  *   defaults to cwd when not inside a worktree)
@@ -139,11 +169,25 @@ function resolveGitEntry(gitPath: string): string | null {
  */
 export function settingsFileForScope(
   scope: 'user' | 'project' | 'local',
-  { claudeHome, cwd, gitMainRoot }: PathInputs & { gitMainRoot?: string },
+  deps: PathInputs & { gitMainRoot?: string },
 ): string {
-  if (scope === 'user') return join(claudeHome, 'settings.json')
+  if (scope === 'user') return join(resolveHomes(deps).dshHome, 'settings.json')
+  const { cwd, gitMainRoot } = deps
   const canonicalCwd = canonicalizeExistingPath(cwd)
   if (scope === 'project') return join(canonicalCwd, '.claude', 'settings.json')
   const mainRoot = canonicalizeExistingPath(gitMainRoot ?? findGitMainRoot(canonicalCwd) ?? canonicalCwd)
   return join(mainRoot, '.claude', 'settings.local.json')
+}
+
+/**
+ * User-scope settings read files in low → high precedence order (plan §3.3):
+ * `[<claudeHome>/settings.json, <dshHome>/settings.json]`, deduped to a
+ * single entry when the homes canonicalize equal (single-root).
+ */
+export function userSettingsReadFiles(deps: PathInputs): string[] {
+  const { claudeHome, dshHome } = resolveHomes(deps)
+  const claudeFile = join(claudeHome, 'settings.json')
+  const dshFile = join(dshHome, 'settings.json')
+  if (canonicalizeExistingPath(claudeFile) === canonicalizeExistingPath(dshFile)) return [dshFile]
+  return [claudeFile, dshFile]
 }

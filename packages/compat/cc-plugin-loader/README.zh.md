@@ -8,15 +8,23 @@
 
 ## 发现
 
-`discoverCcPluginRoots({ pluginDirs?, claudeHome?, cwd? })` 是 glue 的磁盘查找器：
+`discoverCcPluginRoots({ pluginDirs?, claudeHome?, dshHome?, cwd? })` 是 glue 的磁盘查找器：
 
 | `pluginDirs` | 行为 |
 |---|---|
-| `undefined`（默认） | `enabledPlugins`（user → project → local 级联）与 `{claudeHome}/plugins/installed_plugins.json` 的交集。key 必须是精确的 `name@marketplace`。Claude home 为 `$CLAUDE_CONFIG_DIR`（否则 `~/.claude`）。 |
+| `undefined`（默认） | `enabledPlugins`（claude-user → dsh-user → project → local 级联，后者按 key 覆盖）与两个 home 合并后的 `installed_plugins.json` 的交集。key 必须是精确的 `name@marketplace`。Claude home 为 `$CLAUDE_CONFIG_DIR`（否则 `~/.claude`）；dsh home 为显式 `dshHome` → 显式 `claudeHome`（旧版单根）→ `$DSH_HOME`（否则 `~/.dsh`）。 |
 | `[]` 或 `null` | 空——关闭发现。 |
 | 非空 | flatten 这些目录：目录自身或其一层子目录持有 `.claude-plugin/plugin.json` 或顶层 `plugin.json`。仅有 marketplace.json 的目录不是 flatten root。 |
 
 JSON 读失败与缺失的 `installPath` 会跳过而不是抛错。项目/local `enabledPlugins` 偏向 boot cwd（host-plane 单例）；`/reload-plugins` 会重读级联。
+
+### 双 home 状态（兼容读 `~/.claude`，写入 `~/.dsh`）
+
+插件状态是双 home 的：Claude home（`$CLAUDE_CONFIG_DIR` / `~/.claude`）保持完全**可读**以兼容 Claude Code，而 dsh home（`$DSH_HOME` / `~/.dsh`）是**写入根**。两个 home 同时携带状态时，合并按 key 进行、dsh 优先：dsh 的 `enabledPlugins` 条目遮蔽 claude 条目（dsh 级联层位于 claude-user 与 project 层之间），dsh 的 `installed_plugins.json` 条目列表——包括空列表——遮蔽该插件 id 的 claude 列表。值得知道的后果：
+
+- 分叉是单向的：dsh-cc 能看到两个 home，真正的 Claude Code 只看得到自己的。
+- **接管陈旧性：** 一旦 dsh-cc 把某个 id 写进 dsh 的 `installed_plugins.json`，之后 claude 侧对该 id 的改动对 dsh-cc 不可见（dsh 已接管该 id）。
+- 只传 **`claudeHome`**（不传 `dshHome`）的调用方保持旧版单根行为：该目录既是读根也是写根。
 
 ## 加载器
 

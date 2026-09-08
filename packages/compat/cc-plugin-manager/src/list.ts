@@ -10,8 +10,9 @@
  * @module @dsh-cc/plugin-manager/list
  */
 
-import { pluginsStatePaths, settingsFileForScope, canonicalizeExistingPath, type PathInputs } from './paths.ts'
-import { loadInstalledPlugins, loadSettingsFile } from './state-store.ts'
+import { settingsFileForScope, canonicalizeExistingPath, type PathInputs } from './paths.ts'
+import { loadMergedInstalledPlugins, loadMergedUserEnabledPlugins } from './merged-state.ts'
+import { loadSettingsFile } from './state-store.ts'
 import type { EnabledPlugins, Scope, ScopeSettingsFile } from './types.ts'
 
 export interface PluginListEntry {
@@ -65,12 +66,16 @@ function isVisible(entryScope: Scope, entryProjectPath: string | undefined, cano
  * with C9 effective enablement and per-scope enablement maps.
  */
 export async function listInstalled(deps: PathInputs): Promise<PluginListEntry[]> {
-  const paths = pluginsStatePaths(deps)
-  const installed = await loadInstalledPlugins(paths.installedPluginsFile)
+  // Merged installed map (§3.4): a dsh entry list — including empty — shadows
+  // the claude list per id; empty-list ids contribute no rows.
+  const installed = (await loadMergedInstalledPlugins(deps)).file
   const canonicalCwd = canonicalizeExistingPath(deps.cwd)
 
+  // User slot = merged user value (§3.3: dsh ?? claude per key); project/local
+  // scope files are unchanged per-repo Claude-Code parity surfaces.
   const scopeSettings = new Map<Scope, EnabledPlugins>()
-  for (const scope of SCOPES) {
+  scopeSettings.set('user', await loadMergedUserEnabledPlugins(deps))
+  for (const scope of ['project', 'local'] as const) {
     const settings: ScopeSettingsFile = await loadSettingsFile(settingsFileForScope(scope, deps))
     scopeSettings.set(scope, settings['enabledPlugins'] ?? {})
   }

@@ -12,7 +12,8 @@ import { installPlugin } from '../src/install.ts'
 import { uninstallPlugin } from '../src/uninstall.ts'
 import { disablePlugin } from '../src/toggles.ts'
 import { PluginManagerError } from '../src/errors.ts'
-import { cleanupTemps, expectError, readJson, rig, tempDir, type Rig } from './helpers.ts'
+import { canonicalizeExistingPath } from '../src/paths.ts'
+import { cleanupTemps, dualDeps, expectError, readJson, rig, snapshotTree, tempDir, type Rig } from './helpers.ts'
 
 afterEach(cleanupTemps)
 
@@ -121,5 +122,95 @@ describe('uninstall (C4)', () => {
     await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: '/nonexistent/pm-path', version: '1.0.0', installedAt: 'x', lastUpdated: 'x' }] } }), 'utf8')
     const result = await uninstallPlugin(deps(r), 'formatter')
     expect(result.id).toBe('formatter@internal')
+  })
+})
+
+/** Seed a claude home whose installed file + user settings carry the id (claude-owned state). */
+async function claudeOwnedRig(opts?: { claudeFlag?: boolean }): Promise<{ r: Rig, dshHome: string, cachePath: string }> {
+  const r = await rig()
+  const dshHome = await tempDir('pm-dsh-')
+  const { writeFile, mkdir } = await import('node:fs/promises')
+  const cachePath = join(r.cacheDir, 'internal', 'formatter', '1.0.0')
+  await mkdir(join(cachePath, '.claude-plugin'), { recursive: true })
+  await writeFile(join(cachePath, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'formatter', version: '1.0.0' }), 'utf8')
+  await mkdir(join(r.claudeHome, 'plugins'), { recursive: true })
+  await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: cachePath, version: '1.0.0', installedAt: '2026-09-05T08:00:00.000Z', lastUpdated: '2026-09-05T08:00:00.000Z' }] } }), 'utf8')
+  if (opts?.claudeFlag !== false) {
+    await writeFile(join(r.claudeHome, 'settings.json'), JSON.stringify({ enabledPlugins: { 'formatter@internal': true } }, null, 2) + '\n', 'utf8')
+  }
+  return { r, dshHome, cachePath }
+}
+
+describe('uninstall (dual-home, S3 §4.3)', () => {
+  it('claude user flag true → explicit false in the dsh file (conditional shadow); claude tree byte-identical; dsh installed file shadows with []', async () => {
+    const { r, dshHome, cachePath } = await claudeOwnedRig()
+    const before = snapshotTree(r.claudeHome)
+    const result = await uninstallPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    expect(result).toEqual({ id: 'formatter@internal', scope: 'user' })
+
+    // §3.4: the dsh installed file materializes the id's post-removal merged list — `[]`.
+    const dshInstalled = await readJson(join(dshHome, 'plugins', 'installed_plugins.json'))
+    expect(dshInstalled.plugins['formatter@internal']).toEqual([])
+    // claude state untouched (W1/W3)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+    // §4.3 conditional shadow: dsh file carries explicit false; claude flag stays true
+    expect((await readJson(join(dshHome, 'settings.json')))['enabledPlugins']).toEqual({ 'formatter@internal': false })
+    // W4: no orphan marker in the claude cache
+    expect(existsSync(join(cachePath, '.orphaned_at'))).toBe(false)
+    expect(existsSync(cachePath)).toBe(true)
+  })
+
+  it('claude user flag absent → plain C4 key removal from the dsh file (dsh key seeded)', async () => {
+    const { r, dshHome } = await claudeOwnedRig({ claudeFlag: false })
+    const { writeFile } = await import('node:fs/promises')
+    // the dsh user file carries the flag from an earlier dsh enable
+    await writeFile(join(dshHome, 'settings.json'), JSON.stringify({ enabledPlugins: { 'formatter@internal': true } }, null, 2) + '\n', 'utf8')
+    const result = await uninstallPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    expect(result).toEqual({ id: 'formatter@internal', scope: 'user' })
+    // removal (not false) — the key is gone; an empty enabledPlugins object remains (C4)
+    expect(await readJson(join(dshHome, 'settings.json'))).toEqual({ enabledPlugins: {} })
+    expect((await readJson(join(dshHome, 'plugins', 'installed_plugins.json'))).plugins['formatter@internal']).toEqual([])
+  })
+
+  it('a dsh-owned install path IS orphan-marked under the dsh cache (W4)', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    await installPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    const dshCachePath = join(dshHome, 'plugins', 'cache', 'internal', 'formatter', '1.0.0')
+    const before = snapshotTree(r.claudeHome)
+    await uninstallPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    expect(existsSync(join(dshCachePath, '.orphaned_at'))).toBe(true)
+    expect(existsSync(dshCachePath)).toBe(true)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('scope-surgical materialization (§3.4): uninstalling the user scope of a claude-resident two-scope id writes the surviving project entries into the dsh file; claude array untouched', async () => {
+    const r = await rig()
+    const dshHome = await tempDir('pm-dsh-')
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    const claudeCachePath = join(r.cacheDir, 'internal', 'formatter', '1.0.0')
+    await mkdir(join(r.claudeHome, 'plugins'), { recursive: true })
+    await writeFile(r.installedFile, JSON.stringify({ version: 2, plugins: { 'formatter@internal': [
+      { scope: 'user', installPath: claudeCachePath, version: '1.0.0', installedAt: '2026-09-05T08:00:00.000Z', lastUpdated: '2026-09-05T08:00:00.000Z' },
+      { scope: 'project', installPath: claudeCachePath, version: '1.0.0', installedAt: '2026-09-05T08:01:00.000Z', lastUpdated: '2026-09-05T08:01:00.000Z', projectPath: canonicalizeExistingPath(r.cwd) },
+    ] } }), 'utf8')
+    const before = snapshotTree(r.claudeHome)
+
+    await uninstallPlugin(dualDeps(r, dshHome, { now: NOW }), 'formatter')
+    const dshInstalled = await readJson(join(dshHome, 'plugins', 'installed_plugins.json'))
+    const entries = dshInstalled.plugins['formatter@internal']
+    expect(entries).toHaveLength(1)
+    expect(entries[0].scope).toBe('project')
+    expect(entries[0].installPath).toBe(claudeCachePath)
+    // claude array untouched (W1)
+    expect((await readJson(r.installedFile)).plugins['formatter@internal']).toHaveLength(2)
+    expect(snapshotTree(r.claudeHome)).toEqual(before)
+  })
+
+  it('single-root keeps C4 byte-parity: the id key is dropped, not []', async () => {
+    const { r, cachePath } = await installedRig()
+    await uninstallPlugin(deps(r), 'formatter')
+    expect(await readJson(r.installedFile)).toEqual({ version: 2, plugins: {} })
+    expect(existsSync(join(cachePath, '.orphaned_at'))).toBe(true)
   })
 })

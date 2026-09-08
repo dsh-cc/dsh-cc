@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { disablePlugin, enablePlugin } from '../src/toggles.ts'
 import { createCcPluginManager } from '../src/index.ts'
 import { PluginManagerError } from '../src/errors.ts'
+
+async function readJson(file: string): Promise<any> {
+  return JSON.parse(await readFile(file, 'utf8'))
+}
 
 const temps: string[] = []
 
@@ -136,5 +141,30 @@ describe('enable/disable (C3)', () => {
     ])
     const settings = await userSettings(r)
     expect(settings['enabledPlugins']).toEqual({ 'formatter@internal': false })
+  })
+})
+
+describe('toggles (dual-home, S3 §4.2)', () => {
+  it('an id installed only claude-side can be toggled; the user flag lands in the dsh settings file', async () => {
+    const claudeHome = await tempDir('pm-tgl-home2-')
+    const dshHome = await tempDir('pm-tgl-dsh2-')
+    const cwd = await tempDir('pm-tgl-cwd2-')
+    await mkdir(join(claudeHome, 'plugins'), { recursive: true })
+    await writeFile(
+      join(claudeHome, 'plugins', 'installed_plugins.json'),
+      JSON.stringify({ version: 2, plugins: { 'formatter@internal': [{ scope: 'user', installPath: '/p/cache/f/1.0.0', version: '1.0.0', installedAt: 'x', lastUpdated: 'x' }] } }),
+      'utf8',
+    )
+    const deps = { claudeHome, dshHome, cwd }
+
+    const result = await enablePlugin(deps, 'formatter')
+    expect(result).toEqual({ id: 'formatter@internal', scope: 'user', enabled: true })
+    expect((await readJson(join(dshHome, 'settings.json')))['enabledPlugins']).toEqual({ 'formatter@internal': true })
+    expect(existsSync(join(claudeHome, 'settings.json'))).toBe(false)
+
+    const disabled = await disablePlugin(deps, 'formatter')
+    expect(disabled.enabled).toBe(false)
+    // C3: the key is kept with `false` — in the dsh file
+    expect((await readJson(join(dshHome, 'settings.json')))['enabledPlugins']).toEqual({ 'formatter@internal': false })
   })
 })
