@@ -1534,6 +1534,8 @@ importers:
 
   packages/plugin/dsh-cc-agents: {}
 
+  packages/plugin/dsh-cc-shunt: {}
+
   packages/preset/cc:
     dependencies:
       '@dsh-cc/bundle-shell':
