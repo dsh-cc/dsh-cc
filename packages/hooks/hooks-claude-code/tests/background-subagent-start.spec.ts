@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
@@ -48,13 +49,13 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
 
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   const persistRoot = mkdtempSync(join(tmpdir(), 'dsh-hooks-background-persist-'))
   dirs.push(persistRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: persistRoot })
   // sendMessage's cold-resume delivery resolves sessions through session-query.
   await ctx.plugin(SessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
-  // SessionProjectionRegistry is already mounted by mountAgentLoopTestDependencies.
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   const adapter = new MockAdapter(script)

@@ -27,7 +27,7 @@ function exec(opts: { name?: string; args?: unknown; session?: Session; signal?:
 }
 
 function sessionOf(id: string): Session {
-  return Session.create(SessionId(id), undefined, { version: 2, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
+  return Session.create(SessionId(id), undefined, { version: 0, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
 }
 
 function decided(overrides: Partial<DecidedCall> = {}): DecidedCall {

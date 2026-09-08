@@ -17,6 +17,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
@@ -73,6 +74,7 @@ async function setup(
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'dsh-cc-task-integration-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -125,14 +127,10 @@ async function setup(
   return { ctx, parent, adapter, wakeCount: () => wakes, delivered }
 }
 
-/** Read one stored session's header + event log through a read handle. */
-async function loadStoredSession(persistence: { open(id: SessionId, access: 'read'): Promise<{ header: SessionHeader; read(): Promise<{ events: readonly SessionEvent[] }>; close(): Promise<void> }> }, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
-  const handle = await persistence.open(id, 'read')
-  try {
-    return { meta: handle.header, events: (await handle.read()).events }
-  } finally {
-    await handle.close()
-  }
+/** Read one stored session's header + event log through the rc.1
+ * sessionPersistence face (`load` returns header + full event log). */
+async function loadStoredSession(persistence: { load(id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> }, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
+  return await persistence.load(id)
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -396,6 +394,12 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
   // with the pure harness API, no dsh-cc code involved; in the settled variant
   // no Activation appears at all, in the aborted-turn variant one materializes
   // 'running' but never issues a model call). Only the natural-settle cold
-  // resume works (pinned by the §4.12 test above). Harness-side gap.
+  // resume works (pinned by the §4.12 test above). Harness-side gap, applies
+  // at rc.1 too: assertAdmitting runs inside the delivery path (including
+  // coldResume), so a sendMessage from a parent still in the registry after
+  // drainContinuableDescendants is refused with DRAINING rather than
+  // cold-resuming the child (harness
+  // packages/subagent/subagent/src/continuation.ts deliverToChild/coldResume
+  // at 0.1.2-rc.1).
   it.skip('a later send_message cold-resumes the drained child from its persisted Session', () => {})
 })

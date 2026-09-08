@@ -28,6 +28,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId, type LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
@@ -106,6 +107,7 @@ async function boot(
 ): Promise<Boot> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   const workspace = join(root, 'workspace')
   if (!existsSync(join(workspace, '.git'))) {
     mkdirSync(workspace, { recursive: true })
@@ -185,8 +187,8 @@ async function boot(
   // RESUMES the persisted parent session instead.
   const parentId = SessionId('parent')
   const persistedParent = await (ctx.get('sessionPersistence') as {
-    stat(id: SessionId): Promise<unknown>
-  }).stat(parentId)
+    readStoredRevision(id: SessionId): Promise<unknown>
+  }).readStoredRevision(parentId)
   const parentOptions = {
     provider: 'mock',
     model: 'mock',

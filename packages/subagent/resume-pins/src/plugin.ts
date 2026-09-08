@@ -229,9 +229,9 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   const gateEnv = async (pin: ResumePin, callingAgent: unknown): Promise<GateEnv> => {
     let sessionExists = false
     try {
-      const persistence = (ctx as unknown as { sessionPersistence?: { stat: (id: ReturnType<typeof SessionId>, options?: { signal?: AbortSignal }) => Promise<unknown> } }).sessionPersistence
-      if (persistence?.stat !== undefined) {
-        sessionExists = (await persistence.stat(SessionId(pin.childId))) !== undefined
+      const persistence = (ctx as unknown as { sessionPersistence?: { readStoredRevision: (id: ReturnType<typeof SessionId>, signal?: AbortSignal) => Promise<unknown> } }).sessionPersistence
+      if (persistence?.readStoredRevision !== undefined) {
+        sessionExists = (await persistence.readStoredRevision(SessionId(pin.childId))) !== undefined
       }
     } catch {
       sessionExists = false

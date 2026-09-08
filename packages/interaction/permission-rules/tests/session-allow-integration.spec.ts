@@ -59,7 +59,7 @@ function text(result: ToolExecutionResult): string {
 
 function agentWithCwd(id: string, cwd: string): Agent {
   const session = Session.create(SessionId(id), undefined, {
-    version: 2,
+    version: 0,
     isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),

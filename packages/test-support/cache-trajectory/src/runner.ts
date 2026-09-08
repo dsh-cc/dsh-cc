@@ -52,13 +52,13 @@ export interface TrajectoryRunResult {
   readonly firstTurnToolCalls: number
 }
 
-/** The agent-loop service face the runner needs. Upstream `create` is async
- * (harness >=0.1.3): it prepares and persists the session before returning. */
+/** The agent-loop service face the runner needs (`create` is synchronous at
+ * harness 0.1.2-rc.1 and returns the created Agent). */
 interface AgentLoopLike {
   create(id: ReturnType<typeof SessionId>, options?: {
     provider?: string
     model?: string
-  }): Promise<Agent>
+  }): Agent
 }
 
 /** The tools-registry face the runner needs. */
