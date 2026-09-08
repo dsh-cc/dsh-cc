@@ -35,7 +35,8 @@ the installed plugin cache:
 If your workspace defines file-based agents named `deep-reasoner` or
 `fast-worker` (e.g. `.claude/agents/deep-reasoner.md`), the bare names
 (`deep-reasoner`) resolve to your workspace definitions; the plugin copies
-resolve only by the exact scoped ids (`dsh-cc-agents:critic`).
+resolve only by the exact scoped ids (`dsh-cc-agents:critic` /
+`dsh-cc-agents:executor`).
 Both appear in the agent catalog; the plugin copies carry distinct
 "official plugin build" descriptions so you can tell them apart.
 

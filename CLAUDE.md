@@ -15,9 +15,9 @@ via `"disableAllHooks": true`.
 
 ### Routing
 - Reasoning-heavy (design, plan review, root-cause, judging ambiguity)
-  → deep-reasoner (Opus)
+  → dsh-cc-agents:critic (Opus)
 - Mechanical (approved-plan execution, repetitive edits, checks)
-  → fast-worker (Sonnet)
+  → dsh-cc-agents:executor (Sonnet)
 - Codex (/codex:rescue --background) is a peer engineer, not a reviewer.
 
 ### Plan-first
@@ -25,21 +25,21 @@ Enter plan mode before: new features, >2-3-file changes, multiple
 viable approaches, refactor/migration/deletion. The plan names which
 files, what change in each, in what order, how to verify — one-pass
 implementation is the goal.
-Before ExitPlanMode: task deep-reasoner to review the plan cold as a
+Before ExitPlanMode: task dsh-cc-agents:critic to review the plan cold as a
 Staff Engineer; revise per its findings, re-review if substantial.
 
 ### High-stakes decisions (parallel blind review)
 For irreversible or expensive choices (architecture, data model,
-deleting subsystems, public API shape): task deep-reasoner AND Codex in
+deleting subsystems, public API shape): task dsh-cc-agents:critic AND Codex in
 parallel, blind to each other. Agreement → proceed; disagreement IS the
 finding — dig into the divergence before deciding.
 
 ### Execution & failure recovery
-Decompose the approved plan into mechanical units → fast-worker; you
+Decompose the approved plan into mechanical units → dsh-cc-agents:executor; you
 stay at the synthesis layer. Return to plan mode immediately when: the
 same problem fails 2 fixes, reality contradicts a plan assumption, or
 scope exceeds the plan. Never patch on top of a broken plan; non-obvious
-failures route root-cause to deep-reasoner before re-planning.
+failures route root-cause to dsh-cc-agents:critic before re-planning.
 
 Batch independent delegations (hard rule): when N subagent tasks are
 mutually independent, emit ALL `subagent_fork` calls in ONE assistant
@@ -54,18 +54,21 @@ another fork's result is the ONLY legal reason to serialize.
   `run_in_background: true`. Synthesize on the wake; do not poll.
 - A definition with `background: true` backgrounds on omit. If you need
   that child's result this turn, pass `run_in_background: false`.
-- `deep-reasoner` and `fast-worker` are pinned `background: true`: omitting
-  `run_in_background` backgrounds them. A mutating same-tree `fast-worker`
-  delegation MUST pass `run_in_background: false` so you can verify before
-  composing — `isolation: worktree` is not wired.
+- `dsh-cc-agents:critic` is pinned `background: true` (read-only, safe):
+  omitting `run_in_background` backgrounds it. `dsh-cc-agents:executor`
+  is deliberately UNPINNED — a mutating same-tree `dsh-cc-agents:executor`
+  delegation defaults to FOREGROUND so you verify its report before
+  composing; pass `run_in_background: true` only for hands-free execution
+  you intend to collect later — `isolation: worktree` is not wired.
 - Keep the batching hard rule above (N independent Tasks in ONE
-  assistant message). Do not background mutating `fast-worker` /
-  same-tree edits: `isolation: worktree` is not wired.
+  assistant message). Do not background mutating `dsh-cc-agents:executor`
+  / same-tree edits without that intent: `isolation: worktree` is not
+  wired.
 
 ### Verification is planned too
 Before verifying, specify: what behavior, how driven (script/browser/
-CLI), what observable result counts as pass. fast-worker executes;
-ambiguous results → deep-reasoner judges — don't re-litigate inline.
+CLI), what observable result counts as pass. dsh-cc-agents:executor executes;
+ambiguous results → dsh-cc-agents:critic judges — don't re-litigate inline.
 
 ### Modification policy: dev branch or worktree, never main
 Never edit/commit directly on `main`. Which isolation you use depends
@@ -143,7 +146,7 @@ install first, then re-run.
     - The pinned v1.7.0 already carries the v1.6.0 Svelte↔TypeScript
       routing fixes; these rules target the general class.
 - sequential_thinking: orchestrator never uses it — route reasoning to
-  deep-reasoner (who may use it for multi-branch explorations).
+  dsh-cc-agents:critic (who may use it for multi-branch explorations).
 
 ### Config is prompt
 Changes to CLAUDE.md or agent contracts are prompt changes: state the

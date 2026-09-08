@@ -1744,6 +1744,7 @@ capabilities:
       - { type: source, path: packages/compat/cc-plugin-loader/src/agents.ts }
       - { type: source, path: packages/subagent/task/src/plugin-agents.ts }
       - { type: test, path: packages/subagent/task/tests/plugin-agents.spec.ts }
+      - { type: test, path: packages/compat/cc-plugin-loader/tests/dsh-cc-agents.spec.ts }
     deviation:
       kind: divergent
       summary: >-
@@ -1759,15 +1760,18 @@ capabilities:
         one-shot); no TaskOutput alias and no outputFile field; omitting
         run_in_background stays foreground unless the definition pins
         background: true, unlike Claude Code's interactive omit=background.
-        Pinned defaults (repo-guarded): the repo agents deep-reasoner and
-        fast-worker pin background: true, so omitting run_in_background on
-        those Task calls launches them continuable in the background (the
-        call resolves { status: 'async_launched' } immediately and the real
-        result arrives later as a wake message — no inline result to compose
-        on); run_in_background: false forces synchronous collection.
-        Deliberate deviation: there is NO global omit=background default —
-        the bundled explore and dsh-cc-guide agents stay unpinned and keep
-        foreground first-epoch collect.
+        Pinned defaults (repo-guarded): the official plugin agent
+        dsh-cc-agents:critic pins background: true, so omitting
+        run_in_background on those Task calls launches them continuable in
+        the background (the call resolves { status: 'async_launched' }
+        immediately and the real result arrives later as a wake message — no
+        inline result to compose on); run_in_background: false forces
+        synchronous collection. Deliberate deviation on pins:
+        dsh-cc-agents:executor ships NO pin — a mutating agent defaults to
+        foreground so the delegator verifies its report before composing —
+        and there is NO global omit=background default either: the bundled
+        explore and dsh-cc-guide agents stay unpinned and keep foreground
+        first-epoch collect.
         Foreground collect refit: non-fork foreground calls (named agents and
         general-purpose) collect the child's first epoch INLINE as a
         continuable child — same pin preallocation, pre-start pin write, and
