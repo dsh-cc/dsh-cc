@@ -106,7 +106,7 @@ describe('L0 prefix stability (compaction off)', () => {
     await bootKeylessStack()
     const result = await runStandardTrajectory()
 
-    const compactionEvents = [...result.agent.session.events]
+    const compactionEvents = [...result.agent.session.snapshotEvents()]
       .filter(event => event.type.startsWith('compaction/'))
     expect(compactionEvents).toEqual([])
   }, 60_000)

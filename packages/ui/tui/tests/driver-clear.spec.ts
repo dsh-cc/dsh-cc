@@ -48,7 +48,7 @@ function makeClearCtx(opts: {
   const cancels: { id: string; args: unknown }[] = []
   const setModeCalls: { agentId: string; mode: string }[] = []
   const executed: string[] = []
-  const boot = { cwd: PROJ_CWD, ...opts.createSession ?? { id: 's-a', events: [], status: 'idle' } }
+  const boot = { cwd: PROJ_CWD, ...opts.createSession ?? { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' } }
   let boots = 0
   const approvalHandlers = new Set<(req: unknown, next: () => void) => void>()
 
@@ -58,7 +58,7 @@ function makeClearCtx(opts: {
       : agentOptions ?? {}
     const agent = {
       options,
-      session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] },
+      session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
       id: `agent-${s.id}`,
       status: s.status ?? 'idle',
       followup: vi.fn(),
@@ -156,7 +156,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('/clear creates a new session, disposes the old handle, and drops prior rows', async () => {
     const { ctx, disposed, createCalls, resumeCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [userEvent('old turn')], status: 'idle' },
+      createSession: { id: 's-a', events: [userEvent('old turn')], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     expect(driver.state.rows).toContainEqual({ kind: 'user', text: 'old turn' })
@@ -176,7 +176,7 @@ describe('createDriver /clear /new /reset', () => {
   it('/new and /reset take the same create path', async () => {
     for (const cmd of ['/new', '/reset'] as const) {
       const { ctx, disposed, createCalls, resumeCalls } = makeClearCtx({
-        createSession: { id: 's-a', events: [userEvent('old turn')], status: 'idle' },
+        createSession: { id: 's-a', events: [userEvent('old turn')], snapshotEvents() { return this.events }, status: 'idle' },
       })
       const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
       const bootCreates = createCalls.length
@@ -191,8 +191,8 @@ describe('createDriver /clear /new /reset', () => {
   it('after /clear, /resume <oldId> restores the previous rows', async () => {
     const oldEvents = [userEvent('old turn')]
     const { ctx } = makeClearCtx({
-      createSession: { id: 's-a', events: oldEvents, status: 'idle' },
-      resumeSessions: { 's-a': { id: 's-a', events: oldEvents, status: 'idle' } },
+      createSession: { id: 's-a', events: oldEvents, status: 'idle' , snapshotEvents() { return this.events } },
+      resumeSessions: { 's-a': { id: 's-a', events: oldEvents, status: 'idle' } , snapshotEvents() { return this.events } },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     await driver.submit('/clear')
@@ -204,7 +204,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('failed create keeps the old session and emits Start failed', async () => {
     const { ctx, disposed, createCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [userEvent('keep me')], status: 'idle' },
+      createSession: { id: 's-a', events: [userEvent('keep me')], snapshotEvents() { return this.events }, status: 'idle' },
       failCreate: true,
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -224,12 +224,12 @@ describe('createDriver /clear /new /reset', () => {
 
   it('drains a parked approval on success', async () => {
     const { ctx, disposed } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     const fire = (ctx as { _fireApproval: (req: unknown) => void })._fireApproval
     fire({
-      agent: { id: 'agent-s-a', session: { id: 's-a', events: [] } },
+      agent: { id: 'agent-s-a', session: { id: 's-a', events: [], snapshotEvents() { return this.events } } },
       toolName: 'Bash',
       callId: undefined,
       reason: undefined,
@@ -244,7 +244,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('writes the resume marker to the new session id', async () => {
     const { ctx, createCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     await driver.submit('/clear')
@@ -255,7 +255,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('passes the live /model route as create agentOptions', async () => {
     const { ctx, createCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD, provider: 'p', model: 'm' })
     await driver.submit('/clear')
@@ -264,7 +264,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('failed create on a running turn does not cancel, drain, or dispose', async () => {
     const { ctx, disposed, cancels } = makeClearCtx({
-      createSession: { id: 's-a', events: [userEvent('keep me')], status: 'running' },
+      createSession: { id: 's-a', events: [userEvent('keep me')], snapshotEvents() { return this.events }, status: 'running' },
       failCreate: true,
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -284,13 +284,13 @@ describe('createDriver /clear /new /reset', () => {
 
   it('failed create keeps a parked approval parked', async () => {
     const { ctx, disposed } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       failCreate: true,
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     const fire = (ctx as { _fireApproval: (req: unknown) => void })._fireApproval
     fire({
-      agent: { id: 'agent-s-a', session: { id: 's-a', events: [] } },
+      agent: { id: 'agent-s-a', session: { id: 's-a', events: [], snapshotEvents() { return this.events } } },
       toolName: 'Bash',
       callId: undefined,
       reason: undefined,
@@ -306,7 +306,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('cancels a running turn before dispose and drops the interrupt row', async () => {
     const { ctx, cancels, createCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [userEvent('old turn')], status: 'running' },
+      createSession: { id: 's-a', events: [userEvent('old turn')], snapshotEvents() { return this.events }, status: 'running' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     expect(driver.state.busy).toBe(true)
@@ -335,7 +335,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('does not call setMode when the captured mode is default', async () => {
     const { ctx, setModeCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       rules: true,
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -345,7 +345,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('creates with the live session cwd, not the process cwd', async () => {
     const { ctx, createCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle', cwd: '/worktree' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle', cwd: '/worktree' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     await driver.submit('/clear')
@@ -354,7 +354,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('double /clear creates twice with distinct ids', async () => {
     const { ctx, createCalls, disposed } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     const bootCreates = createCalls.length
@@ -385,7 +385,7 @@ describe('createDriver /clear /new /reset', () => {
 
   it('falls back to boot agentOptions when that is the live route', async () => {
     const { ctx, createCalls } = makeClearCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD, provider: 'boot-p', model: 'boot-m' })
     await driver.submit('/clear')

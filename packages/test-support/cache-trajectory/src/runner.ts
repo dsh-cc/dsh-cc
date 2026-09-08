@@ -52,9 +52,10 @@ export interface TrajectoryRunResult {
   readonly firstTurnToolCalls: number
 }
 
-/** The agent-loop service face the runner needs. */
+/** The agent-loop service face the runner needs (`create` is synchronous at
+ * harness 0.1.2-rc.1 and returns the created Agent). */
 interface AgentLoopLike {
-  create(id: ReturnType<typeof SessionId>, options: {
+  create(id: ReturnType<typeof SessionId>, options?: {
     provider?: string
     model?: string
   }): Agent
@@ -119,7 +120,7 @@ export async function runCacheTrajectory(
 
   const provider = options.provider ?? trajectory.provider
   const model = options.model ?? trajectory.model
-  const agent = loop.create(SessionId(trajectory.sessionId), { provider, model })
+  const agent = await loop.create(SessionId(trajectory.sessionId), { provider, model })
   const timeoutMsPerTurn = options.timeoutMsPerTurn ?? DEFAULT_TURN_TIMEOUT_MS
   const startedAt = new Date().toISOString()
 
@@ -133,7 +134,7 @@ export async function runCacheTrajectory(
   }
 
   const finishedAt = new Date().toISOString()
-  const events: readonly SessionEvent[] = agent.session.events
+  const events: readonly SessionEvent[] = agent.session.snapshotEvents()
 
   const rows: RequestUsageRow[] = []
   const rowsWithoutUsage: number[] = []

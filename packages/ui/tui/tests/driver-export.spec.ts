@@ -13,7 +13,7 @@ import { rowsToMarkdown } from '@dsh-cc/tui/export-markdown.ts'
 function makeCtx(events: unknown[]) {
   const agent = {
     options: {},
-    session: { id: 's-export', header: {}, events },
+    session: { id: 's-export', header: {}, events, snapshotEvents() { return this.events } },
     id: 'agent-s-export',
     status: 'idle',
     followup: vi.fn(),

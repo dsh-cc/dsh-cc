@@ -37,7 +37,7 @@ One cordis plugin (`apply`) with:
 
 Zero-op when unmounted: pins are simply unread and behavior is the legacy
 behavior. Only pinned children are affected; a missing pin is a legacy/foreign
-child (pass-through) and same-epoch followups to a live Activation are untouched.
+child (pass-through) and same-epoch steer deliveries to a live Activation are untouched.
 
 ## Composition
 

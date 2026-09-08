@@ -65,7 +65,7 @@ function makeCtx(opts: {
         return {
           agent: {
             options: agentOpts,
-            session: { id: 's-boot', header: {}, events: [] },
+            session: { id: 's-boot', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-boot',
             status: 'idle',
             followup() {},
@@ -80,7 +80,7 @@ function makeCtx(opts: {
         return {
           agent: {
             options: agentOpts,
-            session: { id: 's-resume', header: {}, events: opts.resumeEvents ?? [] },
+            session: { id: 's-resume', header: {}, events: opts.resumeEvents ?? [] , snapshotEvents() { return this.events } },
             id: 'a-resume',
             status: opts.resumeStatus ?? 'idle',
             followup() {},

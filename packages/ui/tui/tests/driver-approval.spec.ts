@@ -35,12 +35,12 @@ function makeQueueCtx(): {
   nextCalls: () => number
 } {
   const approvalHandlers = new Set<(req: FakeApprovalRequest, next: () => unknown) => unknown>()
+  const questionHandlers = new Set<(req: FakeQuestionRequest, next: () => unknown) => unknown>()
   const subagentStartHandlers = new Set<(info: { runId: string; provider: string; id: string }) => void>()
-  let questionProvider: { ask(req: FakeQuestionRequest): Promise<unknown> } | undefined
   let nextCount = 0
   const agent = {
     id: 'a-queue',
-    session: { id: 's-queue', header: {}, events: [] },
+    session: { id: 's-queue', header: {}, events: [], snapshotEvents() { return this.events } },
     options: {},
     status: 'idle',
   }
@@ -53,19 +53,13 @@ function makeQueueCtx(): {
           mount: async () => ({ id: 'cc' }),
         }
       }
-      if (key === 'userQuestions') {
-        return {
-          registerProvider(provider: { ask(req: FakeQuestionRequest): Promise<unknown> }) {
-            questionProvider = provider
-            return () => {}
-          },
-        }
-      }
       return undefined
     },
     on(event: string, handler: (...args: unknown[]) => unknown) {
       if (event === 'approval/request') {
         approvalHandlers.add(handler as (req: FakeApprovalRequest, next: () => unknown) => unknown)
+      } else if (event === 'user-questions/request') {
+        questionHandlers.add(handler as (req: FakeQuestionRequest, next: () => unknown) => unknown)
       } else if (event === 'subagent/start') {
         subagentStartHandlers.add(handler as (info: { runId: string; provider: string; id: string }) => void)
       }
@@ -84,7 +78,14 @@ function makeQueueCtx(): {
       return Promise.resolve(result as Promise<string>)
     },
     ask(req) {
-      return questionProvider!.ask(req) as Promise<{ answers: { id: string; selected: string[] }[] }>
+      const noAnswerer = () => Promise.reject(new Error('NO_PROVIDER'))
+      let result: Promise<unknown> | undefined
+      for (const listener of questionHandlers) {
+        result = (listener(req, noAnswerer) as Promise<unknown>) ?? result
+      }
+      // Created lazily so an unanswered dispatch does not leave a rejected
+      // promise unhandled when a listener claims the request.
+      return (result ?? noAnswerer()) as Promise<{ answers: { id: string; selected: string[] }[] }>
     },
     emitSubagent(info) {
       for (const handler of subagentStartHandlers) handler(info)
@@ -217,7 +218,7 @@ describe('approval modal queue', () => {
     expect(driver.state.subagents.map(run => run.sessionId)).toContain('sub-s1')
 
     const pending = queue.request({
-      agent: { id: 'a-sub', session: { id: 'sub-s1', events: [] } },
+      agent: { id: 'a-sub', session: { id: 'sub-s1', events: [], snapshotEvents() { return this.events } } },
       toolName: 'Bash',
     })
     expect(driver.state.approval?.toolName).toBe('Bash')
@@ -233,7 +234,7 @@ describe('approval modal queue', () => {
     const driver = await createDriver(queue.ctx as never, {})
 
     const pending = queue.request({
-      agent: { id: 'a-stranger', session: { id: 's-stranger', events: [] } },
+      agent: { id: 'a-stranger', session: { id: 's-stranger', events: [], snapshotEvents() { return this.events } } },
       toolName: 'Bash',
     })
     expect(driver.state.approval).toBeUndefined()

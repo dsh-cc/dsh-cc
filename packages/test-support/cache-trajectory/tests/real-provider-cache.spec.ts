@@ -65,7 +65,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('provider cache regression (real 
     expect(report.totals.hitRateExcludingFirst!).toBeGreaterThanOrEqual(thresholds.sessionMinRate)
 
     // World-check of the conversation itself: the tool value reached the answer.
-    const finalText = [...result.agent.session.events]
+    const finalText = [...result.agent.session.snapshotEvents()]
       .reverse()
       .find(event => event.type === 'assistant/message')
     const text = finalText?.type === 'assistant/message'

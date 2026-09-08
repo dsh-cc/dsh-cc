@@ -4,7 +4,8 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { settingsNamespace, SettingsConflictError } from '@deepseek-ai/dsh-settings'
+import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 
 // Concurrency gate for `node:fs/promises.readFile`. When armed, the next read
@@ -105,7 +106,7 @@ async function readDoc(path: string): Promise<Record<string, unknown>> {
 
 /** Resolved `ui-theme` registration for read/update access. */
 function theme(ctx: Context) {
-  return ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+  return ctx.settings.register('ui-theme' as SettingsNamespace, ThemeSchema)
 }
 
 describe('settings cascade hot reload', () => {
@@ -121,21 +122,23 @@ describe('settings cascade hot reload', () => {
   }, 15000)
 
   it('coalesces rapid consecutive writes into few reloads', async () => {
-    const ctx = await boot()
+    // A 2s write-settle window: five awaited writes (each however slow) land
+    // inside it, so the watcher must coalesce them into one reload instead of
+    // firing per write. Deterministic — no wall-clock sleeps.
+    const ctx = await boot({ watch: { stabilityThresholdMs: 2000 } })
     const scope = theme(ctx)
     const counter = commitCounter(ctx)
+    const provider = ctx.settings as unknown as { settled(): Promise<void> }
 
-    // Five distinct values inside one write-settle window: the watcher's
-    // awaitWriteFinish debounce must fold them into at most a couple of
-    // reloads instead of one per write.
     for (let i = 0; i < 5; i++) {
       await writeDoc(userPath(ctx), { 'ui-theme': { theme: `tone-${i}` } })
     }
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('tone-4')
     }, { timeout: 3000 })
-    // Let any trailing reloads land before counting.
-    await new Promise(resolve => setTimeout(resolve, 400))
+    // Let the coalesced reload (and any trailing one) fully land before
+    // counting: the operations-chain tail settles when the queue is drained.
+    await provider.settled()
     expect(counter.commits()).toBeLessThan(5)
     counter.stop()
   }, 15000)
@@ -237,7 +240,7 @@ describe('settings cascade hot reload', () => {
     expect(revisionAt()).toBe(1)
 
     await expect(
-      ctx.settings.update(settingsNamespace('ui-theme'), { theme: 'stale' }, 0),
+      ctx.settings.update('ui-theme' as SettingsNamespace, { theme: 'stale' }, 0),
     ).rejects.toThrow(SettingsConflictError)
   }, 15000)
 
@@ -253,7 +256,7 @@ describe('settings cascade hot reload', () => {
       localSettingsPath: join(projectDir, '.claude', 'settings.local.json'),
     })
     await fiber
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme' as SettingsNamespace, ThemeSchema)
     expect(scope.get()).toEqual({ theme: 'dark', fontSize: 14 })
     const counter = commitCounter(ctx)
 

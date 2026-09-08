@@ -30,26 +30,28 @@ function blocksToText(content: ContentBlock[]): string {
   return content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map(b => b.text).join('')
 }
 
-function base(ctx: Context, agent: Agent | undefined, event: string): Record<string, unknown> {
+function base(agent: Agent | undefined, event: string): Record<string, unknown> {
   return {
     session_id: agent?.session.header.id ?? '',
-    transcript_path: agent === undefined
-      ? ''
-      : ctx.get('sessionPersistence')?.locate(agent.session.header)?.path ?? '',
+    // The pinned persistence seam exposes no public artifact-path accessor
+    // (its jsonl backend's `locate` is private), so the field stays empty —
+    // same as upstream's own hooks-claude-code at the pin, whose base() emits
+    // `transcript_path: ''` (recorded consumer gap in that package's README).
+    transcript_path: '',
     cwd: agent?.session.header.cwd ?? process.cwd(),
     hook_event_name: event,
   }
 }
 
-export function sessionStartPayload(ctx: Context, agent: Agent, source: string): Record<string, unknown> {
-  return { ...base(ctx, agent, 'SessionStart'), source }
+export function sessionStartPayload(_ctx: Context, agent: Agent, source: string): Record<string, unknown> {
+  return { ...base(agent, 'SessionStart'), source }
 }
 /** SessionResume: the base session fields plus the `resume` source (CC's source enum). */
-export function sessionResumePayload(ctx: Context, agent: Agent, source: string): Record<string, unknown> {
-  return { ...base(ctx, agent, 'SessionResume'), source }
+export function sessionResumePayload(_ctx: Context, agent: Agent, source: string): Record<string, unknown> {
+  return { ...base(agent, 'SessionResume'), source }
 }
-export function promptPayload(ctx: Context, agent: Agent, content: ContentBlock[]): Record<string, unknown> {
-  return { ...base(ctx, agent, 'UserPromptSubmit'), prompt: blocksToText(content) }
+export function promptPayload(_ctx: Context, agent: Agent, content: ContentBlock[]): Record<string, unknown> {
+  return { ...base(agent, 'UserPromptSubmit'), prompt: blocksToText(content) }
 }
 
 /**
@@ -63,11 +65,11 @@ function hookToolName(name: string): string {
   return ccCanonicalToolName(name)
 }
 
-export function preToolPayload(ctx: Context, exec: ToolExecution): Record<string, unknown> {
-  return { ...base(ctx, exec.agent, 'PreToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId }
+export function preToolPayload(_ctx: Context, exec: ToolExecution): Record<string, unknown> {
+  return { ...base(exec.agent, 'PreToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId }
 }
-export function postToolPayload(ctx: Context, exec: ToolExecution, result: ToolExecutionResult): Record<string, unknown> {
-  return { ...base(ctx, exec.agent, 'PostToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, tool_response: blocksToText(result.content) }
+export function postToolPayload(_ctx: Context, exec: ToolExecution, result: ToolExecutionResult): Record<string, unknown> {
+  return { ...base(exec.agent, 'PostToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, tool_response: blocksToText(result.content) }
 }
 
 /**
@@ -76,8 +78,8 @@ export function postToolPayload(ctx: Context, exec: ToolExecution, result: ToolE
  * content (CC's `error` string). `is_interrupt` is omitted (not derivable from
  * the harness seam).
  */
-export function postToolFailurePayload(ctx: Context, exec: ToolExecution, result: ToolExecutionResult): Record<string, unknown> {
-  return { ...base(ctx, exec.agent, 'PostToolUseFailure'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, error: blocksToText(result.content) }
+export function postToolFailurePayload(_ctx: Context, exec: ToolExecution, result: ToolExecutionResult): Record<string, unknown> {
+  return { ...base(exec.agent, 'PostToolUseFailure'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, error: blocksToText(result.content) }
 }
 /**
  * The Stop payload. `stopHookActive` is the CC `stop_hook_active` loop-guard
@@ -86,8 +88,8 @@ export function postToolFailurePayload(ctx: Context, exec: ToolExecution, result
  * incrementing — block #1 observes `false`). The SubagentStop payload keeps
  * `stop_hook_active: false` — the bridge never blocks at SubagentStop.
  */
-export function stopPayload(ctx: Context, agent: Agent, stopHookActive: boolean): Record<string, unknown> {
-  return { ...base(ctx, agent, 'Stop'), stop_hook_active: stopHookActive }
+export function stopPayload(_ctx: Context, agent: Agent, stopHookActive: boolean): Record<string, unknown> {
+  return { ...base(agent, 'Stop'), stop_hook_active: stopHookActive }
 }
 /**
  * Build a SubagentStart/SubagentStop payload from the CC base (the child's
@@ -95,9 +97,9 @@ export function stopPayload(ctx: Context, agent: Agent, stopHookActive: boolean)
  * fields. `agent_type` is the CC-default {@link SUBAGENT_TYPE}; `stop_hook_active`
  * is present on SubagentStop only (the loop-guard flag, always false).
  */
-export function subagentPayload(ctx: Context, event: 'SubagentStart' | 'SubagentStop', info: { id: string }, child: Agent | undefined): Record<string, unknown> {
+export function subagentPayload(_ctx: Context, event: 'SubagentStart' | 'SubagentStop', info: { id: string }, child: Agent | undefined): Record<string, unknown> {
   return {
-    ...base(ctx, child, event),
+    ...base(child, event),
     agent_id: info.id,
     agent_type: SUBAGENT_TYPE,
     ...event === 'SubagentStop' ? { stop_hook_active: false } : {},
@@ -109,34 +111,34 @@ export function subagentPayload(ctx: Context, event: 'SubagentStart' | 'Subagent
  * (session-event observers and `session/disposed`). Mirrors {@link base}, whose
  * `agent`-shaped fields come from the session header here.
  */
-function sessionBase(ctx: Context, session: Session, event: string): Record<string, unknown> {
+function sessionBase(session: Session, event: string): Record<string, unknown> {
   return {
     session_id: session.header.id,
-    transcript_path: ctx.get('sessionPersistence')?.locate(session.header)?.path ?? '',
+    transcript_path: '',
     cwd: session.header.cwd ?? process.cwd(),
     hook_event_name: event,
   }
 }
 
 /** Setup (first-run approximation): a brand-new startup session fires with `source: 'init'`. */
-export function setupPayload(ctx: Context, agent: Agent): Record<string, unknown> {
-  return { ...base(ctx, agent, 'Setup'), source: 'init' }
+export function setupPayload(_ctx: Context, agent: Agent): Record<string, unknown> {
+  return { ...base(agent, 'Setup'), source: 'init' }
 }
 
 /** PermissionRequest: the tool the approval is about, from the tool-ext route. */
-export function permissionRequestPayload(ctx: Context, req: ApprovalRequest): Record<string, unknown> {
-  return { ...base(ctx, req.agent, 'PermissionRequest'), tool_name: hookToolName(req.toolName) }
+export function permissionRequestPayload(_ctx: Context, req: ApprovalRequest): Record<string, unknown> {
+  return { ...base(req.agent, 'PermissionRequest'), tool_name: hookToolName(req.toolName) }
 }
 
 /** PermissionDenied: the observer only records the outcome, so the reason is approximated. */
-export function permissionDeniedPayload(ctx: Context, session: Session): Record<string, unknown> {
-  return { ...sessionBase(ctx, session, 'PermissionDenied'), permission_denial_reason: 'Permission request rejected' }
+export function permissionDeniedPayload(_ctx: Context, session: Session): Record<string, unknown> {
+  return { ...sessionBase(session, 'PermissionDenied'), permission_denial_reason: 'Permission request rejected' }
 }
 
 /** Notification (permission_prompt subtype only): the question that was asked. */
-export function notificationPayload(ctx: Context, session: Session, asked: SessionEvent<'approval/asked'>): Record<string, unknown> {
+export function notificationPayload(_ctx: Context, session: Session, asked: SessionEvent<'approval/asked'>): Record<string, unknown> {
   return {
-    ...sessionBase(ctx, session, 'Notification'),
+    ...sessionBase(session, 'Notification'),
     notification_type: 'permission_prompt',
     tool_name: hookToolName(asked.data.toolName),
     ...asked.data.reason !== undefined ? { permission_denial_reason: asked.data.reason } : {},
@@ -144,13 +146,13 @@ export function notificationPayload(ctx: Context, session: Session, asked: Sessi
 }
 
 /** PostCompact: emitted after a compaction/end session event (observe-only). */
-export function postCompactPayload(ctx: Context, session: Session): Record<string, unknown> {
-  return { ...sessionBase(ctx, session, 'PostCompact') }
+export function postCompactPayload(_ctx: Context, session: Session): Record<string, unknown> {
+  return { ...sessionBase(session, 'PostCompact') }
 }
 
 /** SessionEnd: CC's `reason` is not derivable from `session/disposed`, so it is `'other'`. */
-export function sessionEndPayload(ctx: Context, session: Session): Record<string, unknown> {
-  return { ...sessionBase(ctx, session, 'SessionEnd'), reason: 'other' }
+export function sessionEndPayload(_ctx: Context, session: Session): Record<string, unknown> {
+  return { ...sessionBase(session, 'SessionEnd'), reason: 'other' }
 }
 
 /** Map a harness error onto Claude Code's StopFailure error-code vocabulary (default `unknown`). */
@@ -169,19 +171,19 @@ function stopFailureErrorCode(error: unknown): string {
 }
 
 /** StopFailure: the failing agent plus the mapped error code and text. */
-export function stopFailurePayload(ctx: Context, agent: Agent, error: unknown): Record<string, unknown> {
+export function stopFailurePayload(_ctx: Context, agent: Agent, error: unknown): Record<string, unknown> {
   const message = error && typeof error === 'object' && 'message' in error
     ? String((error as { message: unknown }).message)
     : String(error)
-  return { ...base(ctx, agent, 'StopFailure'), error: message, error_code: stopFailureErrorCode(error) }
+  return { ...base(agent, 'StopFailure'), error: message, error_code: stopFailureErrorCode(error) }
 }
 
 /** TaskCreated: the registry-issued id and producer label of a newly-appeared job. */
-export function taskCreatedPayload(ctx: Context, job: { id: JobId; label: string }): Record<string, unknown> {
-  return { ...base(ctx, undefined, 'TaskCreated'), task_id: job.id, task_text: job.label }
+export function taskCreatedPayload(_ctx: Context, job: { id: JobId; label: string }): Record<string, unknown> {
+  return { ...base(undefined, 'TaskCreated'), task_id: job.id, task_text: job.label }
 }
 
 /** TeammateIdle: a subagent entered idle (the bridge only fires for subagent scopes). */
-export function teammateIdlePayload(ctx: Context, agent: Agent): Record<string, unknown> {
-  return { ...base(ctx, agent, 'TeammateIdle') }
+export function teammateIdlePayload(_ctx: Context, agent: Agent): Record<string, unknown> {
+  return { ...base(agent, 'TeammateIdle') }
 }

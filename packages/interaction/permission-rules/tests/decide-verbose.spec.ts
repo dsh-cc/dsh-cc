@@ -8,7 +8,7 @@ import type { ToolExecution } from '@dsh-cc/tools'
 function fakeExec(name: string, args: unknown, opts: { cwd?: string } = {}): ToolExecution {
   const agent = opts.cwd === undefined ? undefined : ({
     id: 'a1',
-    session: { events: [], header: { cwd: opts.cwd } },
+    session: { seq: 0, snapshotEvents: (): readonly unknown[] => [], eventAt: (): undefined => undefined, header: { cwd: opts.cwd } },
   } as unknown as ToolExecution['agent'])
   return {
     signal: new AbortController().signal,

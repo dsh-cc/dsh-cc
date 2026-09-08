@@ -12,10 +12,17 @@
  * @module @dsh-cc/web-fetch-http
  */
 
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
-import { HttpFetchProvider, LOCAL_FETCH_PROVIDER_ID } from '@deepseek-ai/dsh-web-fetch-http'
+import { WebError } from '@deepseek-ai/dsh-web'
+import {
+  HttpFetchProvider,
+  LOCAL_FETCH_PROVIDER_ID,
+  type HttpFetchResolver,
+} from '@deepseek-ai/dsh-web-fetch-http'
 import { CcHttpFetchProvider } from './provider.ts'
 import { gateAndRewrite, isBlockedDestination } from './ssrf.ts'
 import type { GatePolicy } from './ssrf.ts'
@@ -106,18 +113,52 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveFinite('maxBodyChars', resolved.maxBodyChars)
   assertTimeoutMs(resolved.timeoutMs)
   assertNonNegativeInteger('maxRedirects', resolved.maxRedirects)
-  const inner = new HttpFetchProvider({
-    maxUrlLength: resolved.maxUrlLength,
-    maxResponseBytes: resolved.maxResponseBytes,
-    maxBodyChars: resolved.maxBodyChars,
-    timeoutMs: resolved.timeoutMs,
-    maxRedirects: resolved.maxRedirects,
-    userAgent: resolved.userAgent,
-  })
+  // maxUrlLength is dsh-cc's own policy knob: it is enforced by the SSRF gate
+  // (CcHttpFetchProvider's GatePolicy below), not by the upstream limits
+  // literal — upstream HttpFetchLimits no longer carries it.
+  // Upstream HttpFetchProvider now resolves destinations itself through its
+  // public-address policy (rejecting every non-public IP). When dsh-cc's gate
+  // policy allows private destinations (blockPrivateNetwork: false — the
+  // documented escape hatch for local mirrors), inject a permissive resolver
+  // so the inner provider does not re-impose the public-only rule; when the
+  // policy blocks privates, keep upstream's strict default resolver.
+  const inner = new HttpFetchProvider(
+    {
+      maxResponseBytes: resolved.maxResponseBytes,
+      maxBodyChars: resolved.maxBodyChars,
+      timeoutMs: resolved.timeoutMs,
+      maxRedirects: resolved.maxRedirects,
+      userAgent: resolved.userAgent,
+    },
+    resolved.blockPrivateNetwork ? undefined : permissiveAddressResolver,
+  )
   const policy: GatePolicy = {
     maxUrlLength: resolved.maxUrlLength,
     blockPrivateNetwork: resolved.blockPrivateNetwork,
     upgradeInsecure: resolved.upgradeInsecure,
   }
   ctx.web.registerFetchProvider(new CcHttpFetchProvider(inner, policy))
+}
+
+/**
+ * A resolver that accepts every resolved address, including private ones —
+ * the opt-in complement of upstream's public-address policy for
+ * `blockPrivateNetwork: false`. Mirrors `resolvePublicAddresses`'s happy path
+ * without the public-only rejection.
+ */
+const permissiveAddressResolver: HttpFetchResolver = async (hostname, signal) => {
+  const unbracketed = hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname
+  const literalFamily = isIP(unbracketed)
+  const resolved = literalFamily === 0
+    ? await lookup(unbracketed, { all: true, order: 'verbatim' })
+    : [{ address: unbracketed, family: literalFamily }]
+  if (signal.aborted) throw new WebError('web fetch aborted', 'WEB_ABORTED')
+  if (resolved.length === 0) {
+    throw new WebError(`hostname "${hostname}" resolved to no addresses`, 'WEB_PROVIDER_ERROR')
+  }
+  return resolved
+    .filter(entry => entry.family === 4 || entry.family === 6)
+    .map(entry => ({ address: entry.address, family: entry.family as 4 | 6 }))
 }

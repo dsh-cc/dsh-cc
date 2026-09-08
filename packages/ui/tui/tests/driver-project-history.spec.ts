@@ -35,7 +35,7 @@ function makeCtx(opts: {
 }): { ctx: Record<string, unknown> } {
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
     options: {},
-    session: { id: s.id, header: { cwd: s.cwd }, events: s.events ?? [] },
+    session: { id: s.id, header: { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',
     followup: vi.fn(),

@@ -185,17 +185,19 @@
 # that reaches it shares one entry-local realm here, and a consumer left
 # outside would resolve a host registry this preset does not populate.
 #
-# `tool-subagent-report` is host-plane for the same reason as the registry,
-# not because a preset may not want it: it registers a CONTINUABLE SETUP on
-# that singleton rather than a tool this agent calls, and the setup list is
-# not scope-aware — one copy per mounted preset means every child gets
-# `report` registered once per live session, which throws on the second.
+# `tool-subagent-report` is GONE upstream: there is no report tool anymore.
+# Workers return outcomes to their parent with the host-plane
+# `tool-subagent-control` send_message tool (addressed to the parent's session
+# id), and settlement reaches the parent as the subagent manager's
+# `subagent-settled` notice. `tool-subagent-control` stays host-plane for the
+# same reason as the registry: its tools resolve `ctx.subagents.sendMessage` /
+# interrupt state on the host plane, not a tool this agent registers locally.
 #
 # `tool-subagent` and `tool-subagent-fork` (the harness spawn/fork Task tools)
 # are DISABLED here — the CC Task tool is provided by the `tool-task` row in
 # the cc-services group instead. That replacement Task now implements the
 # continuable loop itself: `run_in_background: true` starts a durable
-# background child on the spawn provider, and report / send_message /
+# background child on the spawn provider, and send_message /
 # list_agents / interrupt_agent operate on its returned agentId. The harness
 # rows stay disabled. Note for future readers: the disabled
 # `tool-subagent-fork` row's `backgroundMode: continuable` config is inert
@@ -312,7 +314,10 @@
 # break in-group resolution too. `mcp` (the plugin MCP seam) IS isolated:
 # only in-group loader fibers `ctx.get('mcp')`; a root-realm provide would
 # trip leakedServices (the providing fiber is the cc-mcp-seam child, inside
-# the preset mount).
+# the preset mount). `hooks` (the plugin hooks seam) IS isolated like `mcp`:
+# only in-group loader fibers ctx.get('hooks'); the providing fiber is
+# hooks-claude-code, inside this group — a root-realm provide would trip
+# leakedServices.
 - id: cc-services
   name: cordis:group
   group: true
@@ -324,6 +329,7 @@
     mcpConnections: true
     hookBridgeStatus: true
     mcp: true
+    hooks: true
   config:
     # ToolSearch: model-called search that activates deferred tools per scope.
     - id: tool-search
@@ -332,6 +338,22 @@
     # Model-free staleness microcompaction (auto: false by default).
     - id: compaction-micro
       name: '@dsh-cc/compaction-micro'
+
+    # The hook bridge: runs the Claude Code hooks.json / settings hook config
+    # on the harness interception seams and provides the `hooks` seam plugin
+    # hooks merge through. Must mount BEFORE cc-shell-glue: the glue's
+    # CcPluginsService.mountAll probes ctx.get('hooks') at boot, so the bridge
+    # must have provided it first. Nothing between glue and bridge consumes
+    # bridge services at mount time (command-doctor reads hookBridgeStatus
+    # lazily at invocation), and the bridge's interception listeners use
+    # prepend:true, so ordering vs permission-rules is compose-order-insensitive.
+    - id: hooks-claude-code
+      name: '@dsh-cc/hooks-claude-code'
+      # Tracked root-level hook config (serena code-intelligence plan Phase 0).
+      # Relative configPath resolves against the process launch cwd, so a
+      # worktree session started at the worktree root loads it by construction.
+      config:
+        configPath: hooks.json
 
     # CC plugins on disk (agents/skills/commands/hooks/mcp servers) plus the
     # base agent preset dirs and .mcp.json server wiring — see the glue plugin.
@@ -403,14 +425,6 @@
     # leakedServices gate only because they sit INSIDE the group.
     - id: memory
       name: '@dsh-cc/memory'
-
-    - id: hooks-claude-code
-      name: '@dsh-cc/hooks-claude-code'
-      # Tracked root-level hook config (serena code-intelligence plan Phase 0).
-      # Relative configPath resolves against the process launch cwd, so a
-      # worktree session started at the worktree root loads it by construction.
-      config:
-        configPath: hooks.json
 
     # Replaces the stock dsh-tool-web web_fetch (fetch: false above): adds the
     # optional `prompt`, summarized on the cheap lane when the haiku alias is

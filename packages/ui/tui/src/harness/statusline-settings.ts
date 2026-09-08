@@ -7,10 +7,10 @@
  */
 
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 
 /** Settings namespace carrying the status-line section (kebab-case). */
-export const STATUSLINE_SETTINGS_NAMESPACE = settingsNamespace('statusline')
+export const STATUSLINE_SETTINGS_NAMESPACE = 'statusline' as SettingsNamespace
 
 /** Raw (unresolved) settings section for the status line, CC-shaped and open. */
 export type StatusLineSection = {

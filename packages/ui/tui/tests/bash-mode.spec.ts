@@ -383,7 +383,7 @@ describe('`!` bash mode (root)', () => {
   it('runs !echo end-to-end through a real driver into the grid', async () => {
     const agent = {
       options: {},
-      session: { id: 's-vt', header: {}, events: [] },
+      session: { id: 's-vt', header: {}, events: [], snapshotEvents() { return this.events } },
       id: 'agent-s-vt',
       status: 'idle',
       followup: vi.fn(),

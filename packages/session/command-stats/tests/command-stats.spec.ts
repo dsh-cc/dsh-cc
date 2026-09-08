@@ -4,7 +4,7 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MessageId } from '@deepseek-ai/dsh-llm/brand'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
@@ -155,7 +155,7 @@ describe('/stats human command', () => {
   })
   it('reports folded statistics through the registry boundary', async () => {
     const test = await harness()
-    test.session.append('tool/call', { turn: 1, step: 1, callId: CallId('c1'), name: 'read_file', arguments: '{}' })
+    test.session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('c1'), name: 'read_file', arguments: '{}' })
     test.session.append('assistant/message', {
       turn: 1, step: 1,
       message: { role: 'assistant', source: { kind: 'model', provider: 'p', model: 'm' }, content: [], id: MessageId('a1') },

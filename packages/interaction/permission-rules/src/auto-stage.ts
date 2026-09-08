@@ -270,7 +270,7 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
     if (seededSessions.has(sessionId)) return
     seededSessions.add(sessionId)
     if ((routeFailures.get(routeKey) ?? 0) > 0) return
-    const events = foldClassifiers(session.events)
+    const events = foldClassifiers(session.snapshotEvents())
     if (events.some(event => event.failure === 'breaker')) breakerAudited.add(sessionId)
     const streak = trailingRouteFailureStreak(events, routeKey, CLASSIFIER_BREAKER_THRESHOLD)
     if (streak <= 0) return

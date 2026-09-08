@@ -17,13 +17,12 @@ import type z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
-import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
-import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
 import { resolveAlias, toOneShotRoute } from '@dsh-cc/model-aliases'
-import { installSettingsSection, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value
 // dependency on the seam.
@@ -40,7 +39,9 @@ import {
   type PermissionRuleSource,
 } from './types.ts'
 import {
+  foldPlanMode,
   foldPermissionMode,
+  foldSandboxMode,
   setPermissionMode,
   switchSessionPermissionMode,
 } from './mode.ts'
@@ -62,6 +63,8 @@ export {
 } from './approval-listener.ts'
 
 export {
+  foldPlanMode,
+  foldSandboxMode,
   foldPermissionMode,
   foldResumeSandbox,
   setPermissionMode,
@@ -107,7 +110,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /** The settings namespace carrying `permissions.allow/deny/ask/defaultMode`. */
-export const PERMISSION_SETTINGS_NAMESPACE: SettingsNamespace = settingsNamespace('permissions')
+export const PERMISSION_SETTINGS_NAMESPACE = 'permissions' as SettingsNamespace
 
 export {
   permissionSettingsSchema,
@@ -187,10 +190,12 @@ export class PermissionRulesService extends Service {
     // Optional settings inject: absent `ctx.settings` leaves only the Config
     // rules in force, exactly as the fallback contract requires. A stored
     // change re-enters reload() to rebuild merged state and the guards.
-    installSettingsSection(ctx, PERMISSION_SETTINGS_NAMESPACE, permissionSettingsSchema(), {}, {
-      setSource: (current) => { this.settingsRead = current },
-      onChange: () => this.reload(),
-      validate: value => this.validateSettings(value),
+    ctx.inject(['settings'], (sctx) => {
+      sctx.settings.installSection(ctx, PERMISSION_SETTINGS_NAMESPACE, permissionSettingsSchema(), {}, {
+        setSource: (current) => { this.settingsRead = current },
+        onChange: () => this.reload(),
+        validate: value => this.validateSettings(value),
+      })
     })
 
     // The decision waterfall lives in ./decide.ts as pure functions over this
@@ -304,8 +309,8 @@ export class PermissionRulesService extends Service {
     // audit-logged to the session log (`scope: 'sandbox-auto'`).
     ctx.on('approval/request', createSandboxApprovalListener({
       modeOf: (agent) => {
-        if (foldPlanMode(agent.session.events)) return 'plan'
-        return foldPermissionMode(agent.session.events) ?? this.state.defaultMode
+        if (foldPlanMode(agent.session.snapshotEvents())) return 'plan'
+        return foldPermissionMode(agent.session.snapshotEvents()) ?? this.state.defaultMode
       },
       workspaceOf: (agent) => this.sessionWorkspaceOf(agent),
     }))
@@ -313,21 +318,21 @@ export class PermissionRulesService extends Service {
     // Pin sessions created while the deployment default is a sandbox-affecting or
     // plan mode so a fresh session inherits the default durably.
     ctx.on('session/created', (session) => {
-      if (foldPermissionMode(session.events) !== undefined) return
-      if (foldPlanMode(session.events)) return
+      if (foldPermissionMode(session.snapshotEvents()) !== undefined) return
+      if (foldPlanMode(session.snapshotEvents())) return
       const mode = this.state.defaultMode
       if (mode === 'bypassPermissions') {
         if (this.bypassDisabled()) return
-        const resume = effectiveSandboxMode(session.events)
+        const resume = foldSandboxMode(session.snapshotEvents())
           ?? (this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)
         setPermissionMode(session, 'bypassPermissions', resume)
-        if ((effectiveSandboxMode(session.events) ?? (this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)) !== 'danger-full-access') {
+        if ((foldSandboxMode(session.snapshotEvents()) ?? (this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)) !== 'danger-full-access') {
           setSandboxMode(session, 'danger-full-access')
         }
         return
       }
       if (mode === 'plan') {
-        session.append('plan/mode', { active: true })
+        ;(session.append as (type: string, payload: { active: boolean }) => unknown)('plan/mode', { active: true })
       }
     })
 
@@ -340,9 +345,9 @@ export class PermissionRulesService extends Service {
         text: (context) => {
           const agent = context.agent
           if (agent === undefined) return ''
-          const mode = foldPlanMode(agent.session.events)
+          const mode = foldPlanMode(agent.session.snapshotEvents())
             ? 'plan'
-            : (foldPermissionMode(agent.session.events) ?? this.state.defaultMode)
+            : (foldPermissionMode(agent.session.snapshotEvents()) ?? this.state.defaultMode)
           return MODE_SENTENCE[mode]
         },
       })
@@ -412,7 +417,7 @@ export class PermissionRulesService extends Service {
     const id = String(agent.session.id)
     if (!this.allowlistSeeded.has(id)) {
       this.allowlistSeeded.add(id)
-      this.sessionAllowlist.seed(id, foldSessionAllows(agent.session.events))
+      this.sessionAllowlist.seed(id, foldSessionAllows(agent.session.snapshotEvents()))
     }
     return this.sessionAllowlist.matches(id, exec.name, subjectOf(exec, this.bashToolName))
   }
@@ -424,7 +429,7 @@ export class PermissionRulesService extends Service {
    * verify an escalation is in-scope and falls through to the normal ask.
    */
   private sessionWorkspaceOf(agent: Agent): string | undefined {
-    return foldSessionCwd(agent.session.events) ?? agent.session.header?.cwd
+    return foldSessionCwd(agent.session.snapshotEvents()) ?? agent.session.header?.cwd
   }
 
   /**

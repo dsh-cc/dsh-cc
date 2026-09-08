@@ -1745,6 +1745,9 @@ capabilities:
       - { type: source, path: packages/subagent/task/src/plugin-agents.ts }
       - { type: test, path: packages/subagent/task/tests/plugin-agents.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/dsh-cc-agents.spec.ts }
+      - { type: source, path: CLAUDE.md }
+      - { type: source, path: packages/plugin/dsh-cc-agents/skills/dsh-cc-agents-orchestration/SKILL.md }
+      - { type: source, path: packages/subagent/resume-pins/src/plugin.ts }
     deviation:
       kind: divergent
       summary: >-
@@ -1865,7 +1868,13 @@ capabilities:
         marketplace) dispatches by scoped id end-to-end —
         dsh-cc-agents:critic / dsh-cc-agents:executor mount from the
         real plugin dir and are pinned by plugin-agents.spec.ts and the
-        loader's dsh-cc-agents.spec.ts.
+        loader's dsh-cc-agents.spec.ts. Delegation discipline is
+        prompt-taught across the Task description, the background-loop
+        system-prompt section, both spawn-result texts, the resume-pins
+        send_message advisory and list_agents annotations, the repo
+        CLAUDE.md, and the dsh-cc-agents orchestration skill: one task, one
+        instance — send_message continues only the child's current
+        assignment, and every new task is a fresh subagent_fork spawn.
 
   # ── mcp ─────────────────────────────────────────────────────────────────
   mcp.client:
@@ -1973,7 +1982,12 @@ capabilities:
           the loader's own mountMcpServers path — see
           docs/plans/2026-09-07-plugin-mcp-seam.md; a 2026-09-07 probe
           discovered the previous full/none claim here overstated a dead
-          feature, corrected once the seam was wired). Known limitations:
+          feature, corrected once the seam was wired). The hooks component
+          is now likewise mounted: since 2026-09-08 the hooks-claude-code
+          bridge provides the loader's `hooks` seam (the same seam-probe
+          pattern; the plugin's pluginRoot is passed through for
+          ${CLAUDE_PLUGIN_ROOT} substitution — see
+          docs/plans/2026-09-08-plugin-hooks-seam.md). Known limitations:
           the mcpServers tally counts register-time loads, so config-skipped
           servers (unset env var, malformed entry) surface only via logger
           warns, not the tally (a richer registerServer return is a
@@ -1989,6 +2003,12 @@ capabilities:
       - { type: source, path: packages/bundle/cc-shell/src/mcpSeam.ts }
       - { type: source, path: packages/bundle/cc-shell/src/index.ts, anchor: "cc-mcp-seam" }
       - { type: source, path: packages/plugin/dsh-cc-agents/.claude-plugin/plugin.json }
+      - { type: source, path: packages/hooks/hooks-claude-code/src/index.ts, anchor: "mergePluginHooks" }
+      - { type: source, path: packages/compat/cc-plugin-loader/src/seams.ts }
+      - { type: source, path: packages/compat/cc-plugin-loader/src/hooks.ts }
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: hooks-claude-code" }
+      - { type: test, path: packages/hooks/hooks-claude-code/tests/plugin-hooks-seam.spec.ts }
+      - { type: test, path: packages/bundle/cc-shell/tests/leaked-services.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/mounts.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/discovery.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/dsh-cc-agents.spec.ts }

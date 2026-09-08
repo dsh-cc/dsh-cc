@@ -138,6 +138,16 @@ function isENOENT(error: unknown): boolean {
  * @param path - the absolute settings file path.
  * @returns the parsed root document, or `{}` when the file is absent or blank.
  */
+/** Raw user-file text, or `undefined` when the file is absent. */
+export async function readUserText(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8')
+  } catch (error) {
+    if (isENOENT(error)) return undefined
+    throw error
+  }
+}
+
 export async function readUserFile(path: string): Promise<Record<string, unknown>> {
   let text: string
   try {

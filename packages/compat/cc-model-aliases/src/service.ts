@@ -21,7 +21,7 @@ import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 // Type-only: pull in the declaration-merged `agent/request` event so the host
 // overlay listener typechecks. Does not extend AgentOptions.
 import type {} from '@deepseek-ai/dsh-agent'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { ConfigAliasesSchema, SettingsAliasesSchema } from './schema.ts'
 import { createModelInspector, createModelResolver, mergeAliasMaps } from './resolver.ts'
 import { overlayStampedEffort, stampedEffortOf } from './effort.ts'
@@ -37,7 +37,7 @@ export interface Config {
 export const Config: z<Config> = z.object({ modelAliases: ConfigAliasesSchema })
 
 /** The settings namespace carrying the live `model-aliases` overlay. */
-export const MODEL_ALIASES_NAMESPACE = settingsNamespace('model-aliases')
+export const MODEL_ALIASES_NAMESPACE = 'model-aliases' as SettingsNamespace
 
 /** The shape consumers resolve through. */
 export interface ModelRoutes {

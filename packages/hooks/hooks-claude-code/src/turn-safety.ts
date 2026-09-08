@@ -36,7 +36,7 @@ type RecordIssue = ((issue: HookIssue) => void) | undefined
 /** The last open turn number in the agent's log, or 0 without an agent. */
 export function lastTurn(agent: Agent | undefined): number {
   if (!agent) return 0
-  const last = [...agent.session.events].findLast(e => e.type === 'turn/start')
+  const last = [...agent.session.snapshotEvents()].findLast(e => e.type === 'turn/start')
   /* v8 ignore next -- agent-present callers are tool/stop extension points inside an open turn. */
   return last?.type === 'turn/start' ? last.data.turn : 0
 }

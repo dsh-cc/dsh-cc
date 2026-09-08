@@ -42,7 +42,7 @@ export function assertPermissionModeEvent(event: SessionEvent, fail: InvariantFa
 /** Install closed-vocabulary checks on durable permission/mode events. */
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   const seed = (session: Session): void => {
-    for (const event of session.events) assertPermissionModeEvent(event, fail)
+    for (const event of session.snapshotEvents()) assertPermissionModeEvent(event, fail)
   }
   for (const session of ctx.sessions.list()) seed(session)
   ctx.on('session/created', (session) => { seed(session) }, { global: true })

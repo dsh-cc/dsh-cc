@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { apply } from '../src/index.ts'
+import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 
 /** cc-services isolate keys from packages/preset/cc/agent.cordis.yml. */
 const CC_SERVICES_ISOLATE = [
@@ -22,6 +23,7 @@ const CC_SERVICES_ISOLATE = [
   'mcpConnections',
   'hookBridgeStatus',
   'mcp',
+  'hooks',
 ] as const
 
 interface FiberLike {
@@ -110,6 +112,29 @@ describe('cc-shell glue leakedServices (cc-services isolate map)', () => {
     const fiber = await glue
     expect(leakedServices(root, fiber)).toEqual(['mcp'])
     await fiber.dispose()
+    await root.fiber.dispose()
+  })
+
+  it('flags hooks when that isolate key is missing and the bridge mounts inside the group', async () => {
+    const root = new Context()
+    root.provide('commands', { register: () => () => {} })
+    // The bridge injects ['shell']; a stub is enough for a mount-only probe.
+    root.provide('shell', {})
+    // The hooks bridge (the `hooks` seam provider) mounts inside cc-services
+    // in the preset; mounting it here reproduces the leak the missing key
+    // would cause at preset time. No configPath → no boot hooks, but the
+    // bridge still provides `hooks` (unconditionally) and `hookBridgeStatus`.
+    const group = isolateGroup(root, CC_SERVICES_ISOLATE.filter(name => name !== 'hooks'))
+    const bridge = group.plugin(HooksClaude, { configPath: join(tmp, 'nonexistent-hooks.json') })
+    const fiber = await bridge
+    expect(leakedServices(root, fiber)).toEqual(['hooks'])
+    await fiber.dispose()
+    // With the full isolate map, the same mount leaks nothing.
+    const okGroup = isolateGroup(root, CC_SERVICES_ISOLATE)
+    const ok = okGroup.plugin(HooksClaude, { configPath: join(tmp, 'nonexistent-hooks.json') })
+    const okFiber = await ok
+    expect(leakedServices(root, okFiber)).toEqual([])
+    await okFiber.dispose()
     await root.fiber.dispose()
   })
 })

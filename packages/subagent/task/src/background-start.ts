@@ -272,8 +272,9 @@ function promotedResult(
       + 'to the background while it ran (status async_launched, backgroundedByUser: true); treat '
       + 'this exactly like a background launch — the result arrives as a later waking message, '
       + 'so do not compose on an inline result. '
-      + 'Control it by that id: `list_agents` for status, `send_message` to continue the same '
-      + 'conversation, `interrupt_agent` to stop its current turn.'
+      + 'Control it by that id: `list_agents` for status, `send_message` to continue that same '
+      + 'assignment (a new task needs a fresh `subagent_fork`), `interrupt_agent` to stop its '
+      + 'current turn.'
       + (captureWarning !== undefined
         ? `\nresume pin capture failed: ${captureWarning}; this child will resume with legacy semantics`
         : ''),
@@ -479,8 +480,9 @@ export async function startBackground(
     text:
       `Background subagent started (agentId: ${started.childId}). It is running in the `
       + 'background; its report or finish notice will arrive as a waking message. Control it '
-      + 'by that id: `list_agents` for status, `send_message` to continue the same '
-      + 'conversation, `interrupt_agent` to stop its current turn.'
+      + 'by that id: `list_agents` for status, `send_message` to continue that same '
+      + 'assignment (a new task needs a fresh `subagent_fork`), `interrupt_agent` to stop its '
+      + 'current turn.'
       + (captureWarning !== undefined
         ? `\nresume pin capture failed: ${captureWarning}; this child will resume with legacy semantics`
         : ''),

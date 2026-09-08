@@ -14,7 +14,9 @@ function agent(headerCwd?: string, store = new SessionCwdStore()): Agent {
   const fake = {
     session: {
       id: session.id,
-      get events() { return session.events },
+      seq: 0 as number,
+      snapshotEvents: (): readonly unknown[] => session.snapshotEvents(),
+      eventAt: (i: number): unknown => session.eventAt(i),
       append: session.append.bind(session),
       header: headerCwd === undefined ? {} : { cwd: headerCwd },
     },
@@ -26,7 +28,7 @@ describe('setSessionCwd', () => {
   it('appends a durable worktree/entered event with the normalized path', () => {
     const a = agent()
     setSessionCwd(a, '/tmp/wt/sub/../deep')
-    expect(foldSessionCwd(a.session.events)).toBe('/tmp/wt/deep')
+    expect(foldSessionCwd(a.session.snapshotEvents())).toBe('/tmp/wt/deep')
   })
 
   it('updates the store overlay for that session only', () => {

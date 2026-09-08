@@ -6,8 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-settings'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { helpable } from '@dsh-cc/command-usage'
 import { keyAllowed, parseConfigArgs, renderConfig, type AllowEntry } from './config.ts'
@@ -65,7 +64,7 @@ async function executeConfig(
   }
 
   try {
-    await ctx.settings.update(settingsNamespace(args.scope), { [args.key]: args.value })
+    await ctx.settings.update(args.scope as SettingsNamespace, { [args.key]: args.value })
   } catch (error) {
     return { kind: 'success', text: `Could not update ${args.scope}.${args.key}: ${String(error)}` }
   }

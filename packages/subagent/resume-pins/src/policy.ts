@@ -13,11 +13,10 @@
  * @module @dsh-cc/subagent-resume-pins/policy
  */
 
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 
 /** The settings namespace carrying the resume policy. */
-export const RESUME_POLICY_NAMESPACE: SettingsNamespace = settingsNamespace('subagents-resume')
+export const RESUME_POLICY_NAMESPACE = 'subagents-resume' as SettingsNamespace
 
 /** What happens when the pinned provider/model route is no longer available. */
 export type OnUnavailableModel = 'block' | 'route-current'

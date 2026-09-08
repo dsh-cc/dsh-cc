@@ -10,7 +10,7 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
@@ -61,7 +61,7 @@ const agentAt = (repo: string): Agent =>
   ({ inject: () => undefined, session: { header: { version: 0, id: 's', createdAt: 0, cwd: repo } } }) as unknown as Agent
 
 function call(ctx: Context, name: string, args: unknown, agent: Agent) {
-  return ctx.tools.execute({ signal, callId: CallId(`${name}-${Math.random().toString(36).slice(2)}`), name, arguments: args, agent })
+  return ctx.tools.execute({ signal, callId: ToolCallId(`${name}-${Math.random().toString(36).slice(2)}`), name, arguments: args, agent })
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {

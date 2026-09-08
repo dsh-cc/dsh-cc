@@ -33,20 +33,20 @@ describe('SessionCwdStore', () => {
     const sess = session()
     appendWorktreeEntered(sess, '/tmp/from-log')
     store.set(String(sess.id), '/tmp/live')
-    expect(store.resolve(String(sess.id), sess.events)).toBe('/tmp/live')
+    expect(store.resolve(String(sess.id), sess.snapshotEvents())).toBe('/tmp/live')
   })
 
   it('resolve falls through to the event fold without a live write', () => {
     const store = new SessionCwdStore()
     const sess = session()
     appendWorktreeEntered(sess, '/tmp/from-log')
-    expect(store.resolve(String(sess.id), sess.events)).toBe('/tmp/from-log')
+    expect(store.resolve(String(sess.id), sess.snapshotEvents())).toBe('/tmp/from-log')
   })
 
   it('resolve returns undefined when neither layer recorded a cwd', () => {
     const store = new SessionCwdStore()
     const sess = session()
-    expect(store.resolve(String(sess.id), sess.events)).toBeUndefined()
+    expect(store.resolve(String(sess.id), sess.snapshotEvents())).toBeUndefined()
   })
 
   it('keys are per session: clearing one leaves others intact', () => {

@@ -10,7 +10,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import WebRuntime from '@deepseek-ai/dsh-web'
@@ -60,7 +60,7 @@ let callCounter = 0
 function call(ctx: Context, args: unknown, agent?: unknown) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId(`call-${++callCounter}`),
+    callId: ToolCallId(`call-${++callCounter}`),
     name: 'web_fetch',
     arguments: args,
     ...(agent !== undefined ? { agent: agent as never } : {}),
@@ -213,7 +213,7 @@ describe('error paths', () => {
       routes: CHEAP_ROUTES,
       script: [
         { type: 'block-start', index: 0, blockType: 'tool-call' },
-        { type: 'tool-call-delta', index: 0, id: CallId('summary-tool'), name: 'unexpected', argumentsDelta: '{}' },
+        { type: 'tool-call-delta', index: 0, id: ToolCallId('summary-tool'), name: 'unexpected', argumentsDelta: '{}' },
         { type: 'finish', reason: { kind: 'tool-calls' } },
       ],
     })

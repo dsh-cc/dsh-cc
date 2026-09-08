@@ -26,7 +26,7 @@ export function sessionChecks(ctx: Context, invocation: CommandInvocation): Chec
     summary: cwd,
     evidence: { cwd },
   })
-  checks.push(permissionPresetCheck(ctx, session.events))
+  checks.push(permissionPresetCheck(ctx, session.snapshotEvents()))
   checks.push(agentPresetCheck(ctx))
   checks.push(dshProfileCheck(ctx))
   return checks

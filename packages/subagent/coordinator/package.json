@@ -25,13 +25,13 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-subagent": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-system-prompt": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-agent": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-subagent": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.2-rc.1",
     "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": ">=0.1.1-rc.2"
+    "@deepseek-ai/cordis": ">=0.1.2-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
@@ -41,6 +41,7 @@
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-persistence": "link:../../../../deepseek-harness/packages/session/session-persistence",
+    "@deepseek-ai/dsh-session-query": "link:../../../../deepseek-harness/packages/session-query/session-query",
     "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
     "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",

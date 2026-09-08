@@ -24,7 +24,7 @@ interface FakeAgent extends Record<string, unknown> {
 function makeFakeAgent(): FakeAgent {
   return {
     options: {},
-    session: { id: 's-sub', header: {}, events: [] },
+    session: { id: 's-sub', header: {}, events: [], snapshotEvents() { return this.events } },
     id: 'a-sub',
     status: 'idle',
     followup: vi.fn(),
@@ -158,7 +158,7 @@ describe('createDriver subagent tracking', () => {
   it('/agents groups fold runs as Working / Ready with provider decorations', async () => {
     const agent = makeFakeAgent()
     const continuableChild = {
-      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }] },
+      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }], snapshotEvents() { return this.events } },
     }
     const { ctx, emitStart, emitEnd } = makeCtx(agent, { 'tui-aaaaaaaa': continuableChild })
     const driver = await createDriver(ctx as never, {})
@@ -204,7 +204,7 @@ describe('createDriver subagent tracking', () => {
   it('folds continuable subagent/end into parked, not done', async () => {
     const agent = makeFakeAgent()
     const continuableChild = {
-      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }] },
+      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }], snapshotEvents() { return this.events } },
     }
     const { ctx, emitStart, emitEnd } = makeCtx(agent, { 'tui-abcdef01-dead-beef': continuableChild })
     const driver = await createDriver(ctx as never, {})
@@ -231,7 +231,7 @@ describe('createDriver subagent tracking', () => {
   it('a later start for the same sessionId replaces the parked row', async () => {
     const agent = makeFakeAgent()
     const continuableChild = {
-      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }] },
+      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }], snapshotEvents() { return this.events } },
     }
     const { ctx, emitStart, emitEnd } = makeCtx(agent, { 'tui-abcdef01-dead-beef': continuableChild })
     const driver = await createDriver(ctx as never, {})
@@ -270,7 +270,7 @@ describe('createDriver subagent tracking', () => {
   it('parked and done fold runs both land in Ready; one-shots keep their epoch decoration', async () => {
     const agent = makeFakeAgent()
     const continuableChild = {
-      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }] },
+      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }], snapshotEvents() { return this.events } },
     }
     const { ctx, emitStart, emitEnd } = makeCtx(agent, { 'tui-abcdef01-dead-beef': continuableChild })
     const driver = await createDriver(ctx as never, {})
@@ -302,7 +302,7 @@ describe('createDriver subagent tracking', () => {
   it('/agents stop on a non-running child explains the no-op and does not interrupt', async () => {
     const agent = makeFakeAgent()
     const continuableChild = {
-      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }] },
+      session: { events: [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }], snapshotEvents() { return this.events } },
     }
     const interrupt = vi.fn()
     const { ctx, emitStart, emitEnd } = makeCtx(agent, { 'tui-abcdef01-dead-beef': continuableChild })

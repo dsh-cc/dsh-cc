@@ -17,13 +17,13 @@ export const inject = ['commands']
 
 /** Gather every line the current composition can report. */
 function gather(ctx: Context, session: Session): StatusFields {
-  const events = session.events
+  const events = session.snapshotEvents()
   const modelRef = lastModel(events)
   let preset: string | undefined
   const presets = ctx.get('permissionPresets')
   if (presets !== undefined) {
     try {
-      preset = presets.current(events)
+      preset = presets.current(session)
     } catch {
       // The permission service may be mounted without its shell/approval
       // dependencies; omit the line rather than failing the whole status.

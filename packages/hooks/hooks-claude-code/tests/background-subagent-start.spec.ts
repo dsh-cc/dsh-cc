@@ -12,9 +12,10 @@ import { join } from 'node:path'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime, { type SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
@@ -48,16 +49,18 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
 
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   const persistRoot = mkdtempSync(join(tmpdir(), 'dsh-hooks-background-persist-'))
   dirs.push(persistRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: persistRoot })
+  // sendMessage's cold-resume delivery resolves sessions through session-query.
+  await ctx.plugin(SessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
+  const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
   // Keep the stand-in parent out of the scripted corpus.
   ctx.on('agent/pre-step', async ({ agent: subject }, next) => {
     if (subject !== parent) return next()
@@ -114,14 +117,16 @@ describe('hooks-claude-code — SubagentStart on background starts (§4.14)', ()
     // A cold resume opens a SECOND epoch: a fresh start event with a new runId,
     // and the hook fires once for that epoch too (not per step or per turn).
     //
-    // Wait for the first epoch's Activation to be released first: a followup
-    // delivered while an Activation is still resident parks as the SAME
-    // epoch's next FIFO turn (no new start event — the CI flake this guards).
-    // Mirrors waitNoActivation in packages/subagent/task/tests/integration.spec.ts.
+    // Wait for the first epoch's Activation to be released first: a message
+    // delivered while an Activation is still resident would steer the SAME
+    // epoch at its next step boundary (no new start event — the CI flake this
+    // guards). With no resident Activation the delivery cold-resumes a new
+    // epoch. Mirrors waitNoActivation in
+    // packages/subagent/task/tests/integration.spec.ts.
     await waitFor(() => ctx.agents.get(started.childId) === undefined)
-    await ctx.subagents.followup(parent, started.childId,
+    await ctx.subagents.sendMessage(parent, started.childId,
       [{ type: 'text' as const, text: 'keep going' }],
-      { source: { kind: 'user' as const }, signal: new AbortController().signal })
+      { signal: new AbortController().signal })
     await waitFor(() => starts.length >= 2 && lineCount(marker) >= 2)
     expect(starts).toHaveLength(2)
     expect(String(starts[1]!.id)).toBe(String(started.childId))

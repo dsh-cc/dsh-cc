@@ -27,7 +27,7 @@ function exec(opts: { name?: string; args?: unknown; session?: Session; signal?:
 }
 
 function sessionOf(id: string): Session {
-  return Session.create(SessionId(id), undefined, { version: 0, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
+  return Session.create(SessionId(id), undefined, { version: 0, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
 }
 
 function decided(overrides: Partial<DecidedCall> = {}): DecidedCall {
@@ -285,13 +285,13 @@ describe('permission/classifier audit event (fold/replay round-trip)', () => {
       latencyMs: 5001,
       cacheHit: false,
     })
-    const folded = foldClassifiers(session.events)
+    const folded = foldClassifiers(session.snapshotEvents())
     expect(folded).toHaveLength(2)
     expect(folded[0]).toMatchObject({ tool: 'Bash', verdict: 'allow', cacheHit: false })
     expect(folded[0]?.digest).toBe('a'.repeat(64))
     expect(folded[1]).toMatchObject({ tool: 'Bash', verdict: 'ask', failure: 'timeout' })
     // The session log never carries raw input — only the digest.
-    const raw = JSON.stringify(session.events)
+    const raw = JSON.stringify(session.snapshotEvents())
     expect(raw).not.toContain('command')
     expect(folded.every(record => record.digest === undefined || /^[0-9a-f]{64}$/.test(record.digest))).toBe(true)
   })
@@ -300,7 +300,7 @@ describe('permission/classifier audit event (fold/replay round-trip)', () => {
     const session = sessionOf('audit-2')
     session.append('permission/mode', { mode: 'auto' })
     appendSessionClassifier(session, { tool: 'Bash', digest: 'c'.repeat(64), verdict: 'ask', latencyMs: 1, cacheHit: false })
-    expect(foldClassifiers(session.events)).toHaveLength(1)
+    expect(foldClassifiers(session.snapshotEvents())).toHaveLength(1)
   })
 })
 

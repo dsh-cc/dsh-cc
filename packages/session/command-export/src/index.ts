@@ -88,7 +88,7 @@ async function executeExport(
   request: ExportRequest,
   invocation: CommandInvocation,
 ): Promise<CommandResult> {
-  const events = invocation.agent.session.events
+  const events = invocation.agent.session.snapshotEvents()
   const sessionId = invocation.agent.session.id
   const { dir, name } = resolveOutput(config, request, sessionId)
   const target = await ctx.fs.resolve(joinPath(dir, name))

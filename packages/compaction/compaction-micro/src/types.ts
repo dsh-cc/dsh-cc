@@ -1,4 +1,4 @@
-import type { CallId } from '@deepseek-ai/dsh-llm'
+import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 
 /**
  * Microcompact policy: how many of the most recent `tool/result` surface nodes
@@ -32,7 +32,7 @@ export interface MicrocompactEntry {
   /** Newly appended placeholder tool-result surface seq. */
   readonly replacementSeq: number
   /** Tool call shared by the original and the placeholder. */
-  readonly callId: CallId
+  readonly callId: ToolCallId
   /** Spill locator re-embedded into the placeholder, when the original cited one. */
   readonly spillLocator?: string
 }

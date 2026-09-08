@@ -39,7 +39,7 @@ function makeCtx(opts: {
   // Shared write-order log across the fake command registry and the fake
   // rules engine, so tests can assert '/plan off' precedes setMode.
   const calls: string[] = []
-  const session: FakeSession = { id: 's-perm', header: {}, events: opts.events ?? [] }
+  const session: FakeSession = { id: 's-perm', header: {}, events: opts.events ?? [] , snapshotEvents() { return this.events } }
   const listeners = new Map<string, ((session: FakeSession, event: unknown) => void)[]>()
   const ctx: Record<string, unknown> = {
     get(key: string) {

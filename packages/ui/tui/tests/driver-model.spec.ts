@@ -65,7 +65,7 @@ function makeModelCtx(models: FakeModel[]): Record<string, unknown> {
         return {
           agent: {
             options: agentOpts,
-            session: { id: 's-test', header: {}, events: [] },
+            session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-test',
             status: 'idle',
             followup() {},

@@ -94,7 +94,7 @@ describe('sandbox approval-seam listener', () => {
     const listener = createSandboxApprovalListener(listenerConfig())
     const before = Date.now()
     await listener(request(agent, SANDBOX_REASON), async () => 'rejected' as const)
-    const event = agent.session.events[agent.session.events.length - 1] as unknown as {
+    const event = agent.session.snapshotEvents()[agent.session.seq - 1] as unknown as {
       type: string
       data: Record<string, unknown>
     }
@@ -108,8 +108,8 @@ describe('sandbox approval-seam listener', () => {
   it('does not audit-log a fall-through', async () => {
     const agent = agentWithCwd(undefined)
     const listener = createSandboxApprovalListener(listenerConfig({ workspaceOf: () => undefined }))
-    const before = agent.session.events.length
+    const before = agent.session.seq
     await listener(request(agent, SANDBOX_REASON), async () => 'rejected' as const)
-    expect(agent.session.events).toHaveLength(before)
+    expect(agent.session.snapshotEvents()).toHaveLength(before)
   })
 })

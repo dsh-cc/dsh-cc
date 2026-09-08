@@ -93,7 +93,7 @@ function makeCtx(opts: {
   llm?: unknown
   credentials?: unknown
 }) {
-  const session = opts.session ?? { id: 's-a', events: [], status: 'idle' }
+  const session = opts.session ?? { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
   const handlers = new Map<string, Set<() => void>>()
   const ctx: Record<string, unknown> = {
     get(key: string) {
@@ -117,7 +117,7 @@ function makeCtx(opts: {
           options: {
             ...(session.provider !== undefined && session.model !== undefined ? { provider: session.provider, model: session.model } : {}),
           },
-          session: { id: session.id, header: {}, events: session.events ?? [] },
+          session: { id: session.id, header: {}, events: session.events ?? [] , snapshotEvents() { return this.events } },
           id: `agent-${session.id}`,
           status: session.status ?? 'idle',
           followup: vi.fn(),

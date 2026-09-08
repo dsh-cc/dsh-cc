@@ -5,8 +5,8 @@
  * @module abort-utils
  */
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { ToolExecutionToken, ToolExecutionResult } from './tool-types.ts'
 import type { FusedToolSignal } from './tool-layer.ts'

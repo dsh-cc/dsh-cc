@@ -22,7 +22,9 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-Already have `dsh` **>= 0.1.0-rc.5**? Install only the launcher:
+`dsh-cc` requires `dsh` **>= 0.1.2-rc.1**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-12), and the launcher enforces the floor at bootstrap.
+
+Already have `dsh` **>= 0.1.2-rc.1**? Install only the launcher:
 
 ```sh
 npm install -g @dsh-cc/cli

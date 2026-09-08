@@ -188,7 +188,7 @@ interface FakeAgent extends Record<string, unknown> {
 function makeFakeAgent(status: string): FakeAgent {
   return {
     options: {},
-    session: { id: 's-plugin', header: {}, events: [] },
+    session: { id: 's-plugin', header: {}, events: [], snapshotEvents() { return this.events } },
     id: 'a-plugin',
     status,
     followup: vi.fn(),

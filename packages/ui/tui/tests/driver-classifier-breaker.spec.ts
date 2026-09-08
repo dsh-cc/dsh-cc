@@ -22,11 +22,11 @@ function makeCtx(opts: { events?: unknown[] } = {}): {
   session: FakeSession
   fired: (type: string, event: unknown) => void
 } {
-  const session: FakeSession = { id: 's-a', header: {}, events: opts.events ?? [] }
+  const session: FakeSession = { id: 's-a', header: {}, events: opts.events ?? [] , snapshotEvents() { return this.events } }
   const listeners = new Map<string, ((s: FakeSession, event: unknown) => void)[]>()
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
     options: {},
-    session: { id: s.id, header: { cwd: '/proj' }, events: s.events },
+    session: { id: s.id, header: { cwd: '/proj' }, events: s.events , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: 'idle',
     followup: vi.fn(),

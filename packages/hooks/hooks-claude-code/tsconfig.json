@@ -16,6 +16,9 @@
     },
     {
       "path": "../../compat/cc-model-aliases"
+    },
+    {
+      "path": "../../compat/cc-plugin-loader"
     }
   ]
 }

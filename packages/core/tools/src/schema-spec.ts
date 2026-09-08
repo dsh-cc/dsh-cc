@@ -6,7 +6,7 @@
  * @module dsh-tools/schema-spec
  */
 
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { JsonSchemaNode, ObjectJsonSchema } from './json-schema.ts'
 
 /** Annotation keywords shared by every author-facing schema node. */

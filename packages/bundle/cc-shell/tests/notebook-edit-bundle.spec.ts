@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import ToolRuntime from '@dsh-cc/tools'
 import * as ToolNotebookEdit from '@dsh-cc/tool-notebook-edit'
@@ -76,7 +76,7 @@ describe('cc-shell bundle — tool-notebook-edit row (NotebookEdit over the vend
 
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('cc-notebook-edit'),
+      callId: ToolCallId('cc-notebook-edit'),
       name: 'NotebookEdit',
       arguments: { notebook_path: path, cell_id: 'c1', new_source: 'print(2)' },
     })

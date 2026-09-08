@@ -152,7 +152,7 @@ describe('agent.cordis.yml composition', () => {
     }
   })
 
-  it('isolates exactly the seven cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
+  it('isolates exactly the eight cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')
     expect(group.isolate).toEqual({
@@ -163,6 +163,7 @@ describe('agent.cordis.yml composition', () => {
       mcpConnections: true,
       hookBridgeStatus: true,
       mcp: true,
+      hooks: true,
     })
     const configIds = (group.config as any[]).map((r) => r.id)
     const topIds = doc.map((r) => r.id)

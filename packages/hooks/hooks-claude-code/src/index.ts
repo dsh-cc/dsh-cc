@@ -28,6 +28,8 @@ import {
   hookDiagnosticsWriter,
 } from '@dsh-cc/hook-protocol'
 import { parseClaudeCodeConfig, type ClaudeCodeHookConfig } from './config.ts'
+import type { MatcherGroup } from '@dsh-cc/hook-protocol'
+import type { HooksSeam } from '@dsh-cc/plugin-loader'
 import { failedStatus, loadedStatus } from './status.ts'
 import { registerEvents } from './register-events.ts'
 
@@ -40,6 +42,11 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Harness-home path resolver, provided by @deepseek-ai/dsh-app-boot at boot. Optional in tests. */
     dshHomePath?: (...segments: string[]) => string
+    /**
+     * The plugin hooks seam, provided unconditionally by this bridge (mirrors
+     * the cc-shell `mcp` seam): loader fibers merge plugin hooks through it.
+     */
+    hooks?: HooksSeam
   }
 }
 
@@ -133,46 +140,48 @@ function dshHomeFile(ctx: Context, ...segments: string[]): string | undefined {
 export function apply(ctx: Context, config: Config): void {
   // Resolve the hook config path: an explicit config value wins, otherwise
   // default to $DSH_HOME/hooks.json via ctx.dshHomePath. With neither available
-  // (e.g. an app-boot that does not provide dshHomePath), register nothing and
-  // log, rather than relying on a read error below to degrade silently.
+  // (e.g. an app-boot that does not provide dshHomePath), the boot config is
+  // empty and the bridge logs — but apply() CONTINUES: the `hooks` seam below
+  // is provided unconditionally, so plugin hooks merged later still fire.
   const configPath = config.configPath || dshHomeFile(ctx, 'hooks.json')
-  if (!configPath) {
-    ctx.logger.info('no hooks config path; hooks disabled')
-    // Instance-scoped status for /doctor: no module-level singleton.
-    ctx.provide('hookBridgeStatus', failedStatus('', 'no hooks config path', config))
-    return
-  }
-  // Validate before config parsing so a bad value cannot be hidden by its early return.
+  // The parsed boot config; `{}` when there is no path or the read/parse fails
+  // (each logged, with the hookBridgeStatus provide as before).
+  const parsed: ClaudeCodeHookConfig = {}
   const stderrSummaryMaxChars = config.stderrSummaryMaxChars ?? DEFAULT_STDERR_SUMMARY_MAX_CHARS
-  assertPositiveInteger('stderrSummaryMaxChars', stderrSummaryMaxChars)
   const defaultTimeoutMs = config.defaultTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS
-  // Parse once at load. A read or parse failure logs and registers nothing.
   // F5: hook issues (config warnings among them) append to the dsh-home
   // diagnostics JSONL; without a dshHomePath the writer is a no-op.
   const diagnosticsPath = dshHomeFile(ctx, 'hooks', 'diagnostics.jsonl')
   const recordIssue = diagnosticsPath !== undefined ? hookDiagnosticsWriter(diagnosticsPath) : undefined
-  let parsed: ClaudeCodeHookConfig = {}
-  try {
-    const raw: unknown = JSON.parse(readFileSync(configPath, 'utf8'))
-    const result = parseClaudeCodeConfig(raw, {
-      ...config.pluginRoot !== undefined ? { pluginRoot: config.pluginRoot } : {},
-      ...config.projectDir !== undefined ? { projectDir: config.projectDir } : {},
-    })
-    parsed = result.config
-    for (const s of result.skipped) {
-      ctx.logger.warn(`hooks-claude-code: skipping "${s.type}" hook on ${s.event} (${s.reason})`)
+  if (!configPath) {
+    ctx.logger.info('no hooks config path; hooks disabled')
+    // Instance-scoped status for /doctor: no module-level singleton.
+    ctx.provide('hookBridgeStatus', failedStatus('', 'no hooks config path', config))
+  } else {
+    // Validate before config parsing so a bad value cannot be hidden by its early return.
+    assertPositiveInteger('stderrSummaryMaxChars', stderrSummaryMaxChars)
+    // Parse once at load. A read or parse failure logs and registers nothing.
+    try {
+      const raw: unknown = JSON.parse(readFileSync(configPath, 'utf8'))
+      const result = parseClaudeCodeConfig(raw, {
+        ...config.pluginRoot !== undefined ? { pluginRoot: config.pluginRoot } : {},
+        ...config.projectDir !== undefined ? { projectDir: config.projectDir } : {},
+      })
+      for (const [event, groups] of Object.entries(result.config)) parsed[event] = groups
+      for (const s of result.skipped) {
+        ctx.logger.warn(`hooks-claude-code: skipping "${s.type}" hook on ${s.event} (${s.reason})`)
+      }
+      // F6: every parse warning is logged AND recorded as a `config` diagnostic.
+      for (const w of result.warnings) {
+        const detail = `unsupported ${w.hookType} on ${w.event}${w.matcher !== undefined ? ` (matcher "${w.matcher}")` : ''}: ${w.keys.length > 0 ? w.keys.join(', ') : 'unknown event key'}`
+        ctx.logger.warn(`hooks-claude-code: ${detail}`)
+        recordIssue?.({ ts: new Date().toISOString(), dialect: 'claude-code', point: w.event, kind: 'config', detail })
+      }
+      ctx.provide('hookBridgeStatus', loadedStatus(configPath, parsed, result.skipped, config))
+    } catch (error: unknown) {
+      ctx.logger.warn(`hooks-claude-code: could not load hook config "${configPath}": ${String(error)} — no hooks registered`)
+      ctx.provide('hookBridgeStatus', failedStatus(configPath, String(error), config))
     }
-    // F6: every parse warning is logged AND recorded as a `config` diagnostic.
-    for (const w of result.warnings) {
-      const detail = `unsupported ${w.hookType} on ${w.event}${w.matcher !== undefined ? ` (matcher "${w.matcher}")` : ''}: ${w.keys.length > 0 ? w.keys.join(', ') : 'unknown event key'}`
-      ctx.logger.warn(`hooks-claude-code: ${detail}`)
-      recordIssue?.({ ts: new Date().toISOString(), dialect: 'claude-code', point: w.event, kind: 'config', detail })
-    }
-    ctx.provide('hookBridgeStatus', loadedStatus(configPath, parsed, result.skipped, config))
-  } catch (error: unknown) {
-    ctx.logger.warn(`hooks-claude-code: could not load hook config "${configPath}": ${String(error)} — no hooks registered`)
-    ctx.provide('hookBridgeStatus', failedStatus(configPath, String(error), config))
-    return
   }
 
   // Emit-shaped points run detached, so track their chains; disposal aborts
@@ -194,6 +203,54 @@ export function apply(ctx: Context, config: Config): void {
   // per-run knob).
   const httpAllowedEnvVars = (): ReadonlySet<string> => new Set(config.httpAllowedEnvVars ?? [])
   const runPoint = createRunPoint({ ctx, parsed, config, defaultTimeoutMs, stderrSummaryMaxChars, httpAllowedEnvVars, ...recordIssue !== undefined ? { recordIssue } : {} })
+
+  // The plugin hooks seam (the `hooks` guest contract from @dsh-cc/plugin-loader),
+  // provided UNCONDITIONALLY — including with no boot config or a failed boot
+  // parse — so a plugin shipping hooks/hooks.json still gets its hooks merged
+  // and fired (plan docs/plans/2026-09-08-plugin-hooks-seam.md).
+  ctx.provide('hooks', {
+    mergePluginHooks(pluginName: string, raw: unknown, pluginRoot?: string): () => void {
+      let result
+      try {
+        result = parseClaudeCodeConfig(raw, {
+          ...pluginRoot !== undefined ? { pluginRoot } : {},
+          ...config.projectDir !== undefined ? { projectDir: config.projectDir } : {},
+        })
+      } catch (error: unknown) {
+        // D1 (mcp-seam precedent): a bad plugin config (e.g. an invalid matcher
+        // regex) skips the plugin's hooks with a warn — never throws.
+        ctx.logger.warn(`hooks-claude-code: skipping hooks for plugin "${pluginName}": ${String(error)}`)
+        recordIssue?.({ ts: new Date().toISOString(), dialect: 'claude-code', point: 'hooks', kind: 'config', detail: `plugin "${pluginName}" hooks rejected: ${String(error)}` })
+        return () => {}
+      }
+      for (const s of result.skipped) {
+        ctx.logger.warn(`hooks-claude-code: skipping "${s.type}" hook on ${s.event} (${s.reason})`)
+      }
+      for (const w of result.warnings) {
+        const detail = `unsupported ${w.hookType} on ${w.event}${w.matcher !== undefined ? ` (matcher "${w.matcher}")` : ''}: ${w.keys.length > 0 ? w.keys.join(', ') : 'unknown event key'}`
+        ctx.logger.warn(`hooks-claude-code: ${detail}`)
+        recordIssue?.({ ts: new Date().toISOString(), dialect: 'claude-code', point: w.event, kind: 'config', detail })
+      }
+      // COPY-ON-WRITE merge: runPoint snapshots the per-event array reference
+      // at the start of each dispatch, so replacing (not splicing) keeps any
+      // in-flight snapshot stable — an in-place splice during dispose would
+      // skip groups mid-iteration.
+      const addedGroups = new Set<MatcherGroup>()
+      const addedEvents = new Set<string>()
+      for (const [event, groups] of Object.entries(result.config)) {
+        parsed[event] = [...(parsed[event] ?? []), ...groups]
+        for (const group of groups) addedGroups.add(group)
+        addedEvents.add(event)
+      }
+      return () => {
+        for (const event of addedEvents) {
+          const remaining = (parsed[event] ?? []).filter(group => !addedGroups.has(group))
+          if (remaining.length === 0) delete parsed[event]
+          else parsed[event] = remaining
+        }
+      }
+    },
+  })
 
   // F1/F2/F3 turn-safety cluster (stop-block counters, cap override, halt and
   // notice shaping), built once like the run point.
