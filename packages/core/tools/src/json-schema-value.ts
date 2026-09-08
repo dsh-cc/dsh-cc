@@ -6,8 +6,8 @@
  * @module dsh-tools/json-schema-value
  */
 
-import { assertNever } from '@deepseek-ai/dsh-llm'
-import { isJsonValue } from '@deepseek-ai/dsh-session'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
+import { isJsonValue } from '@deepseek-ai/dsh-util-values'
 import { isJsonNumber, isPlainJsonRecord, SCHEMA_TYPES } from './json-schema.ts'
 import type { JsonSchemaNode, JsonSchemaScalar } from './json-schema.ts'
 

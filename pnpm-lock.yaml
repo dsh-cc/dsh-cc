@@ -279,6 +279,9 @@ importers:
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-util-values':
+        specifier: link:../../../../deepseek-harness/packages/util/values
+        version: link:../../../../deepseek-harness/packages/util/values
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -644,6 +647,9 @@ importers:
       '@deepseek-ai/dsh-user-approval':
         specifier: link:../../../../deepseek-harness/packages/interaction/user-approval
         version: link:../../../../deepseek-harness/packages/interaction/user-approval
+      '@deepseek-ai/dsh-util-values':
+        specifier: link:../../../../deepseek-harness/packages/util/values
+        version: link:../../../../deepseek-harness/packages/util/values
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery

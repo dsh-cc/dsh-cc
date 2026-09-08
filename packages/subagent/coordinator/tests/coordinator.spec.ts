@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -58,7 +58,7 @@ function callTool(
 ) {
   return ctx.tools.execute({
     signal: testToolSignal,
-    callId: CallId(`call-${++calls}`),
+    callId: ToolCallId(`call-${++calls}`),
     name,
     arguments: args,
     agent: agent as never,
@@ -220,7 +220,7 @@ describe('dsh-coordinator named worker routing', () => {
     // Execute without an agent carrier: the coordinator tools require one.
     const result = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('call-x'),
+      callId: ToolCallId('call-x'),
       name: 'worker_tasks',
       arguments: {},
     })

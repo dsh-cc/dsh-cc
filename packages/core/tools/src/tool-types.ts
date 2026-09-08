@@ -5,10 +5,11 @@
  * @module tool-types
  */
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { CallId, ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
-import { deepFreeze } from '@deepseek-ai/dsh-llm'
-import type { JsonValue, UserMessage } from '@deepseek-ai/dsh-session'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
+import type { ToolCallId, ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
+import type {UserMessage} from '@deepseek-ai/dsh-session'
+import type {JsonValue} from '@deepseek-ai/dsh-util-values'
+import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ToolCallView, ToolResultView } from './presentation.ts'
 import type { ToolFailure } from './abort-utils.ts'
 import type { JsonSchemaNode } from './json-schema.ts'
@@ -117,12 +118,12 @@ export type ToolExecutionToken = symbol & { readonly [toolExecutionTokenBrand]: 
  * callers do not choose that token.
  */
 export interface ToolExecutionInput {
-  readonly callId: CallId
+  readonly callId: ToolCallId
   /**
    * Root model-requested call owning this execution tree. Callers omit it for
    * a root execution; nested dispatchers propagate the enclosing value.
    */
-  readonly rootCallId?: CallId
+  readonly rootCallId?: ToolCallId
   readonly name: string
   /** Losslessly JSON-serializable parsed arguments (tools validate their own schema). */
   readonly arguments: unknown
@@ -165,7 +166,7 @@ export interface CodeDispatchLog {
   /** The calling agent (the scope routing key and the spill owner), when the outer call has one. */
   readonly agent?: Agent
   /** Deterministic sub-call id (`<parent>:code:<n>`). */
-  readonly subCallId: CallId
+  readonly subCallId: ToolCallId
   /** The dispatched sub-tool name. */
   readonly name: string
   /** Whether the sub-call settled as an error. */
@@ -183,7 +184,7 @@ export interface CodeDispatchLog {
  */
 export interface ToolExecution extends ToolExecutionInput {
   /** Root model-requested call, resolved for every root and nested execution. */
-  readonly rootCallId: CallId
+  readonly rootCallId: ToolCallId
   /** Registry-assigned identity shared with nested calls only as their opaque `parent` token. */
   readonly token: ToolExecutionToken
 }

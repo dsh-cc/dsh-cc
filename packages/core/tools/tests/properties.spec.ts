@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { isJsonValue } from '@deepseek-ai/dsh-session'
+import { isJsonValue } from '@deepseek-ai/dsh-util-values'
 import { parameterSchemaSpecToJsonSchema, validateArgs } from '@dsh-cc/tools'
 import type { ParameterPropertySpec, ParameterSchemaSpec, ValueSchemaSpec } from '@dsh-cc/tools'
 

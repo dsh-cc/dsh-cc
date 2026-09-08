@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId, type LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, type LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -203,7 +203,7 @@ let calls = 0
 function callTool(ctx: Context, name: string, args: unknown, agent: Agent) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId(`call-${++calls}`),
+    callId: ToolCallId(`call-${++calls}`),
     name,
     arguments: args,
     agent: agent as never,

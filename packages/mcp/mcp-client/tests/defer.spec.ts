@@ -7,7 +7,7 @@
  * No `toolSearch` service ⇒ eager fallback.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { type JsonValue } from '@dsh-cc/tools'
 import DeferredToolRegistry from '@dsh-cc/tool-search'
@@ -154,7 +154,7 @@ describe('deferred MCP tool disclosure', () => {
       expect(activation.status).toBe('loaded')
       expect(ctx.tools.get('mcp__srv__greet')).toBeDefined()
       const result = await ctx.tools.execute({
-        callId: CallId('c1'), name: 'mcp__srv__greet', arguments: { name: 'World' }, signal: testToolSignal,
+        callId: ToolCallId('c1'), name: 'mcp__srv__greet', arguments: { name: 'World' }, signal: testToolSignal,
       })
       expect(result.isError).toBe(false)
       expect(result.content[0]).toEqual({ type: 'text', text: 'ok' })
@@ -239,7 +239,7 @@ describe('deferred MCP tool disclosure', () => {
       expect(ctx.toolSearch.activate('mcp__srv__greet').status).toBe('loaded')
       expect(ctx.tools.get('mcp__srv__greet')).toBeDefined()
       const result = await ctx.tools.execute({
-        callId: CallId('c1'), name: 'mcp__srv__greet', arguments: { name: 'World' }, signal: testToolSignal,
+        callId: ToolCallId('c1'), name: 'mcp__srv__greet', arguments: { name: 'World' }, signal: testToolSignal,
       })
       expect(result.isError).toBe(false)
       // The old client never gets the call.

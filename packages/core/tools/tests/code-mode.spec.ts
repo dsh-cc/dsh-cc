@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, CallId  } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId  } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -10,7 +10,8 @@ import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DIS
 import type { Config, JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import type { JsonValue, SessionEventMap } from '@deepseek-ai/dsh-session'
+import type {SessionEventMap} from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 const testToolSignal = new AbortController().signal
 
@@ -107,7 +108,7 @@ async function runCode(
 ): Promise<ToolExecutionResult> {
   return ctx.tools.execute({
     signal: testToolSignal,
-    callId: CallId('call-1'),
+    callId: ToolCallId('call-1'),
     name: RUN_CODE_NAME,
     arguments: { code, description: extras.description ?? 'Run the test program' },
     ...extras.agent ? { agent: extras.agent } : {},
@@ -1557,9 +1558,9 @@ describe('the run_code dispatch bridge', () => {
       content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     session.append('tool/code-dispatch', {
-      rootCallId: CallId('p1'),
-      parentCallId: CallId('p1'),
-      subCallId: CallId('p1:code:1'),
+      rootCallId: ToolCallId('p1'),
+      parentCallId: ToolCallId('p1'),
+      subCallId: ToolCallId('p1:code:1'),
       name: 'echo',
       arguments: { value: 'x' },
       isError: false,
@@ -1599,7 +1600,7 @@ describe('the run_code dispatch bridge', () => {
     registerEcho(ctx, 'write')
     const result = await registry.execute({
       signal: testToolSignal,
-      callId: CallId('call-1'),
+      callId: ToolCallId('call-1'),
       name: 'write',
       arguments: { text: 'hello' },
     })
@@ -1621,7 +1622,7 @@ describe('the run_code dispatch bridge', () => {
     aborted.abort()
     const result = await registry.execute({
       signal: aborted.signal,
-      callId: CallId('call-1'),
+      callId: ToolCallId('call-1'),
       name: 'write',
       arguments: { text: 'hello' },
     })
@@ -1653,7 +1654,7 @@ describe('per-agent presentation', () => {
     // mode is its own rather than the deployment's.
     const denied = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('coded-direct'),
+      callId: ToolCallId('coded-direct'),
       name: 'echo',
       arguments: { value: 'coded' },
       agent,
@@ -1689,14 +1690,14 @@ describe('per-agent presentation', () => {
     // `dsh-agent-tool-presentation` produces.
     expect(ctx.tools.executionMode({
       signal: testToolSignal,
-      callId: CallId('preset-coded-schedule'),
+      callId: ToolCallId('preset-coded-schedule'),
       name: 'echo',
       arguments: { value: 'joined' },
       agent: joined.agent,
     })).toEqual({ kind: 'exclusive' })
     const denied = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('preset-coded-direct'),
+      callId: ToolCallId('preset-coded-direct'),
       name: 'echo',
       arguments: { value: 'joined' },
       agent: joined.agent,
@@ -1709,7 +1710,7 @@ describe('per-agent presentation', () => {
     expect(native.tools.map(tool => tool.name)).toEqual(['echo'])
     const allowed = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('native-sibling-direct'),
+      callId: ToolCallId('native-sibling-direct'),
       name: 'echo',
       arguments: { value: 'loner' },
       agent: loner.agent,

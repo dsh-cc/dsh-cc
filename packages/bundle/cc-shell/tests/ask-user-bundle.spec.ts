@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@dsh-cc/tools'
 import UserQuestionService, {
   type AskUserQuestionAnswer,
@@ -70,7 +70,7 @@ describe('cc-shell bundle — ask_user_question rows (dsh-user-questions + dsh-t
 
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('cc-ask-ok'),
+      callId: ToolCallId('cc-ask-ok'),
       name: 'ask_user_question',
       arguments: {
         questions: [{
@@ -101,7 +101,7 @@ describe('cc-shell bundle — ask_user_question rows (dsh-user-questions + dsh-t
 
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('cc-ask-no-provider'),
+      callId: ToolCallId('cc-ask-no-provider'),
       name: 'ask_user_question',
       arguments: { questions: [{ id: 'continue', question: 'Continue?' }] },
     })

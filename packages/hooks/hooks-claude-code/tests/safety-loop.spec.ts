@@ -11,7 +11,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
-import { CallId, type ContentBlock } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineContentToolFixture, type PreToolDecision } from '@dsh-cc/tools'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
@@ -317,7 +317,7 @@ echo '{"systemMessage":"${long}"}'
     const warn = vi.fn()
     ctx.logger.warn = warn as never
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
-    const result = await ctx.tools.execute({ signal: new AbortController().signal, callId: CallId('c1'), name: 'echo', arguments: {} })
+    const result = await ctx.tools.execute({ signal: new AbortController().signal, callId: ToolCallId('c1'), name: 'echo', arguments: {} })
     expect(result.isError).toBe(false)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('heads up no agent'))
   })

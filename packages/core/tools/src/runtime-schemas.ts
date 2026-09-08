@@ -9,7 +9,7 @@
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
+import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
 import { RUN_CODE_NAME, SDK_SECTION_ORDER } from './code-mode.ts'
 import type { ToolSdkSchema } from './ts-types.ts'

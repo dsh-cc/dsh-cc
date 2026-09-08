@@ -3,7 +3,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import * as toolSchedule from '@deepseek-ai/dsh-schedule'
 
@@ -51,7 +51,7 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
 
     const created = await ctx.agents.withInitiator(root.agent, () => ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('cc-schedule-create'),
+      callId: ToolCallId('cc-schedule-create'),
       name: 'schedule_create',
       arguments: { prompt: 'future reminder', after_seconds: 3600 },
       agent: root.agent,

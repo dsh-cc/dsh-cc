@@ -4,8 +4,8 @@
  * @module dsh-tools/json-render
  */
 
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 /**
  * Snapshot one binding call's argument as lossless JSON, then snapshot that

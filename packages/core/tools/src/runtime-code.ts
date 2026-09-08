@@ -8,7 +8,7 @@
 
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import { assertNever } from '@deepseek-ai/dsh-llm'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import type { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
 // Type-only: makes `ctx.get('approval')` resolve to the ApprovalService
 // augmentation. The seam stays optional at runtime — see `serviceAsk`.

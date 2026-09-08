@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
@@ -45,7 +45,7 @@ async function mount(config: Config = {}): Promise<Context> {
 function exec(name: string, args: unknown, agent?: Agent): ToolExecutionInput {
   return {
     signal: testToolSignal,
-    callId: CallId('c1'),
+    callId: ToolCallId('c1'),
     name,
     arguments: args,
     ...(agent ? { agent } : {}),

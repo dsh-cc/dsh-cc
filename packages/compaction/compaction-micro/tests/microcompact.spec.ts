@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId, createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // Type-only: the `compaction/prune` shadow-price SessionEventMap merge.
@@ -38,7 +38,7 @@ function appendToolStep(
   call: string,
   text: string,
 ): number {
-  const callId = CallId(call)
+  const callId = ToolCallId(call)
   s.append('turn/start', { turn })
   s.append('step/start', { turn, step: 1 })
   s.append('assistant/message', {
@@ -75,7 +75,7 @@ function replacementText(s: Session, call: string): string | undefined {
     const event = s.events[seq]
     if (event?.type !== 'tool/result') continue
     const msg = event.data.message as SessionEvent<'tool/result'>['data']['message']
-    if (msg.source.callId !== CallId(call)) continue
+    if (msg.source.callId !== ToolCallId(call)) continue
     const block = msg.content[0]
     return block?.type === 'tool-result' && block.content[0]?.type === 'text'
       ? block.content[0].text
@@ -132,7 +132,7 @@ describe('Microcompactor window + freeze', () => {
     expect(result.replaced).toHaveLength(3)
     expect(result.stable).toBe(false)
     expect(result.replaced.map(e => e.callId)).toEqual(
-      [1, 2, 3].map(i => CallId(`call-${i}`)),
+      [1, 2, 3].map(i => ToolCallId(`call-${i}`)),
     )
     // Newest two are untouched verbatim.
     expect(replacementText(s, 'call-4')).toBe('result 4')
@@ -186,7 +186,7 @@ describe('Microcompactor window + freeze', () => {
     // The oldest two (seqs originalSeqs[0..1]) were collapsed.
     expect(result.replaced).toHaveLength(2)
     expect(result.replaced.map(r => r.originalSeq)).toEqual([originalSeqs[0], originalSeqs[1]])
-    expect(result.replaced.map(r => r.callId)).toEqual([CallId('call-1'), CallId('call-2')])
+    expect(result.replaced.map(r => r.callId)).toEqual([ToolCallId('call-1'), ToolCallId('call-2')])
     // Each decision's replacementSeq is a current-surface node whose content is the placeholder,
     // and which cites the shadowed original — the decision reconstructs from log + code.
     for (const record of result.replaced) {
@@ -277,7 +277,7 @@ describe('Microcompactor single-pass batch folding', () => {
 
     const first = micro.microcompactSession(s)
     expect(first.replaced).toHaveLength(1)
-    expect(first.replaced[0]?.callId).toEqual(CallId('call-1'))
+    expect(first.replaced[0]?.callId).toEqual(ToolCallId('call-1'))
     expect(first.stable).toBe(false)
 
     // Steady state: with the overflow landed, a re-pass folds nothing.
@@ -290,7 +290,7 @@ describe('Microcompactor single-pass batch folding', () => {
     appendToolStep(s, 7, 'call-7', 'result 7')
     const third = micro.microcompactSession(s)
     expect(third.replaced).toHaveLength(1)
-    expect(third.replaced[0]?.callId).toEqual(CallId('call-2'))
+    expect(third.replaced[0]?.callId).toEqual(ToolCallId('call-2'))
     expect(replacementText(s, 'call-7')).toBe('result 7')
   })
 })
