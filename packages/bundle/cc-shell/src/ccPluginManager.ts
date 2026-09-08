@@ -20,6 +20,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { createCcPluginManager, createSystemGitRunner, type CcPluginManager } from '@dsh-cc/plugin-manager'
 import { resolveClaudeHome } from '@dsh-cc/plugin-loader'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -29,14 +30,16 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /**
- * Build the session-bound manager: `$CLAUDE_CONFIG_DIR` / `~/.claude` state
- * root, the session cwd (the same `process.cwd()` source `CcPluginsService`
- * uses for project/local `enabledPlugins` scope resolution), and the host
- * git runner for marketplace clones/updates.
+ * Build the session-bound manager: dual-home plugin state (writes to
+ * `$DSH_HOME` / `~/.dsh`, compat-reads `$CLAUDE_CONFIG_DIR` / `~/.claude`),
+ * the session cwd (the same `process.cwd()` source `CcPluginsService` uses
+ * for project/local `enabledPlugins` scope resolution), and the host git
+ * runner for marketplace clones/updates.
  */
 export function createSessionCcPluginManager(): CcPluginManager {
   return createCcPluginManager({
     claudeHome: resolveClaudeHome(),
+    dshHome: resolveDshHome(),
     cwd: process.cwd(),
     runGit: createSystemGitRunner(),
   })

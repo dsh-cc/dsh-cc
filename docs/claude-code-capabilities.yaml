@@ -1371,13 +1371,18 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-plugin" }
       - { type: test, path: packages/interaction/command-plugin/tests/command-plugin.spec.ts }
+      - { type: test, path: packages/interaction/command-plugin/tests/manage.spec.ts }
     deviation:
       kind: downgrade
       summary: >-
         No interactive menu UI (text output only); a static trust-warning line
         instead of interactive consent prompts; CC-only subcommands not
         implemented (details/eval/init/prune/tag/validate, --config, --sparse,
-        managed scope).
+        managed scope). State surface diverges from upstream: listing presents
+        the dual-home merged view (claude home read-visible, dsh entries win
+        per key), mutations write to the dsh home (`$DSH_HOME` / `~/.dsh`)
+        never the Claude home, and a shadowed-claude marketplace re-add prints
+        a one-line notice.
 
   commands.provider:
     title: /provider
@@ -1987,7 +1992,16 @@ capabilities:
       - { type: test, path: packages/bundle/cc-shell/tests/mcp-seam.integration.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-manager/tests/install-dsh-cc-agents.spec.ts }
       - { type: test, path: packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts }
-    deviation: { kind: none }
+    deviation:
+      kind: divergent
+      summary: >-
+        Discovery presents the dual-home merged view: the Claude home
+        ($CLAUDE_CONFIG_DIR / ~/.claude) stays read-visible for Claude Code
+        compatibility while the dsh home ($DSH_HOME / ~/.dsh) is the write
+        root, merged per key with dsh-wins. The fork is one-way (real Claude
+        Code sees only its own home) and ids dsh has taken over stop tracking
+        later claude-side changes; a claudeHome-alone caller keeps legacy
+        single-root behavior.
 
   plugins.management:
     title: Plugin management state
@@ -2001,14 +2015,28 @@ capabilities:
     dimensions:
       recognized: true
       mounted: true
-      behavioral: full
-      ux: full
+      behavioral: divergent
+      ux: partial
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-shell-glue" }
+      - { type: test, path: packages/compat/cc-plugin-manager/tests/merged-state.spec.ts }
+      - { type: test, path: packages/compat/cc-plugin-manager/tests/paths.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-manager/tests/alignment.spec.ts }
+      - { type: test, path: packages/compat/cc-plugin-manager/tests/marketplace.spec.ts }
       - { type: test, path: packages/interaction/command-plugin/tests/manage.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-manager/tests/install.spec.ts }
-    deviation: { kind: none }
+      - { type: test, path: packages/bundle/cc-shell/tests/ccPluginManager.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        State root split: every /plugin mutation writes under the dsh home
+        ($DSH_HOME / ~/.claude never written), the Claude home stays
+        read-visible for compatibility, and both homes merge per key with
+        dsh-wins (null tombstones hide claude-only marketplaces). Claude Code
+        reads only its own home, so the fork is one-way; ids materialized into
+        the dsh installed file stop tracking later claude-side changes
+        (takeover staleness). Setting CLAUDE_CONFIG_DIR no longer relocates
+        writes; a claudeHome-alone caller keeps legacy single-root behavior.
 
   # ── settings ────────────────────────────────────────────────────────────
   settings.hot-reload:

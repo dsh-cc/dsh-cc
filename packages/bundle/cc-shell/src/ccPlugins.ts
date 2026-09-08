@@ -46,8 +46,13 @@ export interface CcPluginsServiceOptions {
   readonly pluginDirs?: readonly string[] | null
   /** Spawn-time model resolver threaded into every mounted agent. */
   readonly resolveModel?: ResolveModel
-  /** Claude config home; defaults to `$CLAUDE_CONFIG_DIR` / `~/.claude`. */
+  /** Claude config home; defaults to `$CLAUDE_CONFIG_DIR` / `~/.claude`. When
+   * only `claudeHome` is set (no `dshHome`), the loader keeps legacy
+   * single-root behavior: that directory is both the read and the write root. */
   readonly claudeHome?: string
+  /** dsh state home (`$DSH_HOME` / `~/.dsh`): the write root for dsh-managed
+   * plugin state, merged per key over the Claude home (dsh wins). */
+  readonly dshHome?: string
   /** Workspace used for project/local `enabledPlugins`; defaults to `process.cwd()`. */
   readonly cwd?: string
 }
@@ -138,6 +143,7 @@ export class CcPluginsService {
     return discoverCcPluginRoots({
       ...this.options.pluginDirs !== undefined ? { pluginDirs: this.options.pluginDirs } : {},
       ...this.options.claudeHome !== undefined ? { claudeHome: this.options.claudeHome } : {},
+      ...this.options.dshHome !== undefined ? { dshHome: this.options.dshHome } : {},
       ...this.options.cwd !== undefined ? { cwd: this.options.cwd } : {},
       log: this.ctx.logger,
     })
