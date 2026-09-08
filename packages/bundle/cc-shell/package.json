@@ -49,6 +49,7 @@
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
+    "@dsh-cc/hooks-claude-code": "workspace:^",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",

@@ -21,9 +21,11 @@ export interface HooksSeam {
    * Merge a plugin's hooks into the bridge.
    * @param pluginName - the plugin that owns the hooks.
    * @param config - the per-event hook map (`ClaudeCodeHookConfig` shape).
+   * @param pluginRoot - the plugin's root dir, used to substitute
+   *   `${CLAUDE_PLUGIN_ROOT}` in command strings.
    * @returns the exact disposer that removes the injected hooks.
    */
-  mergePluginHooks(pluginName: string, config: unknown): () => void
+  mergePluginHooks(pluginName: string, config: unknown, pluginRoot?: string): () => void
 }
 
 /** Hooks live under this file in a plugin root, when present. */
@@ -60,7 +62,7 @@ export function mountHooks(options: MountHooksOptions): { disposers: (() => void
     tally.addSkipped('plugin declares no hooks')
     return { disposers, tally }
   }
-  disposers.push(options.hooks.mergePluginHooks(options.manifest.name, hooks.value))
+  disposers.push(options.hooks.mergePluginHooks(options.manifest.name, hooks.value, options.pluginRoot))
   tally.addLoaded()
   return { disposers, tally }
 }

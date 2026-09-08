@@ -308,6 +308,22 @@ describe('mountHooks', () => {
       await dispose()
     }
   })
+
+  it('passes (pluginName, config, pluginRoot) to the seam for hooks/hooks.json', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'hooks/hooks.json', JSON.stringify({ hooks: { SessionStart: [] } }))
+      const manifest = parsePluginManifest({ name: 'p' }, 'p')
+      const merged: unknown[] = []
+      const seam = { mergePluginHooks: (...args: unknown[]) => { merged.push(args); return () => {} } }
+      const { tally } = mountHooks({ pluginRoot: root, manifest, hooks: seam })
+      expect(tally.result().loaded).toBe(1)
+      // The third argument is the plugin root, for ${CLAUDE_PLUGIN_ROOT} substitution.
+      expect(merged[0]).toEqual(['p', { SessionStart: [] }, root])
+    } finally {
+      await dispose()
+    }
+  })
 })
 
 describe('mountMcpServers', () => {

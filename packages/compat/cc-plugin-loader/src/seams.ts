@@ -32,9 +32,11 @@ export interface HooksSeam {
    * canonical `ClaudeCodeHookConfig` shape the bridge consumes.
    * @param pluginName - the plugin owning the hooks, for namespacing.
    * @param config - the parsed per-event `MatcherGroup[]` map.
+   * @param pluginRoot - the plugin's root dir, used to substitute
+   *   `${CLAUDE_PLUGIN_ROOT}` in command strings.
    * @returns the exact disposer that removes the injected hooks.
    */
-  mergePluginHooks(pluginName: string, config: unknown): () => void
+  mergePluginHooks(pluginName: string, config: unknown, pluginRoot?: string): () => void
 }
 
 /** Probe a guest seam by key, returning `undefined` when the host lacks it. */
