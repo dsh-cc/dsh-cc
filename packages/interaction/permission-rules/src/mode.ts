@@ -23,7 +23,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { PLAN_READONLY_REASON, SWITCHABLE_PERMISSION_MODES, type PermissionMode, type SwitchablePermissionMode } from './types.ts'
 
 ;(KNOWN_SESSION_EVENT_TYPES as Set<string>).add('permission/mode')
@@ -54,6 +54,50 @@ interface PermissionModeWire {
 /** Read a log event through the extended `permission/mode` face. */
 function asModeEvent(event: SessionEvent): PermissionModeWire {
   return event as unknown as PermissionModeWire
+}
+
+/** Wire face of one log event that may or may not be a `plan/mode`. */
+interface PlanModeWire {
+  readonly type: string
+  readonly data: { active?: boolean }
+}
+
+/** Wire face of one log event that may or may not be a `sandbox/mode`. */
+interface SandboxModeWire {
+  readonly type: string
+  readonly data: { mode?: SandboxMode }
+}
+
+/**
+ * Fold the session's plan mode: whether the last `plan/mode` event is active.
+ * Local wire face of the upstream fold (removed from dsh-plan-mode) — the
+ * `plan/mode {active}` event vocabulary is unchanged at the pin.
+ * @param events - session events in log order (other event types are skipped).
+ * @returns true when the last recorded state entered plan mode.
+ */
+export function foldPlanMode(events: readonly SessionEvent[]): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i] as unknown as PlanModeWire
+    if (event.type === 'plan/mode') return event.data.active === true
+  }
+  return false
+}
+
+/**
+ * Fold the session's live sandbox mode: the last `sandbox/mode` event, or
+ * undefined when the session never recorded one. Local wire face of the
+ * upstream fold (removed from dsh-sandbox-policy) — last-wins regardless of
+ * the event's `source`, including `delegation`-seeded events (matching both
+ * the upstream baseline helper and the pin's projection).
+ * @param events - session events in log order (other event types are skipped).
+ * @returns the last recorded sandbox mode, or undefined without one.
+ */
+export function foldSandboxMode(events: readonly SessionEvent[]): SandboxMode | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i] as unknown as SandboxModeWire
+    if (event.type === 'sandbox/mode') return event.data.mode
+  }
+  return undefined
 }
 
 /**
@@ -154,15 +198,15 @@ export function switchSessionPermissionMode(args: SwitchSessionPermissionModeArg
   const enteringBypass = mode === 'bypassPermissions'
 
   if (enteringBypass) {
-    const resume = effectiveSandboxMode(session.snapshotEvents()) ?? shellMode
-    const alreadyFull = (effectiveSandboxMode(session.snapshotEvents()) ?? shellMode) === 'danger-full-access'
+    const resume = foldSandboxMode(session.snapshotEvents()) ?? shellMode
+    const alreadyFull = (foldSandboxMode(session.snapshotEvents()) ?? shellMode) === 'danger-full-access'
     setPermissionMode(session, mode, resume)
     if (!alreadyFull) setSandboxMode(session, 'danger-full-access')
   } else {
     setPermissionMode(session, mode)
     if (wasBypass) {
       const restore = foldResumeSandbox(session.snapshotEvents()) ?? shellMode ?? 'workspace-write'
-      if ((effectiveSandboxMode(session.snapshotEvents()) ?? shellMode) !== restore) {
+      if ((foldSandboxMode(session.snapshotEvents()) ?? shellMode) !== restore) {
         setSandboxMode(session, restore)
       }
     }

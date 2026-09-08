@@ -39,10 +39,10 @@ function makeTodosCtx(opts: {
   projections?: ReturnType<typeof makeProjections>
   resumeSessions?: Record<string, FakeSession>
 }) {
-  const createSession: FakeSession = { id: 's-a', events: [], status: 'idle' }
+  const createSession: FakeSession = { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
     options: {},
-    session: { id: s.id, header: {}, events: s.events ?? [] },
+    session: { id: s.id, header: {}, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',
     followup: vi.fn(),
@@ -199,7 +199,7 @@ describe('createDriver todos (sessionProjections feed)', () => {
     const projections = makeProjections({ 's-a': {} })
     const { ctx } = makeTodosCtx({
       projections,
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle' } },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
     await driver.switchSession('s-b')

@@ -8,7 +8,7 @@
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
+import { foldPlanMode } from '@dsh-cc/permission-rules'
 import { foldPermissionMode } from '@dsh-cc/permission-rules'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
 

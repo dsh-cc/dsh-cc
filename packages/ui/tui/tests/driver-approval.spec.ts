@@ -40,7 +40,7 @@ function makeQueueCtx(): {
   let nextCount = 0
   const agent = {
     id: 'a-queue',
-    session: { id: 's-queue', header: {}, events: [] },
+    session: { id: 's-queue', header: {}, events: [], snapshotEvents() { return this.events } },
     options: {},
     status: 'idle',
   }
@@ -217,7 +217,7 @@ describe('approval modal queue', () => {
     expect(driver.state.subagents.map(run => run.sessionId)).toContain('sub-s1')
 
     const pending = queue.request({
-      agent: { id: 'a-sub', session: { id: 'sub-s1', events: [] } },
+      agent: { id: 'a-sub', session: { id: 'sub-s1', events: [], snapshotEvents() { return this.events } } },
       toolName: 'Bash',
     })
     expect(driver.state.approval?.toolName).toBe('Bash')
@@ -233,7 +233,7 @@ describe('approval modal queue', () => {
     const driver = await createDriver(queue.ctx as never, {})
 
     const pending = queue.request({
-      agent: { id: 'a-stranger', session: { id: 's-stranger', events: [] } },
+      agent: { id: 'a-stranger', session: { id: 's-stranger', events: [], snapshotEvents() { return this.events } } },
       toolName: 'Bash',
     })
     expect(driver.state.approval).toBeUndefined()

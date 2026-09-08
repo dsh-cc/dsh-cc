@@ -10,7 +10,7 @@
  */
 
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
+import { foldPlanMode } from '@dsh-cc/permission-rules'
 
 /**
  * The plan lifecycle as mode switches see it:

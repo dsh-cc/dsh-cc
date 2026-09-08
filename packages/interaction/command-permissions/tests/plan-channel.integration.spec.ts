@@ -16,9 +16,12 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { turnBoundaryProjectionDefinition } from '@deepseek-ai/dsh-agent-loop'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import Tools from '@deepseek-ai/dsh-tools'
-import PlanMode, { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
+import PlanMode from '@deepseek-ai/dsh-plan-mode'
+import { foldPlanMode } from '@dsh-cc/permission-rules'
 import * as commandPermissions from '@dsh-cc/command-permissions'
 
 async function boot(): Promise<{
@@ -28,6 +31,8 @@ async function boot(): Promise<{
 }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
+  ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
   await ctx.plugin(CommandRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(SystemPrompt)
@@ -71,7 +76,7 @@ describe('plan switching through the command channel (composition-level)', () =>
     expect(ctx.get('planMode')).toBeUndefined()
     const execution = await ctx.commands.execute(agent, '/permissions plan', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
-    expect(foldPlanMode(agent.session.events)).toBe(true)
+    expect(foldPlanMode(agent.session.snapshotEvents())).toBe(true)
   })
 
   it('re-entering plan is a no-op answered locally, not re-dispatched', async () => {
@@ -81,19 +86,19 @@ describe('plan switching through the command channel (composition-level)', () =>
     // Had it re-dispatched, the real /plan handler would answer with its own
     // entering/already-active narration instead of this branch's text.
     expect((second?.result as { text: string }).text).toBe('Permission mode is now "plan".')
-    expect(foldPlanMode(agent.session.events)).toBe(true)
+    expect(foldPlanMode(agent.session.snapshotEvents())).toBe(true)
   })
 
   it('/permissions auto exits plan through /plan off before switching the engine', async () => {
     const { ctx, agent, calls } = await boot()
     await ctx.commands.execute(agent, '/permissions plan', [], new AbortController().signal)
-    expect(foldPlanMode(agent.session.events)).toBe(true)
+    expect(foldPlanMode(agent.session.snapshotEvents())).toBe(true)
     const execution = await ctx.commands.execute(agent, '/permissions auto', [], new AbortController().signal)
     expect((execution?.result as { text: string }).text).toBe('Permission mode is now "auto".')
-    expect(foldPlanMode(agent.session.events)).toBe(false)
+    expect(foldPlanMode(agent.session.snapshotEvents())).toBe(false)
     expect(calls).toEqual(['setMode:auto'])
     // The exit really went through plan-mode: both transitions are logged.
-    const planEvents = agent.session.events
+    const planEvents = agent.session.snapshotEvents()
       .filter(event => event.type === 'plan/mode')
       .map(event => event.data.active)
     expect(planEvents).toEqual([true, false])

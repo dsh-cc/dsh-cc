@@ -11,7 +11,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { join } from 'node:path'
 import { defaultDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
@@ -52,7 +52,7 @@ export const OUTPUT_STYLE_SECTION = 'cc:output-style'
 export const OUTPUT_STYLE_ORDER = -50
 
 /** Settings namespace carrying the selected output style. */
-export const OUTPUT_STYLE_SETTINGS_NAMESPACE = settingsNamespace('cc-output-styles')
+export const OUTPUT_STYLE_SETTINGS_NAMESPACE = 'cc-output-styles' as SettingsNamespace
 
 /** Schema of one resolved settings section for the output style. */
 const OUTPUT_STYLE_ENTRY_SCHEMA = z.object({ outputStyle: z.string() })
@@ -119,14 +119,16 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // is mounted, and written by /output-style when none is.
   let fallback = config.outputStyle ?? DEFAULT_OUTPUT_STYLE
   let source: () => string = () => fallback
-  installSettingsSection(ctx, OUTPUT_STYLE_SETTINGS_NAMESPACE, OUTPUT_STYLE_ENTRY_SCHEMA, { outputStyle: fallback }, {
-    setSource: (current) => {
-      source = () => current().outputStyle
-    },
-    onChange: () => {
-      // A committed style change must reach the next assembled prompt.
-      ctx.emit('system-prompt/change')
-    },
+  ctx.inject(['settings'], (sctx) => {
+    sctx.settings.installSection(ctx, OUTPUT_STYLE_SETTINGS_NAMESPACE, OUTPUT_STYLE_ENTRY_SCHEMA, { outputStyle: fallback }, {
+      setSource: (current) => {
+        source = () => current().outputStyle
+      },
+      onChange: () => {
+        // A committed style change must reach the next assembled prompt.
+        ctx.emit('system-prompt/change')
+      },
+    })
   })
 
   // The section provider reads the live selection at each assembly, so a

@@ -6,9 +6,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
-import { effectiveSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
-import { foldPermissionMode } from '@dsh-cc/permission-rules'
+import { foldPlanMode, foldPermissionMode, foldSandboxMode } from '@dsh-cc/permission-rules'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
@@ -306,7 +304,7 @@ describe('session mode overrides (durable)', () => {
     const agent = openTurnAgent('bypass-leave')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
     ctx.permissionRules.setMode(agent, 'acceptEdits')
-    expect(effectiveSandboxMode(agent.session.snapshotEvents())).toBe('workspace-write')
+    expect(foldSandboxMode(agent.session.snapshotEvents())).toBe('workspace-write')
   })
 
   it('leaving bypass with no recorded resume falls back to workspace-write', async () => {
@@ -314,7 +312,7 @@ describe('session mode overrides (durable)', () => {
     const agent = openTurnAgent('bypass-norec')
     ;(agent.session.append as (type: string, payload: { mode: string }) => unknown)('permission/mode', { mode: 'bypassPermissions' })
     ctx.permissionRules.setMode(agent, 'default')
-    expect(effectiveSandboxMode(agent.session.snapshotEvents())).toBe('workspace-write')
+    expect(foldSandboxMode(agent.session.snapshotEvents())).toBe('workspace-write')
   })
 
   it('auto mode auto-allows a classifier-LOW ask without hitting approval', async () => {
@@ -392,7 +390,7 @@ describe('session mode overrides (durable)', () => {
     ctx.reflect.provide('shell', { sandboxMode: 'workspace-write' } as never)
     const session = ctx.sessions.create(SessionId('pin-bypass'))
     expect(foldPermissionMode(session.snapshotEvents())).toBe('bypassPermissions')
-    expect(effectiveSandboxMode(session.snapshotEvents())).toBe('danger-full-access')
+    expect(foldSandboxMode(session.snapshotEvents())).toBe('danger-full-access')
   })
 
   it('session/created pin: plan default seeds plan/mode active on the new session', async () => {

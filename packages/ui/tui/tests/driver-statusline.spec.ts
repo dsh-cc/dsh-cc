@@ -56,6 +56,15 @@ function makeSettings(initial: Record<string, unknown>) {
         },
       }
     },
+    installSection(_owner: unknown, ns: unknown, _schema: unknown, entry: unknown, hooks: {
+      setSource?: (current: () => unknown) => void
+      onChange?: () => void
+    }) {
+      const scope = this.register(ns, undefined, { base: entry })
+      hooks.setSource?.(() => scope.get())
+      hooks.onChange?.()
+      scope.watch(() => hooks.onChange?.())
+    },
   }
   const commit = (section: Record<string, unknown>): void => {
     for (const reg of regs.values()) {
@@ -147,6 +156,7 @@ function makeStatusLineCtx(opts: {
         ...(s.createdAt === undefined ? {} : { createdAt: s.createdAt }),
       },
       events: s.events ?? [],
+      snapshotEvents() { return this.events },
     },
     id: `agent-${s.id}`,
     status: 'idle',

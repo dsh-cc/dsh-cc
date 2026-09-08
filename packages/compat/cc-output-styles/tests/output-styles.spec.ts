@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
+import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
@@ -35,7 +35,17 @@ class MemorySettings extends SettingsProvider {
 /** Build a live idle agent accepted by command dispatch and session append. */
 function stubAgent(ctx: Context, id: string): { agent: Agent; session: Session } {
   const session = ctx.sessions.create(SessionId(id))
-  const inbox = new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} })
+  // Plain-object fake: upstream no longer exports an `Inbox` constructor.
+  const nextStep: unknown[] = []
+  const inbox = {
+    nextTurn: [],
+    nextStep,
+    clear: () => {},
+    append: (target: string, message: unknown) => { if (target === 'next-step') nextStep.push(message) },
+    prepend: () => {},
+    replace: () => false,
+    remove: () => false,
+  }
   let status: AgentStatus = 'idle'
   const agent: Agent = {
     id: session.id,

@@ -32,7 +32,7 @@ async function harness(): Promise<{
   await ctx.plugin(MemorySettings)
   await ctx.plugin(CommandRuntime)
   await ctx.plugin(AgentRegistry)
-  ctx.settings.register(settingsNamespace('ui-theme'), THEME_SCHEMA)
+  ctx.settings.register('ui-theme' as SettingsNamespace, THEME_SCHEMA)
   const plugin = await ctx.plugin(commandConfig)
   const session = ctx.sessions.create(SessionId(`command-config-${Math.random()}`))
   const agent: Agent = {
@@ -108,7 +108,7 @@ describe('/config human command', () => {
     expect(execution?.result.kind).toBe('success')
     const text = (execution?.result as { text: string }).text
     expect(text).toContain('Set ui-theme.theme = "dark"')
-    expect(ctx.settings.get(settingsNamespace('ui-theme'))).toMatchObject({ theme: 'dark' })
+    expect(ctx.settings.get('ui-theme' as SettingsNamespace)).toMatchObject({ theme: 'dark' })
   })
   it('refuses unknown scopes and non-allowlisted keys with a friendly message', async () => {
     const { ctx, agent } = await harness()

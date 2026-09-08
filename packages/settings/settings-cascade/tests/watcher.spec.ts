@@ -4,7 +4,8 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { settingsNamespace, SettingsConflictError } from '@deepseek-ai/dsh-settings'
+import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 
 // Concurrency gate for `node:fs/promises.readFile`. When armed, the next read
@@ -105,7 +106,7 @@ async function readDoc(path: string): Promise<Record<string, unknown>> {
 
 /** Resolved `ui-theme` registration for read/update access. */
 function theme(ctx: Context) {
-  return ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+  return ctx.settings.register('ui-theme' as SettingsNamespace, ThemeSchema)
 }
 
 describe('settings cascade hot reload', () => {
@@ -237,7 +238,7 @@ describe('settings cascade hot reload', () => {
     expect(revisionAt()).toBe(1)
 
     await expect(
-      ctx.settings.update(settingsNamespace('ui-theme'), { theme: 'stale' }, 0),
+      ctx.settings.update('ui-theme' as SettingsNamespace, { theme: 'stale' }, 0),
     ).rejects.toThrow(SettingsConflictError)
   }, 15000)
 
@@ -253,7 +254,7 @@ describe('settings cascade hot reload', () => {
       localSettingsPath: join(projectDir, '.claude', 'settings.local.json'),
     })
     await fiber
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme' as SettingsNamespace, ThemeSchema)
     expect(scope.get()).toEqual({ theme: 'dark', fontSize: 14 })
     const counter = commitCounter(ctx)
 

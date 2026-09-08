@@ -59,7 +59,7 @@ function makeShellService(script: FakeResult[] = []) {
 function makeCtx(options: { shell?: unknown; status?: string } = {}) {
   const agent = {
     options: {},
-    session: { id: 's-bash', header: {}, events: [] },
+    session: { id: 's-bash', header: {}, events: [], snapshotEvents() { return this.events } },
     id: 'agent-s-bash',
     status: options.status ?? 'idle',
     followup: vi.fn(),

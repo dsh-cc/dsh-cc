@@ -18,7 +18,7 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { evaluatePermission } from './evaluate.ts'
 import { assessBashCommand, assessFilePath, type RiskAssessment } from './classifier.ts'
 import { isBashToolName, subjectOf } from './matchers.ts'
-import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
+import { foldPlanMode } from './mode.ts'
 import { foldPermissionMode } from './mode.ts'
 import type { PermissionDecision, PermissionMode, PermissionRuleSet } from './types.ts'
 

@@ -55,7 +55,7 @@ function makeQuestionCtx(): {
       create: async () => ({
         agent: {
           options: {},
-          session: { id: 's-test', header: {}, events: [] },
+          session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
           id: 'a-test',
           status: 'idle',
           followup() {},

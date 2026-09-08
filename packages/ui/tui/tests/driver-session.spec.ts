@@ -48,13 +48,13 @@ function makeSwitchableCtx(opts: {
 } {
   const disposed: string[] = []
   const resumeCalls: { resumeSessionId: string; agentOptions?: unknown }[] = []
-  const createSession = withCwd(opts.createSession ?? { id: 's-a', events: [], status: 'idle' })
+  const createSession = withCwd(opts.createSession ?? { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' })
 
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
     options: s.provider !== undefined && s.model !== undefined
       ? { provider: s.provider, model: s.model }
       : {},
-    session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] },
+    session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',
     followup: vi.fn(),
@@ -119,8 +119,8 @@ describe('createDriver switchSession', () => {
       { type: 'user/message', data: { content: [{ type: 'text', text: 'switched history' }], source: { kind: 'user' } } },
     ]
     const { ctx, disposed, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
-      resumeSessions: { 's-b': { id: 's-b', events: newEvents, status: 'running' } },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-b': { id: 's-b', events: newEvents, status: 'running' } , snapshotEvents() { return this.events } },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     // Boot session is s-a
@@ -149,8 +149,8 @@ describe('createDriver switchSession', () => {
 
   it('reseeds the model from the TARGET session after the rebind (banner + statusLine follow /resume)', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', provider: 'old-p', model: 'old-m', events: [], status: 'idle' },
-      resumeSessions: { 's-b': { id: 's-b', provider: 'new-p', model: 'new-m', events: [], status: 'idle' } },
+      createSession: { id: 's-a', provider: 'old-p', model: 'old-m', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-b': { id: 's-b', provider: 'new-p', model: 'new-m', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     // Boot banner reflects the boot session's model.
@@ -169,8 +169,8 @@ describe('createDriver switchSession', () => {
 
   it('is a no-op when switching to the current session (dispose NOT called)', async () => {
     const { ctx, disposed, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
-      resumeSessions: { 's-a': { id: 's-a', events: [], status: 'idle' } },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-a': { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
 
@@ -182,7 +182,7 @@ describe('createDriver switchSession', () => {
 
   it('on a failed resume emits a notice and keeps the old session alive', async () => {
     const { ctx, disposed, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       resumeSessions: {}, // 's-b' not registered → resume throws
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -210,12 +210,12 @@ describe('createDriver switchSession', () => {
     const approvalHandlers = new Set<(req: unknown, next: () => void) => void>()
     const disposed: string[] = []
     const resumeCalls: { resumeSessionId: string }[] = []
-    const createSession = { id: 's-a', events: [], status: 'idle' }
-    const newSession = { id: 's-b', events: [], status: 'idle' }
+    const createSession = { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
+    const newSession = { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' }
 
     const makeAgent = (s: FakeSession): Record<string, unknown> => ({
       options: {},
-      session: { id: s.id, header: {}, events: s.events ?? [] },
+      session: { id: s.id, header: {}, events: s.events ?? [] , snapshotEvents() { return this.events } },
       id: `agent-${s.id}`,
       status: s.status ?? 'idle',
       followup: vi.fn(),
@@ -259,7 +259,7 @@ describe('createDriver switchSession', () => {
 
     // Simulate a pending approval by firing the approval/request event.
     const fakeReq = {
-      agent: { id: 'agent-s-a', session: { id: 's-a', events: [] } },
+      agent: { id: 'agent-s-a', session: { id: 's-a', events: [], snapshotEvents() { return this.events } } },
       toolName: 'Bash',
       callId: undefined,
       reason: undefined,
@@ -313,7 +313,7 @@ describe('createDriver switchSession', () => {
         create: async () => ({
           agent: {
             options: {},
-            session: { id: 's-a', header: {}, events: [] },
+            session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-a',
             status: 'idle',
             followup() {},
@@ -324,7 +324,7 @@ describe('createDriver switchSession', () => {
         resume: async () => ({
           agent: {
             options: {},
-            session: { id: 's-a', header: {}, events: [] },
+            session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-a',
             status: 'idle',
             followup() {},
@@ -357,7 +357,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('opens the switcher on /resume (no args) with sessions newest-first and current marked', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-current', events: [], status: 'idle' },
+      createSession: { id: 's-current', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-old', createdAt: 1000 },
         { id: 's-current', createdAt: 2000 },
@@ -381,7 +381,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('focuses index 0 when the current session is not in the list', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-ghost', events: [], status: 'idle' },
+      createSession: { id: 's-ghost', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-a', createdAt: 1000 },
         { id: 's-b', createdAt: 2000 },
@@ -394,7 +394,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('falls back to a status-row notice when no sessions exist', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [],
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -407,7 +407,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('move clamps at the bounds (no wrap)', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-b', events: [], status: 'idle' },
+      createSession: { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-a', createdAt: 1000 },
         { id: 's-b', createdAt: 2000 },
@@ -430,7 +430,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('cancel closes the overlay without switching', async () => {
     const { ctx, disposed } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [{ id: 's-b', createdAt: 1000 }],
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -442,7 +442,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('submit switches to the focused session and closes the overlay', async () => {
     const { ctx, disposed, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       resumeSessions: {
         's-b': { id: 's-b', events: [{ type: 'user/message', data: { content: [{ type: 'text', text: 'hello from s-b' }], source: { kind: 'user' } } }], status: 'idle' },
       },
@@ -474,7 +474,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('/resume <id> switches directly without opening the overlay', async () => {
     const { ctx, disposed, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       resumeSessions: {
         's-b': { id: 's-b', events: [{ type: 'user/message', data: { content: [{ type: 'text', text: 'direct switch' }], source: { kind: 'user' } } }], status: 'idle' },
       },
@@ -496,7 +496,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('/resume <id> with unknown id emits a failure notice without disposing', async () => {
     const { ctx, disposed } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       resumeSessions: {}, // 's-unknown' not registered
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -511,7 +511,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('does not leave any "Restart with" text (regression)', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [{ id: 's-b', createdAt: 1000 }],
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -526,7 +526,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('defaults to cwd scope: other-project sessions stay hidden until Tab', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-cur', events: [], status: 'idle' },
+      createSession: { id: 's-cur', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-cur', createdAt: 2000 },
         { id: 's-far', cwd: '/away', createdAt: 3000 },
@@ -556,7 +556,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('hides forked child sessions from the picker (same inherited title, different ids)', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-root', events: [], status: 'idle' },
+      createSession: { id: 's-root', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-root', createdAt: 1000 },
         { id: 's-child-a', createdAt: 2000, parentSession: 's-root' },
@@ -571,7 +571,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('opens the overlay on an empty cwd scope when other projects have sessions', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-cur', events: [], status: 'idle' },
+      createSession: { id: 's-cur', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [{ id: 's-far', cwd: '/away', createdAt: 3000 }],
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -585,7 +585,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('project scope shows subdirectory/worktree-cwd sessions of the same repo', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-cur', events: [], status: 'idle' },
+      createSession: { id: 's-cur', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-cur', createdAt: 1000 },
         { id: 's-sub', cwd: '/proj/packages/x', createdAt: 2000 },
@@ -605,7 +605,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('project scope shows sidecar-indexed sessions recorded under a foreign cwd', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-cur', events: [], status: 'idle' },
+      createSession: { id: 's-cur', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-cur', createdAt: 1000 },
         { id: 's-pinned', cwd: '/elsewhere', createdAt: 2000 },
@@ -624,7 +624,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('types a query filter, backspaces it away, and refilters with focus tracking', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-alpha', events: [], status: 'idle' },
+      createSession: { id: 's-alpha', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-alpha', createdAt: 2000 },
         { id: 's-beta', createdAt: 3000 },
@@ -655,7 +655,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('escape is two-stage: clears a non-empty query first, then closes', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-a', createdAt: 1000 },
         { id: 's-b', createdAt: 2000 },
@@ -696,7 +696,7 @@ describe('createDriver /resume session switcher overlay', () => {
       },
     }
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-alpha', events: [], status: 'idle' },
+      createSession: { id: 's-alpha', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-alpha', createdAt: 2000 },
         { id: 's-beta', createdAt: 3000 },
@@ -732,7 +732,7 @@ describe('createDriver /resume session switcher overlay', () => {
       },
     }
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [{ id: 's-b', createdAt: 1000 }],
       sessionQuery,
     })
@@ -761,7 +761,7 @@ describe('createDriver /resume session switcher overlay', () => {
       })),
     }
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-alpha', events: [], status: 'idle' },
+      createSession: { id: 's-alpha', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [
         { id: 's-alpha', createdAt: 2000 },
         { id: 's-beta', createdAt: 3000 },
@@ -778,7 +778,7 @@ describe('createDriver /resume session switcher overlay', () => {
 
   it('skips title decoration when no sessionQuery service is mounted', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       sessionList: [{ id: 's-b', createdAt: 1000 }],
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
@@ -808,7 +808,7 @@ describe('createDriver catalog refresh on session switch', () => {
   }): { ctx: Record<string, unknown> } {
     const makeAgent = (id: string): Record<string, unknown> => ({
       options: {},
-      session: { id, header: { cwd: PROJ_CWD }, events: [] },
+      session: { id, header: { cwd: PROJ_CWD }, events: [], snapshotEvents() { return this.events } },
       id: `agent-${id}`,
       status: 'idle',
       followup: vi.fn(),
@@ -917,7 +917,7 @@ describe('createDriver session title state', () => {
 
   it('folds the boot session history title into state', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [titleEvent('Boot title')], status: 'idle' },
+      createSession: { id: 's-a', events: [titleEvent('Boot title')], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     expect(driver.state.title).toBe('Boot title')
@@ -925,8 +925,8 @@ describe('createDriver session title state', () => {
 
   it('switchSession clears a stale title when the new session has none', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [titleEvent('Alpha work')], status: 'idle' },
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle' } },
+      createSession: { id: 's-a', events: [titleEvent('Alpha work')], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
     expect(driver.state.title).toBe('Alpha work')
@@ -938,8 +938,8 @@ describe('createDriver session title state', () => {
 
   it('switchSession adopts the new session title from its folded history', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [titleEvent('Alpha work')], status: 'idle' },
-      resumeSessions: { 's-b': { id: 's-b', events: [titleEvent('Beta work')], status: 'idle' } },
+      createSession: { id: 's-a', events: [titleEvent('Alpha work')], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-b': { id: 's-b', events: [titleEvent('Beta work')], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
 
