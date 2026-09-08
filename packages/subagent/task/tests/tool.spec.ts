@@ -781,6 +781,7 @@ describe('Task tool', () => {
       expect(text).toMatch(/wak(e|ing)|finish/)
       expect(text).toMatch(/list_agents/)
       expect(text).toMatch(/send_message/)
+      expect(text).toMatch(/same assignment/)
       expect(text).toMatch(/interrupt_agent/)
       expect(text.toLowerCase()).not.toContain('outputfile')
     })
@@ -879,6 +880,11 @@ describe('Task tool', () => {
       expect(BACKGROUND_SECTION_TEXT.toLowerCase()).not.toContain('long-running or parallelizable')
     })
 
+    it('teaches the one-task-one-instance delegation contract in the background section', () => {
+      expect(BACKGROUND_SECTION_TEXT).toMatch(/one task, one instance/i)
+      expect(BACKGROUND_SECTION_TEXT).toMatch(/current assignment/)
+    })
+
     it('registers the tool description and parameter description with the same contract', async () => {
       const { ctx } = await mount()
       const def = ctx.tools.get(TASK_TOOL) as unknown as { description: string; parameters: { properties: Record<string, { description: string }> } } | undefined
@@ -891,6 +897,15 @@ describe('Task tool', () => {
       expect(param).toBeDefined()
       expect(param.description.toLowerCase()).not.toContain('default false')
       expect(param.description).toMatch(/false|pin/)
+    })
+
+    it('teaches the one-task-one-instance delegation contract in the tool description', async () => {
+      const { ctx } = await mount()
+      const def = ctx.tools.get(TASK_TOOL) as unknown as { description: string } | undefined
+      expect(def).toBeDefined()
+      expect(def!.description).toMatch(/One task, one instance/)
+      expect(def!.description).toMatch(/steer it in flight/)
+      expect(def!.description).toMatch(/current assignment/i)
     })
   })
 

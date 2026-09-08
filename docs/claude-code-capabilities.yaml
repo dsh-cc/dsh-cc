@@ -1745,6 +1745,9 @@ capabilities:
       - { type: source, path: packages/subagent/task/src/plugin-agents.ts }
       - { type: test, path: packages/subagent/task/tests/plugin-agents.spec.ts }
       - { type: test, path: packages/compat/cc-plugin-loader/tests/dsh-cc-agents.spec.ts }
+      - { type: source, path: CLAUDE.md }
+      - { type: source, path: packages/plugin/dsh-cc-agents/skills/dsh-cc-agents-orchestration/SKILL.md }
+      - { type: source, path: packages/subagent/resume-pins/src/plugin.ts }
     deviation:
       kind: divergent
       summary: >-
@@ -1865,7 +1868,13 @@ capabilities:
         marketplace) dispatches by scoped id end-to-end —
         dsh-cc-agents:critic / dsh-cc-agents:executor mount from the
         real plugin dir and are pinned by plugin-agents.spec.ts and the
-        loader's dsh-cc-agents.spec.ts.
+        loader's dsh-cc-agents.spec.ts. Delegation discipline is
+        prompt-taught across the Task description, the background-loop
+        system-prompt section, both spawn-result texts, the resume-pins
+        send_message advisory and list_agents annotations, the repo
+        CLAUDE.md, and the dsh-cc-agents orchestration skill: one task, one
+        instance — send_message continues only the child's current
+        assignment, and every new task is a fresh subagent_fork spawn.
 
   # ── mcp ─────────────────────────────────────────────────────────────────
   mcp.client:
