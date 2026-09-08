@@ -76,7 +76,7 @@ describe('cc bundle cache trajectory e2e', () => {
     })
 
     // Passive microcompactor: no compaction events may land on the session.
-    const compactionEvents = [...result.agent.session.events]
+    const compactionEvents = [...result.agent.session.snapshotEvents()]
       .filter(event => event.type.startsWith('compaction/'))
     expect(compactionEvents).toEqual([])
 

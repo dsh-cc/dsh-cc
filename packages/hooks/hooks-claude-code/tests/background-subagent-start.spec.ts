@@ -14,7 +14,6 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SubagentRuntime, { type SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
@@ -52,12 +51,12 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   dirs.push(persistRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: persistRoot })
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
+  // SessionProjectionRegistry is already mounted by mountAgentLoopTestDependencies.
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
+  const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
   // Keep the stand-in parent out of the scripted corpus.
   ctx.on('agent/pre-step', async ({ agent: subject }, next) => {
     if (subject !== parent) return next()

@@ -15,12 +15,16 @@ export function fakeInvocation(options: {
   cwd?: string
   events?: SessionEvent[]
 } = {}): CommandInvocation {
+  const events = options.events ?? []
   return {
     agent: {
       session: {
         id: options.sessionId ?? 'sess-doctor',
         header: { cwd: options.cwd ?? '/repo' },
-        events: options.events ?? [],
+        // Upstream >=0.1.3 reads events via snapshotEvents(); events stays for
+        // any code path still iterating the log directly.
+        events,
+        snapshotEvents() { return events },
       },
     },
     rawInput: '',

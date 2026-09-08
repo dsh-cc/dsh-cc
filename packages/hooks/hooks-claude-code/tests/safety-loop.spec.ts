@@ -51,7 +51,7 @@ async function harness(configPath: string, adapter: MockAdapter, opts: HarnessOp
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx
 }
-function events(agent: Agent): SessionEvent[] { return [...agent.session.events] }
+function events(agent: Agent): SessionEvent[] { return [...agent.session.snapshotEvents()] }
 async function waitForIdle(_ctx: Context, agent: Agent): Promise<void> { return agent.whenIdle() }
 async function waitFor(predicate: () => boolean, timeout = 5000, interval = 10): Promise<void> {
   const deadline = Date.now() + timeout
@@ -94,7 +94,7 @@ describe('F1 — Stop-hook block cap + truthful stop_hook_active', () => {
     // One response per steered continuation: 1 initial + 8 steered.
     const adapter = new MockAdapter(Array.from({ length: 12 }, (_, i) => textResponse(`r${i}`)))
     const ctx = await harness(path, adapter, { dshHome: home })
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
 
@@ -122,7 +122,7 @@ describe('F1 — Stop-hook block cap + truthful stop_hook_active', () => {
       process.env.CLAUDE_CODE_STOP_HOOK_BLOCK_CAP = env
       const adapter = new MockAdapter(Array.from({ length: 12 }, (_, i) => textResponse(`r${i}`)))
       const ctx = await harness(path, adapter)
-      const agent = ctx.agentLoop.create(SessionId(`a-${env}`), { provider: 'mock', model: 'mock' })
+      const agent = await ctx.agentLoop.create(SessionId(`a-${env}`), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       expect(adapter.requests).toHaveLength(expectedRequests)
@@ -145,7 +145,7 @@ exit 0
     const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command }] }] })
     const adapter = new MockAdapter(Array.from({ length: 12 }, (_, i) => textResponse(`r${i}`)))
     const ctx = await harness(path, adapter)
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitFor(() => existsSync(flags)) // the first block ran → count(a1) = 1
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'again' }], source: { kind: 'user' } }))
@@ -175,8 +175,8 @@ exit 0
     const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command }] }] })
     const adapter = new MockAdapter(Array.from({ length: 12 }, (_, i) => textResponse(`r${i}`)))
     const ctx = await harness(path, adapter)
-    const a = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
-    const b = ctx.agentLoop.create(SessionId('b1'), { provider: 'mock', model: 'mock' })
+    const a = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const b = await ctx.agentLoop.create(SessionId('b1'), { provider: 'mock', model: 'mock' })
     a.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitFor(() => existsSync(records)) // a blocked once → count(a1) = 1
     b.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
@@ -198,7 +198,7 @@ exit 0
     const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command }] }] })
     const adapter = new MockAdapter(Array.from({ length: 12 }, (_, i) => textResponse(`r${i}`)))
     const ctx = await harness(path, adapter)
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitFor(() => existsSync(flags)) // blocked once → count(a1) = 1
     // Fire the disposal edge: the cleanup must drop a1's counter and session
@@ -219,7 +219,7 @@ describe('F2 — continue:false halts each in-run seam', () => {
     const path = hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: s }] }] })
     const adapter = new MockAdapter([textResponse('should not run')])
     const ctx = await harness(path, adapter)
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     expect(adapter.requests).toHaveLength(0)
@@ -237,7 +237,7 @@ describe('F2 — continue:false halts each in-run seam', () => {
     const ctx = await harness(path, adapter)
     let ran = false
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'ok' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     expect(ran).toBe(true) // post-execute: the tool already ran
@@ -262,7 +262,7 @@ exit 2
     const path = hooks(d, { Stop: [{ hooks: [{ type: 'command', command: s }] }] })
     const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
     const ctx = await harness(path, adapter)
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     // The turn ended canceled with the hook cause — the steer did not loop forever.
@@ -277,7 +277,7 @@ exit 2
     const path = hooks(d, { PermissionRequest: [{ hooks: [{ type: 'command', command: s }] }] })
     const adapter = new MockAdapter([])
     const ctx = await harness(path, adapter, { beforeHooks: (c) => { void c.plugin(ApprovalService) } })
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.session.append('turn/start', { turn: 1 })
     const outcome = await ctx.approval.request({ agent, toolName: 'bash' })
     expect(outcome).toBe('rejected')
@@ -296,7 +296,7 @@ echo '{"systemMessage":"${long}"}'
     const path = hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: s }] }] })
     const adapter = new MockAdapter([textResponse('ok')])
     const ctx = await harness(path, adapter)
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     const surfaced = notices(agent)
@@ -343,7 +343,7 @@ describe('F4 — PreToolUse allow pre-approves (downstream boundaries still win)
     const { requests } = recordingAnswerer(ctx)
     let ran = false
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'ok' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     expect(ran).toBe(true)
@@ -366,7 +366,7 @@ describe('F4 — PreToolUse allow pre-approves (downstream boundaries still win)
       if (!boundaryFirst) ctx.on('tools/pre-execute', boundary)
       let ran = false
       ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'ok' }] } }))
-      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       const result = events(agent).find(e => e.type === 'tool/result')
@@ -388,7 +388,7 @@ describe('F4 — PreToolUse allow pre-approves (downstream boundaries still win)
     let downstreamSeen = false
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'ok' }] } }))
     ctx.on('tools/pre-execute', async (_exec, next) => { downstreamSeen = true; return next() })
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     expect(ran).toBe(false)
@@ -409,7 +409,7 @@ describe('F4 — PreToolUse allow pre-approves (downstream boundaries still win)
     ctx.on('tools/pre-execute', async (): Promise<PreToolDecision> => ({ kind: 'deny', reason: 'boundary says no' }))
     let ran = false
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'ok' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     // The boundary deny beats the hook ask: the tool never ran and no approval
@@ -427,7 +427,7 @@ describe('S1 — PreToolUse additionalContext is injected', () => {
     const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
     const ctx = await harness(path, adapter)
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     // The context landed as a durable plugin-sourced message AFTER the tool result.
@@ -447,7 +447,7 @@ describe('S2 — PostToolUse tool-result replacement', () => {
     const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
     const ctx = await harness(path, adapter)
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'raw output' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     const result = events(agent).find(e => e.type === 'tool/result')
@@ -462,7 +462,7 @@ describe('S2 — PostToolUse tool-result replacement', () => {
     const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
     const ctx = await harness(path, adapter)
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'raw' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     const result = events(agent).find(e => e.type === 'tool/result')
@@ -480,7 +480,7 @@ describe('S2 — PostToolUse tool-result replacement', () => {
         ? { kind: 'accept' as const, content: [{ type: 'text' as const, text: 'downstream content' }] }
         : { kind: 'block' as const, feedback: [{ type: 'text' as const, text: 'downstream block' }] })
       ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'raw' }] } }))
-      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       const result = events(agent).find(e => e.type === 'tool/result')
@@ -502,7 +502,7 @@ describe('S2 — PostToolUse tool-result replacement', () => {
       const adapter = new MockAdapter([toolCallResponse('c1', toolName, {}), textResponse('done')])
       const ctx = await harness(path, adapter)
       ctx.tools.register(defineContentToolFixture({ name: toolName, description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'raw' }] } }))
-      const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+      const agent = await ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       const result = events(agent).find(e => e.type === 'tool/result')

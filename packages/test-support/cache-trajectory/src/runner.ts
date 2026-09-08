@@ -52,12 +52,13 @@ export interface TrajectoryRunResult {
   readonly firstTurnToolCalls: number
 }
 
-/** The agent-loop service face the runner needs. */
+/** The agent-loop service face the runner needs. Upstream `create` is async
+ * (harness >=0.1.3): it prepares and persists the session before returning. */
 interface AgentLoopLike {
-  create(id: ReturnType<typeof SessionId>, options: {
+  create(id: ReturnType<typeof SessionId>, options?: {
     provider?: string
     model?: string
-  }): Agent
+  }): Promise<Agent>
 }
 
 /** The tools-registry face the runner needs. */
@@ -119,7 +120,7 @@ export async function runCacheTrajectory(
 
   const provider = options.provider ?? trajectory.provider
   const model = options.model ?? trajectory.model
-  const agent = loop.create(SessionId(trajectory.sessionId), { provider, model })
+  const agent = await loop.create(SessionId(trajectory.sessionId), { provider, model })
   const timeoutMsPerTurn = options.timeoutMsPerTurn ?? DEFAULT_TURN_TIMEOUT_MS
   const startedAt = new Date().toISOString()
 

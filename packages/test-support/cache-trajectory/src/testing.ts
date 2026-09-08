@@ -38,7 +38,9 @@ export async function mountTrajectoryTestStack(
   ctx: Context,
   options: TrajectoryStackOptions,
 ): Promise<void> {
-  await mountAgentLoopTestDependencies(ctx, { systemPrompt: { persona: options.persona } })
+  // Harness >=0.1.3: the system-prompt persona knob is `personaPrefix`/`personaSuffix`
+  // (a plain string prefix before first-party guidance).
+  await mountAgentLoopTestDependencies(ctx, { systemPrompt: { personaPrefix: options.persona } })
   await ctx.plugin(LlmDeepSeek, options.baseURL === undefined ? {} : { baseURL: options.baseURL })
   await ctx.plugin(AgentLoop, { agents: [] })
   if (options.ccPlugins === true) {

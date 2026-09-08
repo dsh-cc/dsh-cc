@@ -131,7 +131,6 @@ function makeStatusLineCtx(opts: {
   projections?: ReturnType<typeof makeProjections>
   settings?: ReturnType<typeof makeSettings>
   executor?: ReturnType<typeof makeExecutor>
-  persistence?: { locate(header: unknown): { path?: string } | undefined }
   createSession?: { id: string; provider?: string; model?: string; createdAt?: number; cwd?: string; events?: unknown[] }
   resumeSessions?: Record<string, { id: string; cwd?: string; events?: unknown[] }>
 }) {
@@ -139,7 +138,8 @@ function makeStatusLineCtx(opts: {
   const services: Record<string, unknown> = {
     sessionProjections: opts.projections?.service,
     shell: opts.executor?.service,
-    sessionPersistence: opts.persistence,
+    // sessionPersistence: no longer stubbed — the removed upstream `locate`
+    // face is not part of any statusline payload contract.
     // The permission-rules engine the permission-mode writepath needs.
     permissionRules: {
       ruleSet: { allow: [], deny: [], ask: [], bypassImmune: [] },

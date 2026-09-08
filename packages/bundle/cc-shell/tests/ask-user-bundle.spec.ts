@@ -6,7 +6,6 @@ import ToolRuntime from '@dsh-cc/tools'
 import UserQuestionService, {
   type AskUserQuestionAnswer,
   type AskUserQuestionRequest,
-  type UserQuestionProvider,
 } from '@deepseek-ai/dsh-user-questions'
 import * as ToolAskUser from '@deepseek-ai/dsh-tool-ask-user'
 
@@ -16,8 +15,9 @@ import * as ToolAskUser from '@deepseek-ai/dsh-tool-ask-user'
  * provider slot, and `@deepseek-ai/dsh-tool-ask-user` registers the model-facing
  * `ask_user_question` tool over it. The seam must mount before the tool that
  * injects it; the UI provider is owned by the host app and mounts via
- * registerProvider() rather than a bundle row — with none registered, `ask`
- * surfaces a graceful NO_PROVIDER tool error instead of crashing the host.
+ * a `user-questions/request` waterfall answerer rather than a bundle row — with
+ * none registered, `ask` surfaces a graceful NO_PROVIDER tool error instead of
+ * crashing the host.
  */
 
 /**
@@ -35,16 +35,19 @@ async function mountAskUser(): Promise<{ ctx: Context; dispose: () => Promise<vo
 }
 
 /**
- * Scripted provider that records each request and returns the given answer.
- * Mirrors upstream provider injection: the host app owns the one active slot.
+ * Scripted waterfall answerer that records each request and returns the given
+ * answer. Mirrors upstream answerer injection (see
+ * packages/client/ui-user-questions): the host app owns the listener.
  */
-function scriptedProvider(seen: AskUserQuestionRequest[], answer: AskUserQuestionAnswer): UserQuestionProvider {
-  return {
-    async ask(request) {
-      seen.push(request)
-      return answer
-    },
-  }
+function scriptedAnswerer(
+  ctx: Context,
+  seen: AskUserQuestionRequest[],
+  answer: AskUserQuestionAnswer,
+): () => void {
+  return ctx.on('user-questions/request', async (request, next) => {
+    seen.push(request)
+    return answer
+  })
 }
 
 describe('cc-shell bundle — ask_user_question rows (dsh-user-questions + dsh-tool-ask-user)', () => {
@@ -61,12 +64,10 @@ describe('cc-shell bundle — ask_user_question rows (dsh-user-questions + dsh-t
     await dispose()
   })
 
-  it('asks a registered provider and projects structured answers', async () => {
+  it('asks a registered answerer and projects structured answers', async () => {
     const { ctx, dispose } = await mountAskUser()
     const seen: AskUserQuestionRequest[] = []
-    ctx.userQuestions.registerProvider(
-      scriptedProvider(seen, { answers: [{ id: 'pkg', selected: ['pnpm'] }] }),
-    )
+    scriptedAnswerer(ctx, seen, { answers: [{ id: 'pkg', selected: ['pnpm'] }] })
 
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,

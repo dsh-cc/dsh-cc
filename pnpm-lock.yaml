@@ -128,6 +128,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-persistence':
+        specifier: link:../../../../deepseek-harness/packages/session/session-persistence
+        version: link:../../../../deepseek-harness/packages/session/session-persistence
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
         version: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl

@@ -130,7 +130,7 @@ describe('hooks-claude-code bridge — prompt executor', () => {
     })
     const adapter = new MockAdapter([textResponse('ok')])
     const ctx = await harness(dir, adapter, { enablePromptHooks: true }, (c) => { c.provide('subagents', service as never) })
-    const agent = ctx.agentLoop.create(SessionId('exec-1'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('exec-1'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
 
@@ -150,7 +150,7 @@ describe('hooks-claude-code bridge — prompt executor', () => {
     const adapter = new MockAdapter([textResponse('ok')])
     const warn = vi.fn()
     const ctx = await harness(dir, adapter, {}, (c) => { c.provide('subagents', service as never); c.logger.warn = warn as never })
-    const agent = ctx.agentLoop.create(SessionId('exec-disabled'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('exec-disabled'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
 
@@ -165,7 +165,7 @@ describe('hooks-claude-code bridge — prompt executor', () => {
     const adapter = new MockAdapter([textResponse('ok')])
     const warn = vi.fn()
     const ctx = await harness(dir, adapter, { enablePromptHooks: true }, (c) => { c.logger.warn = warn as never })
-    const agent = ctx.agentLoop.create(SessionId('exec-nosub'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('exec-nosub'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('cannot run (no subagents service or parent agent'))
@@ -189,7 +189,7 @@ describe('hooks-claude-code bridge — model stamping (agentOptions)', () => {
     const stampId = options.hookModel === undefined
       ? (options.routes === undefined ? 'exec-stamp-omitted-noroutes' : 'exec-stamp-omitted-haiku')
       : `exec-stamp-${options.hookModel}`
-    const agent = ctx.agentLoop.create(SessionId(stampId), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId(stampId), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     return calls
@@ -234,7 +234,7 @@ describe('hooks-claude-code bridge — model stamping (agentOptions)', () => {
       c.provide('ccModelRoutes', fakeRoutes({ haiku: { provider: 'orchestrix', model: 'flash-1' } }) as never)
     })
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'raw' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('exec-agent-stamp'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('exec-agent-stamp'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     expect(calls).toHaveLength(1)
@@ -255,7 +255,7 @@ describe('hooks-claude-code bridge — agent executor', () => {
     const ctx = await harness(dir, adapter, { enableAgentHooks: true }, (c) => { c.provide('subagents', service as never) })
     let ran = false
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'raw' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('exec-agent'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('exec-agent'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
 
@@ -263,7 +263,7 @@ describe('hooks-claude-code bridge — agent executor', () => {
     expect(calls[0]!.request.prompt[0]!.text).toContain('Verify the tool output')
     // The decoded deny decision blocked the tool (verification subagent vetoed it).
     expect(ran).toBe(false)
-    const result = [...agent.session.events].find(e => e.type === 'tool/result')
+    const result = [...agent.session.snapshotEvents()].find(e => e.type === 'tool/result')
     expect(result?.type === 'tool/result' && result.data.message.content[0].isError).toBe(true)
   })
 
@@ -277,7 +277,7 @@ describe('hooks-claude-code bridge — agent executor', () => {
     const ctx = await harness(dir, adapter, {}, (c) => { c.provide('subagents', service as never); c.logger.warn = warn as never })
     let ran = false
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { ran = true; return [{ type: 'text', text: 'raw' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('exec-agent-disabled'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('exec-agent-disabled'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
 
