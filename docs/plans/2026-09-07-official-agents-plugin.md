@@ -153,6 +153,24 @@ code change is needed.**
   KillBash, Read, Write, Edit, Glob, Grep, TodoWrite, NotebookEdit]` (every
   name verified against CC_TO_HARNESS_TOOLS). Persona text keeps the
   fallback guidance (serena-first → Read/Grep/Edit).
+  - **Update 2026-09-08 — decision REVERSED (subagent-cleanup branch).**
+    The `mcp__*` names are back in the distributed frontmatter: critic
+    mirrors deep-reasoner's eight MCP tools (5 serena readers,
+    sequential_thinking, 2 context7 lookups); executor gains
+    fast-worker's twelve serena tools and the full serena-first editing
+    section. Rationale: within dsh-cc the wired production dispatch is
+    the Task tool, which runs `sanitizeToolFilter` once at spawn in
+    `dispatchDefinition` (background and resume replay the captured,
+    already-sanitized filter) and pre-activates named deferred tools
+    beforehand (`packages/subagent/task/src/preload-tools.ts`), so an
+    absent server degrades gracefully to drop + warn. The residual risk
+    is the loader's own exported `AgentProvider.start`
+    (`packages/compat/cc-plugin-loader/src/agents.ts`), which overlays
+    the raw `toolRestriction` unsanitized — accepted, documented in the
+    plugin README ("Portability note"), and shared by any embedder that
+    dispatches through provider.start directly. The loader test pin was
+    split into two host-shaped assertions (built-in-only → exact drop
+    warnings; MCP-equipped → full survival + auto-injected ToolSearch).
 - **Persona text — genericize.** "the orchestrator (Fable)" → "the
   coordinating agent"; drop references to this repo's routing table; keep
   strengths / how-to-work / output contract (that is the value). The

@@ -3,7 +3,11 @@
  * (docs/plans/2026-09-07-official-agents-plugin.md §5.3): everything the
  * package declares in `files` exists on disk, and the nested CC manifest
  * stays in lockstep with the npm manifest — so the published artifact can
- * never silently lose a component the loader mounts.
+ * never silently lose a component the loader mounts. These agent files are
+ * the single source of truth: the repo's workspace copies
+ * (.claude/agents/deep-reasoner|fast-worker.md) were deleted in the
+ * subagent-cleanup cutover, retiring the Output-contract drift guard that
+ * used to compare the two.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -46,28 +50,13 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
     expect(existsSync(join(PKG_DIR, 'agents', 'executor.md'))).toBe(true)
   })
 
-  it('keeps the Output contract section in lockstep with the repo agents (drift guard)', () => {
+  it('keeps the retired workspace shadow copies deleted (no dual existence)', () => {
     const repoRoot = join(PKG_DIR, '..', '..', '..')
-    // repo .claude/agents file → plugin distribution copy
-    const pairs = [
-      ['deep-reasoner.md', 'critic.md'],
-      ['fast-worker.md', 'executor.md'],
-    ] as const
-    const section = (text: string): string => {
-      const match = text.match(/^## Output contract.*?$/m)
-      expect(match, '## Output contract heading exists').not.toBeNull()
-      const start = match!.index! + match![0].length
-      const rest = text.slice(start)
-      const next = rest.indexOf('\n## ')
-      return next === -1 ? rest : rest.slice(0, next)
-    }
-    for (const [repoName, pluginName] of pairs) {
-      const repo = readFileSync(join(repoRoot, '.claude', 'agents', repoName), 'utf8')
-      const plugin = readFileSync(join(PKG_DIR, 'agents', pluginName), 'utf8')
+    for (const name of ['deep-reasoner.md', 'fast-worker.md']) {
       expect(
-        section(plugin),
-        `Output contract of plugin ${pluginName} must be identical to repo ${repoName}`,
-      ).toBe(section(repo))
+        existsSync(join(repoRoot, '.claude', 'agents', name)),
+        `${name} must NOT reappear under .claude/agents — the plugin copies are the single source of truth`,
+      ).toBe(false)
     }
   })
 

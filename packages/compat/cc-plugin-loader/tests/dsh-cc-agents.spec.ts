@@ -6,8 +6,10 @@
  *
  * - providers register as branded, scoped `dsh-cc-agents:*` ids;
  * - the background pin folds for critic only (executor ships none);
- * - the shipped `tools:` lists sanitize cleanly against a minimal built-in
- *   known-names set (no drop warnings fired);
+ * - the shipped `tools:` lists degrade by host: on a built-in-only host
+ *   the named MCP tools drop with warnings and the agents run on the
+ *   built-ins alone; on a host mounting those servers the full list
+ *   survives verbatim and the sanitize step auto-injects ToolSearch;
  * - an unconfigured model alias resolves to inherit (no agentOptions);
  * - the skills component LOADS (not skipped) and the skill is visible in a
  *   REAL skill registry (`@deepseek-ai/dsh-skill`) with model invocation on.
@@ -89,7 +91,7 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     }
   })
 
-  it('sanitizes both shipped tool lists cleanly against a minimal built-in known set (no warnings)', async () => {
+  it('drops the shipped MCP names with warnings on a built-in-only host (graceful degradation)', async () => {
     const ctx = new Context()
     const { subagents, providers } = subagentsSeam()
     const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR, seams: { subagents } })
@@ -99,10 +101,40 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       for (const provider of providers) {
         const raw = provider.definition.toolRestriction
         expect(raw, `${provider.name} ships a tools list`).toBeDefined()
-        expect(raw?.allow?.length ?? 0).toBeGreaterThan(0)
+        const mcpNames = raw!.allow!.filter(name => name.startsWith('mcp__'))
+        expect(mcpNames.length, `${provider.name} ships MCP tool names`).toBeGreaterThan(0)
         const sanitized = sanitizeToolFilter(raw!, warn, BUILTIN_KNOWN_NAMES)
-        // Nothing dropped: the sanitized filter keeps the full shipped list.
-        expect(sanitized).toEqual(raw)
+        // Every MCP name dropped; every built-in survived, order preserved.
+        expect(sanitized.allow).toEqual(raw!.allow!.filter(name => !name.startsWith('mcp__')))
+      }
+      expect(warnings.length).toBeGreaterThan(0)
+      expect(warnings.every(message => message.includes('dropping unknown tool name "mcp__'))).toBe(true)
+    } finally {
+      mount.dispose()
+    }
+  })
+
+  it('keeps the full shipped list and auto-injects ToolSearch when the named servers are mounted', async () => {
+    const ctx = new Context()
+    const { subagents, providers } = subagentsSeam()
+    const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR, seams: { subagents } })
+    try {
+      const warnings: string[] = []
+      const warn = (message: string) => { warnings.push(message) }
+      for (const provider of providers) {
+        const raw = provider.definition.toolRestriction!
+        // Every shipped MCP name must be an exact non-wildcard name, so the
+        // spawn-time preload seam (subagent/task preload-tools) pre-activates
+        // it instead of skipping it as a wildcard form.
+        for (const name of raw.allow!.filter(n => n.startsWith('mcp__'))) {
+          const rest = name.slice('mcp__'.length)
+          expect(rest.includes('__') && !rest.endsWith('__*'), `${name} is an exact MCP name`).toBe(true)
+        }
+        const equipped = new Set([...BUILTIN_KNOWN_NAMES, ...raw.allow!, 'ToolSearch'])
+        const sanitized = sanitizeToolFilter(raw, warn, equipped)
+        // Nothing dropped, and ToolSearch is appended for the mid-run reload
+        // path once the allow-list holds MCP names.
+        expect(sanitized.allow).toEqual([...raw.allow!, 'ToolSearch'])
       }
       expect(warnings).toEqual([])
     } finally {
