@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -8,6 +8,37 @@ import { join } from 'node:path'
 import { type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 import { applyOpsToSection, diffSections } from '../src/persist.ts'
+
+// Concurrency gate for `node:fs/promises.readFile` (same pattern as
+// watcher.spec.ts): when armed, the next read hangs in a controlled deferred
+// instead of hitting the disk, letting the test interleave a watcher reload
+// with a queued persist. Disarmed (the default) it is a pure passthrough.
+const readGate = vi.hoisted(() => ({
+  held: 0,
+  waiters: [] as Array<() => void>,
+}))
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    readFile(path: Parameters<typeof actual.readFile>[0], options?: Parameters<typeof actual.readFile>[1]) {
+      if (readGate.held > 0) {
+        readGate.held -= 1
+        return new Promise<string>((res) => {
+          readGate.waiters.push(() => { void res(actual.readFile(path, options)) })
+        })
+      }
+      return actual.readFile(path, options)
+    },
+  }
+})
+
+/** Release every read the gate is holding. */
+function drainReadGate(): void {
+  const waiters = readGate.waiters
+  readGate.waiters = []
+  for (const waiter of waiters) waiter()
+}
 
 /**
  * Persistence contract of the writable cascade: writes travel the seam and are
@@ -23,6 +54,8 @@ const Passthrough: z<Record<string, unknown>> = z.any()
 const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
+  drainReadGate()
+  readGate.held = 0
   while (cleanups.length > 0) await cleanups.pop()!()
 })
 
@@ -146,6 +179,50 @@ describe('surgical delta', () => {
     await ctx.settings.update('persist-e' as SettingsNamespace, { D: 'd' })
 
     expect(await readDoc(user)).toEqual({ 'persist-e': { D: 'd' } })
+  })
+
+  it('a watcher reload between capture and persist does not re-emit keys the file already had', async () => {
+    const dir = await tempDir()
+    const user = join(dir, 'user.json')
+    const ctx = await boot({ userSettingsPath: user })
+    const ns = 'persist-g' as SettingsNamespace
+    register(ctx, 'persist-g')
+
+    // (1) A successful write seeds both the file and the shadow with C.
+    await ctx.settings.update(ns, { C: 'c' })
+    expect(await readDoc(user)).toEqual({ 'persist-g': { C: 'c' } })
+
+    // (2)-(3) A failed persist leaves the shadow at {C:'c'} while the seam's
+    // in-memory document still carries C.
+    await writeFile(user, '{ broken json')
+    await expect(ctx.settings.update(ns, { D: 'd' })).rejects.toThrow()
+
+    // (4) The file is repaired externally to '{}'.
+    await writeFile(user, '{}')
+
+    // (5)-(6) Queue a watcher reload and let it start so IT holds the gated
+    // read; then start a persist WITHOUT awaiting it: the harness captures
+    // the section {C:'c',D:'d'} (its in-memory doc still has C) and the
+    // persist lands in the queue behind the reload.
+    readGate.held = 1
+    const provider = ctx.settings as unknown as { queueRefresh(): void }
+    provider.queueRefresh()
+    await new Promise(resolve => setImmediate(resolve))
+    const pending = ctx.settings.update(ns, { D: 'd' })
+    await vi.waitFor(() => {
+      expect(readGate.waiters.length).toBe(1)
+    }, { timeout: 3000 })
+
+    // (7) Release the reload's held source read so the reload publishes the
+    // repaired '{}' — resetting the LIVE shadow — before the queued persist
+    // executes. The diff base must be the one frozen at capture time
+    // ({C:'c'}), so the delta is exactly {D:'d'}.
+    drainReadGate()
+    await pending
+
+    // (8) The file must carry ONLY D: the reload reset the live shadow, but
+    // the persist's diff base was captured before it.
+    expect(await readDoc(user)).toEqual({ 'persist-g': { D: 'd' } })
   })
 })
 

@@ -122,21 +122,23 @@ describe('settings cascade hot reload', () => {
   }, 15000)
 
   it('coalesces rapid consecutive writes into few reloads', async () => {
-    const ctx = await boot()
+    // A 2s write-settle window: five awaited writes (each however slow) land
+    // inside it, so the watcher must coalesce them into one reload instead of
+    // firing per write. Deterministic — no wall-clock sleeps.
+    const ctx = await boot({ watch: { stabilityThresholdMs: 2000 } })
     const scope = theme(ctx)
     const counter = commitCounter(ctx)
+    const provider = ctx.settings as unknown as { settled(): Promise<void> }
 
-    // Five distinct values inside one write-settle window: the watcher's
-    // awaitWriteFinish debounce must fold them into at most a couple of
-    // reloads instead of one per write.
     for (let i = 0; i < 5; i++) {
       await writeDoc(userPath(ctx), { 'ui-theme': { theme: `tone-${i}` } })
     }
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('tone-4')
     }, { timeout: 3000 })
-    // Let any trailing reloads land before counting.
-    await new Promise(resolve => setTimeout(resolve, 400))
+    // Let the coalesced reload (and any trailing one) fully land before
+    // counting: the operations-chain tail settles when the queue is drained.
+    await provider.settled()
     expect(counter.commits()).toBeLessThan(5)
     counter.stop()
   }, 15000)
