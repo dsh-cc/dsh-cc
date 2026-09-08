@@ -32,6 +32,16 @@ the same turn) instead of serializing them.
   report before composing on it. Pass `run_in_background: true` only when
   you want hands-free execution and will collect the result later.
 
+## Optional MCP tools
+
+Both agents name optional deferred MCP tools in their frontmatter
+(serena symbol tools; critic also `sequential_thinking` and context7).
+On hosts where those servers are connected, spawn pre-activates them
+and the agents use them directly (executor follows a serena-first
+editing policy). On other hosts the names drop with a warning and the
+agents run on built-in tools alone. Either way the report contracts
+below hold.
+
 ## Report contracts
 
 - **critic** ends every answer with `Recommendation` /

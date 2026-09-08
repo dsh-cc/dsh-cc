@@ -39,6 +39,39 @@ resolve only by the exact scoped ids (`dsh-cc-agents:critic`).
 Both appear in the agent catalog; the plugin copies carry distinct
 "official plugin build" descriptions so you can tell them apart.
 
+## MCP-enhanced tool surfaces (optional)
+
+Both agents name deferred MCP tools in their frontmatter. When the host
+connects those servers, the names survive spawn-time filtering and are
+pre-activated before the child's first turn, so the agents call them
+directly:
+
+- **critic** — five read-only serena symbol tools
+  (`mcp__serena__find_symbol`, `get_symbols_overview`,
+  `find_referencing_symbols`, `search_for_pattern`,
+  `get_diagnostics_for_file`), `mcp__sequential_thinking__sequentialthinking`,
+  and the two context7 documentation lookups.
+- **executor** — twelve serena symbol tools, including the
+  reference-aware editing family (`replace_symbol_body`,
+  `insert_before/after_symbol`, `rename_symbol`, `replace_content`,
+  `replace_in_files`, `get_diagnostics_for_file`,
+  `restart_language_server`); its serena-first editing policy activates
+  with them.
+
+Hosts without these servers are unaffected: the names are dropped with a
+startup warning and the agents run on built-in tools alone.
+
+**Portability note:** the drop-with-warning degradation is a property of
+the dsh-cc Task dispatch path, which sanitizes a definition's tool list
+against the live registry at spawn. The plugin loader's own exported
+`AgentProvider.start` overlays the raw tool restriction UNSANITIZED and
+may fail in the backend when a named server is absent — if you dispatch
+these definitions through provider.start directly (or embed them outside
+dsh-cc), strip the `mcp__*` entries or sanitize first. The enhancement
+also assumes the servers keep their conventional aliases (`serena`,
+`sequential_thinking`, `context7`); a renamed server degrades to the
+same drop-with-warning path.
+
 ## Advisory safety: critic
 
 `critic` retains the `Bash` tool for read-only verification (run a
