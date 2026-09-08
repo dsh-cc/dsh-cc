@@ -1,6 +1,6 @@
 # Harness: the Collectable Continuable Handle
 
-Status: Revised v2.1 (v2 folded the dual cold review: 4-state machine, abort
+Status: **Cancelled for local implementation (upstream proposal only)** — per the 2026-09-10 harness read-only directive this is not implemented in the dsh-cc repo; the dsh-cc-side epoch collector (`docs/plans/2026-09-05-epoch-collector-dsh-cc.md`, shipped in PR #115) covers the first-epoch collection need by different means, and the v2.1 design below stands as the proposal for upstream adoption. Design state: Revised v2.1 (v2 folded the dual cold review: 4-state machine, abort
 ack/terminal split, collectSignal lease, post-admission detach, overloads, catalog
 regen; v2.1 adds the resolution-check fixes: the aborted branch resolves the epoch
 from the real disposal terminal, and the lease wiring is assigned to downstream).
@@ -8,7 +8,7 @@ from the real disposal terminal, and the lease wiring is assigned to downstream)
 upstream PR) — local implementation is cancelled; this document is the upstream
 proposal only. The dsh-cc UX plan's Slices 2–3 reformulate dsh-cc-side instead.
 Date: 2026-09-10
-Scope: upstream `deepseek-ai/deepseek-harness`, `packages/subagent/subagent/src/{continuation.ts,types.ts,lifecycle.ts,index.ts}` and `packages/subagent/subagent/tests/`. Companion to `docs/plans/2026-09-10-continuable-background-ux.md` (Slices 2–3).
+Scope: upstream `deepseek-ai/deepseek-harness`, `packages/subagent/subagent/src/{continuation.ts,types.ts,lifecycle.ts,index.ts}` and `packages/subagent/subagent/tests/`. Companion to `docs/plans/2026-09-05-continuable-background-ux.md` (Slices 2–3).
 
 ## 1. Problem
 
@@ -353,7 +353,7 @@ lease only acts on an ARMED collector: after an implicit followup-detach
 of that child then relies on the detached path's inject-under-closing-
 teardown record (§4.2 Details), exactly as for any detached child. Wiring
 `collectSignal` (to the collecting tool call's cancellation) is dsh-cc's
-responsibility in Slice 3 of docs/plans/2026-09-10-continuable-background-ux.md;
+responsibility in Slice 3 of docs/plans/2026-09-05-continuable-background-ux.md;
 the harness defines the lease, the caller wires it.
 
 This also closes the scheduler-drain interleaving: a tool call awaiting

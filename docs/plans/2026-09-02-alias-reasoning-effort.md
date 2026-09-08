@@ -1,6 +1,6 @@
 # Alias-carried reasoningEffort for CC subagent spawn
 
-Status: approved (Staff review 2026-09-02; M1/M2/S1 folded in). Constraint: **dsh-cc only** — do not modify deepseek-harness.
+Status: **Implemented** — PR #72 (merged 2026-09-02). Approved at Staff review (2026-09-02; M1/M2/S1 folded in). Constraint: **dsh-cc only** — do not modify deepseek-harness.
 
 ## Goal
 

@@ -315,7 +315,7 @@ function outcomeToResult(
 
 /**
  * Dispatch a FOREGROUND non-fork call by collecting the child's first epoch
- * inline through the epoch collector (`docs/plans/2026-09-10-epoch-collector-dsh-cc.md`).
+ * inline through the epoch collector (`docs/plans/2026-09-05-epoch-collector-dsh-cc.md`).
  * Performs the same pin preallocation, pre-start pin write, and
  * tombstone-on-throw as `startBackground` — a foreground-launched child is
  * pinnable/resumable exactly like a background one. The child's settlement

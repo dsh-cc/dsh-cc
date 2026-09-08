@@ -1,6 +1,6 @@
 # Startup Latency: Boot-to-First-Frame
 
-Status: approved for implementation (cold-reviewed 2026-09-05; revisions folded in)
+Status: **Implemented** — PR #121 (merged 2026-09-05). Approved for implementation (cold-reviewed 2026-09-05; revisions folded in).
 Scope: dsh-cc repo only. The harness repo (`deepseek-harness`) is untouched —
 its items are upstream proposals (appendix), not work items here.
 

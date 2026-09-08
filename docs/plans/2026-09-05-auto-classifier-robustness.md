@@ -1,7 +1,7 @@
 # Auto-mode classifier robustness: token budget, failure attribution, restart-durable breaker, visible fallback, debug channel
 
 - **Date:** 2026-09-05
-- **Status:** Reviewed — one cold Staff-review round (deep-reasoner,
+- **Status:** Implemented — PR #123 (merged 2026-09-05). Reviewed — one cold Staff-review round (deep-reasoner,
   2026-09-05): verdict approve-with-nits. Incorporated: R2 pre-parse abort
   ordering + caller-cancel exclusion (new 'cancelled' tag, never
   breaker-counted); R3 synchronous idempotent seed guard + skip unattributed

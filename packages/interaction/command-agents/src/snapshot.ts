@@ -1,7 +1,7 @@
 /**
  * Pure `/agents` snapshot + rendering: the thin data model shared by the
  * preset command handler and the TUI local-slash surface (plan
- * docs/plans/2026-09-10-continuable-background-ux.md §3.2). All functions are
+ * docs/plans/2026-09-05-continuable-background-ux.md §3.2). All functions are
  * pure over the injected duck-typed services, so they unit-test without
  * cordis. The preset surface renders this model exactly; the TUI may ADD
  * decorations (provider/model, prompt excerpt, last stopReason) from its own

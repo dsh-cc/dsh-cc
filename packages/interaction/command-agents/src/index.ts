@@ -1,6 +1,6 @@
 /**
  * Human-facing `/agents` command: list, inspect, and stop continuable
- * background agents (plan docs/plans/2026-09-10-continuable-background-ux.md
+ * background agents (plan docs/plans/2026-09-05-continuable-background-ux.md
  * §3.2). Mounted INSIDE the `cc-services` realm (the pin store is
  * realm-interior, F8); the read-only snapshot is ALSO published to the root
  * realm as `ccAgents` so the TUI local-slash path — a host-plane sibling that

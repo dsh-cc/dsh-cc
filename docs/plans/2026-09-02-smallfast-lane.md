@@ -1,6 +1,6 @@
 # Small-fast lane + alias-resolved hook/recall models
 
-Status: implemented on `feat/smallfast-lane` (Staff-approved; nits folded). Constraint: **dsh-cc only** — do not modify deepseek-harness.
+Status: **Implemented** — merged to main as PR #75 (2026-09-02). (Originally developed on `feat/smallfast-lane`; Staff-approved, nits folded.) Constraint: **dsh-cc only** — do not modify deepseek-harness.
 
 ## Goal
 

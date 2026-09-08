@@ -1,7 +1,7 @@
 # Worktree Session Isolation — Design Document
 
 **Date:** 2026-09-02
-**Status:** Ready for implementation (WS0 verification passed)
+**Status:** Implemented — PR #82 (merged 2026-09-02). Original readiness record: "Ready for implementation (WS0 verification passed)."
 **Scope:** `dsh-cc` monorepo — interactive harness, permission rules, workspace tools
 
 ---

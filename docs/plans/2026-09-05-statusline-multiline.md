@@ -1,6 +1,6 @@
 # Multi-row custom status line + client-drawn permission-mode row
 
-Status: proposed (2026-09-10). Amends the recorded v1 limitation of
+Status: **Implemented** — PR #124 (merged 2026-09-05). Amends the recorded v1 limitation of
 `docs/plans/2026-09-05-statusline-command.md` (§C3 / S6: "v1 renders the
 first row only") and the matching `ux.statusline` deviation in
 `docs/claude-code-capabilities.yaml`. Reviewed cold as a Staff Engineer

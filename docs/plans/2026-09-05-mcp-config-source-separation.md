@@ -1,6 +1,6 @@
 # MCP config source separation and Claude Code migration
 
-Date: 2026-09-05. Status: reviewed (deep-reasoner cold review; 9 findings folded in — see §9). Gate scope approved by the user: both `cwd/.mcp.json` and `$DSH_HOME/.mcp.json` count as dsh-native.
+Date: 2026-09-05. Status: **Implemented** — PR #116 (merged 2026-09-05). Reviewed (deep-reasoner cold review; 9 findings folded in — see §9). Gate scope approved by the user: both `cwd/.mcp.json` and `$DSH_HOME/.mcp.json` count as dsh-native.
 
 ## 1 Background
 

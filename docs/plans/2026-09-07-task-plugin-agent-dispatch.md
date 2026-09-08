@@ -1,6 +1,6 @@
 # Seam Plugin-Agent Dispatch for the CC Task Tool — Design
 
-Status: reviewed — deep-reasoner cold Staff-Engineer review returned
+Status: **Implemented** — PR #5 (merged 2026-09-07). Reviewed — deep-reasoner cold Staff-Engineer review returned
 **approve-with-changes**; all five findings (scoped-registration mechanism,
 colon file-def shadowing, re-entrant catalog emit, no-prefix discoverability,
 plugin-def resume pins) and all four TDD gaps are folded in, and a delta

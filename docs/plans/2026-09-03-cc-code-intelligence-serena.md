@@ -1,5 +1,7 @@
 # Code intelligence parity: Serena as the production path, hooks for behavior shaping, diagnostics, and health detection
 
+Status: **Implemented** — PR #85 (merged 2026-09-03).
+
 Research synthesis turned into an execution plan. Incorporates two adversarial Staff-Engineer cold reviews. Their fatal findings are fixed by construction: (1) hook config is never discovered from `.claude/settings.json` → Phase 0; (2) serena-hooks' PostToolUse `reset` is structurally dead here → cut; (3) a `*`-matcher PostToolUse hook taxes every tool call in the process → narrowed matcher + hard timeout + exit-0 discipline; (4) stale/empty Serena results are invisible to hooks → carried by prompt rules, not the watchdog. Do not re-introduce any of these.
 
 ## Agreed facts (research basis, do not re-litigate)

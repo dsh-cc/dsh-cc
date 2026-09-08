@@ -1,6 +1,6 @@
 # Background Agent Runtime for dsh-cc — Design
 
-Status: reviewed — deep-reasoner cold Staff-Engineer review returned
+Status: **Implemented** — PR #87 (merged 2026-09-03). Reviewed — deep-reasoner cold Staff-Engineer review returned
 **approve-with-changes**; all four should-fix findings (cold-resume
 agentOptions disclosure, no fabricated `outputFile`, parent-exit drain
 semantics, idle-parent-wake + drain + bundled-explore tests) are folded in.

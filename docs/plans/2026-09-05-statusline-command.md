@@ -1,6 +1,6 @@
 # Custom status line (`statusLine` settings contract, Claude Code parity)
 
-Status: Approved (post-review) — implemented (deep-reasoner cold review verdicts incorporated)
+Status: **Implemented** — PR #118 (merged 2026-09-05). Approved post-review (deep-reasoner cold review verdicts incorporated).
 Date: 2026-09-05
 Scope: Let the dsh-cc TUI (`dsh --profile tui`) execute a user-configured shell command for the bottom status line, honoring the Claude Code `statusLine` settings contract (`statusLine.type = "command"`), while leaving today's built-in HUD untouched when no command is configured.
 

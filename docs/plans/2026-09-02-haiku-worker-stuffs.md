@@ -1,6 +1,6 @@
 # Haiku-lane workers: Explore, dsh-cc-guide, session title/rename, WebFetch summarize
 
-Status: Staff-approved (nits folded; 2026-09-02 cold review). Constraint: **dsh-cc only** — do not modify deepseek-harness. This plan **supersedes** the Non-goals block in `docs/plans/2026-09-02-smallfast-lane.md` for the four items named above; the cheap lane remains `resolve('haiku')` with unconfigured-builtin → inherit. Three slices, three PRs (A then B then C).
+Status: **Implemented** — PR #79 (merged 2026-09-02). Staff-approved (nits folded; 2026-09-02 cold review). Constraint: **dsh-cc only** — do not modify deepseek-harness. This plan **supersedes** the Non-goals block in `docs/plans/2026-09-02-smallfast-lane.md` for the four items named above; the cheap lane remains `resolve('haiku')` with unconfigured-builtin → inherit. Three slices, three PRs (A then B then C).
 
 ## Goal
 

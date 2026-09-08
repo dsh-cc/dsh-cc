@@ -1,6 +1,6 @@
 # LLM provider management (`/provider` command)
 
-Status: Approved (post-review) — cold Staff-Engineer review findings incorporated (verify-step Blocker fixed; Available-merge rule added; credential concurrency + removal semantics re-grounded)
+Status: **Implemented** — PR #129 (merged 2026-09-05). Approved post-review — cold Staff-Engineer review findings incorporated (verify-step Blocker fixed; Available-merge rule added; credential concurrency + removal semantics re-grounded)
 Date: 2026-09-05
 Scope: Give the dsh-cc TUI first-class LLM provider management: a `/provider` command that lists, adds, edits, and removes provider routes, manages their API keys through the credentials store, and ships curated one-tap presets for Kimi (API + Coding Plan), Zhipu/Z.AI (CN + international, API + Coding Plan), DeepSeek, plus fully custom providers — with every change taking effect live, without a session restart.
 

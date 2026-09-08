@@ -1,6 +1,6 @@
 # Pinned resume descriptors for continuable subagents ("resume pins")
 
-Status: designed — two rounds of dual blind review (deep-reasoner + Codex), all
+Status: **Implemented** — PR #104 (merged 2026-09-04). Designed — two rounds of dual blind review (deep-reasoner + Codex), all
 findings folded. Round 1 replaced tool shadowing with `tools/pre-execute`/
 `tools/post-execute` and post-hoc aggregate storage with preallocated per-child
 pin files; round 2 folded spawn-degradation (preflight never rejects), explicit

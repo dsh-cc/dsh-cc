@@ -1,6 +1,6 @@
 # Serena-first prompt sections
 
-Date: 2026-09-16. Status: reviewed (deep-reasoner cold review, 3 blocking findings folded in).
+Date: 2026-09-04. Status: Implemented — PR #112 (merged 2026-09-04); reviewed (deep-reasoner cold review, 3 blocking findings folded in).
 
 ## Background
 

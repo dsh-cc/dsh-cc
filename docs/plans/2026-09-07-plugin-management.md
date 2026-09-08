@@ -1,7 +1,7 @@
 # Plugin management for dsh-cc (install / uninstall / enable / disable / update / marketplaces)
 
-- **Status:** approved design (Staff-Engineer cold review: PROCEED-WITH-CHANGES; all blocking findings closed by on-machine probes).
-- **Date:** 2026-09-06
+- **Status:** Implemented — PR #3 (merged 2026-09-07). Approved design (Staff-Engineer cold review: PROCEED-WITH-CHANGES; all blocking findings closed by on-machine probes).
+- **Date:** 2026-09-07
 - **Scope:** full plugin CRUD for Claude Code plugins from inside dsh-cc sessions, implemented as dsh-cc packages only. The deepseek-harness repo is read-only (user directive).
 
 ## 1. Problem and goals
