@@ -17,12 +17,10 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
-import * as ReportTool from '@deepseek-ai/dsh-tool-subagent-report'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
@@ -43,12 +41,10 @@ async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(ControlTools)
   await ctx.plugin(ListAgents)
-  await ctx.plugin(ReportTool)
   // A deployment tool surface + the name-reservation shim, as integration.spec.ts.
   ctx.tools.register(defineTool({
     name: 'read',
@@ -88,7 +84,7 @@ async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []
   )
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const parent = ctx.agentLoop.create(
+  const parent = await ctx.agentLoop.create(
     SessionId('parent'),
     { provider: 'mock', model: 'mock' },
     { cwd: join(root, 'workspace') },

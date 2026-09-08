@@ -185,17 +185,19 @@
 # that reaches it shares one entry-local realm here, and a consumer left
 # outside would resolve a host registry this preset does not populate.
 #
-# `tool-subagent-report` is host-plane for the same reason as the registry,
-# not because a preset may not want it: it registers a CONTINUABLE SETUP on
-# that singleton rather than a tool this agent calls, and the setup list is
-# not scope-aware — one copy per mounted preset means every child gets
-# `report` registered once per live session, which throws on the second.
+# `tool-subagent-report` is GONE upstream: there is no report tool anymore.
+# Workers return outcomes to their parent with the host-plane
+# `tool-subagent-control` send_message tool (addressed to the parent's session
+# id), and settlement reaches the parent as the subagent manager's
+# `subagent-settled` notice. `tool-subagent-control` stays host-plane for the
+# same reason as the registry: its tools resolve `ctx.subagents.sendMessage` /
+# interrupt state on the host plane, not a tool this agent registers locally.
 #
 # `tool-subagent` and `tool-subagent-fork` (the harness spawn/fork Task tools)
 # are DISABLED here — the CC Task tool is provided by the `tool-task` row in
 # the cc-services group instead. That replacement Task now implements the
 # continuable loop itself: `run_in_background: true` starts a durable
-# background child on the spawn provider, and report / send_message /
+# background child on the spawn provider, and send_message /
 # list_agents / interrupt_agent operate on its returned agentId. The harness
 # rows stay disabled. Note for future readers: the disabled
 # `tool-subagent-fork` row's `backgroundMode: continuable` config is inert

@@ -43,6 +43,7 @@
     "@deepseek-ai/dsh-compaction": "link:../../../../deepseek-harness/packages/compaction/compaction",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
     "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",

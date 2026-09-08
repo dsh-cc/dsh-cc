@@ -326,8 +326,14 @@ export class SettingsCascadeProvider extends SettingsProvider {
     }
   }
 
-  /** Every concrete settings FILE path worth watching, canonicalized and deduped. */
-  private async watchPaths(): Promise<string[]> {
+  /**
+   * Every concrete settings FILE path worth watching, canonicalized and
+   * deduped. The result also carries each file's parent directory: chokidar
+   * v4 emits nothing for a watched path whose parent directory does not yet
+   * exist, so a settings file created after boot (e.g. the project
+   * `.claude/settings.json`) is only seen through its directory watch.
+   */
+  private async watchPaths(): Promise<{ files: string[]; dirs: string[] }> {
     const paths = [
       this.spec.sources.userSettings,
       this.spec.sources.projectSettings,
@@ -336,39 +342,50 @@ export class SettingsCascadeProvider extends SettingsProvider {
       this.spec.policy.systemPath,
       this.spec.policy.userPath,
     ].filter((path): path is string => path !== undefined)
-    const canonical = await Promise.all(paths.map(path => canonicalizeWatchPath(path)))
-    return [...new Set(canonical)]
+    const canonical = [...new Set(await Promise.all(paths.map(path => canonicalizeWatchPath(path))))]
+    return {
+      files: canonical,
+      dirs: [...new Set(canonical.map(path => dirname(path)))],
+    }
   }
 
   override async* [Service.init](): AsyncGenerator<() => Promise<void> | void, void, void> {
     // The base init loads and publishes the merged document; a parse failure
     // there is a boot failure and stays loud.
     yield* super[Service.init]()
-    const watcher = chokidarWatch(await this.watchPaths(), {
+    const refresh = () => {
+      if (this.isClosed()) return
+      this.queueRefresh()
+    }
+    const { files, dirs } = await this.watchPaths()
+    const watcher = chokidarWatch(files, {
       ignoreInitial: true,
       awaitWriteFinish: {
         stabilityThreshold: DEBOUNCE_MS,
         pollInterval: Math.max(1, Math.min(DEBOUNCE_MS, 10)),
       },
     })
-    watcher.on('all', () => {
-      if (this.isClosed()) return
-      this.queueRefresh()
-    })
-    watcher.on('ready', () => {
-      // The base init's load raced the watcher's own setup: a change written
-      // between that read and the watcher becoming active never fires an
-      // event. One reconcile at ready closes the gap.
-      if (this.isClosed()) return
-      this.queueRefresh()
-    })
-    watcher.on('error', (error) => {
-      this.ctx.logger.warn('settings-cascade: watcher error')
-      this.ctx.logger.warn(error)
-    })
+    // Parent directories are watched at depth 0: a plain dir watch would
+    // recurse (a settings file may live directly in $HOME), which is both a
+    // boot-cost and a noise problem. Depth 0 still reports direct children,
+    // which is all the creation-after-boot case needs.
+    const dirWatcher = chokidarWatch(dirs, { ignoreInitial: true, depth: 0 })
+    for (const w of [watcher, dirWatcher]) {
+      w.on('all', refresh)
+      w.on('ready', () => {
+        // The base init's load raced the watcher's own setup: a change written
+        // between that read and the watcher becoming active never fires an
+        // event. One reconcile at ready closes the gap.
+        refresh()
+      })
+      w.on('error', (error) => {
+        this.ctx.logger.warn('settings-cascade: watcher error')
+        this.ctx.logger.warn(error)
+      })
+    }
     yield async () => {
       this.closed = true
-      await watcher.close()
+      await Promise.all([watcher.close(), dirWatcher.close()])
       await this.operations
     }
   }

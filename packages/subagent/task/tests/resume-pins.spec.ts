@@ -30,12 +30,11 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
-import * as ReportTool from '@deepseek-ai/dsh-tool-subagent-report'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
@@ -114,13 +113,13 @@ async function boot(
   }
   if (opts.researcherDefinition === true) writeResearcherDefinition(workspace)
   await ctx.plugin(JsonlSessionPersistence, { root: join(root, 'sessions') })
+  // sendMessage's cold-resume delivery resolves sessions through session-query.
+  await ctx.plugin(SessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(ControlTools)
   await ctx.plugin(ListAgents)
-  await ctx.plugin(ReportTool)
   if (opts.readTool !== false) {
     ctx.tools.register(defineTool({
       name: 'read',
@@ -179,15 +178,27 @@ async function boot(
   }
   const adapter = new MockAdapter(script, opts.reasoning, opts.defaultMaxTokens)
   if (opts.registerMockAdapter !== false) ctx.llm.registerAdapter(['mock'], adapter)
-  const parent = ctx.agentLoop.create(
-    SessionId('parent'),
-    {
-      provider: 'mock',
-      model: 'mock',
-      ...(opts.parentMaxTokens !== undefined ? { maxTokens: opts.parentMaxTokens } : {}),
-    },
-    { cwd: workspace },
-  )
+  // The parent identity is STABLE across boots (production: a resumed
+  // coordinator keeps its session id, and a cold-resumed child only accepts
+  // messages from the parent its header records). Re-creating 'parent' over
+  // the shared root is refused by the jsonl backend, so a second boot
+  // RESUMES the persisted parent session instead.
+  const parentId = SessionId('parent')
+  const persistedParent = await (ctx.get('sessionPersistence') as {
+    stat(id: SessionId): Promise<unknown>
+  }).stat(parentId)
+  const parentOptions = {
+    provider: 'mock',
+    model: 'mock',
+    ...(opts.parentMaxTokens !== undefined ? { maxTokens: opts.parentMaxTokens } : {}),
+  }
+  let parent: Agent
+  if (persistedParent !== undefined) {
+    const handle = await ctx.agentLoop.resume(ctx, { resumeSessionId: parentId, agentOptions: parentOptions })
+    parent = handle.agent
+  } else {
+    parent = await ctx.agentLoop.create(parentId, parentOptions, { cwd: workspace })
+  }
   ctx.on('agent/pre-step', async ({ agent: subject }, next) => {
     if (subject !== parent) return next()
     return { kind: 'reject' as const }
@@ -259,7 +270,7 @@ describe('§6 test 6 — acceptance: the pinned tuple survives a two-Context col
     const b = await boot([textResponse('resumed answer from B')], root, { reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
     expect(childRequests(b.adapter, childId)).toHaveLength(0)
 
-    const send = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue from B' }, b.parent)
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue from B' }, b.parent)
     expect(send.isError, text(send as never)).toBe(false)
     await vi.waitFor(() => expect(childRequests(b.adapter, childId).length).toBeGreaterThan(0), { timeout: 10_000 })
     await waitNoActivation(b.ctx, childId)
@@ -296,7 +307,7 @@ describe('§6 test 6 — acceptance: the pinned tuple survives a two-Context col
     // overlay runs — the overlay must REMOVE them (absence, not null), making
     // the removal non-vacuous (test-quality fix a).
     const b = await boot([textResponse('resumed answer from B')], root, { junkRequestKeys: true })
-    const send = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(send.isError, `send failed: ${text(send as never)}`).toBe(false)
     await vi.waitFor(() => expect(childRequests(b.adapter, childId).length).toBeGreaterThan(0), { timeout: 10_000 })
     await waitNoActivation(b.ctx, childId)
@@ -329,7 +340,7 @@ describe('§6 test 7 — changed definition between boots', () => {
     // Real edit between boots.
     writeResearcherDefinition(join(root, 'workspace'), 'CHANGED PERSONA MARKER')
     const b = await boot([textResponse('resumed answer')], root, { reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
-    const send = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(send.isError, text(send as never)).toBe(false)
     expect(text(send as never)).toContain('resumed with changed definition (pinned persona retained)')
     expect(b.store.read(agentId)).toMatchObject({ lastNotice: expect.stringContaining('changed definition') })
@@ -344,7 +355,7 @@ describe('§6 test 7 — changed definition between boots', () => {
       policy: { onDefinitionChanged: 'block' },
     })
     const before = childRequests(c.adapter, SessionId(agentId)).length
-    const denied = await callTool(c.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, c.parent)
+    const denied = await callTool(c.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, c.parent)
     expect(denied.isError).toBe(true)
     expect(text(denied as never)).toContain('DEFINITION_CHANGED')
     expect(childRequests(c.adapter, SessionId(agentId)).length).toBe(before)
@@ -356,7 +367,7 @@ describe('§6 test 7 — changed definition between boots', () => {
     writeFileSync(join(ws, '.claude', 'agents', 'researcher.md'),
       '---\nname: researcher # a yaml comment\ndescription: reads things\nmodel: sonnet\ntools:\n  - read\n---\nRESEARCHER PERSONA MARKER\n')
     const d = await boot([textResponse('resumed answer')], root, { reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
-    const quiet = await callTool(d.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, d.parent)
+    const quiet = await callTool(d.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, d.parent)
     expect(quiet.isError).toBe(false)
     expect(text(quiet as never)).not.toContain('changed definition')
     await waitNoActivation(d.ctx, SessionId(agentId))
@@ -385,7 +396,7 @@ describe('§6 test 8 — model unavailability, policy fallback, and adapter-defa
 
     // B: NO 'mock' adapter — the pinned provider is gone.
     const b = await boot([], root, { registerMockAdapter: false, reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
-    const denied = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const denied = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(denied.isError).toBe(true)
     expect(text(denied as never)).toContain('SUBAGENT_MODEL_UNAVAILABLE')
     expect(childRequests(b.adapter, childId)).toHaveLength(0)
@@ -407,7 +418,7 @@ describe('§6 test 8 — model unavailability, policy fallback, and adapter-defa
     })
     const mock2Adapter = new MockAdapter([textResponse('resumed on current route')], HIGH_EFFORT, 999)
     c.ctx.llm.registerAdapter(['mock2'], mock2Adapter)
-    const resumed = await callTool(c.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, c.parent)
+    const resumed = await callTool(c.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, c.parent)
     expect(resumed.isError).toBe(false)
     expect(text(resumed as never)).toContain('resumed with current default route mock2/mock2 per policy')
     // Cache coherence: the FIRST resumed request already carries the complete
@@ -431,7 +442,7 @@ describe('§6 test 8 — model unavailability, policy fallback, and adapter-defa
 
     // B: same route, but the adapter NOW declares a default maxTokens.
     const b = await boot([], root, { reasoning: HIGH_EFFORT, defaultMaxTokens: 4321, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
-    const denied = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const denied = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(denied.isError).toBe(true)
     expect(text(denied as never)).toContain('SUBAGENT_MODEL_UNAVAILABLE')
     expect(childRequests(b.adapter, childId)).toHaveLength(0)
@@ -443,7 +454,7 @@ describe('§6 test 8 — model unavailability, policy fallback, and adapter-defa
       defaultMaxTokens: 4321,
       policy: { onUnavailableModel: 'route-current' },
     })
-    const resumed = await callTool(c.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, c.parent)
+    const resumed = await callTool(c.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, c.parent)
     expect(resumed.isError, text(resumed as never)).toBe(false)
     expect(text(resumed as never)).toContain('resumed with current default route mock/mock per policy')
     await vi.waitFor(() => expect(childRequests(c.adapter, childId).length).toBeGreaterThan(0), { timeout: 10_000 })
@@ -469,7 +480,7 @@ describe('§6 test 9 — pinned tool removed in Context B', () => {
 
     // B: the 'read' tool no longer exists in this composition.
     const b = await boot([], root, { readTool: false, reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
-    const denied = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const denied = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(denied.isError).toBe(true)
     expect(text(denied as never)).toContain('PINNED_TOOL_UNAVAILABLE')
     expect(childRequests(b.adapter, SessionId(agentId))).toHaveLength(0)
@@ -493,7 +504,7 @@ describe('§6 test 10 — workspace drift', () => {
     const gone = await workspaceFixture()
     const b1 = await boot([], gone.root)
     rmSync(gone.workspace, { recursive: true, force: true })
-    const denied = await callTool(b1.ctx, 'send_message', { subagent_id: gone.agentId, message: 'continue' }, b1.parent)
+    const denied = await callTool(b1.ctx, 'send_message', { agent_id: gone.agentId, message: 'continue' }, b1.parent)
     expect(denied.isError, text(denied as never)).toBe(true)
     expect(text(denied as never)).toContain('WORKSPACE_MISSING')
     await b1.ctx.fiber.dispose()
@@ -516,7 +527,7 @@ describe('§6 test 10 — workspace drift', () => {
     rmSync(join(wt, '.git'))
     gitInit(wt)
     const b2 = await boot([textResponse('resumed')], driftRoot)
-    const identityDrift = await callTool(b2.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b2.parent)
+    const identityDrift = await callTool(b2.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b2.parent)
     expect(identityDrift.isError).toBe(false)
     expect(text(identityDrift as never)).toContain('repository identity changed')
     await waitNoActivation(b2.ctx, SessionId(agentId))
@@ -537,7 +548,7 @@ describe('§6 test 10 — workspace drift', () => {
     rmSync(join(wt2, '.git'))
     gitInit(wt2)
     const b3 = await boot([], blockRoot, { policy: { onWorkspaceChanged: 'block' } })
-    const blocked = await callTool(b3.ctx, 'send_message', { subagent_id: agentId2, message: 'continue' }, b3.parent)
+    const blocked = await callTool(b3.ctx, 'send_message', { agent_id: agentId2, message: 'continue' }, b3.parent)
     expect(blocked.isError).toBe(true)
     expect(text(blocked as never)).toContain('WORKSPACE_CHANGED')
     await b3.ctx.fiber.dispose()
@@ -552,7 +563,7 @@ describe('§6 test 10 — workspace drift', () => {
     await a3.ctx.fiber.dispose()
     execSync('git checkout -q -b topic', { cwd: join(branchRoot, 'workspace') })
     const b4 = await boot([textResponse('resumed')], branchRoot, { policy: { onWorkspaceChanged: 'block' } })
-    const branched = await callTool(b4.ctx, 'send_message', { subagent_id: agentId3, message: 'continue' }, b4.parent)
+    const branched = await callTool(b4.ctx, 'send_message', { agent_id: agentId3, message: 'continue' }, b4.parent)
     expect(branched.isError).toBe(false)
     expect(text(branched as never)).toContain('branch changed')
     await waitNoActivation(b4.ctx, SessionId(agentId3))
@@ -568,9 +579,9 @@ describe('§6 test 11 — regression: unpinned children and live followups pass 
     const childId = SessionId(agentId)
 
     // (a) Live-Activation followup while the child runs: the gate skips it.
-    const live = await callTool(a.ctx, 'send_message', { subagent_id: agentId, message: 'still there?' }, a.parent)
+    const live = await callTool(a.ctx, 'send_message', { agent_id: agentId, message: 'still there?' }, a.parent)
     expect(live.isError).toBe(false)
-    expect(text(live as never)).toContain('message queued')
+    expect(text(live as never)).toContain(`message delivered to agent ${agentId}`)
     await a.store.remove(agentId)
     // Stop the hung turn so the child's Activation can release.
     await callTool(a.ctx, 'interrupt_agent', { agent_id: agentId }, a.parent)
@@ -580,7 +591,7 @@ describe('§6 test 11 — regression: unpinned children and live followups pass 
     // (b) Cold resume with NO pin: legacy passthrough — the pinned maxTokens
     // would be restored by the overlay, so its absence proves zero effect.
     const b = await boot([textResponse('resumed answer')], root)
-    const send = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(send.isError, `send failed: ${text(send as never)}`).toBe(false)
     await vi.waitFor(() => expect(childRequests(b.adapter, childId).length).toBeGreaterThan(0), { timeout: 10_000 })
     await waitNoActivation(b.ctx, childId)
@@ -611,7 +622,7 @@ describe('§6 test 12 — crash window: pin exists, session never created', () =
       workspace: { cwd: b.workspace, gitDir: '.git', gitCommonDir: '.git', branch: 'main' },
       resume: { state: 'ok' },
     })
-    const denied = await callTool(b.ctx, 'send_message', { subagent_id: orphanId, message: 'continue' }, b.parent)
+    const denied = await callTool(b.ctx, 'send_message', { agent_id: orphanId, message: 'continue' }, b.parent)
     expect(denied.isError).toBe(true)
     expect(text(denied as never)).toContain('PIN_ORPHANED')
     expect(childRequests(b.adapter, SessionId(orphanId))).toHaveLength(0)
@@ -634,7 +645,7 @@ describe('review fixes — corrupt/vanished pins at request time (H2 + H4)', () 
     // The corrupt sentinel is fail-closed at BOTH layers: the gate denies the
     // send visibly (no followup), and the request-time overlay would throw
     // the same way for any request that bypasses the gate.
-    const send = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(send.isError).toBe(true)
     expect(text(send as never)).toContain('PIN_UNREADABLE')
     expect(childRequests(b.adapter, SessionId(agentId))).toHaveLength(0)
@@ -655,7 +666,7 @@ describe('review fixes — corrupt/vanished pins at request time (H2 + H4)', () 
 
     const b = await boot([textResponse('resumed answer')], root)
     rmSync(join(root, 'resume-pins', `${agentId}.json`))
-    const send = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(send.isError, `send failed: ${text(send as never)}`).toBe(false)
     await vi.waitFor(() => expect(childRequests(b.adapter, childId).length).toBeGreaterThan(0), { timeout: 10_000 })
     await waitNoActivation(b.ctx, childId)
@@ -691,7 +702,7 @@ describe('review fixes — durability ordering on store-write failure (H3)', () 
       workspace: { cwd: b.workspace, gitDir: '.git', gitCommonDir: '.git', branch: 'main' },
       resume: { state: 'ok' },
     })
-    const denied = await callTool(b.ctx, 'send_message', { subagent_id: orphanId, message: 'continue' }, b.parent)
+    const denied = await callTool(b.ctx, 'send_message', { agent_id: orphanId, message: 'continue' }, b.parent)
     expect(denied.isError).toBe(true)
     expect(text(denied as never)).toContain('PIN_ORPHANED')
     expect(text(denied as never)).toContain('persistence failed')
@@ -710,7 +721,7 @@ describe('review fixes — durability ordering on store-write failure (H3)', () 
     // Healthy spawn, write-failing store in B: the gate would pass, but the
     // pass must never be admitted without its durable publication.
     const b = await boot([textResponse('resumed answer')], root, { store: new FailingUpdateStore(join(root, 'resume-pins')) })
-    const denied = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    const denied = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
     expect(denied.isError).toBe(true)
     expect(text(denied as never)).toContain('STORE_WRITE_FAILURE')
     expect(childRequests(b.adapter, SessionId(agentId))).toHaveLength(0)
@@ -722,7 +733,7 @@ describe('review fixes — unsafe session ids pass through at lookup level (H5)'
     const root = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-'))
     roots.push(root)
     const b = await boot([textResponse('unused')], root)
-    const result = await callTool(b.ctx, 'send_message', { subagent_id: 'weird/../id', message: 'hi' }, b.parent)
+    const result = await callTool(b.ctx, 'send_message', { agent_id: 'weird/../id', message: 'hi' }, b.parent)
     // The gate must NOT have thrown the store's "unsafe resume-pin childId"
     // error; the send proceeds (and fails as an unknown agent, unpin-related).
     expect(text(result as never)).not.toContain('unsafe resume-pin childId')
@@ -747,8 +758,8 @@ describe('review fixes — concurrent sends to one cold child never cross-delive
     writeResearcherDefinition(join(root, 'workspace'), 'CHANGED PERSONA MARKER')
     const b = await boot([textResponse('resumed answer')], root, { reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
     const [r1, r2] = await Promise.all([
-      callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'first continue' }, b.parent),
-      callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'second continue' }, b.parent),
+      callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'first continue' }, b.parent),
+      callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'second continue' }, b.parent),
     ])
     const NOTICED = 'resumed with changed definition (pinned persona retained)'
     const t1 = text(r1 as never)
@@ -759,5 +770,36 @@ describe('review fixes — concurrent sends to one cold child never cross-delive
     expect([...t1.matchAll(new RegExp(NOTICED, 'g'))].length).toBeLessThanOrEqual(1)
     expect([...t2.matchAll(new RegExp(NOTICED, 'g'))].length).toBeLessThanOrEqual(1)
     expect(t1.includes(NOTICED) || t2.includes(NOTICED)).toBe(true)
+  }, 40_000)
+})
+
+describe('§6 rename — the gate reads the harness control tool\'s `agent_id` key', () => {
+  it('denies a send_message addressed by agent_id (and the legacy subagent_id key no longer gates)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-'))
+    roots.push(root)
+    const a = await boot([textResponse('first answer')], root, {
+      researcherDefinition: true,
+      routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } },
+      reasoning: HIGH_EFFORT,
+    })
+    const agentId = await startBackground(a.ctx, a.parent, { subagent_type: 'researcher' })
+    await waitNoActivation(a.ctx, SessionId(agentId))
+    await a.ctx.fiber.dispose()
+
+    // B: NO 'mock' adapter — the pinned provider is gone, so the gate denies.
+    const b = await boot([], root, { registerMockAdapter: false, reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
+    const denied = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
+    expect(denied.isError, `expected gate deny, got: ${text(denied as never)}`).toBe(true)
+    expect(text(denied as never)).toContain('SUBAGENT_MODEL_UNAVAILABLE')
+    expect(childRequests(b.adapter, SessionId(agentId))).toHaveLength(0)
+    expect(b.store.read(agentId)).toMatchObject({ resume: { state: 'blocked' } })
+
+    // The legacy `subagent_id` key no longer addresses the gate: the tool
+    // call fails upstream (unknown/blank agent_id) rather than being denied
+    // with a resume-pin reason — the old key must NOT silently re-enable a
+    // gated send.
+    const legacy = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
+    expect(text(legacy as never)).not.toContain('SUBAGENT_MODEL_UNAVAILABLE')
+    await b.ctx.fiber.dispose()
   }, 40_000)
 })

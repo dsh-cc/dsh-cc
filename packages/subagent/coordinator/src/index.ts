@@ -6,13 +6,13 @@
  * scheduling tools ({@link spawn_worker}, {@link send_to_worker},
  * {@link worker_broadcast}, {@link worker_tasks}).
  *
- * Result return and completion waking are NOT reimplemented here: a worker
- * reports through the existing `report` tool (`tool-subagent-report`),
- * and the subagent manager already injects its `subagent-settled` notice into
- * this coordinator's inbox as a waking message when a worker settles
- * (`@deepseek-ai/dsh-subagent`'s continuation settlement delivery). This
- * package adds the coordinator role and its naming/messaging surface around
- * those seams and documents the reuse.
+ * Result return and completion waking are NOT reimplemented here: the subagent
+ * manager already injects its `subagent-settled` notice into this coordinator's
+ * inbox as a waking message when a worker settles
+ * (`@deepseek-ai/dsh-subagent`'s continuation settlement delivery), and a worker
+ * can address the coordinator directly with its `send_message` control tool.
+ * This package adds the coordinator role and its naming/messaging surface
+ * around those seams and documents the reuse.
  * @module @dsh-cc/coordinator
  */
 
@@ -140,11 +140,6 @@ export function installCoordinatorMode(
 ): () => void {
   const provider = ctx.subagents
   const registry = new WorkerRegistry('spawn')
-  const taskSource = (sendingId: SessionId) => ({
-    kind: 'coordinator' as const,
-    form: 'relay' as const,
-    senderSessionId: sendingId,
-  })
 
   // Scoped tool registration helper: each tool's execute resolves the live
   // coordinator agent and its durable id for authority and attribution.
@@ -160,9 +155,9 @@ export function installCoordinatorMode(
     name: SPAWN_WORKER,
     description:
       'Start one named background worker to carry out a task in the shared workspace. '
-      + 'Name it for later send_to_worker and worker_tasks use. The worker reports its result through the '
-      + 'report tool, which arrives back here as a waking message; when it finishes you are told either way. '
-      + 'Delegation is the only way to change the workspace in coordinator mode.',
+      + 'Name it for later send_to_worker and worker_tasks use. When the worker finishes you receive a '
+      + 'subagent-settled waking message, and a worker may also send you a message directly with its '
+      + 'send_message tool. Delegation is the only way to change the workspace in coordinator mode.',
     parameters: {
       name: {
         type: 'string',
@@ -207,9 +202,10 @@ export function installCoordinatorMode(
   disposals.push(agent.ctx.tools.register(defineTool({
     name: SEND_TO_WORKER,
     description:
-      'Send a message to one of your named workers, continuing its conversation on the same turn queue. '
-      + 'Use it to redirect, extend, or clarify work already delegated. Returns only delivery confirmation; '
-      + 'the worker answers with a later report or its finish notice.',
+      'Send a message to one of your named workers. It steers a running worker at its next step boundary '
+      + 'and wakes an idle or parked one. Use it to redirect, extend, or clarify work already delegated. '
+      + 'Returns only delivery confirmation; the worker answers in a later message or through its '
+      + 'subagent-settled finish notice.',
     parameters: {
       worker: {
         type: 'string',
@@ -219,7 +215,7 @@ export function installCoordinatorMode(
       message: {
         type: 'string',
         required: true,
-        description: 'The message to deliver as the worker\'s next turn.',
+        description: 'The message to deliver to the worker.',
       },
     },
     output: {
@@ -233,7 +229,7 @@ export function installCoordinatorMode(
       },
       render: (args, value) => [{
         type: 'text',
-        text: `message queued for worker ${args.worker} as message ${value.messageId}`,
+        text: `message delivered to worker ${args.worker} as message ${value.messageId}`,
       }],
     },
     async execute(args, exec) {
@@ -241,11 +237,11 @@ export function installCoordinatorMode(
       if (childId === undefined) {
         throw new Error(`unknown worker "${args.worker}": start it with spawn_worker first`)
       }
-      const messageId = await provider.followup(
+      const messageId = await provider.sendMessage(
         agent,
         childId,
         [{ type: 'text' as const, text: args.message }],
-        { source: taskSource(agent.id), signal: exec.signal },
+        { signal: exec.signal },
       )
       return { worker: args.worker, messageId }
     },
@@ -254,7 +250,7 @@ export function installCoordinatorMode(
   disposals.push(agent.ctx.tools.register(defineTool({
     name: WORKER_BROADCAST,
     description:
-      'Send the same message to every one of your active named workers as their next turn. ',
+      'Send the same message to every one of your active named workers, steering running ones and waking idle ones. ',
     parameters: {
       message: {
         type: 'string',
@@ -279,11 +275,11 @@ export function installCoordinatorMode(
       const entries = registry.entries()
       let sent = 0
       for (const entry of entries) {
-        await provider.followup(
+        await provider.sendMessage(
           agent,
           entry.childId,
           [{ type: 'text' as const, text: args.message }],
-          { source: taskSource(agent.id), signal: exec.signal },
+          { signal: exec.signal },
         )
         sent += 1
       }

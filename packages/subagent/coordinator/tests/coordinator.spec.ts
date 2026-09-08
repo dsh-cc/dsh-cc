@@ -6,9 +6,9 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { defineTool } from '@dsh-cc/tools'
@@ -29,8 +29,9 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
+  // sendMessage's cold-resume delivery resolves sessions through session-query.
+  await ctx.plugin(SessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   // A small deployment tool surface: two write tools and two read-only tools,
@@ -40,9 +41,19 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   ctx.tools.register(defineTool({ name: 'read', description: 'read', parameters: {}, output: { schema: { type: 'null' }, render: () => [] }, async execute() { return null } }))
   ctx.tools.register(defineTool({ name: 'search', description: 'search', parameters: {}, output: { schema: { type: 'null' }, render: () => [] }, async execute() { return null } }))
   ctx.llm.registerAdapter(['mock'], new MockAdapter(script))
-  const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
+  const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
   parkParent(ctx, parent)
   return { ctx, parent }
+}
+
+/** Read one stored session's header + event log through a read handle. */
+async function loadStoredSession(persistence: { open(id: SessionId, access: 'read'): Promise<{ header: SessionHeader; read(): Promise<{ events: readonly SessionEvent[] }>; close(): Promise<void> }> }, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
+  const handle = await persistence.open(id, 'read')
+  try {
+    return { meta: handle.header, events: (await handle.read()).events }
+  } finally {
+    await handle.close()
+  }
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -105,7 +116,8 @@ describe('dsh-coordinator mode activation', () => {
     const section = assembly.sections.find(entry => entry.name === 'coordinator:mode')
     expect(section).toBeDefined()
     expect(section!.text).toContain('Coordinator mode')
-    expect(section!.text).toContain('report')
+    expect(section!.text).toContain('send_message')
+    expect(section!.text).toContain('subagent-settled')
 
     dispose()
     const restored = visibleTools(ctx, parent)
@@ -184,8 +196,37 @@ describe('dsh-coordinator named worker routing', () => {
       message: 'and extend it',
     }, parent)
     expect(sent.isError).toBe(false)
-    expect(text(sent)).toContain('message queued for worker alpha')
+    expect(text(sent)).toContain('message delivered to worker alpha')
   })
+
+  it('send_to_worker\'s message reaches the spawned worker\'s persisted session via sendMessage', async () => {
+    // The production delivery path end-to-end: the tool resolves the worker,
+    // calls ctx.subagents.sendMessage (steer semantics), and the formatted
+    // message lands durably on the worker's own session log.
+    const { ctx, parent } = await setup([textResponse('first'), textResponse('second')])
+    coordinator.installCoordinatorMode(parent, ctx, { enabled: true })
+
+    const spawned = await callTool(ctx, 'spawn_worker', { name: 'alpha', prompt: 'do task' }, parent)
+    const childId = SessionId(text(spawned).match(/as ([A-Za-z0-9-]+)$/)![1]!)
+    const sent = await callTool(ctx, 'send_to_worker', { worker: 'alpha', message: 'and extend it' }, parent)
+    expect(sent.isError).toBe(false)
+
+    await vi.waitFor(async () => {
+      const loaded = await loadStoredSession(ctx.sessionPersistence, childId)
+      const childTexts = loaded.events
+        .flatMap(event => event.type === 'user/message' ? event.data.content : [])
+        .flatMap(block => block.type === 'text' ? [block.text] : [])
+      expect(childTexts.some(entry => entry.includes('do task'))).toBe(true)
+      const delivered = loaded.events
+        .filter(event => event.type === 'user/message'
+          && (event.data.content as { type: string; text?: string }[]).some(
+            block => block.type === 'text' && block.text?.includes('sent a message'),
+          ))
+        .map(event => (event.data.content as { type: string; text?: string }[])
+          .flatMap(block => block.type === 'text' ? [block.text] : []).join(''))
+      expect(delivered.some(entry => entry.includes('and extend it'))).toBe(true)
+    }, { timeout: 10_000 })
+  }, 20_000)
 
   it('worker_tasks lists the named worker once spawned', async () => {
     const { ctx, parent } = await setup([textResponse('child'), textResponse('child2')])
@@ -239,13 +280,12 @@ describe('dsh-coordinator completion notification (reused subagent-settled proto
     roots.push(root)
     await ctx.plugin(JsonlSessionPersistence, { root })
     await ctx.plugin(AgentLoop, { agents: [] })
-    await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(SubagentRuntime)
+      await ctx.plugin(SubagentRuntime)
     await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
     ctx.tools.register(defineTool({ name: 'write', description: 'write', parameters: {}, output: { schema: { type: 'null' }, render: () => [] }, async execute() { return null } }))
     ctx.tools.register(defineTool({ name: 'edit', description: 'edit', parameters: {}, output: { schema: { type: 'null' }, render: () => [] }, async execute() { return null } }))
     ctx.llm.registerAdapter(['mock'], new MockAdapter([textResponse('child answer'), textResponse('parent ack')]))
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
     coordinator.installCoordinatorMode(parent, ctx, { enabled: true })
 
     const spawned = await callTool(ctx, 'spawn_worker', { name: 'gamma', prompt: 'work' }, parent)
@@ -258,7 +298,7 @@ describe('dsh-coordinator completion notification (reused subagent-settled proto
     // parent's session as a durable waking message — the completion protocol
     // this package reuses rather than reimplements.
     await vi.waitFor(() => {
-      const userEvents = parent.session.events
+      const userEvents = parent.session.snapshotEvents()
         .flatMap(event => event.type === 'user/message' ? [event.data] : [])
       expect(userEvents.some(m =>
         m.source.kind === 'subagent-settled' && m.source.senderSessionId === childId)).toBe(true)

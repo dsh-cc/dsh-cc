@@ -23,12 +23,11 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { SessionId } from '@deepseek-ai/dsh-session'
 
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime, { resolveChildAgentOptions } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
-import * as ReportTool from '@deepseek-ai/dsh-tool-subagent-report'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
@@ -95,13 +94,12 @@ async function setup(
   if (opts.gitInit === true) execSync('git init -q -b main', { cwd: workspace })
   if (opts.researcherDefinition === true) writeResearcherDefinition(workspace)
   await ctx.plugin(JsonlSessionPersistence, { root })
+  await ctx.plugin(SessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(ControlTools)
   await ctx.plugin(ListAgents)
-  await ctx.plugin(ReportTool)
   registerReadTool(ctx)
   const tools = ctx.get('tools') as { reserve?(name: string): () => void }
   if (typeof tools.reserve !== 'function') {
@@ -137,7 +135,7 @@ async function setup(
   const store = new PinStore(pinsRoot)
   const adapter = new MockAdapter(script, opts.reasoning, opts.defaultMaxTokens)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const parent = ctx.agentLoop.create(
+  const parent = await ctx.agentLoop.create(
     SessionId('parent'),
     { provider: 'mock', model: 'mock' },
     { cwd: workspace },
@@ -224,8 +222,9 @@ describe('resume pin capture — complete pin after a real background spawn (§6
       workspace: { cwd: workspace },
       resume: { state: 'ok' },
     })
-    // The preallocated id IS the durable child session id.
-    expect(await ctx.sessionPersistence.load(SessionId(pin!.childId))).toBeDefined()
+    // The preallocated id IS the durable child session id (a persisted
+    // session exists under it — the jsonl backend's cold inspection).
+    expect(await ctx.sessionPersistence.stat(SessionId(pin!.childId))).toBeDefined()
   }, 20_000)
 
   it('pins kind "plain" for a general-purpose background spawn', async () => {
@@ -258,9 +257,11 @@ describe('resume pin capture — effective tuple equivalence (§4.3)', () => {
     for (const parent of parentRoutes) {
       for (const route of routes) {
         // The harness spread: parent options conditionally, then the child
-        // request (toAgentOptions drops undefined fields) on top.
+        // request (toAgentOptions drops undefined fields) on top. The fake
+        // parent exposes a session whose requestHeader is unset, matching a
+        // parent with no in-flight request config.
         const harness = resolveChildAgentOptions(
-          { options: parent } as never,
+          { options: parent, session: { requestHeader: () => undefined } } as never,
           toAgentOptions(route) as never,
           0,
         )
