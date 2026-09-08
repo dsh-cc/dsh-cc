@@ -38,7 +38,7 @@ function makeCtx(opts: {
   credentials?: unknown
 }) {
   const disposed: string[] = []
-  const session = opts.session ?? { id: 's-a', events: [], status: 'idle' }
+  const session = opts.session ?? { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
   const handlers = new Map<string, Set<() => void>>()
 
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
@@ -49,6 +49,7 @@ function makeCtx(opts: {
       id: s.id,
       header: s.cwd === undefined ? {} : { cwd: s.cwd },
       events: s.events ?? [],
+      snapshotEvents() { return this.events },
     },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',

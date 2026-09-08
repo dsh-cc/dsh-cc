@@ -30,7 +30,9 @@ function makeQuestionCtx(): {
   ctx: Record<string, unknown>
   provider: () => { ask(request: FakeRequest): Promise<FakeAnswer> } | undefined
 } {
-  let registered: { ask(request: FakeRequest): Promise<FakeAnswer> } | undefined
+  // Waterfall-shaped fake (harness >=0.1.3): the answerer is a
+  // `user-questions/request` listener, not a registerProvider slot.
+  const questionListeners: ((req: FakeRequest, next: () => Promise<FakeAnswer>) => unknown)[] = []
   const ctx = {
     get(key: string) {
       if (key === 'agentPresets') {
@@ -40,22 +42,19 @@ function makeQuestionCtx(): {
           mount: async () => ({ id: 'cc' }),
         }
       }
-      if (key === 'userQuestions') {
-        return {
-          registerProvider(provider: { ask(request: FakeRequest): Promise<FakeAnswer> }) {
-            registered = provider
-            return () => {}
-          },
-        }
-      }
       return undefined
     },
-    on: () => () => {},
+    on(event: string, handler: (...args: unknown[]) => unknown) {
+      if (event === 'user-questions/request') {
+        questionListeners.push(handler as (req: FakeRequest, next: () => Promise<FakeAnswer>) => unknown)
+      }
+      return () => {}
+    },
     agents: {
       create: async () => ({
         agent: {
           options: {},
-          session: { id: 's-test', header: {}, events: [] },
+          session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
           id: 'a-test',
           status: 'idle',
           followup() {},
@@ -65,7 +64,24 @@ function makeQuestionCtx(): {
       }),
     },
   }
-  return { ctx, provider: () => registered }
+  return {
+    ctx,
+    provider() {
+      if (questionListeners.length === 0) return undefined
+      return {
+        ask(request: FakeRequest): Promise<FakeAnswer> {
+          const noAnswerer = () => Promise.reject(new Error('NO_PROVIDER'))
+          let result: Promise<FakeAnswer> | undefined
+          for (const listener of questionListeners) {
+            result = (listener(request, noAnswerer) as Promise<FakeAnswer>) ?? result
+          }
+          // Created lazily so an unanswered dispatch does not leave a rejected
+          // promise unhandled when a listener claims the request.
+          return result ?? noAnswerer()
+        },
+      }
+    },
+  }
 }
 
 describe('createDriver ask-user-question overlay', () => {

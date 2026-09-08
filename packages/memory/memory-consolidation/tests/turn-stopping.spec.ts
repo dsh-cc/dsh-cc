@@ -15,10 +15,15 @@ import { MEMORY_WRITES_SCHEMA } from '../src/index.ts'
  */
 
 function fakeAgent(cwd: string, depth = 0): Agent {
+  const events: unknown[] = []
   return {
     options: depth < 0 ? { subagentDepth: -1 } : {},
     session: {
-      events: [],
+      events,
+      // Upstream >=0.1.3 session face: seq (next append position, so it
+      // tracks growth) and snapshotEvents() instead of direct iteration.
+      get seq() { return events.length },
+      snapshotEvents() { return events },
       header: {
         id: `session:${cwd}`,
         cwd,
@@ -392,7 +397,15 @@ describe('extract-memories index injection', () => {
 
   function agentWithTypes(types: readonly string[]): Agent {
     const agent = fakeAgent(MEM)
-    agent.session.events = types.map((type) => ({ type })) as never
+    const events = types.map((type) => ({ type }))
+    // Rebind through the session face: snapshotEvents() is the read surface
+    // and seq tracks the log length (upstream >=0.1.3).
+    agent.session.events = events as never
+    ;(agent.session as { snapshotEvents(): unknown }).snapshotEvents = () => events
+    Object.defineProperty(agent.session, 'seq', {
+      get: () => events.length,
+      configurable: true,
+    })
     return agent
   }
 

@@ -1,6 +1,6 @@
 /**
  * Driver wiring for the custom status line (plan §4/Slice 4): settings
- * registration (`statusline` namespace via installSettingsSection, tolerant
+ * registration (`statusline` namespace via settings.installSection, tolerant
  * when no settings provider is mounted), the lazily-created command runner,
  * the refreshInterval timer (owned here — a documented deviation from the
  * plan's "inside the runner" phrasing; same observable behavior, and the
@@ -15,7 +15,6 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import type { TuiState } from '../store.ts'
 import {
   type ContextPressureStateLike,
@@ -237,14 +236,16 @@ export function createStatusLineWiring(
   }
 
   // Settings registration (D5): tolerated when no settings provider is
-  // mounted — installSettingsSection only wires while a provider exists, and
+  // mounted — the settings inject only wires while a provider exists, and
   // test/host ctxs without `inject` keep the feature fully inert.
   if (typeof (ctx as { inject?: unknown }).inject === 'function') {
-    installSettingsSection(ctx, STATUSLINE_SETTINGS_NAMESPACE, STATUSLINE_SECTION_SCHEMA, {}, {
-      setSource: (currentSection) => {
-        source = () => currentSection()
-      },
-      onChange: () => resolve(),
+    ctx.inject(['settings'], (sctx) => {
+      sctx.settings.installSection(ctx, STATUSLINE_SETTINGS_NAMESPACE, STATUSLINE_SECTION_SCHEMA, {}, {
+        setSource: (currentSection) => {
+          source = () => currentSection()
+        },
+        onChange: () => resolve(),
+      })
     })
   }
 

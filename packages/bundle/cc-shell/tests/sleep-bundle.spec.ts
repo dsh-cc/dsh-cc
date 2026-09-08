@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@dsh-cc/tools'
 import * as ToolSleep from '@dsh-cc/tool-sleep'
 
@@ -26,7 +26,7 @@ describe('cc-shell bundle — tool-sleep row (Sleep over the vendored ToolRuntim
     const { ctx, dispose } = await mountToolSleep()
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('cc-sleep-zero'),
+      callId: ToolCallId('cc-sleep-zero'),
       name: 'Sleep',
       arguments: { duration: 0 },
     })

@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -100,7 +100,7 @@ interface ToolSearchValue {
 async function runToolSearch(host: Context, query: string, args: { max_results?: number; agent?: Agent } = {}) {
   const result = await host.tools.execute({
     signal,
-    callId: CallId('search'),
+    callId: ToolCallId('search'),
     name: TOOL_SEARCH_NAME,
     arguments: { query, ...args.max_results !== undefined ? { max_results: args.max_results } : {} },
     ...args.agent !== undefined ? { agent: args.agent } : {},

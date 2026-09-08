@@ -8,8 +8,8 @@
 
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import { deepFreeze } from '@deepseek-ai/dsh-llm'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { errorMessage, failureMessageFromContent, projectionError, snapshotProjection, snapshotToolValue, ToolNotFoundError, ToolOutputError } from './abort-utils.ts'
 import { validateJsonSchemaValue } from './json-schema.ts'
 import { materializePresentation } from './tool-types.ts'

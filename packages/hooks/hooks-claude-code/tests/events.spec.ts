@@ -8,6 +8,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
@@ -55,6 +56,7 @@ async function harness(
 ): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
@@ -82,7 +84,7 @@ describe('hooks-claude-code bridge — Setup (first-run approx)', () => {
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('setup-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('setup-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     await waitFor(() => existsSync(setupMarker))
@@ -100,7 +102,7 @@ describe('hooks-claude-code bridge — SessionEnd', () => {
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('end-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('end-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     // Emit session/disposed directly (the store path is effect-tied); root
@@ -121,7 +123,7 @@ describe('hooks-claude-code bridge — Notification / PermissionDenied / PostCom
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('pd-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('pd-session'), { provider: 'mock', model: 'mock' })
     // Synthesize the approval-decided rejection directly on the session log.
     agent.session.append('approval/decided', { id: 'req-1' as never, outcome: 'rejected' })
     await waitFor(() => existsSync(pdMarker))
@@ -137,7 +139,7 @@ describe('hooks-claude-code bridge — Notification / PermissionDenied / PostCom
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('notif-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('notif-session'), { provider: 'mock', model: 'mock' })
     agent.session.append('approval/asked', { id: 'req-1' as never, toolName: 'bash' })
     await waitFor(() => existsSync(notifMarker))
     expect(existsSync(notifMarker)).toBe(true)
@@ -152,7 +154,7 @@ describe('hooks-claude-code bridge — Notification / PermissionDenied / PostCom
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('pc-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('pc-session'), { provider: 'mock', model: 'mock' })
     agent.session.append('compaction/end' as never, {} as never)
     await waitFor(() => existsSync(pcMarker))
     expect(existsSync(pcMarker)).toBe(true)
@@ -172,7 +174,7 @@ describe('hooks-claude-code bridge — PermissionRequest (interception)', () => 
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter, (c) => { void c.plugin(ApprovalService) })
-    const agent = ctx.agentLoop.create(SessionId('perm-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('perm-session'), { provider: 'mock', model: 'mock' })
     // The approval audit pair must be turn-enclosed; open a turn first.
     agent.session.append('turn/start', { turn: 1 })
     const outcome = await ctx.approval.request({ agent, toolName: 'bash' })
@@ -191,7 +193,7 @@ describe('hooks-claude-code bridge — PermissionRequest (interception)', () => 
     const ctx = await harness(dir, adapter, (c) => { void c.plugin(ApprovalService) })
     // A downstream answerer that the mid-chain hook must delegate to via `next()`.
     ctx.on('approval/request', () => Promise.resolve<ApprovalOutcome>('allowed-once'))
-    const agent = ctx.agentLoop.create(SessionId('perm-pass-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('perm-pass-session'), { provider: 'mock', model: 'mock' })
     // The approval audit pair must be turn-enclosed; open a turn first.
     agent.session.append('turn/start', { turn: 1 })
     const outcome = await ctx.approval.request({ agent, toolName: 'bash' })
@@ -209,7 +211,7 @@ describe('hooks-claude-code bridge — StopFailure', () => {
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('sf-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('sf-session'), { provider: 'mock', model: 'mock' })
     ctx.emit(ctx, 'agent/error', { agent, turn: 1, step: 0, error: new Error('rate limit exceeded') })
     await waitFor(() => existsSync(sfMarker))
     expect(existsSync(sfMarker)).toBe(true)
@@ -234,7 +236,7 @@ describe('hooks-claude-code bridge — TaskCreated (jobs diff)', () => {
     }
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter, (c) => { c.provide('jobs', jobs as never) })
-    const agent = ctx.agentLoop.create(SessionId('td-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('td-session'), { provider: 'mock', model: 'mock' })
     // A brand-new job appears → the registered onJobsChanged listener fires.
     jobs.ids.add('task-1')
     for (const l of jobs.listeners) l(undefined)
@@ -254,7 +256,7 @@ describe('hooks-claude-code bridge — PostToolUseFailure', () => {
     const adapter = new MockAdapter([toolCallResponse('c1', 'boom', {}), textResponse('done')])
     const ctx = await harness(dir, adapter)
     ctx.tools.register(defineContentToolFixture({ name: 'boom', description: 'b', parameters: {}, async execute() { throw new Error('kaput') } }))
-    const agent = ctx.agentLoop.create(SessionId('ptu-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('ptu-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitFor(() => existsSync(ptuMarker))
     expect(existsSync(ptuMarker)).toBe(true)
@@ -270,7 +272,7 @@ describe('hooks-claude-code bridge — PostToolUseFailure', () => {
     const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
     const ctx = await harness(dir, adapter)
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('ptu-ok-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('ptu-ok-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     await new Promise(r => setTimeout(r, 150))
@@ -292,7 +294,7 @@ describe('hooks-claude-code bridge — PostToolUseFailure', () => {
     const adapter = new MockAdapter([toolCallResponse('c1', 'echo', {}), textResponse('done')])
     const ctx = await harness(dir, adapter)
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
-    const agent = ctx.agentLoop.create(SessionId('ptu-reg-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('ptu-reg-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     await waitFor(() => existsSync(ptuMarker))
@@ -311,7 +313,7 @@ describe('hooks-claude-code bridge — SessionResume', () => {
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('sr-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('sr-session'), { provider: 'mock', model: 'mock' })
     ctx.emit(ctx, 'agent/session-start', { agent, source: 'resume' })
     await waitFor(() => existsSync(srMarker))
     expect(existsSync(srMarker)).toBe(true)
@@ -331,7 +333,7 @@ describe('hooks-claude-code bridge — SessionResume', () => {
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('sr-startup-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('sr-startup-session'), { provider: 'mock', model: 'mock' })
     ctx.emit(ctx, 'agent/session-start', { agent, source: 'startup' })
     await waitFor(() => existsSync(setupMarker))
     expect(existsSync(setupMarker)).toBe(true)
@@ -349,7 +351,7 @@ describe('hooks-claude-code bridge — TeammateIdle', () => {
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('team-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('team-session'), { provider: 'mock', model: 'mock' })
     // Mark the agent as a subagent via subagent/start, then flip it to idle.
     ctx.emit(subagentCarrier(ctx), 'subagent/start', { runId: SubagentRunId('run-1'), provider: 'inproc', id: SessionId('team-session'), local: false })
     ctx.emit(ctx, 'agent/status', { agent, status: 'idle' })
@@ -366,7 +368,7 @@ describe('hooks-claude-code bridge — TeammateIdle', () => {
 
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
-    const agent = ctx.agentLoop.create(SessionId('root-only-session'), { provider: 'mock', model: 'mock' })
+    const agent = await ctx.agentLoop.create(SessionId('root-only-session'), { provider: 'mock', model: 'mock' })
     ctx.emit(ctx, 'agent/status', { agent, status: 'idle' })
     // Root listener fires, but the hook must NOT run because the agent is not a subagent.
     await new Promise(r => setTimeout(r, 100))

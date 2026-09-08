@@ -3,7 +3,7 @@
  * (docs/plans/2026-09-03-background-agent-runtime.md §4.9, §4.10, §4.12, §4.13):
  * the REAL Task plugin composed on a real in-process harness stack (agent loop,
  * jsonl session persistence, subagent runtime + in-process spawn provider,
- * harness control tools and the report setup), with only the model scripted.
+ * harness control tools), with only the model scripted.
  *
  * These tests fail if the P0 wiring regresses: the durable agentId contract,
  * the control loop, idle-parent wake, cold resume, and parent teardown drain.
@@ -14,17 +14,17 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
-import * as ReportTool from '@deepseek-ai/dsh-tool-subagent-report'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
@@ -62,7 +62,7 @@ function registerReadTool(ctx: Context): void {
 
 /**
  * Boot the full composition the cc preset mounts for delegation: harness
- * runtime stack + control tools + the report continuable setup + the CC Task
+ * runtime stack + control tools + the CC Task
  * plugin. The parent is parked by default (its wake pre-steps are counted and
  * rejected), so tests assert on delivery rather than the parent's own turns.
  */
@@ -74,16 +74,18 @@ async function setup(
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'dsh-cc-task-integration-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
+  // The subagent runtime's cold-resume delivery resolves sessions through
+  // the session-query engine.
+  await ctx.plugin(SessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(ControlTools)
   await ctx.plugin(ListAgents)
-  await ctx.plugin(ReportTool)
   registerReadTool(ctx)
   // The production cc `tools` service is dsh-cc's ToolRuntime, whose `reserve`
   // keeps disabled-row names restrictable; the testkit mounts the harness
@@ -100,7 +102,7 @@ async function setup(
   applyTask(ctx)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const parent = ctx.agentLoop.create(
+  const parent = await ctx.agentLoop.create(
     SessionId('parent'),
     { provider: 'mock', model: 'mock' },
     { cwd: workspace(opts.workspace === true) },
@@ -125,6 +127,12 @@ async function setup(
   return { ctx, parent, adapter, wakeCount: () => wakes, delivered }
 }
 
+/** Read one stored session's header + event log through the rc.1
+ * sessionPersistence face (`load` returns header + full event log). */
+async function loadStoredSession(persistence: { load(id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> }, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
+  return await persistence.load(id)
+}
+
 function text(result: { content: { type: string; text?: string }[] }): string {
   return result.content.filter(block => block.type === 'text').map(block => block.text).join('')
 }
@@ -133,7 +141,7 @@ let calls = 0
 function callTool(ctx: Context, name: string, args: unknown, agent: Agent) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId(`call-${++calls}`),
+    callId: ToolCallId(`call-${++calls}`),
     name,
     arguments: args,
     agent: agent as never,
@@ -202,29 +210,80 @@ describe('Task background mode — control loop (§4.9)', () => {
     await vi.waitFor(() => expect(ctx.agents.get(childId)?.status).toBe('idle'), { timeout: 10_000 })
 
     // (c) send_message by the returned id delivers a follow-up turn.
-    const send = await callTool(ctx, 'send_message', { subagent_id: agentId, message: 'continue please' }, parent)
+    const send = await callTool(ctx, 'send_message', { agent_id: agentId, message: 'continue please' }, parent)
     expect(send.isError).toBe(false)
+    expect(text(send as never)).toContain(`message delivered to agent ${agentId}`)
     await waitNoActivation(ctx, childId)
-    const loaded = await ctx.sessionPersistence.load(childId)
-    expect(userTexts(loaded.events)).toEqual(['slow work', 'continue please'])
+    const loaded = await loadStoredSession(ctx.sessionPersistence, childId)
+    // The delivered follow-up is formatted with the runtime's "Agent <id> sent
+    // a message: " prefix; assert the shape, not the exact wrapper (the log
+    // may carry additional runtime-context rows around the two caller texts).
+    const texts = userTexts(loaded.events)
+    // (§8) The prefix is its own content block; assert it lands on the SAME
+    // user/message as the caller text, not in one concatenated entry.
+    const delivered = loaded.events
+      .filter(event => event.type === 'user/message'
+        && (event.data.content as { type: string; text?: string }[]).some(
+          block => block.type === 'text' && block.text?.includes('sent a message'),
+        ))
+      .map(event => (event.data.content as { type: string; text?: string }[])
+        .flatMap(block => block.type === 'text' ? [block.text] : []).join(''))
+    expect(texts[0]).toBe('slow work')
+    expect(delivered.some(entry => entry.includes('continue please'))).toBe(true)
+  }, 20_000)
+})
+
+describe('Task background mode — steer-while-running (pin)', () => {
+  it('a sendMessage to a RUNNING child steers at the next step boundary (nextStep, not a FIFO turn)', async () => {
+    const { ctx, parent } = await setup(['hang', textResponse('never reached')])
+
+    const agentId = await startBackground(ctx, parent)
+    const childId = SessionId(agentId)
+    await vi.waitFor(() => {
+      const child = ctx.agents.get(childId)
+      expect(child).toBeDefined()
+      expect(child!.status).toBe('running')
+    }, { timeout: 10_000 })
+    const child = ctx.agents.get(childId)!
+    const stepsBefore = child.inbox.nextStep.length
+
+    // The runtime admits the delivery at the child's NEAREST STEP BOUNDARY:
+    // it is parked in the running child's nextStep queue, not a FIFO turn.
+    const messageId = await ctx.subagents.sendMessage(
+      parent,
+      childId,
+      [{ type: 'text' as const, text: 'steered mid-flight' }],
+      { signal: new AbortController().signal },
+    )
+    expect(typeof messageId).toBe('string')
+    expect(child.inbox.nextStep.length).toBe(stepsBefore + 1)
+    expect(child.inbox.nextStep.some(message =>
+      message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+        .includes('steered mid-flight'))).toBe(true)
+
+    // Release the hung child cleanly.
+    await child.cancel({ kind: 'parent' })
+    await waitNoActivation(ctx, childId)
   }, 20_000)
 })
 
 describe('Task background mode — idle-parent wake (§4.10)', () => {
-  it('the parked parent is woken (new turn attempt) with the report content, then again at settlement', async () => {
+  it('the parked parent is woken (new turn attempt) by a child send_message, then again at settlement', async () => {
     const { ctx, parent, wakeCount, delivered } = await setup([
-      toolCallResponse('r1', 'report', { output: 'FINDING: the answer' }),
+      // The child addresses its finding to the parked parent by session id via
+      // the harness send_message control tool (the sole child→parent channel).
+      toolCallResponse('r1', 'send_message', { agent_id: 'parent', message: 'FINDING: the answer' }),
       textResponse('wrapping up'),
     ])
 
     const agentId = await startBackground(ctx, parent)
     const childId = SessionId(agentId)
 
-    // The child reports mid-turn; the next-step delivery inserts the report
-    // into the idle parent's inbox and starts a wake turn on it (counted by
-    // the parked pre-step before it rejects).
+    // The child sends mid-turn; the delivery inserts the message into the
+    // idle parent's inbox and starts a wake turn on it (counted by the parked
+    // pre-step before it rejects).
     await vi.waitFor(() => {
-      expect(delivered.some(entry => entry.source === 'subagent-report'
+      expect(delivered.some(entry => entry.source === 'agent-message'
         && entry.text.includes('FINDING: the answer'))).toBe(true)
       expect(wakeCount()).toBeGreaterThanOrEqual(1)
     }, { timeout: 10_000 })
@@ -249,13 +308,14 @@ describe('Task background mode — cold resume (§4.12)', () => {
     const agentId = await startBackground(ctx, parent, { subagent_type: 'researcher' })
     const childId = SessionId(agentId)
     await waitNoActivation(ctx, childId)
-    expect(await ctx.sessionPersistence.load(childId)).toBeDefined()
+    expect(await loadStoredSession(ctx.sessionPersistence, childId)).toBeDefined()
 
     // send_message cold-resumes: a new Activation materializes from the
     // persisted session (no live handle existed before the delivery).
     expect(ctx.agents.get(childId)).toBeUndefined()
-    const send = await callTool(ctx, 'send_message', { subagent_id: agentId, message: 'keep going' }, parent)
+    const send = await callTool(ctx, 'send_message', { agent_id: agentId, message: 'keep going' }, parent)
     expect(send.isError).toBe(false)
+    expect(text(send as never)).toContain(`message delivered to agent ${agentId}`)
     await vi.waitFor(() => {
       expect(adapter.requests.filter(request => request.sessionId === childId).length).toBeGreaterThanOrEqual(2)
     }, { timeout: 10_000 })
@@ -269,8 +329,19 @@ describe('Task background mode — cold resume (§4.12)', () => {
     expect(toolNames).not.toContain('write')
 
     await waitNoActivation(ctx, childId)
-    const loaded = await ctx.sessionPersistence.load(childId)
-    expect(userTexts(loaded.events)).toEqual(['slow work', 'keep going'])
+    const loaded = await loadStoredSession(ctx.sessionPersistence, childId)
+    // Shape assertion (§8): the runtime's "Agent <id> sent a message: " prefix
+    // is its own content block on the same user/message as the caller's text.
+    const texts = userTexts(loaded.events)
+    const delivered = loaded.events
+      .filter(event => event.type === 'user/message'
+        && (event.data.content as { type: string; text?: string }[]).some(
+          block => block.type === 'text' && block.text?.includes('sent a message'),
+        ))
+      .map(event => (event.data.content as { type: string; text?: string }[])
+        .flatMap(block => block.type === 'text' ? [block.text] : []).join(''))
+    expect(texts[0]).toBe('slow work')
+    expect(delivered.some(entry => entry.includes('keep going'))).toBe(true)
   }, 20_000)
 })
 
@@ -290,7 +361,7 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
     await waitNoActivation(ctx, childId)
     // …but nothing was lost: the persisted Session survives (the interrupted
     // initial prompt remains durable as an inbox splice on the child's log).
-    const loaded = await ctx.sessionPersistence.load(childId)
+    const loaded = await loadStoredSession(ctx.sessionPersistence, childId)
     expect(String(loaded.meta.id)).toBe(String(childId))
     expect(JSON.stringify(loaded.events)).toContain('slow work')
   }, 20_000)
@@ -308,21 +379,27 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
     // dispose + resume/restart) before continuing a drained child.
     await ctx.subagents.drainContinuableDescendants([parent])
     await waitNoActivation(ctx, childId)
-    await expect(ctx.subagents.followup(parent, childId,
+    await expect(ctx.subagents.sendMessage(parent, childId,
       [{ type: 'text' as const, text: 'too early' }],
-      { source: { kind: 'user' as const }, signal: new AbortController().signal }))
+      { signal: new AbortController().signal }))
       .rejects.toMatchObject({ code: 'DRAINING' })
-    const loaded = await ctx.sessionPersistence.load(childId)
+    const loaded = await loadStoredSession(ctx.sessionPersistence, childId)
     expect(String(loaded.meta.id)).toBe(String(childId))
   }, 20_000)
 
   // SKIPPED: the final §4.13 leg — `send_message` cold-resuming a child whose
   // Activation was torn down by a drain — is not implementable against the
-  // current harness build: `followup` after `drainContinuableChildren` resolves
+  // current harness build: `sendMessage` after `drainContinuableChildren` resolves
   // the delivery but the child's Activation never re-materializes (reproduced
   // with the pure harness API, no dsh-cc code involved; in the settled variant
   // no Activation appears at all, in the aborted-turn variant one materializes
   // 'running' but never issues a model call). Only the natural-settle cold
-  // resume works (pinned by the §4.12 test above). Harness-side gap.
+  // resume works (pinned by the §4.12 test above). Harness-side gap, applies
+  // at rc.1 too: assertAdmitting runs inside the delivery path (including
+  // coldResume), so a sendMessage from a parent still in the registry after
+  // drainContinuableDescendants is refused with DRAINING rather than
+  // cold-resuming the child (harness
+  // packages/subagent/subagent/src/continuation.ts deliverToChild/coldResume
+  // at 0.1.2-rc.1).
   it.skip('a later send_message cold-resumes the drained child from its persisted Session', () => {})
 })

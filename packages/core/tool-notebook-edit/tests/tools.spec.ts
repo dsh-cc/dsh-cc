@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -107,7 +107,7 @@ async function call(
 ): Promise<{ isError: boolean; value?: unknown; error?: { message?: string; info?: { code?: string } } }> {
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId(`nb-${++callCounter}`),
+    callId: ToolCallId(`nb-${++callCounter}`),
     name: 'NotebookEdit',
     arguments: args,
   })

@@ -19,15 +19,15 @@ Disposing the plugin fiber reverses every registration in one pass, so disabling
 The scheduling tools are thin adapters over the subagent service, so residency, cold resume, and delivery authority remain the service's:
 
 - `spawn_worker(name, prompt)` calls `ctx.subagents.startContinuable()` and records the durable child id under the given name.
-- `send_to_worker(worker, message)` resolves a name (or durable id) and delivers one next-turn message through `ctx.subagents.followup()`, sourcing it `{ kind: 'coordinator', form: 'relay' }`.
-- `worker_broadcast(message)` follows up the same content with every registered worker.
+- `send_to_worker(worker, message)` resolves a name (or durable id) and steers or wakes that worker through `ctx.subagents.sendMessage()` — a running worker takes the message at its next step boundary, an idle or parked one is woken (or cold-resumed). Sender attribution is derived from the live coordinator Agent.
+- `worker_broadcast(message)` sends the same content to every registered worker (steer + wake semantics as above).
 - `worker_tasks()` lists registered workers with a live status from the Agent registry.
 
 An unknown worker reference is an errored result; a scheduling tool invoked without a calling agent fails loud.
 
 ## Result return and completion (reused protocols)
 
-Coordinator mode does not reinvent worker-to-coordinator reporting. A worker reports through the independently installed [`@deepseek-ai/dsh-tool-subagent-report`](../tool-subagent-report/README.md) `report` tool, and the subagent service delivers that as a parent message. When a worker settles, the subagent service's continuation settlement already injects its `subagent-settled` notice into the coordinator agent's session as a waking message ([`dsh-subagent` continuation settlement delivery](../subagent/README.md)) — the completion notification that wakes the coordinator's loop. This package documents that reuse rather than duplicating the wake; its tests assert the notice reaches the coordinator session.
+Coordinator mode does not reinvent worker-to-coordinator reporting, and there is no report tool. A worker returns its outcome by sending a message back to the coordinator with the harness `send_message` control tool (addressed to the coordinator's session id), and when a worker settles the subagent service's continuation settlement injects its `subagent-settled` notice into the coordinator agent's session as a waking message ([`dsh-subagent` continuation settlement delivery](../subagent/README.md)) — the completion notification that wakes the coordinator's loop. This package documents that reuse rather than duplicating the wake; its tests assert the notice reaches the coordinator session.
 
 ## Directory
 

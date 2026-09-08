@@ -7,9 +7,10 @@
  * contract that breaks if the harness ever strips unknown `AgentOptions` keys
  * or changes scope admission for host listeners.
  *
- * Also pins the documented nested-child behavior: a fresh grandchild spawned
- * WITHOUT agentOptions does NOT copy the stamp (`resolveChildAgentOptions`
- * only forwards provider/model/maxTokens); and a same-route fork child MAY
+ * Also pins the nested-child behavior at the 0.1.3 pin: a grandchild spawned
+ * WITHOUT agentOptions inherits its same-route parent's route state
+ * (provider/model/reasoningEffort — upstream's resolveChildAgentOptions now
+ * forwards the parent's route-owned effort); and a same-route fork child MAY
  * restore the parent's explicit header effort from the seed before the
  * overlay wins — accepted, not a new copy path.
  *
@@ -22,9 +23,9 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
@@ -58,11 +59,11 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]): Prom
 }> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'dsh-alias-effort-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
@@ -82,7 +83,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]): Prom
   // The routes service mounts no aliases here — what matters is its host
   // `agent/request` overlay listener being registered by apply().
   applyModelAliases(ctx, {})
-  const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
+  const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
   return { adapter, parent, subagents: ctx.get('subagents') as SubagentsSeam }
 }
 
@@ -154,7 +155,7 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     expect(adapter.requests[1]).toMatchObject({ model: 'mock', reasoningEffort: 'max' })
   })
 
-  it('a grandchild spawned without agentOptions does not copy the stamp', async () => {
+  it('a grandchild spawned without agentOptions inherits the same-route effort (upstream >=0.1.3 semantics)', async () => {
     const { adapter, parent, subagents } = await setup([
       textResponse('stamped child'),
       textResponse('grandchild'),
@@ -178,7 +179,16 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     })
     await grandchild.result
     expect(adapter.requests).toHaveLength(2)
-    // No stamp copied: resolveChildAgentOptions forwards provider/model/maxTokens only.
-    expect(adapter.requests[1]).not.toHaveProperty('reasoningEffort')
+    // Harness >=0.1.3: resolveChildAgentOptions forwards the parent's
+    // route-owned reasoningEffort to same-route children (a route change
+    // without an explicit requested effort clears it instead). The stamped
+    // child runs mock/glm-5.3 with 'max', so the same-route grandchild
+    // inherits that route state — the stamp itself is still never COPIED as
+    // an unknown key; it arrives through upstream's own inheritance rule.
+    expect(adapter.requests[1]).toMatchObject({
+      provider: 'mock',
+      model: 'glm-5.3',
+      reasoningEffort: 'max',
+    })
   })
 })

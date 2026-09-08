@@ -18,7 +18,7 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { evaluatePermission } from './evaluate.ts'
 import { assessBashCommand, assessFilePath, type RiskAssessment } from './classifier.ts'
 import { isBashToolName, subjectOf } from './matchers.ts'
-import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
+import { foldPlanMode } from './mode.ts'
 import { foldPermissionMode } from './mode.ts'
 import type { PermissionDecision, PermissionMode, PermissionRuleSet } from './types.ts'
 
@@ -58,8 +58,8 @@ export type DecideDeps = {
  */
 function effectiveMode(deps: DecideDeps, exec: ToolExecution): PermissionMode {
   const agent = exec.agent
-  if (agent !== undefined && foldPlanMode(agent.session.events)) return 'plan'
-  const recorded = agent === undefined ? undefined : foldPermissionMode(agent.session.events)
+  if (agent !== undefined && foldPlanMode(agent.session.snapshotEvents())) return 'plan'
+  const recorded = agent === undefined ? undefined : foldPermissionMode(agent.session.snapshotEvents())
   return recorded ?? deps.defaultMode()
 }
 

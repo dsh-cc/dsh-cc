@@ -33,7 +33,7 @@ type RestoredArgs = { args: Record<string, unknown> } | { raw: string }
  */
 function argsOf(req: ApprovalRequest): RestoredArgs | undefined {
   if (req.callId === undefined) return undefined
-  const events = req.agent.session.events
+  const events = req.agent.session.snapshotEvents()
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i]!
     if (event.type !== 'tool/call') continue

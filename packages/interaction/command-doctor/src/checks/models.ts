@@ -117,7 +117,7 @@ function aliasCheck(
 
 /** Fold the last `request/header` into `models.last-request`. */
 function lastRequestCheck(invocation: CommandInvocation): Check {
-  const modelRef = lastModel(invocation.agent.session.events)
+  const modelRef = lastModel(invocation.agent.session.snapshotEvents())
   if (modelRef === undefined) {
     return {
       id: 'models.last-request',

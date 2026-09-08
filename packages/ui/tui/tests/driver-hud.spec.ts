@@ -47,7 +47,7 @@ function makeHudCtx(opts: {
   resumeSessions?: Record<string, FakeSession>
 }) {
   const disposed: string[] = []
-  const createSession = opts.createSession ?? { id: 's-a', events: [], status: 'idle' }
+  const createSession = opts.createSession ?? { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
 
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
     options: {},
@@ -55,6 +55,7 @@ function makeHudCtx(opts: {
       id: s.id,
       header: s.cwd === undefined ? {} : { cwd: s.cwd },
       events: s.events ?? [],
+      snapshotEvents() { return this.events },
     },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',
@@ -257,7 +258,7 @@ describe('createDriver hud (sessionProjections feed)', () => {
     const projections = makeProjections({ 's-a': {} })
     const { ctx } = makeHudCtx({
       projections,
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle' } },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
     await driver.switchSession('s-b')
@@ -300,7 +301,7 @@ describe('createDriver branch probe', () => {
   it('re-probes with the new session cwd after switchSession', async () => {
     const probeCalls: string[] = []
     const { ctx } = makeHudCtx({
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle', cwd: '/other/dir' } },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle', cwd: '/other/dir' } },
     })
     const driver = await createDriver(ctx as never, {
       cwd: '/w/proj',

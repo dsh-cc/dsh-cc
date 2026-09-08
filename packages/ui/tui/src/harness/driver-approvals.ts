@@ -161,15 +161,27 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
   // A question from the host (agent ask for user input) renders as a modal
   // entry behind any active approval; when the pipeline is empty it becomes
   // the head and renders immediately.
-  const userQuestions = rt.ctx.get('userQuestions') as
-    | { registerProvider(provider: { ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> }): () => void }
-    | undefined
-  let questionsDispose: (() => void) | undefined
-  if (userQuestions !== undefined) {
-    try {
-      questionsDispose = userQuestions.registerProvider({
-        ask: async (request: AskUserQuestionRequest) => {
-          const first = request.questions[0]
+  // Harness >=0.1.3: `userQuestions.registerProvider` was removed. Answers now
+  // route through the agent-scoped cordis waterfall event
+  // `user-questions/request` (dispatched with `scopeTarget(agent, agent)`);
+  // upstream's own reference answerer (packages/client/ui-user-questions) and
+  // test tripwire (session-snapshot child-question-tripwire) register a plain
+  // root-context listener the same way. The CALLER_NOT_LIVE / DELEGATED_CALLER
+  // guards inside the service keep child-agent asks from ever reaching this
+  // listener, so the TUI only ever answers for live root agents — which is
+  // the behavior we want.
+  const questionsDispose: (() => void) | undefined = rt.ctx.on(
+    'user-questions/request',
+    async (request: AskUserQuestionRequest, next: () => Promise<AskUserQuestionAnswer>) => {
+      // Only answer for agents this driver owns (the live root or tracked
+      // subagents); anything else delegates to the next answerer. Child
+      // agents cannot ask at all (DELEGATED_CALLER guard), so the practical
+      // set is the live root.
+      const agent = request.agent
+      const ownSessions = new Set(rt.state().subagents.map(run => run.sessionId))
+      ownSessions.add(String(rt.current.agent.session.id))
+      if (agent !== undefined && !ownSessions.has(String(agent.session.id))) return next()
+      const first = request.questions[0]
           const view: QuestionView = {
             header: first?.header ?? 'Question',
             question: first?.question ?? '',
@@ -209,11 +221,7 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
             modal.publishHead()
           })
         },
-      })
-    } catch (error) {
-      if ((error as { code?: string }).code !== 'DUPLICATE_PROVIDER') throw error
-    }
-  }
+    )
 
   /**
    * Resolve the head question and advance the modal queue. Labels are echoed

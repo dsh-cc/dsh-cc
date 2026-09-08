@@ -8,9 +8,9 @@
  */
 
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
-import { assertNever, deepFreeze } from '@deepseek-ai/dsh-llm'
+import { assertNever, deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
+import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import { createExecutionToken, fuseToolSignals, isAborted, toolAbortedBeforeDispatchResult, toolAbortedResult, toolErrorResult, ToolNotFoundError } from './abort-utils.ts'
 import { RUN_CODE_NAME } from './code-mode.ts'
 import type { MutableToolRunContext, PreToolDecision, ScheduledToolDispatch, ScheduledToolPreparation, ToolDefinition, ToolExecution, ToolExecutionInput, ToolExecutionResult, ToolRunContext } from './tool-types.ts'

@@ -34,7 +34,7 @@ export const Config = z.object({
 
 /** Execute `/cost` against the invocation's own session log. */
 function executeCost(config: Config, invocation: CommandInvocation): CommandResult {
-  const events = invocation.agent.session.events
+  const events = invocation.agent.session.snapshotEvents()
   const report = foldCost(events, config.modelTable)
   return { kind: 'success', text: formatCostReport(report) }
 }

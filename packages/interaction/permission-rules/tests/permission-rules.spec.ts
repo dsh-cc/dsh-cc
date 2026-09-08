@@ -1,14 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
-import { effectiveSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
-import { foldPermissionMode } from '@dsh-cc/permission-rules'
+import { foldPlanMode, foldPermissionMode, foldSandboxMode } from '@dsh-cc/permission-rules'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
@@ -69,7 +67,7 @@ async function mount(config: Config = {}): Promise<Context> {
 function exec(name: string, args: unknown, agent?: Agent): ToolExecutionInput {
   return {
     signal: testToolSignal,
-    callId: CallId('c1'),
+    callId: ToolCallId('c1'),
     name,
     arguments: args,
     ...(agent ? { agent } : {}),
@@ -91,6 +89,7 @@ function openTurnAgent(id: string): Agent {
 function openAgentWithCwd(id: string, cwd: string): Agent {
   const session = Session.create(SessionId(id), undefined, {
     version: 0,
+    isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),
     cwd,
@@ -281,7 +280,7 @@ describe('session mode overrides (durable)', () => {
     const ctx = await mount()
     const agent = openTurnAgent('dur-ae')
     ctx.permissionRules.setMode(agent, 'acceptEdits')
-    expect(foldPermissionMode(agent.session.events)).toBe('acceptEdits')
+    expect(foldPermissionMode(agent.session.snapshotEvents())).toBe('acceptEdits')
     // An edit still auto-allows under the durable acceptEdits mode.
     const result = await ctx.tools.execute(exec('edit', { file_path: 'a.ts' }, agent))
     expect(result.isError).toBe(false)
@@ -292,7 +291,7 @@ describe('session mode overrides (durable)', () => {
     ctx.reflect.provide('shell', { sandboxMode: 'workspace-write' } as never)
     const agent = openTurnAgent('bypass-pin')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const events = agent.session.events
+    const events = agent.session.snapshotEvents()
     const modeEvent = events.filter(e => e.type === 'permission/mode').pop()!
     expect(modeEvent.data).toMatchObject({ mode: 'bypassPermissions', resumeSandbox: 'workspace-write' })
     const sandboxEvent = events.filter(e => e.type === 'sandbox/mode').pop()!
@@ -305,7 +304,7 @@ describe('session mode overrides (durable)', () => {
     const agent = openTurnAgent('bypass-leave')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
     ctx.permissionRules.setMode(agent, 'acceptEdits')
-    expect(effectiveSandboxMode(agent.session.events)).toBe('workspace-write')
+    expect(foldSandboxMode(agent.session.snapshotEvents())).toBe('workspace-write')
   })
 
   it('leaving bypass with no recorded resume falls back to workspace-write', async () => {
@@ -313,7 +312,7 @@ describe('session mode overrides (durable)', () => {
     const agent = openTurnAgent('bypass-norec')
     ;(agent.session.append as (type: string, payload: { mode: string }) => unknown)('permission/mode', { mode: 'bypassPermissions' })
     ctx.permissionRules.setMode(agent, 'default')
-    expect(effectiveSandboxMode(agent.session.events)).toBe('workspace-write')
+    expect(foldSandboxMode(agent.session.snapshotEvents())).toBe('workspace-write')
   })
 
   it('auto mode auto-allows a classifier-LOW ask without hitting approval', async () => {
@@ -383,21 +382,21 @@ describe('session mode overrides (durable)', () => {
     ;(agent as unknown as { inject: () => void }).inject = inject
     ctx.permissionRules.setMode(agent, 'acceptEdits')
     expect(inject).toHaveBeenCalledTimes(1)
-    expect(session.events.some(e => e.type === 'permission/mode')).toBe(true)
+    expect(session.snapshotEvents().some(e => e.type === 'permission/mode')).toBe(true)
   })
 
   it('session/created pin: bypassPermissions default pins the new session to full access', async () => {
     const ctx = await mount({ defaultMode: 'bypassPermissions' })
     ctx.reflect.provide('shell', { sandboxMode: 'workspace-write' } as never)
     const session = ctx.sessions.create(SessionId('pin-bypass'))
-    expect(foldPermissionMode(session.events)).toBe('bypassPermissions')
-    expect(effectiveSandboxMode(session.events)).toBe('danger-full-access')
+    expect(foldPermissionMode(session.snapshotEvents())).toBe('bypassPermissions')
+    expect(foldSandboxMode(session.snapshotEvents())).toBe('danger-full-access')
   })
 
   it('session/created pin: plan default seeds plan/mode active on the new session', async () => {
     const ctx = await mount({ defaultMode: 'plan' })
     const session = ctx.sessions.create(SessionId('pin-plan'))
-    expect(foldPlanMode(session.events)).toBe(true)
+    expect(foldPlanMode(session.snapshotEvents())).toBe(true)
   })
 
   it('plan non-read-only is denied at the plugin layer with exit_plan_mode guidance', async () => {

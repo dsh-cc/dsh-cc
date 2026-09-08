@@ -22,7 +22,9 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-如果已经安装 `dsh` **>= 0.1.0-rc.5**，只需安装启动器：
+`dsh-cc` 要求 `dsh` **>= 0.1.2-rc.1**；默认的 `npm install -g @deepseek-ai/dsh` 目前即可满足（截至 2026-09-12），启动器会在启动时校验该下限。
+
+如果已经安装 `dsh` **>= 0.1.2-rc.1**，只需安装启动器：
 
 ```sh
 npm install -g @dsh-cc/cli

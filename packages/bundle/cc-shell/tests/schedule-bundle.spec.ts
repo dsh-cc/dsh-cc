@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { Service } from '@deepseek-ai/cordis'
 import * as toolSchedule from '@deepseek-ai/dsh-schedule'
+
+/** Minimal sessionPersistence service mount (mirrors upstream schedule
+ * plugin.spec's PersistenceProbe: the schedule plugin only requires the
+ * service to exist, never calls its read/write face in this composition). */
+class PersistenceProbe extends Service {
+  constructor(ctx: Context) {
+    super(ctx, 'sessionPersistence')
+  }
+}
 
 /**
  * cc-shell bundle schedule row (`@deepseek-ai/dsh-schedule`). Mirrors the
@@ -13,15 +24,10 @@ import * as toolSchedule from '@deepseek-ai/dsh-schedule'
  * than a full-timing loop — deterministic. assert_shape: the tool registers on
  * future root agents and a schedule_create call appends schedule/change.
  */
-class PersistenceProbe extends Service {
-  constructor(ctx: Context) {
-    super(ctx, 'sessionPersistence')
-  }
-}
-
 async function harness(): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(PersistenceProbe)
   ctx.on('session/flush', () => {})
   await ctx.plugin(AgentLoop, { agents: [] })
@@ -51,7 +57,7 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
 
     const created = await ctx.agents.withInitiator(root.agent, () => ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('cc-schedule-create'),
+      callId: ToolCallId('cc-schedule-create'),
       name: 'schedule_create',
       arguments: { prompt: 'future reminder', after_seconds: 3600 },
       agent: root.agent,
@@ -61,7 +67,7 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
     expect(created.value).toMatchObject({ id: 'schedule-1', deliveryMode: 'session-local' })
 
     // The durable create appended a schedule/change event to the session log.
-    expect(root.agent.session.events.some(e => e.type === 'schedule/change')).toBe(true)
+    expect(root.agent.session.snapshotEvents().some(e => e.type === 'schedule/change')).toBe(true)
 
     await plugin.dispose()
     expect(ctx.tools.get('schedule_create', root.agent)).toBeUndefined()

@@ -4,7 +4,7 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { SettingsCascadeProvider, type Config, type EnvSettings } from '../src/index.ts'
 
 // Concurrency gate for `node:fs/promises.readFile`. When armed, reads hang in
@@ -74,7 +74,7 @@ async function writeSettings(dir: string, name: string, doc: unknown): Promise<s
 function themeOf(ctx: Context, base?: Partial<ThemeConfig>): ThemeConfig {
   const options: { base?: Partial<ThemeConfig> } = {}
   if (base !== undefined) options.base = base
-  return ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema, options)!.get() as ThemeConfig
+  return ctx.settings.register('ui-theme' as SettingsNamespace, ThemeSchema, options)!.get() as ThemeConfig
 }
 
 describe('five-level precedence', () => {
@@ -94,7 +94,7 @@ describe('five-level precedence', () => {
       policy: { userPath: policy },
     })
     // The namespace key must match the raw section key.
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme' as SettingsNamespace, ThemeSchema)
     expect((scope.get() as ThemeConfig).theme).toBe('policy')
   })
 
@@ -110,7 +110,7 @@ describe('five-level precedence', () => {
     const dir = await tempDir()
     const user = await writeSettings(dir, 'user.json', { 'ui-theme': { theme: 'user' } })
     const ctx = await boot({ userSettingsPath: user })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema, {
+    const scope = ctx.settings.register('ui-theme' as SettingsNamespace, ThemeSchema, {
       base: { fontSize: 18 },
     })
     expect(scope.get()).toEqual({ theme: 'user', fontSize: 18 })

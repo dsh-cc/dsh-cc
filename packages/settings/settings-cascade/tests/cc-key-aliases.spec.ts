@@ -4,7 +4,7 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 
 const StatusLineSchema: z<{ type: string; command: string }> = z.object({
@@ -43,7 +43,7 @@ async function writeSettings(dir: string, name: string, doc: unknown): Promise<s
 
 /** Resolved `statusline` section through the CC-key alias. */
 function statusLineOf(ctx: Context): { type: string; command: string } {
-  return ctx.settings.register(settingsNamespace('statusline'), StatusLineSchema)!.get() as { type: string; command: string }
+  return ctx.settings.register('statusline' as SettingsNamespace, StatusLineSchema)!.get() as { type: string; command: string }
 }
 
 describe('CC-key aliasing', () => {
@@ -82,7 +82,7 @@ describe('CC-key aliasing', () => {
     const dir = await tempDir()
     const user = await writeSettings(dir, 'user.json', { statusLine: 'nope' })
     const ctx = await boot({ userSettingsPath: user })
-    const scope = ctx.settings.register(settingsNamespace('statusline'), z.object({
+    const scope = ctx.settings.register('statusline' as SettingsNamespace, z.object({
       type: z.string().default('command'),
       command: z.string().default(''),
     }))
@@ -96,10 +96,10 @@ describe('CC-key aliasing', () => {
       statusLine: { type: 'command', command: 'echo hi' },
     })
     const ctx = await boot({ userSettingsPath: user })
-    const scope = ctx.settings.register(settingsNamespace('statusline'), StatusLineSchema)
+    const scope = ctx.settings.register('statusline' as SettingsNamespace, StatusLineSchema)
     expect(scope!.get()).toEqual({ type: 'command', command: 'echo hi' })
-    const theme = ctx.settings.register(settingsNamespace('ui-theme'), z.object({ theme: z.string().default('dark') }))
-    await ctx.settings.update(settingsNamespace('ui-theme'), { theme: 'light' })
+    const theme = ctx.settings.register('ui-theme' as SettingsNamespace, z.object({ theme: z.string().default('dark') }))
+    await ctx.settings.update('ui-theme' as SettingsNamespace, { theme: 'light' })
     expect(theme!.get()).toEqual({ theme: 'light' })
     // The aliased section still resolves to the same value afterwards.
     // And the user file kept the original CC key intact.

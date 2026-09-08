@@ -7,7 +7,7 @@
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED } from '@dsh-cc/tools'
 import * as ToolSleep from '@dsh-cc/tool-sleep'
@@ -22,7 +22,7 @@ async function setup() {
 
 let callCounter = 0
 function call(ctx: Context, signal: AbortSignal, args: unknown) {
-  return ctx.tools.execute({ signal, callId: CallId(`call-${++callCounter}`), name: 'Sleep', arguments: args })
+  return ctx.tools.execute({ signal, callId: ToolCallId(`call-${++callCounter}`), name: 'Sleep', arguments: args })
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {

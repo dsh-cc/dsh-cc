@@ -40,13 +40,13 @@ function makeSwitchableCtx(opts: {
   const disposed: string[] = []
   const resumeCalls: { resumeSessionId: string }[] = []
   const createCalls: unknown[] = []
-  const createSession = opts.createSession ?? { id: 's-a', events: [], status: 'idle' }
+  const createSession = opts.createSession ?? { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
 
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
     options: s.provider !== undefined && s.model !== undefined
       ? { provider: s.provider, model: s.model }
       : {},
-    session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] },
+    session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',
     followup: vi.fn(),
@@ -116,7 +116,7 @@ describe('createDriver resume marker', () => {
   it('fresh boot does not touch the marker (pre-seeded marker survives)', async () => {
     writeResumeTarget('s-old')
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, {})
     expect(readResumeTarget()).toBe('s-old')
@@ -127,7 +127,7 @@ describe('createDriver resume marker', () => {
   it('resumed boot writes the marker to the resumed id (self-heal)', async () => {
     writeResumeTarget('s-old')
     const { ctx, resumeCalls } = makeSwitchableCtx({
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle' } },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { sessionId: 's-b' })
     expect(resumeCalls).toHaveLength(1)
@@ -139,7 +139,7 @@ describe('createDriver resume marker', () => {
   it('fresh boot + first real prompt writes the marker to the new id', async () => {
     writeResumeTarget('s-old')
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, {})
     expect(readResumeTarget()).toBe('s-old') // prompt not yet sent
@@ -151,7 +151,7 @@ describe('createDriver resume marker', () => {
   it('fresh boot + dispose without any prompt leaves the marker untouched', async () => {
     writeResumeTarget('s-old')
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, {})
     await driver.dispose()
@@ -161,7 +161,7 @@ describe('createDriver resume marker', () => {
   it('content then dispose writes the marker to the current id', async () => {
     writeResumeTarget('s-old')
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, {})
     await driver.submit('real prompt')
@@ -173,7 +173,7 @@ describe('createDriver resume marker', () => {
   it('content then /quit (bypasses driver.dispose) still writes the marker', async () => {
     writeResumeTarget('s-old')
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, {})
     await driver.submit('real prompt')
@@ -184,8 +184,8 @@ describe('createDriver resume marker', () => {
 
   it('switchSession writes the new id; a later prompt keeps the marker on the current session', async () => {
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle' } },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, {})
     await driver.submit('first prompt on s-a')
@@ -203,7 +203,7 @@ describe('createDriver resume marker', () => {
   it('stale marker self-heal: failed boot resume clears the marker, degrades to a fresh session, and surfaces a notice', async () => {
     writeResumeTarget('s-gone')
     const { ctx, resumeCalls, createCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       resumeSessions: {}, // 's-gone' not registered → resume throws
     })
     const driver = await createDriver(ctx as never, { sessionId: 's-gone' })
@@ -226,7 +226,7 @@ describe('createDriver resume marker', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'dsh-resume-noread-'))
     writeResumeTarget('s-old', { cwd })
     const { ctx, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd })
     expect(resumeCalls).toHaveLength(0)
@@ -239,8 +239,8 @@ describe('createDriver resume marker', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'dsh-resume-hit-'))
     writeResumeTarget('s-b', { cwd })
     const { ctx, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle' } },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd, autoResume: true })
     expect(resumeCalls).toHaveLength(1)
@@ -251,7 +251,7 @@ describe('createDriver resume marker', () => {
   it('autoResume true + no marker + continueRequested -> fresh + notice', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'dsh-resume-nomarker-'))
     const { ctx, resumeCalls, createCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd, autoResume: true, continueRequested: true })
     expect(resumeCalls).toHaveLength(0)
@@ -265,7 +265,7 @@ describe('createDriver resume marker', () => {
   it('autoResume true + no marker + continueRequested false -> fresh, no notice', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'dsh-resume-nomarker2-'))
     const { ctx, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd, autoResume: true })
     expect(resumeCalls).toHaveLength(0)
@@ -277,8 +277,8 @@ describe('createDriver resume marker', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'dsh-resume-new-'))
     writeResumeTarget('s-b', { cwd })
     const { ctx, resumeCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
-      resumeSessions: { 's-b': { id: 's-b', events: [], status: 'idle' } },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+      resumeSessions: { 's-b': { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' } },
     })
     const driver = await createDriver(ctx as never, { cwd, sessionId: '', autoResume: true })
     expect(resumeCalls).toHaveLength(0)
@@ -289,7 +289,7 @@ describe('createDriver resume marker', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'dsh-resume-stale-'))
     writeResumeTarget('s-gone', { cwd })
     const { ctx, resumeCalls, createCalls } = makeSwitchableCtx({
-      createSession: { id: 's-a', events: [], status: 'idle' },
+      createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
       resumeSessions: {}, // 's-gone' not registered -> resume throws
     })
     const driver = await createDriver(ctx as never, { cwd, autoResume: true })
@@ -311,7 +311,7 @@ describe('createDriver resume marker', () => {
     const bootCwd = mkdtempSync(join(tmpdir(), 'dsh-resume-wk-boot-'))
     const sessionCwd = mkdtempSync(join(tmpdir(), 'dsh-resume-wk-sess-'))
     const { ctx } = makeSwitchableCtx({
-      createSession: { id: 's-a', cwd: sessionCwd, events: [], status: 'idle' },
+      createSession: { id: 's-a', cwd: sessionCwd, events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: bootCwd })
     await driver.submit('real prompt') // triggers persistResumeTarget

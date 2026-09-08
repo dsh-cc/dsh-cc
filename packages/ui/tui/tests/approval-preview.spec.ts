@@ -19,7 +19,7 @@ function previewReq(
   events: unknown[] = [],
 ): Parameters<typeof payloadOf>[0] {
   return {
-    agent: { session: { events } },
+    agent: { session: { events, snapshotEvents() { return this.events } } },
     toolName,
     ...(callId === undefined ? {} : { callId }),
   } as Parameters<typeof payloadOf>[0]
@@ -254,7 +254,7 @@ function makeApprovalCtx(
   const handlers = new Set<(req: FakeApprovalRequest, next: () => unknown) => unknown>()
   const agent = {
     id: 'a-appr',
-    session: { id: 's-appr', header: {}, events },
+    session: { id: 's-appr', header: {}, events, snapshotEvents() { return this.events } },
     options: {},
     status: 'idle',
   }

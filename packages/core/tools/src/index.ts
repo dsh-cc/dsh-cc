@@ -60,7 +60,7 @@ export {
   type JsonSchemaScalar,
 } from './json-schema.ts'
 
-export type { JsonValue } from '@deepseek-ai/dsh-session'
+export type { JsonValue } from '@deepseek-ai/dsh-util-values'
 export type { CodeDispatchEventData, CodeDispatchStartEventData } from './types.ts'
 
 export { CodeRunFailedError, RUN_CODE_NAME } from './code-mode.ts'

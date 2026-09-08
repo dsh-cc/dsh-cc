@@ -26,7 +26,7 @@ interface FakeAgent extends Record<string, unknown> {
 function makeFakeAgent(sessionId: string, status: string): FakeAgent {
   return {
     options: {},
-    session: { id: sessionId, header: {}, events: [] },
+    session: { id: sessionId, header: {}, events: [], snapshotEvents() { return this.events } },
     id: `agent-${sessionId}`,
     status,
     followup: vi.fn(),

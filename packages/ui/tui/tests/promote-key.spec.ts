@@ -281,7 +281,7 @@ describe('driver promotion gate (ccCollectorRegistry + env kill switch)', () => 
         create: async () => ({
           agent: {
             options: {},
-            session: { id: 's-a', header: {}, events: [] },
+            session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-1',
             status: 'idle',
             followup: vi.fn(),

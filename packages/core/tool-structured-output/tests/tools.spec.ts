@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime, { JsonSchemaError } from '@dsh-cc/tools'
 import * as ToolStructuredOutput from '@dsh-cc/tool-structured-output'
 
@@ -36,7 +36,7 @@ function registerAndCall(ctx: Context, args: unknown) {
   ctx.tools.register(ToolStructuredOutput.createStructuredOutputTool(BUGS_SCHEMA))
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId('so-' + Math.random()),
+    callId: ToolCallId('so-' + Math.random()),
     name: 'StructuredOutput',
     arguments: args,
   })

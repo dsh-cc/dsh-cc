@@ -22,7 +22,7 @@ import { z } from 'zod'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { apply } from '@dsh-cc/mcp-client/src/index.ts'
 import { publicToolName } from '@dsh-cc/mcp-client/src/tools.ts'
 import type { Config } from '@dsh-cc/mcp-client'
@@ -74,8 +74,8 @@ function textOf(block: unknown): string {
 }
 
 let callSeq = 0
-function nextCallId(): CallId {
-  return CallId(`e2e-${++callSeq}`)
+function nextCallId(): ToolCallId {
+  return ToolCallId(`e2e-${++callSeq}`)
 }
 
 // ---- Fixture server tests ----

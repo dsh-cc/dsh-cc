@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { bootstrapCommand, dshUnavailableMessage, existingWorktreeDecision, interceptResume, parseWorktreeFlag, planWorktree, PROFILE, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, worktreeAddArgv, worktreeEnv } from '../bootstrap.mjs'
+import { bootstrapCommand, dshUnavailableMessage, existingWorktreeDecision, interceptResume, parseWorktreeFlag, planWorktree, PROFILE, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, versionGate, worktreeAddArgv, worktreeEnv } from '../bootstrap.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ownVersion = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version
@@ -24,6 +24,16 @@ const profileDir = join(home, 'profiles', PROFILE)
 const add = bootstrapCommand(existsSync(join(profileDir, 'package.json')), ownVersion)
 if (add !== undefined) {
   console.error(`dsh-cc: initializing profile "${PROFILE}"…`)
+  // Minimum-version gate runs ONLY here (bootstrap/install path), never on
+  // every launch — docs/plans/2026-09-05-startup-boot-first-frame.md W2
+  // removed the per-launch `dsh --version` probe for cold-start latency.
+  // Unparseable output fails open: the check must never brick the launcher.
+  const gate = versionGate(() => spawnSync('dsh', ['--version'], { encoding: 'utf8' }))
+  if (gate.warning) console.error(gate.warning)
+  if (!gate.ok) {
+    console.error(gate.message)
+    process.exit(1)
+  }
   const installed = spawnSync('dsh', add, { encoding: 'utf8', stdio: 'inherit' })
   // A spawn error (e.g. dsh not on PATH) leaves status null — that is a
   // missing-CLI problem, not an install failure.

@@ -52,7 +52,7 @@ function makeSeedCtx(): {
         return {
           agent: {
             options: agentOpts,
-            session: { id: 's-boot', header: {}, events: [] },
+            session: { id: 's-boot', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-boot',
             status: 'idle',
             followup(message: { content: { text?: string }[] }) {

@@ -6,10 +6,10 @@
  * @module @dsh-cc/tools/src/code-mode
  */
 
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { CodeBindingFunction, CodeRunResult, CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { jsonNormalizeArgs, renderValue } from './json-render.ts'
 import { CodeRunFailedError, resolveFlavor, RUN_CODE_DESCRIPTION_PARAM_DESCRIPTION, RUN_CODE_NAME, TYPESCRIPT_FLAVOR } from './run-code-defs.ts'
 import { defineTool, parameterSchemaSpecToJsonSchema } from './schema.ts'
@@ -232,7 +232,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
         }
         const normalized = jsonNormalizeArgs(rawArgs)
         const n = ++dispatches
-        const subCallId = CallId(`${String(exec.callId)}:code:${n}`)
+        const subCallId = ToolCallId(`${String(exec.callId)}:code:${n}`)
         const input = {
           callId: subCallId,
           rootCallId: exec.rootCallId,

@@ -35,7 +35,7 @@ function makeCtx(capture: {
         return {
           agent: {
             options: agentOpts,
-            session: { id: 's-test', header: {}, events: [] },
+            session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-test',
             status: 'idle',
             followup() {},
@@ -50,7 +50,7 @@ function makeCtx(capture: {
         return {
           agent: {
             options: agentOpts,
-            session: { id: 's-test', header: {}, events: capture.resumeEvents ?? [] },
+            session: { id: 's-test', header: {}, events: capture.resumeEvents ?? [] , snapshotEvents() { return this.events } },
             id: 'a-test',
             status: capture.resumeStatus ?? 'idle',
             followup() {},
@@ -251,7 +251,7 @@ function makeCommandsCtx(commands: {
         create: async () => ({
           agent: {
             options: {},
-            session: { id: 's-test', header: {}, events: [] },
+            session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-test',
             status: 'idle',
             followup() {},

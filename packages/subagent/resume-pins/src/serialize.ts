@@ -4,7 +4,7 @@
  *
  * - {@link serializePerKey} runs tasks with the same key strictly in start
  *   order (a per-key promise chain): concurrent gate evaluations +
- *   persistence + followup admission for one cold child cannot interleave.
+ *   persistence + delivery admission for one cold child cannot interleave.
  *   A failing task propagates its rejection to its own caller only — the
  *   chain continues for later tasks.
  * - {@link ExecutionNoticeBus} keys pending gate notices by the tool

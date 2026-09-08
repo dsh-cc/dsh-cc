@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@dsh-cc/tools'
 import * as ToolStructuredOutput from '@dsh-cc/tool-structured-output'
 
@@ -40,7 +40,7 @@ describe('cc-shell bundle — tool-structured-output row (StructuredOutput over 
     const input = { title: 'bug', count: 3 }
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('cc-structured-output'),
+      callId: ToolCallId('cc-structured-output'),
       name: 'StructuredOutput',
       arguments: input,
     })

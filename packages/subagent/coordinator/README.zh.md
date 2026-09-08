@@ -19,7 +19,7 @@
 调度工具是 subagent 服务之上的薄适配层，因此驻留、冷恢复和投递权限仍归服务所有：
 
 - `spawn_worker(name, prompt)` 调用 `ctx.subagents.startContinuable()`，并把持久子 id 记录在给定名称之下。
-- `send_to_worker(worker, message)` 解析名称（或持久 id），并通过 `ctx.subagents.followup()` 投递一条下一轮消息，其来源记为 `{ kind: 'coordinator', form: 'relay' }`。
+- `send_to_worker(worker, message)` 解析名称（或持久 id），并通过 `ctx.subagents.sendMessage()` 对该 worker 执行 steer/wake —— 运行中的 worker 在下一个 step 边界接收消息，空闲或已停靠的 worker 被唤醒（或冷恢复）。发送方归属由存活的协调者 Agent 推导。
 - `worker_broadcast(message)` 把相同内容发送给每个已注册 worker。
 - `worker_tasks()` 列出已注册 worker，并附带来自 Agent 注册表的实时状态。
 
@@ -27,7 +27,7 @@
 
 ## 结果回流与完成（复用既有协议）
 
-协调模式不会重新实现 worker 到协调者的结果回流。worker 通过独立安装的 [`@deepseek-ai/dsh-tool-subagent-report`](../tool-subagent-report/README.md) 的 `report` 工具上报，subagent 服务会将其作为一条父级消息投递。当某 worker 结束（settle）时，subagent 服务的 continuation 结算已把它的 `subagent-settled` 通知作为唤醒消息注入协调者 agent 的会话（参见 [`dsh-subagent` continuation 结算投递](../subagent/README.md)）——这正是唤醒协调者循环的完成通知。本包记录这一复用而不是重复实现唤醒；其测试断言该通知确实到达协调者会话。
+协调模式不会重新实现 worker 到协调者的结果回流，也不再有 report 工具。worker 通过 harness 的 `send_message` 控制工具把结果直接发回协调者（以协调者的会话 id 为目标）；当某 worker 结束（settle）时，subagent 服务的 continuation 结算会把它的 `subagent-settled` 通知作为唤醒消息注入协调者 agent 的会话（参见 [`dsh-subagent` continuation 结算投递](../subagent/README.md)）——这正是唤醒协调者循环的完成通知。本包记录这一复用而不是重复实现唤醒；其测试断言该通知确实到达协调者会话。
 
 ## 目录
 

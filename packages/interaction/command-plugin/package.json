@@ -28,10 +28,10 @@
     "@dsh-cc/command-usage": "workspace:^"
   },
 "peerDependencies": {
-    "@deepseek-ai/dsh-commands": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-session": ">=0.1.1-rc.2",
-    "@deepseek-ai/cordis": ">=0.1.1-rc.2"
+    "@deepseek-ai/dsh-commands": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.1.2-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.2-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",

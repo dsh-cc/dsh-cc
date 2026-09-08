@@ -7,7 +7,7 @@
  * Zero-op when unmounted: pins are simply unread and behavior is today's
  * legacy behavior. When mounted, only pinned children are affected — a
  * missing pin is a legacy/foreign child (pass-through), and a same-epoch
- * followup to a live Activation is untouched.
+ * steer delivery to a live Activation is untouched.
  *
  * Durability ordering: every deny persists `resume.state='blocked'` (reason)
  * through the shared store — an atomic disk rewrite plus synchronous cache
@@ -175,7 +175,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   // the registry-assigned opaque call identity present on BOTH the pre- and
   // post-execute payloads) so a failing send can never leak its notice into a
   // later call. Per-child promise chains serialize gate evaluation +
-  // persistence + followup admission, so concurrent sends to one cold child
+  // persistence + delivery admission, so concurrent sends to one cold child
   // cannot interleave their decisions or cross-deliver notices.
   const pendingNotices = new ExecutionNoticeBus()
   const childLocks = new Map<string, Promise<unknown>>()
@@ -200,7 +200,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
    * Persist a deny to the pin BEFORE the decision returns (§4.6 ordering).
    * Propagates write failure: the caller keeps denying with a reason that
    * names the persistence failure — a pending deny is never downgraded to a
-   * followup just because the durable marker could not be written.
+   * delivery just because the durable marker could not be written.
    */
   const persistBlocked = (pin: ResumePin, decision: GateDecision): void => {
     if (decision.action !== 'deny') return
@@ -212,7 +212,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
 
   /**
    * Persist a passing evaluation: clear blocked state, cache overlay/notices.
-   * Propagates write failure — a pending PASS/route-current must not followup
+   * Propagates write failure — a pending PASS/route-current must not deliver
    * until the required durable state is published; the caller denies with
    * `STORE_WRITE_FAILURE` instead.
    */
@@ -229,10 +229,9 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   const gateEnv = async (pin: ResumePin, callingAgent: unknown): Promise<GateEnv> => {
     let sessionExists = false
     try {
-      const persistence = (ctx as unknown as { sessionPersistence?: { inspect: (id: ReturnType<typeof SessionId>) => Promise<unknown> } }).sessionPersistence
-      if (persistence?.inspect !== undefined) {
-        await persistence.inspect(SessionId(pin.childId))
-        sessionExists = true
+      const persistence = (ctx as unknown as { sessionPersistence?: { readStoredRevision: (id: ReturnType<typeof SessionId>, signal?: AbortSignal) => Promise<unknown> } }).sessionPersistence
+      if (persistence?.readStoredRevision !== undefined) {
+        sessionExists = (await persistence.readStoredRevision(SessionId(pin.childId))) !== undefined
       }
     } catch {
       sessionExists = false
@@ -268,10 +267,10 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
 
   // §4.6: the resume gate. Fires on every tool call; acts only on
   // `send_message` to a PINNED child with no live Activation. Gate
-  // evaluation + persistence + followup admission are serialized per child.
+  // evaluation + persistence + delivery admission are serialized per child.
   ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.name !== 'send_message') return next()
-    const target = (exec.arguments as { subagent_id?: unknown } | null)?.subagent_id
+    const target = (exec.arguments as { agent_id?: unknown } | null)?.agent_id
     if (typeof target !== 'string' || target.length === 0) return next()
     return serializePerKey(childLocks, target, async () => {
       const found = readPin(target)
@@ -279,7 +278,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
       if ('kind' in found) {
         return { kind: 'deny' as const, reason: `[PIN_UNREADABLE] resume pin for ${target} is unreadable (${found.reason}); refusing to resume` }
       }
-      // Same-epoch followup to a live agent: untouched.
+      // Same-epoch steer to a live agent: untouched.
       if (ctx.agents.get(SessionId(target)) !== undefined) return next()
       const decision = await evaluateGate(found, await gateEnv(found, exec.agent), policy())
       if (decision.action === 'deny') {
@@ -296,9 +295,9 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
         return { kind: 'deny' as const, reason: decision.reason }
       }
       // Durability ordering: the pass result (cleared state, overlay cache,
-      // notices) is published synchronously BEFORE the followup is queued —
+      // notices) is published synchronously BEFORE the delivery happens —
       // a store-write failure denies with a store-write-failure code and the
-      // followup never happens.
+      // delivery never happens.
       try {
         persistPass(found, decision)
       } catch (error) {

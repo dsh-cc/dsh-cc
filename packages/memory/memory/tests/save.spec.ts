@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
@@ -48,7 +48,7 @@ let callCounter = 0
 function call(ctx: Context, args: unknown, agent?: Agent) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId(`call-${++callCounter}`),
+    callId: ToolCallId(`call-${++callCounter}`),
     name: MEMORY_SAVE_TOOL,
     arguments: args,
     ...(agent !== undefined ? { agent } : {}),

@@ -12,7 +12,7 @@ import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 function makeBareCtx() {
   const makeAgent = () => ({
     options: {},
-    session: { id: 's-a', header: {}, events: [] },
+    session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
     id: 'agent-s-a',
     status: 'idle',
     followup: vi.fn(),
