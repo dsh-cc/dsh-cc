@@ -12,7 +12,8 @@
  *
  * @module @dsh-cc/command-permissions/client
  */
-import type { ClientContext, ISessions, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ISessions, SessionFace } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { CommandUiContract, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { ClientSessionContext } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { BYPASS_CONFIRMATION, BYPASS_MODE, PERMISSION_MODE_OPTIONS } from '../modes.ts'
