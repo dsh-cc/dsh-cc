@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/bundle-tui",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Terminal surface bundle for the dsh tui profile: CC-mode TUI over dsh-base",
   "type": "module",
   "files": [

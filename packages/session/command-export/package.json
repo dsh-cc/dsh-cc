@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-export",
   "description": "Human-facing slash command for exporting a session transcript to a file",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
@@ -24,10 +24,10 @@
     "lib"
   ],
   "license": "Apache-2.0",
-    "dependencies": {
+  "dependencies": {
     "@dsh-cc/command-usage": "workspace:^"
   },
-"peerDependencies": {
+  "peerDependencies": {
     "@deepseek-ai/dsh-commands": ">=0.1.2-rc.1",
     "@deepseek-ai/dsh-fs": ">=0.1.2-rc.1",
     "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",

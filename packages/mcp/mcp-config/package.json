@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/mcp-config",
   "description": "MCP workspace-configuration loader: parses .mcp.json into mcp-client registrations",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

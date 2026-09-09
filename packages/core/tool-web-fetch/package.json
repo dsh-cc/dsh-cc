@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/tool-web-fetch",
   "description": "CC-style web_fetch replacement with an optional prompt: summarizes the fetched page on the cheap lane (haiku alias) when configured; passing a prompt without haiku fails before fetching",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

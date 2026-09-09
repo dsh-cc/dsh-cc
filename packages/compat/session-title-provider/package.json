@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/session-title-provider",
   "description": "CC host-plane first-prompt session-title provider on the haiku cheap lane",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
