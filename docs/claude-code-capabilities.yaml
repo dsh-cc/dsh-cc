@@ -338,19 +338,28 @@ capabilities:
   engine.onboarding:
     title: Onboarding / tips
     category: engine
-    plane: preset
+    plane: host
     upstream:
       summary: First-run onboarding flow and contextual tips.
       refs: []
     dimensions:
-      recognized: false
-      mounted: false
-      behavioral: missing
-      ux: missing
-    evidence: []
+      recognized: true
+      mounted: true
+      behavioral: divergent
+      ux: partial
+    evidence:
+      - { type: source, path: packages/ui/tui/src/harness/onboarding.ts, anchor: "wireOnboarding" }
+      - { type: source, path: packages/ui/tui/src/harness/driver-run-local.ts, anchor: "onboard" }
+      - { type: test, path: packages/ui/tui/tests/onboarding.spec.ts }
     deviation:
-      kind: downgrade
-      summary: No package or design doc exists for onboarding/tips.
+      kind: divergent
+      summary: >-
+        Deliberate shape change from Claude Code's first-run wizard: the gate
+        is derived (no theme or trust step) — the provider panel opens iff the
+        boot default-model seed settles with `selection.current === undefined`
+        on a TTY, dismissal keeps the no-model notice, and the
+        `cc-onboarding.suppressed` settings section (cleared by `/onboard`)
+        is the only stored flag. Contextual tips are not implemented.
 
   engine.plan-mode:
     title: Plan mode

@@ -21,6 +21,7 @@ import { createModeSection } from './driver-mode.ts'
 import { liveModeWithDefault, liveSessionCwd } from './driver-live.ts'
 import { createHudSection } from './driver-hud.ts'
 import { createStatusLineWiring } from './statusline-wiring.ts'
+import type { OnboardingGate } from './onboarding.ts'
 import { createPickersSection } from './driver-pickers.ts'
 import { createQueueSection } from './driver-queue.ts'
 import { createRunLocalSection } from './driver-run-local.ts'
@@ -159,25 +160,20 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     handle = await ctx.agents.create(createArgs(SessionId(`tui-${randomUUID()}`)))
   }
 
-  // `-c`/`--continue` is the only reason bare boots show a hint: the marker
-  // was checked, nothing to continue, so point the user at /resume. Shown
-  // only when autoResume actually looked at the marker and came up empty
-  // (a stale-marker degrade already surfaced its own notice above).
+  // `-c`/`--continue` on a bare boot with nothing to continue → point at
+  // /resume (a stale-marker degrade already surfaced its own notice above).
   if (attemptedAutoResume && !markerFound && config.continueRequested === true) {
     showNotice('没有可继续的上一会话，可 /resume 手动选择')
   }
 
   // Rebindable holder: switchSession replaces handle/agent in-place so every
-  // event handler and closure reads the LIVE agent at fire time. The session
-  // filter compares against current.agent.session.id; late events from a
-  // disposed session are dropped by the id mismatch.
+  // event handler and closure reads the LIVE agent at fire time.
   const current: { handle: AgentHandle; agent: Agent } = { handle, agent: handle.agent }
   if (current.agent.options.provider !== undefined && current.agent.options.model !== undefined) {
     selection.current = { provider: current.agent.options.provider, model: current.agent.options.model }
   }
-  // Deployment default-model service, effort resolution, history binding,
-  // and the resume marker now live in the agent section (harness/driver-agent.ts).
-  //
+  // Deployment default-model service, effort resolution, history binding, and
+  // the resume marker now live in the agent section (harness/driver-agent.ts).
   // Per-project input history: prompts and bash commands are bucketed by the
   // session's project (the main git root — worktrees collapse onto it), so
   // ↑/↓ recall never leaks across working directories. An explicit
@@ -191,6 +187,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     historyProjectKey = bootProject.projectKey
     historyDir = join(tuiDir, 'projects', bootProject.projectKey)
   }
+  // First-run onboarding gate: buffered boot flag + late-bound run-local handle.
+  const onboardingGate: OnboardingGate = { modelMissing: false }
   const agent = createAgentSection({
     emit,
     state: () => state,
@@ -201,6 +199,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     liveMode: liveModeWithDefault(ctx),
     historyDir,
     cwd,
+    onModelMissing: () => { onboardingGate.modelMissing = true; onboardingGate.handle?.onModelMissing() },
   })
   // W4 fire-early: kick the default-model seed — submits and /effort await the
   // settled seed before dispatch; banner upsert + gated notice in continuation.
@@ -265,7 +264,6 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     statusline,
   })
   const { refreshBranch, seedHud, seedTodos, applyUsage, projections, statusLineOf } = hud
-
   // Late-bound cross-section handles: runHarness (mode/pickers) and flushQueue
   // (session/event listener) are wired after their sections are constructed.
   const actions: {
@@ -378,6 +376,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     persistResumeTarget: persistResumeTargetAndIndex,
     getMarkedContent: agent.getMarkedContent,
     setMarkedContent: agent.setMarkedContent,
+    listeners,
+    onboardingGate,
   })
   const { runLocal, runHarness } = runLocalSection
   actions.runHarness = runHarness
@@ -490,6 +490,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     listCommands: () => catalog.listCommands(),
     async dispose() {
       statusline.dispose()
+      runLocalSection.onboarding.dispose()
       if (noticeTimer !== undefined) { clearTimeout(noticeTimer); noticeTimer = undefined }
       approvals.dispose()
       if (agent.getMarkedContent()) persistResumeTargetAndIndex()

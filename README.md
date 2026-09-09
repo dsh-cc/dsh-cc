@@ -85,7 +85,7 @@ Install them inside a session:
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 6 | 5 | 2 |
+| Engine subsystems | 11 | 7 | 4 | 2 |
 | Hook events | 12 | 4 | 4 | 0 |
 | Command surface | 19 | 7 | 1 | 2 |
 | Sessions and context | 1 | 0 | 1 | 0 |
@@ -185,6 +185,7 @@ The CC preset exposes a growing command surface, including:
 /init               scan a project and scaffold CLAUDE.md
 /plugin             manage plugins
 /provider           manage LLM providers (list/add/remove, rotate keys, set default)
+/onboard            re-run the first-run setup (clears the onboarding opt-out)
 /release-notes      show release notes
 /version            show version information
 ```
@@ -192,6 +193,10 @@ The CC preset exposes a growing command surface, including:
 The TUI also provides terminal-oriented interactions such as todo inspection, approval flows, queued prompts, transcript export, usage/context display, and local shell commands.
 
 `/provider` opens an overlay over your configured model providers: `/provider list` prints the current routes, `/provider add <preset-id>` walks a wizard for the built-in presets (Moonshot, Z.AI/Zhipu, DeepSeek) or a fully custom endpoint, and the per-route detail view rotates keys, refreshes the model list, sets the default, or removes the route. API keys are typed into a masked field and stored in the credential store (`~/.dsh/.credentials.yaml`), never in settings; keys already supplied by the environment are shown read-only. Changes take effect for new sessions immediately (credentials resolve per request); the running session keeps its current provider until you pick again with `/model`.
+
+### First-run onboarding
+
+On a fresh install with no model configured, the boot seed settles with no default route and the TUI opens the provider panel automatically: pick a preset, paste your API key (stored only in the credential store), and set the default model — then you are ready to go. Dismissing the panel with `Esc` only skips it for the current session; the flow is re-offered on the next boot. To opt out permanently, set `cc-onboarding.suppressed: true` under the user settings namespace in `~/.dsh/settings.json`, and re-arm any time with `/onboard`. Non-interactive (non-TTY) runs never trigger the flow and keep the plain "No model configured" notice.
 
 ## Use the models you want
 
