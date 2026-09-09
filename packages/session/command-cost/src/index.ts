@@ -16,7 +16,7 @@ export const inject = ['commands']
 
 /** `/cost` configuration: the deployment USD price table. */
 export interface Config {
-  /** Ordered price-table columns; the first exact model match wins, then a `'*'` column. */
+  /** Ordered price-table columns; matched by exact model id first (first row wins), then by `/`-suffix for route-prefixed runtime ids (longest row wins, ties → first row), then a `'*'` column. */
   readonly modelTable: readonly ModelPrice[]
 }
 

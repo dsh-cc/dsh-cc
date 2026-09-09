@@ -20,6 +20,9 @@ const PRICE: ModelPrice = {
   cacheWritePerMTok: 0.07,
 }
 
+/** PRICE without the provider column — suffix tests call with other providers. */
+const { provider: _priceProvider, ...BARE } = PRICE
+
 /** Build a minimal session event for fold tests without touching a live session. */
 function ev(type: string, data: unknown, seq: number): SessionEvent {
   return Object.freeze({ seq, time: seq * 10, type, data }) as SessionEvent
@@ -149,6 +152,67 @@ describe('/cost pricing helpers', () => {
   it('formats USD with two fixed decimals', () => {
     expect(formatUsd(1.239)).toBe('$1.24')
     expect(formatUsd(0)).toBe('$0.00')
+  })
+})
+
+describe('/cost suffix pricing', () => {
+  it('matches a route-prefixed runtime id against a bare model row via suffix', () => {
+    const table = [{ ...BARE, model: 'glm-5.3' }]
+    expect(resolvePrice(table, 'orchestrix', 'llmbox_ant/glm-5.3')).toEqual(table[0])
+  })
+
+  it('suffix match respects the provider filter', () => {
+    const table = [{ ...BARE, model: 'glm-5.3', provider: 'other' }]
+    expect(resolvePrice(table, 'orchestrix', 'llmbox_ant/glm-5.3')).toBeUndefined()
+  })
+
+  it('falls through to the wildcard when the suffix match fails the provider filter', () => {
+    const table: ModelPrice[] = [{ ...BARE, model: 'glm-5.3', provider: 'other' }, { ...BARE, model: '*' }]
+    const matched = resolvePrice(table, 'orchestrix', 'llmbox_ant/glm-5.3')
+    expect(matched).toEqual(table[1])
+    expect(matched?.model).toBe('*')
+  })
+
+  it('prefers the longest suffix row', () => {
+    const table = [{ ...BARE, model: 'glm-5.3' }, { ...BARE, model: 'ant/glm-5.3' }]
+    expect(resolvePrice(table, 'p', 'foo/ant/glm-5.3')).toEqual(table[1])
+  })
+
+  it('breaks equal-length suffix ties by first row in table order', () => {
+    const table = [{ ...BARE, model: 'm', provider: 'p1' }, { ...BARE, model: 'm' }]
+    expect(resolvePrice(table, 'p1', 'x/m')).toEqual(table[0])
+  })
+
+  it('enforces the / boundary — no partial segment match', () => {
+    expect(resolvePrice([{ ...BARE, model: 'glm-5.3' }], 'p', 'x/glm-5.3-flash')).toBeUndefined()
+  })
+
+  it('does not match a slash-containing row against an underscore-prefixed runtime id', () => {
+    expect(resolvePrice([{ ...BARE, model: 'ant/glm-5.3' }], 'p', 'llmbox_ant/glm-5.3')).toBeUndefined()
+  })
+
+  it('does not match a runtime bare id against a suffixed row (reverse direction)', () => {
+    expect(resolvePrice([{ ...BARE, model: 'x/glm-5.3' }], 'p', 'glm-5.3')).toBeUndefined()
+  })
+
+  it('prefers an exact row over a suffix row', () => {
+    const table = [{ ...BARE, model: 'llmbox_ant/glm-5.3' }, { ...BARE, model: 'glm-5.3' }]
+    expect(resolvePrice(table, 'p', 'llmbox_ant/glm-5.3')).toEqual(table[0])
+  })
+
+  it('folds a route-prefixed session end to end against a bare model row', () => {
+    const events = [
+      header(1, 'orchestrix', 'llmbox_ant/glm-5.3'),
+      usage(2, { inputTokens: 1_000_000, outputTokens: 200_000 }),
+    ]
+    const row: ModelPrice = {
+      model: 'glm-5.3', inputPerMTok: 0.5, outputPerMTok: 2, cacheReadPerMTok: 0, cacheWritePerMTok: 0,
+    }
+    const report = foldCost(events, [row])
+    expect(report.perModel[0]).toMatchObject({ provider: 'orchestrix', model: 'llmbox_ant/glm-5.3', priced: true })
+    // (1e6*0.5 + 2e5*2)/1e6
+    expect(report.perModel[0].costUsd).toBeCloseTo(0.9, 6)
+    expect(report.totalUsd).toBeCloseTo(0.9, 6)
   })
 })
 
