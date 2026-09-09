@@ -125,10 +125,11 @@ describe('dsh-cc-agents install round-trip (marketplace → cache → mount)', (
       expect(names.sort()).toEqual([
         'dsh-cc-agents:critic',
         'dsh-cc-agents:executor',
+        'dsh-cc-agents:marathon',
       ])
       expect(skillNames).toEqual(['dsh-cc-agents-orchestration'])
       const agents = mount.report.components.find(c => c.kind === 'agents')
-      expect(agents?.loaded).toBe(2)
+      expect(agents?.loaded).toBe(3)
       const skills = mount.report.components.find(c => c.kind === 'skills')
       expect(skills?.loaded).toBe(1)
       expect(skills?.skipped).toBe(0)

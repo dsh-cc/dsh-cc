@@ -50,7 +50,7 @@ function subagentsSeam(): {
 }
 
 describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
-  it('registers both agents as branded providers under scoped dsh-cc-agents ids', async () => {
+  it('registers the shipped agents as branded providers under scoped dsh-cc-agents ids', async () => {
     const ctx = new Context()
     const { subagents, providers } = subagentsSeam()
     const mount = await mountCcPlugin(ctx, {
@@ -60,11 +60,12 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     try {
       expect(mount.report.name).toBe('dsh-cc-agents')
       const agents = mount.report.components.find(c => c.kind === 'agents')
-      expect(agents?.loaded).toBe(2)
+      expect(agents?.loaded).toBe(3)
       expect(agents?.failed).toBe(0)
       expect(providers.map(p => p.name).sort()).toEqual([
         'dsh-cc-agents:critic',
         'dsh-cc-agents:executor',
+        'dsh-cc-agents:marathon',
       ])
       for (const provider of providers) {
         expect(isPluginAgentProvider(provider)).toBe(true)
@@ -72,13 +73,13 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
         expect(provider.definition.agentType).not.toContain(':')
         expect(provider.definition.systemPrompt.length).toBeGreaterThan(0)
       }
-      expect(providers.map(p => p.definition.agentType).sort()).toEqual(['critic', 'executor'])
+      expect(providers.map(p => p.definition.agentType).sort()).toEqual(['critic', 'executor', 'marathon'])
     } finally {
       mount.dispose()
     }
   })
 
-  it('pins background: true on critic only; executor carries no pin', async () => {
+  it('pins background: true on critic only; executor and marathon carry no pin', async () => {
     const ctx = new Context()
     const { subagents, providers } = subagentsSeam()
     const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR, seams: { subagents } })
@@ -86,6 +87,7 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       const byAgent = new Map(providers.map(p => [p.definition.agentType, p.definition]))
       expect(byName(byAgent, 'critic').background).toBe(true)
       expect('background' in byName(byAgent, 'executor')).toBe(false)
+      expect('background' in byName(byAgent, 'marathon')).toBe(false)
     } finally {
       mount.dispose()
     }
