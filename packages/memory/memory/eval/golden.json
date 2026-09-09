@@ -1,0 +1,405 @@
+{
+  "description": "W4 recall-selection quality eval golden set. required = filenames a correct selection must include; tolerated = acceptable extras that do not hurt precision; anything else selected is a false positive. no-relevant queries expect an empty selection. clusters declares the distractor lookalike groups; only `relevant` members are wanted by the cluster's queries.",
+  "clusters": [
+    {
+      "id": "model-aliases",
+      "members": [
+        "model-alias-resolution.md",
+        "recall-haiku-alias.md",
+        "model-alias-migration-2025.md",
+        "model-alias-perf-benchmarks.md"
+      ],
+      "relevant": [
+        "model-alias-resolution.md",
+        "recall-haiku-alias.md"
+      ]
+    },
+    {
+      "id": "vitest",
+      "members": [
+        "vitest-config-include-globs.md",
+        "vitest-mock-adapter-pattern.md",
+        "vitest-flaky-retry-policy.md"
+      ],
+      "relevant": [
+        "vitest-config-include-globs.md",
+        "vitest-mock-adapter-pattern.md"
+      ]
+    },
+    {
+      "id": "sandbox",
+      "members": [
+        "sandbox-workspace-write-policy.md",
+        "sandbox-denied-operations.md",
+        "sandbox-legacy-approval-mode.md",
+        "sandbox-container-images.md"
+      ],
+      "relevant": [
+        "sandbox-workspace-write-policy.md",
+        "sandbox-denied-operations.md"
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "class": "direct-topic",
+      "query": "How does one-shot fork safety get enforced for memory recall children?",
+      "required": [
+        "one-shot-fork-safety.md"
+      ],
+      "tolerated": [
+        "harness-frozen-constraint.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "What does outputSchema do for structured results from a one-shot subagent?",
+      "required": [
+        "output-schema-structured.md"
+      ],
+      "tolerated": [
+        "extract-selected-names-removal.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "Why was extractSelectedNames removed from the memory package?",
+      "required": [
+        "extract-selected-names-removal.md"
+      ],
+      "tolerated": [
+        "output-schema-structured.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "How does recall avoid re-suggesting reference docs for tools already in use?",
+      "required": [
+        "recall-recent-tools-suppression.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "direct-topic",
+      "query": "Where does memory recall inject its result into the parent agent context?",
+      "required": [
+        "agent-inject-prestep.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "direct-topic",
+      "query": "What are the byte and file-count limits on memory writeback?",
+      "required": [
+        "memory-writeback-limits.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "direct-topic",
+      "query": "How is the MEMORY.md entrypoint truncated before it hits the system prompt?",
+      "required": [
+        "memory-entrypoint-truncation.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "direct-topic",
+      "query": "Why does the memory_save tool write files host-side?",
+      "required": [
+        "memory-save-tool.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "direct-topic",
+      "query": "Should subagent one-shot events be paired by runId or child id, and why?",
+      "required": [
+        "subagent-runid-pairing.md"
+      ],
+      "tolerated": [
+        "subagent-events-global.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "Are subagent start and end events session-filtered?",
+      "required": [
+        "subagent-events-global.md"
+      ],
+      "tolerated": [
+        "session-parentage-probe.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "I'm wiring up the haiku alias for recall — how does resolution work and what does unconfigured haiku do?",
+      "required": [
+        "model-alias-resolution.md",
+        "recall-haiku-alias.md"
+      ],
+      "tolerated": [
+        "one-shot-fork-safety.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "How do I test a real agent loop subagent in vitest?",
+      "required": [
+        "vitest-config-include-globs.md",
+        "vitest-mock-adapter-pattern.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "What happens when a sandbox file operation is denied, and what is the current write policy?",
+      "required": [
+        "sandbox-workspace-write-policy.md",
+        "sandbox-denied-operations.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "Can I commit the workstream changes myself, and why not?",
+      "required": [
+        "never-commit-rule.md"
+      ],
+      "tolerated": [
+        "harness-frozen-constraint.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "Explain how recall injects memories and how the shown set prevents repeats.",
+      "required": [
+        "agent-inject-prestep.md",
+        "memory-recall-shown-set.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "A selector child must not execute the query and must stay read-only — which pieces enforce that?",
+      "required": [
+        "one-shot-fork-safety.md",
+        "tool-restrict-own-layer.md"
+      ],
+      "tolerated": [
+        "sandbox-workspace-write-policy.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "How do I find which session spawned a one-shot subagent, given the events carry no parentage?",
+      "required": [
+        "session-parentage-probe.md",
+        "subagent-events-global.md"
+      ],
+      "tolerated": [
+        "subagent-runid-pairing.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "What limits apply when the consolidator writes memory files back?",
+      "required": [
+        "memory-writeback-limits.md",
+        "memory-save-tool.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "Does the harness restrict mask every tool, including structured_output?",
+      "required": [
+        "tool-restrict-own-layer.md",
+        "output-schema-structured.md"
+      ],
+      "tolerated": [
+        "one-shot-fork-safety.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "How should I land a behavior change in this repo, and can I retry a flaky test?",
+      "required": [
+        "tdd-red-green.md",
+        "vitest-flaky-retry-policy.md"
+      ],
+      "tolerated": [
+        "never-commit-rule.md"
+      ]
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "What's a good recipe for sourdough starter feeding?",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "Summarize the plot of Hamlet act three.",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "How do I train for a half marathon in twelve weeks?",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "Explain the Krebs cycle steps.",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "Best settings for shooting the Milky Way on a DSLR?",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "How do I fold a fitted sheet?",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "What's the capital of Australia and its population?",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "Convert 350 degrees Fahrenheit to Celsius for baking cookies.",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "Write a limerick about a cat who sails.",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "Which plants survive low light in a north-facing apartment?",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "how does the alias thing work?",
+      "required": [
+        "model-alias-resolution.md"
+      ],
+      "tolerated": [
+        "recall-haiku-alias.md",
+        "model-alias-migration-2025.md",
+        "model-alias-perf-benchmarks.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "which test config should I look at?",
+      "required": [
+        "vitest-config-include-globs.md"
+      ],
+      "tolerated": [
+        "vitest-mock-adapter-pattern.md",
+        "vitest-flaky-retry-policy.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "something about the sandbox rules?",
+      "required": [
+        "sandbox-workspace-write-policy.md"
+      ],
+      "tolerated": [
+        "sandbox-denied-operations.md",
+        "sandbox-legacy-approval-mode.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "what's the deal with small fast models?",
+      "required": [
+        "recall-haiku-alias.md"
+      ],
+      "tolerated": [
+        "model-alias-resolution.md",
+        "model-alias-perf-benchmarks.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "memory limits?",
+      "required": [
+        "memory-writeback-limits.md",
+        "memory-entrypoint-truncation.md"
+      ],
+      "tolerated": [
+        "memory-recall-shown-set.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "who spawned that child and how do I trace it?",
+      "required": [
+        "session-parentage-probe.md"
+      ],
+      "tolerated": [
+        "subagent-runid-pairing.md",
+        "subagent-events-global.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "what am I allowed to run in the sandbox vs not?",
+      "required": [
+        "sandbox-workspace-write-policy.md",
+        "sandbox-denied-operations.md"
+      ],
+      "tolerated": [
+        "never-commit-rule.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "the old selector parsing — where did it go?",
+      "required": [
+        "extract-selected-names-removal.md"
+      ],
+      "tolerated": [
+        "output-schema-structured.md",
+        "one-shot-fork-safety.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "team memory, yes or no?",
+      "required": [
+        "team-memory-format.md"
+      ],
+      "tolerated": [
+        "memory-save-tool.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "why can't we just fix the harness?",
+      "required": [
+        "harness-frozen-constraint.md"
+      ],
+      "tolerated": [
+        "tool-restrict-own-layer.md"
+      ]
+    }
+  ]
+}
