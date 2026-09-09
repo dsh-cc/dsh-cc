@@ -16,6 +16,8 @@ Usage is always reported when a usage record logged; cost is only estimated when
 
 All prices live in the plugin `Config` in your `cordis.yml`; nothing is hardcoded in the plugin. Prices are USD per one million tokens. A column whose `model` is `'*'` is the wildcard default applied to any model without an exact column.
 
+The CC preset (`@dsh-cc/preset-cc`) ships a starter table of official published list prices for common DeepSeek, GLM, and Kimi models, collected from the vendor pricing pages (see the `command-cost` row in its `agent.cordis.yml` for the collection date and sources). Deployment billing often differs from list prices — override the whole `modelTable` when yours does. The starter table deliberately carries no `'*'` wildcard column: unmatched models report usage with a "no price configured" marker instead of a misleading zero cost.
+
 ```yaml
 - id: command-cost
   name: '@dsh-cc/command-cost'
@@ -45,7 +47,7 @@ The producer injects `commands`. A custom app mounts their owners plus this plug
   name: '@dsh-cc/command-cost'
 ```
 
-Without a `modelTable`, every model is reported as unpriced — token usage still shows, but no cost estimate does.
+Without a `modelTable`, every model is reported as unpriced — token usage still shows, but no cost estimate does. With the CC preset's starter table, models it covers are priced at official list prices; anything else stays unpriced.
 
 ## Model Experience
 
@@ -54,4 +56,5 @@ The slash input and the direct token/cost output are absent from model requests 
 ## Known Limitations and Deferred Work
 
 - **Exact-match pricing only** — a `'*'` wildcard column covers unmatched models; more flexible per-prefix pricing is deferred.
+- **Starter prices are list prices, not your bill** — the preset table reflects official published prices at collection time and goes stale as vendors adjust; deployments with negotiated or internal-gateway pricing must override it.
 - **No live totals during a turn** — `/cost` reports the durable log up to the last checkpoint; in-flight usage is not included.

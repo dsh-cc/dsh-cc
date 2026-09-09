@@ -227,9 +227,11 @@ capabilities:
     deviation:
       kind: downgrade
       summary: >-
-        Ships an empty default price table (composition decides pricing), and
-        CC quota/limit surfaces are vendor-billing-bound — the TUI /usage panel
-        footnotes quota as unavailable.
+        Ships a starter price table of official list prices for common
+        DeepSeek/GLM/Kimi models (composition decides pricing; deployment
+        billing may differ), and CC quota/limit surfaces are
+        vendor-billing-bound — the TUI /usage panel footnotes quota as
+        unavailable.
 
   engine.credentials:
     title: Credentials storage
