@@ -61,7 +61,6 @@ export {
   BASH_TIMEOUT_MS,
   gitBranchOf,
 } from './shell-output.ts'
-export { formatCostReport } from './usage-view.ts'
 export { allowRuleOf, payloadOf } from './approval-preview.ts'
 
 /** Default lifetime of a transient `showNotice` hint. */

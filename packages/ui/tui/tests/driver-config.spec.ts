@@ -313,7 +313,7 @@ describe('createDriver listCommands catalog', () => {
     const catalog = driver.listCommands()
     const names = catalog.map(c => c.name).sort()
     expect(names).toEqual([
-      'agents', 'clear', 'copy', 'cost', 'effort', 'exit', 'export-md', 'model', 'new', 'provider', 'quit', 'reset', 'resume', 'tui-help', 'usage',
+      'agents', 'clear', 'copy', 'effort', 'exit', 'export-md', 'model', 'new', 'provider', 'quit', 'reset', 'resume', 'tui-help', 'usage',
     ])
   })
 

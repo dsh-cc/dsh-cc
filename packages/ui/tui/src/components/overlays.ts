@@ -411,7 +411,7 @@ function alignedRows(entries: readonly (readonly [string, number])[]): string[] 
 
 /**
  * Usage panel box (`/usage`): the live context-occupancy bar, the cumulative
- * token totals (cache rows only when non-zero, mirroring /cost), and the
+ * token totals (cache rows only when non-zero), and the
  * context breakdown by role. Pure display — no focus or navigation — and
  * each section degrades independently to a dim `n/a` when its projection has
  * no data. Quota and rate-limit figures have no projection at all, so the

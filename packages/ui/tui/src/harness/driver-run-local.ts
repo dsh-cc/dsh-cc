@@ -18,7 +18,6 @@ import { rowsToMarkdown } from '../export-markdown.ts'
 import { defaultExportDir, exportStamp } from './shell-output.ts'
 import {
   breakdownOf,
-  formatCostReport,
   occupancyOf,
   totalsOf,
   usageViewOf,
@@ -265,13 +264,6 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
       }
       // User-facing text carries the effort NAME, not the raw id.
       emit(upsertRow(rt.state(), { kind: 'status', text: `Reasoning effort is now ${level.name}.` }))
-    }
-    if (name === 'cost') {
-      const totals = rt.projections === undefined
-        ? undefined
-        : totalsOf(rt.projections.stateOf(rt.current.agent.session, 'tokenUsage') as TokenUsageStateLike | undefined)
-      emit(upsertRow(rt.state(), { kind: 'status', text: formatCostReport(totals) }))
-      return
     }
     if (name === 'usage') {
       // Seed from the live projections before opening: a resumed session (or
