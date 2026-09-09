@@ -50,6 +50,23 @@ dsh plugin --profile web add \
 dsh web
 ```
 
+### 可选：官方插件
+
+上面的 bundle 就是快速开始的全部内容。仓库内建的 `dsh-cc` 插件市场另有两个按需安装的官方插件，提供预配置的子代理通道：
+
+- **`dsh-cc-agents`** — `dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）和 `dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）子代理，外加一个编排路由 skill。
+- **`dsh-cc-shunt`** — PreToolUse 门禁，把批量文件阅读和样板代码生成重定向到廉价通道的 worker 子代理，让大文件语料不进入主上下文（配置 `haiku` 别名才能真正省 token）。
+
+在会话内安装：
+
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install dsh-cc-agents@dsh-cc
+/plugin install dsh-cc-shunt@dsh-cc
+```
+
+`/plugin install` 会替你写入 `enabledPlugins` 标记；安装后重启会话以加载新的 agents 和 hooks。后续更新分两步：先 `/plugin marketplace update dsh-cc` 重新拉取市场，再 `/plugin update <id>` 更新插件。各插件自己的 README（[agents](packages/plugin/dsh-cc-agents/README.md)、[shunt](packages/plugin/dsh-cc-shunt/README.md)）覆盖配置项与已知限制。
+
 ## 为什么选择 dsh-cc？
 
 | 需求 | dsh-cc 提供的能力 |
