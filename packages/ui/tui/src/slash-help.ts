@@ -37,7 +37,6 @@ const LOCAL_HELP_SPECS: Readonly<Record<string, Omit<CommandHelpSpec, 'name' | '
     usage: ['[<id>|stop <id>]', '(no argument — list background agents)'],
     notes: ['<id> shows one agent\'s detail; stop <id> interrupts a running agent.'],
   },
-  cost: {},
   usage: {},
   'export-md': {
     usage: ['<path>', '(no argument — write to the default export directory)'],

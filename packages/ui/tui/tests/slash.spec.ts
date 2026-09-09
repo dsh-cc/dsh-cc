@@ -5,7 +5,7 @@ describe('LOCAL_COMMANDS', () => {
   it('has an entry for every TUI-owned slash name', () => {
     const names = LOCAL_COMMANDS.map(c => c.name).sort()
     expect(names).toEqual([
-      'agents', 'clear', 'copy', 'cost', 'effort', 'exit', 'export-md', 'model', 'new', 'provider', 'quit', 'reset', 'resume', 'tui-help', 'usage',
+      'agents', 'clear', 'copy', 'effort', 'exit', 'export-md', 'model', 'new', 'provider', 'quit', 'reset', 'resume', 'tui-help', 'usage',
     ])
   })
 
@@ -37,12 +37,6 @@ describe('LOCAL_COMMANDS', () => {
     expect(agents!.argumentHint).toContain('stop')
   })
 
-  it('cost is listed with a token-usage description', () => {
-    const cost = LOCAL_COMMANDS.find(c => c.name === 'cost')
-    expect(cost).toBeDefined()
-    expect(cost!.description.toLowerCase()).toContain('token usage')
-  })
-
   it('usage is listed with a panel description', () => {
     const usage = LOCAL_COMMANDS.find(c => c.name === 'usage')
     expect(usage).toBeDefined()
@@ -71,7 +65,6 @@ describe('parseSlash', () => {
     expect(parseSlash('/resume sess-1')).toEqual({ kind: 'local', name: 'resume', rawInput: 'sess-1' })
     expect(parseSlash('/model 2')).toEqual({ kind: 'local', name: 'model', rawInput: '2' })
     expect(parseSlash('/agents')).toEqual({ kind: 'local', name: 'agents', rawInput: '' })
-    expect(parseSlash('/cost')).toEqual({ kind: 'local', name: 'cost', rawInput: '' })
     expect(parseSlash('/export-md /tmp/notes.md')).toEqual({
       kind: 'local', name: 'export-md', rawInput: '/tmp/notes.md',
     })
@@ -85,5 +78,6 @@ describe('parseSlash', () => {
     expect(parseSlash('/permissions')).toEqual({ kind: 'harness', line: '/permissions' })
     expect(parseSlash('/permissions plan')).toEqual({ kind: 'harness', line: '/permissions plan' })
     expect(parseSlash('/status')).toEqual({ kind: 'harness', line: '/status' })
+    expect(parseSlash('/cost')).toEqual({ kind: 'harness', line: '/cost' })
   })
 })

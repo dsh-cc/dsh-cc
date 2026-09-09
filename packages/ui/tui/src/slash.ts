@@ -6,7 +6,7 @@
 
 /** Slash names the TUI handles without calling `ctx.commands`. */
 export const LOCAL_SLASH = [
-  'quit', 'exit', 'clear', 'new', 'reset', 'tui-help', 'resume', 'model', 'effort', 'agents', 'cost', 'usage', 'export-md', 'copy', 'provider',
+  'quit', 'exit', 'clear', 'new', 'reset', 'tui-help', 'resume', 'model', 'effort', 'agents', 'usage', 'export-md', 'copy', 'provider',
 ] as const
 
 /** `/provider` subcommands (§4.1) — surfaced as the argument completer hints. */
@@ -36,7 +36,6 @@ export const LOCAL_COMMANDS: readonly LocalCommand[] = [
   { name: 'model', description: 'List or switch the active model', argumentHint: '<n|provider/id>' },
   { name: 'effort', description: 'Set reasoning effort for the current model', argumentHint: '<level|default>' },
   { name: 'agents', description: 'List, inspect, or stop background agents', argumentHint: '[<id>|stop <id>]' },
-  { name: 'cost', description: 'Show token usage' },
   { name: 'usage', description: 'Open the live token and context usage panel' },
   {
     name: 'export-md',
