@@ -265,6 +265,7 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
       }
       if (selection.current === undefined) {
         rt.emit(upsertRow(rt.state(), { kind: 'status', text: 'No model configured. Pick one with /model.' }))
+        rt.onModelMissing?.()
       }
     }
   }

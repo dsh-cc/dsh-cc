@@ -24,6 +24,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { CatalogEntry } from '../model-catalog.ts'
 import type { ModalEntry } from './driver-modal.ts'
+import type { OnboardingGate } from './onboarding.ts'
 import type { StatusLineSectionHandle } from './statusline-wiring.ts'
 import type { SessionEventLike, ToolPresenters } from '../transcript.ts'
 
@@ -338,6 +339,10 @@ export interface DriverRunLocalCtx {
   setMarkedContent(marked: boolean): void
   /** Await the boot default-model seed before /effort reads the selection. */
   waitForModel(): Promise<void>
+  /** The driver's emit listener set (onboarding rides it as the diff seam). */
+  listeners: Set<(state: TuiState) => void>
+  /** Buffered boot no-model flag + the late-bound onboarding handle. */
+  onboardingGate: OnboardingGate
 }
 
 /**
@@ -409,6 +414,12 @@ export interface DriverAgentCtx {
   historyDir: string | undefined
   /** Working directory the resume marker is keyed by. */
   cwd: string
+  /**
+   * Boot hook: the default-model seed settled with `selection.current`
+   * still undefined (exactly once per boot). The onboarding wiring reacts
+   * by offering the provider wizard.
+   */
+  onModelMissing?(): void
 }
 
 /**

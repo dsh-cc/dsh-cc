@@ -45,6 +45,11 @@ const LOCAL_HELP_SPECS: Readonly<Record<string, Omit<CommandHelpSpec, 'name' | '
   provider: {
     usage: ['[list | add <preset-id> | remove <route>]', '(no argument — open the provider panel)'],
   },
+  onboard: {
+    notes: [
+      'Re-opens the provider setup panel after clearing cc-onboarding.suppressed; it is a no-op when a model is already configured.',
+    ],
+  },
 }
 
 /** One rendered help text per LOCAL_SLASH name. */

@@ -29,6 +29,7 @@ import { parseEffortChoice } from '../effort-catalog.ts'
 import { shouldEchoCommandResult } from '../compact-fold.ts'
 import { createAgentsSection } from './driver-agents.ts'
 import { createProviderSection, type ProviderRuntime } from '../provider-command.ts'
+import { wireOnboarding, type OnboardingHandle } from './onboarding.ts'
 import { enqueue, moveWorktreeExitFocus, openUsagePanel, setBusy, setTurnActive, setWorktreeExit, upsertRow } from '../store.ts'
 import {
   createWorktreeExitHooks,
@@ -84,6 +85,8 @@ export interface RunLocalSection {
   worktreeExitSubmit(): Promise<void>
   /** Dismiss the `/quit` worktree-exit overlay without quitting. */
   worktreeExitCancel(): void
+  /** First-run onboarding handle (welcome gate + /onboard re-run). */
+  onboarding: OnboardingHandle
 }
 
 export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
@@ -92,6 +95,18 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
   // `/provider` section (read path + action wizards). Created here so runLocal
   // can dispatch without a cycle; createDriver re-exports it on the driver.
   const providerRuntime = createProviderSection({ emit: rt.emit, state: rt.state, ctx: rt.ctx, selection: rt.selection })
+  // First-run onboarding: rides the provider runtime (same emit/state/listener
+  // seams) so the wizard gate reacts to the boot seed's no-model settle.
+  const onboarding = wireOnboarding({
+    ctx: rt.ctx,
+    emit: rt.emit,
+    state: rt.state,
+    selection: rt.selection,
+    listeners: rt.listeners,
+    providerRuntime,
+    modelMissing: () => rt.onboardingGate.modelMissing,
+  })
+  rt.onboardingGate.handle = onboarding
   const worktreeExit = rt.config.worktreeExit ?? createWorktreeExitHooks()
 
   // The section owns the quit finalizer: after a `/quit` decision settles it
@@ -292,6 +307,12 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
       await providerRuntime.openProviderPanel(rawInput)
       return
     }
+    if (name === 'onboard') {
+      // Manual re-run of the first-run flow: clears cc-onboarding.suppressed
+      // (when the section is writable), then re-opens the provider panel.
+      await onboarding.reRun()
+      return
+    }
     if (name === 'copy') {
       copyLatestReply()
       return
@@ -426,5 +447,6 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
     worktreeExitMove,
     worktreeExitSubmit,
     worktreeExitCancel,
+    onboarding,
   }
 }
