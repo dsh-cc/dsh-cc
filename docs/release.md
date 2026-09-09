@@ -28,6 +28,10 @@ npmjs 并打 GitHub Release。CI 校验 tag 与版本清单一致(`scripts/check
 
 ## 发布 SOP
 
+> **重要**：`main` 受 org ruleset 保护——**只接受 PR、禁止 merge commit**（只能
+> rebase/squash）。因此不能按老流程直接 `git push origin main vX.Y.Z`。
+> rebase 合并会改写 commit sha，所以 **tag 要在合并后重指到 main 上的新 sha**。
+
 发布脚本带 dry-run:
 
 ```bash
@@ -39,14 +43,21 @@ pnpm release <x.y.z[-rc.N]>             # 改写所有可发布包版本 → 提
 - 版本号与计划一致,恰为 `x.y.z`(正式)或 `x.y.z-rc.N`(预发布);
 - 提交与 `vX.Y.Z` tag 就位(带 `--dry-run` 不会真的改动它们)。
 
-然后一条命令同推 main 和 tag:
+然后走 PR 流程同推 main 和 tag(rebase 合并保留单 commit 线性历史):
 
 ```bash
-git push origin main vX.Y.Z
+git switch -c release-<x.y.z>                  # 从 release 提交建分支
+git push -u origin release-<x.y.z>
+gh pr create --title "chore(release): vX.Y.Z" --base main --head release-<x.y.z>
+gh pr merge <PR号> --rebase                    # sha 会被改写!
+git fetch origin main && git tag -f vX.Y.Z origin/main
+git push origin vX.Y.Z --force                 # 覆盖脚本先打的旧 sha tag
 ```
 
-顺序反了或漏推 main 会被祖先门禁拦下(workflow 校验 `vX.Y.Z` 必须落在
-`origin/main` 上的提交)。推完去 Actions 观察 **Publish (npm)** 跑完、全绿。
+强推 tag 会触发 [Publish (npm)](../.github/workflows/publish.yml) 重跑(幂等:
+脚本先打的旧 sha tag 触发的首跑会因 tag 不在 main 祖先上失败,新跑放行)。
+workflow 校验 `vX.Y.Z` 必须落在 `origin/main` 上的提交。推完去 Actions 观察
+**Publish (npm)** 跑完、全绿。
 
 ## dist-tag 约定
 
