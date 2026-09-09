@@ -1,15 +1,16 @@
 # @dsh-cc/plugin-dsh-cc-agents
 
-Official dsh-cc plugin shipping two subagents and an orchestration skill:
+Official dsh-cc plugin shipping three subagents and an orchestration skill:
 
 - **`dsh-cc-agents:critic`** — reasoning-heavy work: complex analysis, architectural decisions, adversarial plan review, root-cause analysis. Runs on the `opus` model alias; read-only persona.
 - **`dsh-cc-agents:executor`** — mechanical execution of pre-approved, fully specified plans: formatting, simple refactors, boilerplate, renames, tests, docs, checks. Runs on the `sonnet` model alias.
-- **`dsh-cc-agents-orchestration` skill** — routing table for choosing between the two agents, the background asymmetry, and their report contracts.
+- **`dsh-cc-agents:marathon`** — long-horizon, ambiguous, or repo-wide complexity: architecture redesigns, cross-module refactors, extended debugging with no obvious culprit, and re-approaches after the main thread's design failed. Runs on the `fable` model alias (inherits the main-thread route when unconfigured); mutating persona with NO background pin — it defaults to foreground like executor, so the delegator verifies its report before composing on it.
+- **`dsh-cc-agents-orchestration` skill** — routing table for choosing between the agents, the background asymmetry, and their report contracts.
 
 ## Prerequisites
 
-The agents request the `opus` / `sonnet` model aliases. If those aliases are
-not configured, the agents still work — unconfigured aliases resolve to
+The agents request the `opus` / `sonnet` / `fable` model aliases. If those
+aliases are not configured, the agents still work — unconfigured aliases resolve to
 inherit-the-parent-route — but lane separation (heavy reasoning on a stronger
 model, mechanical work on a faster one) is lost until you configure them.
 Optional, not required.
@@ -42,7 +43,7 @@ Both appear in the agent catalog; the plugin copies carry distinct
 
 ## MCP-enhanced tool surfaces (optional)
 
-Both agents name deferred MCP tools in their frontmatter. When the host
+All agents name deferred MCP tools in their frontmatter. When the host
 connects those servers, the names survive spawn-time filtering and are
 pre-activated before the child's first turn, so the agents call them
 directly:
@@ -58,6 +59,10 @@ directly:
   `replace_in_files`, `get_diagnostics_for_file`,
   `restart_language_server`); its serena-first editing policy activates
   with them.
+- **marathon** — the executor editing family plus the critic reasoning set:
+  all twelve serena symbol tools (editing included),
+  `mcp__sequential_thinking__sequentialthinking` for multi-branch
+  exploration, and the two context7 documentation lookups.
 
 Hosts without these servers are unaffected: the names are dropped with a
 startup warning and the agents run on built-in tools alone.

@@ -263,12 +263,13 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
     expect(request['toolFilter']).toBeDefined()
   })
 
-  it('the catalog lists both scoped ids', async () => {
+  it('the catalog lists all scoped ids', async () => {
     const { ctx } = await setup()
     const index = new PluginAgentIndex(ctx)
     expect(index.knownIds().sort()).toEqual([
       'dsh-cc-agents:critic',
       'dsh-cc-agents:executor',
+      'dsh-cc-agents:marathon',
     ])
     const catalog = renderCatalog(
       index.list().map(entry => ({
@@ -278,6 +279,7 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
     )
     expect(catalog).toContain('dsh-cc-agents:critic')
     expect(catalog).toContain('dsh-cc-agents:executor')
+    expect(catalog).toContain('dsh-cc-agents:marathon')
     expect(catalog).toContain('## Available subagents')
   })
 })

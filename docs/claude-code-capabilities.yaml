@@ -1761,9 +1761,10 @@ capabilities:
         immediately and the real result arrives later as a wake message — no
         inline result to compose on); run_in_background: false forces
         synchronous collection. Deliberate deviation on pins:
-        dsh-cc-agents:executor ships NO pin — a mutating agent defaults to
-        foreground so the delegator verifies its report before composing —
-        and there is NO global omit=background default either: the bundled
+        dsh-cc-agents:executor and dsh-cc-agents:marathon ship NO pin — a
+        mutating agent defaults to foreground so the delegator verifies its
+        report before composing — and there is NO global omit=background
+        default either: the bundled
         explore and dsh-cc-guide agents stay unpinned and keep foreground
         first-epoch collect.
         Foreground collect refit: non-fork foreground calls (named agents and
@@ -1964,7 +1965,8 @@ capabilities:
         status: true
         notes: >-
           Exercised end-to-end by a first-party plugin: packages/plugin/
-          dsh-cc-agents (the official critic + executor agents plus
+          dsh-cc-agents (the official critic + executor + marathon agents
+          plus
           an orchestration skill) ships via the repo-root official `dsh-cc`
           marketplace (.claude-plugin/marketplace.json) and is pinned by the
           real-dir mount spec, the install→cache→mount round-trip spec, and
