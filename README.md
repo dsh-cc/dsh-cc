@@ -50,6 +50,23 @@ dsh plugin --profile web add \
 dsh web
 ```
 
+### Optional: official plugins
+
+The bundles above are the whole quick start. Two optional official plugins — shipped through the repo's `dsh-cc` marketplace — add preconfigured subagent lanes:
+
+- **`dsh-cc-agents`** — the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias) and `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias) subagents, plus an orchestration routing skill.
+- **`dsh-cc-shunt`** — PreToolUse gates that redirect bulk file reads and boilerplate generation to cheap-lane worker subagents, keeping large file corpora out of the main context (configure a `haiku` alias for real token savings).
+
+Install them inside a session:
+
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install dsh-cc-agents@dsh-cc
+/plugin install dsh-cc-shunt@dsh-cc
+```
+
+`/plugin install` flips the `enabledPlugins` flag for you; restart the session so the new agents and hooks are picked up. To update later, re-pull the marketplace and then update the plugin: `/plugin marketplace update dsh-cc`, then `/plugin update <id>`. Each plugin's own README ([agents](packages/plugin/dsh-cc-agents/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md)) covers configuration and known limits.
+
 ## Why developers use dsh-cc
 
 | Need | What dsh-cc provides |
