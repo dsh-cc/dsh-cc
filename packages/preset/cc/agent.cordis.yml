@@ -482,7 +482,9 @@
     # tokens), collected 2026-09-10 from the vendor pricing pages; deployments
     # whose billing differs should override the whole modelTable. No '*'
     # wildcard column on purpose: unmatched models report "no price
-    # configured" instead of a misleading zero cost.
+    # configured" instead of a misleading zero cost. A runtime id with a route
+    # prefix (e.g. `llmbox_ant/glm-5.3`) matches the bare model row via suffix
+    # matching.
     modelTable:
       # DeepSeek (api-docs.deepseek.com/quick_start/pricing); cache write is
       # not billed separately → cacheWrite 0.

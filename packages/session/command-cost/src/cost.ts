@@ -12,10 +12,10 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 /**
  * One model column of the deployment price table. Prices are per one million
  * tokens (MTok) in USD. A column whose `model` is `'*'` is the wildcard default
- * applied to any model without an exact column.
+ * applied to any model without a matching exact or suffix column.
  */
 export interface ModelPrice {
-  /** Exact provider model id matched against the request header's `config.model`; `'*'` is the default column. */
+  /** Provider model id matched against the request header's `config.model` (exact first, then `/`-suffix matching for route-prefixed runtime ids); `'*'` is the default column. */
   readonly model: string
   /** Provider route the model belongs to; must match the request header or be omitted. */
   readonly provider?: string
@@ -31,7 +31,7 @@ export interface ModelPrice {
 
 /** `/cost` configuration — the price table lives entirely in the deployment Config. */
 export interface CommandCostConfig {
-  /** Ordered price-table columns; the first exact model match wins, then a `'*'` column. */
+  /** Ordered price-table columns; matched by exact id first (first row wins), then by `/`-suffix for route-prefixed runtime ids (longest row wins, ties → first row), then a `'*'` column. */
   readonly modelTable: readonly ModelPrice[]
 }
 
@@ -92,22 +92,34 @@ function isTokenUsage(value: unknown): value is TokenUsage {
 }
 
 /**
- * Resolve the price column for one model against the deployment table: an exact
- * `model` (and `provider` when configured) match first, then the `'*'` default
- * column.
+ * Resolve the price column for one model against the deployment table, in three
+ * tiers: (1) exact — first row where `model` matches and `provider` (when set
+ * on the row) matches; (2) suffix — among rows whose `model` is a
+ * `/`-separated tail segment of the runtime id (runtime ids may carry a
+ * deployment route prefix, e.g. `llmbox_ant/glm-5.3` naming the same model as a
+ * bare `glm-5.3` row), the longest row wins, ties go to the first row in table
+ * order; `'*'` rows are excluded from this tier; (3) wildcard — the first row
+ * with `model === '*'`.
  * @param table - ordered deployment price table, possibly with a `'*'` entry.
  * @param provider - route from the request header.
  * @param model - model id from the request header.
- * @returns the matched column rules, or undefined when neither an exact nor a default column names it.
+ * @returns the matched column rules, or undefined when no tier matches.
  */
 export function resolvePrice(
   table: readonly ModelPrice[],
   provider: string,
   model: string,
 ): ModelPrice | undefined {
-  const exact = table.find(price =>
-    price.model === model && (price.provider === undefined || price.provider === provider))
-  return exact ?? table.find(price => price.model === '*')
+  const matches = (price: ModelPrice) => price.provider === undefined || price.provider === provider
+  const exact = table.find(price => price.model === model && matches(price))
+  if (exact !== undefined) return exact
+  let best: ModelPrice | undefined
+  for (const price of table) {
+    if (price.model === '*' || !matches(price)) continue
+    if (!model.endsWith(`/${price.model}`)) continue
+    if (best === undefined || price.model.length > best.model.length) best = price
+  }
+  return best ?? table.find(price => price.model === '*')
 }
 
 /**
