@@ -152,6 +152,28 @@ describe('agent.cordis.yml composition', () => {
     }
   })
 
+  it('ships a well-formed starter price table for command-cost', () => {
+    const row = doc.find((r) => r.id === 'command-cost')!
+    const table = (row.config as { modelTable: any[] }).modelTable
+    expect(Array.isArray(table)).toBe(true)
+    expect(table.length).toBeGreaterThan(0)
+    const models = new Set<string>()
+    for (const entry of table) {
+      expect(typeof entry.model).toBe('string')
+      expect(entry.model.length).toBeGreaterThan(0)
+      expect(entry.model).not.toBe('*')
+      expect(entry.provider).toBeUndefined()
+      for (const key of ['inputPerMTok', 'outputPerMTok', 'cacheReadPerMTok', 'cacheWritePerMTok']) {
+        expect(typeof entry[key]).toBe('number')
+        expect(entry[key]).toBeGreaterThanOrEqual(0)
+      }
+      // First exact match wins, so a duplicate model id would silently shadow
+      // one of the columns.
+      expect(models.has(entry.model)).toBe(false)
+      models.add(entry.model)
+    }
+  })
+
   it('isolates exactly the eight cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')

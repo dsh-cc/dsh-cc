@@ -477,9 +477,79 @@
 - id: command-cost
   name: '@dsh-cc/command-cost'
   config:
-    # Composition decides pricing → the package schema stays strict; ship an
-    # empty price table by default (README "Known limits" /cost entry).
-    modelTable: []
+    # Composition decides pricing → the package schema stays strict. The preset
+    # ships a starter table of official published list prices (USD per 1M
+    # tokens), collected 2026-09-10 from the vendor pricing pages; deployments
+    # whose billing differs should override the whole modelTable. No '*'
+    # wildcard column on purpose: unmatched models report "no price
+    # configured" instead of a misleading zero cost.
+    modelTable:
+      # DeepSeek (api-docs.deepseek.com/quick_start/pricing); cache write is
+      # not billed separately → cacheWrite 0.
+      - model: deepseek-v4-flash-0731
+        inputPerMTok: 0.28
+        outputPerMTok: 0.42
+        cacheReadPerMTok: 0.04
+        cacheWritePerMTok: 0
+      - model: deepseek-v4-flash
+        inputPerMTok: 0.28
+        outputPerMTok: 0.42
+        cacheReadPerMTok: 0.04
+        cacheWritePerMTok: 0
+      - model: deepseek-v4-pro
+        inputPerMTok: 0.56
+        outputPerMTok: 1.68
+        cacheReadPerMTok: 0.08
+        cacheWritePerMTok: 0
+      # GLM (docs.z.ai/guides/overview/pricing); cached-input storage is
+      # limited-time free → cacheWrite 0. glm-5.3-flash uses list prices, not
+      # the 50%-off promo.
+      - model: glm-5.3
+        inputPerMTok: 1.4
+        outputPerMTok: 4.4
+        cacheReadPerMTok: 0.26
+        cacheWritePerMTok: 0
+      - model: glm-5.2
+        inputPerMTok: 1.4
+        outputPerMTok: 4.4
+        cacheReadPerMTok: 0.26
+        cacheWritePerMTok: 0
+      - model: glm-5.1
+        inputPerMTok: 1.4
+        outputPerMTok: 4.4
+        cacheReadPerMTok: 0.26
+        cacheWritePerMTok: 0
+      - model: glm-5
+        inputPerMTok: 1.0
+        outputPerMTok: 3.2
+        cacheReadPerMTok: 0.2
+        cacheWritePerMTok: 0
+      - model: glm-4.7
+        inputPerMTok: 0.6
+        outputPerMTok: 2.2
+        cacheReadPerMTok: 0.11
+        cacheWritePerMTok: 0
+      - model: glm-4.6
+        inputPerMTok: 0.6
+        outputPerMTok: 2.2
+        cacheReadPerMTok: 0.11
+        cacheWritePerMTok: 0
+      - model: glm-4.5
+        inputPerMTok: 0.6
+        outputPerMTok: 2.2
+        cacheReadPerMTok: 0.11
+        cacheWritePerMTok: 0
+      - model: glm-5.3-flash
+        inputPerMTok: 0.15
+        outputPerMTok: 0.50
+        cacheReadPerMTok: 0.03
+        cacheWritePerMTok: 0
+      # Kimi (kimi.ai kimi-k3 pricing page).
+      - model: kimi-k3
+        inputPerMTok: 3.00
+        outputPerMTok: 15.00
+        cacheReadPerMTok: 0.30
+        cacheWritePerMTok: 0
 
 - id: command-export
   name: '@dsh-cc/command-export'
