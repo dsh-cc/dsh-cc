@@ -12,7 +12,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { GitRunner } from '../src/git.ts'
@@ -82,8 +82,14 @@ describe('dsh-cc-agents install round-trip (marketplace → cache → mount)', (
       runGit: fakeGit(),
     }, 'dsh-cc-agents@dsh-cc')
     expect(result.id).toBe('dsh-cc-agents@dsh-cc')
-    expect(result.version).toBe('0.5.0')
-    const cachePath = join(cacheDir, 'dsh-cc', 'dsh-cc-agents', '0.5.0')
+    // The marketplace copy IS the git-tracked manifest, so the installed
+    // version must follow it — never hardcoded (a release bump would
+    // otherwise break this spec every time).
+    const shippedVersion = JSON.parse(
+      readFileSync(join(REPO_ROOT, REAL_PLUGIN_DIR, '.claude-plugin', 'plugin.json'), 'utf8'),
+    ).version as string
+    expect(result.version).toBe(shippedVersion)
+    const cachePath = join(cacheDir, 'dsh-cc', 'dsh-cc-agents', shippedVersion)
     expect(result.installPath).toBe(cachePath)
     // Every shipped component made it through the cache copy.
     expect(existsSync(join(cachePath, '.claude-plugin', 'plugin.json'))).toBe(true)

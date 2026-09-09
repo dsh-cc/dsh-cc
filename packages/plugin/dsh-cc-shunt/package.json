@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/plugin-dsh-cc-shunt",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Official dsh-cc plugin: hard PreToolUse gates redirect bulk reads and boilerplate generation to cheap-lane shunt-worker subagents to save main-context tokens.",
   "type": "module",
   "license": "Apache-2.0",
