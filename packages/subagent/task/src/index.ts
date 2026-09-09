@@ -74,7 +74,7 @@ export { mountSubagentChildNotice, foldChildNotice, CHILD_NOTICE_SOURCE_KIND } f
  * @returns an unmount callback.
  */
 export function mountOneShotVisibility(ctx: Context): () => void {
-  const agents = ctx.get('agents') as ConstructorParameters<typeof createOneShotLedger>[0]['agents']
+  const agents = ctx.get('agents') as import('./one-shot-ledger.ts').OneShotLedgerDeps['agents']
   const ledger = createOneShotLedger({ bus: ctx, agents })
   const offNotice = mountSubagentChildNotice(ctx, ledger)
   return () => {

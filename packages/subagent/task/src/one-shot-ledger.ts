@@ -60,15 +60,18 @@ export interface OneShotLedgerRow {
   mode?: string
 }
 
+/** The duck-typed child-agent snapshot probed for parentage/label metadata. */
+export interface LedgerChildSnapshot {
+  session?: {
+    id?: unknown
+    header?: { parentSession?: unknown }
+    events?: readonly { type?: string; data?: { label?: unknown; mode?: unknown } }[]
+  }
+}
+
 /** Duck-typed `ctx.agents` accessor for child-session parentage probes. */
 export interface LedgerAgents {
-  get?(id: string): {
-    session?: {
-      id?: unknown
-      header?: { parentSession?: unknown }
-      events?: readonly { type?: string; data?: { label?: unknown; mode?: unknown } }[]
-    }
-  } | undefined
+  get?(id: string): LedgerChildSnapshot | undefined
 }
 
 /** Duck-typed event bus (cordis `ctx.on`) the lifecycle events arrive on. */
@@ -80,7 +83,7 @@ export interface OneShotLedgerDeps {
   /** The bus the shared listener pair subscribes to. */
   bus: LedgerEventBus
   /** The live agent registry (`ctx.agents`) used for parentage/label probes. */
-  agents?: LedgerAgents
+  agents?: LedgerAgents | undefined
   /** Wall clock; defaults to `Date.now`. */
   now?: () => number
   /** How long an ended row stays queryable. Default 5 minutes. */
@@ -92,7 +95,7 @@ export interface OneShotLedgerDeps {
 export const DEFAULT_ENDED_TTL_MS = 5 * 60_000
 export const DEFAULT_ACTIVE_TTL_MS = 60 * 60_000
 
-function resolveDescriptor(child: NonNullable<ReturnType<LedgerAgents['get']>> | undefined): {
+function resolveDescriptor(child: LedgerChildSnapshot | undefined): {
   label?: string
   mode?: string
 } {
@@ -104,7 +107,7 @@ function resolveDescriptor(child: NonNullable<ReturnType<LedgerAgents['get']>> |
   }
 }
 
-function resolveParentId(child: NonNullable<ReturnType<LedgerAgents['get']>> | undefined): string | undefined {
+function resolveParentId(child: LedgerChildSnapshot | undefined): string | undefined {
   const parent = child?.session?.header?.parentSession
   return parent === undefined || parent === null || parent === '' ? undefined : String(parent)
 }
@@ -129,12 +132,13 @@ export function createOneShotLedger(deps: OneShotLedgerDeps): {
     const child = deps.agents?.get?.(id)
     const descriptor = resolveDescriptor(child)
     const label = descriptor.label
+    const parentId = resolveParentId(child)
     rowsByRunId.set(String(info.runId), {
       runId: String(info.runId),
       id,
       provider: String(info.provider),
       ...label !== undefined ? { label } : {},
-      ...resolveParentId(child) !== undefined ? { parentId: resolveParentId(child) } : {},
+      ...parentId !== undefined ? { parentId } : {},
       startedAt: now(),
       internal: label !== undefined && INTERNAL_LABELS.includes(label),
       ...descriptor.mode !== undefined ? { mode: descriptor.mode } : {},
