@@ -219,9 +219,39 @@ spec auto-skips without the env var.
 DoD: all non-gated tests green; a documented one-liner runs the eval when
 aliases are configured.
 
-## 3. Registration audit (filled in by W3)
+## 3. Registration audit (W3 result, 2026-09-09)
 
-(to be completed during implementation)
+Inventory: every production `tools.register` call site under `packages/`
+(tests excluded). Layer classification follows the harness semantics: plugin
+load/activation contexts write to the global layer (masked by `restrict` →
+safe); `agent.ctx` writes to the agent's own layer (bypasses `restrict` →
+needs a guard).
+
+| package:site | layer | bypass-capable? | origin guard | action |
+|---|---|---|---|---|
+| workspace/tool-git-worktree `src/index.ts:216,289` | global | no | n/a | none |
+| core/tool-notebook-edit `src/index.ts:129` | global | no | n/a | none |
+| core/tool-web-fetch `src/index.ts:225` | global | no | n/a | none |
+| core/tool-structured-output `src/index.ts:106` | global | no | n/a | none (the dsh-cc side; the per-child own-layer `structured_output` is injected harness-side and is the intended exemption) |
+| mcp/mcp-client `src/defer.ts:57,60`, `src/resources.ts:71` | global | no | n/a | none |
+| core/tool-search `src/index.ts:216` | global | no | n/a | none |
+| core/tool-sleep `src/index.ts:94` | global | no | n/a | none |
+| subagent/coordinator `src/index.ts:154,202,250,290` | agent own-layer | **yes** (4 coordinator tools) | composition guard: `apply()` requires an agent-scoped context and throws when active without one; the preset mounts it for the coordinator main agent only — no blanket per-agent hook exists | accept & document; no code change |
+
+Result: 9 production sites across 8 packages; exactly one bypass-capable
+class (coordinator mode), invocation-guarded by preset composition. No
+unguarded blank-hook registrations exist in dsh-cc's own plugins today;
+the W3 tripwire spec fails CI if that ever changes for the recall child.
+
+**Fallback-path verdict (clean):** `resolveRecallAgentOptions` →
+`toAgentOptions(routes?.resolve('haiku'))`; `toAgentOptions` returns
+`undefined` for an unresolved alias *and* collapses empty route objects
+(`agentOptions.ts:20-28`), so `{ model: undefined }` is unrepresentable.
+`recall.spec.ts` already pins the inherit-on-unresolvable behavior
+("omits agentOptions when recallUseSmallFast is true but no ccModelRoutes
+is mounted"). Accepted residual: an unresolvable `haiku` alias inherits the
+main model silently (no warn-once) — logged here as known, tolerated
+behavior; no code change.
 
 ## 4. Sequencing and PR plan
 
