@@ -1,6 +1,6 @@
 # Plugin MCP Seam — Wiring `mcpServers` from CC Plugins into mcp-client
 
-Date: 2026-09-07. Status: revised — dual blind review (deep-reasoner cold
+Date: 2026-09-07. Status: **Implemented** — PR #8 (merged 2026-09-08). Original review record: revised — dual blind review (deep-reasoner cold
 review + Codex cold review, independent) both returned REVISE; all blocking
 findings folded. See §8 Review log. Two disputes settled empirically
 (disposable probe spec, since deleted): cordis loading-fiber

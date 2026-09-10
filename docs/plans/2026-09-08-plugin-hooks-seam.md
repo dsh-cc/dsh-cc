@@ -1,6 +1,6 @@
 # Plugin Hooks Seam — Wiring `hooks/hooks.json` from CC Plugins into the Hook Bridge
 
-Date: 2026-09-08. Status: implemented. Mirrors the mcp seam precedent
+Date: 2026-09-08. Status: **Implemented** — PR #16 (merged 2026-09-08). Mirrors the mcp seam precedent
 (docs/plans/2026-09-07-plugin-mcp-seam.md) where applicable; critic-reviewed
 design with two amendments baked in (intra-group reorder rationale,
 copy-on-write merge, leaked-services variant test).

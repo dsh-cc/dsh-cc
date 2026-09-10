@@ -1,6 +1,6 @@
 # Plugin state split: compat-read `~/.claude`, write `~/.dsh`
 
-- **Status:** approved design — Staff-Engineer cold review returned APPROVE-WITH-CHANGES; every finding is closed by an explicit ruling in this revision (§3.1 default-chain, §3.4, §4.3, §4.5, §4.7, §5, §7).
+- **Status:** **Implemented** — PR #9 (merged 2026-09-08). Original review record: approved design — Staff-Engineer cold review returned APPROVE-WITH-CHANGES; every finding is closed by an explicit ruling in this revision (§3.1 default-chain, §3.4, §4.3, §4.5, §4.7, §5, §7).
 - **Date:** 2026-09-07
 - **Scope:** relocate every dsh-cc plugin-management write out of the Claude home (`$CLAUDE_CONFIG_DIR` / `~/.claude`) and into the harness home (`$DSH_HOME` / `~/.dsh`), keep Claude-home state fully readable for Claude Code compatibility, define per-key dsh-wins merge semantics when both homes carry state, and audit all other `~/.claude` touchpoints for the same defect. In-scope packages: `packages/compat/cc-plugin-manager`, `packages/compat/cc-plugin-loader`, `packages/bundle/cc-shell` wiring, docs and capability manifest.
 
