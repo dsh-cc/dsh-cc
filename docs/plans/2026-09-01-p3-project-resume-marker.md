@@ -114,7 +114,7 @@ Today `-c` = "resume from the marker; if none, print a stderr hint". After P3, b
 
 Do not proactively delete old files. The dual-read guarantees old files are respected (newer mtime wins); the dual-write guarantees old launchers keep working; `clearResumeTarget` clears both. Note (F5 factual correction): `--new` only sets the env sentinel and **does not clear any marker on disk**; the TUI also has no `/new` command (the comment at `resume-target.ts:53` is stale — correct it in the rewrite). The old marker is overwritten by the dual-write after the new session's first real prompt.
 
-**Removal milestone for the legacy dual-write (decision on open question 2)**: a single repo controls both the launcher and the plugin, and profile install locks versions by `ownVersion`, so mixed versions only occur when "the launcher npm package is upgraded without reinstalling the profile" — keep the dual-write until the **next minor (0.4.0)**, then remove it; annotate code comments with `TODO(0.4.0)` and open a tracker issue after merging this PR.
+**Removal milestone for the legacy dual-write**: completed — the cwd-bucketed dual-write/read was removed after 0.4.0 (cleanup PR; repo is past 0.6.x). Only the project-keyed marker remains.
 
 ## 3. Affected files
 
