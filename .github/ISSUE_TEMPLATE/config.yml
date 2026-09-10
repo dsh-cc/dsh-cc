@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation · 文档与官网
+    url: https://dsh-cc.github.io
+    about: Quick start, overview, and product docs before filing an issue.
+  - name: Claude Code parity matrix · 兼容矩阵
+    url: https://github.com/dsh-cc/dsh-cc/blob/main/docs/cc-parity-matrix.md
+    about: Check known gaps before reporting a missing Claude Code-style feature.
