@@ -1,5 +1,7 @@
 # @dsh-cc/serena-first
 
+[English](README.md) | 中文
+
 CC 预设的 serena 优先提示词引导（参见 `README.md`）。
 
 当 serena MCP 服务器已连接（仓库 `.serena/project.yml`，用户级

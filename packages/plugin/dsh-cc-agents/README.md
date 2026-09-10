@@ -1,5 +1,7 @@
 # @dsh-cc/plugin-dsh-cc-agents
 
+English | [中文](README.zh.md)
+
 Official dsh-cc plugin shipping three subagents and an orchestration skill:
 
 - **`dsh-cc-agents:critic`** — reasoning-heavy work: complex analysis, architectural decisions, adversarial plan review, root-cause analysis. Runs on the `opus` model alias; read-only persona.

@@ -1,5 +1,7 @@
 # dsh-cc-shunt
 
+English | [中文](README.zh.md)
+
 Official dsh-cc plugin that keeps bulk file content out of the main context.
 
 **How it works**: two hard PreToolUse gates (Read and Bash) block whole-file

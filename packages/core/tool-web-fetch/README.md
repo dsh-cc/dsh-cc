@@ -1,5 +1,7 @@
 # @dsh-cc/tool-web-fetch
 
+English | [中文](README.zh.md)
+
 CC-style `web_fetch` replacement with an optional `prompt`. This package replaces the
 stock `@deepseek-ai/dsh-tool-web` `web_fetch` when the CC preset sets `tool-web` to
 `fetch: false` and mounts this row in `cc-services` instead.
