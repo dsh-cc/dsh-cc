@@ -1134,6 +1134,23 @@ capabilities:
       kind: downgrade
       summary: Forks and reports the child id; switching to the child requires a restart.
 
+  commands.cache-health:
+    title: /cache-health
+    category: commands
+    plane: preset
+    upstream:
+      summary: Show prompt-cache prefix stability and provider-metered cache usage for the session.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cache-health" }
+      - { type: test, path: packages/observability/cache-health/tests/composition.spec.ts }
+    deviation: { kind: none }
+
   commands.compact:
     title: /compact
     category: commands

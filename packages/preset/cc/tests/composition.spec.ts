@@ -174,6 +174,14 @@ describe('agent.cordis.yml composition', () => {
     }
   })
 
+  it('mounts cache-health as a plain command row with no preset config', () => {
+    const row = doc.find((r) => r.id === 'cache-health')!
+    expect(row.name).toBe('@dsh-cc/cache-health')
+    // The plugin's default config (enabled: true) is all the preset needs; any
+    // tuning belongs to deployments, not the preset row.
+    expect(row.config).toBeUndefined()
+  })
+
   it('isolates exactly the nine cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')

@@ -101,6 +101,9 @@
       "path": "./packages/compaction/compaction-basic-cc"
     },
     {
+      "path": "./packages/observability/cache-health"
+    },
+    {
       "path": "./packages/session/command-cost"
     },
     {
