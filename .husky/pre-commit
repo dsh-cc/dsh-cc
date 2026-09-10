@@ -1,25 +1,38 @@
-# 本地门禁 = 下方列出的命令,与 .github/workflows/presubmit.yml 一一对应。
-#   check:exports 在 presubmit/publish 上于 bundle:client 之后跑;本地同样
-#   位置补跑(typecheck 先产各包 lib/,bundle:client 再补 lib/client.js),挡
-#   "exports 指向不存在的 lib 目标"这一类(#112 serena-first 缺 tsconfig 引用)。
-#   typecheck ≡ build 的 tsc -b 部分(同 tsconfig.packages.json);build 另在其后
-#   跑 bundle:client 产 lib/client.js(tsdown,当仓 gitignore lib/,不改 typecheck,
-#   仅 commit 前补跑,使本地 profile sync 能带上浏览器 bundle)
-#   不引入 lint-staged:仓内无 eslint/prettier,无 staged 检查可执行。
-# worktree 自愈:worktree 无 node_modules(gitignored);首次 commit 前若未装
-# 依赖,自动执行 pnpm install --frozen-lockfile(硬链接全局 store,见 docs/dev.md)。
-set -e   # husky 真实提交路径已是 sh -e;此处为裸调用防护(见下)与 husky 版本漂移防御
+# Local gates = the commands listed below, mirroring
+# .github/workflows/presubmit.yml one-to-one.
+#   check:exports runs after bundle:client in presubmit/publish; locally it
+#   runs at the equivalent position (typecheck produces each package's lib/
+#   first, then bundle:client adds lib/client.js) and blocks the "exports
+#   points at a lib target that doesn't exist" class (#112: serena-first was
+#   missing a tsconfig reference).
+#   typecheck ≡ the tsc -b half of build (same tsconfig.packages.json);
+#   build additionally runs bundle:client afterwards to produce
+#   lib/client.js (tsdown; this repo gitignores lib/, typecheck is left
+#   unchanged — the bundle is re-run only before commits so a local profile
+#   sync picks up the browser bundle too).
+#   No lint-staged on purpose: the repo has no eslint/prettier, so there is
+#   no staged-only check to run.
+# Worktree self-heal: worktrees have no node_modules (gitignored); before
+# the first commit, run `pnpm install --frozen-lockfile` automatically if
+# dependencies aren't installed (hard-links from the global store — see
+# docs/dev.md).
+set -e   # husky's real commit path already runs sh -e; this guards bare
+         # invocation (see below) and husky-version drift
 
-# git 会往 hook 环境注入仓库绑定变量(GIT_INDEX_FILE=.git/index,相对顶层;
-# 其他版本另有 GIT_DIR/GIT_PREFIX 等)。子孙进程以非顶层 cwd 调 git(临时仓库
-# 测试、git worktree add 内部在 linked worktree 重跑 reset——那里 .git 是指针
-# 文件)会按自己的 cwd 重解析,读写错位 index。统一摘除,使 gate 内 git 行为
-# 与手工执行一致。未设置的变量 unset 为 no-op。
+# git injects repo-bound variables into hook environments
+# (GIT_INDEX_FILE=.git/index, relative to the top level; other versions add
+# GIT_DIR/GIT_PREFIX etc.). Descendant processes that invoke git from a
+# non-top-level cwd (temp-repo tests; `git worktree add` re-running reset
+# inside the linked worktree, where .git is a pointer file) resolve against
+# their own cwd and read/write a misaligned index. Unset them all so in-gate
+# git behaves like manual invocation. Unsetting an unset variable is a no-op.
 unset GIT_INDEX_FILE GIT_PREFIX GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR \
       GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE
 
-# 锁文件护栏:gate 前后均不允许 pnpm-lock.yaml 存在未暂存漂移或冲突态。
-# 改 workspace 依赖须 pnpm install 并把 pnpm-lock.yaml 随同一 commit stage。
+# Lockfile guard: before and after the gates, pnpm-lock.yaml must have
+# neither unstaged drift nor a conflict state. Changing workspace
+# dependencies requires `pnpm install` and staging pnpm-lock.yaml in the
+# same commit.
 lockfile_guard() {
   if ! git diff --quiet -- pnpm-lock.yaml; then
     echo "pre-commit: pnpm-lock.yaml has unstaged drift or a conflict state ($1)." >&2
@@ -32,7 +45,7 @@ lockfile_guard before-gates
 
 if [ ! -e node_modules ]; then pnpm install --frozen-lockfile; fi
 
-# --- 纯静态门禁(无需 node_modules;与 presubmit 顺序一致) ---
+# --- Pure static gates (no node_modules needed; same order as presubmit) ---
 pnpm check:spec-deps
 pnpm check:publish
 pnpm check:readme
@@ -41,14 +54,16 @@ pnpm check:tui-boundary
 pnpm check:deep-imports
 pnpm check:vendor-purity
 
-# --- 需 js-yaml 的门禁(node_modules 已 link) ---
-# capability manifest 校验 + README/matrix 生成产物无漂移(改 manifest 后跑 pnpm docs:parity)
+# --- Gates needing js-yaml (node_modules present by now) ---
+# capability manifest validation + README/matrix generated artifacts must
+# not drift (run `pnpm docs:parity` after changing the manifest)
 pnpm check:capabilities
 pnpm check:parity
-# 两个 checker 的配对自测(presubmit 也在 capabilities/parity 之后跑)
+# Paired self-tests for the two checkers (presubmit also runs them after
+# capabilities/parity)
 pnpm test:capabilities
 
-# --- 构建 + 测试 ---
+# --- Build + tests ---
 pnpm typecheck
 pnpm run bundle:client
 pnpm check:exports

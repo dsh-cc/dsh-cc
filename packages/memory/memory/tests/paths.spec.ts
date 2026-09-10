@@ -54,7 +54,7 @@ describe('resolveMemoryHome', () => {
  */
 describe('projectSlug', () => {
   it('collapses separators and drive colons to single dashes', () => {
-    expect(projectSlug('/Users/x/work/repo')).toBe('Users-x-work-repo')
+    expect(projectSlug('/home/x/work/repo')).toBe('home-x-work-repo')
     expect(projectSlug('C:\\src\\repo')).toBe('C-src-repo')
     expect(projectSlug('/a//b\\\\c')).toBe('a-b-c')
   })

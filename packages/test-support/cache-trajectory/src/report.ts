@@ -3,7 +3,7 @@
  * the per-request/session folds, the shape+cache invariant evaluation, the
  * report schema/fold, the console table, and the env threshold knob.
  *
- * Hit-rate口径 (whole plan unified): `cacheRead / (input + cacheRead)` — the
+ * Hit-rate definition (unified across the whole plan): `cacheRead / (input + cacheRead)` — the
  * harness TokenUsage buckets are disjoint and `inputTokens` is uncached input
  * only. No cacheWrite exists on DeepSeek, so a cacheWrite bucket never enters
  * the denominator.
