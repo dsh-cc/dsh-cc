@@ -215,12 +215,12 @@ async function mount() {
 }
 
 /** Drive one pre-step (for `agent`, defaulting to a top-level stand-in) so recall runs (fire-and-forget). */
-function drivePreStep(ctx: Context, agent?: Agent): void {
+function drivePreStep(ctx: Context, agent?: Agent, messages?: { content: { type: string; text?: string }[]; source?: { kind: string } }[]): void {
   const target = agent ?? ({ session: { header: { cwd: '/work/repo' } } } as unknown as Agent)
   const signal = new AbortController().signal
   void ctx.emit('agent/pre-step', {
     agent: target,
-    messages: [{ content: [{ type: 'text', text: 'how do I use bash?' }] }],
+    messages: messages ?? [{ content: [{ type: 'text', text: 'how do I use bash?' }] }],
     turn: 1,
     step: 1,
     signal,
@@ -265,6 +265,41 @@ describe('MemoryRecall subagent gating', () => {
     await new Promise(resolve => setTimeout(resolve, 10))
     expect(recorder.recentToolsSeen).toHaveLength(1)
     recorder.resolveLatest([])
+    await dispose()
+  })
+})
+
+describe('MemoryRecall injected-source denylist and query dedupe (W3)', () => {
+  it('pending messages consisting only of injected (memory-kind) texts never invoke the selector', async () => {
+    const { ctx, recorder, dispose } = await mount()
+    drivePreStep(ctx, undefined, [
+      { content: [{ type: 'text', text: '## Memory: Bash\nbody' }], source: { kind: 'memory' } },
+      { content: [{ type: 'text', text: '[observe] +1 internal' }], source: { kind: 'cc-subagent-children' } },
+    ])
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(recorder.recentToolsSeen).toHaveLength(0)
+    await dispose()
+  })
+
+  it('a message without a source field is treated as user input and recalls', async () => {
+    const { ctx, recorder, dispose } = await mount()
+    drivePreStep(ctx, undefined, [{ content: [{ type: 'text', text: 'how do I use bash?' }] }])
+    await until(() => recorder.recentToolsSeen.length > 0, 'selector invocation')
+    recorder.resolveLatest([])
+    await dispose()
+  })
+
+  it('the identical query text re-presented for the same agent skips without spawning', async () => {
+    const { ctx, recorder, dispose } = await mount()
+    const agent = { session: { header: { cwd: '/work/repo' } } } as unknown as Agent
+    const userMessages = [{ content: [{ type: 'text', text: 'how do I use bash?' }] }]
+    drivePreStep(ctx, agent, userMessages)
+    await until(() => recorder.recentToolsSeen.length > 0, 'first selector')
+    recorder.resolveLatest([])
+    // Same pending text again: no second selector spawn.
+    drivePreStep(ctx, agent, userMessages)
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(recorder.recentToolsSeen).toHaveLength(1)
     await dispose()
   })
 })

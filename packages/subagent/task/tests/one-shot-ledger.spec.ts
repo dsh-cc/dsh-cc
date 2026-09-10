@@ -3,9 +3,13 @@
  * W2a): shared `subagent/start` / `subagent/end` listeners, runId pairing
  * (never child id — a cold-resumed child gets a new runId), header-based
  * parentage resolution, internal classification with the label completeness
- * gate, and TTL pruning for ended AND active rows.
+ * gate, and TTL pruning for ended AND active rows. The W1 addendum pins the
+ * descriptor API-probe (ownEvents()/snapshotEvents()/legacy array) and lazy
+ * per-row re-resolution: the harness in-process driver appends the
+ * `subagent/descriptor` inside the child's FIRST pre-step, AFTER
+ * `subagent/start` fires — so label/mode must resolve at read time too.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   INTERNAL_LABELS,
   createOneShotLedger,
@@ -200,6 +204,88 @@ describe('one-shot ledger', () => {
       parentId: 'p1', startedAt: 42, endedAt: 42, stopReason: 'aborted',
       internal: false, mode: 'one-shot',
     })
+    ledger.dispose()
+  })
+})
+
+/** A fake child whose session carries the descriptor via the given API shape. */
+function childWith(descriptor: { label?: string; mode?: string } | undefined, shape: 'snapshot' | 'own' | 'legacy') {
+  const events = descriptor === undefined
+    ? []
+    : [{ type: 'subagent/descriptor', data: { ...descriptor } }]
+  const session: Record<string, unknown> = { header: { parentSession: 'p1' } }
+  if (shape === 'snapshot') session.snapshotEvents = () => events
+  else if (shape === 'own') session.ownEvents = () => events
+  else session.events = events
+  return { session }
+}
+
+describe('one-shot ledger — descriptor API probe (W1)', () => {
+  it('case 10: a fake child exposing ONLY snapshotEvents() resolves the descriptor label', () => {
+    const bus = new FakeBus()
+    const agents = { get: () => childWith({ label: 'memory-recall', mode: 'one-shot' }, 'snapshot') }
+    const ledger = createOneShotLedger({ bus, agents, now: () => 1000 })
+    bus.emit('subagent/start', { runId: 'r1', id: 'c1', provider: 'fork' })
+    const row = ledger.rows()[0]!
+    expect(row.label).toBe('memory-recall')
+    expect(row.mode).toBe('one-shot')
+    expect(row.internal).toBe(true)
+    ledger.dispose()
+  })
+
+  it('case 11: ownEvents() is preferred over snapshotEvents() when both exist', () => {
+    const bus = new FakeBus()
+    const child = childWith({ label: 'from-snapshot' }, 'snapshot')
+    const snapshotSpy = vi.spyOn(child.session as { snapshotEvents: () => unknown }, 'snapshotEvents')
+    child.session.ownEvents = () => [{ type: 'subagent/descriptor', data: { label: 'from-own' } }]
+    const agents = { get: () => child }
+    const ledger = createOneShotLedger({ bus, agents, now: () => 1000 })
+    bus.emit('subagent/start', { runId: 'r1', id: 'c1', provider: 'fork' })
+    expect(ledger.rows()[0]!.label).toBe('from-own')
+    expect(snapshotSpy).not.toHaveBeenCalled()
+    ledger.dispose()
+  })
+
+  it('case 12: a legacy events-array child still resolves', () => {
+    const bus = new FakeBus()
+    const agents = { get: () => childWith({ label: 'legacy-label' }, 'legacy') }
+    const ledger = createOneShotLedger({ bus, agents, now: () => 1000 })
+    bus.emit('subagent/start', { runId: 'r1', id: 'c1', provider: 'fork' })
+    expect(ledger.rows()[0]!.label).toBe('legacy-label')
+    ledger.dispose()
+  })
+})
+
+describe('one-shot ledger — lazy per-row re-resolution (W1)', () => {
+  it('case 13: a row inserted before the descriptor lands re-resolves label/mode/internal on the next activeFor()', () => {
+    const bus = new FakeBus()
+    const child = childWith(undefined, 'snapshot')
+    const agents = { get: () => child }
+    const ledger = createOneShotLedger({ bus, agents, now: () => 1000 })
+    bus.emit('subagent/start', { runId: 'r1', id: 'c1', provider: 'fork' })
+    expect(ledger.rows()[0]!.label).toBeUndefined()
+    expect(ledger.rows()[0]!.internal).toBe(false)
+    // The in-process driver appends the descriptor inside the child's first
+    // pre-step — after `subagent/start`. Simulate that late landing.
+    ;(child.session as { snapshotEvents: () => unknown }).snapshotEvents =
+      () => [{ type: 'subagent/descriptor', data: { label: 'memory-recall', mode: 'one-shot' } }]
+    const active = ledger.activeFor('p1')
+    expect(active).toHaveLength(1)
+    expect(active[0]!.label).toBe('memory-recall')
+    expect(active[0]!.mode).toBe('one-shot')
+    expect(active[0]!.internal).toBe(true)
+    // Resolved rows are cached: the probe is not re-run (label stays).
+    expect(ledger.rows()[0]!.label).toBe('memory-recall')
+    ledger.dispose()
+  })
+
+  it('case 14: a row whose agent is gone stays unlabeled without error', () => {
+    const bus = new FakeBus()
+    const ledger = createOneShotLedger({ bus, agents: { get: () => undefined }, now: () => 1000 })
+    bus.emit('subagent/start', { runId: 'r1', id: 'c1', provider: 'fork' })
+    const row = ledger.rows()[0]!
+    expect(row.label).toBeUndefined()
+    expect(row.internal).toBe(false)
     ledger.dispose()
   })
 })

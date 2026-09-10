@@ -2,7 +2,8 @@
  * Tests for the one-shot visibility wiring (W2a/c): `mountOneShotVisibility`
  * attaches the shared subagent/start+end ledger and the parent-scoped
  * pre-step notice to a real cordis context, so apply() surfaces active
- * long-running children to exactly their parent sessions.
+ * long-running children to exactly their parent sessions. Delivery is the
+ * enter-decision batch rewrite (NOT agent.inject — see one-shot-notice.ts).
  */
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -11,9 +12,15 @@ import { mountOneShotVisibility } from '../src/index.ts'
 
 const enter: PreStepDecision = { kind: 'enter', messages: [] }
 
-function fakeAgent(sessionId: string): { agent: Agent; injected: unknown[] } {
-  const injected: unknown[] = []
-  return { agent: { session: { id: sessionId }, inject: (m: unknown) => injected.push(m) } as unknown as Agent, injected }
+/** Texts the notice appended to the returned enter decision. */
+function appendedTexts(decision: PreStepDecision): string[] {
+  if (decision.kind !== 'enter') return []
+  return decision.messages.flatMap(message =>
+    message.content.flatMap(block => block.type === 'text' ? [block.text] : []))
+}
+
+function fakeAgent(sessionId: string): Agent {
+  return { session: { id: sessionId } } as unknown as Agent
 }
 
 describe('one-shot visibility wiring', () => {
@@ -28,33 +35,38 @@ describe('one-shot visibility wiring', () => {
     })
     mountOneShotVisibility(ctx)
     ctx.emit('subagent/start' as never, { runId: 'r1', id: 'c1', provider: 'spawn' } as never)
-    const matching = fakeAgent('p1')
-    const bystander = fakeAgent('p2')
-    for (const { agent, injected } of [matching, bystander]) {
-      await ctx.waterfall(
-        ctx as never,
-        'agent/pre-step',
-        { agent, messages: [], turn: 1, step: 1, signal: new AbortController().signal },
-        () => Promise.resolve(enter),
-      )
-      void agent
-    }
-    expect(matching.injected).toHaveLength(1)
-    expect(bystander.injected).toEqual([])
+    const matchingAgent = fakeAgent('p1')
+    const bystanderAgent = fakeAgent('p2')
+    const bystander = await ctx.waterfall(
+      ctx as never,
+      'agent/pre-step',
+      { agent: bystanderAgent, messages: [], turn: 1, step: 1, signal: new AbortController().signal },
+      () => Promise.resolve(enter),
+    )
+    const matching = await ctx.waterfall(
+      ctx as never,
+      'agent/pre-step',
+      { agent: matchingAgent, messages: [], turn: 1, step: 1, signal: new AbortController().signal },
+      () => Promise.resolve(enter),
+    )
+    expect(appendedTexts(matching)).toHaveLength(1)
+    expect(appendedTexts(matching)[0]).toContain('worker')
+    expect(appendedTexts(bystander)).toEqual([])
     await ctx.fiber.dispose()
   })
 
-  it('zero active children: no listener emissions at all', async () => {
+  it('zero active children: the decision is returned unmodified', async () => {
     const ctx = new Context()
     mountOneShotVisibility(ctx)
-    const { agent, injected } = fakeAgent('p1')
-    await ctx.waterfall(
+    const { agent } = { agent: fakeAgent('p1') }
+    const decision = { kind: 'enter', messages: [] } as const
+    const returned = await ctx.waterfall(
       ctx as never,
       'agent/pre-step',
       { agent, messages: [], turn: 1, step: 1, signal: new AbortController().signal },
-      () => Promise.resolve(enter),
+      () => Promise.resolve(decision),
     )
-    expect(injected).toEqual([])
+    expect(returned).toBe(decision)
     await ctx.fiber.dispose()
   })
 })

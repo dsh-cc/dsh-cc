@@ -65,7 +65,12 @@ export interface LedgerChildSnapshot {
   session?: {
     id?: unknown
     header?: { parentSession?: unknown }
+    /** Legacy event array (removed at the harness 0.1.2-rc.1 line — probed last). */
     events?: readonly { type?: string; data?: { label?: unknown; mode?: unknown } }[]
+    /** Preferred probe: the session's own (non-inherited) event log. */
+    ownEvents?: () => readonly unknown[]
+    /** Fallback probe: the full snapshot event log. */
+    snapshotEvents?: () => readonly unknown[]
   }
 }
 
@@ -95,11 +100,26 @@ export interface OneShotLedgerDeps {
 export const DEFAULT_ENDED_TTL_MS = 5 * 60_000
 export const DEFAULT_ACTIVE_TTL_MS = 60 * 60_000
 
+type DescriptorEvent = { type?: unknown; data?: { label?: unknown; mode?: unknown } }
+
+/**
+ * Read the child session's event log through the live harness API:
+ * prefer `ownEvents()`, fall back to `snapshotEvents()`, then to the legacy
+ * `events` array (removed at the harness 0.1.2-rc.1 line — the old probe
+ * read only that dead field, so descriptors NEVER resolved).
+ */
+function sessionEvents(session: LedgerChildSnapshot['session']): readonly unknown[] {
+  if (typeof session?.ownEvents === 'function') return session.ownEvents()
+  if (typeof session?.snapshotEvents === 'function') return session.snapshotEvents()
+  return session?.events ?? []
+}
+
 function resolveDescriptor(child: LedgerChildSnapshot | undefined): {
   label?: string
   mode?: string
 } {
-  const event = child?.session?.events?.find(e => e.type === 'subagent/descriptor')
+  const event = sessionEvents(child?.session)
+    .find(e => (e as DescriptorEvent).type === 'subagent/descriptor') as DescriptorEvent | undefined
   if (event === undefined) return {}
   return {
     ...event.data?.label !== undefined ? { label: String(event.data.label) } : {},
@@ -159,13 +179,34 @@ export function createOneShotLedger(deps: OneShotLedgerDeps): {
       }
     }
   }
+  /**
+   * Lazy per-row re-resolution: the in-process driver appends the
+   * `subagent/descriptor` inside the child's FIRST pre-step — after
+   * `subagent/start` fires — so an insert-time probe legitimately sees
+   * nothing. For any row still label-less, re-probe once via `agents.get`;
+   * resolved rows are cached (never probed again). A gone child stays
+   * unlabeled without error.
+   */
+  const reResolve = (): void => {
+    if (deps.agents?.get === undefined) return
+    for (const row of rowsByRunId.values()) {
+      if (row.label !== undefined) continue
+      const descriptor = resolveDescriptor(deps.agents.get(row.id))
+      if (descriptor.label === undefined) continue
+      row.label = descriptor.label
+      if (descriptor.mode !== undefined) row.mode = descriptor.mode
+      row.internal = INTERNAL_LABELS.includes(descriptor.label)
+    }
+  }
   return {
     rows(): readonly OneShotLedgerRow[] {
       prune()
+      reResolve()
       return [...rowsByRunId.values()]
     },
     activeFor(parentId: string): readonly OneShotLedgerRow[] {
       prune()
+      reResolve()
       return [...rowsByRunId.values()].filter(row =>
         row.parentId === parentId && row.endedAt === undefined
         // Unresolvable parentage is never scoped to any session.
