@@ -1479,12 +1479,21 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: link:../../../../deepseek-harness/vendor/include
+        version: link:../../../../deepseek-harness/vendor/include
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: link:../../../../deepseek-harness/vendor/loader
+        version: link:../../../../deepseek-harness/vendor/loader
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
       '@deepseek-ai/dsh-settings':
         specifier: link:../../../../deepseek-harness/packages/settings/settings
         version: link:../../../../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/dsh-settings-file':
+        specifier: link:../../../../deepseek-harness/packages/settings/settings-file
+        version: link:../../../../deepseek-harness/packages/settings/settings-file
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
