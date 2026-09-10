@@ -1,6 +1,9 @@
 # Prompt-Cache Health Observer
 
-Date: 2026-09-10. Status: shipped (2026-09-10) — critic cold review passed with
+Date: 2026-09-10. Status: **Implemented** — PR #39 (merged 2026-09-10, package
+@dsh-cc/cache-health; second commit added the stablePrefixHash gap found in
+plan-vs-delivery verification). Original review record: critic cold review
+passed with
 amendments (6 items: hash system+tools ahead of messages, skip
 purpose:compaction/session-title calls, proxy no-write test on both call
 paths, message-hash⟺wire-prefix assumption pinned by test, front-loaded
