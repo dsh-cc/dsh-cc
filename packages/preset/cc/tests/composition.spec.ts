@@ -190,6 +190,12 @@ describe('agent.cordis.yml composition', () => {
     })
     const configIds = (group.config as any[]).map((r) => r.id)
     const topIds = doc.map((r) => r.id)
+    // The handoff-store row (plan docs/plans/2026-09-10-subagent-handoff-store.md)
+    // publishes no Service and sits inside the group, last among the tool rows
+    // (after tool-web-fetch), with NO new isolate key (plain plugin, memory pattern).
+    expect(configIds).toContain('handoff-store')
+    expect(topIds).not.toContain('handoff-store')
+    expect(configIds.indexOf('handoff-store')).toBeGreaterThan(configIds.indexOf('tool-web-fetch'))
     expect(configIds).toContain('command-plugin')
     expect(configIds).toContain('command-mcp')
     // The serena-first steering row consumes the isolated `mcpConnections`

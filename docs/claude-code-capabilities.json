@@ -808,6 +808,52 @@
         "kind": "none"
       }
     },
+    "engine.subagent-handoff": {
+      "title": "Subagent handoff store (handoff_put / handoff_get)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. A sandboxed or read-only subagent parks a large artifact with handoff_put and returns a short summary embedding a handoff://<id> handle; the orchestrator or a follow-up child fetches the full text with handoff_get. Content-addressed store under $DSH_HOME/handoff, TTL 24h + 500-entry disk-based LRU, ledger.jsonl audit index.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: handoff-store"
+        },
+        {
+          "type": "source",
+          "path": "packages/plugin/dsh-cc-agents/agents/critic.md"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/handoff-store/tests/store.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/handoff-store/tests/agent-surface.tripwire.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: the advisory-threshold contract (cc-handoff settings namespace, default 8192) is enforced only by the agents' prompt contract, not by the tool — put never rejects on size, and the cheap-lane shunt agents deliberately keep the pair out of their whitelists."
+      }
+    },
     "engine.tool-search": {
       "title": "ToolSearch (deferred tools)",
       "category": "engine",

@@ -1,6 +1,7 @@
 # Subagent Handoff Store
 
-Date: 2026-09-10. Status: proposed — critic cold review passed with
+Date: 2026-09-10. Status: implemented (PR pending) as of 2026-09-10 —
+critic cold review passed with
 amendments (6 items: tool-whitelist blocking fix, flat globally-unique id
 store, store-primitive sharing deferred, config trimmed to enabled+
 threshold single-source, honest benefit boundary, orphan-sweep caveat);
@@ -35,7 +36,8 @@ Scope of benefit, stated precisely:
 - **BUT — blocking fact found in review**: the target agents
   (`dsh-cc-agents` critic/executor/marathon) all declare frontmatter
   `tools:` whitelists, and intersection semantics
-  (`packages/subagent/task/src/restrict.ts:6-12`) mean an absent tool is
+  (`packages/subagent/task/src/sanitize-filter.ts` unknown-name drop /
+  `packages/subagent/task/src/tool.ts` intersection) mean an absent tool is
   silently unavailable. `handoff_put` MUST be added to those whitelists
   or the contract dies silently (restrict.ts only errors on unknown names
   already inside a list).

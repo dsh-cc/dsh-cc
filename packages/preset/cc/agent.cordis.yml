@@ -448,6 +448,15 @@
     - id: tool-web-fetch
       name: '@dsh-cc/tool-web-fetch'
 
+    # Subagent handoff store (plan docs/plans/2026-09-10-subagent-handoff-store.md):
+    # the handoff_put / handoff_get tool pair over a content-addressed store
+    # under $DSH_HOME/handoff/<projectKey>/. Publishes no Service (plain plugin,
+    # memory pattern), so it needs no isolate key of its own; state is entirely
+    # on disk (TTL 24h + 500-entry disk-based LRU swept on put), so spawned
+    # children in separate processes see the same store.
+    - id: handoff-store
+      name: '@dsh-cc/handoff-store'
+
 # ── parallel rows ──────────────────────────────────────────────────────────
 
 # Claude Code skills from user/project/additional roots.

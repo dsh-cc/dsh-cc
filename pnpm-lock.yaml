@@ -1733,6 +1733,9 @@ importers:
       '@dsh-cc/coordinator':
         specifier: workspace:^
         version: link:../../subagent/coordinator
+      '@dsh-cc/handoff-store':
+        specifier: workspace:^
+        version: link:../../subagent/handoff-store
       '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code
@@ -2070,6 +2073,33 @@ importers:
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
+
+  packages/subagent/handoff-store:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../../../deepseek-harness/packages/settings/settings
+        version: link:../../../../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/dsh-util-values':
+        specifier: link:../../../../deepseek-harness/packages/util/values
+        version: link:../../../../deepseek-harness/packages/util/values
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/session-cwd':
+        specifier: workspace:^
+        version: link:../../workspace/session-cwd
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/subagent/resume-pins:
     dependencies:

@@ -61,7 +61,8 @@
     "@dsh-cc/tool-search": "workspace:^",
     "@dsh-cc/tool-sleep": "workspace:^",
     "@dsh-cc/tool-structured-output": "workspace:^",
-    "@dsh-cc/tool-web-fetch": "workspace:^"
+    "@dsh-cc/tool-web-fetch": "workspace:^",
+    "@dsh-cc/handoff-store": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",

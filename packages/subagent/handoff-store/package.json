@@ -1,0 +1,49 @@
+{
+  "name": "@dsh-cc/handoff-store",
+  "description": "Subagent handoff store: handoff_put/handoff_get let sandboxed subagents park large artifacts in a content-addressed store and hand back a handoff://<id> handle",
+  "version": "0.6.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/subagent/handoff-store"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./store": {
+      "types": "./lib/store.d.ts",
+      "default": "./lib/store.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.2-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@deepseek-ai/dsh-util-values": ">=0.1.2-rc.1",
+    "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
+    "@deepseek-ai/dsh-agent": ">=0.1.2-rc.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",
+    "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
