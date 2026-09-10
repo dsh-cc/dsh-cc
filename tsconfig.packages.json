@@ -107,6 +107,12 @@
       "path": "./packages/session/command-stats"
     },
     {
+      "path": "./packages/session/command-learn"
+    },
+    {
+      "path": "./packages/session/session-forensics"
+    },
+    {
       "path": "./packages/interaction/command-branch"
     },
     {

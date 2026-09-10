@@ -137,6 +137,15 @@
       "@dsh-cc/command-stats": [
         "./packages/session/command-stats/src/index.ts"
       ],
+      "@dsh-cc/command-learn": [
+        "./packages/session/command-learn/src/index.ts"
+      ],
+      "@dsh-cc/command-learn/render": [
+        "./packages/session/command-learn/src/render.ts"
+      ],
+      "@dsh-cc/session-forensics": [
+        "./packages/session/session-forensics/src/index.ts"
+      ],
       "@dsh-cc/command-status": [
         "./packages/interaction/command-status/src/index.ts"
       ],
