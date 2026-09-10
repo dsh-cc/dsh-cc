@@ -2420,6 +2420,43 @@
         "summary": "Drives a follow-up turn that writes/refreshes CLAUDE.md rather than the upstream one-shot initializer flow."
       }
     },
+    "commands.learn": {
+      "title": "/learn [apply|all|days=N]",
+      "category": "commands",
+      "plane": "preset",
+      "upstream": {
+        "summary": "dsh-cc extension — distill recurring failure→success corrections from session transcripts into memory.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: command-learn"
+        },
+        {
+          "type": "test",
+          "path": "packages/session/command-learn/tests/command-learn.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "none"
+      }
+    },
     "commands.mcp": {
       "title": "/mcp",
       "category": "commands",

@@ -28,6 +28,7 @@
     "@dsh-cc/command-export": "workspace:^",
     "@dsh-cc/command-help": "workspace:^",
     "@dsh-cc/command-init": "workspace:^",
+    "@dsh-cc/command-learn": "workspace:^",
     "@dsh-cc/command-mcp": "workspace:^",
     "@dsh-cc/command-memory": "workspace:^",
     "@dsh-cc/command-permissions": "workspace:^",

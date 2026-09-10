@@ -123,9 +123,16 @@ function fakeDriver(initial: TuiState = createInitialState()): Driver & { setSta
   }
 }
 
-/** Wait for the throttled async render to settle. */
-async function settle(): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, 60))
+/** Wait for the throttled async render to satisfy `pred`, polling with a
+ * bounded deadline. A fixed sleep loses the race on slow/loaded CI runners
+ * (the grid reads back as blank filler lines); on timeout we fall through
+ * and let the unchanged assertions report the real failure. */
+async function until(pred: () => boolean, deadlineMs = 2000): Promise<void> {
+  const deadline = Date.now() + deadlineMs
+  while (!pred()) {
+    if (Date.now() >= deadline) return
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
 }
 
 describe('resize re-layout', () => {
@@ -154,7 +161,10 @@ describe('resize re-layout', () => {
 
     const root = buildRoot(driver, { terminal: vt, onQuit: () => {} })
     root.tui.start()
-    await settle()
+    await until(() => {
+      const j = vt.grid().join('\n')
+      return j.includes('TAILMARKER') && j.includes('run: bash')
+    })
 
     // --- Width 80 baseline ---
     const grid80 = vt.grid()
@@ -169,7 +179,10 @@ describe('resize re-layout', () => {
 
     // --- Resize to 40 cols ---
     vt.resize(40, 24)
-    await settle()
+    await until(() => {
+      const j = vt.grid().join('\n')
+      return j.includes('TAILMARKER') && j.includes('run: bash')
+    })
 
     const grid40 = vt.grid()
     const joined40 = grid40.join('\n')
