@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 import {
-  legacyResumeMarkerFile,
   readResumeTarget,
   resumeMarkerFile,
   writeResumeTarget,
@@ -208,14 +207,11 @@ describe('createDriver resume marker', () => {
     })
     const driver = await createDriver(ctx as never, { sessionId: 's-gone' })
 
-    // Resume was attempted, then the marker was cleared and a fresh session created.
     expect(resumeCalls).toHaveLength(1)
     expect(createCalls).toHaveLength(1)
     expect(readResumeTarget()).toBeUndefined()
-    // User-visible notice points at /resume.
     expect(driver.state.notice).toMatch(/已失效/)
     expect(driver.state.notice).toMatch(/\/resume/)
-    // The degraded fresh session must not steal the marker (no content yet).
     await driver.dispose()
     expect(readResumeTarget()).toBeUndefined()
   })
@@ -230,7 +226,6 @@ describe('createDriver resume marker', () => {
     })
     const driver = await createDriver(ctx as never, { cwd })
     expect(resumeCalls).toHaveLength(0)
-    // Marker untouched.
     expect(readResumeTarget({ cwd })).toBe('s-old')
     await driver.dispose()
   })
@@ -256,7 +251,6 @@ describe('createDriver resume marker', () => {
     const driver = await createDriver(ctx as never, { cwd, autoResume: true, continueRequested: true })
     expect(resumeCalls).toHaveLength(0)
     expect(createCalls).toHaveLength(1)
-    // Assert the notice immediately — the notice TTL clears it on a timer.
     expect(driver.state.notice).toMatch(/没有可继续/)
     expect(driver.state.notice).toMatch(/\/resume/)
     await driver.dispose()
@@ -285,12 +279,12 @@ describe('createDriver resume marker', () => {
     await driver.dispose()
   })
 
-  it('stale marker with autoResume: clear BOTH the new and legacy marker files, degrade to fresh', async () => {
+  it('stale marker with autoResume: clear the project marker, degrade to fresh', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'dsh-resume-stale-'))
     writeResumeTarget('s-gone', { cwd })
     const { ctx, resumeCalls, createCalls } = makeSwitchableCtx({
       createSession: { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' },
-      resumeSessions: {}, // 's-gone' not registered -> resume throws
+      resumeSessions: {},
     })
     const driver = await createDriver(ctx as never, { cwd, autoResume: true })
 
@@ -298,30 +292,22 @@ describe('createDriver resume marker', () => {
     expect(resumeCalls[0]!.resumeSessionId).toBe('s-gone')
     expect(createCalls).toHaveLength(1)
     expect(driver.state.notice).toMatch(/已失效/)
-    // Both marker files are blanked (dual clear). `home` here is the `tui`
-    // data dir under DSH_HOME — the same one resume-target derives, so the
-    // paths line up with the driver's writes.
     const home = join(tempHome, 'tui')
     expect(readFileSync(resumeMarkerFile({ home, cwd }), 'utf8')).toBe('')
-    expect(readFileSync(legacyResumeMarkerFile({ home, cwd }), 'utf8')).toBe('')
     await driver.dispose()
   })
 
-  it('write-key fix: marker lands in the session\'s project bucket; legacy in the boot-cwd bucket', async () => {
+  it("write-key fix: marker lands in the session's project bucket", async () => {
     const bootCwd = mkdtempSync(join(tmpdir(), 'dsh-resume-wk-boot-'))
     const sessionCwd = mkdtempSync(join(tmpdir(), 'dsh-resume-wk-sess-'))
     const { ctx } = makeSwitchableCtx({
       createSession: { id: 's-a', cwd: sessionCwd, events: [], snapshotEvents() { return this.events }, status: 'idle' },
     })
     const driver = await createDriver(ctx as never, { cwd: bootCwd })
-    await driver.submit('real prompt') // triggers persistResumeTarget
+    await driver.submit('real prompt')
 
     const home = join(tempHome, 'tui')
-    // NEW marker (project-keyed) lives in the SESSION's project bucket.
     expect(readFileSync(resumeMarkerFile({ home, cwd: sessionCwd }), 'utf8').trim())
-      .toBe('s-a')
-    // LEGACY marker (cwd-bucketed) lives in the BOOT cwd bucket.
-    expect(readFileSync(legacyResumeMarkerFile({ home, cwd: bootCwd }), 'utf8').trim())
       .toBe('s-a')
     await driver.dispose()
   })
