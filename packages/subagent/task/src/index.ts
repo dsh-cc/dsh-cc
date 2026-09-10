@@ -29,6 +29,8 @@ import { PluginAgentIndex } from './plugin-agents.ts'
 import { registerTaskTool } from './tool.ts'
 import { mountSettledNoticeSuppression } from './suppress-settled.ts'
 import { mountAgentCatalog } from './catalog.ts'
+import { createOneShotLedger } from './one-shot-ledger.ts'
+import { mountSubagentChildNotice } from './one-shot-notice.ts'
 import { mountStripWorkspaceInstructions } from './strip-instructions.ts'
 
 export { AgentRegistry } from './registry.ts'
@@ -58,6 +60,29 @@ export type {
   EpochTerminal,
 } from './epoch-collector.ts'
 export { mountAgentCatalog } from './catalog.ts'
+export { createOneShotLedger, DEFAULT_ACTIVE_TTL_MS, DEFAULT_ENDED_TTL_MS, INTERNAL_LABELS } from './one-shot-ledger.ts'
+export type { OneShotLedgerRow } from './one-shot-ledger.ts'
+export { mountSubagentChildNotice, foldChildNotice, CHILD_NOTICE_SOURCE_KIND } from './one-shot-notice.ts'
+
+/**
+ * One-shot subagent visibility (memory-recall hardening follow-ups W2a/c):
+ * the shared `subagent/start`/`subagent/end` ledger plus the parent-scoped
+ * `agent/pre-step` notice, mounted on ONE context. Safe on a context without
+ * an `agents` service — parentage then stays unresolvable and nothing is
+ * ever injected.
+ * @param ctx - the plug context.
+ * @returns an unmount callback.
+ */
+export function mountOneShotVisibility(ctx: Context): () => void {
+  const agents = ctx.get('agents') as import('./one-shot-ledger.ts').OneShotLedgerDeps['agents']
+  const ledger = createOneShotLedger({ bus: ctx, agents })
+  const offNotice = mountSubagentChildNotice(ctx, ledger)
+  return () => {
+    ledger.dispose()
+    offNotice()
+  }
+}
+
 export {
   mountStripWorkspaceInstructions,
   isDelegated,
@@ -175,6 +200,7 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
   mountBackgroundSection(ctx)
   mountStripWorkspaceInstructions(ctx)
   mountSettledNoticeSuppression(ctx)
+  mountOneShotVisibility(ctx)
   publishCollectorRegistry(ctx)
 }
 

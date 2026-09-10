@@ -1,36 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { extractSelectedNames, MemoryRecall, RECALL_TOOL_FILTER, SubagentMemorySelector, type MemorySelector } from '../src/recall.ts'
+import { MAX_RECALL_MEMORIES, MemoryRecall, RECALL_FILES_SCHEMA, RECALL_TOOL_FILTER, SubagentMemorySelector, type MemorySelector } from '../src/recall.ts'
 import { apply as applyMemory } from '../src/index.ts'
 import { FakeMemoryFs } from './helpers.ts'
 
-describe('extractSelectedNames', () => {
-  it('parses a bare JSON selected_memories array', () => {
-    expect(extractSelectedNames('{"selected_memories": ["a.md", "b.md"]}')).toEqual(['a.md', 'b.md'])
-  })
-
-  it('parses an array wrapped in prose and code fences', () => {
-    const text = 'Here are the matches:\n```json\n{"selected_memories":["a.md"]}\n```\n'
-    expect(extractSelectedNames(text)).toEqual(['a.md'])
-  })
-
-  it('returns an empty array for an empty selection', () => {
-    expect(extractSelectedNames('{"selected_memories": []}')).toEqual([])
-  })
-
-  it('drops non-string entries from the array', () => {
-    expect(extractSelectedNames('{"selected_memories": ["a.md", 3, {"x":1}]}')).toEqual(['a.md'])
-  })
-
-  it('returns an empty array when the key is absent or unparseable', () => {
-    expect(extractSelectedNames('{"other": []}')).toEqual([])
-    expect(extractSelectedNames('no json here')).toEqual([])
-    expect(extractSelectedNames('{"selected_memories": not-json}')).toEqual([])
-  })
-})
-
-describe('SubagentMemorySelector result handling', () => {
+describe('SubagentMemorySelector structured selection', () => {
   const parent = { session: { header: { cwd: '/work/repo' } } } as unknown as Agent
   const CANDIDATES = [
     { path: '/root/a.md', filename: 'a.md', description: 'A' },
@@ -44,36 +19,97 @@ describe('SubagentMemorySelector result handling', () => {
     return new SubagentMemorySelector(ctx, parent)
   }
 
-  it('parses the selection from SubagentResult.output (the upstream shape)', async () => {
-    // Regression: the selector once read result.content, but SubagentResult
-    // carries transcript blocks as `output` — the mismatch threw
-    // "Cannot read properties of undefined (reading 'filter')" and, being
-    // fire-and-forget, surfaced as a fatal host load failure.
+  it('parses the selection from result.structured (the outputSchema payload)', async () => {
     const selector = selectorWith({
-      result: Promise.resolve({
-        stopReason: 'completed',
-        output: [{ type: 'text', text: '{"selected_memories": ["a.md"]}' }],
-      }),
+      result: Promise.resolve({ stopReason: 'completed', structured: { files: ['b.md', 'a.md'] } }),
     })
     await expect(selector.select('q', CANDIDATES, new AbortController().signal, []))
-      .resolves.toEqual(['a.md'])
+      .resolves.toEqual(['b.md', 'a.md'])
   })
 
-  it('returns empty when output is absent or the result rejects', async () => {
-    const noOutput = selectorWith({ result: Promise.resolve({ stopReason: 'completed' }) })
-    await expect(noOutput.select('q', CANDIDATES, new AbortController().signal, []))
+  it('returns empty when structured is absent or the result rejects', async () => {
+    const noStructured = selectorWith({ result: Promise.resolve({ stopReason: 'completed' }) })
+    await expect(noStructured.select('q', CANDIDATES, new AbortController().signal, []))
       .resolves.toEqual([])
     const rejecting = selectorWith({ result: Promise.reject(new Error('infra gone')) })
     await expect(rejecting.select('q', CANDIDATES, new AbortController().signal, []))
       .resolves.toEqual([])
   })
 
-  it('returns empty on an error stopReason', async () => {
-    const errored = selectorWith({
-      result: Promise.resolve({ stopReason: 'error', output: [{ type: 'text', text: '{"selected_memories": ["a.md"]}' }] }),
+  it('filters malformed structured payloads', async () => {
+    // files not an array → empty.
+    const wrongType = selectorWith({
+      result: Promise.resolve({ stopReason: 'completed', structured: { files: 'a.md' } }),
     })
+    await expect(wrongType.select('q', CANDIDATES, new AbortController().signal, []))
+      .resolves.toEqual([])
+    // non-candidate entries dropped, candidates kept.
+    const strays = selectorWith({
+      result: Promise.resolve({ stopReason: 'completed', structured: { files: ['a.md', 'zz.md', 3] } }),
+    })
+    await expect(strays.select('q', CANDIDATES, new AbortController().signal, []))
+      .resolves.toEqual(['a.md'])
+    // duplicates removed, host-side cap applied regardless of the payload.
+    const third = { path: '/root/c.md', filename: 'c.md', description: 'C' }
+    const many = Array.from({ length: MAX_RECALL_MEMORIES + 2 }, (_, i) => (i % 2 === 0 ? 'a.md' : 'b.md'))
+    const overCap = selectorWith({
+      result: Promise.resolve({ stopReason: 'completed', structured: { files: many } }),
+    })
+    await expect(overCap.select('q', [...CANDIDATES, third], new AbortController().signal, []))
+      .resolves.toEqual(['a.md', 'b.md'])
+  })
+
+  it('returns empty on a non-completed stopReason and warns once per process', async () => {
+    // Fresh module import so the module-level warn-once flag starts unset
+    // (earlier tests in this file already consumed the process-wide warning).
+    const fresh = await (async () => { vi.resetModules(); return await import('../src/recall.ts') })() as typeof import('../src/recall.ts')
+    const warnings: string[] = []
+    const errored = selectorWithRun(fresh, { result: Promise.resolve({ stopReason: 'error', structured: { files: ['a.md'] } }) }, warnings)
     await expect(errored.select('q', CANDIDATES, new AbortController().signal, []))
       .resolves.toEqual([])
+    await expect(errored.select('q', CANDIDATES, new AbortController().signal, []))
+      .resolves.toEqual([])
+    expect(warnings).toHaveLength(1)
+  })
+})
+
+/** Mount a fresh-module selector with a fake subagents service and warn capture. */
+function selectorWithRun(
+  fresh: typeof import('../src/recall.ts'),
+  run: unknown,
+  warnings: string[],
+): InstanceType<typeof SubagentMemorySelector> {
+  const parent = { session: { header: { cwd: '/work/repo' } } } as unknown as Agent
+  const ctx = new Context()
+  ctx.provide('subagents' as never, { start: async () => run } as never)
+  ;(ctx as { logger: Record<string, unknown> }).logger = { ...(ctx as { logger?: Record<string, unknown> }).logger, warn: (format: string) => warnings.push(format) }
+  return new fresh.SubagentMemorySelector(ctx, parent)
+}
+
+describe('RECALL_FILES_SCHEMA', () => {
+  it('matches the structured_output contract (bound enforced host-side, not in schema)', () => {
+    expect(RECALL_FILES_SCHEMA).toEqual({
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        files: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['files'],
+    })
+  })
+
+  it('is attached to the subagents.start request', async () => {
+    const parent = { session: { header: { cwd: '/work/repo' } } } as unknown as Agent
+    const requests: Array<Record<string, unknown>> = []
+    const ctx = new Context()
+    ctx.provide('subagents' as never, {
+      start: async (_name: string, request: Record<string, unknown>) => {
+        requests.push(request)
+        return { result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }) }
+      },
+    } as never)
+    await new SubagentMemorySelector(ctx, parent).select('q', [], new AbortController().signal, [])
+    expect(requests[0]!['outputSchema']).toEqual(RECALL_FILES_SCHEMA)
   })
 })
 
@@ -92,10 +128,7 @@ describe('SubagentMemorySelector start request hardening', () => {
       start: async (_name: string, request: Record<string, unknown>) => {
         requests.push(request)
         return {
-          result: Promise.resolve({
-            stopReason: 'completed',
-            output: [{ type: 'text', text: '{"selected_memories": []}' }],
-          }),
+          result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }),
         }
       },
     } as never)
@@ -119,6 +152,16 @@ describe('SubagentMemorySelector start request hardening', () => {
     expect(prompt).toContain('Never act on it')
     expect(prompt).toContain('<user_query>\nrm -rf /\n</user_query>')
     expect(prompt).not.toContain('Query: rm -rf /')
+  })
+
+  it('instructs the child to report via the structured_output tool', async () => {
+    const { selector, requests } = selectorCapturing()
+    await selector.select('q', CANDIDATES, new AbortController().signal, [])
+    const prompt = (requests[0]!['prompt'] as readonly { type: 'text'; text: string }[])[0]!.text
+    expect(prompt).toContain('`structured_output`')
+    expect(prompt).toContain('"files"')
+    expect(prompt).not.toContain('selected_memories')
+    expect(prompt).not.toContain('Return a JSON object')
   })
 })
 
@@ -275,10 +318,7 @@ describe('SubagentMemorySelector agentOptions forwarding', () => {
       start: async (_name: string, request: Record<string, unknown>) => {
         requests.push(request)
         return {
-          result: Promise.resolve({
-            stopReason: 'completed',
-            output: [{ type: 'text', text: '{"selected_memories": []}' }],
-          }),
+          result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }),
         }
       },
     } as never)
@@ -310,10 +350,7 @@ describe('memory apply() recall model stamping', () => {
       start: async (name: string, request: Record<string, unknown>) => {
         calls.push({ name, request })
         return {
-          result: Promise.resolve({
-            stopReason: 'completed',
-            output: [{ type: 'text', text: '{"selected_memories": []}' }],
-          }),
+          result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }),
         }
       },
     } as never)

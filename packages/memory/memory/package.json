@@ -56,6 +56,13 @@
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
+    "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
+    "@deepseek-ai/dsh-subagent-spawn-in-process": "link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process",
+    "@deepseek-ai/dsh-subagent-fork-in-process": "link:../../../../deepseek-harness/packages/subagent/subagent-fork-in-process",
+    "@dsh-cc/agent-loop-mock": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },

@@ -126,9 +126,18 @@ function fakeDriver(initial: TuiState): Driver {
   }
 }
 
-/** Wait for the throttled async render to settle. */
-async function settle(): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, 60))
+/**
+ * Poll a predicate until it holds or the timeout lapses. A fixed settle() can
+ * outrace the throttled render on loaded CI runners (observed: a blank xterm
+ * grid in presubmit while the same run passes locally) — polling turns that
+ * race into a bounded wait without weakening the final assertions.
+ */
+async function settleUntil(predicate: () => boolean, timeoutMs = 2000, stepMs = 15): Promise<void> {
+  const start = Date.now()
+  while (!predicate()) {
+    if (Date.now() - start > timeoutMs) return
+    await new Promise(resolve => setTimeout(resolve, stepMs))
+  }
 }
 
 describe('resume replay — folding a durable event log', () => {
@@ -209,7 +218,7 @@ describe('resume replay — folding a durable event log', () => {
     const driver = fakeDriver(folded)
     const root = buildRoot(driver, { terminal: vt, onQuit: () => {} })
     root.tui.start()
-    await settle()
+    await settleUntil(() => vt.grid().join('\n').includes('list files'))
 
     const joined = vt.grid().join('\n')
     expect(joined).toContain('list files')
