@@ -22,8 +22,7 @@ Compression becomes risk-free because the original is always one call away.
 
 ## 2. Feasibility ground truth (verified 2026-09-10, re-verified in review)
 
-Harness anchors (`deepseek-harness` at
-`/Users/bytedance/workspace/github.com/deepseek-harness`, read-only):
+Harness anchors (the `deepseek-harness` checkout, read-only):
 - `tools/post-execute` waterfall (`packages/core/tools/src/index.ts:167`,
   dispatch ~:1733-1774; worktree mirror
   `packages/core/tools/src/runtime-results.ts:54-80`) runs BEFORE the loop
