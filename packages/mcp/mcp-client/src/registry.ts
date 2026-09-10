@@ -57,10 +57,37 @@ interface Managed {
   control: McpConnectionControl
 }
 
+/** Listener invoked with a snapshot copy whenever a registry entry mutates. */
+export type McpConnectionChangeListener = (entry: McpConnectionEntry) => void
+
 /** The `mcpConnections` service: enumerate and drive the registered MCP servers. */
 export class McpConnectionsService extends Service {
   /** Live instances keyed by `serverName`. */
   private readonly managed = new Map<string, Managed>()
+
+  private readonly listeners = new Set<McpConnectionChangeListener>()
+
+  /**
+   * Subscribe to entry mutations (register / report / unregister). Each event
+   * delivers a snapshot COPY of the entry (mutating it does not affect the
+   * registry). Listener exceptions are contained and logged.
+   * @returns a disposer that stops delivery.
+   */
+  onDidChange(listener: McpConnectionChangeListener): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+
+  private notify(entry: McpConnectionEntry): void {
+    const snapshot: McpConnectionEntry = { ...entry }
+    for (const listener of this.listeners) {
+      try {
+        listener(snapshot)
+      } catch (error) {
+        this.ctx.logger.warn(`mcpConnections: onDidChange listener failed: ${String(error)}`)
+      }
+    }
+  }
 
   constructor(ctx: Context) {
     super(ctx, 'mcpConnections')
@@ -77,10 +104,13 @@ export class McpConnectionsService extends Service {
       throw new Error(`mcpConnections: server "${name}" is already registered by another mcp-client instance`)
     }
     this.managed.set(name, { entry: { name, state: 'connecting', ...authRequired === undefined ? {} : { authRequired } }, control })
+    this.notify(this.managed.get(name)!.entry)
   }
 
   /** Remove an instance (on teardown / full disconnect). */
   unregister(name: string): void {
+    const managed = this.managed.get(name)
+    if (managed) this.notify(managed.entry)
     this.managed.delete(name)
   }
 
@@ -91,6 +121,7 @@ export class McpConnectionsService extends Service {
     managed.entry.state = state
     if (info.error !== undefined) managed.entry.error = info.error
     if (state === 'ready' || state === 'connecting') delete managed.entry.error
+    this.notify(managed.entry)
   }
 
   /** Record the current tool count for a registered instance. */

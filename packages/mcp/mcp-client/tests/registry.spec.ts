@@ -174,6 +174,59 @@ describe('McpConnectionsService / mcpConnections registry', () => {
     expect(ctx.get('mcpConnections')).toBeUndefined()
   })
 
+  it('onDidChange fires a snapshot copy on register, report, and unregister', () => {
+    const service = new McpConnectionsService(ctx)
+    const control = { disconnect: async () => {}, reconnect: async () => {} }
+    const events: { name: string; state: string; error?: string }[] = []
+    service.onDidChange(entry => events.push({ name: entry.name, state: entry.state, error: entry.error }))
+
+    service.register('ev', control)
+    expect(events).toEqual([{ name: 'ev', state: 'connecting' }])
+
+    service.report('ev', 'error', { error: 'boom happened' })
+    expect(events[1]).toMatchObject({ name: 'ev', state: 'error', error: 'boom happened' })
+
+    service.unregister('ev')
+    expect(events[2]).toMatchObject({ name: 'ev', state: 'error', error: 'boom happened' })
+  })
+
+  it('onDidChange delivers a COPY: mutating the delivered entry does not affect entries()', () => {
+    const service = new McpConnectionsService(ctx)
+    service.register('cpy', { disconnect: async () => {}, reconnect: async () => {} })
+    service.onDidChange(entry => {
+      entry.state = 'ready'
+      entry.toolCount = 99
+    })
+    service.report('cpy', 'connecting')
+    const entry = service.entries().find(e => e.name === 'cpy')!
+    expect(entry.state).toBe('connecting')
+    expect(entry.toolCount).toBeUndefined()
+  })
+
+  it('the returned disposer stops onDidChange delivery', () => {
+    const service = new McpConnectionsService(ctx)
+    service.register('dsp', { disconnect: async () => {}, reconnect: async () => {} })
+    const events: string[] = []
+    const dispose = service.onDidChange(entry => events.push(entry.state))
+    dispose()
+    service.report('dsp', 'ready')
+    expect(events).toEqual([])
+  })
+
+  it('a throwing onDidChange listener is contained: others still fire, report does not throw', () => {
+    const service = new McpConnectionsService(ctx)
+    const warnings: string[] = []
+    ctx.logger.warn = (message: unknown, ...rest: unknown[]) => { warnings.push(`${String(message)}${rest.join('')}`) }
+    service.register('thr', { disconnect: async () => {}, reconnect: async () => {} })
+    service.onDidChange(() => { throw new Error('listener exploded') })
+    const seen: string[] = []
+    service.onDidChange(entry => seen.push(entry.state))
+
+    expect(() => service.report('thr', 'ready')).not.toThrow()
+    expect(seen).toEqual(['ready'])
+    expect(warnings.some(w => w.includes('listener'))).toBe(true)
+  })
+
   it('a registry provided by a parent plugin survives an instance rollback', async () => {
     // Mirror the glue topology: parent mounts a registry child fiber first, then a
     // failing instance (failOnStartupError), then a healthy one.
