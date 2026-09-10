@@ -331,6 +331,7 @@
     hookBridgeStatus: true
     mcp: true
     hooks: true
+    contextCrusher: true
   config:
     # ToolSearch: model-called search that activates deferred tools per scope.
     - id: tool-search
@@ -339,6 +340,20 @@
     # Model-free staleness microcompaction (auto: false by default).
     - id: compaction-micro
       name: '@dsh-cc/compaction-micro'
+
+    # CCR tool-output compression (plan docs/plans/2026-09-10-ccr-tool-output-compression.md):
+    # a `tools/post-execute` listener registered with `prepend: true`, composed
+    # post-`next()`, plus the agent-visible `context_retrieve` tool (listener +
+    # tool host, no consumed service of its own — but it mounts a Service, so it
+    # shares this realm via the `contextCrusher` isolate key above). MUST sit
+    # BEFORE the hooks-claude-code row: waterfall listeners dispatch
+    # outermost-first in registration order, and the crusher must be outermost
+    # so its post-`next()` compression wraps the bridge's PostToolUse fold (the
+    # bridge sees the original bytes; the committed result carries the
+    # compressed form). The order tripwire is pinned by
+    # packages/context/context-crusher/tests/composition.spec.ts.
+    - id: context-crusher
+      name: '@dsh-cc/context-crusher'
 
     # The hook bridge: runs the Claude Code hooks.json / settings hook config
     # on the harness interception seams and provides the `hooks` seam plugin

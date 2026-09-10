@@ -274,6 +274,44 @@
         "summary": "CC's TaskCreate/TaskOutput/TaskStop tool naming is not aliased; the dsh jobs tools (tool-jobs over the host job registry) carry the equivalent surface under dsh names."
       }
     },
+    "engine.context-compression": {
+      "title": "CCR tool-output compression (context-crusher)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Reversible compression of large tool results (Compress-Cache-Retrieve): grep/log-shaped outputs are compressed, the original is cached content-addressed under $DSH_HOME, and a context_retrieve tool restores it via a ccr:// hash marker.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: context-crusher"
+        },
+        {
+          "type": "test",
+          "path": "packages/context/context-crusher/tests/composition.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "Not an upstream CC surface: a dsh-cc extension shipped flag-gated (enabled: false, mode: dry-run by default) so savings are measured before any replacement."
+      }
+    },
     "engine.coordinator": {
       "title": "Coordinator mode",
       "category": "engine",

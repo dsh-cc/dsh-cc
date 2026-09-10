@@ -1,0 +1,67 @@
+{
+  "name": "@dsh-cc/context-crusher",
+  "description": "CCR reversible tool-output compression: compress large grep/log tool results, cache the original, retrieve it via context_retrieve",
+  "version": "0.6.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/context/context-crusher"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-agent": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-token-meter": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-util-values": ">=0.1.2-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.2-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
+    "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
+    "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
+    "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
+    "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
+    "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
+    "@dsh-cc/hooks-claude-code": "workspace:^",
+    "@dsh-cc/agent-loop-mock": "workspace:^",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

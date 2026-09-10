@@ -42,6 +42,7 @@
     "@dsh-cc/command-version": "workspace:^",
     "@dsh-cc/compaction-basic": "workspace:^",
     "@dsh-cc/compaction-micro": "workspace:^",
+    "@dsh-cc/context-crusher": "workspace:^",
     "@dsh-cc/coordinator": "workspace:^",
     "@dsh-cc/hooks-claude-code": "workspace:^",
     "@dsh-cc/memory": "workspace:^",

@@ -50,6 +50,9 @@
       "path": "./packages/compat/session-title-provider"
     },
     {
+      "path": "./packages/context/context-crusher"
+    },
+    {
       "path": "./packages/compat/cc-serena-first"
     },
     {

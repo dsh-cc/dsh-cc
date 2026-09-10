@@ -1,11 +1,12 @@
 # CCR: Reversible Tool-Output Compression (Compress-Cache-Retrieve)
 
-Date: 2026-09-10. Status: proposed — critic cold review passed with
-amendments (8 items: tokenMeter injection, post-next composition,
+Date: 2026-09-10. Status: implemented (this PR) — critic cold review passed
+with amendments (8 items: tokenMeter injection, post-next composition,
 project-keyed content-addressed store, order-tripwire test, result.meta
 original stash, final-result bypass note, ponytail cuts, protected-tools
-widening); all baked in. No harness changes; everything composes via
-existing seams.
+widening); all baked in. Staff review (binding) later removed the
+`result.meta` stash (D1) and is folded in below. No harness changes;
+everything composes via existing seams.
 
 ## 1. Problem
 
@@ -50,6 +51,12 @@ Harness anchors (the `deepseek-harness` checkout, read-only):
   (precedent: `packages/memory/memory/src/save.ts:123-130`).
 - Project bucket convention: `sha256(projectRoot).slice(0, 16)`
   (`packages/ui/tui/src/project.ts:190-192`).
+- Freeze order correction (staff review): deepFreeze/materialization happens
+  AFTER the post-execute waterfall — `finalizeScheduledExecution` (:1602)
+  runs the waterfall, then `finishScheduledExecution` (:1625+) materializes
+  and freezes the result. The pre-committed prefix stays untouched (true as
+  claimed); the earlier "result already frozen at listener time" claim was
+  wrong.
 - `final-result` results bypass post-execute entirely
   (`packages/core/tools/src/tool-types.ts:234-243`) — the crusher is
   best-effort for those dispatches (extent unverified; documented).
@@ -105,15 +112,13 @@ parsed by downstream code — structured-output class); short errors
 (`isError && size < 2×minBytes`) → skip; size < `minBytes` (default 8 KB)
 → skip — min-bytes is the primary defense for misparsed outputs; router
 returns null → passthrough; saving ratio < `minSavingsRatio` (default 0.4)
-→ passthrough. On replace: store original, set
-
-```
-[dsh-cc compressed 41230→6180 tokens. Original: ccr://a1b2c3d4e5f60708]
-```
-
-appended to the compressed text, stash `{ hash, path }` into
-`result.meta` (persisted field, `tool-calls.ts:288-290`) so a future UI
-can offer expansion, and append a ledger row.
+→ passthrough. On replace: store the original atomically and append a
+ledger row. Provenance carriers are the MARKER TEXT (persisted with the
+compressed content) plus the ledger row — `result.meta` is NOT writable
+from post-execute: `PostToolDecision` carries no meta field, and mutating
+the result in place is forbidden (results may be frozen; violates the
+Readonly contract). A future UI expansion surface reads the marker +
+ledger instead.
 
 Dry-run mode: everything above minus the replace — ledger row gets
 `applied: false`. **Phase 0 ships dry-run only** — measure before
@@ -165,16 +170,22 @@ max-entries are constants until ledger data justifies knobs.
     `tool/result` carries the compressed text + marker;
   - `context_retrieve(hash)` returns the original verbatim;
   - downstream `block` decision passes through untouched;
-  - `result.meta` carries `{hash, path}`.
+  - the committed `tool/result` content carries the marker text with the
+    `ccr://<hash>` handle (the ledger row carries the same hash) —
+    `result.meta` is not a provenance carrier (see §3.3).
 - Cache safety: identical-prefix turns around a large tool result; assert
   prior events byte-untouched via `snapshotEvents()` window.
 
 ## 6. Risks / explicit non-goals
 
 - Transcript effect: `appendToolResult` persists compressed content — TUI
-  replay and `command-export` show the compressed blob forever; mitigated
-  by `result.meta` stash, documented here deliberately.
+  replay and `command-export` show the compressed blob forever; the original
+  lives only in the store + ledger (the marker text is the in-transcript
+  provenance), documented here deliberately.
 - `final-result` dispatches bypass the waterfall — best-effort coverage.
+- `applyFinalContent` bypass: definition-owned content finalization runs
+  after the waterfall and may rewrite crushed content — residual bypass
+  class alongside `final-result`.
 - Model retrieval loops: marker is inert text; no auto-restore.
 - No LLM summarization in v1; no `agent/request`/history mutation (cache
   hot-zone protection by construction).
