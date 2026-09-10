@@ -99,6 +99,7 @@ Install them inside a session:
 | Models | 0 | 1 | 0 | 0 |
 | Workspace | 1 | 0 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
+
 Statuses were verified against upstream documentation retrieved as of 2026-09-05 (freshness threshold: 120 days).
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
@@ -142,18 +143,26 @@ Use `/mcp` to inspect and manage MCP connections.
 
 When your MCP configuration connects a [Serena](https://github.com/oraios/serena) server, dsh-cc automatically takes advantage of it: the system prompt steers toward Serena's symbol tools for code questions, and the bundled `explore` subagent gains read-only symbol retrieval (`find_symbol`, `find_referencing_symbols`, `get_symbols_overview`). Serena is strictly optional — without it, sessions behave identically through the built-in Read/Grep tools, minus the steering hints.
 
-Add it to `~/.dsh/.mcp.json` (or a project `.mcp.json`):
+Install Serena once so a local `serena` binary is on `PATH`:
+
+```sh
+uv tool install git+https://github.com/oraios/serena@v1.7.0
+```
+
+Then add it to `~/.dsh/.mcp.json` (or a project `.mcp.json`) using the local binary:
 
 ```json
 {
   "mcpServers": {
     "serena": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/oraios/serena@v1.7.0", "serena", "start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
+      "command": "serena",
+      "args": ["start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
     }
   }
 }
 ```
+
+Avoid launching it via `uvx --from git+…`: every server start would write `~/.cache/uv`, which the session sandbox denies.
 
 `/doctor` reports the connection under the `mcp.serena` check.
 
