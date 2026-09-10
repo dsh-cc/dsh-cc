@@ -1,6 +1,9 @@
 # Reasoning Fold for DeepSeek-Family Models (Stage 0 = probe only)
 
-Date: 2026-09-10. Status: proposed — critic cold review passed with
+Date: 2026-09-10. Status: **Implemented (Stage-0 probe)** — PR #40 (merged
+2026-09-10, package @dsh-cc/reasoning-fold); Stages 1/2 remain contingent on
+the cost/adapter gates per the scope decision below. Original review record:
+critic cold review passed with
 amendments (7 items: full usage-chunk capture with cost-defined gate,
 stream protocol written out, llmbox adapter path flagged unverified,
 reconstructability-contract impact documented, Stages 1/2 demoted to
