@@ -359,7 +359,7 @@ function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefi
  * Run an MCP request, retrying once on a mid-session `UnauthorizedError`.
  * Between the original attempt and the retry, `onUnauthorized` runs to drop
  * stale OAuth state and re-establish a token. Only a single retry is attempted
- * (the spec's "401 自动重试一次"); a second failure propagates to the caller.
+ * (the spec's "retry once automatically on a 401"); a second failure propagates to the caller.
  *
  * @param request - the MCP request to attempt.
  * @param onUnauthorized - re-auth hook run before the single retry.

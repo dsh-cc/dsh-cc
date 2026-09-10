@@ -1,5 +1,8 @@
-# 开 PR / 推分支前的最终真实启动冒烟(2026-09-04 v0.4.1 事故:两处"presubmit
-# 全绿但所有用户启动即崩"的回归)。全部门禁静态层面都在 pre-commit 跑过,
-# 这一句额外验证"主干构建产物在用户等价的解析池里真能 boot 起来"。
-# 跳过(仅限你清楚改动不可能影响启动时):git push --no-verify
+# Final real-boot smoke before opening a PR / pushing a branch (after the
+# 2026-09-04 v0.4.1 incident: two "presubmit fully green but boot crashes
+# for every user" regressions). All gates run statically in pre-commit; this
+# line additionally proves the trunk build artifact actually boots in a
+# user-equivalent resolution pool.
+# Skip (only when you are certain the change cannot affect boot):
+# git push --no-verify
 pnpm smoke:profile-boot

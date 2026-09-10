@@ -24,8 +24,8 @@ Missing product surface:
 ## 2. Verified ground truth
 
 Confirmed by two independent reviewers and by orchestrator spot-checks. Citations:
-worktree paths are this repo; `harness:` paths are the read-only sibling checkout
-`/Users/bytedance/workspace/github.com/deepseek-harness`.
+worktree paths are this repo; `harness:` paths are the read-only sibling
+`deepseek-harness` checkout (by convention checked out as a sibling directory).
 
 - **F1. Wait policy exists.** `packages/subagent/task/src/tool.ts:145-149`
   (`wantsBackground`): explicit `run_in_background` boolean wins, then a

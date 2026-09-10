@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/preset-cc",
-  "description": "dsh「CC 模式」agent preset:composition-only package mounting the Claude Code surface",
+  "description": "dsh CC mode agent preset: composition-only package mounting the Claude Code surface",
   "version": "0.1.0",
   "private": true,
   "type": "module",

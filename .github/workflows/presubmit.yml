@@ -1,25 +1,37 @@
 # =============================================================================
 # PreSubmit — dsh-cc
 #
-# GitHub 移植自 orchestrix 的 codebase presubmit。与参考仓的三处有意偏离:
-#   1. 单 job:本仓 typecheck≡build(同为 tsc -b tsconfig.packages.json),
-#      参考仓 quality-gates/test-and-build 双 job 并联在此只会重复构建 harness。
-#   2. 参考仓手工装 Node+内部镜像/bnpm → 本 workflow 用 setup-node 原生
-#      pnpm 缓存;两仓依赖全部来自公网 npm。
-#   3. ~20 个包以 link:../../../../deepseek-harness/... 依赖兄弟仓库
-#      → 并排 checkout:两个 path: 使两仓目录互为兄弟,link 上溯 4 级即命中。
-#   4. harness 构建产物(各包 lib/,~64MB)按 pin SHA 用 actions/cache
-#      restore/save 缓存,命中即跳过 build:lib(占全流水线 ~62%);save 紧跟
-#      build 步(success() 门控防半截产物投毒,且后续测试红推 iteration 仍
-#      能保有已建缓存)。node_modules 1.4G 不入缓存,install 每跑必做。
-#      产物 glob 为固定深度且恰等于 tsdown workspace 声明的 build:lib 输出集,
-#      不用 **:@actions/glob 的 ** 跟随符号链接,会在 pnpm symlink 树上组合
-#      爆炸(实测 save 19min 未果);harness 包深度/tsdown workspace 变更需同步。
+# GitHub port of orchestrix's codebase presubmit. Four intentional deviations
+# from the reference repo:
+#   1. Single job: here typecheck≡build (both are `tsc -b
+#      tsconfig.packages.json`); the reference repo's parallel
+#      quality-gates / test-and-build jobs would only build the harness twice.
+#   2. The reference repo installs Node + an internal mirror/bnpm by hand;
+#      this workflow uses setup-node's native pnpm cache instead — both
+#      repos' dependencies come entirely from the public npm registry.
+#   3. ~20 packages depend on the sibling repo via
+#      link:../../../../deepseek-harness/... → side-by-side checkouts: the two
+#      `path:` values make the repos siblings, so the link: walk-up of 4
+#      levels lands exactly.
+#   4. Harness build outputs (each package's lib/, ~64MB) are cached by pin
+#      SHA via actions/cache restore/save; a hit skips build:lib (~62% of the
+#      pipeline). save follows the build step directly (success() gating
+#      keeps half-built artifacts from poisoning the cache, and a
+#      red-test iteration still keeps the already-built cache). node_modules
+#      (1.4G) is never cached — install runs on every run. The artifact glob
+#      is fixed-depth and exactly matches the build:lib output set declared
+#      by the tsdown workspace — no `**`: @actions/glob's `**` follows
+#      symlinks and explodes combinatorially on the pnpm symlink tree (a save
+#      measured 19min without finishing). Harness package depth / tsdown
+#      workspace changes must be mirrored here.
 #
-# deepseek-harness pin 升级流程:harness master 验证通过后,更新上方 env 的
-# DSH_HARNESS_REF 到新 SHA 并连同本仓适配修改一起提交。改 ref 即换 cache key,
-# PR 与合入 main 各冷构建一次(缓存按分支隔离),此后全部命中;旧 entry 闲置
-# 7 天自动淘汰。注意这是组织内固定 fork:删除/转私有/force-push GC 都会让 CI 失效。
+# deepseek-harness pin upgrade flow: once harness master checks out, update
+# DSH_HARNESS_REF in the env block above to the new SHA and commit it
+# together with this repo's adaptations. Changing the ref changes the cache
+# key — one cold build each for the PR and the merge to main (caches are
+# branch-scoped), hits from then on; the idle old entry expires after 7
+# days. Note this is a fixed org-internal fork: deletion, going private, or
+# force-push GC all break CI.
 # =============================================================================
 name: PreSubmit
 
@@ -30,13 +42,15 @@ on:
     branches: [main]
 
 env:
-  # deepseek-harness pin:checkout ref 与 harness 产物 cache key 的单一事实源
+  # deepseek-harness pin: single source of truth for the checkout ref and
+  # the harness-artifact cache key
   DSH_HARNESS_REF: a66e4702047846cdaa10c66c9d3df3951f5ea70d # 0.1.2-rc.1 release commit
 
 permissions:
   contents: read
 
-# 同一 PR/分支的快速连推只保留最新一轮,避免重复构建 deepseek-harness
+# On rapid consecutive pushes to the same PR/branch keep only the newest
+# run — avoids building deepseek-harness twice
 concurrency:
   group: presubmit-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
@@ -69,8 +83,9 @@ jobs:
             dsh-cc/pnpm-lock.yaml
             deepseek-harness/pnpm-lock.yaml
 
-      # 纯静态扫描,无需 node_modules:抢在 harness 构建前挡住"测试引用了未声明
-      # 的 link:/workspace 依赖"这一类 CI-only 失败(ERR_MODULE_NOT_FOUND)。
+      # Pure static scan, no node_modules needed: catches "a spec imports an
+      # undeclared link:/workspace dependency" — a CI-only failure class
+      # (ERR_MODULE_NOT_FOUND) — before the harness build starts.
       - name: Spec dependency declarations (check:spec-deps)
         working-directory: dsh-cc
         run: node scripts/check-spec-deps.mjs
@@ -83,8 +98,9 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-publish-manifests.mjs
 
-      # 双语 README 三件套门禁(README.md/README.zh.md/README.i18n.yaml 配对
-      # 哈希记录,见 docs/i18n/README.md);纯静态,git hash-object 无需 node_modules。
+      # Bilingual README trio gate (README.md/README.zh.md/README.i18n.yaml
+      # pairing record — see docs/i18n/README.md); pure static: git
+      # hash-object needs no node_modules.
       - name: Package README trio (check:readme)
         working-directory: dsh-cc
         run: node scripts/check-readme.mjs
@@ -93,20 +109,25 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-readme.test.mjs
 
-      # 棘轮模式:基线冻结存量超限文件(只准减不准增),基线清空后即 ≤500 硬门。
+      # Ratchet mode: the baseline freezes existing over-budget files
+      # (shrink-only); once the baseline is empty the gate becomes a hard
+      # ≤500-line cap.
       - name: File size budget (check:size)
         working-directory: dsh-cc
         run: node scripts/check-file-size.mjs
 
-      # 另两道纯静态门禁:vendored pi-tui 纯净性(白名单外的 bare import)+
-      # TUI harness 边界(@deepseek-ai/* 只准出现在 harness/ 与插件面)。趁
-      # 静态阶段拦截,别等 vendor 树污染扩散到消费方才暴露。
+      # Two more pure-static gates: vendored pi-tui purity (no bare imports
+      # outside the whitelist) + the TUI harness boundary (@deepseek-ai/* may
+      # appear only in harness/ and the plugin surface). Catch violations in
+      # the static phase — don't wait for vendor-tree pollution to surface at
+      # the consumers.
       - name: TUI boundary (check:tui-boundary)
         working-directory: dsh-cc
         run: node scripts/check-tui-boundary.mjs
 
-      # 跨包深链 src/ import 会在 tsc emit 中原样保留,运行时命中 Node 的
-      # node_modules type-stripping 限制(plugin tree boot 直接失败)。
+      # Cross-package deep src/ imports survive verbatim in tsc emit and hit
+      # Node's node_modules type-stripping restriction at runtime (plugin
+      # tree boot fails outright).
       - name: Deep src imports (check:deep-imports)
         working-directory: dsh-cc
         run: node scripts/check-deep-src-imports.mjs
@@ -129,7 +150,7 @@ jobs:
         working-directory: deepseek-harness
         run: pnpm install --frozen-lockfile
 
-      - name: 'Build deepseek-harness lib (link: 的消费点;跳过 build:web)'
+      - name: 'Build deepseek-harness lib (consumption point of link:; build:web skipped)'
         if: steps.cache-harness.outputs.cache-hit != 'true'
         working-directory: deepseek-harness
         run: pnpm run build:lib
@@ -150,9 +171,10 @@ jobs:
           HUSKY: 0
         run: pnpm install --frozen-lockfile
 
-      # Capability 门禁(I1–I11、evidence anchor、registry integrity、生成物
-      # 无漂移)依赖 js-yaml,无法进入上方"纯静态、无需 node_modules"车道;
-      # install 后立即运行,仍先于 typecheck/test 提供快速反馈。
+      # The capability gates (I1–I11, evidence anchors, registry integrity,
+      # no generated-artifact drift) depend on js-yaml, so they cannot join
+      # the pure-static no-node_modules lane above; they run right after
+      # install, still ahead of typecheck/test for fast feedback.
       - name: Capability evidence (check:capabilities)
         working-directory: dsh-cc
         run: node scripts/check-capability-evidence.mjs
@@ -161,7 +183,8 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/generate-parity-matrix.mjs --check
 
-      # 两个 checker 的配对自测(见 docs/plans/2026-09-03-claude-code-capability-manifest.md §5.3)。
+      # Paired self-tests for the two checkers (see
+      # docs/plans/2026-09-03-claude-code-capability-manifest.md §5.3).
       - name: Capability evidence self-test
         working-directory: dsh-cc
         run: node scripts/check-capability-evidence.test.mjs
@@ -182,9 +205,11 @@ jobs:
         working-directory: dsh-cc
         run: pnpm run bundle:client
 
-      # 与 publish.yml 平齐:每个 exports 指向的 lib/* 必须由本次构建真实产出。
-      # 此前只在 publish 阶段跑,#112 的 tsconfig 引用缺失(serena-first 从不
-      # 产出 lib/)得以合入——exports 幽灵目标必须合入前就挡下。
+      # Level with publish.yml: every lib/* an exports entry points at must
+      # be produced by this very build. This used to run only at publish
+      # time — #112's missing tsconfig reference (serena-first never emits
+      # lib/) got merged that way; ghost exports targets must be blocked
+      # pre-merge.
       - name: Export targets (check:exports)
         working-directory: dsh-cc
         run: pnpm check:exports
