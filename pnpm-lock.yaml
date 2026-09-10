@@ -483,6 +483,75 @@ importers:
         specifier: workspace:^
         version: link:../cc-model-aliases
 
+  packages/context/context-crusher:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: link:../../../../deepseek-harness/vendor/include
+        version: link:../../../../deepseek-harness/vendor/include
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: link:../../../../deepseek-harness/vendor/loader
+        version: link:../../../../deepseek-harness/vendor/loader
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: link:../../../../deepseek-harness/packages/core/agent-loop
+        version: link:../../../../deepseek-harness/packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-bash-local':
+        specifier: link:../../../../deepseek-harness/packages/shell/bash-local
+        version: link:../../../../deepseek-harness/packages/shell/bash-local
+      '@deepseek-ai/dsh-invariants':
+        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
+        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../../../deepseek-harness/packages/settings/settings
+        version: link:../../../../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+        version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+      '@deepseek-ai/dsh-token-meter':
+        specifier: link:../../../../deepseek-harness/packages/llm/token-meter
+        version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../../../deepseek-harness/packages/core/tools
+        version: link:../../../../deepseek-harness/packages/core/tools
+      '@deepseek-ai/dsh-util-values':
+        specifier: link:../../../../deepseek-harness/packages/util/values
+        version: link:../../../../deepseek-harness/packages/util/values
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/agent-loop-mock':
+        specifier: workspace:^
+        version: link:../../test-support/agent-loop-mock
+      '@dsh-cc/hooks-claude-code':
+        specifier: workspace:^
+        version: link:../../hooks/hooks-claude-code
+      '@dsh-cc/session-cwd':
+        specifier: workspace:^
+        version: link:../../workspace/session-cwd
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/core/tool-append-order:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -1655,6 +1724,9 @@ importers:
       '@dsh-cc/compaction-micro':
         specifier: workspace:^
         version: link:../../compaction/compaction-micro
+      '@dsh-cc/context-crusher':
+        specifier: workspace:^
+        version: link:../../context/context-crusher
       '@dsh-cc/coordinator':
         specifier: workspace:^
         version: link:../../subagent/coordinator
