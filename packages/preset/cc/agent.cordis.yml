@@ -498,6 +498,12 @@
 
 # ── CC parity slash commands ───────────────────────────────────────────────
 
+# CacheHealth: passive prompt-cache prefix-stability observer; /cache-health
+# joins its own llm/stream observation ledger with provider-metered cache
+# usage from session events (detector-only, no request rewriting).
+- id: cache-health
+  name: '@dsh-cc/cache-health'
+
 - id: command-cost
   name: '@dsh-cc/command-cost'
   config:

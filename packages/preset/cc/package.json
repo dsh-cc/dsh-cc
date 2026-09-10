@@ -22,6 +22,7 @@
     "@dsh-cc/command-branch": "workspace:^",
     "@dsh-cc/command-compact": "workspace:^",
     "@dsh-cc/command-config": "workspace:^",
+    "@dsh-cc/cache-health": "workspace:^",
     "@dsh-cc/command-cost": "workspace:^",
     "@dsh-cc/command-diff": "workspace:^",
     "@dsh-cc/command-doctor": "workspace:^",

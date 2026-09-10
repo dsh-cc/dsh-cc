@@ -1,6 +1,6 @@
 # Prompt-Cache Health Observer
 
-Date: 2026-09-10. Status: proposed — critic cold review passed with
+Date: 2026-09-10. Status: shipped (2026-09-10) — critic cold review passed with
 amendments (6 items: hash system+tools ahead of messages, skip
 purpose:compaction/session-title calls, proxy no-write test on both call
 paths, message-hash⟺wire-prefix assumption pinned by test, front-loaded

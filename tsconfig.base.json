@@ -128,6 +128,18 @@
       "@dsh-cc/command-compact": [
         "./packages/interaction/command-compact/src/index.ts"
       ],
+      "@dsh-cc/cache-health": [
+        "./packages/observability/cache-health/src/index.ts"
+      ],
+      "@dsh-cc/cache-health/tracker": [
+        "./packages/observability/cache-health/src/tracker.ts"
+      ],
+      "@dsh-cc/cache-health/ledger": [
+        "./packages/observability/cache-health/src/ledger.ts"
+      ],
+      "@dsh-cc/cache-health/report": [
+        "./packages/observability/cache-health/src/report.ts"
+      ],
       "@dsh-cc/command-cost": [
         "./packages/session/command-cost/src/index.ts"
       ],
