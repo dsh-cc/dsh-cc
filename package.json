@@ -21,7 +21,7 @@
     "check:subagent-paste": "node scripts/check-subagent-paste.test.mjs",
     "check:spec-deps": "node scripts/check-spec-deps.mjs",
     "check:publish": "node scripts/check-publish-manifests.mjs",
-    "check:readme": "node scripts/check-readme.mjs",
+    "check:readme": "node scripts/check-readme.mjs && node scripts/marketplace.test.mjs",
     "check:marketplace": "node scripts/marketplace.test.mjs",
     "check:size": "node scripts/check-file-size.mjs",
     "check:size:ratchet": "node scripts/check-file-size.mjs --ratchet",
