@@ -5,9 +5,8 @@ amendments (8 items: child-session naming fix, approval-event analyzer
 rewire, correlation-heuristic tightening, exact event shape doc, memory
 helper anchors, host confirmation, LLM pass cut from v1, unverified
 residuals recorded); all baked in.
-Borrowed from headroom's `headroom learn`
-(https://docs.headroomlabs.ai/docs/failure-learning); adapted to dsh-cc's
-session JSONL store and memory subsystem, zero harness changes.
+Works entirely against dsh-cc's session JSONL store and memory subsystem;
+zero harness changes.
 
 ## 1. Problem
 
@@ -15,7 +14,7 @@ The same mistakes recur across sessions: wrong file paths re-guessed,
 environment commands retried until the right incantation syntax, searches
 scoped too narrowly, commands the user keeps rejecting. dsh-cc has a
 durable memory system, but nothing distills failures into it
-automatically. Headroom's insight is *success correlation*: don't catalog
+automatically. The core move is *success correlation*: don't catalog
 failures — find what FIX followed each failure and record the correction.
 
 ## 2. Feasibility ground truth (verified 2026-09-10 on real transcripts)

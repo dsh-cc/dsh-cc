@@ -1,13 +1,12 @@
-# Subagent Handoff Store (SharedContext)
+# Subagent Handoff Store
 
 Date: 2026-09-10. Status: proposed — critic cold review passed with
 amendments (6 items: tool-whitelist blocking fix, flat globally-unique id
 store, store-primitive sharing deferred, config trimmed to enabled+
 threshold single-source, honest benefit boundary, orphan-sweep caveat);
 all baked in.
-Borrowed from headroom's SharedContext
-(https://docs.headroomlabs.ai/docs/shared-context); reduced to what
-dsh-cc's orchestration model actually needs, zero harness changes.
+Scoped to what dsh-cc's orchestration model actually needs;
+zero harness changes.
 
 ## 1. Problem — and the honest benefit boundary
 
@@ -21,8 +20,8 @@ orchestrator.
 Scope of benefit, stated precisely:
 - sibling transfer and never-fetched artifacts: real token savings;
 - parent fetching the full text anyway: **zero savings** — this feature
-  does not pretend otherwise (headroom's ~80% figure relied on
-  compression, explicitly excluded from v1);
+  does not pretend otherwise (compression-based savings are explicitly
+  excluded from v1);
 - executor/marathon already have Write and can return repo paths — the
   artifact-out convention exists for them; the gap is *sandboxed or
   read-only agents* and *$DSH_HOME-based cross-session transfer*.
@@ -127,5 +126,5 @@ on the other.
 
 - Advisory contract drift: metric of success is parent-context bytes per
   delegation in dogfood, not policing.
-- No compression in v1; no cross-project sharing (projectKey partition —
-  headroom GH #462 lesson); no repo writes; no memory-system claims.
+- No compression in v1; no cross-project sharing (projectKey partition);
+  no repo writes; no memory-system claims.

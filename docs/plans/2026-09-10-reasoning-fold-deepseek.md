@@ -7,8 +7,7 @@ reconstructability-contract impact documented, Stages 1/2 demoted to
 contingent sketches, floorChars validation, display-delay note); all
 baked in. **Scope decision post-review: this PR builds the Stage-0 probe
 and nothing else.**
-Borrowed from headroom's reasoning compaction
-(https://docs.headroomlabs.ai/docs/cache-optimization#cold-prefix-recompaction-when-the-cache-lapses).
+Zero harness changes; measurement before any behavior change.
 
 ## 1. Problem & honest stakes
 

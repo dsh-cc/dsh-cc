@@ -4,9 +4,8 @@ Date: 2026-09-10. Status: proposed — critic cold review passed with
 amendments (8 items: tokenMeter injection, post-next composition,
 project-keyed content-addressed store, order-tripwire test, result.meta
 original stash, final-result bypass note, ponytail cuts, protected-tools
-widening); all baked in.
-Borrowed from headroom (https://docs.headroomlabs.ai/docs/ccr,
-/docs/how-compression-works); adapted to dsh-cc with zero harness changes.
+widening); all baked in. No harness changes; everything composes via
+existing seams.
 
 ## 1. Problem
 
@@ -17,7 +16,7 @@ reader subagents, but anything that slips past the gate — or is produced by
 tools other than Read/Bash — lands full-size in the session. dsh-cc has no
 post-hoc compression layer today.
 
-Headroom's answer is CCR: compress aggressively, keep the original in a
+The approach: compress aggressively, keep the original in a
 local content-addressed store, and give the model a retrieval tool.
 Compression becomes risk-free because the original is always one call away.
 
@@ -118,8 +117,8 @@ appended to the compressed text, stash `{ hash, path }` into
 can offer expansion, and append a ledger row.
 
 Dry-run mode: everything above minus the replace — ledger row gets
-`applied: false`. **Phase 0 ships dry-run only** (the headroom
-"simulation" equivalent) so savings are measured on dogfood sessions
+`applied: false`. **Phase 0 ships dry-run only** — measure before
+replacing — so savings are measured on dogfood sessions
 before anyone turns replacement on.
 
 ### 3.4 Retrieval tool

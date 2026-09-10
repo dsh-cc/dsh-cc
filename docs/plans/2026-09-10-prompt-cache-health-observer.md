@@ -6,9 +6,7 @@ purpose:compaction/session-title calls, proxy no-write test on both call
 paths, message-hash⟺wire-prefix assumption pinned by test, front-loaded
 suspect heuristics, config trimmed); all baked in. Deployment fact added
 post-review: cache counter reliability varies by routed upstream.
-Borrowed from headroom's CacheAligner
-(https://docs.headroomlabs.ai/docs/cache-optimization) — detector-only,
-zero harness changes.
+Detector-only, zero harness changes.
 
 ## 1. Problem
 
@@ -23,8 +21,8 @@ provider-independent); (b) what the provider actually meters
 (usage.cacheReadTokens/cacheWriteTokens, provider-dependent). Today
 nothing answers either.
 
-Headroom's CacheAligner answers (a) detector-only — it reports, never
-rewrites. This feature ports that idea and pairs it with (b) via the
+This feature answers both, detector-only — it reports, never
+rewrites. (a) comes from observing the request stream itself; (b) via the
 existing session events.
 
 ## 2. Feasibility ground truth (verified 2026-09-10, re-verified in review)
@@ -134,5 +132,5 @@ change). Nothing else.
 - Excerpt leakage: redaction + truncation; ledger is local-only.
 - llmbox cache-field fidelity unverified — recorded as residual risk for
   phase 2 verification.
-- Detector-only by design (the headroom lesson): no request rewriting,
+- Detector-only by design: no request rewriting,
   no provider-call changes, no harness changes.
