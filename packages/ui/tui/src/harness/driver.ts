@@ -151,7 +151,6 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
       // Stale marker: the recorded session is gone. Clear it so the next boot
       // does not loop on the same failure, then degrade to a fresh session
       // (which must not steal the marker — persist only fires on real content).
-      // The dual clear (legacyCwd defaults to cwd) covers both buckets.
       clearResumeTarget({ cwd })
       showNotice('上次会话已失效，已开启新会话，可 /resume 手动选择')
       handle = await ctx.agents.create(createArgs(SessionId(`tui-${randomUUID()}`)))
@@ -333,11 +332,9 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     seedTodos,
     refreshBranch,
     writeResumeTarget: (id: string) => writeResumeTarget(id, {
-      // NEW marker keys off the LIVE session's project (a switch into a
-      // session created elsewhere writes its own bucket); the legacy one
-      // stays in the boot-cwd bucket (symmetric with the old launcher read).
+      // Keys off the LIVE session's project (a switch into a session
+      // created elsewhere writes its own bucket).
       cwd: current.agent.session.header.cwd ?? cwd,
-      legacyCwd: cwd,
     }),
     setMarkedContent: agent.setMarkedContent,
     rebindHistory,
