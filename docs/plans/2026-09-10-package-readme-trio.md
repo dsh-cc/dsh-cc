@@ -1,6 +1,6 @@
 # Package README trio completion + docs gate
 
-Status: approved (critic cold-review, 3 major findings incorporated)
+Status: **Implemented** — PR #29 (merged 2026-09-10). Original review record: approved (critic cold-review, 3 major findings incorporated)
 Date: 2026-09-10
 
 ## Goal

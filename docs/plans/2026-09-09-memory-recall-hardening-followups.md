@@ -1,6 +1,6 @@
 # Memory-Recall Hardening Follow-Ups (Harness-Frozen)
 
-Date: 2026-09-09. Status: approved — design reviewed cold by the critic agent;
+Date: 2026-09-09. Status: **Implemented** — PR #27 (merged 2026-09-10). Original review record: approved — design reviewed cold by the critic agent;
 every finding is adopted inline below (W2 parentage resolution, runId pairing,
 injection scope limits, W3 enumeration mechanism + negative control, W1 prompt
 invariants, W4 scope trim). Follow-up to the rogue memory-recall fork incident
