@@ -1682,6 +1682,9 @@ importers:
       '@dsh-cc/command-init':
         specifier: workspace:^
         version: link:../../interaction/command-init
+      '@dsh-cc/command-learn':
+        specifier: workspace:^
+        version: link:../../session/command-learn
       '@dsh-cc/command-mcp':
         specifier: workspace:^
         version: link:../../interaction/command-mcp
@@ -1876,6 +1879,52 @@ importers:
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
 
+  packages/session/command-learn:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../../interaction/command-usage
+      '@dsh-cc/memory':
+        specifier: workspace:^
+        version: link:../../memory/memory
+      '@dsh-cc/session-forensics':
+        specifier: workspace:^
+        version: link:../session-forensics
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: link:../../../../deepseek-harness/vendor/loader
+        version: link:../../../../deepseek-harness/vendor/loader
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
+      '@deepseek-ai/dsh-fs':
+        specifier: link:../../../../deepseek-harness/packages/fs/fs
+        version: link:../../../../deepseek-harness/packages/fs/fs
+      '@deepseek-ai/dsh-fs-local':
+        specifier: link:../../../../deepseek-harness/packages/fs/fs-local
+        version: link:../../../../deepseek-harness/packages/fs/fs-local
+      '@deepseek-ai/dsh-home-paths':
+        specifier: link:../../../../deepseek-harness/packages/util/home-paths
+        version: link:../../../../deepseek-harness/packages/util/home-paths
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../../../deepseek-harness/packages/settings/settings
+        version: link:../../../../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+
   packages/session/command-stats:
     dependencies:
       '@dsh-cc/command-usage':
@@ -1903,6 +1952,8 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+
+  packages/session/session-forensics: {}
 
   packages/settings/settings-cascade:
     dependencies:

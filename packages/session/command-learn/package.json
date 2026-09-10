@@ -1,0 +1,57 @@
+{
+  "name": "@dsh-cc/command-learn",
+  "description": "Human-facing slash command distilling session failure patterns into memory (/learn)",
+  "version": "0.0.1",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/session/command-learn"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./render": {
+      "types": "./lib/render.d.ts",
+      "default": "./lib/render.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/memory": "workspace:^",
+    "@dsh-cc/session-forensics": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-commands": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-fs": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.2-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-fs": "link:../../../../deepseek-harness/packages/fs/fs",
+    "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
+    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

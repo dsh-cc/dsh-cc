@@ -1,10 +1,15 @@
 # Session Failure Learning (`/learn`)
 
-Date: 2026-09-10. Status: proposed — critic cold review passed with
-amendments (8 items: child-session naming fix, approval-event analyzer
-rewire, correlation-heuristic tightening, exact event shape doc, memory
-helper anchors, host confirmation, LLM pass cut from v1, unverified
-residuals recorded); all baked in.
+Date: 2026-09-10. Status: implemented (v1, phases 0+1 in one PR) —
+implementation-review rulings folded in: denied = `rejected` only
+(`cancelled`/`unavailable` excluded), same-tool + first-success-in-line-order
+correlation, stable topic-file description (no pointer churn), empty-findings
+apply is a no-op (never deletes memory), file layout split for the 500-line
+gate, zstd skip-guard in tests. Original review provenance: critic cold
+review passed with amendments (8 items: child-session naming fix,
+approval-event analyzer rewire, correlation-heuristic tightening, exact event
+shape doc, memory helper anchors, host confirmation, LLM pass cut from v1,
+unverified residuals recorded); all baked in.
 Works entirely against dsh-cc's session JSONL store and memory subsystem;
 zero harness changes.
 

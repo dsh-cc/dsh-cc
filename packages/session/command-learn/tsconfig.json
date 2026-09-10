@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../interaction/command-usage"
+    },
+    {
+      "path": "../../memory/memory"
+    },
+    {
+      "path": "../session-forensics"
+    }
+  ]
+}

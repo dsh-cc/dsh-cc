@@ -604,6 +604,9 @@
 - id: command-init
   name: '@dsh-cc/command-init'
 
+- id: command-learn
+  name: '@dsh-cc/command-learn'
+
 - id: command-tasks
   name: '@dsh-cc/command-tasks'
 
