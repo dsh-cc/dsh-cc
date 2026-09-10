@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   clearResumeTarget,
@@ -97,7 +97,9 @@ describe('readResumeTarget', () => {
   it('absent or blank → undefined', () => {
     const { home, cwd } = setup()
     expect(readResumeTarget({ home, cwd })).toBeUndefined()
-    writeFileSync(resumeMarkerFile({ home, cwd }), '\n')
+    const blank = resumeMarkerFile({ home, cwd })
+    mkdirSync(dirname(blank), { recursive: true })
+    writeFileSync(blank, '\n')
     expect(readResumeTarget({ home, cwd })).toBeUndefined()
   })
 })
