@@ -92,6 +92,9 @@
       "path": "./packages/subagent/handoff-store"
     },
     {
+      "path": "./packages/llm-tuning/reasoning-fold"
+    },
+    {
       "path": "./packages/subagent/resume-pins"
     },
     {
