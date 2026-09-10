@@ -3466,6 +3466,18 @@
         {
           "type": "test",
           "path": "packages/mcp/mcp-client/tests/auth.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/mcp/mcp-client/tests/registry.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/bundle/cc-shell/tests/mcp-ready-notice.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/bundle/cc-shell/tests/mcp-gating.spec.ts"
         }
       ],
       "deviation": {

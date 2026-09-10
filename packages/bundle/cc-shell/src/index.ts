@@ -33,6 +33,7 @@ import {
   type McpConfigFile,
   type ResolvedMcpPaths,
 } from '@dsh-cc/mcp-config'
+import { mountMcpReadyNotice } from './mcpReadyNotice.ts'
 import * as CcMcpClient from '@dsh-cc/mcp-client'
 import { CcPluginManagerService } from './ccPluginManager.ts'
 import { CcPluginsService } from './ccPlugins.ts'
@@ -198,12 +199,16 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   //    server is still handshaking cannot see its `mcp__*` tools. When any
   //    deferred server was mounted, register a one-shot `agent/session-start`
   //    hook (same pattern as the gating notice below) that lists the servers
-  //    still `connecting` at that moment. The pending set is evaluated at fire
-  //    time — fast handshakes settle right after the mount loop, so a boot
-  //    where everything is ready by the first prompt injects nothing.
+  //    still `connecting` at that moment, then mounts a settle follow-up: a
+  //    one-shot `agent/pre-step` listener that appends a "servers ready /
+  //    unavailable" summary to the first matching enter decision once every
+  //    announced server has stopped handshaking (see mcpReadyNotice.ts).
+  //    The pending set is evaluated at fire time — fast handshakes settle
+  //    right after the mount loop, so a boot where everything is ready by the
+  //    first prompt injects nothing.
   if (deferredNames.length > 0) {
     let fired = false
-    ctx.on('agent/session-start', ({ agent }: { agent: { inject(message: unknown): void } }) => {
+    ctx.on('agent/session-start', ({ agent }: { agent: { inject(message: unknown): void; session?: { id?: unknown } } }) => {
       // One shot per process, consumed even when suppressed.
       if (fired) return
       fired = true
@@ -216,6 +221,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (pending.length === 0) return
       const text = `MCP: still connecting — ${pending.join(', ')}. Tools from these servers become available once ready.`
       agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'plugin', plugin: 'cc-shell-glue', form: 'notice', summary: text } }))
+      const sid = agent.session?.id
+      mountMcpReadyNotice(ctx, registry!, pending, typeof sid === 'string' ? sid : undefined)
     })
   }
 

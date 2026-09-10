@@ -306,6 +306,86 @@ describe('cc-shell glue deferred MCP mounts', () => {
     await ctx.get('mcpConnections')!.disconnect('slow-notice')
   }, 30_000)
 
+  it('mounts the settle follow-up: the pre-step gets one ready notice once the slow server settles', async () => {
+    writeDshConfigMixed(['fast-rn'], ['slow-rn'], 5_000)
+    const ctx = await newCtx()
+
+    await apply(ctx, { pluginDirs: [] })
+    await awaitReady(ctx.get('mcpConnections')!, 'fast-rn')
+
+    const captured: unknown[] = []
+    const agent = { session: { id: 'rn-1' }, inject: (message: unknown) => captured.push(message) }
+    ctx.emit(ctx, 'agent/session-start', { agent, source: 'startup' })
+    expect(captured).toHaveLength(1)
+    expect(JSON.stringify(captured[0])).toContain('slow-rn')
+
+    const drive = (): Promise<unknown> => ctx.waterfall(
+      ctx as never,
+      'agent/pre-step',
+      { agent, messages: [], turn: 1, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+    const appendedTexts = (decision: unknown): string[] => {
+      const messages = (decision as { messages?: { content?: { type: string; text?: string }[] }[] }).messages ?? []
+      return messages.flatMap(message => (message.content ?? []).flatMap(block => block.type === 'text' && block.text?.startsWith('MCP:') ? [block.text] : []))
+    }
+
+    // Slow server still handshaking → no settle text yet.
+    const r1 = await drive()
+    expect(JSON.stringify(r1)).not.toContain('servers ready')
+
+    const registry = ctx.get('mcpConnections')!
+    await vi.waitFor(() => {
+      expect(registry.entries().find(e => e.name === 'slow-rn')).toMatchObject({ name: 'slow-rn', state: 'ready' })
+    }, { timeout: 10_000 })
+    const r2 = await drive()
+    const texts = appendedTexts(r2)
+    expect(texts).toHaveLength(1)
+    expect(texts[0]).toContain('servers ready')
+    expect(texts[0]).toContain('slow-rn')
+
+    // Wrong-sid agent (driven between settle and delivery) is a bystander —
+    // and the right-sid drive above already consumed the one-shot.
+    const third = await drive()
+    expect(appendedTexts(third)).toEqual([])
+
+    // Cleanup: disconnect the fixture servers.
+    await registry.disconnect('fast-rn')
+    await registry.disconnect('slow-rn')
+  }, 30_000)
+
+  it('no settle follow-up when every server settled before session start', async () => {
+    writeDshConfig(['rn-settled-a'])
+    const ctx = await newCtx()
+
+    await apply(ctx, { pluginDirs: [] })
+    const registry = ctx.get('mcpConnections')!
+    await awaitReady(registry, 'rn-settled-a')
+
+    const captured: unknown[] = []
+    const agent = { session: { id: 'rn-2' }, inject: (message: unknown) => captured.push(message) }
+    ctx.emit(ctx, 'agent/session-start', { agent, source: 'startup' })
+    expect(captured).toHaveLength(0)
+
+    for (const turn of [1, 2]) {
+      const decision = await ctx.waterfall(
+        ctx as never,
+        'agent/pre-step',
+        { agent, messages: [], turn, step: 1, signal: new AbortController().signal },
+        async () => ({ kind: 'enter', messages: [] }),
+      )
+      expect(JSON.stringify(decision)).not.toContain('MCP:')
+    }
+
+    await registry.disconnect('rn-settled-a')
+  }, 30_000)
+
+  // Production admission note (per critic review): this test drives
+  // `ctx.waterfall` directly on the glue's own ctx, bypassing production's
+  // fused `agentEvents` dispatch/scope filter. Production admission rests on
+  // untagged listeners being admitted globally (dsh-scope), which the
+  // existing still-connecting notice already relies on.
+
   it('suppresses the connecting notice when every server settles before the mount loop ends', async () => {
     writeDshConfig(['settled-a', 'settled-b'])
     const ctx = await newCtx()
