@@ -248,6 +248,22 @@ export function createCatalogSection(rt: DriverCatalogCtx): {
   const subagentStart = 'subagent/start' as Parameters<typeof rt.ctx.on>[0]
   const subagentEnd = 'subagent/end' as Parameters<typeof rt.ctx.on>[0]
   /**
+   * Read a session's event log through the live harness API: prefer
+   * `ownEvents()`, fall back to `snapshotEvents()`, then to the legacy
+   * `events` array (removed at the harness 0.1.2-rc.1 line — the old probe
+   * read only that dead field and never saw anything).
+   */
+  const sessionEvents = (session: unknown): readonly unknown[] => {
+    const s = session as {
+      ownEvents?: () => readonly unknown[]
+      snapshotEvents?: () => readonly unknown[]
+      events?: readonly unknown[]
+    } | undefined
+    if (typeof s?.ownEvents === 'function') return s.ownEvents()
+    if (typeof s?.snapshotEvents === 'function') return s.snapshotEvents()
+    return s?.events ?? []
+  }
+  /**
    * Probe whether a child session is continuable: duck-typed peek at
    * `rt.ctx.agents.get(id)` — the child session's events carry a
    * `subagent/descriptor` event with `data.mode === 'continuable'`. Missing
@@ -255,13 +271,13 @@ export function createCatalogSection(rt: DriverCatalogCtx): {
    * Kept local and tiny; no new module.
    */
   const probeResumable = (id: string): boolean => {
-    const child = (rt.ctx.agents as unknown as { get?: (id: string) => { session?: { events?: readonly unknown[] } } } | undefined)
+    const child = (rt.ctx.agents as unknown as { get?: (id: string) => { session?: unknown } } | undefined)
       ?.get?.(String(id))
     if (child === undefined) return false
-    return child.session?.events?.some(event =>
+    return sessionEvents((child as { session?: unknown }).session).some(event =>
       (event as { type?: string; data?: { mode?: string } }).type === 'subagent/descriptor'
       && (event as { data?: { mode?: string } }).data?.mode === 'continuable'
-    ) === true
+    )
   }
   rt.ctx.on(subagentStart, (info: SubagentRunInfoLike) => {
     const sessionId = String(info.id)

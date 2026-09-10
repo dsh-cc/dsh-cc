@@ -1,18 +1,21 @@
 /**
  * Parent-scoped subagent-child notice (memory-recall hardening follow-ups
- * W2c): on `agent/pre-step`, ONLY the agent whose `session.id` matches a
- * ledger row's `parentId` gets one folded observe-only line — contributed
- * via `agent.inject()` + `createUserMessage` with a dedicated
- * `MessageSourceMap` kind, mirroring `packages/memory/memory/src/recall.ts`'s
- * contribution shape — when that session has ≥1 active non-internal
- * one-shot child. Zero emission otherwise: sessions with no children see
- * nothing; internal-only activity yields at most a folded count, never
- * per-child rows.
+ * W2c; addendum 2026-09-10): on `agent/pre-step`, ONLY the agent whose
+ * `session.id` matches a ledger row's `parentId` gets one folded
+ * observe-only line, contributed by REWRITING the enter decision's message
+ * batch (`{...decision, messages: [...decision.messages, notice]}`). The
+ * previous `agent.inject()` delivery was wrong twice over: inject queues a
+ * DURABLE pending inbox message, and the harness loop re-opens a turn
+ * whenever the inbox has pending work at turn end — an idle session woke
+ * forever with nothing to do (the phantom-loop bug). A batch append enriches
+ * only the current step (pinned by tests/mechanism-pins.spec.ts T1).
+ *
+ * Dedupe is per agent OBJECT: a WeakMap stores the last appended fold text;
+ * an identical fold appends nothing, a changed fold appends again.
  *
  * Registration follows `strip-instructions.ts` / `suppress-settled.ts`: a
  * plain `agent/pre-step` waterfall listener that delegates to `next()`
- * unchanged (observe-only). No `prepend` — unlike the strip, this listener
- * reads only the ledger and its own agent, so ordering is irrelevant.
+ * unchanged (observe-only).
  *
  * @module @dsh-cc/subagent-task/one-shot-notice
  */
@@ -62,6 +65,8 @@ export interface ChildNoticeLedger {
  * @returns an unmount callback.
  */
 export function mountSubagentChildNotice(ctx: Context, ledger: ChildNoticeLedger): () => void {
+  // Last appended fold text per agent object (dedupe across pre-steps).
+  const lastNotice = new WeakMap<Agent, string>()
   return ctx.on('agent/pre-step', async ({ agent }: { agent: Agent }, next): Promise<PreStepDecision> => {
     const decision = await next()
     // Fire-and-forget: the notice is model-visible enrichment, never worth
@@ -70,13 +75,22 @@ export function mountSubagentChildNotice(ctx: Context, ledger: ChildNoticeLedger
       const sid = (agent.session as { id?: unknown } | undefined)?.id
       if (sid === undefined) return decision
       const active = ledger.activeFor(String(sid))
-      if (active.length === 0) return decision
-      agent.inject(createUserMessage({
-        content: [{ type: 'text', text: foldChildNotice(active) }],
-        source: { kind: 'cc-subagent-children' },
-      }))
+      const text = foldChildNotice(active)
+      // Never append an empty fold; never re-append an unchanged fold. The
+      // memo updates only on an actual append, so a fold skipped by a
+      // non-enter decision is retried on the next enter.
+      if (text === '' || lastNotice.get(agent) === text) return decision
+      if (decision.kind !== 'enter') return decision
+      lastNotice.set(agent, text)
+      return {
+        ...decision,
+        messages: [...decision.messages, createUserMessage({
+          content: [{ type: 'text', text }],
+          source: { kind: 'cc-subagent-children' },
+        })],
+      }
     } catch {
-      // Absent llm seam or inject surface: skip quietly.
+      // Absent llm seam or decision surface: skip quietly.
     }
     return decision
   })

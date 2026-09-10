@@ -264,3 +264,61 @@ behavior; no code change.
 - Explicit non-goals: flipping `recallUseSmallFast` (needs a W4 report);
   touching `deepseek-harness`; fixing `list_agents` or `restrict()`
   upstream (worked around in W2/W3 instead).
+
+## Addendum 2026-09-10
+
+Bug-fix follow-up to the W2 one-shot subagent-child notice (PR #27), which
+misbehaved into an infinite phantom loop on the pinned harness
+(0.1.2-rc.1, commit a66e470204): one real user message produced 9 phantom
+`[observe]` injections and 8 memory injections.
+
+### Dead API root cause
+
+`Session.events` (a public array member) no longer exists at the 0.1.2-rc.1
+line — the session surface is `ownEvents()` / `snapshotEvents()` /
+`eventAt()`. Every descriptor/prompt probe read the dead duck-typed
+`session?.events` field, so labels, modes, and excerpts NEVER resolved
+(duck-typed optional chaining hid this from TypeScript): internal infra
+forks were misclassified as visible 'unlabeled' children. All probes now
+read `ownEvents()` when it is a function, else `snapshotEvents()`, else the
+legacy `events` array:
+
+- `packages/subagent/task/src/one-shot-ledger.ts` (`resolveDescriptor`)
+- `packages/ui/tui/src/harness/driver-catalog.ts` (`probeResumable`)
+- `packages/ui/tui/src/harness/driver-agents.ts` (`promptExcerptOf`)
+
+The TUI probes are small local helpers (no cross-package dependency on
+`@dsh-cc/subagent-task`). `packages/interaction/command-doctor`'s
+`status.events` is a different object and was intentionally left alone.
+
+### Notice delivery: agent.inject → enter-batch append
+
+`agent.inject()` queues a DURABLE pending inbox message, and the harness
+loop re-opens a turn whenever the inbox has pending work at turn end — an
+idle session woke forever with "nothing to do". The notice now appends to
+the current step's context by rewriting the enter decision
+(`{...decision, messages: [...decision.messages, notice]}`); a batch append
+never sits in the pending inbox. Mechanism pins (T1/T2) in
+`packages/subagent/task/tests/mechanism-pins.spec.ts` lock both facts
+against the real testkit loop. Per-agent dedupe: a WeakMap stores the last
+appended fold text per agent object; identical folds append nothing.
+
+### Lazy descriptor re-resolution
+
+The in-process one-shot driver appends `subagent/descriptor` inside the
+child's FIRST pre-step, after `subagent/start` fires — an insert-time probe
+legitimately sees nothing. The ledger now re-probes label-less rows at
+`rows()`/`activeFor()` read time via `agents.get(row.id)` and caches
+resolved rows (never probed again); start-time insertion shape and runId
+pairing are unchanged.
+
+### Recall denylist (know your injector)
+
+`MemoryRecall.maybeRecall` builds its query only from pending messages
+whose `source.kind` is not in `{'memory', 'cc-subagent-children'}`; a
+message with no source is user input. Injected `[observe]` text previously
+yielded empty selections (no topic marked shown), so every woken turn
+spawned a new recall selector child — the self-feeding half of the loop.
+Per-agent query dedupe (last query per agent) additionally skips a
+re-presented identical query. Rule: any new injected message source kind
+must be added to the denylist constant.

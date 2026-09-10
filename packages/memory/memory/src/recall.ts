@@ -180,6 +180,15 @@ function isFilesPayload(value: unknown): value is { files: readonly unknown[] } 
   return Array.isArray((value as { files?: unknown }).files)
 }
 
+/**
+ * Injected source kinds whose pending pre-step messages must NEVER feed the
+ * recall query — a query built from injected text yields empty selections
+ * (no topic marked shown) and re-triggers recall on every woken turn, the
+ * self-feeding phantom loop. KNOW YOUR INJECTOR: any new injected message
+ * source kind must be added here.
+ */
+const INJECTED_SOURCE_DENYLIST: readonly string[] = ['memory', 'cc-subagent-children']
+
 /** Structural subset of the subagent seam used by the selector. */
 interface SubagentLike {
   start(name: string, request: {
@@ -198,7 +207,7 @@ interface SubagentLike {
 
 /** The per-agent recall coordinator. Holds the shown-path set per agent. */
 export class MemoryRecall {
-  private readonly state = new WeakMap<Agent, { shown: Set<string>; inFlight: boolean }>()
+  private readonly state = new WeakMap<Agent, { shown: Set<string>; inFlight: boolean; lastQuery: string }>()
   private readonly providerName: string
   private readonly createSelector: (ctx: Context, agent: Agent) => MemorySelector
   private readonly recentTools = new Set<string>()
@@ -255,7 +264,7 @@ export class MemoryRecall {
       signal,
     }: {
       agent: Agent
-      messages: ReadonlyArray<{ content: readonly { type: string; text?: string }[] }>
+      messages: ReadonlyArray<{ content: readonly { type: string; text?: string }[]; source?: { kind?: string } }>
       signal: AbortSignal
     },
     next: () => Promise<PreStepDecision>,
@@ -278,13 +287,19 @@ export class MemoryRecall {
 
   private async maybeRecall(
     agent: Agent,
-    messages: ReadonlyArray<{ content: readonly { type: string; text?: string }[] }>,
+    messages: ReadonlyArray<{ content: readonly { type: string; text?: string }[]; source?: { kind?: string } }>,
     signal: AbortSignal,
     selector: MemorySelector,
   ): Promise<void> {
     const fileSystem = this.ctx.get('fs')
     if (fileSystem === undefined) return
+    // Build the query ONLY from real user input: messages carrying an
+    // injected source kind (memory bodies, subagent-child notices) are
+    // excluded — a query built from injected text yields empty selections
+    // and re-triggers recall forever. A message with no source is user input.
     const query = messages
+      .filter(message => message.source === undefined
+        || !INJECTED_SOURCE_DENYLIST.includes(message.source.kind ?? ''))
       .map(message => message.content.filter(block => block.type === 'text').map(block => block.text ?? '').join(' '))
       .join('\n')
       .trim()
@@ -301,9 +316,13 @@ export class MemoryRecall {
     if (topics.length === 0) return
     let entry = this.state.get(agent)
     if (entry === undefined) {
-      entry = { shown: new Set(), inFlight: false }
+      entry = { shown: new Set(), inFlight: false, lastQuery: '' }
       this.state.set(agent, entry)
     }
+    // Per-agent query dedupe: the identical pending text re-presented (e.g.
+    // the same turn context claimed again) must not spawn another selector.
+    if (entry.lastQuery === query) return
+    entry.lastQuery = query
     const fresh = topics.filter(topic => !entry.shown.has(topic.path))
     if (fresh.length === 0) return
     // Pre-step fires once per step while a turn runs; a pending selection must
