@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-compact",
   "description": "Human-facing /compact command with optional preservation instructions",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

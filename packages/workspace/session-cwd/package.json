@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/session-cwd",
   "description": "Session-scoped working directory state for DeepSeek Harness CC: durable worktree/entered session events, foldable cwd state, getSessionCwd/setSessionCwd APIs, and a pre-execute workspace boundary guard",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

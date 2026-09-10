@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 /** Compile-time fallback, kept in sync with package.json `version`. */
-export const FALLBACK_VERSION = '0.6.0'
+export const FALLBACK_VERSION = '0.6.1'
 
 /** A shared harness version reported by the host, or `undefined` when unknown. */
 export type HarnessVersion = string | undefined

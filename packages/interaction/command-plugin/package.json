@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-plugin",
   "description": "Human-facing slash commands to list and reload mounted Claude Code plugins",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
