@@ -112,6 +112,12 @@ inert until Stage 1 exists.
 
 ## 4. Phases
 
+### Stage-0 addendum (pre-implementation research)
+
+> **Adapter gate (answered 2026-09-10, pre-implementation research).** The `orchestrix` route is not a named adapter: it resolves at runtime through the harness's generic pi-ai adapter (`llm-pi-ai` registers one adapter for all configured provider routes; `llmbox_ant/` is a model-id prefix convention, not a code path). Harness-side, the pi-ai adapter PRESERVES prior-turn reasoning: reasoning blocks are re-encoded as pi-ai `thinking` content blocks in the re-sent assistant history (`packages/llm/llm-pi-ai/src/replay.ts:150,193-197`) and forwarded via `streamSimple` (`adapter.ts:370-372`) — unlike the deepseek adapter's `reasoning_content` string field. The final hop — whether `@earendil-works/pi-ai`'s serialization (or the llmbox gateway) discards or meters that thinking text on the wire — remains outside both repos and unverified from source. Conclusion: the re-send happens on the harness side on the orchestrix route too, so the cost rationale stands pending runtime usage data; the probe's ledger is the instrument that settles it.
+>
+> **Cost gate metric (pinned).** Usage semantics are DISJOINT (harness `llm/src/types.ts` TokenUsage docstring): `inputTokens` counts uncached input only; billed input = `inputTokens + cacheReadTokens + cacheWriteTokens` (the deepseek adapter already subtracts cache hits from prompt_tokens). Any "re-sent reasoning share of metered input" analysis MUST use the summed billed-input denominator or it silently overstates the share 2-4x on cached sessions. `reasoningTokens` is output-side and cannot measure re-send cost; the gate reads re-send cost indirectly via usage deltas across turns, as §1 states.
+
 0. Probe + ledger + Stage-0 addendum answering both gates. (This PR.)
 1. Frozen: fold path, contingent on gates. Separate PR.
 2. Frozen: eval; default-on decision. Separate PR.

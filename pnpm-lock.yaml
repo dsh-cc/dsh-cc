@@ -1474,6 +1474,24 @@ importers:
 
   packages/launcher/tui: {}
 
+  packages/llm-tuning/reasoning-fold:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../../../deepseek-harness/packages/settings/settings
+        version: link:../../../../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/mcp/mcp-client:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -1751,6 +1769,9 @@ importers:
       '@dsh-cc/output-styles':
         specifier: workspace:^
         version: link:../../compat/cc-output-styles
+      '@dsh-cc/reasoning-fold':
+        specifier: workspace:^
+        version: link:../../llm-tuning/reasoning-fold
       '@dsh-cc/serena-first':
         specifier: workspace:^
         version: link:../../compat/cc-serena-first

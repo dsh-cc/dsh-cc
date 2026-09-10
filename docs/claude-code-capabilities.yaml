@@ -407,6 +407,33 @@ capabilities:
       - { type: test, path: packages/interaction/command-permissions/tests/plan-channel.integration.spec.ts }
     deviation: { kind: none }
 
+  engine.reasoning-fold-probe:
+    title: Reasoning-fold probe (Stage 0, ledger only)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. A READ-ONLY
+        llm/stream listener byte-counts reasoning-delta vs text-delta chunks
+        and captures usage into $DSH_HOME/reasoning-fold/<sessionId>.jsonl,
+        measuring the re-sent-reasoning cost before any behavior change
+        (the fold itself is a gated Stage-1/2 effort).
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: partial
+      ux: missing
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: reasoning-fold" }
+      - { type: test, path: packages/llm-tuning/reasoning-fold/tests/component.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: read-only, ledger-only probe (cc-reasoning-fold
+        settings namespace, probe: true default); no chunk is ever rewritten
+        and no model call can fail because of it.
+
   engine.remote-sessions:
     title: Remote / web sessions
     category: engine
