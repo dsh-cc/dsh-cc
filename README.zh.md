@@ -135,18 +135,26 @@ CC profile 中的 MCP 客户端支持：
 
 当你的 MCP 配置连接了 [Serena](https://github.com/oraios/serena) server 时，dsh-cc 会自动加以利用：系统提示词会引导模型在代码问题上优先使用 Serena 的符号工具，内置的 `explore` 子代理也会获得只读符号检索能力（`find_symbol`、`find_referencing_symbols`、`get_symbols_overview`）。Serena 完全可选——不安装时，会话行为完全一致，代码问答仍走内置的 Read/Grep 工具，只是少了这些引导。
 
-在 `~/.dsh/.mcp.json`（或项目级 `.mcp.json`）中添加：
+先安装一次 Serena，让本地 `serena` 命令进入 `PATH`：
+
+```sh
+uv tool install git+https://github.com/oraios/serena@v1.7.0
+```
+
+然后在 `~/.dsh/.mcp.json`（或项目级 `.mcp.json`）中使用本地命令：
 
 ```json
 {
   "mcpServers": {
     "serena": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/oraios/serena@v1.7.0", "serena", "start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
+      "command": "serena",
+      "args": ["start-mcp-server", "--context", "claude-code", "--project-from-cwd"]
     }
   }
 }
 ```
+
+不要通过 `uvx --from git+…` 启动：每次 server 启动都会写 `~/.cache/uv`，会被会话沙箱拒绝。
 
 连接状态可通过 `/doctor` 的 `mcp.serena` 检查项查看。
 

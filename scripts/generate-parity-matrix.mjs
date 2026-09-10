@@ -230,6 +230,9 @@ export function renderReadmeBlock(manifest, { readmeDir = "." } = {}) {
   const threshold = manifest.baseline?.freshness_threshold_days;
   if (newest)
     out.push(
+      // Blank line above: without it, renderers absorb this sentence into
+      // the table as a trailing row (GFM tables swallow adjacent paragraphs).
+      "",
       `Statuses were verified against upstream documentation retrieved as of ${newest}` +
         (typeof threshold === "number" ? ` (freshness threshold: ${threshold} days).` : "."),
     );
