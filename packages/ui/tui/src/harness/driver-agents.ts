@@ -63,16 +63,34 @@ export function createAgentsSection(rt: DriverRunLocalCtx): AgentsSection {
   }
 
   /**
+   * Read a session's event log through the live harness API: prefer
+   * `ownEvents()`, fall back to `snapshotEvents()`, then to the legacy
+   * `events` array (removed at the harness 0.1.2-rc.1 line — the old probe
+   * read only that dead field and never saw anything).
+   */
+  const sessionEvents = (session: unknown): readonly unknown[] => {
+    const s = session as {
+      ownEvents?: () => readonly unknown[]
+      snapshotEvents?: () => readonly unknown[]
+      events?: readonly unknown[]
+    } | undefined
+    if (typeof s?.ownEvents === 'function') return s.ownEvents()
+    if (typeof s?.snapshotEvents === 'function') return s.snapshotEvents()
+    return s?.events ?? []
+  }
+
+  /**
    * ANSI/control-stripped, newline-normalized, unicode-aware-truncated prompt
    * excerpt from the child's first user message event, when the child agent's
    * session is reachable via `ctx.agents.get` (F7: the fold itself carries no
    * prompt).
    */
   const promptExcerptOf = (childId: string): string | undefined => {
-    const child = (rt.ctx.agents as unknown as { get?: (id: string) => { session?: { events?: readonly unknown[] } } } | undefined)
+    const child = (rt.ctx.agents as unknown as { get?: (id: string) => { session?: unknown } } | undefined)
       ?.get?.(childId)
-    const events = child?.session?.events
-    if (events === undefined) return undefined
+    if (child === undefined) return undefined
+    const events = sessionEvents((child as { session?: unknown }).session)
+    if (events.length === 0) return undefined
     for (const event of events) {
       const record = event as { type?: string; data?: { role?: string; content?: unknown; text?: string } }
       if (record.type !== 'message' || record.data?.role !== 'user') continue

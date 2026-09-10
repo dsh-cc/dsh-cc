@@ -356,4 +356,59 @@ describe('createDriver subagent tracking', () => {
       expect(row.text).toContain('/agents')
     }
   })
+
+  it('classifies a snapshotEvents()-only child as resumable when its descriptor is continuable (W5 dead-API fix)', async () => {
+    const agent = makeFakeAgent()
+    const snapshotOnlyChild = {
+      session: { snapshotEvents: () => [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }] },
+    }
+    const { ctx, emitStart } = makeCtx(agent, { 'tui-abcdef01-dead-beef': snapshotOnlyChild })
+    const driver = await createDriver(ctx as never, {})
+
+    emitStart({ runId: 'r1', provider: 'openai', id: 'tui-abcdef01-dead-beef', local: true })
+    expect(driver.state.subagents[0]).toMatchObject({ sessionId: 'tui-abcdef01-dead-beef', resumable: true })
+  })
+
+  it('folds a snapshotEvents()-only continuable child into parked, not done (W5 dead-API probe)', async () => {
+    const agent = makeFakeAgent()
+    const snapshotOnlyChild = {
+      session: { snapshotEvents: () => [{ type: 'subagent/descriptor', data: { mode: 'continuable' } }] },
+    }
+    const { ctx, emitStart, emitEnd } = makeCtx(agent, { 'tui-abcdef01-dead-beef': snapshotOnlyChild })
+    const driver = await createDriver(ctx as never, {})
+
+    emitStart({ runId: 'r1', provider: 'openai', id: 'tui-abcdef01-dead-beef', local: true })
+    emitEnd({ runId: 'r1', provider: 'openai', id: 'tui-abcdef01-dead-beef', local: true, stopReason: 'end_turn' })
+    expect(driver.state.subagents[0]).toMatchObject({ status: 'parked', resumable: true })
+  })
+
+  it('a snapshotEvents()-only child with a one-shot descriptor is NOT resumable', async () => {
+    const agent = makeFakeAgent()
+    const snapshotOnlyChild = {
+      session: { snapshotEvents: () => [{ type: 'subagent/descriptor', data: { mode: 'one-shot' } }] },
+    }
+    const { ctx, emitStart, emitEnd } = makeCtx(agent, { 'tui-abcdef01-dead-beef': snapshotOnlyChild })
+    const driver = await createDriver(ctx as never, {})
+
+    emitStart({ runId: 'r1', provider: 'openai', id: 'tui-abcdef01-dead-beef', local: true })
+    emitEnd({ runId: 'r1', provider: 'openai', id: 'tui-abcdef01-dead-beef', local: true, stopReason: 'end_turn' })
+    expect(driver.state.subagents[0]).toMatchObject({ status: 'done' })
+  })
+
+  it('/agents <id> surfaces the prompt excerpt from a snapshotEvents()-only child (W5 dead-API probe)', async () => {
+    const agent = makeFakeAgent()
+    const snapshotOnlyChild = {
+      session: { snapshotEvents: () => [{ type: 'message', data: { role: 'user', text: 'read the flaky test' } }] },
+    }
+    const { ctx, emitStart } = makeCtx(agent, { 'tui-abcdef01': snapshotOnlyChild })
+    const driver = await createDriver(ctx as never, {})
+
+    emitStart({ runId: 'r1', provider: 'openai', id: 'tui-abcdef01', local: true })
+    await driver.submit('/agents tui-abcdef01')
+    const row = driver.state.rows.at(-1)
+    expect(row?.kind).toBe('status')
+    if (row?.kind === 'status') {
+      expect(row.text).toContain('prompt: "read the flaky test"')
+    }
+  })
 })
