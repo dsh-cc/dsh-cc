@@ -1,0 +1,106 @@
+name: Install / first-run failure · 安装或首次启动失败
+description: npm install, launcher bootstrap, or first-run onboarding did not work.
+title: "install: "
+labels: ["bug", "install"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an install or first-run problem.
+
+        Please redact API keys and tokens. Prefer `/doctor` output when available.
+
+        感谢反馈安装/首次启动问题。请打码 API key 与 token；有条件请附上 `/doctor` 输出。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened? · 发生了什么
+      description: One or two sentences. Include the failing step (install, `dsh-cc`, onboarding, etc.).
+      placeholder: e.g. `dsh-cc` exits immediately after install with "No model configured" / 启动后立刻退出
+    validations:
+      required: true
+
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands you ran · 执行过的命令
+      description: Exact install / launch commands.
+      placeholder: |
+        npm install -g @deepseek-ai/dsh @dsh-cc/cli
+        dsh-cc
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Exact error output · 完整报错
+      description: Paste the full terminal output. Redact secrets.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS · 操作系统
+      placeholder: macOS 15.1 / Ubuntu 24.04 / Windows 11 (WSL2)
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version · Node 版本
+      description: Output of `node -v`.
+      placeholder: v22.x.x
+    validations:
+      required: true
+
+  - type: input
+    id: dsh-version
+    attributes:
+      label: dsh version · dsh 版本
+      description: Output of `dsh --version` (dsh-cc needs dsh >= 0.1.2-rc.1).
+      placeholder: 0.1.2-rc.1
+    validations:
+      required: true
+
+  - type: input
+    id: cli-version
+    attributes:
+      label: "@dsh-cc/cli version · CLI 版本"
+      description: From `npm list -g @dsh-cc/cli` or package metadata.
+      placeholder: 0.6.1
+    validations:
+      required: false
+
+  - type: dropdown
+    id: provider-configured
+    attributes:
+      label: Was a model provider configured? · 是否已配置模型
+      options:
+        - "No — first run / onboarding never completed"
+        - "Yes — provider configured but launch still fails"
+        - "Unsure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "/doctor output (if available) · /doctor 输出"
+      description: Run `/doctor` (or `/doctor --verbose`) inside a session if you can start one. Redact secrets.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else? · 其他信息
+      description: Screenshots description, proxy/network notes, prior working version, etc.
+    validations:
+      required: false

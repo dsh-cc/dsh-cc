@@ -1,0 +1,91 @@
+name: Model / provider routing · 模型或路由问题
+description: Alias routing, provider setup, or wrong model being used.
+title: "models: "
+labels: ["bug", "models"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for provider setup, alias mapping (`sketch` / `draft` / `blueprint` / `masterplan`, `haiku` / `sonnet` / `opus`), or unexpected model selection.
+
+        **Never paste API keys.** Redact tokens in settings dumps and logs.
+
+        用于 provider 配置、别名映射，或实际调用了错误模型。请勿粘贴 API key。
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior · 期望行为
+      description: Which alias / provider / model should have been used?
+      placeholder: e.g. alias `draft` should route to glm-5.3-flash via Z.AI
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior · 实际行为
+      description: What happened instead? Include error text or observed model id.
+      placeholder: e.g. requests still go to deepseek-v4-flash / `/provider list` shows no default
+    validations:
+      required: true
+
+  - type: textarea
+    id: provider-list
+    attributes:
+      label: "`/provider list` (redacted) · 当前路由"
+      description: Paste `/provider list` output with keys removed. Say if the command is unavailable.
+      render: shell
+    validations:
+      required: false
+
+  - type: dropdown
+    id: how-configured
+    attributes:
+      label: How did you configure the provider? · 如何配置的
+      options:
+        - First-run onboarding panel
+        - "`/provider add` wizard"
+        - "`/onboard`"
+        - Manual settings / env vars
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: settings-snippet
+    attributes:
+      label: Relevant settings snippet · 相关配置片段
+      description: Only non-secret bits from `~/.dsh/settings.json` or project settings. Never include `.credentials.yaml` contents.
+      render: yaml
+    validations:
+      required: false
+
+  - type: input
+    id: dsh-cli
+    attributes:
+      label: dsh + @dsh-cc/cli versions · 版本
+      placeholder: "dsh 0.1.2-rc.1 / @dsh-cc/cli 0.6.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction · 最小复现步骤
+      description: Numbered steps from a clean-ish state if possible.
+      placeholder: |
+        1. Fresh install
+        2. `/provider add ...`
+        3. Ask the agent to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Logs / extra context · 日志与补充
+      description: Redact secrets. `/doctor` or session excerpts welcome.
+      render: shell
+    validations:
+      required: false

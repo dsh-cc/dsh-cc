@@ -1,0 +1,86 @@
+name: Compatibility gap · 兼容缺口 / 缺失能力
+description: A Claude Code-style workflow or feature is missing or only partially works.
+title: "parity: "
+labels: ["enhancement", "parity"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        dsh-cc intentionally tracks Claude Code-style workflows on DeepSeek Harness and documents gaps in the [parity matrix](https://github.com/dsh-cc/dsh-cc/blob/main/docs/cc-parity-matrix.md).
+
+        Please check that doc first — if the gap is already listed, link it and tell us how severe it is for your workflow.
+
+        请先查阅兼容矩阵；若缺口已记录，请贴上条目并说明对你工作流的影响程度。
+
+  - type: input
+    id: feature
+    attributes:
+      label: Feature or workflow · 功能 / 工作流
+      description: Name the Claude Code-style capability you expected.
+      placeholder: e.g. PreToolUse HTTP hooks / `/compact` behavior / project memory write
+    validations:
+      required: true
+
+  - type: input
+    id: matrix-link
+    attributes:
+      label: Parity matrix entry (if known) · 矩阵条目
+      description: Row name or deep link into `docs/cc-parity-matrix.md`.
+      placeholder: e.g. Hook events → SessionStart (Missing)
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected (Claude Code-style) · 期望行为
+      placeholder: What should happen in a Claude Code-compatible workflow?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual in dsh-cc · dsh-cc 实际行为
+      placeholder: Error, no-op, partial behavior, or "command not found".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity for your workflow · 影响程度
+      options:
+        - Blocker — cannot adopt / must switch tools
+        - Workaround exists — painful but usable
+        - Nice-to-have — polish / parity completeness
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction · 最小复现
+      description: Project shape (`.claude/agents`, hooks, skills) and steps.
+      placeholder: |
+        1. Add `.claude/agents/foo.md` with ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions · 版本
+      placeholder: "dsh 0.1.2-rc.1 / @dsh-cc/cli 0.6.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround (if any) · 现有绕过方式
+      description: Helps prioritize and document FAQ entries.
+    validations:
+      required: false
