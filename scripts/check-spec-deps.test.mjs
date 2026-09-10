@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* check-spec-deps.mjs 的测试夹具:合成仓库 + 真实仓库冒烟 */
+/* Test fixtures for check-spec-deps.mjs: synthetic repos + a real-repo smoke pass */
 import { findSpecImportProblems } from "./check-spec-deps.mjs";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

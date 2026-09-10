@@ -1,5 +1,7 @@
 # @dsh-cc/tui
 
+English | [中文](README.zh.md)
+
 Claude Code-style terminal surface for DeepSeek Harness. Mounted by
 `@dsh-cc/bundle-tui` on the **`tui`** profile; new sessions compose the
 **`cc`** agent preset.

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * check-capability-evidence.mjs 的测试夹具:合成清单(每条不变量 I1–I11
- * 一个最小 fixture)+ 归一化/锚点/新鲜度用例。遵循 check-spec-deps.test.mjs
- * 的模式:纯 node + assert,临时目录注入 rootDir,无测试框架。
+ * Test fixtures for check-capability-evidence.mjs: a synthetic manifest
+ * (one minimal fixture per invariant I1–I11) plus normalization / anchor /
+ * freshness cases. Follows the pattern of check-spec-deps.test.mjs: plain
+ * node + assert, rootDir injected via a temp dir, no test framework.
  */
 import { checkCapabilityManifest } from "./lib/capability-manifest.mjs";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -20,7 +21,8 @@ const PRESET = "packages/preset/cc/agent.cordis.yml";
 const errorsOf = (diags) => diags.filter((d) => d.level === "error");
 const warningsOf = (diags) => diags.filter((d) => d.level === "warning");
 
-// 最小合法骨架;overrides 深合并不做,直接整段替换 capabilities / baseline 等。
+// Minimal valid skeleton; overrides are not deep-merged here — the
+// capabilities / baseline blocks are replaced wholesale instead.
 function baseManifest() {
   return {
     manifest_version: 1,
@@ -100,7 +102,8 @@ function writeFixture(yamlText, extraFiles = []) {
   return dir;
 }
 
-// js-yaml 把对象序列化成 YAML;测试自己 dump,避免手写字符串出错。
+// js-yaml serializes objects to YAML; the test does its own dump rather
+// than trusting hand-written YAML strings.
 import yaml from "js-yaml";
 const dump = (m) => yaml.dump(m, { lineWidth: -1 });
 
@@ -111,7 +114,8 @@ const GOOD_FILES = [
 ];
 
 try {
-  // 1) 全合法 fixture:零诊断(含一条正向维度的能力 + 一条全负向的)。
+  // 1) Fully valid fixture: zero diagnostics (one capability with positive
+  // grades + one all-negative).
   {
     const dir = writeFixture(dump(baseManifest()), GOOD_FILES);
     const diags = checkCapabilityManifest(dir, "docs.yaml");
@@ -119,7 +123,8 @@ try {
     console.log("valid fixture OK (0 diagnostics)");
   }
 
-  // 标量简写 vs 对象形式:归一化后诊断一致。
+  // Scalar shorthand vs. object form: identical diagnostics after
+  // normalization.
   {
     const m = baseManifest();
     m.capabilities["sessions.resume"].dimensions = {
@@ -134,7 +139,7 @@ try {
     console.log("object-form normalization OK (0 diagnostics)");
   }
 
-  // 2) 每条不变量一个最小 fixture。
+  // 2) One minimal fixture per invariant.
   const violates = (name, mutate, rule) => {
     const m = baseManifest();
     mutate(m);
@@ -262,7 +267,8 @@ m.capabilities["sessions.resume"].evidence = [
       cap.category = "memory";
       delete m.capabilities["sessions.checkpointing"];
       m.capabilities["memory.snapshot"] = cap;
-      // memory.snapshot 在 sessions.resume 之后 → 违反类别顺序
+      // memory.snapshot placed after sessions.resume → violates category
+      // ordering
     },
     "I7",
   );
@@ -305,7 +311,8 @@ m.capabilities["sessions.resume"].evidence = [
     "I11",
   );
 
-  // I7 重复 id:js-yaml 在解析期即拒绝重复键,loader 报一条 manifest 诊断。
+  // I7 duplicate id: js-yaml rejects duplicate keys at parse time; the
+  // loader surfaces one manifest diagnostic.
   {
     const dumped = dump(baseManifest());
     const dup = dumped.replace(
@@ -321,7 +328,7 @@ m.capabilities["sessions.resume"].evidence = [
     console.log("I7-duplicate OK (rejected at YAML parse)");
   }
 
-  // 3) 证据路径存在性:缺失文件 → error(rule "evidence")。
+  // 3) Evidence path existence: a missing file → error (rule "evidence").
   {
     const dir = writeFixture(dump(baseManifest()), [[PRESET, PRESET_BODY]]);
     const errs = errorsOf(checkCapabilityManifest(dir, "docs.yaml"));
@@ -331,7 +338,8 @@ m.capabilities["sessions.resume"].evidence = [
     console.log("evidence-exists OK (missing file named)");
   }
 
-  // 4) 锚点规则:URL 证据禁止 anchor(schema 错误);锚点必须是字面子串。
+  // 4) Anchor rules: URL evidence must not carry an anchor (schema error);
+  // an anchor must match a literal substring.
   {
     const m = baseManifest();
     m.capabilities["sessions.resume"].evidence = [
@@ -345,7 +353,7 @@ m.capabilities["sessions.resume"].evidence = [
     console.log("anchor-on-url OK (rejected)");
   }
 
-  // 5) 新鲜度(I8):过期 retrieved → WARNING,不产生 error。
+  // 5) Freshness (I8): a stale retrieved date → WARNING, never an error.
   {
     const m = baseManifest();
     m.capabilities["sessions.resume"].upstream.refs[0].retrieved = OLD;
@@ -360,7 +368,7 @@ m.capabilities["sessions.resume"].evidence = [
     console.log("freshness WARNING OK (run stays green)");
   }
 
-  // 6) 清单文件缺失 → actionable error。
+  // 6) Manifest file missing → actionable error.
   {
     const diags = checkCapabilityManifest(root, "does-not-exist.yaml");
     assert.equal(diags.length, 1);
@@ -369,7 +377,7 @@ m.capabilities["sessions.resume"].evidence = [
     console.log("missing-manifest OK (actionable message)");
   }
 
-  // 7) CLI:缺失清单 → exit 1 + 消息。
+  // 7) CLI: missing manifest → exit 1 + message.
   {
     const script = join(dirname(fileURLToPath(import.meta.url)), "check-capability-evidence.mjs");
     const r = spawnSync(process.execPath, [script, join(root, "nope.yaml")], {

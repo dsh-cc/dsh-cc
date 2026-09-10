@@ -1,5 +1,7 @@
 # @dsh-cc/cli
 
+English | [中文](README.zh.md)
+
 Optional `dsh-cc` bin. Canonical command is still `dsh --profile tui`.
 
 First run bootstraps `$DSH_HOME/profiles/tui` with the three CC bundles.

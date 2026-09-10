@@ -1,5 +1,7 @@
 # @dsh-cc/serena-first
 
+English | [中文](README.zh.md)
+
 Serena-first prompt steering for the CC preset (`packages/preset/cc`).
 
 When a serena MCP server is connected (repo `.serena/project.yml`, user-scoped

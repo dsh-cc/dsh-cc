@@ -1,5 +1,7 @@
 # @dsh-cc/tool-web-fetch
 
+[English](README.md) | 中文
+
 CC 风格的 `web_fetch` 替代工具，带可选 `prompt` 参数。当 CC preset 将 `tool-web` 配置为
 `fetch: false` 并在 `cc-services` 内挂载本包时，本包取代 stock `@deepseek-ai/dsh-tool-web`
 的 `web_fetch`。

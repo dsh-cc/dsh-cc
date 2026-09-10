@@ -13,7 +13,7 @@
  *
  * Rate note: shares here use the FULL prompt (`read / (input+read+write)`) —
  * the diagnostic question is "how much of this request was served from cache",
- * unlike the benchmark口径 in `report.ts` (`read / (input+read)`).
+ * unlike the benchmark definition in `report.ts` (`read / (input+read)`).
  *
  * `compareForkPrefix` pins the fork byte-identity invariant: a plain fork
  * child's request head (system prompt + route) must equal its parent's, since

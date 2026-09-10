@@ -8,7 +8,7 @@ import { sgr } from '../components/theme.ts'
 import type { TranscriptRow } from '../store.ts'
 
 /**
- * DeepSeek whale source art, "half-block compressed" (半块压缩版): 11 rows of
+ * DeepSeek whale source art, half-block compressed: 11 rows of
  * '█' (filled) / '.' (background), embedded verbatim — pristine. The eye is
  * punched at build time (see {@link EYE}), so the source art above stays
  * untouched and the eye intent is documented here rather than edited in.

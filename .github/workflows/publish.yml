@@ -1,19 +1,23 @@
 # =============================================================================
 # Publish (npm) — dsh-cc
 #
-# v* tag 推送触发:执行与 presubmit 等价的完整检查链(另加发布专属门禁),
-# 再把全部非 private 包发布到 npmjs。presubmit 不监听 tag,故本 workflow
-# 自带全量门禁。
+# Triggered by pushing a v* tag: runs the full presubmit-equivalent check
+# chain (plus release-only gates), then publishes every non-private package
+# to npmjs. presubmit doesn't listen to tags, so this workflow carries the
+# complete gate set itself.
 #
-# 版本模型(lockstep):scripts/release.mjs 在本地统一改写所有可发布包的
-# 版本、提交并打 tag;本 workflow 校验 tag 与清单一致后才发布。重跑幂等:
-# pnpm -r publish 自动跳过 registry 上已存在的版本(断点续发),--tag 会对
-# 已发布版本重挂 dist-tag。
+# Version model (lockstep): scripts/release.mjs locally rewrites every
+# publishable package's version, commits, and tags; this workflow verifies
+# tag/manifest consistency before publishing. Reruns are idempotent:
+# `pnpm -r publish` skips versions already on the registry (resume after a
+# partial publish), and --tag reattaches the dist-tag for versions already
+# published.
 #
-# 认证两阶段:bootstrap 期在仓库 secret 配置 NPM_TOKEN(granular)走 token;
-# 升级为 npm Trusted Publishing(OIDC)时在 npmjs 为每个包配置 trusted
-# publisher(org=dsh-cc, repo=dsh-cc, workflow=publish.yml,
-# environment=npm-publish),然后删除 NPM_TOKEN secret —— 本文件无需改动。
+# Two-phase auth: during bootstrap a repo secret NPM_TOKEN (granular)
+# authenticates via token; when upgrading to npm Trusted Publishing (OIDC),
+# configure a trusted publisher for each package on npmjs (org=dsh-cc,
+# repo=dsh-cc, workflow=publish.yml, environment=npm-publish), then delete
+# the NPM_TOKEN secret — this file needs no change.
 # =============================================================================
 name: Publish (npm)
 
@@ -25,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '已存在的 v* tag(用于失败重跑)'
+        description: 'Existing v* tag (for rerunning a failed publish)'
         required: true
 
 permissions:
@@ -34,10 +38,11 @@ permissions:
 
 concurrency:
   group: release
-  cancel-in-progress: false   # 发布可重跑、不可打断
+  cancel-in-progress: false   # releases are rerunnable, never interruptible
 
 env:
-  # push(ref_name 即 tag)与 dispatch(inputs.tag)两条路径统一出 TAG
+  # Unify TAG across the push path (ref_name = tag) and the dispatch path
+  # (inputs.tag)
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
@@ -51,22 +56,24 @@ jobs:
         with:
           path: dsh-cc
           ref: ${{ env.TAG }}
-          fetch-depth: 0   # merge-base 祖先门禁需要全历史
+          fetch-depth: 0   # the merge-base ancestry gate needs full history
 
-      # 廉价门禁放最前:失败时不必等装依赖/构建 harness
+      # Cheap gates first: a failure here never waits on dependency
+      # installation or the harness build
       - name: Tag gates (ancestor of main; versions match tag)
         working-directory: dsh-cc
         run: |
           git fetch origin main --quiet
-          git merge-base --is-ancestor "${TAG}^{commit}" origin/main || { echo "::error::tag $TAG 不在 origin/main 上 —— 先把 main 推上去:git push origin main $TAG(或仅对已推送的 main 提交重新打 tag)"; exit 1; }
+          git merge-base --is-ancestor "${TAG}^{commit}" origin/main || { echo "::error::tag $TAG is not on origin/main — push main first: git push origin main $TAG (or re-tag an already-pushed main commit)"; exit 1; }
           node scripts/check-release-version.mjs "$TAG"
 
-      # 与 presubmit.yml 单一事实源:锚定 env 块里唯一的 SHA 行,0 个或 2+ 个匹配即失败
+      # Single source of truth is presubmit.yml: anchor the one SHA line in
+      # its env block; 0 or 2+ matches fails here
       - name: Derive DSH_HARNESS_REF from presubmit.yml
         working-directory: dsh-cc
         run: |
           hits=$(grep -cE '^\s*DSH_HARNESS_REF:\s*[0-9a-f]{40}' .github/workflows/presubmit.yml)
-          [ "$hits" = "1" ] || { echo "::error::presubmit.yml 中 DSH_HARNESS_REF 不唯一($hits 处)"; exit 1; }
+          [ "$hits" = "1" ] || { echo "::error::DSH_HARNESS_REF in presubmit.yml is not unique ($hits matches)"; exit 1; }
           ref=$(grep -oE '^\s*DSH_HARNESS_REF:\s*[0-9a-f]{40}' .github/workflows/presubmit.yml | grep -oE '[0-9a-f]{40}')
           echo "DSH_HARNESS_REF=$ref" >> "$GITHUB_ENV"
 
@@ -83,7 +90,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22   # 特意不配 registry-url:token/OIDC 在发布步显式区分
+          node-version: 22   # deliberately no registry-url: token vs OIDC is decided explicitly in the publish step
           cache: pnpm
           cache-dependency-path: |
             dsh-cc/pnpm-lock.yaml
@@ -101,7 +108,14 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-publish-manifests.mjs
 
-      # 与 presubmit 保持一致:纯静态扫描,挡 vendor 污染与 harness 边界突破
+      # Level with presubmit: the bilingual README trio pairing gate holds
+      # before a release too
+      - name: Package README trio (check:readme)
+        working-directory: dsh-cc
+        run: node scripts/check-readme.mjs
+
+      # Level with presubmit: pure static scans that block vendor pollution
+      # and harness-boundary breaks
       - name: TUI boundary (check:tui-boundary)
         working-directory: dsh-cc
         run: node scripts/check-tui-boundary.mjs
@@ -110,7 +124,8 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-vendor-purity.mjs
 
-      # harness lib 缓存只 restore 不 save:缓存在 presubmit 侧生产,发布只消费
+      # The harness lib cache is restored but never saved here: the cache is
+      # produced on the presubmit side, release only consumes it
       - name: Cache harness build outputs (restore only)
         id: cache-harness
         uses: actions/cache/restore@v4
@@ -163,8 +178,9 @@ jobs:
             *)   echo "DIST_TAG=latest" >> "$GITHUB_ENV" ;;
           esac
 
-      # 二选一认证:NPM_TOKEN 存在 → token(bootstrap);不存在 → 不配置任何
-      # 静态凭据,pnpm 11.7 自动走 OIDC trusted publishing
+      # Either/or auth: NPM_TOKEN present → token auth (bootstrap); absent →
+      # no static credential is configured and pnpm 11.7 automatically falls
+      # back to OIDC trusted publishing
       - name: Registry auth (token bootstrap | OIDC flip)
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
