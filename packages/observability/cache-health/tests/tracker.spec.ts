@@ -109,13 +109,14 @@ describe('PrefixTracker segment diff', () => {
   it('exits early: segments after the first difference are not hashed', () => {
     const counting = countingHash()
     const tracker = new PrefixTracker(counting.hash)
-    // 5 segments; after drift at index 0 nothing further should be hashed.
+    // 5 segments; after drift at index 0 nothing further should be hashed:
+    // +1 drift-segment hash, +1 stable-prefix fingerprint hash (O(1)).
     tracker.observe('s1', options('sys', ['m1', 'm2', 'm3']))
     const before = counting.calls()
     const second = tracker.observe('s1', options('OTHER', ['m1', 'm2', 'm3']))
     expect(second.prefixChanged).toBe(true)
     expect(second.driftSegmentIndex).toBe(0)
-    expect(counting.calls()).toBe(before + 1)
+    expect(counting.calls()).toBe(before + 2)
   })
 })
 

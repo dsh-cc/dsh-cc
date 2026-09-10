@@ -14,7 +14,7 @@
 
 ## 账本
 
-每次模型调用一行 JSONL，位于 `<dshHome>/cache-health/<projectKey>/<sessionId>.jsonl`，其中 `projectKey` 是会话 cwd 的短哈希（context-crusher 惯例）。行包含 `{ts, seq, provider, model, stableSegments, stablePrefixTokensEst, prefixChanged, driftSegmentIndex?, driftExcerpt?, callPurpose?}`。追加是即发即忘的——观察绝不会给模型调用增加延迟。文件上限 2000 行（溢出时裁剪最旧的）。
+每次模型调用一行 JSONL，位于 `<dshHome>/cache-health/<projectKey>/<sessionId>.jsonl`，其中 `projectKey` 是会话 cwd 的短哈希（context-crusher 惯例）。行包含 `{ts, seq, provider, model, stableSegments, stablePrefixHash, stablePrefixTokensEst, prefixChanged, driftSegmentIndex?, driftExcerpt?, callPurpose?}`——`stablePrefixHash` 是稳定前缀的指纹（对其各段哈希再哈希），共享前缀的调用间保持稳定，可与离线 `cache-trajectory` 分析器对齐比对。追加是即发即忘的——观察绝不会给模型调用增加延迟。文件上限 2000 行（溢出时裁剪最旧的）。
 
 行反映的是 `llm/stream` options 的中间件之前原始视图，而非线上忠实呈现：未来若有中间件在 `llm/stream` 中改写 options，该账本将低估抖动。摘录会折叠空白、脱敏（`sk-…` 密钥、`Bearer` 令牌、≥ 32 字符的不透明串）并截断到 80 字符。`stablePrefixTokensEst`（规范化长度 / 4）是估算值，不是 token 计数。
 

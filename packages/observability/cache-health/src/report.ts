@@ -21,6 +21,7 @@ export interface CacheHealthReport {
   /** Latest row's stable-prefix state (undefined with no rows). */
   readonly current?: {
     readonly stableSegments: number
+    readonly stablePrefixHash: string
     readonly stablePrefixTokensEst: number
     readonly changedSinceLastCall: boolean
   }
@@ -113,6 +114,7 @@ export function buildReport(
       ? {
           current: {
             stableSegments: last.stableSegments,
+            stablePrefixHash: last.stablePrefixHash,
             stablePrefixTokensEst: last.stablePrefixTokensEst,
             changedSinceLastCall: last.prefixChanged,
           },
@@ -146,6 +148,7 @@ export function renderReport(report: CacheHealthReport): string {
   lines.push(
     `Current stable prefix: ${report.current.stableSegments} segments,`
     + ` ~${report.current.stablePrefixTokensEst} tokens (estimate),`
+    + ` hash ${report.current.stablePrefixHash.slice(0, 16)},`
     + ` changed since last call: ${report.current.changedSinceLastCall ? 'yes' : 'no'}`,
   )
   lines.push('')

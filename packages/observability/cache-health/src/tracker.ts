@@ -73,6 +73,8 @@ export function excerpt(text: string): string {
 export interface PrefixObservation {
   /** Number of leading segments whose hash equals the previous call's. */
   readonly stableSegments: number
+  /** Fingerprint of the stable prefix (hash over its segment hashes); stable across calls sharing the prefix, comparable against the offline cache-trajectory analyzer. */
+  readonly stablePrefixHash: string
   /** Estimated tokens of the stable prefix (canonical length / 4, rounded). */
   readonly stablePrefixTokensEst: number
   /** Whether a previously-stable segment changed (prefix bust, not a tail append). */
@@ -130,8 +132,10 @@ export class PrefixTracker {
       hashes.push(this.hash(text))
     }
     this.prev.set(sessionId, hashes)
+    const stableCount = prefixChanged ? stable : hashes.length
     return {
-      stableSegments: prefixChanged ? stable : hashes.length,
+      stableSegments: stableCount,
+      stablePrefixHash: this.hash(hashes.slice(0, stableCount).join('\n')),
       stablePrefixTokensEst: Math.round(tokens / 4),
       prefixChanged,
       ...(driftSegmentIndex !== undefined ? { driftSegmentIndex } : {}),

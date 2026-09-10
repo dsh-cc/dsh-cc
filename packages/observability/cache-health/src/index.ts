@@ -110,6 +110,7 @@ export function observeRequest(deps: CacheHealthDeps, options: GenerateOptions):
       provider: options.provider,
       model: options.model,
       stableSegments: observation.stableSegments,
+      stablePrefixHash: observation.stablePrefixHash,
       stablePrefixTokensEst: observation.stablePrefixTokensEst,
       prefixChanged: observation.prefixChanged,
       ...(observation.driftSegmentIndex !== undefined

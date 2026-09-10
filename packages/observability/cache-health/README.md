@@ -14,7 +14,7 @@ Cache metering numbers are provider-metered; zero-metered upstreams produce zero
 
 ## Ledger
 
-One JSONL row per model call at `<dshHome>/cache-health/<projectKey>/<sessionId>.jsonl`, where `projectKey` is a short hash of the session cwd (the context-crusher idiom). Rows carry `{ts, seq, provider, model, stableSegments, stablePrefixTokensEst, prefixChanged, driftSegmentIndex?, driftExcerpt?, callPurpose?}`. Appends are fire-and-forget — observation never adds latency to model calls. The file is capped at 2000 rows (oldest trimmed on overflow).
+One JSONL row per model call at `<dshHome>/cache-health/<projectKey>/<sessionId>.jsonl`, where `projectKey` is a short hash of the session cwd (the context-crusher idiom). Rows carry `{ts, seq, provider, model, stableSegments, stablePrefixHash, stablePrefixTokensEst, prefixChanged, driftSegmentIndex?, driftExcerpt?, callPurpose?}` — `stablePrefixHash` is a fingerprint of the stable prefix (hash over its segment hashes), stable across calls sharing the prefix and comparable with the offline `cache-trajectory` analyzer. Appends are fire-and-forget — observation never adds latency to model calls. The file is capped at 2000 rows (oldest trimmed on overflow).
 
 Rows reflect the raw pre-middleware view of `llm/stream` options, not a wire-faithful rendering: a future middleware rewriting options in `llm/stream` would make this ledger under-report churn. Excerpts are whitespace-collapsed, redacted (`sk-…` keys, `Bearer` tokens, opaque runs ≥ 32 chars), and truncated to 80 characters. `stablePrefixTokensEst` (canonical length / 4) is an estimate, not a token count.
 

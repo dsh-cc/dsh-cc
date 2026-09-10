@@ -10,6 +10,7 @@ function row(seq: number, prefixChanged = false, driftSegmentIndex?: number): Le
     provider: 'deepseek',
     model: 'deepseek-chat',
     stableSegments: 3,
+    stablePrefixHash: 'a'.repeat(64),
     stablePrefixTokensEst: 100,
     prefixChanged,
     ...(driftSegmentIndex !== undefined ? { driftSegmentIndex } : {}),
@@ -62,7 +63,7 @@ describe('buildReport + renderReport', () => {
     expect(report.driftRows).toHaveLength(3)
     expect(report.frontLoadedSuspects.map(r => r.seq)).toEqual([2, 3])
     expect(report.tailAppends.map(r => r.seq)).toEqual([4])
-    expect(report.current).toEqual({ stableSegments: 3, stablePrefixTokensEst: 100, changedSinceLastCall: true })
+    expect(report.current).toEqual({ stableSegments: 3, stablePrefixHash: 'a'.repeat(64), stablePrefixTokensEst: 100, changedSinceLastCall: true })
   })
 
   it('renders the exact disclaimers and an empty-ledger notice', () => {

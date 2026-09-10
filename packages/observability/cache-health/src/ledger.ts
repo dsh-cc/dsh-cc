@@ -22,6 +22,8 @@ export interface LedgerRow {
   readonly provider: string
   readonly model: string
   readonly stableSegments: number
+  /** Fingerprint of the stable prefix — hash over its segment hashes. */
+  readonly stablePrefixHash: string
   readonly stablePrefixTokensEst: number
   readonly prefixChanged: boolean
   readonly driftSegmentIndex?: number
@@ -43,6 +45,8 @@ export type LedgerErrorSink = (error: unknown) => void
 // first overflow; initialize from disk on first append if that ever matters.
 export class CacheHealthLedger {
   private readonly counts = new Map<string, number>()
+  /** Per-file write chain: serializes appends so rows keep call order (still floating). */
+  private readonly pending = new Map<string, Promise<void>>()
 
   constructor(
     readonly root: string,
@@ -54,16 +58,20 @@ export class CacheHealthLedger {
     return join(this.root, projectKey, `${sessionId}.jsonl`)
   }
 
-  /** Append one row as a FLOATING promise. Never await on the llm/stream path. */
+  /** Append one row as a FLOATING promise chained per file (call order preserved). Never await on the llm/stream path. */
   append(projectKey: string, sessionId: string, row: LedgerRow): void {
     const file = this.pathFor(projectKey, sessionId)
-    void (async () => {
+    const write = async (): Promise<void> => {
       await mkdir(dirname(file), { recursive: true })
       await appendFile(file, `${JSON.stringify(row)}\n`, 'utf8')
       const count = (this.counts.get(file) ?? 0) + 1
       this.counts.set(file, count)
       if (count > LEDGER_MAX_ROWS) await this.trim(file)
-    })().catch((error) => {
+    }
+    const prev = this.pending.get(file) ?? Promise.resolve()
+    const next = prev.then(write, write)
+    this.pending.set(file, next)
+    next.catch((error) => {
       try {
         this.onError(error)
       } catch {
