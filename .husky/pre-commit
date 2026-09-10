@@ -6,8 +6,8 @@
 #   跑 bundle:client 产 lib/client.js(tsdown,当仓 gitignore lib/,不改 typecheck,
 #   仅 commit 前补跑,使本地 profile sync 能带上浏览器 bundle)
 #   不引入 lint-staged:仓内无 eslint/prettier,无 staged 检查可执行。
-# worktree 自愈:worktree 无 node_modules(gitignored);首次 commit 前若未 link
-# 依赖,自动执行幂等的 scripts/link-worktree-deps.sh(主仓内 no-op)。
+# worktree 自愈:worktree 无 node_modules(gitignored);首次 commit 前若未装
+# 依赖,自动执行 pnpm install --frozen-lockfile(硬链接全局 store,见 docs/dev.md)。
 set -e   # husky 真实提交路径已是 sh -e;此处为裸调用防护(见下)与 husky 版本漂移防御
 
 # git 会往 hook 环境注入仓库绑定变量(GIT_INDEX_FILE=.git/index,相对顶层;
@@ -30,11 +30,12 @@ lockfile_guard() {
 }
 lockfile_guard before-gates
 
-if [ ! -e node_modules ]; then bash scripts/link-worktree-deps.sh; fi
+if [ ! -e node_modules ]; then pnpm install --frozen-lockfile; fi
 
 # --- 纯静态门禁(无需 node_modules;与 presubmit 顺序一致) ---
 pnpm check:spec-deps
 pnpm check:publish
+pnpm check:readme
 pnpm check:size
 pnpm check:tui-boundary
 pnpm check:deep-imports

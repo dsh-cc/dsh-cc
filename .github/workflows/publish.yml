@@ -101,6 +101,11 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-publish-manifests.mjs
 
+      # 与 presubmit 保持一致:发布前同样把住双语 README 三件套配对门禁
+      - name: Package README trio (check:readme)
+        working-directory: dsh-cc
+        run: node scripts/check-readme.mjs
+
       # 与 presubmit 保持一致:纯静态扫描,挡 vendor 污染与 harness 边界突破
       - name: TUI boundary (check:tui-boundary)
         working-directory: dsh-cc

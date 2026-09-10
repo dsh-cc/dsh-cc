@@ -83,6 +83,16 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-publish-manifests.mjs
 
+      # 双语 README 三件套门禁(README.md/README.zh.md/README.i18n.yaml 配对
+      # 哈希记录,见 docs/i18n/README.md);纯静态,git hash-object 无需 node_modules。
+      - name: Package README trio (check:readme)
+        working-directory: dsh-cc
+        run: node scripts/check-readme.mjs
+
+      - name: Package README trio self-test
+        working-directory: dsh-cc
+        run: node scripts/check-readme.test.mjs
+
       # 棘轮模式:基线冻结存量超限文件(只准减不准增),基线清空后即 ≤500 硬门。
       - name: File size budget (check:size)
         working-directory: dsh-cc
