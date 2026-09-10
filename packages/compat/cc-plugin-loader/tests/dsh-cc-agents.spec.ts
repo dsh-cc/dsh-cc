@@ -30,6 +30,10 @@ const BUILTIN_KNOWN_NAMES = new Set([
   // (@dsh-cc/tools CC_TO_HARNESS_TOOLS) — a minimal built-in-only set.
   'bash', 'read', 'read_image', 'grep', 'glob', 'write', 'edit',
   'job_output', 'job_kill', 'todo_write', 'NotebookEdit',
+  // dsh-cc plugin-registered tools (handoff-store, plan
+  // docs/plans/2026-09-10-subagent-handoff-store.md): present on any host
+  // mounting the cc preset, so the whitelist keeps them.
+  'handoff_put', 'handoff_get',
 ])
 
 /** A capture-only subagent seam (records providers, resolves no backend). */

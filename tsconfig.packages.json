@@ -89,6 +89,9 @@
       "path": "./packages/subagent/task"
     },
     {
+      "path": "./packages/subagent/handoff-store"
+    },
+    {
       "path": "./packages/subagent/resume-pins"
     },
     {
