@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/bundle-permissions",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Claude Code permission parity layer for dsh profiles: five-level settings cascade + CC permission-rule engine",
   "type": "module",
   "files": [

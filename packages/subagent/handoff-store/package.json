@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/handoff-store",
   "description": "Subagent handoff store: handoff_put/handoff_get let sandboxed subagents park large artifacts in a content-addressed store and hand back a handoff://<id> handle",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

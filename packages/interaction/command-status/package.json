@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-status",
   "description": "Human-facing slash command for a session status summary",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

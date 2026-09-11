@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/model-aliases",
   "description": "Claude Code-compatible model alias resolution for the DeepSeek Harness",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

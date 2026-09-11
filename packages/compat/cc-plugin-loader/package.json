@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/plugin-loader",
   "description": "Load Claude Code plugin.json manifests as in-memory dsh plugin mounts",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
