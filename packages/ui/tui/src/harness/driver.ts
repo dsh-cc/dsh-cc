@@ -19,6 +19,7 @@ import { createCatalogSection } from './driver-catalog.ts'
 import type { DriverBashCtx, DriverQueueCtx, PermissionRulesLike } from './driver-ctx.ts'
 import { createModeSection } from './driver-mode.ts'
 import { liveModeWithDefault, liveSessionCwd } from './driver-live.ts'
+import { warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
 import { createHudSection } from './driver-hud.ts'
 import { createStatusLineWiring } from './statusline-wiring.ts'
 import type { OnboardingGate } from './onboarding.ts'
@@ -121,8 +122,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   })
 
   // Boot session resolution (§2.3): non-empty sessionId → resume that id;
-  // '' → explicit fresh (never read the marker); undefined + autoResume →
-  // read the project marker; else fresh. `SessionId` is never built from ''.
+  // '' → fresh; undefined + autoResume → marker; else fresh. Never SessionId('').
   let resumeSession: SessionId | undefined
   let attemptedAutoResume = false
   let markerFound = false
@@ -147,10 +147,10 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
         ...agentOptions === undefined ? {} : { agentOptions },
       })
       resumed = true
+      warnIfResumedCwdMissing(handle.agent, cwd, showNotice)
     } catch {
-      // Stale marker: the recorded session is gone. Clear it so the next boot
-      // does not loop on the same failure, then degrade to a fresh session
-      // (which must not steal the marker — persist only fires on real content).
+      // Stale marker: session gone — clear it (no loop) and degrade to a fresh
+      // session, which must not steal the marker (persist fires on real content).
       clearResumeTarget({ cwd })
       showNotice('上次会话已失效，已开启新会话，可 /resume 手动选择')
       handle = await ctx.agents.create(createArgs(SessionId(`tui-${randomUUID()}`)))
@@ -425,6 +425,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     get cwd() { return cwd },
     get promptHistory() { return agent.getHistory() },
     get bashHistory() { return agent.getBashHistory() },
+    // Live, not a snapshot: /resume (switchSession) rebinds current.agent in place.
+    get currentSessionId() { return String(current.agent.session.id) },
     subscribe(listener) {
       listeners.add(listener)
       listener(state)

@@ -41,6 +41,8 @@ export interface Driver {
    * prompt history.
    */
   readonly bashHistory: readonly string[]
+  /** Live primary-agent session id (switchSession rebinds current.agent in place). Exit tip reads it. */
+  readonly currentSessionId: string
   subscribe(listener: (state: TuiState) => void): () => void
   setDraft(draft: string): void
   submit(text?: string): Promise<void>
@@ -52,11 +54,7 @@ export interface Driver {
    * is empty.
    */
   steerQueued(): void
-  /**
-   * Pop the LAST queued entry (LIFO — the most recent submit) back out of
-   * the outbox for editing (empty-composer ↑). Returns the text, or
-   * `undefined` when the queue is empty (same-reference no-op).
-   */
+  /** Pop the LAST queued entry (LIFO) back out of the outbox for editing (empty-composer ↑); `undefined` when empty. */
   recallQueued(): string | undefined
   /**
    * Ctrl+B promotion of a foreground subagent wait (UX plan §3.4): promote

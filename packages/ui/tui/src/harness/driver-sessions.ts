@@ -18,6 +18,7 @@ import { bootBannerRows } from './boot-banner.ts'
 import { filterSessions, sortByActivity, type SessionListEntry } from './session-list.ts'
 import { defaultTuiDir } from '../history.ts'
 import { liveSessionCwd } from './driver-live.ts'
+import { warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
 import { isProjectMember, resolveProject, type ProjectInfo } from '../project.ts'
 import { readProjectSessionIds } from '../project-sessions.ts'
 import {
@@ -248,6 +249,13 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
     }
 
     await bindSession(newHandle, { reseedModel: true })
+    // Resumed-cwd guard: the picker has no showNotice channel (ctx has none),
+    // so surface the dead-cwd warning through the file's status-row idiom.
+    warnIfResumedCwdMissing(
+      rt.current.agent,
+      rt.cwd,
+      (message) => emit(upsertRow(rt.state(), { kind: 'status', text: message })),
+    )
   }
 
   // Shared bind path (also used by startFreshSession). dispose() stops the

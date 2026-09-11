@@ -3336,6 +3336,20 @@
           "anchor": "- id: command-resume"
         },
         {
+          "type": "source",
+          "path": "packages/ui/tui/src/exit-tip.ts",
+          "anchor": "formatExitTip"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/resumed-cwd-guard.ts",
+          "anchor": "resumedCwdGuard"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/resumed-cwd-guard.spec.ts"
+        },
+        {
           "type": "test",
           "path": "packages/compat/session-title-provider/tests/provider.spec.ts"
         },
