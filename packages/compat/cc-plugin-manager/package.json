@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/plugin-manager",
   "description": "Manage Claude Code plugin state files (marketplaces, installs, per-scope settings) in byte-shape parity with the real CLI",
-  "version": "0.6.2",
+  "version": "0.6.3-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

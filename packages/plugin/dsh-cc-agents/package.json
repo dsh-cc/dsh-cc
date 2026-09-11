@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/plugin-dsh-cc-agents",
-  "version": "0.6.2",
+  "version": "0.6.3-rc.1",
   "description": "Official dsh-cc Claude-compatible plugin: the critic, executor, and marathon subagents plus an orchestration routing skill.",
   "type": "module",
   "license": "Apache-2.0",
