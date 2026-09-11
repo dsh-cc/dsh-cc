@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/tool-search",
   "description": "Deferred tool registration and a ToolSearch model tool that loads heavy tools on demand",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-agents",
   "description": "Human-facing slash command to list, inspect, and stop continuable background agents",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

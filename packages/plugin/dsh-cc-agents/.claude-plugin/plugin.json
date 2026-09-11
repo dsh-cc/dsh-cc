@@ -1,5 +1,5 @@
 {
   "name": "dsh-cc-agents",
   "description": "Official dsh-cc plugin shipping the critic, executor, and marathon subagents with an orchestration routing skill.",
-  "version": "0.6.1"
+  "version": "0.6.2"
 }
