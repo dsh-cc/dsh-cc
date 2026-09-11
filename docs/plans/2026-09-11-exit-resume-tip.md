@@ -154,7 +154,88 @@ cross-project resolution.
 Estimated net addition <150 lines; no harness changes, no settings, no new
 CLI flag.
 
-## 4. Explicit non-goals
+## 4. Slice 2 (added post-review): resumed-cwd guard
+
+### 4.1 Gap vs Claude Code
+
+CC's documented behavior ([worktrees]):
+resuming a session returns Claude Code to its associated worktree; CC
+**verifies the worktree is still a valid checkout before re-entering**, and
+if the directory was deleted (or the session was forked) it resumes in the
+current launch directory.
+
+dsh-cc facts (verified):
+- `--resume <id>` resolves globally (JSONL backend scans every project dir
+  under the sessions root, unique id wins) and the resumed session adopts its
+  **stored header cwd** — the original worktree.
+- Harness `ResumeAgentOptions` exposes only `resumeSessionId`, `agentOptions`,
+  `setup` — **no cwd/meta override**, so CC's fallback-to-launch-dir cannot be
+  replicated in-process (harness is read-only; upstream-proposal territory).
+- The live cwd accessor already exists: `liveSessionCwd(agent, fallback)`
+  (`driver-live.ts:52`) folds the session-cwd plugin's `worktree/entered` event
+  over `agent.session.header.cwd`.
+
+### 4.2 Chosen behavior
+
+Detect the dead-cwd case and surface a prominent notice, keeping the resumed
+transcript (losing history by falling back to a fresh session is strictly
+worse than warning):
+
+- New module `packages/ui/tui/src/harness/resumed-cwd-guard.ts` (driver.ts
+  sits at 499/500 — the guard logic lives outside it):
+  - `resumedCwdGuard(agent, launchCwd): { missingCwd: string } | undefined` —
+    resolve `liveSessionCwd(agent, launchCwd)`; when that directory no longer
+    exists (`existsSync`), return it.
+  - `warnIfResumedCwdMissing(agent, launchCwd, showNotice): void` — wraps the
+    guard and emits the notice through the same `showNotice` channel the boot
+    resume path already uses.
+- Wiring (both resume sites):
+  1. boot resume success (`driver.ts`, right after `resumed = true`) — via the
+     existing `showNotice` channel already in scope there (+1 call line;
+     absorb by compressing the 4-line catch-block comment above it to 2);
+  2. `/resume` picker switch — after `bindSession(newHandle)`
+     (`driver-sessions.ts:250`) so the notice reflects the bound agent.
+     `showNotice` is NOT in the driver-sessions ctx scope (review finding):
+     the picker uses the file's existing `upsertRow` status-row idiom
+     (`driver-sessions.ts:246`) instead — zero driver.ts change.
+- Notice text (Chinese, matching the existing driver notices): session
+  original dir missing, file tools may fail, suggest `/clear` or restart in
+  the right directory.
+- No state change beyond the notice: the session stays resumed; the user
+  decides. No fallback, no marker writes, no fresh-session degrade.
+
+### 4.3 TDD plan (spec first, then implementation)
+
+1. Write `resumed-cwd-guard.spec.ts` first, covering:
+   - existing session cwd (a real temp dir) → guard returns `undefined`, no
+     notice;
+   - missing session cwd (a path under a deleted temp dir) → guard returns it,
+     notice emitted with the path;
+   - `liveSessionCwd` fold is respected: a `worktree/entered` event overrides
+     the header cwd (fake-agent idiom from
+     `packages/session/session-cwd/tests/api.spec.ts:12-23` — real
+     `Session.create`, duck-typed `{ session: { id, snapshotEvents, append,
+     header } }` cast `as unknown as Agent`);
+   - launch-dir fallback: header cwd absent → guard uses launch cwd.
+2. Implementation until green; then wiring at both resume sites (driver.ts
+   stays ≤500: absorb the +1 call line by compressing a nearby comment, as
+   done in slice 1).
+3. Existing suites stay green; capabilities manifest gains the guard evidence
+   on the `sessions.resume` entry (validator rules I3/I4/I7), parity artifacts
+   regenerated.
+
+### 4.4 Non-goals (slice 2)
+
+- No CC-parity fallback to the launch directory (impossible without a harness
+  `resume({meta})` override — upstream proposal, not a fork).
+- No exit-tip line for a dead cwd (the resume-time notice is the actionable
+  moment; exit-time repetition is noise).
+- No proactive scan of `sessions.txt` entries for dead cwds (picker list
+  stays as-is).
+
+[worktrees]: https://code.claude.com/docs/en/worktrees
+
+## 5. Explicit non-goals
 
 - No machine-wide cross-project session id resolution (CC has a dedicated
   index service; we do not — that would be a harness upstream proposal,
