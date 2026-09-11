@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/coordinator",
   "description": "Coordinator-mode orchestration over continuable subagents for the DeepSeek Harness",
-  "version": "0.6.2",
+  "version": "0.6.3-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
