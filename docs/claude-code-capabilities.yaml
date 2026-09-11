@@ -1804,6 +1804,9 @@ capabilities:
       - { type: test, path: packages/ui/tui/tests/session-list.spec.ts }
       - { type: source, path: packages/ui/tui/src/harness/worktree-identity.ts }
       - { type: test, path: packages/ui/tui/tests/worktree-identity.spec.ts }
+      - { type: source, path: packages/ui/tui/src/exit-tip.ts, anchor: "printExitTip" }
+      - { type: source, path: packages/ui/tui/src/plugin.ts, anchor: "printExitTip" }
+      - { type: test, path: packages/ui/tui/tests/exit-tip.spec.ts }
     deviation:
       kind: downgrade
       summary: >-

@@ -39,6 +39,8 @@ export interface Driver {
    * appended on submit (see {@link Driver.submit}). Read once at mount.
    */
   readonly promptHistory: readonly string[]
+  /** Live primary-agent session id (switchSession rebinds current.agent in place). Exit tip reads it. */
+  readonly currentSessionId: string
   /**
    * Bash-mode command history (newest-first, live reference). Every command
    * executed through a leading `!` is prepended here and persisted to
