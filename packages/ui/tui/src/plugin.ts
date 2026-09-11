@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './index.ts'
 import { createDriver } from './harness/driver.ts'
+import { printExitTip } from './exit-tip.ts'
 import { ensurePackagedPreset } from './packaged-preset.ts'
 import { acquireTerminal } from './terminal/lease.ts'
 import { buildRoot } from './components/root.ts'
@@ -65,6 +66,8 @@ export async function mountTui(ctx: Context, config: Config): Promise<void> {
   const shutdown = (): void => {
     if (shuttingDown) return
     shuttingDown = true
+    // Read before dispose: dispose tears down the agent session.
+    const sessionId = driver.currentSessionId
     try {
       root.destroy()
       root.stopForExit()
@@ -73,6 +76,9 @@ export async function mountTui(ctx: Context, config: Config): Promise<void> {
     }
     void driver.dispose().finally(() => {
       lease.release()
+      // Outside the teardown try/catch: a stopForExit throw must not swallow
+      // the tip, which must land in normal-screen scrollback before exit.
+      printExitTip({ sessionId })
       process.exit(0)
     })
   }

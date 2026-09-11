@@ -108,7 +108,7 @@ derived from four orthogonal dimensions (`recognized` / `mounted` / `behavioral`
 | Status | Capability | Recognized | Mounted | Behavior | UX | Evidence | Deviation | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ❌ | <a id="cap-sessions.checkpointing"></a>File checkpointing and rewind | — | — | Missing | Missing | — | upstream-blocked — Feature absent; requires a snapshot seam in the session layer. | — |
-| ✅ | <a id="cap-sessions.persistence"></a>Session persistence / resume / fork | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/compat/session-title-provider/tests/provider.spec.ts) [t2](packages/ui/tui/tests/session-list.spec.ts) | — | — |
+| ✅ | <a id="cap-sessions.persistence"></a>Session persistence / resume / fork | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [s2](packages/ui/tui/src/exit-tip.ts) [t1](packages/compat/session-title-provider/tests/provider.spec.ts) [t2](packages/ui/tui/tests/session-list.spec.ts) | — | — |
 
 ## Memory and CLAUDE.md
 

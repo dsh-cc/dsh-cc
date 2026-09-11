@@ -425,6 +425,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     get cwd() { return cwd },
     get promptHistory() { return agent.getHistory() },
     get bashHistory() { return agent.getBashHistory() },
+    // Live, not a snapshot: /resume (switchSession) rebinds current.agent in place.
+    get currentSessionId() { return String(current.agent.session.id) },
     subscribe(listener) {
       listeners.add(listener)
       listener(state)
