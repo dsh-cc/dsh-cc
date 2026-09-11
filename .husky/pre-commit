@@ -49,6 +49,7 @@ if [ ! -e node_modules ]; then pnpm install --frozen-lockfile; fi
 pnpm check:spec-deps
 pnpm check:publish
 pnpm check:readme
+pnpm check:marketplace
 pnpm check:size
 pnpm check:tui-boundary
 pnpm check:deep-imports

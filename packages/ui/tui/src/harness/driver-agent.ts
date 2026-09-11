@@ -290,13 +290,10 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
   let markedContent = false
   const persistResumeTarget = (): void => {
     const id = String(current.agent.session.id)
-    // The NEW marker keys off the LIVE session's project (a resumed session
-    // created elsewhere writes its own bucket); legacy dual-write stays in
-    // the boot-cwd bucket. Dedupe is internal to writeResumeTarget (F4) —
-    // no read-compare here.
+    // Keys off the LIVE session's project (a resumed session created elsewhere
+    // writes its own bucket). Dedupe is internal to writeResumeTarget.
     writeResumeTarget(id, {
       cwd: current.agent.session.header.cwd ?? rt.cwd,
-      legacyCwd: rt.cwd,
     })
   }
 
