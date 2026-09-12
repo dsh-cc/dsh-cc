@@ -6,7 +6,6 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
@@ -27,7 +26,6 @@ afterEach(() => {
 async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -274,7 +272,6 @@ describe('dsh-coordinator completion notification (reused subagent-settled proto
     // suite that owns this protocol.
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
-    await ctx.plugin(SessionProjectionRegistry)
     const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-notify-'))
     roots.push(root)
     await ctx.plugin(JsonlSessionPersistence, { root })

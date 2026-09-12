@@ -48,9 +48,8 @@ function routesFromEnv(): ModelRoutes | undefined {
 
 /** Mount the real subagent seam the way the in-repo integration canary does. */
 async function bootStack(): Promise<{ ctx: Context; parent: Agent }> {
-  const [{ default: AgentLoop }, { default: SessionProjectionRegistry }, { default: JsonlPersistence }, { default: SubagentRuntime }, Spawn, Testkit] = await Promise.all([
+  const [{ default: AgentLoop }, { default: JsonlPersistence }, { default: SubagentRuntime }, Spawn, Testkit] = await Promise.all([
     import('@deepseek-ai/dsh-agent-loop'),
-    import('@deepseek-ai/dsh-session-projection'),
     import('@deepseek-ai/dsh-session-persistence-jsonl'),
     import('@deepseek-ai/dsh-subagent'),
     import('@deepseek-ai/dsh-subagent-spawn-in-process'),
@@ -61,7 +60,6 @@ async function bootStack(): Promise<{ ctx: Context; parent: Agent }> {
   const { SessionId } = await import('@deepseek-ai/dsh-session')
   const ctx = new Context()
   await Testkit.mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(JsonlPersistence, { root: mkdtempSync(join(tmpdir(), 'dsh-recall-eval-')) })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)

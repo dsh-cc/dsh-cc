@@ -9,7 +9,6 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
 import {
@@ -42,7 +41,6 @@ export async function mountTrajectoryTestStack(
   // Harness 0.1.2-rc.1: the system-prompt persona knob is `persona` (a plain
   // template string).
   await mountAgentLoopTestDependencies(ctx, { systemPrompt: { persona: options.persona } })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(LlmDeepSeek, options.baseURL === undefined ? {} : { baseURL: options.baseURL })
   await ctx.plugin(AgentLoop, { agents: [] })
   if (options.ccPlugins === true) {

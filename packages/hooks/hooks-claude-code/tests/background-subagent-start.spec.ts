@@ -12,7 +12,6 @@ import { join } from 'node:path'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
@@ -49,7 +48,6 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
 
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   const persistRoot = mkdtempSync(join(tmpdir(), 'dsh-hooks-background-persist-'))
   dirs.push(persistRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: persistRoot })
