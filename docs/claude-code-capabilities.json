@@ -1067,7 +1067,7 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Mounted via @dsh-cc/tool-web-fetch (optional prompt summarized on resolve('haiku'); prompt without haiku hard-fails before fetch); the tool upgrades http: URLs to https: before the seam, CC-style. Fetch executor is the stock dsh-base @deepseek-ai/dsh-web-fetch-http provider with CC egress caps restated in cc-shell — upstream rc.1 resolves public-only addresses and pins them per redirect hop, closing the DNS-rebinding residual the retired literal gate left. WebFetch(domain:) content rules match hostnames. Residual: no Anthropic preflight, no 15-min cache, no pre-approved docs domains, no private-network escape hatch."
+        "summary": "Mounted via @dsh-cc/tool-web-fetch (optional prompt summarized on resolve('haiku'); prompt without haiku hard-fails before fetch); the tool upgrades http: URLs to https: before the seam, CC-style. Fetch executor is the stock dsh-base @deepseek-ai/dsh-web-fetch-http provider with CC egress caps restated in cc-shell — upstream rc.1 resolves public-only addresses and pins them per redirect hop, closing the DNS-rebinding residual the retired literal gate left. At upstream 0.1.5-rc.1 the provider additionally routes via @deepseek-ai/dsh-http-proxy when proxy env is set (installProxyFromEnvironment at boot). WebFetch(domain:) content rules match hostnames. Residual: no Anthropic preflight, no 15-min cache, no pre-approved docs domains, no private-network escape hatch."
       }
     },
     "engine.web-search": {

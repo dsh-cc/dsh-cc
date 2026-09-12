@@ -90,6 +90,9 @@ workflow 校验 `vX.Y.Z` 必须落在 `origin/main` 上的提交。推完去 Act
 **peer 下限仍命中当前 pin 的 harness 版本**。升级 harness pin(`DSH_HARNESS_REF`)
 跨版本族时(如 `0.1.1 → 0.2.0`)必须同步提高 peer range,否则 presubmit 会拦截。
 
+2026-09-12:harness 锚点已迁移至 0.1.5-rc.1(`DSH_HARNESS_REF=1ef9c1fa9a`),
+相关 peer 下限同步提高至 `>= 0.1.5-rc.1`。
+
 ## token 轮换
 
 granular token 最长 1 年。到期前在 npmjs 生成新 token 并替换 GitHub secret;

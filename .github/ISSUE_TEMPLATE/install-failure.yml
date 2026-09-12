@@ -63,8 +63,8 @@ body:
     id: dsh-version
     attributes:
       label: dsh version · dsh 版本
-      description: Output of `dsh --version` (dsh-cc needs dsh >= 0.1.2-rc.1).
-      placeholder: 0.1.2-rc.1
+      description: Output of `dsh --version` (dsh-cc needs dsh >= 0.1.5-rc.1).
+      placeholder: 0.1.5-rc.1
     validations:
       required: true
 
@@ -73,7 +73,7 @@ body:
     attributes:
       label: "@dsh-cc/cli version · CLI 版本"
       description: From `npm list -g @dsh-cc/cli` or package metadata.
-      placeholder: 0.6.1
+      placeholder: 0.6.3
     validations:
       required: false
 
