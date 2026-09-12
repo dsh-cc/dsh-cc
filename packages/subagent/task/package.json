@@ -33,11 +33,11 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-agent": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-subagent": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-system-prompt": ">=0.1.2-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-agent": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-subagent": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {

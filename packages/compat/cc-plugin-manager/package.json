@@ -28,6 +28,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-home-paths": ">=0.1.2-rc.1"
+    "@deepseek-ai/dsh-home-paths": ">=0.1.5-rc.1"
   }
 }

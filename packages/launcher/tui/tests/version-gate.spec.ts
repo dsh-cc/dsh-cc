@@ -44,12 +44,12 @@ describe('compareSemver', () => {
 })
 
 describe('belowMinimumVersion gate table', () => {
-  it('minimum is 0.1.2-rc.1', () => {
-    expect(MIN_DSH_VERSION).toBe('0.1.2-rc.1')
+  it('minimum is 0.1.5-rc.1', () => {
+    expect(MIN_DSH_VERSION).toBe('0.1.5-rc.1')
   })
 
-  const failing = ['0.1.1-rc.2', '0.1.2-alpha.5']
-  const passing = ['0.1.2-rc.1', '0.1.2-rc.2', '0.1.2', '0.1.3-alpha.2', '0.2.0']
+  const failing = ['0.1.1-rc.2', '0.1.2-rc.1', '0.1.2-rc.2', '0.1.2']
+  const passing = ['0.1.5-rc.1', '0.1.5', '0.1.6-alpha.2', '0.2.0']
 
   it.each(failing)('fails below-minimum %s', (version) => {
     expect(belowMinimumVersion(version)).toBe(true)
@@ -64,7 +64,7 @@ describe('belowMinimumMessage', () => {
   it('names the found version, the minimum, and the fix command', () => {
     const message = belowMinimumMessage('0.1.1-rc.2')
     expect(message).toContain('0.1.1-rc.2')
-    expect(message).toContain('0.1.2-rc.1')
+    expect(message).toContain('0.1.5-rc.1')
     expect(message).toContain('npm install -g @deepseek-ai/dsh@latest')
   })
 })
