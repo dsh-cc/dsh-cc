@@ -29,8 +29,11 @@ function makePin(childId: string, workspaceCwd: string): ResumePin {
     createdAt: '2026-09-04T00:00:00.000Z',
     definition: { kind: 'plain' },
     modelSelector: { raw: 'inherit', via: 'inherit' },
-    // `complete: false` skips the step-5 availability preflight; this spec is
-    // about step 0 (session existence), not model routing.
+    // `complete: false` makes this a DEGRADED pin: the gate still runs the
+    // step-5 availability preflight (`resolvePinned`) for it, just without
+    // tuple-drift enforcement — so a minimal llm service stub whose
+    // `resolveCallConfig` echoes the pinned route is required for a pass.
+    // This spec is about step 0 (session existence), not model routing.
     effective: { provider: 'mock', model: 'mock', reasoningEffort: null, maxTokens: null, complete: false },
     toolFilter: { allow: [], deny: [] },
     // A bare temp dir has no git repo → the probe returns the 'unknown'
@@ -51,7 +54,11 @@ function stubPersistenceFace(snapshot: { sessionId: string } | undefined) {
   } as Record<string, unknown>
 }
 
-async function mount(pin: ResumePin, persistence: Record<string, unknown>): Promise<PreExecute> {
+async function mount(
+  pin: ResumePin,
+  persistence: Record<string, unknown>,
+  extra: Record<string, unknown> = {},
+): Promise<PreExecute> {
   const pinsRoot = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-gate-persist-'))
   const store = new PinStore(pinsRoot)
   store.write(pin)
@@ -68,6 +75,12 @@ async function mount(pin: ResumePin, persistence: Record<string, unknown>): Prom
   // "same-epoch live Activation" check passes through.
   ;(ctx as unknown as Record<string, unknown>).sessionPersistence = persistence
   ;(ctx as unknown as Record<string, unknown>).agents = { get: () => undefined }
+  Object.entries(extra).forEach(([key, value]) => {
+    // `llm` must be a real cordis service (the plugin reads it via `ctx.get('llm')`);
+    // plain members like `sessionPersistence` are read directly off `ctx`.
+    if (key === 'llm') (ctx as unknown as { provide: (key: string, value: unknown) => void }).provide('llm', value)
+    else (ctx as unknown as Record<string, unknown>)[key] = value
+  })
   const preExecute = (captured['tools/pre-execute'] as PreExecute[]).at(-1)!
   expect(typeof preExecute).toBe('function')
   return preExecute
@@ -94,7 +107,9 @@ function sendTo(childId: string) {
 describe('resume gate — session existence via the 0.1.5 persistence face (stat)', () => {
   it('stat returning a snapshot ⇒ the session EXISTS ⇒ gate passes and delivery proceeds (RED: current code sees it as orphaned)', async () => {
     const workspace = makeWorkspace()
-    const preExecute = await mount(makePin('child-1', workspace), stubPersistenceFace({ sessionId: 'child-1' }))
+    const preExecute = await mount(makePin('child-1', workspace), stubPersistenceFace({ sessionId: 'child-1' }), {
+      llm: { resolveCallConfig: async config => ({ provider: config.provider, model: config.model }) },
+    })
     const { exec, next } = sendTo('child-1')
     const out = await preExecute(exec, next)
     // A pass never denies; the delivery is admitted untouched.
