@@ -144,6 +144,9 @@ jobs:
             deepseek-harness/packages/*/*/lib
             deepseek-harness/vendor/*/lib
             deepseek-harness/apps/cli/lib
+            # 0.1.5: flock lease addon ships its built lib here; broken
+            # without it even on cache-hit runs (jsonl imports eagerly).
+            deepseek-harness/native/system/packages/*/lib
           key: harness-lib-${{ env.DSH_HARNESS_REF }}
 
       - name: Install deepseek-harness deps
@@ -163,6 +166,9 @@ jobs:
             deepseek-harness/packages/*/*/lib
             deepseek-harness/vendor/*/lib
             deepseek-harness/apps/cli/lib
+            # 0.1.5: flock lease addon ships its built lib here; broken
+            # without it even on cache-hit runs (jsonl imports eagerly).
+            deepseek-harness/native/system/packages/*/lib
           key: harness-lib-${{ env.DSH_HARNESS_REF }}
 
       - name: Install dsh-cc deps
