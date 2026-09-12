@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-permissions",
   "description": "Human-facing /permissions command (CC rule-engine modes) plus a popupSelect decoration (and TUI overlay) for the bare invocation",
-  "version": "0.6.3-rc.1",
+  "version": "0.6.3-rc.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

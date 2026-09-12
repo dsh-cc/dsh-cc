@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/tool-structured-output",
   "description": "StructuredOutput tool that validates model input against a caller-supplied JSON schema and returns it verbatim, aligned with Claude Code's SyntheticOutputTool",
-  "version": "0.6.3-rc.1",
+  "version": "0.6.3-rc.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

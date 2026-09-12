@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-config",
   "description": "Human-facing slash command to show or update effective configuration namespaces",
-  "version": "0.6.3-rc.1",
+  "version": "0.6.3-rc.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
