@@ -42,7 +42,7 @@ import type {
   PersistenceLike,
   SessionQueryLike,
   SessionTitleResultLike,
-} from '../state/driver-types.ts'
+} from './session-service-likes.ts'
 
 export interface SessionsSection {
   listSessions(): Promise<readonly SessionListEntry[]>

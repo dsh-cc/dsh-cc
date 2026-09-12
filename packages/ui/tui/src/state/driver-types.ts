@@ -361,50 +361,6 @@ export type LlmLike = {
 }
 
 /**
- * Structural stand-in for the 0.1.5 handle-model `sessionPersistence.list()`:
- * one lightweight snapshot per stored session. The flat fields the picker
- * needs (id, cwd, createdAt, lineage) all live on `snapshot.header`; the
- * snapshot exposes no mtime, so last-activity refinement (`updatedAtMs`) is
- * unavailable at list time and the picker falls back to `createdAt`.
- * Keep this shape verbatim from the harness contract — drift here is exactly
- * what a structural cast cannot flag (the /resume picker crash of 0.6.3-rc.1).
- */
-export type PersistenceSnapshotLike = {
-  readonly header: {
-    readonly id: string
-    readonly createdAt: number
-    readonly cwd?: string
-    readonly parentSession?: string
-  }
-  readonly revision: unknown
-  readonly eventCount?: number
-  readonly sizeBytes?: number
-}
-
-export type PersistenceLike = {
-  list(options?: { signal?: AbortSignal }): Promise<readonly PersistenceSnapshotLike[]>
-}
-
-/**
- * Structural stand-in for the deployment's `sessionQuery` service: batch
- * title reads for the /resume picker. One result per requested id —
- * operational failures are isolated per id (`status: 'rejected'`), and the
- * fulfilled value carries the session header plus its latest title snapshot.
- */
-export type SessionTitleResultLike =
-  | {
-    status: 'fulfilled'
-    /** Requested session id — the join key. Do not use `value.session.id`. */
-    sessionId: string
-    value: { session: { id: string }; title?: { title: string } }
-  }
-  | { status: 'rejected'; sessionId?: string }
-
-export type SessionQueryLike = {
-  readTitleSnapshots(ids: readonly string[], signal?: AbortSignal): Promise<readonly SessionTitleResultLike[]>
-}
-
-/**
  * `subagent/start` snapshot. The real `SubagentRunInfo` is declared in
  * the subagent package (via cordis module augmentation), which the tui
  * package doesn't import — so a structural local type stands in. Fields are
