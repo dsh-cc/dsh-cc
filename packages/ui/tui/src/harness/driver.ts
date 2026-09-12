@@ -98,8 +98,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const selection: ModelSelectionRef = { assembled: undefined, current: undefined }
 
   const presetSetup = composition.setup
-  const withSelection: AgentSetup = async (agentCtx) => {
-    if (presetSetup !== undefined) await presetSetup(agentCtx)
+  const withSelection: AgentSetup = async (agentCtx, agent) => {
+    if (presetSetup !== undefined) await presetSetup(agentCtx, agent)
     installModelSelection(agentCtx, selection)
   }
 
