@@ -65,16 +65,16 @@ describe('cc-shell background composition (§4.11)', () => {
   it('resolves a session-persistence backend service', async () => {
     const { ctx } = await compose()
     const persistence = ctx.get('sessionPersistence') as {
-      load?: unknown
-      append?: unknown
-      readFrom?: unknown
-      readStoredRevision?: unknown
+      create?: unknown
+      open?: unknown
+      stat?: unknown
       list?: unknown
+      flush?: unknown
     } | undefined
     expect(persistence).toBeDefined()
-    // The jsonl backend's contract at rc.1: the coordinator-facing read/write
-    // face (load/append/readFrom/readStoredRevision/list).
-    for (const method of ['load', 'append', 'readFrom', 'readStoredRevision', 'list']) {
+    // The jsonl backend's contract at rc.1: the handle-based face
+    // (create/open/stat/list/flush).
+    for (const method of ['create', 'open', 'stat', 'list', 'flush']) {
       expect(typeof persistence![method as keyof typeof persistence]).toBe('function')
     }
     await ctx.fiber.dispose()

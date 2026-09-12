@@ -185,8 +185,8 @@ async function boot(
   // RESUMES the persisted parent session instead.
   const parentId = SessionId('parent')
   const persistedParent = await (ctx.get('sessionPersistence') as {
-    readStoredRevision(id: SessionId): Promise<unknown>
-  }).readStoredRevision(parentId)
+    stat(id: SessionId): Promise<{ revision: unknown } | undefined>
+  }).stat(parentId)
   const parentOptions = {
     provider: 'mock',
     model: 'mock',
@@ -281,7 +281,8 @@ describe('§6 test 6 — acceptance: the pinned tuple survives a two-Context col
     expect(resumed.maxTokens).toBe(5555)
     expect(resumed.reasoningEffort).toBe('high')
     expect(resumed.model).toBe('mock')
-    expect(resumed.system).toContain('RESEARCHER PERSONA MARKER')
+    // 0.1.5: the system prompt rides as the leading system message, not a request field.
+    expect(JSON.stringify(resumed.messages?.filter((message: { role: string }) => message.role === 'system'))).toContain('RESEARCHER PERSONA MARKER')
     expect((resumed.tools ?? []).map(tool => tool.name)).toContain('read')
     // No gate notices on a clean resume.
     expect(text(send as never)).not.toContain('resumed')

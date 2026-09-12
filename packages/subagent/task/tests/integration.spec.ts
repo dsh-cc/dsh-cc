@@ -126,9 +126,19 @@ async function setup(
 }
 
 /** Read one stored session's header + event log through the rc.1
- * sessionPersistence face (`load` returns header + full event log). */
-async function loadStoredSession(persistence: { load(id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> }, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
-  return await persistence.load(id)
+ * sessionPersistence face (`stat` + a read `open` handle); `undefined` when
+ * the session does not exist. */
+async function loadStoredSession(persistence: {
+  stat(id: SessionId): Promise<unknown>
+  open(id: SessionId, access: 'read'): Promise<{ header: SessionHeader; read(): Promise<{ events: readonly SessionEvent[] }>; close(): Promise<void> }>
+}, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] } | undefined> {
+  if (await persistence.stat(id) === undefined) return undefined
+  const handle = await persistence.open(id, 'read')
+  try {
+    return { meta: handle.header, events: (await handle.read()).events }
+  } finally {
+    await handle.close()
+  }
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -321,7 +331,8 @@ describe('Task background mode — cold resume (§4.12)', () => {
     // The descriptor composition survived: the resumed child still carries the
     // definition's persona and its sanitized (allow: [read]) tool filter.
     const resumed = adapter.requests.filter(request => request.sessionId === childId).at(-1)!
-    expect(resumed.system).toContain('RESEARCHER PERSONA MARKER')
+    // 0.1.5: the system prompt rides as the leading system message, not a request field.
+    expect(JSON.stringify(resumed.messages?.filter((message: { role: string }) => message.role === 'system'))).toContain('RESEARCHER PERSONA MARKER')
     const toolNames = (resumed.tools ?? []).map(tool => tool.name)
     expect(toolNames).toContain('read')
     expect(toolNames).not.toContain('write')

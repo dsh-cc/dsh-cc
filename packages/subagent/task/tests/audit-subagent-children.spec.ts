@@ -15,7 +15,7 @@ import {
 } from '../../../../scripts/audit-subagent-children.mjs'
 
 function header(id, extra = {}) {
-  return JSON.stringify({ type: 'session', version: 0, id, createdAt: 1000, delegationDepth: 0, ...extra })
+  return JSON.stringify({ type: 'session', version: 3, isSeeded: false, id, createdAt: 1000, delegationDepth: 0, ...extra })
 }
 
 function toolUse(id, name, input = {}) {

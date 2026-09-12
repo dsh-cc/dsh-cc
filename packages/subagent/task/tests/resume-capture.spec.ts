@@ -223,8 +223,8 @@ describe('resume pin capture — complete pin after a real background spawn (§6
       resume: { state: 'ok' },
     })
     // The preallocated id IS the durable child session id (a persisted
-    // session exists under it — the jsonl backend's cold inspection).
-    expect(await ctx.sessionPersistence.readStoredRevision(SessionId(pin!.childId))).toBeDefined()
+    // session exists under it — the jsonl backend's stat snapshot).
+    expect(await ctx.sessionPersistence.stat(SessionId(pin!.childId))).toBeDefined()
   }, 20_000)
 
   it('pins kind "plain" for a general-purpose background spawn', async () => {
