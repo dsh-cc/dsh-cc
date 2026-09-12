@@ -38,9 +38,9 @@ export async function mountTrajectoryTestStack(
   ctx: Context,
   options: TrajectoryStackOptions,
 ): Promise<void> {
-  // Harness 0.1.2-rc.1: the system-prompt persona knob is `persona` (a plain
+  // Harness 0.1.5: the system-prompt persona knob is `personaPrefix` (a plain
   // template string).
-  await mountAgentLoopTestDependencies(ctx, { systemPrompt: { persona: options.persona } })
+  await mountAgentLoopTestDependencies(ctx, { systemPrompt: { personaPrefix: options.persona } })
   await ctx.plugin(LlmDeepSeek, options.baseURL === undefined ? {} : { baseURL: options.baseURL })
   await ctx.plugin(AgentLoop, { agents: [] })
   if (options.ccPlugins === true) {

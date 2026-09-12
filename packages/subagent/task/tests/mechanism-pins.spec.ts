@@ -40,7 +40,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   await ctx.plugin(AgentLoop, { agents: [] })
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const agent = ctx.agentLoop.create(
+  const agent = await ctx.agentLoop.create(
     SessionId('parent'),
     { provider: 'mock', model: 'mock' },
     { cwd: join(root, 'workspace') },

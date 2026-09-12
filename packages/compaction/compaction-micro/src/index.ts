@@ -167,7 +167,7 @@ export class Microcompactor extends Service {
         ...event.data,
         message: replacementMessage,
       }, {
-        surfaceOp: { op: 'replace', start: seq, end: seq },
+        surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq },
         sourceEventSeqs: [seq],
       })
       // Decision metadata stays in the returned pass result only: out-of-repo

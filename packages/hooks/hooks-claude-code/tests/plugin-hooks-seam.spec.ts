@@ -67,7 +67,7 @@ async function driveToolCall(ctx: Context, adapter: MockAdapter): Promise<{ ran:
     if (decision.kind === 'deny') denied = true
     return decision
   })
-  const agent: Agent = ctx.agentLoop.create(SessionId('seam'), { provider: 'mock', model: 'mock' })
+  const agent: Agent = await ctx.agentLoop.create(SessionId('seam'), { provider: 'mock', model: 'mock' })
   agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
   await agent.whenIdle()
   return { ran, denied }

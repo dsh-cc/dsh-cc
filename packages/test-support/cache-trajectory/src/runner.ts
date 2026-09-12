@@ -53,12 +53,12 @@ export interface TrajectoryRunResult {
 }
 
 /** The agent-loop service face the runner needs (`create` is synchronous at
- * harness 0.1.2-rc.1 and returns the created Agent). */
+ * harness 0.1.5 and returns a Promise for the created Agent). */
 interface AgentLoopLike {
   create(id: ReturnType<typeof SessionId>, options?: {
     provider?: string
     model?: string
-  }): Agent
+  }): Promise<Agent>
 }
 
 /** The tools-registry face the runner needs. */
