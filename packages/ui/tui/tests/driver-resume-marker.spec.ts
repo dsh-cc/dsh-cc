@@ -68,7 +68,17 @@ function makeSwitchableCtx(opts: {
         }
       }
       if (key === 'sessionPersistence') {
-        return { list: async () => opts.sessionList ?? [] }
+        // Real 0.1.5 face: list() yields { header, revision } snapshots.
+        return {
+          list: async () => (opts.sessionList ?? []).map(e => ({
+            header: {
+              id: e.id,
+              createdAt: e.createdAt,
+              ...(e.cwd === undefined ? {} : { cwd: e.cwd }),
+            },
+            revision: `rev-${e.id}-1`,
+          })),
+        }
       }
       return undefined
     },

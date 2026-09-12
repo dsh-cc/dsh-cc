@@ -342,7 +342,7 @@ describe('createDriver busy input semantics', () => {
     const driver = await createDriver(ctx as never, {})
 
     emitSession({ type: 'compaction/summary', seq: 9, data: { shadowedSeqs: [1, 2, 3], shadowedTokenCount: 10, sourceCommandId: 'cmd-1' } })
-    emitSession({ type: 'user/message', seq: 10, surfaceOp: { op: 'replace', start: 1, end: 3 }, data: { content: [{ type: 'text', text: '<compacted-summary>body</compacted-summary>' }], source: { kind: 'plugin', plugin: 'compact', sourceCommandId: 'cmd-1' } } })
+    emitSession({ type: 'user/message', seq: 10, surfaceOp: { op: 'replace', startSeq: 1, endSeq: 3 }, data: { content: [{ type: 'text', text: '<compacted-summary>body</compacted-summary>' }], source: { kind: 'plugin', plugin: 'compact', sourceCommandId: 'cmd-1' } } })
     expect(driver.state.rows.some(r => r.kind === 'compact')).toBe(true)
 
     await driver.submit('/compact')

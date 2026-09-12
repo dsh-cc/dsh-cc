@@ -39,7 +39,7 @@ const withCwd = (s: FakeSession): FakeSession => ({ cwd: PROJ_CWD, ...s })
 function makeSwitchableCtx(opts: {
   createSession?: FakeSession
   resumeSessions?: Record<string, FakeSession>
-  sessionList?: { id: string; cwd?: string; createdAt: number; updatedAtMs?: number; parentSession?: string }[]
+  sessionList?: { id: string; cwd?: string; createdAt: number; parentSession?: string }[]
   sessionQuery?: unknown
 }): {
   ctx: Record<string, unknown>
@@ -77,7 +77,24 @@ function makeSwitchableCtx(opts: {
         }
       }
       if (key === 'sessionPersistence') {
-        return { list: async () => (opts.sessionList ?? []).map(e => ({ cwd: PROJ_CWD, ...e })) }
+        // Fake stays on the REAL 0.1.5 handle-model face: list() yields
+        // { header, revision } snapshots, not flat picker entries. The flat
+        // test-fixture shape only feeds the header mapping below — returning
+        // the old flat shape here is what let the 0.1.5 drift sail through.
+        return {
+          list: async () => (opts.sessionList ?? []).map((e) => {
+            const entry = { cwd: PROJ_CWD, ...e }
+            return {
+              header: {
+                id: entry.id,
+                createdAt: entry.createdAt,
+                ...(entry.cwd === undefined ? {} : { cwd: entry.cwd }),
+                ...(entry.parentSession === undefined ? {} : { parentSession: entry.parentSession }),
+              },
+              revision: `rev-${entry.id}-1`,
+            }
+          }),
+        }
       }
       if (key === 'sessionQuery') {
         return opts.sessionQuery

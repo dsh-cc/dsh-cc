@@ -360,35 +360,6 @@ export type LlmLike = {
   }>
 }
 
-export type PersistenceLike = {
-  list(signal?: AbortSignal): Promise<{
-    id: string
-    cwd?: string
-    createdAt: number
-    updatedAtMs?: number
-    parentSession?: string
-  }[]>
-}
-
-/**
- * Structural stand-in for the deployment's `sessionQuery` service: batch
- * title reads for the /resume picker. One result per requested id —
- * operational failures are isolated per id (`status: 'rejected'`), and the
- * fulfilled value carries the session header plus its latest title snapshot.
- */
-export type SessionTitleResultLike =
-  | {
-    status: 'fulfilled'
-    /** Requested session id — the join key. Do not use `value.session.id`. */
-    sessionId: string
-    value: { session: { id: string }; title?: { title: string } }
-  }
-  | { status: 'rejected'; sessionId?: string }
-
-export type SessionQueryLike = {
-  readTitleSnapshots(ids: readonly string[], signal?: AbortSignal): Promise<readonly SessionTitleResultLike[]>
-}
-
 /**
  * `subagent/start` snapshot. The real `SubagentRunInfo` is declared in
  * the subagent package (via cordis module augmentation), which the tui

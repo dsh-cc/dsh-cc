@@ -24,13 +24,17 @@ import { dropRowsInRange, extractCompactSummary, isCompactCheckpointSource } fro
  * Minimal session-event face the TUI understands. `seq` tags created rows so
  * a surface replacement can drop exactly the replaced span; `surfaceOp`
  * mirrors the session surface contract (plain `'append'` or a positional
- * `'replace'` range).
+ * `'replace'` range — 0.1.5 names the bounds `startSeq`/`endSeq`; the legacy
+ * `start`/`end` spelling may still appear in logs persisted before the
+ * rename, so readers tolerate both).
  */
 export interface SessionEventLike {
   readonly type: string
   readonly data?: unknown
   readonly seq?: number
-  readonly surfaceOp?: 'append' | { op: 'replace'; start: number; end: number }
+  readonly surfaceOp?: 'append'
+    | { op: 'replace'; startSeq: number; endSeq: number }
+    | { op: 'replace'; start: number; end: number }
 }
 
 /** Optional presenters looked up by tool name (agent-scoped registry). */
@@ -163,7 +167,17 @@ function replaceOpOf(
 ): { start: number; end: number } | undefined {
   const op = event.surfaceOp
   if (typeof op !== 'object' || op === null || op.op !== 'replace') return undefined
-  return typeof op.start === 'number' && typeof op.end === 'number' ? { start: op.start, end: op.end } : undefined
+  // 0.1.5 spelling (startSeq/endSeq) first; fall back to the pre-rename
+  // start/end pair for logs written before the retarget.
+  if ('startSeq' in op && 'endSeq' in op
+    && typeof op.startSeq === 'number' && typeof op.endSeq === 'number') {
+    return { start: op.startSeq, end: op.endSeq }
+  }
+  if ('start' in op && 'end' in op
+    && typeof op.start === 'number' && typeof op.end === 'number') {
+    return { start: op.start, end: op.end }
+  }
+  return undefined
 }
 
 /** Drop `pendingCompact` (exactOptionalPropertyTypes-safe field removal). */
