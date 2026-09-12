@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/skill-loader",
   "description": "Claude Code skill-format compatible provider for the DeepSeek Harness",
-  "version": "0.6.3-rc.1",
+  "version": "0.6.3-rc.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
