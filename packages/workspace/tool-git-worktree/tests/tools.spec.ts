@@ -89,7 +89,7 @@ class FakeFs extends FileSystem {
 }
 
 const sessionCwdAgent = (cwd: string): Agent =>
-  ({ inject: () => undefined, session: { header: { version: 0, id: 's', createdAt: 0, cwd } } }) as unknown as Agent
+  ({ inject: () => undefined, session: { header: { version: 3, id: 's', createdAt: 0, cwd } } }) as unknown as Agent
 
 async function setup() {
   const ctx = new Context()

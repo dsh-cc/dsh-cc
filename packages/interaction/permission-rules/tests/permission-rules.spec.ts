@@ -88,7 +88,7 @@ function openTurnAgent(id: string): Agent {
 /** An agent whose session carries a working directory (enables the escape check). */
 function openAgentWithCwd(id: string, cwd: string): Agent {
   const session = Session.create(SessionId(id), undefined, {
-    version: 0,
+    version: 3,
     isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),
