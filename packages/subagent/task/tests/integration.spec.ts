@@ -396,19 +396,17 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
     expect(String(loaded.meta.id)).toBe(String(childId))
   }, 20_000)
 
-  // SKIPPED: the final §4.13 leg — `send_message` cold-resuming a child whose
-  // Activation was torn down by a drain — is not implementable against the
-  // current harness build: `sendMessage` after `drainContinuableChildren` resolves
-  // the delivery but the child's Activation never re-materializes (reproduced
-  // with the pure harness API, no dsh-cc code involved; in the settled variant
-  // no Activation appears at all, in the aborted-turn variant one materializes
-  // 'running' but never issues a model call). Only the natural-settle cold
-  // resume works (pinned by the §4.12 test above). Harness-side gap, applies
-  // at rc.1 too: assertAdmitting runs inside the delivery path (including
-  // coldResume), so a sendMessage from a parent still in the registry after
-  // drainContinuableDescendants is refused with DRAINING rather than
-  // cold-resuming the child (harness
-  // packages/subagent/subagent/src/continuation.ts deliverToChild/coldResume
-  // at 0.1.2-rc.1).
+  // SKIPPED (re-probed at 0.1.5-rc.1): the final §4.13 leg — `send_message`
+  // cold-resuming a child whose Activation was torn down by
+  // `drainContinuableChildren` — still does not complete end to end. Progress
+  // since 0.1.2-rc.1: the delivery seam was reworked (deliverToChild /
+  // steerPrompt, continuation-messages.ts) and the send now RESOLVES — no
+  // DRAINING error from assertAdmitting on the per-child arm (the parent is
+  // not itself drained), even with the child fully out of the registry
+  // (ctx.agents.get(childId) === undefined awaited before the send). But the
+  // cold-resumed Activation never issues a model call: the scripted adapter
+  // records only the initial request (1, never ≥2) within 10s — the same
+  // "Activation never re-materializes into a turn" gap reproduced at 0.1.2.
+  // Natural-settle cold resume works (pinned by the §4.12 test above).
   it.skip('a later send_message cold-resumes the drained child from its persisted Session', () => {})
 })
