@@ -74,7 +74,18 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
   const listSessions = async (): Promise<readonly SessionListEntry[]> => {
     const persistence = ctx.get('sessionPersistence') as PersistenceLike | undefined
     if (persistence === undefined) return []
-    return persistence.list()
+    // 0.1.5 handle-model snapshots: the picker's flat fields all live on
+    // `header`. No mtime is exposed, so `updatedAtMs` stays absent and
+    // sortByActivity's createdAt fallback carries the ordering.
+    const snapshots = await persistence.list()
+    return snapshots.map((snapshot): SessionListEntry => ({
+      id: String(snapshot.header.id),
+      ...(snapshot.header.cwd === undefined ? {} : { cwd: snapshot.header.cwd }),
+      createdAt: snapshot.header.createdAt,
+      ...(snapshot.header.parentSession === undefined
+        ? {}
+        : { parentSession: String(snapshot.header.parentSession) }),
+    }))
   }
 
   // /resume picker working set: the full unfiltered list lives here while the

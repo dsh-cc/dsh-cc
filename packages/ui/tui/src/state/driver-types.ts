@@ -360,14 +360,29 @@ export type LlmLike = {
   }>
 }
 
+/**
+ * Structural stand-in for the 0.1.5 handle-model `sessionPersistence.list()`:
+ * one lightweight snapshot per stored session. The flat fields the picker
+ * needs (id, cwd, createdAt, lineage) all live on `snapshot.header`; the
+ * snapshot exposes no mtime, so last-activity refinement (`updatedAtMs`) is
+ * unavailable at list time and the picker falls back to `createdAt`.
+ * Keep this shape verbatim from the harness contract — drift here is exactly
+ * what a structural cast cannot flag (the /resume picker crash of 0.6.3-rc.1).
+ */
+export type PersistenceSnapshotLike = {
+  readonly header: {
+    readonly id: string
+    readonly createdAt: number
+    readonly cwd?: string
+    readonly parentSession?: string
+  }
+  readonly revision: unknown
+  readonly eventCount?: number
+  readonly sizeBytes?: number
+}
+
 export type PersistenceLike = {
-  list(signal?: AbortSignal): Promise<{
-    id: string
-    cwd?: string
-    createdAt: number
-    updatedAtMs?: number
-    parentSession?: string
-  }[]>
+  list(options?: { signal?: AbortSignal }): Promise<readonly PersistenceSnapshotLike[]>
 }
 
 /**

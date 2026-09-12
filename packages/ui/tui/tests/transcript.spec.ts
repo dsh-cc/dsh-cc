@@ -8,14 +8,14 @@ import {
   shouldEchoCommandResult,
 } from '@dsh-cc/tui/compact-fold.ts'
 
-/** Build a compact checkpoint user/message replace event (real shape). */
+/** Build a compact checkpoint user/message replace event (real 0.1.5 shape). */
 function compactCheckpoint(
   seq: number,
   opts: { sourceCommandId?: string; start?: number; end?: number } = {},
 ): {
   type: 'user/message'
   seq: number
-  surfaceOp: { op: 'replace'; start: number; end: number }
+  surfaceOp: { op: 'replace'; startSeq: number; endSeq: number }
   data: Record<string, unknown>
 } {
   const source: Record<string, unknown> = {
@@ -27,7 +27,7 @@ function compactCheckpoint(
   return {
     type: 'user/message',
     seq,
-    surfaceOp: { op: 'replace', start: opts.start ?? 10, end: opts.end ?? 20 },
+    surfaceOp: { op: 'replace', startSeq: opts.start ?? 10, endSeq: opts.end ?? 20 },
     data: {
       content: [
         { type: 'text', text: 'This is an automatically generated checkpoint...\n\n<compacted-summary>' },
@@ -653,6 +653,24 @@ describe('compact checkpoint fold', () => {
     state = applySessionEvent(state, compactCheckpoint(21, { start: 10, end: 20 }))
     expect(state.rows).toEqual([
       { kind: 'compact', trigger: 'auto', items: 0, tokens: 0, summary: '## Primary Request\n- foo', seq: 21 },
+      { kind: 'user', text: 'recent', seq: 30 },
+    ])
+  })
+
+  it('legacy pre-0.1.5 start/end replace spelling still drops the range', () => {
+    let state = createInitialState()
+    state = applySessionEvent(state, { type: 'user/message', seq: 10, data: { text: 'old', source: { kind: 'user' } } })
+    state = applySessionEvent(state, { type: 'user/message', seq: 30, data: { text: 'recent', source: { kind: 'user' } } })
+    state = applySessionEvent(state, {
+      type: 'user/message',
+      seq: 21,
+      surfaceOp: { op: 'replace', start: 10, end: 20 },
+      data: { text: 'folded', source: { kind: 'user' } },
+    })
+    // A non-checkpoint replacement only shrinks the transcript: the range row
+    // (seq 10) is dropped, the replacing event adds no row of its own, and the
+    // tail (seq 30) survives.
+    expect(state.rows).toEqual([
       { kind: 'user', text: 'recent', seq: 30 },
     ])
   })
