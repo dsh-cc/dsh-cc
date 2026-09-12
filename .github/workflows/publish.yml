@@ -207,11 +207,28 @@ jobs:
       # scope (~20–30 PUTs / few minutes). pnpm -r fires them back-to-back
       # and dies mid-set with E429. The script skips versions already on
       # the registry, so reruns only attempt the remainder.
+      # OIDC trap (2026-09-10, still live 2026-09-12): pnpm 11.7's automatic
+      # OIDC attempt succeeds at the exchange and then hard-fails the PUT
+      # with "403 OIDC permission denied for this action" — the trusted
+      # publisher registrations on npmjs do not match this workflow (observed
+      # on v0.6.3-rc.2 run for @dsh-cc/bundle-permissions, first PUT), and
+      # pnpm has no flag to prefer the static token. Scrubbing the GHA
+      # id-token env makes pnpm's getIdToken throw → "Skipped OIDC" → static
+      # NPM_TOKEN auth (the pre-2026-09-10 behavior, where the exchange 404'd
+      # and pnpm fell back on its own).
+      # CAVEAT: --provenance is dropped alongside: without the id token
+      # libnpmpublish cannot build attestations. Restore both once the
+      # npmjs trusted-publisher claims (repo/workflow/environment) are
+      # verified per package (see docs/release.md §升级到 Trusted Publishing).
       - name: Publish all packages (skips versions already on the registry)
         working-directory: dsh-cc
         env:
           PUBLISH_DELAY_MS: 8000
-        run: node scripts/publish-packages.mjs --tag "$DIST_TAG" --provenance --no-git-checks
+        run: |
+          # GHA drops env vars assigned "" at the step level, so the scrub
+          # must be a shell unset (see the OIDC trap comment above).
+          unset ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+          node scripts/publish-packages.mjs --tag "$DIST_TAG" --no-git-checks
 
       - name: GitHub Release
         working-directory: dsh-cc
