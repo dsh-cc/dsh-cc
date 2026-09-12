@@ -6,7 +6,6 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
@@ -27,7 +26,6 @@ afterEach(() => {
 async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -49,9 +47,19 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
 }
 
 /** Read one stored session's header + event log through the rc.1
- * sessionPersistence face (`load` returns header + full event log). */
-async function loadStoredSession(persistence: { load(id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> }, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
-  return await persistence.load(id)
+ * sessionPersistence face (`stat` + a read `open` handle); `undefined` when
+ * the session does not exist. */
+async function loadStoredSession(persistence: {
+  stat(id: SessionId): Promise<unknown>
+  open(id: SessionId, access: 'read'): Promise<{ header: SessionHeader; read(): Promise<{ events: readonly SessionEvent[] }>; close(): Promise<void> }>
+}, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] } | undefined> {
+  if (await persistence.stat(id) === undefined) return undefined
+  const handle = await persistence.open(id, 'read')
+  try {
+    return { meta: handle.header, events: (await handle.read()).events }
+  } finally {
+    await handle.close()
+  }
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -274,7 +282,6 @@ describe('dsh-coordinator completion notification (reused subagent-settled proto
     // suite that owns this protocol.
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
-    await ctx.plugin(SessionProjectionRegistry)
     const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-notify-'))
     roots.push(root)
     await ctx.plugin(JsonlSessionPersistence, { root })

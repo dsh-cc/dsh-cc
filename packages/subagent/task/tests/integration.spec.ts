@@ -17,7 +17,6 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
@@ -74,7 +73,6 @@ async function setup(
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'dsh-cc-task-integration-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -128,9 +126,19 @@ async function setup(
 }
 
 /** Read one stored session's header + event log through the rc.1
- * sessionPersistence face (`load` returns header + full event log). */
-async function loadStoredSession(persistence: { load(id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> }, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
-  return await persistence.load(id)
+ * sessionPersistence face (`stat` + a read `open` handle); `undefined` when
+ * the session does not exist. */
+async function loadStoredSession(persistence: {
+  stat(id: SessionId): Promise<unknown>
+  open(id: SessionId, access: 'read'): Promise<{ header: SessionHeader; read(): Promise<{ events: readonly SessionEvent[] }>; close(): Promise<void> }>
+}, id: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] } | undefined> {
+  if (await persistence.stat(id) === undefined) return undefined
+  const handle = await persistence.open(id, 'read')
+  try {
+    return { meta: handle.header, events: (await handle.read()).events }
+  } finally {
+    await handle.close()
+  }
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -323,7 +331,8 @@ describe('Task background mode — cold resume (§4.12)', () => {
     // The descriptor composition survived: the resumed child still carries the
     // definition's persona and its sanitized (allow: [read]) tool filter.
     const resumed = adapter.requests.filter(request => request.sessionId === childId).at(-1)!
-    expect(resumed.system).toContain('RESEARCHER PERSONA MARKER')
+    // 0.1.5: the system prompt rides as the leading system message, not a request field.
+    expect(JSON.stringify(resumed.messages?.filter((message: { role: string }) => message.role === 'system'))).toContain('RESEARCHER PERSONA MARKER')
     const toolNames = (resumed.tools ?? []).map(tool => tool.name)
     expect(toolNames).toContain('read')
     expect(toolNames).not.toContain('write')
@@ -387,19 +396,17 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
     expect(String(loaded.meta.id)).toBe(String(childId))
   }, 20_000)
 
-  // SKIPPED: the final §4.13 leg — `send_message` cold-resuming a child whose
-  // Activation was torn down by a drain — is not implementable against the
-  // current harness build: `sendMessage` after `drainContinuableChildren` resolves
-  // the delivery but the child's Activation never re-materializes (reproduced
-  // with the pure harness API, no dsh-cc code involved; in the settled variant
-  // no Activation appears at all, in the aborted-turn variant one materializes
-  // 'running' but never issues a model call). Only the natural-settle cold
-  // resume works (pinned by the §4.12 test above). Harness-side gap, applies
-  // at rc.1 too: assertAdmitting runs inside the delivery path (including
-  // coldResume), so a sendMessage from a parent still in the registry after
-  // drainContinuableDescendants is refused with DRAINING rather than
-  // cold-resuming the child (harness
-  // packages/subagent/subagent/src/continuation.ts deliverToChild/coldResume
-  // at 0.1.2-rc.1).
+  // SKIPPED (re-probed at 0.1.5-rc.1): the final §4.13 leg — `send_message`
+  // cold-resuming a child whose Activation was torn down by
+  // `drainContinuableChildren` — still does not complete end to end. Progress
+  // since 0.1.2-rc.1: the delivery seam was reworked (deliverToChild /
+  // steerPrompt, continuation-messages.ts) and the send now RESOLVES — no
+  // DRAINING error from assertAdmitting on the per-child arm (the parent is
+  // not itself drained), even with the child fully out of the registry
+  // (ctx.agents.get(childId) === undefined awaited before the send). But the
+  // cold-resumed Activation never issues a model call: the scripted adapter
+  // records only the initial request (1, never ≥2) within 10s — the same
+  // "Activation never re-materializes into a turn" gap reproduced at 0.1.2.
+  // Natural-settle cold resume works (pinned by the §4.12 test above).
   it.skip('a later send_message cold-resumes the drained child from its persisted Session', () => {})
 })

@@ -3,18 +3,71 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import { Service } from '@deepseek-ai/cordis'
+import { SessionEvent, SessionHeader, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import {
+  SessionPersistence,
+  SessionPersistenceNotFoundError,
+  SessionPersistenceRevision,
+} from '@deepseek-ai/dsh-session-persistence'
+import type { SessionAccess, SessionHandle, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
 import * as toolSchedule from '@deepseek-ai/dsh-schedule'
 
-/** Minimal sessionPersistence service mount (mirrors upstream schedule
- * plugin.spec's PersistenceProbe: the schedule plugin only requires the
- * service to exist, never calls its read/write face in this composition). */
-class PersistenceProbe extends Service {
-  constructor(ctx: Context) {
-    super(ctx, 'sessionPersistence')
+interface StoredProbeSession {
+  readonly header: SessionHeader
+  readonly events: SessionEvent[]
+}
+
+/** In-memory handle-based persistence, just enough for agent-loop's write path
+ * (mirrors upstream schedule plugin.spec's PersistenceProbe). */
+class PersistenceProbe extends SessionPersistence {
+  private readonly stored = new Map<string, StoredProbeSession>()
+
+  override async create(header: SessionHeader): Promise<SessionHandle> {
+    const entry: StoredProbeSession = { header, events: [] }
+    this.stored.set(header.id, entry)
+    return this.handle(entry, 'write')
+  }
+
+  // Appends are durable on resolution here; nothing buffers, so the service-wide flush is a no-op.
+  override async flush(): Promise<void> {}
+
+  override async open(id: SessionId, access: SessionAccess): Promise<SessionHandle> {
+    const entry = this.stored.get(id)
+    if (entry === undefined) throw new SessionPersistenceNotFoundError(id)
+    return this.handle(entry, access)
+  }
+
+  override async stat(id: SessionId): Promise<SessionPersistenceSnapshot | undefined> {
+    const entry = this.stored.get(id)
+    return entry === undefined ? undefined : this.snapshot(entry)
+  }
+
+  override async list(): Promise<SessionPersistenceSnapshot[]> {
+    return [...this.stored.values()].map(entry => this.snapshot(entry))
+  }
+
+  private snapshot(entry: StoredProbeSession): SessionPersistenceSnapshot {
+    return {
+      header: entry.header,
+      revision: SessionPersistenceRevision(`probe-${entry.header.id}-${entry.events.length}`),
+      eventCount: entry.events.length,
+    }
+  }
+
+  private handle(entry: StoredProbeSession, access: SessionAccess): SessionHandle {
+    return {
+      id: entry.header.id,
+      header: entry.header,
+      inheritedEventCount: SessionLogOffset(0),
+      access,
+      read: async (offset = 0, length = Number.MAX_SAFE_INTEGER) =>
+        ({ eventState: 'detached', events: structuredClone(entry.events.slice(offset, offset + length)) }),
+      append: async (events) => { entry.events.push(...events) },
+      flush: async () => {},
+      close: async () => {},
+      [Symbol.asyncDispose]: async () => {},
+    }
   }
 }
 
@@ -27,7 +80,6 @@ class PersistenceProbe extends Service {
 async function harness(): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(PersistenceProbe)
   ctx.on('session/flush', () => {})
   await ctx.plugin(AgentLoop, { agents: [] })

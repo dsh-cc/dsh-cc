@@ -31,11 +31,11 @@
     "@dsh-cc/session-forensics": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-commands": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-fs": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-home-paths": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-settings": ">=0.1.2-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-commands": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-fs": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-home-paths": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {

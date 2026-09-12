@@ -65,7 +65,7 @@ body:
     id: dsh-cli
     attributes:
       label: dsh + @dsh-cc/cli versions · 版本
-      placeholder: "dsh 0.1.2-rc.1 / @dsh-cc/cli 0.6.1"
+      placeholder: "dsh 0.1.5-rc.1 / @dsh-cc/cli 0.6.3"
     validations:
       required: true
 

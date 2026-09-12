@@ -43,8 +43,8 @@
     "js-yaml": "^4.1.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.2-rc.1",
-    "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.5-rc.1",
     "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {

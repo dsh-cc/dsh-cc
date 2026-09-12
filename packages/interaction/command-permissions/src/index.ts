@@ -190,5 +190,5 @@ export function apply(ctx: Context): void {
   }, {
     subcommands: PERMISSION_MODE_OPTIONS.map(option => ({ word: option.id, summary: option.detail })),
   }))
-  if (ctx.agent === undefined) installCatalogWrap(ctx)
+  if (ctx.get('agent') === undefined) installCatalogWrap(ctx)
 }

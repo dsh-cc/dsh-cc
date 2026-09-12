@@ -44,7 +44,7 @@ on:
 env:
   # deepseek-harness pin: single source of truth for the checkout ref and
   # the harness-artifact cache key
-  DSH_HARNESS_REF: a66e4702047846cdaa10c66c9d3df3951f5ea70d # 0.1.2-rc.1 release commit
+  DSH_HARNESS_REF: 1ef9c1fa9afbea78c5537bfc8b6d1c27d598798e # 0.1.5-rc.1 release commit
 
 permissions:
   contents: read
@@ -144,6 +144,10 @@ jobs:
             deepseek-harness/packages/*/*/lib
             deepseek-harness/vendor/*/lib
             deepseek-harness/apps/cli/lib
+            # 0.1.5: flock lease addon ships its built lib here; broken
+            # without it even on cache-hit runs (jsonl imports eagerly).
+            deepseek-harness/native/system/packages/*/lib
+            deepseek-harness/native/system/packages/*/bin
           key: harness-lib-${{ env.DSH_HARNESS_REF }}
 
       - name: Install deepseek-harness deps
@@ -153,7 +157,10 @@ jobs:
       - name: 'Build deepseek-harness lib (consumption point of link:; build:web skipped)'
         if: steps.cache-harness.outputs.cache-hit != 'true'
         working-directory: deepseek-harness
-        run: pnpm run build:lib
+        run: pnpm run build:lib && pnpm run build:native-system
+        # 0.1.5: background-Task paths call flock for real; the addon
+        # binary is gitignored upstream, so cache-miss runs must compile it
+        # (ubuntu runners carry build-essential).
 
       - name: Cache harness build outputs (save)
         if: steps.cache-harness.outputs.cache-hit != 'true'
@@ -163,6 +170,10 @@ jobs:
             deepseek-harness/packages/*/*/lib
             deepseek-harness/vendor/*/lib
             deepseek-harness/apps/cli/lib
+            # 0.1.5: flock lease addon ships its built lib here; broken
+            # without it even on cache-hit runs (jsonl imports eagerly).
+            deepseek-harness/native/system/packages/*/lib
+            deepseek-harness/native/system/packages/*/bin
           key: harness-lib-${{ env.DSH_HARNESS_REF }}
 
       - name: Install dsh-cc deps

@@ -20,7 +20,6 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
@@ -38,7 +37,6 @@ afterEach(() => {
 async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'cc-shell-background-'))
   roots.push(root)
   // (a) host-plane persistence: the jsonl backend (dsh base cordis.patch row).
@@ -67,16 +65,16 @@ describe('cc-shell background composition (§4.11)', () => {
   it('resolves a session-persistence backend service', async () => {
     const { ctx } = await compose()
     const persistence = ctx.get('sessionPersistence') as {
-      load?: unknown
-      append?: unknown
-      readFrom?: unknown
-      readStoredRevision?: unknown
+      create?: unknown
+      open?: unknown
+      stat?: unknown
       list?: unknown
+      flush?: unknown
     } | undefined
     expect(persistence).toBeDefined()
-    // The jsonl backend's contract at rc.1: the coordinator-facing read/write
-    // face (load/append/readFrom/readStoredRevision/list).
-    for (const method of ['load', 'append', 'readFrom', 'readStoredRevision', 'list']) {
+    // The jsonl backend's contract at rc.1: the handle-based face
+    // (create/open/stat/list/flush).
+    for (const method of ['create', 'open', 'stat', 'list', 'flush']) {
       expect(typeof persistence![method as keyof typeof persistence]).toBe('function')
     }
     await ctx.fiber.dispose()

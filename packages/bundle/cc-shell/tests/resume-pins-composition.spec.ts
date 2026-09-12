@@ -15,7 +15,6 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
@@ -38,7 +37,6 @@ afterEach(() => {
 async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   const root = mkdtempSync(join(tmpdir(), 'cc-shell-resume-pins-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })

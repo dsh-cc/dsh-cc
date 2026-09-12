@@ -58,7 +58,7 @@ async function harness(repo: string) {
 }
 
 const agentAt = (repo: string): Agent =>
-  ({ inject: () => undefined, session: { header: { version: 0, id: 's', createdAt: 0, cwd: repo } } }) as unknown as Agent
+  ({ inject: () => undefined, session: { header: { version: 3, id: 's', createdAt: 0, cwd: repo } } }) as unknown as Agent
 
 function call(ctx: Context, name: string, args: unknown, agent: Agent) {
   return ctx.tools.execute({ signal, callId: ToolCallId(`${name}-${Math.random().toString(36).slice(2)}`), name, arguments: args, agent })

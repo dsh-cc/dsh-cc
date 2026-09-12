@@ -12,7 +12,6 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
@@ -37,12 +36,11 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   const root = workspace()
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(JsonlSessionPersistence, { root })
   await ctx.plugin(AgentLoop, { agents: [] })
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const agent = ctx.agentLoop.create(
+  const agent = await ctx.agentLoop.create(
     SessionId('parent'),
     { provider: 'mock', model: 'mock' },
     { cwd: join(root, 'workspace') },

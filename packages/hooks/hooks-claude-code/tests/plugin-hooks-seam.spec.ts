@@ -8,7 +8,6 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { defineContentToolFixture } from '@dsh-cc/tools'
@@ -48,7 +47,6 @@ interface HooksSeam {
 async function mountBridge(configPath: string | undefined, adapter: MockAdapter): Promise<{ ctx: Context; seam: HooksSeam }> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
@@ -69,7 +67,7 @@ async function driveToolCall(ctx: Context, adapter: MockAdapter): Promise<{ ran:
     if (decision.kind === 'deny') denied = true
     return decision
   })
-  const agent: Agent = ctx.agentLoop.create(SessionId('seam'), { provider: 'mock', model: 'mock' })
+  const agent: Agent = await ctx.agentLoop.create(SessionId('seam'), { provider: 'mock', model: 'mock' })
   agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
   await agent.whenIdle()
   return { ran, denied }
