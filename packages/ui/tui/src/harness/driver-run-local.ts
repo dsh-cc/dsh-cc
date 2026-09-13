@@ -16,6 +16,8 @@ import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { rowsToMarkdown } from '../export-markdown.ts'
 import { defaultExportDir, exportStamp } from './shell-output.ts'
+import type { PersistenceLike } from './session-service-likes.ts'
+import { tombstoneResumeTargetForRemovedWorktree } from './resumed-cwd-guard.ts'
 import {
   breakdownOf,
   occupancyOf,
@@ -435,6 +437,18 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
     // the plugin's shutdown invokes) does not re-persist a resume marker that
     // points into the deleted worktree.
     rt.setMarkedContent(false)
+    // Tombstone the resume anchor when its session lived under the removed
+    // worktree (fail-open: quitting is never blocked by anchor bookkeeping).
+    try {
+      const persistence = rt.ctx.get('sessionPersistence') as PersistenceLike | undefined
+      await tombstoneResumeTargetForRemovedWorktree({
+        cwd: rt.cwd,
+        removedPath: view.worktreePath,
+        persistence,
+      })
+    } catch {
+      // Anchor bookkeeping is best-effort.
+    }
     await finalizeQuit(false)
   }
 
