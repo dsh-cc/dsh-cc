@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { readResumeTarget, writeResumeTarget } from '@dsh-cc/tui/resume-target.ts'
 import type {
   WorktreeCleanupOutcome,
   WorktreeExitEvidence,
@@ -274,5 +275,69 @@ describe('createDriver /quit worktree-exit', () => {
     expect(driver.state.worktreeExit).toBeUndefined()
     expect(dispose).toHaveBeenCalledOnce()
     expect(hooks.cleanup).toHaveBeenCalledOnce()
+  })
+})
+
+/**
+ * Tombstone wiring: a successful Remove must clear the project resume anchor
+ * when the anchored session's persisted cwd lived under the removed worktree
+ * (fail-open otherwise, and untouched on keep/cancel).
+ */
+describe('createDriver /quit worktree-exit tombstone', () => {
+  let prevHome: string | undefined
+  let tempHome: string
+  let tempCwd: string
+
+  beforeEach(() => {
+    prevHome = process.env.DSH_HOME
+    tempHome = mkdtempSync(join(tmpdir(), 'dsh-wt-tomb-'))
+    tempCwd = mkdtempSync(join(tmpdir(), 'dsh-wt-tomb-cwd-'))
+    process.env.DSH_HOME = tempHome
+  })
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = prevHome
+  })
+
+  function makeCtxWithPersistence(agent: FakeAgent, dispose: ReturnType<typeof vi.fn>, snapshots: readonly unknown[]): Record<string, unknown> {
+    return {
+      ...makeCtx(agent, dispose),
+      get(key: string) {
+        if (key === 'sessionPersistence') return { list: async () => snapshots }
+        return (makeCtx(agent, dispose) as { get: (k: string) => unknown }).get(key)
+      },
+    }
+  }
+
+  it('remove clears the anchor when the anchored session cwd is under the removed worktree', async () => {
+    writeResumeTarget('s-wt', { cwd: tempCwd })
+    const agent = makeFakeAgent('idle')
+    const dispose = vi.fn()
+    const snapshots = [{
+      header: { id: 's-wt', createdAt: 0, cwd: join(MANAGED.worktreePath, 'packages') },
+      revision: null,
+    }]
+    const ctx = makeCtxWithPersistence(agent, dispose, snapshots)
+    const hooks = makeHooks()
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks, onQuit: vi.fn(), cwd: tempCwd })
+    await driver.submit('/quit')
+    await driver.worktreeExitMove(1)
+    await driver.worktreeExitSubmit()
+    expect(hooks.cleanup).toHaveBeenCalledOnce()
+    expect(readResumeTarget({ cwd: tempCwd })).toBeUndefined()
+  })
+
+  it('keep does not touch the anchor', async () => {
+    writeResumeTarget('s-wt', { cwd: tempCwd })
+    const agent = makeFakeAgent('idle')
+    const dispose = vi.fn()
+    const ctx = makeCtxWithPersistence(agent, dispose, [])
+    const hooks = makeHooks()
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks, onQuit: vi.fn(), cwd: tempCwd })
+    await driver.submit('/quit')
+    await driver.worktreeExitSubmit()
+    expect(hooks.cleanup).not.toHaveBeenCalled()
+    expect(readResumeTarget({ cwd: tempCwd })).toBe('s-wt')
   })
 })

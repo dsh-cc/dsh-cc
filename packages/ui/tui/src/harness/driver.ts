@@ -19,7 +19,8 @@ import { createCatalogSection } from './driver-catalog.ts'
 import type { DriverBashCtx, DriverQueueCtx, PermissionRulesLike } from './driver-ctx.ts'
 import { createModeSection } from './driver-mode.ts'
 import { liveModeWithDefault, liveSessionCwd } from './driver-live.ts'
-import { warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
+import { gateAutoResumeTarget, warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
+import type { PersistenceLike } from './session-service-likes.ts'
 import { createHudSection } from './driver-hud.ts'
 import { createStatusLineWiring } from './statusline-wiring.ts'
 import type { OnboardingGate } from './onboarding.ts'
@@ -130,7 +131,10 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     attemptedAutoResume = true
     const markerId = readResumeTarget({ cwd })
     markerFound = markerId !== undefined && markerId.length > 0
-    resumeSession = markerFound ? SessionId(markerId!) : undefined
+    // Auto-resume gate (fail-open): fresh when the anchored session's cwd is gone.
+    resumeSession = markerFound && await gateAutoResumeTarget({
+      markerId: markerId!, persistence: ctx.get('sessionPersistence') as PersistenceLike | undefined, showNotice, cwd,
+    }) === 'resume' ? SessionId(markerId!) : undefined
   }
 
   let resumed = false
