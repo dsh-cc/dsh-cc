@@ -316,56 +316,61 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 			resetEditorHistory(editor, liveHistory)
 		}
 
-		transcript.setRows(state.rows, {
-			thinkingExpanded: state.thinkingExpanded,
-			toolOutputExpanded: state.toolOutputExpanded,
-			compactExpanded: state.compactExpanded,
-		})
+		// Paint-path guard: a throw in any row/overlay update must still paint
+		// the last-good frame — skipping requestRender freezes the whole TUI.
+		try {
+			transcript.setRows(state.rows, {
+				thinkingExpanded: state.thinkingExpanded,
+				toolOutputExpanded: state.toolOutputExpanded,
+				compactExpanded: state.compactExpanded,
+			})
 
-		queueLine.setText(
-			state.queued.length === 0
-				? ''
-				: state.queued.map(text => theme.muted(`⏵ queued: ${text}`)).join('\n'),
-		)
-		queueLine.invalidate()
+			queueLine.setText(
+				state.queued.length === 0
+					? ''
+					: state.queued.map(text => theme.muted(`⏵ queued: ${text}`)).join('\n'),
+			)
+			queueLine.invalidate()
 
-		const summary = todoSummary(state)
-		todoLine.setText(
-			summary === undefined
-				? ''
-				: theme.muted(`☐ ${summary.done}/${summary.total}${summary.active === undefined ? '' : ` · ${truncateActive(summary.active)}`}`),
-		)
-		todoLine.invalidate()
+			const summary = todoSummary(state)
+			todoLine.setText(
+				summary === undefined
+					? ''
+					: theme.muted(`☐ ${summary.done}/${summary.total}${summary.active === undefined ? '' : ` · ${truncateActive(summary.active)}`}`),
+			)
+			todoLine.invalidate()
 
-		noticeLine.setText(state.notice === undefined ? '' : theme.muted(state.notice))
-		noticeLine.invalidate()
+			noticeLine.setText(state.notice === undefined ? '' : theme.muted(state.notice))
+			noticeLine.invalidate()
 
-		// Working line lifecycle tracks the turn anchor: start on the
-		// undefined→set jump, stop on the reverse. Seeded by the first
-		// (immediate) subscribe call — see workingLineLive above.
-		const turnLive = state.turn !== undefined
-		if (workingLineLive !== turnLive) {
-			workingLineLive = turnLive
-			if (turnLive) workingLine.start()
-			else workingLine.stop()
+			// Working line lifecycle tracks the turn anchor: start on the
+			// undefined→set jump, stop on the reverse. Seeded by the first
+			// (immediate) subscribe call — see workingLineLive above.
+			const turnLive = state.turn !== undefined
+			if (workingLineLive !== turnLive) {
+				workingLineLive = turnLive
+				if (turnLive) workingLine.start()
+				else workingLine.stop()
+			}
+
+			// Overlay boxes (approval/question/pickers/panels) rebuild from the
+			// state on every emit via the shared overlay host.
+			renderOverlayChildren(overlays, state, theme)
+
+			// Refresh the autocomplete provider when the command catalog moves
+			// (reference equality with the last-seen array). The driver keeps the
+			// cached array stable across state emits until commands/change fires, so
+			// this is a cheap guard that rebuilds only on an actual catalog change.
+			const latestCatalog = driver.listCommands()
+			if (latestCatalog !== lastCatalog) {
+				lastCatalog = latestCatalog
+				autocompleteProvider = new TuiAutocompleteProvider(latestCatalog, driver.cwd, undefined, argCompleters)
+				editor.setAutocompleteProvider(autocompleteProvider)
+			}
+
+		} finally {
+			tui.requestRender()
 		}
-
-		// Overlay boxes (approval/question/pickers/panels) rebuild from the
-		// state on every emit via the shared overlay host.
-		renderOverlayChildren(overlays, state, theme)
-
-		// Refresh the autocomplete provider when the command catalog moves
-		// (reference equality with the last-seen array). The driver keeps the
-		// cached array stable across state emits until commands/change fires, so
-		// this is a cheap guard that rebuilds only on an actual catalog change.
-		const latestCatalog = driver.listCommands()
-		if (latestCatalog !== lastCatalog) {
-			lastCatalog = latestCatalog
-			autocompleteProvider = new TuiAutocompleteProvider(latestCatalog, driver.cwd, undefined, argCompleters)
-			editor.setAutocompleteProvider(autocompleteProvider)
-		}
-
-		tui.requestRender()
 	})
 
 	tui.setFocus(editor)

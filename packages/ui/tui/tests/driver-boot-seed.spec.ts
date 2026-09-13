@@ -28,9 +28,11 @@ function makeSeedCtx(): {
   ctx: Record<string, unknown>
   gate: { resolve: (value: unknown) => void; reject: (error: unknown) => void }
   sent: { text: string }[]
+  agentRef: { current?: { status: string } }
 } {
   const gate = deferred<unknown>()
   const sent: { text: string }[] = []
+  const agentRef: { current?: { status: string } } = {}
   const ctx: Record<string, unknown> = {
     get(key: string) {
       if (key === 'agentPresets') {
@@ -49,8 +51,7 @@ function makeSeedCtx(): {
     agents: {
       create: async (o: unknown) => {
         const agentOpts = (o as { agentOptions?: Record<string, unknown> })?.agentOptions ?? {}
-        return {
-          agent: {
+        agentRef.current = {
             options: agentOpts,
             session: { id: 's-boot', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-boot',
@@ -59,13 +60,12 @@ function makeSeedCtx(): {
               sent.push({ text: message.content?.find(p => p.text !== undefined)?.text ?? '' })
             },
             cancel() {},
-          },
-          dispose: async () => {},
         }
+        return { agent: agentRef.current, dispose: async () => {} }
       },
     },
   }
-  return { ctx, gate, sent }
+  return { ctx, gate, sent, agentRef }
 }
 
 const bannerRows = (state: { rows: { kind: string; text?: string }[] }): string[] =>
@@ -116,14 +116,17 @@ describe('createDriver boot seed (fire-early / await-late)', () => {
   })
 
   it('a queued (busy) submit is not enqueued until the seed settles', async () => {
-    const { ctx, gate, sent } = makeSeedCtx()
+    const { ctx, gate, sent, agentRef } = makeSeedCtx()
     const driver = await createDriver(ctx as never, {})
     const first = driver.submit('first')
     gate.resolve({ provider: 'orchestrix', model: 'deepseek-v4-flash' })
     await first
     // Agent busy → second submit parks in the outbox; it must not enqueue
     // before ITS seed wait resolves (already settled here — regression guard
-    // for the wait seam sitting before enqueue).
+    // for the wait seam sitting before enqueue). The fake agent reports
+    // 'running' here: with the W2 zombie-busy reconcile, a submit while busy
+    // with an 'idle' agent dispatches immediately instead of queueing.
+    agentRef.current!.status = 'running'
     await driver.submit('second')
     expect(driver.state.queued).toEqual(['second'])
   })

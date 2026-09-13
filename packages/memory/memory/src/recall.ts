@@ -48,13 +48,14 @@ export const RECALL_FILES_SCHEMA: Record<string, unknown> = {
   required: ['files'],
 }
 
-/** Warn-once-per-process flag for malformed selector settlements. */
-let warnedMalformedSelection = false
+/** Warn-once-per-process flags (boxed so warnOnce can flip them). */
+const malformedSelectionFlag = { done: false }
+const lateIdleInjectFlag = { done: false }
 
 /** Log through the host logger when available, else the console; at most once. */
-function warnOnce(ctx: Context, message: string): void {
-  if (warnedMalformedSelection) return
-  warnedMalformedSelection = true
+function warnOnce(flag: { done: boolean }, ctx: Context, message: string): void {
+  if (flag.done) return
+  flag.done = true
   const logger = (ctx as { logger?: { warn?: (format: string) => void } }).logger
   if (typeof logger?.warn === 'function') logger.warn(message)
   else console.warn(message)
@@ -157,7 +158,7 @@ export class SubagentMemorySelector implements MemorySelector {
     // structured_output tool); the transcript text is ignored. A schema
     // requested but never reported settles as a resolved stopReason 'error'.
     if (result.stopReason !== 'completed' || !isFilesPayload(result.structured)) {
-      warnOnce(this.ctx, 'memory-recall: selector child did not report a valid structured selection; skipping recall')
+      warnOnce(malformedSelectionFlag, this.ctx, 'memory-recall: selector child did not report a valid structured selection; skipping recall')
       return []
     }
     const valid = new Set(candidates.map(candidate => candidate.filename))
@@ -337,6 +338,17 @@ export class MemoryRecall {
         Array.from(this.recentTools),
       )
       if (signal.aborted || selected.length === 0) return
+      // Late-inject idle guard: a selection that settles after turn end is
+      // stale enrichment for a turn that no longer exists. Harness inject is
+      // a durable next-step splice for top-level agents — at idle it would
+      // strand in the inbox and contaminate whichever turn comes next. Drop
+      // BEFORE the shown-marking loop: marking here would permanently
+      // suppress these topics (the next turn's fresh filter excludes them).
+      if (agent.status === 'idle') {
+        warnOnce(lateIdleInjectFlag, this.ctx,
+          'memory-recall: selector settled after the turn ended; dropping recall to avoid stranding an inject in the inbox')
+        return
+      }
       const byFilename = new Map(topics.map(topic => [topic.filename, topic]))
       const bodies: string[] = []
       for (const filename of selected) {

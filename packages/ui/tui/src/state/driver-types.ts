@@ -18,6 +18,12 @@ export type ApprovalAnswerKind = 'once' | 'always' | 'session' | 'reject'
 
 export interface Driver {
   readonly state: TuiState
+  /**
+   * Last UI-listener faults (capped at 5, oldest dropped): `{at, message}`
+   * pairs recorded by the emit loop when a subscriber threw. Diagnostic tail
+   * only — each fault is also `console.error`'d at emit time.
+   */
+  readonly uiFaults: readonly { at: number; message: string }[]
   readonly statusLine: string
   /**
    * Width-aware status line: same content as {@link Driver.statusLine}, but

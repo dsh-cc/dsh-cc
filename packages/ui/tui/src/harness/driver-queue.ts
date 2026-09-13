@@ -152,7 +152,9 @@ const flushQueue = (rt: DriverQueueCtx): void => {
   // live session. A rejected whenIdle must not strand the queue.
   const endingAgent = rt.current.agent as { whenIdle?: () => Promise<void> }
   if (typeof endingAgent.whenIdle === 'function') {
+    // A throwing flush is otherwise an unhandled rejection — surface it.
     void endingAgent.whenIdle().then(flush, flush)
+      .catch((error: unknown) => rt.showNotice(`⚠ Outbox flush failed: ${error instanceof Error ? error.message : String(error)}`))
   } else {
     queueMicrotask(flush)
   }
@@ -166,6 +168,15 @@ const flushQueue = (rt: DriverQueueCtx): void => {
  */
 const steerQueued = (rt: DriverQueueCtx): void => {
   const s = rt.state()
+  // Same zombie-busy reconcile as submit: steering a dead turn would
+  // self-recover the dispatch but leave busy latched forever. Clear the
+  // stale anchor and re-dispatch the chips as queued work instead.
+  if (s.busy && rt.current.agent.status !== 'running') {
+    const zombieChips = [...s.queued]
+    rt.emit(clearTurn(clearQueue(setBusy(rt.state(), false))))
+    for (const chip of zombieChips) void dispatchQueued(rt, chip, 'followup')
+    return
+  }
   const pending = [...s.queued]
   if (pending.length === 0) return
   for (const text of pending) {
@@ -254,12 +265,24 @@ const submit = async (rt: DriverQueueCtx, text?: string): Promise<void> => {
   rt.persistResumeTarget()
   const s = rt.state()
   if (s.busy) {
-    // Outbox: park the text as a pending chip only. It reaches the agent on
-    // the next durable `turn/end` (flushQueue) or immediately via Ctrl+S
-    // (steerQueued). No injection into the running turn here — that is what
-    // makes recall-then-edit meaningful.
-    rt.emit(enqueue(s, draft))
-    return
+    // Zombie-busy reconcile: if ground truth says the agent is not running,
+    // the busy latch is stale (the event intake died mid-turn) and the chips
+    // would strand until a turn/end that can never be seen. Reconcile from
+    // the agent status, re-dispatch the chips FIFO synchronously (NOT via
+    // flushQueue — its whenIdle deferral would let the draft below overtake
+    // them), then fall through to the idle-send path for the new draft.
+    if (rt.current.agent.status !== 'running') {
+      const zombieChips = [...rt.state().queued]
+      rt.emit(clearTurn(clearQueue(setBusy(rt.state(), false))))
+      for (const chip of zombieChips) void dispatchQueued(rt, chip, 'followup')
+    } else {
+      // Outbox: park the text as a pending chip only. It reaches the agent on
+      // the next durable `turn/end` (flushQueue) or immediately via Ctrl+S
+      // (steerQueued). No injection into the running turn here — that is what
+      // makes recall-then-edit meaningful.
+      rt.emit(enqueue(s, draft))
+      return
+    }
   }
   // Idle sends bypass the outbox entirely — the row surfaces from the durable
   // `user/message` event, and a sent text must not stay recallable.
