@@ -31,6 +31,7 @@ import type { ProviderRuntime } from '../provider-command.ts'
 
 import type { Driver } from '../state/driver-types.ts'
 export type { Driver } from '../state/driver-types.ts'
+import { createEmitChannel } from './driver-emit.ts'
 import type { DriverConfig } from '../state/driver-types.ts'
 
 import { clearResumeTarget, readResumeTarget, writeResumeTarget } from '../resume-target.ts'
@@ -52,7 +53,6 @@ import {
   toggleGlobalCollapse,
   toggleThinking,
   upsertRow,
-  type TuiState,
 } from '../store.ts'
 
 export type { DriverConfig, TokenUsageTotals } from '../state/driver-types.ts'
@@ -72,12 +72,8 @@ const NOTICE_TTL_MS = 3000
  * and a folded view model.
  */
 export async function createDriver(ctx: Context, config: DriverConfig = {}): Promise<Driver & { providerRuntime: ProviderRuntime }> {
-  const listeners = new Set<(state: TuiState) => void>()
   let state = createInitialState()
-  const emit = (next: TuiState): void => {
-    state = next
-    for (const listener of listeners) listener(state)
-  }
+  const { listeners, emit, uiFaults } = createEmitChannel((next) => { state = next }, (text) => showNotice(text))
 
   // Transient notice: parked in state.notice with a self-clearing timer. The
   // timer handle lives here so dispose() can cancel it (reversible effect),
@@ -420,6 +416,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
 
   return {
     get state() { return state },
+    get uiFaults() { return uiFaults },
     get statusLine() { return statusLineOf() },
     statusLineIn: (width?: number) => statusLineOf(width),
     get cwd() { return cwd },

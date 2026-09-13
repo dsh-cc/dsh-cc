@@ -64,59 +64,73 @@ export function attachSessionEvents(rt: DriverSessionEventsCtx): void {
     // Late events from a disposed session are dropped by id mismatch.
     if (session.id !== rt.current.agent.session.id) return
     const eventType = (event as SessionEventLike).type as string
-    rt.emit(applySessionEvent(rt.state(), event as SessionEventLike, rt.presenters))
-    if (eventType === 'permission/mode' || eventType === 'plan/mode') {
-      rt.emit(setPermissionMode(rt.state(), rt.liveMode(rt.current.agent)))
-    }
-    // R4: a live classifier breaker open is surfaced once, visibly — replayed
-    // logs are handled by the transcript fold, never re-shown here.
-    if (eventType === 'permission/classifier') {
-      const data = (event as SessionEventLike).data as { failure?: string } | undefined
-      if (data?.failure === 'breaker' && !breakerNoticed.has(session.id)) {
-        breakerNoticed.add(session.id)
-        rt.showNotice(CLASSIFIER_BREAKER_NOTICE)
+    try {
+      rt.emit(applySessionEvent(rt.state(), event as SessionEventLike, rt.presenters))
+      if (eventType === 'permission/mode' || eventType === 'plan/mode') {
+        rt.emit(setPermissionMode(rt.state(), rt.liveMode(rt.current.agent)))
       }
-    }
-    // Manual-compaction working line: an idle agent's `/compact` runs outside
-    // any turn, so anchor the working line for its duration. A live turn's
-    // anchor (auto-compact mid-request) is left untouched.
-    if (eventType === 'compaction/start') {
-      if (rt.state().turn === undefined) {
-        compactOwnedTurn = true
-        rt.emit(setBusy(rt.state(), true))
-        rt.emit(setTurnActive(rt.state(), { startedAt: Date.now(), outputBase: rt.state().hud?.tokens?.output }))
+      // R4: a live classifier breaker open is surfaced once, visibly — replayed
+      // logs are handled by the transcript fold, never re-shown here.
+      if (eventType === 'permission/classifier') {
+        const data = (event as SessionEventLike).data as { failure?: string } | undefined
+        if (data?.failure === 'breaker' && !breakerNoticed.has(session.id)) {
+          breakerNoticed.add(session.id)
+          rt.showNotice(CLASSIFIER_BREAKER_NOTICE)
+        }
       }
-    } else if (eventType === 'compaction/end' && compactOwnedTurn) {
-      compactOwnedTurn = false
-      rt.emit(clearTurn(rt.state()))
-      rt.emit(setBusy(rt.state(), false))
-      // Same contract as turn/end: entries submitted during the compaction
-      // flush into the next durable turn.
-      rt.flushQueue()
-    }
-    // Working-line anchor backstop: a live `turn/start` (or `agent/status`
-    // running) can be the first evidence of a turn this UI never saw
-    // submitted. Anchor only when none exists — re-anchoring a live turn
-    // would reset elapsed time and the token delta to zero.
-    const liveState = rt.state()
-    if (eventType === 'turn/start' && liveState.turn === undefined) {
-      rt.emit(setTurnActive(rt.state(), { startedAt: Date.now(), outputBase: liveState.hud?.tokens?.output }))
-    } else if (eventType === 'agent/status' && liveState.turn === undefined) {
-      const status = (event as SessionEventLike).data as { status?: unknown } | undefined
-      if (status?.status === 'running') {
+      // Manual-compaction working line: an idle agent's `/compact` runs outside
+      // any turn, so anchor the working line for its duration. A live turn's
+      // anchor (auto-compact mid-request) is left untouched.
+      if (eventType === 'compaction/start') {
+        if (rt.state().turn === undefined) {
+          compactOwnedTurn = true
+          rt.emit(setBusy(rt.state(), true))
+          rt.emit(setTurnActive(rt.state(), { startedAt: Date.now(), outputBase: rt.state().hud?.tokens?.output }))
+        }
+      } else if (eventType === 'compaction/end' && compactOwnedTurn) {
+        compactOwnedTurn = false
+        rt.emit(clearTurn(rt.state()))
+        rt.emit(setBusy(rt.state(), false))
+        // Same contract as turn/end: entries submitted during the compaction
+        // flush into the next durable turn.
+        rt.flushQueue()
+      }
+      // Working-line anchor backstop: a live `turn/start` (or `agent/status`
+      // running) can be the first evidence of a turn this UI never saw
+      // submitted. Anchor only when none exists — re-anchoring a live turn
+      // would reset elapsed time and the token delta to zero.
+      const liveState = rt.state()
+      if (eventType === 'turn/start' && liveState.turn === undefined) {
         rt.emit(setTurnActive(rt.state(), { startedAt: Date.now(), outputBase: liveState.hud?.tokens?.output }))
+      } else if (eventType === 'agent/status' && liveState.turn === undefined) {
+        const status = (event as SessionEventLike).data as { status?: unknown } | undefined
+        if (status?.status === 'running') {
+          rt.emit(setTurnActive(rt.state(), { startedAt: Date.now(), outputBase: liveState.hud?.tokens?.output }))
+        }
       }
-    }
-    // Working-line step clock: each tool call (and each tool result) resets
-    // the elapsed timer, so the line shows the current step's duration.
-    const stepState = rt.state()
-    if ((eventType === 'tool/call' || eventType === 'tool/result') && stepState.turn !== undefined) {
-      rt.emit(resetTurnStep(rt.state(), Date.now()))
-    }
-    // Outbox flush anchor: the durable `turn/end` fires exactly once per turn.
-    if (eventType === 'turn/end') {
-      rt.emit(clearTurn(rt.state()))
-      rt.flushQueue()
+      // Working-line step clock: each tool call (and each tool result) resets
+      // the elapsed timer, so the line shows the current step's duration.
+      const stepState = rt.state()
+      if ((eventType === 'tool/call' || eventType === 'tool/result') && stepState.turn !== undefined) {
+        rt.emit(resetTurnStep(rt.state(), Date.now()))
+      }
+      // Outbox flush anchor: the durable `turn/end` fires exactly once per turn.
+      if (eventType === 'turn/end') {
+        rt.emit(clearTurn(rt.state()))
+        rt.flushQueue()
+      }
+    } catch (error) {
+      // A throwing fold/bookkeeping step must not kill the observer — a dead
+      // intake is what latches the zombie-busy freeze. Surface the skipped
+      // event; a skipped row is seq-tagged, so later folds cannot mis-target.
+      const seq = (event as { seq?: unknown }).seq
+      rt.showNotice(`⚠ Skipped malformed session event ${String(seq)} (${eventType})`)
+      if (eventType === 'turn/end') {
+        // Turnaround completeness cannot depend on the fold that just failed:
+        // clear busy + the turn anchor and drain the outbox anyway.
+        rt.emit(clearTurn(setBusy(rt.state(), false)))
+        rt.flushQueue()
+      }
     }
   })
 }
