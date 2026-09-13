@@ -42,6 +42,8 @@ import type {
   ToolsLike,
 } from '../state/driver-types.ts'
 import type { DriverAgentCtx, DriverSessionEventsCtx } from './driver-ctx.ts'
+import { applyStreamFrame } from '../assistant-stream.ts'
+import type { AssistantStreamFrame } from '@deepseek-ai/dsh-agent'
 
 /**
  * The slice of createDriver's model/history cluster that the session/event
@@ -131,6 +133,21 @@ export function attachSessionEvents(rt: DriverSessionEventsCtx): void {
         rt.emit(clearTurn(setBusy(rt.state(), false)))
         rt.flushQueue()
       }
+    }
+  })
+  // Live text painting: transient `agent/assistant-stream` frames upsert
+  // scratch rows; the durable `assistant/message` settle fold replaces them.
+  // Observe-only: a frame fault must never kill the loop — degrade silently
+  // (console + count) to settle-only rendering, never a per-frame notice.
+  let streamFoldFaults = 0
+  rt.ctx.on('agent/assistant-stream', (payload: { agent?: { session?: { id: string } }; frame?: AssistantStreamFrame }) => {
+    const agent = payload?.agent
+    if (agent?.session?.id !== rt.current.agent.session.id) return
+    try {
+      rt.emit(applyStreamFrame(rt.state(), payload.frame!))
+    } catch (error) {
+      streamFoldFaults += 1
+      console.error(`[tui] assistant-stream frame fold failed (fault #${streamFoldFaults})`, error)
     }
   })
 }

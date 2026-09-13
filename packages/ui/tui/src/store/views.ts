@@ -9,8 +9,18 @@ import type { ProviderPanelState } from './provider-panel.ts'
 
 export type TranscriptRow =
   | { kind: 'user'; text: string; seq?: number }
-  | { kind: 'assistant'; text: string; seq?: number }
-  | { kind: 'thinking'; text: string; seq?: number }
+  | {
+    kind: 'assistant'
+    text: string
+    seq?: number
+    /**
+     * Live-paint marker (`${turn}:${step}:${kind}`) for a scratch row built
+     * from `agent/assistant-stream` frames; replaced wholesale by the durable
+     * `assistant/message` settle fold. Absent on durable rows.
+     */
+    streamKey?: string
+  }
+  | { kind: 'thinking'; text: string; seq?: number; streamKey?: string }
   | {
     kind: 'tool'
     callId: string
@@ -405,6 +415,18 @@ export interface TuiState {
    * first title lands. Log-only: never produces a transcript row.
    */
   title?: string
+  /**
+   * Owner of the in-flight live assistant-stream attempt: chunk frames carry
+   * only `attemptId`, so the `start` frame's (turn, step) is parked here to
+   * key the scratch rows. Cleared on the attempt's `end` frame.
+   */
+  liveStream?: { attemptId: string; turn: number; step: number }
+  /**
+   * Highest session seq swallowed by a surface replacement (compaction or
+   * steering edit). A durable `assistant/message` settling at or below this
+   * seq is shadowed history — its content must not re-enter the transcript.
+   */
+  shadowedThrough?: number
   /**
    * Timestamp (`Date.now()`) of the last idle Ctrl+C press — the anchor for
    * the double-press-to-exit window. Never cleared: a stale anchor simply
