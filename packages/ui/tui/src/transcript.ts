@@ -19,6 +19,7 @@ import {
   type TuiState,
 } from './store.ts'
 import { dropRowsInRange, extractCompactSummary, isCompactCheckpointSource } from './compact-fold.ts'
+import { foldSettledMessage } from './assistant-stream.ts'
 
 /**
  * Minimal session-event face the TUI understands. `seq` tags created rows so
@@ -203,8 +204,13 @@ function applySurfaceReplace(
     ? (data as { source?: unknown }).source
     : undefined
   const rows = dropRowsInRange(state.rows, op.start, op.end)
+  // Remember the swallowed seq ceiling: a durable assistant/message settling
+  // at or below it is shadowed history and must not re-enter the transcript.
+  const shadowedThrough = state.shadowedThrough === undefined
+    ? op.end
+    : Math.max(state.shadowedThrough, op.end)
   if (!isCompactCheckpointSource(source)) {
-    return withoutPendingCompact({ ...state, rows })
+    return withoutPendingCompact({ ...state, rows, shadowedThrough })
   }
   const pending = state.pendingCompact
   const sourceCommandId = pending?.sourceCommandId
@@ -229,7 +235,7 @@ function applySurfaceReplace(
   const withCompact = insertAt === -1
     ? [...rows, compact]
     : [...rows.slice(0, insertAt), compact, ...rows.slice(insertAt)]
-  return withoutPendingCompact({ ...state, rows: withCompact })
+  return withoutPendingCompact({ ...state, rows: withCompact, shadowedThrough })
 }
 
 /**
@@ -347,7 +353,7 @@ export function applySessionEvent(
       return setBusy(upsertRow(state, { kind: chunkKind(data), text, ...seqTag(event) }), true)
     }
     case 'assistant/message':
-      return setBusy(state, false)
+      return setBusy(foldSettledMessage(state, event), false)
     case 'tool/call': {
       const name = nameOf(data)
       const args = argsOf(data)
