@@ -432,3 +432,62 @@ describe('memory apply() recall model stamping', () => {
     await dispose()
   })
 })
+
+describe('MemoryRecall late-inject idle guard (W3)', () => {
+  it('a selector settling after the agent went idle drops the inject, leaves shown unpolluted, and warns once', async () => {
+    const { ctx, recorder, dispose } = await mount()
+    const warnSpy = vi.fn()
+    ;(ctx as { logger?: unknown }).logger = { warn: warnSpy }
+    const inject = vi.fn()
+    const agent = {
+      session: { header: { cwd: '/work/repo' } },
+      status: 'running',
+      inject,
+    } as unknown as Agent & { status: string; inject: typeof inject }
+
+    // Selector resolves AFTER the turn ended (status flipped to idle).
+    drivePreStep(ctx, agent, [{ content: [{ type: 'text', text: 'how do I use bash?' }] }])
+    await until(() => recorder.recentToolsSeen.length > 0, 'first selector')
+    agent.status = 'idle'
+    recorder.resolveLatest(['bash.md'])
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(inject).not.toHaveBeenCalled()
+
+    // shown was NOT polluted: a later, different-query recall still surfaces bash.md.
+    agent.status = 'running'
+    drivePreStep(ctx, agent, [{ content: [{ type: 'text', text: 'an entirely different question' }] }])
+    await until(() => recorder.recentToolsSeen.length > 1, 'second selector')
+    recorder.resolveLatest(['bash.md'])
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(inject).toHaveBeenCalledTimes(1)
+
+    // A second late delivery warns at most once per process. A fresh topic
+    // keeps the selection non-empty (bash.md is shown by now).
+    ;(ctx.fs as FakeMemoryFs).seed('/root/projects/work-repo/git.md', topicBody('Git reference documentation', 'reference'))
+    agent.status = 'idle'
+    drivePreStep(ctx, agent, [{ content: [{ type: 'text', text: 'yet another different question' }] }])
+    await until(() => recorder.recentToolsSeen.length > 2, 'third selector')
+    recorder.resolveLatest(['git.md'])
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(inject).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    warnSpy.mockRestore()
+    await dispose()
+  })
+
+  it('a selector settling while the agent is still running injects (regression pin)', async () => {
+    const { ctx, recorder, dispose } = await mount()
+    const inject = vi.fn()
+    const agent = {
+      session: { header: { cwd: '/work/repo' } },
+      status: 'running',
+      inject,
+    } as unknown as Agent & { status: string; inject: typeof inject }
+    drivePreStep(ctx, agent, [{ content: [{ type: 'text', text: 'how do I use bash?' }] }])
+    await until(() => recorder.recentToolsSeen.length > 0, 'selector')
+    recorder.resolveLatest(['bash.md'])
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(inject).toHaveBeenCalledTimes(1)
+    await dispose()
+  })
+})
