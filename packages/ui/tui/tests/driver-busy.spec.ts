@@ -295,7 +295,12 @@ describe('createDriver busy input semantics', () => {
     expect(driver.state.busy).toBe(true)
   })
 
-  it('idle manual compact: submit queues while busy; compaction/end flushes via followup', async () => {
+  it('idle manual compact: submit reconciles the pseudo-turn and dispatches immediately', async () => {
+    // W2 semantics: a manual compaction latches busy while the agent's ground
+    // truth stays 'idle' (maintenance phases report idle), so a submit
+    // reconciles the zombie anchor and dispatches synchronously instead of
+    // parking the chip until compaction/end. followup during maintenance is
+    // latched by the harness and delivered at convergence — safe by design.
     const agent = makeFakeAgent('idle')
     const { ctx, emitSession } = makeCtx(agent)
     const driver = await createDriver(ctx as never, {})
@@ -303,11 +308,12 @@ describe('createDriver busy input semantics', () => {
     emitSession({ type: 'compaction/start', data: { compactionId: 'c1', turn: null } })
     expect(driver.state.busy).toBe(true)
     await driver.submit('queued during compact')
-    expect(driver.state.queued).toEqual(['queued during compact'])
-    expect(agent.followup).not.toHaveBeenCalled()
+    expect(sentTexts(agent.followup.mock.calls)).toEqual(['queued during compact'])
+    expect(driver.state.queued).toEqual([])
 
     emitSession({ type: 'compaction/end', data: { compactionId: 'c1', turn: null } })
     await settle()
+    // The outbox was already drained by the reconcile; compaction/end flushes nothing new.
     expect(sentTexts(agent.followup.mock.calls)).toEqual(['queued during compact'])
     expect(driver.state.queued).toEqual([])
   })
