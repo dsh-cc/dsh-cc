@@ -1,6 +1,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { ensurePackagedPreset, packagedPresetRoot } from '@dsh-cc/tui/packaged-preset.ts'
 
@@ -50,5 +52,19 @@ describe('ensurePackagedPreset', () => {
       revision: '1',
     })
     expect(result.status).toBe('missing-source')
+  })
+})
+
+describe('stage-preset', () => {
+  it('stamps the managed marker with this package version, not a constant', () => {
+    // ensurePackagedPreset treats a matching revision as "current" — a
+    // hardcoded value would freeze the materialized preset copy forever.
+    // Run the real prepack script and inspect the staged marker.
+    const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+    const run = spawnSync('node', ['scripts/stage-preset.mjs'], { cwd: pkgRoot, encoding: 'utf8' })
+    expect(run.status).toBe(0)
+    const marker = JSON.parse(readFileSync(join(pkgRoot, 'presets', 'cc', '.dsh-cc-managed.json'), 'utf8'))
+    const pkg = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'))
+    expect(marker.revision).toBe(pkg.version)
   })
 })

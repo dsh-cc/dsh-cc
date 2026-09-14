@@ -253,6 +253,70 @@ describe('agent.cordis.yml composition', () => {
     }
   })
 
+  it('every @dsh-cc row is installed by the release path: reachable via runtime deps from the launcher bundles, through publishable packages only', () => {
+    // The launcher bootstraps a profile with `dsh plugin add` of the three
+    // bundles; preset rows resolve from the profile's node_modules. A row that
+    // no published package depends on resolves nowhere on a store install —
+    // the exact defect that shipped from v0.5.0 through v0.7.0. This gate
+    // walks the repo package graph exactly as publish would (workspace:^
+    // converts 1:1 to semver) and fails the moment a row loses install
+    // reachability.
+    const repoRoot = join(dirname(agentCordisPath), '..', '..', '..')
+    const manifest = new Map<string, { dependencies: Record<string, string>, isPrivate: boolean }>()
+    for (const group of readdirSync(join(repoRoot, 'packages'))) {
+      const groupDir = join(join(repoRoot, 'packages'), group)
+      if (!statSync(groupDir).isDirectory()) continue
+      for (const pkg of readdirSync(groupDir)) {
+        const pkgJsonPath = join(groupDir, pkg, 'package.json')
+        if (!existsSync(pkgJsonPath)) continue
+        const m = JSON.parse(readFileSync(pkgJsonPath, 'utf8'))
+        manifest.set(m.name, { dependencies: m.dependencies ?? {}, isPrivate: m.private === true })
+      }
+    }
+
+    const LAUNCHER_BUNDLES = ['@dsh-cc/bundle-permissions', '@dsh-cc/bundle-shell', '@dsh-cc/bundle-tui']
+    // BFS over runtime dependencies from the bootstrap set.
+    const reachable = new Set<string>()
+    const queue = [...LAUNCHER_BUNDLES]
+    while (queue.length > 0) {
+      const name = queue.shift()!
+      if (reachable.has(name)) continue
+      const m = manifest.get(name)
+      // Non-@dsh-cc / out-of-repo deps end the walk: they are upstream
+      // packages the registry resolves on its own.
+      if (m === undefined) continue
+      reachable.add(name)
+      for (const dep of Object.keys(m.dependencies)) {
+        if (dep.startsWith('@dsh-cc/')) queue.push(dep)
+      }
+    }
+    // Every package on the walked path must actually be published, or its
+    // published dependents point at a package that does not exist.
+    const privatePackages = [...reachable].filter((name) => manifest.get(name)!.isPrivate)
+    expect(
+      privatePackages,
+      `reachable but private: ${privatePackages.join(', ')}`,
+    ).toEqual([])
+
+    const rows: any[] = []
+    for (const row of doc) {
+      if (row.name === 'cordis:group' && Array.isArray(row.config)) {
+        rows.push(...row.config)
+      } else {
+        rows.push(row)
+      }
+    }
+    const dshCcRows = rows.filter((r) => r.name && r.name.startsWith('@dsh-cc/'))
+    expect(dshCcRows.length).toBeGreaterThan(0)
+    for (const row of dshCcRows) {
+      expect(
+        reachable,
+        `${row.id} -> ${row.name} is not installed by any package in the launcher bootstrap closure; `
+        + 'add it to @dsh-cc/preset-cc dependencies and ensure @dsh-cc/tui depends on preset-cc',
+      ).toContain(row.name)
+    }
+  })
+
   it('resolves every @deepseek-ai row name against an installed deployment', () => {
     const rows = doc.filter((r) => r.name && r.name.startsWith('@deepseek-ai/'))
     const seen = new Set<string>()

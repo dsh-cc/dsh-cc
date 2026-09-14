@@ -4,7 +4,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { closeSync, existsSync, lstatSync, openSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { closeSync, existsSync, lstatSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 export const PROFILE = 'tui'
@@ -813,5 +813,139 @@ export function runStoreRestore(profileDir, ownVersion, deps = {}) {
     return { restored: false, reason: 'error' }
   } finally {
     if (locked) tryRm(lock, false)
+  }
+}
+
+// --- store heal: converge an existing profile after a launcher update --------
+
+/** Marker file recording the launcher version that last installed the bundles. */
+export const BOOTSTRAP_STAMP = '.dsh-cc-bootstrap.json'
+/** Exclusive lock for the heal path (same freshness semantics as the restore lock). */
+export const HEAL_LOCK = '.dsh-cc-heal.lock'
+
+/**
+ * Read the launcher version recorded by the last successful bundle install.
+ * Missing/malformed stamp -> null (pre-heal profiles, i.e. every install made
+ * before this mechanism existed) — that is a HEAL, not a skip: those profiles
+ * carry whatever the first bootstrap pinned, forever.
+ *
+ * @param {string} stampPath
+ * @returns {string | null}
+ */
+export function readBootstrapVersion(stampPath) {
+  try {
+    const value = JSON.parse(readFileSync(stampPath, 'utf8'))
+    return typeof value.launcherVersion === 'string' && value.launcherVersion.length > 0
+      ? value.launcherVersion
+      : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Decide whether an EXISTING profile needs its store bundles re-added at this
+ * launcher's version. Skipped for dev pairings (channel `dev`, regardless of
+ * version match): the registry `plugin add` here would clobber the
+ * workspace-symlinked dev scope — dev convergence is `runStoreRestore`'s job
+ * alone. The first-install path is separate (`bootstrapCommand`), so callers
+ * must not heal on a launch that just bootstrapped.
+ *
+ * @param {{ profileExists: boolean, stampVersion: string | null, ownVersion: string, buildInfo?: Record<string, unknown> | null }} input
+ * @returns {{ from: string } | null}
+ */
+export function healDecision({ profileExists, stampVersion, ownVersion, buildInfo = null }) {
+  if (!profileExists) return null
+  if (buildInfo?.channel === 'dev') return null
+  if (stampVersion === ownVersion) return null
+  return { from: stampVersion ?? 'unknown (pre-heal profile)' }
+}
+
+/**
+ * Write the bootstrap stamp. A failure here is reported LOUDLY, not swallowed:
+ * a launcher that heals but cannot record it re-runs a full network install on
+ * every single launch — silent degradation is unacceptable.
+ *
+ * @param {string} stampPath
+ * @param {string} ownVersion
+ * @param {(...a: unknown[]) => void} [log]
+ */
+export function writeBootstrapStamp(stampPath, ownVersion, log = console.error) {
+  try {
+    writeFileSync(stampPath, `${JSON.stringify({ launcherVersion: ownVersion }, null, 2)}\n`)
+  } catch (error) {
+    log(`dsh-cc: CRITICAL: profile healed to ${ownVersion} but the stamp could not be written `
+      + `(${/** @type {Error} */ (error).message}); the full plugin install will repeat on every launch until this is fixed`)
+  }
+}
+
+/**
+ * Re-run the bundle add against an existing profile (launcher update path).
+ * `pnpm add` upserts the pinned ranges and `dsh plugin add` reconciles
+ * `dsh.profile.bundles` idempotently — the same command surface the first
+ * bootstrap and `runStoreRestore` rely on. A failed add warns and continues
+ * launching (the stale stamp retries next launch); a failed stamp write is
+ * loud (see writeBootstrapStamp).
+ *
+ * @param {string} profileDir
+ * @param {string} ownVersion
+ * @param {{ from?: string, spawnSyncImpl?: typeof import('node:child_process').spawnSync, log?: (...a: unknown[]) => void, now?: () => number }} [options]
+ * @returns {{ healed: boolean, reason?: 'locked' | 'plugin-add-failed' }}
+ */
+export function runStoreHeal(profileDir, ownVersion, options = {}) {
+  const { from, spawnSyncImpl = spawnSync, log = console.error, now = Date.now } = options
+  const lock = join(profileDir, HEAL_LOCK)
+  const stamp = join(profileDir, BOOTSTRAP_STAMP)
+  const home = dirname(dirname(profileDir))
+  const profileName = basename(profileDir)
+  let locked = false
+
+  try {
+    // Exclusive create; a lock younger than ten minutes means another launch
+    // is mid-heal — launch as-is rather than race pnpm on one profile dir.
+    try {
+      closeSync(openSync(lock, 'wx'))
+      locked = true
+    } catch (error) {
+      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') throw error
+      let fresh = true
+      try {
+        fresh = now() - statSync(lock).mtimeMs < 10 * 60 * 1000
+      } catch { /* lock vanished between EEXIST and stat: proceed */ }
+      if (fresh) {
+        log('dsh-cc: profile heal already in progress, skipping')
+        return { healed: false, reason: 'locked' }
+      }
+      try {
+        rmSync(lock, { force: true })
+        closeSync(openSync(lock, 'wx'))
+        locked = true
+      } catch {
+        log('dsh-cc: profile heal already in progress, skipping')
+        return { healed: false, reason: 'locked' }
+      }
+    }
+
+    const result = spawnSyncImpl('dsh', ['plugin', '--profile', profileName, 'add', ...BUNDLES.map(n => `${n}@${ownVersion}`)], {
+      stdio: 'inherit',
+      env: spawnEnv(sanitizeInheritedEnv(process.env), home),
+    })
+    const success = !result.error && result.status === 0
+    if (!success) {
+      log(`dsh-cc: profile heal to ${ownVersion} failed (will retry on next launch; if the new dsh-cc version was just published, npm/pnpm's minimum-release-age window may still be hiding it)`)
+      return { healed: false, reason: 'plugin-add-failed' }
+    }
+    writeBootstrapStamp(stamp, ownVersion, log)
+    log(`dsh-cc: launcher updated ${from ?? 'unknown'} → ${ownVersion}; re-installed store bundles in profile "${profileName}"`)
+    return { healed: true }
+  } catch (error) {
+    log(`dsh-cc: profile heal failed unexpectedly: ${/** @type {Error} */ (error).message}`)
+    return { healed: false, reason: 'plugin-add-failed' }
+  } finally {
+    if (locked) {
+      try {
+        rmSync(lock, { force: true })
+      } catch { /* best-effort; a stale lock is taken over next launch */ }
+    }
   }
 }

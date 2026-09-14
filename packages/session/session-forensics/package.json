@@ -2,7 +2,6 @@
   "name": "@dsh-cc/session-forensics",
   "description": "Pure analysis library distilling session failure patterns (used by /learn)",
   "version": "0.0.1",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
@@ -20,5 +19,8 @@
   "files": [
     "lib"
   ],
-  "license": "MIT"
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -31,6 +31,15 @@ npm install -g @dsh-cc/cli
 dsh-cc
 ```
 
+### Upgrading
+
+```sh
+npm install -g @dsh-cc/cli@latest
+dsh-cc
+```
+
+On the first launch after an upgrade, the launcher re-runs the profile's bundle install at the new version (recorded in `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`), so the profile converges automatically — no manual step. A failed reconcile (e.g. network, or the fresh release still inside npm/pnpm's minimum-release-age window) warns and boots anyway, retrying on the next launch. Dev-synced profiles (via `scripts/sync-local-profile.sh`) are never reconciled by the launcher; they follow the dev-restore flow instead.
+
 The launcher creates and boots the CC-oriented `tui` profile. To compose the profile explicitly instead:
 
 ```sh

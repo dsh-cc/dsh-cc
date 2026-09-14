@@ -11,6 +11,13 @@
 npmjs 并打 GitHub Release。CI 校验 tag 与版本清单一致(`scripts/check-release-version.mjs`)
 才放行,防止 tag 与清单失配。发布可重跑:已发布版本自动跳过,断点续发。
 
+**preset 插件闭包不变量**(0.7.1 起):CC preset 的每个 `@dsh-cc/*` 行必须能
+从 launcher 的三个 bundle 出发、只走运行时 `dependencies`、且全部经过**非
+private 包**到达 —— 由 `packages/preset/cc/tests/composition.spec.ts` 的
+closure-reachability 门禁守护。`@dsh-cc/preset-cc`(及 `command-learn`、
+`session-forensics`)必须保持可发布:它们一旦回到 private,preset 行在
+store 安装上将无法解析(v0.5.0–v0.7.0 曾因此全线无法启动)。
+
 ## 首次发布前的手动准备(一次性)
 
 1. **npm granular access token**(为什么:授权范围最小、无全局写入权):
