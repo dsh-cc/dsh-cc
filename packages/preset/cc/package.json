@@ -2,7 +2,6 @@
   "name": "@dsh-cc/preset-cc",
   "description": "dsh CC mode agent preset: composition-only package mounting the Claude Code surface",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "repository": {
     "type": "git",
@@ -16,6 +15,9 @@
     "README.zh.md"
   ],
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@dsh-cc/bundle-shell": "workspace:^",
     "@dsh-cc/command-agents": "workspace:^",

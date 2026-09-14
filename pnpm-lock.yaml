@@ -2362,6 +2362,9 @@ importers:
       '@dsh-cc/pi-tui':
         specifier: workspace:^
         version: link:../pi-tui
+      '@dsh-cc/preset-cc':
+        specifier: workspace:^
+        version: link:../../preset/cc
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task

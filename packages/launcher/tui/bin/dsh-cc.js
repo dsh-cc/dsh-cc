@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { bootstrapCommand, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, interceptResume, parseLocalConfig, parseWorktreeFlag, parseWorktreeRef, planWorktree, planWorktreeRef, prFetchRefs, remoteHost, PROFILE, readBuildInfo, repoRootFromCommonDir, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal } from '../bootstrap.mjs'
+import { bootstrapCommand, BOOTSTRAP_STAMP, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, healDecision, interceptResume, parseLocalConfig, parseWorktreeFlag, parseWorktreeRef, planWorktree, planWorktreeRef, prFetchRefs, readBootstrapVersion, remoteHost, PROFILE, readBuildInfo, repoRootFromCommonDir, runStoreHeal, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal, writeBootstrapStamp } from '../bootstrap.mjs'
 import { readWorktreeSettings, resolveBaseRef, sweepWorktrees, SWEEP_CAP_MS, worktreeReuseReset, worktreeSettingsPaths } from '../worktree-lifecycle.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -27,7 +27,8 @@ if (process.argv.includes('--version') || process.argv.includes('-V')) {
   console.log(formatVersionLabel(ownVersion, buildInfo))
   process.exit(0)
 }
-const add = bootstrapCommand(existsSync(join(profileDir, 'package.json')), ownVersion)
+const profileExisted = existsSync(join(profileDir, 'package.json'))
+const add = bootstrapCommand(profileExisted, ownVersion)
 if (add !== undefined) {
   console.error(`dsh-cc: initializing profile "${PROFILE}"…`)
   // Minimum-version gate runs ONLY here (bootstrap/install path), never on
@@ -51,13 +52,33 @@ if (add !== undefined) {
     console.error(`dsh-cc: plugin install failed. Retry:\n  dsh ${add.join(' ')}`)
     process.exit(installed.status ?? 1)
   }
+  // First install of this launcher version: record it so later launches can
+  // tell "converged" from "installed before the heal mechanism existed".
+  writeBootstrapStamp(join(profileDir, BOOTSTRAP_STAMP), ownVersion)
 }
 
 // A dev-synced profile paired with a DIFFERENT launcher version converges
 // back to store bundles before the session starts (plan 2026-09-13 §3.4).
 // A fresh profile has no stamp, so this can never fire on the bootstrap path.
+// A successful restore IS this version's install: stamp afterwards.
 const restorePlan = devStoreRestoreDecision(buildInfo, ownVersion)
-if (restorePlan !== null) runStoreRestore(profileDir, ownVersion)
+if (restorePlan !== null) {
+  const restored = runStoreRestore(profileDir, ownVersion)
+  if (restored.restored) writeBootstrapStamp(join(profileDir, BOOTSTRAP_STAMP), ownVersion)
+} else {
+  // A pre-existing store profile converges to this launcher's version on
+  // version change (or on a missing stamp — installs made before the heal
+  // existed, including every 0.7.0-broken profile). Never fires on a
+  // dev-synced profile (that pairing belongs to the restore path) nor on a
+  // launch that just bootstrapped.
+  const heal = healDecision({
+    profileExists: profileExisted && add === undefined,
+    stampVersion: readBootstrapVersion(join(profileDir, BOOTSTRAP_STAMP)),
+    ownVersion,
+    buildInfo,
+  })
+  if (heal !== null) runStoreHeal(profileDir, ownVersion, { from: heal.from })
+}
 
 // A parent dsh-cc TUI process leaks DSH_CC_RESUME_SESSION / DSH_CC_AUTO_RESUME
 // / DSH_CC_CONTINUE into a child launcher's environment. Strip them up front —
