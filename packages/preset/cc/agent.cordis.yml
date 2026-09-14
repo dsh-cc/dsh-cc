@@ -322,7 +322,11 @@
 # The bridge's second provide, `hookRun` (WorktreeCreate / WorktreeRemove
 # invocation; docs/plans/2026-09-14-cc-worktree-parity.md WS-6), is
 # deliberately NOT isolated, mirroring `ccPlugins`: its consumer
-# (tool-git-worktree) mounts top-level, outside this group's realm.
+# (tool-git-worktree) mounts top-level, outside this group's realm — and like
+# ccPlugins it is provided from the ROOT fiber (see the bridge's root-provide
+# in @dsh-cc/hooks-claude-code), because a plain in-realm provide here would
+# publish a preset fiber's service into the root realm and trip the preset
+# leakedServices gate (agent-preset/invalid at mount).
 - id: cc-services
   name: cordis:group
   group: true

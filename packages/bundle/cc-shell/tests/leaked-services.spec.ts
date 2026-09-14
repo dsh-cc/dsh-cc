@@ -127,20 +127,27 @@ describe('cc-shell glue leakedServices (cc-services isolate map)', () => {
     const group = isolateGroup(root, CC_SERVICES_ISOLATE.filter(name => name !== 'hooks'))
     const bridge = group.plugin(HooksClaude, { configPath: join(tmp, 'nonexistent-hooks.json') })
     const fiber = await bridge
-    // hookRun (WS-6, docs/plans/2026-09-14-cc-worktree-parity.md) is a
-    // deliberately UNISOLATED public invoke seam — tool-git-worktree mounts
-    // top-level (outside cc-services), so isolating hookRun would shadow it
-    // exactly like the ccPlugins root-realm exception documented in
-    // agent.cordis.yml. It therefore leaks in every mount shape by design.
-    expect(leakedServices(root, fiber)).toEqual(['hookRun', 'hooks'])
+    // hookRun (WS-6, docs/plans/2026-09-14-cc-worktree-parity.md) is a public
+    // invoke seam whose consumer (tool-git-worktree) mounts top-level,
+    // outside cc-services — so it CANNOT sit in the isolate map, and a plain
+    // in-realm provide would trip the preset leakedServices gate (boot
+    // failure). The bridge therefore publishes it from the ROOT fiber
+    // (CcPluginsService pattern), which is outside the preset subtree and
+    // passes the gate in every mount shape.
+    expect(leakedServices(root, fiber)).toEqual(['hooks'])
     await fiber.dispose()
-    // With the full isolate map, the same mount leaks nothing.
+    // With the full isolate map, the same mount leaks nothing — hookRun's
+    // root-fiber publication is not a leak by construction.
     const okGroup = isolateGroup(root, CC_SERVICES_ISOLATE)
     const ok = okGroup.plugin(HooksClaude, { configPath: join(tmp, 'nonexistent-hooks.json') })
     const okFiber = await ok
-    // The full map still cannot contain hookRun: it is the deliberately
-    // public seam (see above), provided without an isolate key.
-    expect(leakedServices(root, okFiber)).toEqual(['hookRun'])
+    expect(leakedServices(root, okFiber)).toEqual([])
+    // The root-realm publication resolves for out-of-realm consumers.
+    expect(root.get('hookRun')).toBeTypeOf('function')
+    // Unload clears the slot so consumers degrade instead of holding a dead
+    // runner.
+    await okFiber.dispose()
+    expect(root.get('hookRun', false)).toBeUndefined()
     await okFiber.dispose()
     await root.fiber.dispose()
   })
