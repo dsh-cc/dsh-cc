@@ -3493,6 +3493,62 @@
         "summary": "Loader + base tool-skill, CC paths conditional activation, bundled subset (debug/simplify/batch), and TUI /name routing all work; CC's verify/stuck skills are not ported (ant-only; verify companion files absent)."
       }
     },
+    "subagents.isolation": {
+      "title": "Subagent isolation: worktree",
+      "category": "subagents",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Agent definitions accept `isolation: worktree`; the Task tool runs the child in an isolated git worktree under <repo>/.claude/worktrees/ (fresh branch from HEAD, worktree kept or removed after the run).",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/sub-agents",
+            "retrieved": "2026-09-14"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: tool-task"
+        },
+        {
+          "type": "source",
+          "path": "packages/subagent/task/src/worktree-isolation.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/worktree-isolation.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/worktree-isolation.integration.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/workspace/tool-git-worktree/src/worktree.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "The child's session-cwd overlay moves to the worktree (permission-rules workspace, boundary guard, context buckets follow), but the child's header.cwd, the harness sandbox root, and the bash default workdir stay the parent's (needs a SubagentStartRequest.cwd seam, upstream §11.2). Containment is therefore strongest when the parent runs at the repo root; a parent cwd that cannot contain <repoRoot>/.claude/worktrees refuses the dispatch. Delegated children cannot answer approval prompts, so sandbox-denied writes hard-fail — the absolute-path contract is injected into the persona and the first prompt line. Serena (user-mounted) pins one project root per session and does not follow the child."
+      }
+    },
     "subagents.task-tool": {
       "title": "Subagents / Agent tool / teams",
       "category": "subagents",

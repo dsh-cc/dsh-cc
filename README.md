@@ -91,7 +91,7 @@ Install them inside a session:
 | Sessions and context | 1 | 0 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
 | Skills | 0 | 1 | 0 | 0 |
-| Subagents | 0 | 1 | 0 | 0 |
+| Subagents | 0 | 2 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 2 | 0 | 0 |
 | Settings | 2 | 1 | 0 | 0 |
@@ -100,7 +100,7 @@ Install them inside a session:
 | Workspace | 0 | 2 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
-Statuses were verified against upstream documentation retrieved as of 2026-09-05 (freshness threshold: 120 days).
+Statuses were verified against upstream documentation retrieved as of 2026-09-14 (freshness threshold: 120 days).
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->

@@ -12,6 +12,8 @@
     { "path": "../../preset/claude-code-agents" },
     { "path": "../../compat/cc-model-aliases" },
     { "path": "../resume-pins" },
-    { "path": "../../memory/memory" }
+    { "path": "../../memory/memory" },
+    { "path": "../../workspace/tool-git-worktree" },
+    { "path": "../../workspace/session-cwd" }
   ]
 }

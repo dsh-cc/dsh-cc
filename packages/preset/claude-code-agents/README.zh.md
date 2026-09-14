@@ -9,7 +9,7 @@
 - **三层，高者优先。** bundled 层随包内置工具 agent（`explore` 与 `dsh-cc-guide`，均钉死 `model: haiku` 并带 Read/Glob/Grep 白名单），经 `discoverBundledAgents()` 提供。project 层是从项目根向上遍历找到的最近的 `.claude/agents` 目录；user 层是作者自己的 `~/.claude/agents`。定义以其文件 basename 为键，各层按级别遮蔽——bundled < user < project——同名本地文件总是覆盖其 bundled 同名者。
 - **两种格式。** `.md` 文件的 YAML frontmatter 提供字段，其 markdown 正文（或 `prompt` frontmatter 覆写）提供系统提示。`.json` 文件是单个对象，其 `prompt` 字段即系统提示。
 - **响亮失败。** 每个坏掉的已知 frontmatter 值都会在加载期带着文件路径与字段名抛错，因此坏 agent 会被修复而非静默降级。未知字段被忽略，因此针对更新版本 Claude Code 编写的定义可移植到受支持子集。
-- **字段翻译。** `description` 成为 when-to-use 指南；`tools`/`disallowedTools` 编译为单个有效的 `allow`/`deny` 工具约束，其名称求交集（同时出现在两个列表中的名称被禁用）；`model`（含归一化的 `inherit` 哨兵）、`effort`、`permissionMode`、`maxTurns`、`initialPrompt`、`background`、`memory`、`skills`、`mcpServers`、`hooks` 与 `isolation` 全部透传——且 `background` 不再是死字段:Task 工具会兑现它(在 `run_in_background` 缺省时转后台)。
+- **字段翻译。** `description` 成为 when-to-use 指南；`tools`/`disallowedTools` 编译为单个有效的 `allow`/`deny` 工具约束，其名称求交集（同时出现在两个列表中的名称被禁用）；`model`（含归一化的 `inherit` 哨兵）、`effort`、`permissionMode`、`maxTurns`、`initialPrompt`、`background`、`memory`、`skills`、`mcpServers`、`hooks` 与 `isolation` 全部透传——且 `background` 不再是死字段:Task 工具会兑现它(在 `run_in_background` 缺省时转后台);`isolation: worktree` 也被 Task 工具消费(child 运行在 per-child git worktree 中——见 `@dsh-cc/subagent-task` 的隔离工作树一节)。
 
 ## API
 

@@ -462,4 +462,19 @@ export function apply(ctx: Context, config: Config = {}): void {
   }
 }
 
-export { validateSlug, worktreeBranch, worktreePathFor, randomSlug, flattenSlug } from './worktree.ts'
+export {
+  validateSlug,
+  worktreeBranch,
+  worktreePathFor,
+  randomSlug,
+  flattenSlug,
+  // Pure git-command constructors + probes (WS-3 subagent isolation reuses
+  // the same creation/cleanup commands the EnterWorktree path runs).
+  addWorktree,
+  commitsAhead,
+  deleteBranch,
+  forceRemoveWorktree,
+  status,
+} from './worktree.ts'
+export type { GitCmd } from './worktree.ts'
+export { repoRootFromCommonDir, scanLocalConfig } from './harden.ts'

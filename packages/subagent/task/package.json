@@ -44,10 +44,13 @@
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
+    "@dsh-cc/tool-git-worktree": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
     "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
     "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
@@ -71,7 +74,10 @@
     "@dsh-cc/plugin-loader": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
-    "@dsh-cc/tool-search": "workspace:*"
+    "@dsh-cc/tool-search": "workspace:*",
+    "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
+    "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
+    "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local"
   },
   "publishConfig": {
     "access": "public"

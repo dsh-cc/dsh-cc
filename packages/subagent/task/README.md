@@ -150,6 +150,38 @@ backend provider names (`fork`/`spawn`/`codex`/`claude-code`) as if they were ad
 agent types; bare plugin agent names are not addressable either — only `plugin:agent`
 scoped ids are.
 
+## Isolated worktree (`isolation: worktree`)
+
+A definition whose frontmatter pins `isolation: worktree` is dispatched into a per-child
+git worktree instead of the parent tree (WS-3 of `docs/plans/2026-09-14-cc-worktree-parity.md`):
+
+1. **Create** — a worktree under `<mainRepoRoot>/.claude/worktrees/subagent-<childId>` on
+   branch `worktree-subagent-<childId>`, created through the SAME hardened path as
+   `EnterWorktree` (common-dir root pin, local-config scan, filter-driver neutralization),
+   then locked with `git worktree lock --reason="dsh-cc subagent <id>"` (pre-2.15 git's
+   "unknown option" failure is tolerated as a no-op). Any creation failure refuses the
+   dispatch — it never silently falls back to the parent tree.
+2. **Adopt** — on the child's first `subagent/start`, `setSessionCwd` moves the CHILD's
+   session cwd to the worktree (parent log untouched); the permission-rules workspace, the
+   session-cwd boundary guard, and the context buckets follow. The contract paragraph
+   ("your working directory is `<path>`; pass absolute paths inside it to every tool and
+   shell `workdir`; the parent checkout is off-limits") is appended to the child persona
+   and a first-line note is prepended to the prompt.
+3. **Clean up** — on `subagent/end` (re-fires per epoch for continuable children): probe
+   `git status --porcelain` + commits ahead of the recorded base HEAD; clean and no commits
+   → unlock + `worktree remove --force` + branch delete; otherwise the tree stays on disk
+   and the final text says so ("LEFT on disk").
+4. **Refusal** — when the computed worktree path falls outside the parent session's
+   sandbox root (its cwd ancestry — i.e. the parent cwd is a subdirectory of the repo
+   root), the dispatch is refused with a named error.
+
+Deviations (manifest `subagents.isolation`, `behavioral: partial` / `ux: partial`): the
+child's `header.cwd`, the harness sandbox root, and the bash default workdir remain the
+parent's (needs a `SubagentStartRequest.cwd` seam). Delegated children cannot answer
+approval prompts, so a sandbox-denied write hard-fails — the absolute-path contract above
+is what keeps the child functional. Serena (user-mounted) pins one project root per
+session and does not follow the child.
+
 ## Workspace instructions on Task children
 
 The harness `agent-instructions` plugin injects the workspace CLAUDE.md / AGENTS.md
@@ -209,6 +241,9 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
 - `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`
   (`./strip-instructions`) — mount (or classify for) the pre-step strip of the harness
   `agent-instructions` workspace baseline on delegated Task children.
+- `dispatchWorktreeIsolation` / `mountWorktreeIsolation` / `SubagentWorktreeRegistry`
+  (`./worktree-isolation`) — the `isolation: worktree` create/adopt/settle/lock lifecycle
+  (git command construction lives in `@dsh-cc/tool-git-worktree`; never re-implemented).
 
 ## Non-goals
 
@@ -217,6 +252,7 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
   pins `background: true`.
 - In-flight promotion of a running foreground Task to background (TUI Ctrl+B) — a follow-up,
   not a limitation of the package's existence.
-- CC frontmatter `permissionMode` / `isolation` / `memory` / `effort` projection onto the
-  child (the loader parses them, v1 does not consume them).
+- CC frontmatter `permissionMode` / `memory` / `effort` projection onto the child (the
+  loader parses them, v1 does not consume them). `isolation: worktree` IS consumed —
+  see the isolated-worktree section above.
 - `registerBaseAgents` in cc-shell (base-agent discovery moved here; see the cc-shell README).

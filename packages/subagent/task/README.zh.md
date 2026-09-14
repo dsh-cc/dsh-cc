@@ -65,6 +65,17 @@ To delegate to one, pass its name as the `subagent_type` argument of the Task to
 
 由于 section 文本是同步组装的而发现是异步的,未知工作区的首次组装会显示空,随后 discovery 落地后触发 `system-prompt/change`,重组即显示目录。当工作区未定义任何 agent(或没有可 scope 的 agent)时,section 渲染空串并从提示词中消失。目录列出文件定义以及按 scoped id 呈现的插件 agent——刻意**不**把 seam 后端 provider 名(`fork`/`spawn`/`codex`/`claude-code`)当作可寻址的 agent 类型来枚举;裸插件 agent 名同样不可寻址——只有 `plugin:agent` scoped id 可以。
 
+## 隔离工作树(`isolation: worktree`)
+
+frontmatter 钉了 `isolation: worktree` 的定义会被派发到 per-child 的 git worktree,而不是父工作树(`docs/plans/2026-09-14-cc-worktree-parity.md` WS-3):
+
+1. **创建** —— 在 `<主仓库根>/.claude/worktrees/subagent-<childId>` 建 worktree,分支 `worktree-subagent-<childId>`,走与 `EnterWorktree` 相同的加固路径(common-dir 根锚定、local-config 扫描、filter 驱动中和),随后 `git worktree lock --reason="dsh-cc subagent <id>"`(老版本 git 的 "unknown option" 失败按 no-op 容忍)。创建失败一律拒绝派发——绝不静默回落到父工作树。
+2. **收养** —— child 首次 `subagent/start` 时,`setSessionCwd` 把 **child** 的会话 cwd 切到 worktree(父日志不动);permission-rules 工作区、session-cwd 边界守卫、context bucket 随之生效。契约段落("你的工作目录是 `<path>`;所有工具都传其中的绝对路径,shell 传 `workdir`;父 checkout 禁入")追加进 child persona,prompt 首行加一条提示。
+3. **清理** —— `subagent/end` 时(continuable child 每个 epoch 重触发):探测 `git status --porcelain` 与相对基线 HEAD 的领先提交;干净且无提交 → unlock + `worktree remove --force` + 删分支;否则工作树留在磁盘上,并在最终文本中说明("LEFT on disk")。
+4. **拒绝** —— 当计算出的 worktree 路径落在父会话沙箱根(其 cwd 祖先——即父 cwd 是仓库根的子目录)之外时,以具名错误拒绝派发。
+
+偏差(manifest `subagents.isolation`,`behavioral: partial` / `ux: partial`):child 的 `header.cwd`、harness 沙箱根、bash 默认 workdir 仍是父的(需要 `SubagentStartRequest.cwd` seam)。被委派的 child 无法应答审批,沙箱拒绝的写入会硬失败——上面的绝对路径契约正是 child 保持可用性的前提。Serena(用户挂载)每会话固定一个项目根,不会跟随 child。
+
 ## Task child 上的工作区指令
 
 harness 的 `agent-instructions` 插件会在**每个**会话(包括 Task child)注入工作区 CLAUDE.md / AGENTS.md 基线,作为一条 `agent-instructions` 来源的 user message。本包挂载一个 `agent/pre-step` 监听器,为被委派的 child(`delegationDepth > 0`)剥离该基线:
@@ -92,10 +103,11 @@ harness 的 `agent-instructions` 插件会在**每个**会话(包括 Task child)
 - `registerTaskTool` / `TASK_TOOL`(`./tool`)— 注册 `subagent_fork` Task 工具。
 - `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER`(`./catalog`)— 挂载 `Available subagents` section。
 - `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`(`./strip-instructions`)— 挂载(或为测试分类)pre-step 剥离监听器,把 harness `agent-instructions` 工作区基线从被委派的 Task child 中移除。
+- `dispatchWorktreeIsolation` / `mountWorktreeIsolation` / `SubagentWorktreeRegistry`(`./worktree-isolation`)— `isolation: worktree` 的 create/adopt/settle/lock 生命周期(git 命令构造在 `@dsh-cc/tool-git-worktree`,绝不重复实现)。
 
 ## 非目标
 
 - 把缺省的 `run_in_background` 视为后台的会话级策略(Claude Code 交互式的 omit=background 规则);dsh-cc 在缺省时保持前台,除非定义钉了 `background: true`。
 - 正在运行的前台 Task 的在途转后台(TUI Ctrl+B)——follow-up,而非本包存在性上的限制。
-- 把 CC frontmatter 的 `permissionMode` / `isolation` / `memory` / `effort` 投影到 child(loader 会解析,v1 不消费)。
+- 把 CC frontmatter 的 `permissionMode` / `memory` / `effort` 投影到 child(loader 会解析,v1 不消费)。`isolation: worktree` 已被消费——见上文隔离工作树一节。
 - cc-shell 里的 `registerBaseAgents`(base agent 发现迁至此处;见 cc-shell README)。
