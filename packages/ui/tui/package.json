@@ -46,11 +46,12 @@
   },
   "dependencies": {
     "@dsh-cc/command-agents": "workspace:^",
-    "@dsh-cc/command-usage": "workspace:^",
     "@dsh-cc/command-permissions": "workspace:^",
+    "@dsh-cc/command-usage": "workspace:^",
     "@dsh-cc/permission-rules": "workspace:^",
     "@dsh-cc/pi-tui": "workspace:^",
     "@dsh-cc/preset-cc": "workspace:^",
+    "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/subagent-task": "workspace:^",
     "@dsh-cc/tool-git-worktree": "workspace:^",
     "highlight.js": "11.12.0"
