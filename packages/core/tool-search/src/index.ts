@@ -421,7 +421,7 @@ function composeSearchMessage(
   if (searchable === 0) {
     return 'All deferred tools available to you are already loaded; call them directly.'
   }
-  return `No deferred tools matched "${query}". If the capability you need is not deferred, it may already be available — call it directly.`
+  return `No deferred tools matched "${query}". This directory lists deferred tools only; tools that registered eagerly (including eager MCP tools) never appear here — they are already in your function list, call them directly.`
 }
 
 /** Compose the model-facing summary of a ToolSearch outcome. */

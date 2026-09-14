@@ -392,7 +392,7 @@ describe('empty-search messaging', () => {
     const result = await runToolSearch(ctx, 'zzz-no-match')
     expect(result.value.results).toEqual([])
     expect(result.value.message).toContain('No deferred tools matched "zzz-no-match"')
-    expect(result.value.message).toContain('call it directly')
+    expect(result.value.message).toContain('call them directly')
   })
 })
 
