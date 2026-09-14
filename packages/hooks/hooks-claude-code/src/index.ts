@@ -17,7 +17,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SubagentRunId } from '@deepseek-ai/dsh-subagent'
@@ -209,8 +209,29 @@ export function apply(ctx: Context, config: Config): void {
   // here instead of re-implementing the runner. Matcher-less: worktree events
   // ignore matchers ('' subject). Agent-less (worktree events carry no agent);
   // the run point degrades gracefully without one.
-  ctx.provide('hookRun', (point, payload, opts) =>
-    runPoint(point, '', payload, { signal: opts.signal }))
+  //
+  // Published from the ROOT fiber (CcPluginsService pattern), not this fiber:
+  // the consumer (tool-git-worktree) mounts top-level in the cc preset,
+  // outside the cc-services isolate realm, so an entry-local provide would be
+  // invisible to it — but a plain ctx.provide from this preset-mounted fiber
+  // trips the preset leakedServices gate ("move to the host composition").
+  // A root-fiber provide is outside the preset subtree, so the gate passes
+  // and every context resolves it. The bridge fiber keeps the lifecycle:
+  // an effect clears the publication on unload; consumers degrade to
+  // `undefined` (their default behavior) instead of holding a dead runner.
+  const root = ctx.root
+  const hookRunInvoke = (point: string, payload: unknown, opts: { signal: AbortSignal }) =>
+    runPoint(point, '', payload, { signal: opts.signal })
+  const rootKey = root[Context.isolate]['hookRun']
+  const existingHookRun = rootKey === undefined ? undefined : root.reflect.store[rootKey]
+  if (existingHookRun === undefined) {
+    root.provide('hookRun', hookRunInvoke)
+  } else if (existingHookRun.value !== hookRunInvoke) {
+    root.set('hookRun', hookRunInvoke)
+  }
+  ctx.effect(() => () => {
+    if (root.get('hookRun', false) === hookRunInvoke) root.set('hookRun', undefined)
+  }, 'hooks-claude-code: clear root-realm hookRun publication on unload')
 
   // The plugin hooks seam (the `hooks` guest contract from @dsh-cc/plugin-loader),
   // provided UNCONDITIONALLY — including with no boot config or a failed boot
