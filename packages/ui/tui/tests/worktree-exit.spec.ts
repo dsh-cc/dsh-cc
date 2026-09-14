@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   detectWorktreeSession,
+  unlockWorktreeSession,
   gatherEvidence,
   ownsBranch,
   removeWorktree,
@@ -207,6 +208,7 @@ describe('removeWorktree', () => {
     const seen: string[] = []
     const chdir = vi.fn((dir: string) => { seen.push(dir) })
     const exec = scriptedExec({
+      'worktree unlock /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
       'worktree remove --force /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
       'branch -D worktree-feat': { stdout: '', stderr: '' },
     })
@@ -215,6 +217,7 @@ describe('removeWorktree', () => {
     expect(seen).toEqual(['/repo'])
     const calls = (exec as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0] as string[])
     expect(calls).toEqual([
+      ['worktree', 'unlock', '/repo/.claude/worktrees/feat'],
       ['worktree', 'remove', '--force', '/repo/.claude/worktrees/feat'],
       ['branch', '-D', 'worktree-feat'],
     ])
@@ -230,6 +233,7 @@ describe('removeWorktree', () => {
       branch: 'user/special',
     }
     const exec = scriptedExec({
+      'worktree unlock /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
       'worktree remove --force /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
     })
     const outcome = await removeWorktree(session, exec, vi.fn())
@@ -239,6 +243,7 @@ describe('removeWorktree', () => {
 
   it('throws on worktree-remove failure and never attempts the branch delete', async () => {
     const exec = scriptedExec({
+      'worktree unlock /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
       'worktree remove --force /repo/.claude/worktrees/feat': new Error('not empty'),
     })
     await expect(removeWorktree(managed, exec, vi.fn())).rejects.toThrow('not empty')
@@ -247,10 +252,71 @@ describe('removeWorktree', () => {
 
   it('reports a failed branch delete without throwing', async () => {
     const exec = scriptedExec({
+      'worktree unlock /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
       'worktree remove --force /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
       'branch -D worktree-feat': new Error('branch pushed'),
     })
     const outcome = await removeWorktree(managed, exec, vi.fn())
     expect(outcome).toEqual({ branchDeleted: false })
+  })
+})
+
+// --- WS-4: session lock release + marker `named` field -----------------------
+
+describe('marker `named` field (WS-4, WS-5 coupling)', () => {
+  it('parses named: true from the launcher marker', async () => {
+    const cwd = '/repo/.claude/worktrees/feat'
+    const session = await detectWorktreeSession(cwd, {
+      [WORKTREE_ENV]: JSON.stringify({
+        repoRoot: '/repo',
+        worktreePath: cwd,
+        branch: 'worktree-feat',
+        baseHead: 'abc',
+        named: true,
+      }),
+    }, scriptedExec({}))
+    expect(session).toMatchObject({ kind: 'managed', named: true })
+  })
+
+  it('omits named when the marker omits it (older launcher)', async () => {
+    const cwd = '/repo/.claude/worktrees/feat'
+    const session = await detectWorktreeSession(cwd, {
+      [WORKTREE_ENV]: JSON.stringify({
+        repoRoot: '/repo',
+        worktreePath: cwd,
+        branch: 'worktree-feat',
+        baseHead: 'abc',
+      }),
+    }, scriptedExec({}))
+    expect(session?.named).toBeUndefined()
+  })
+})
+
+describe('unlockWorktreeSession (TUI dispose, WS-4)', () => {
+  it('runs `git worktree unlock` from the repo root', async () => {
+    const session: WorktreeExitSession = {
+      kind: 'managed',
+      repoRoot: '/repo',
+      worktreePath: '/repo/.claude/worktrees/feat',
+      branch: 'worktree-feat',
+    }
+    const exec = scriptedExec({
+      'worktree unlock /repo/.claude/worktrees/feat': { stdout: '', stderr: '' },
+    })
+    await expect(unlockWorktreeSession(session, exec)).resolves.toBeUndefined()
+    expect(exec).toHaveBeenCalledWith(['worktree', 'unlock', '/repo/.claude/worktrees/feat'], '/repo')
+  })
+
+  it('swallows unlock failure — old git without worktree lock or a foreign lock', async () => {
+    const session: WorktreeExitSession = {
+      kind: 'managed',
+      repoRoot: '/repo',
+      worktreePath: '/repo/.claude/worktrees/feat',
+      branch: 'worktree-feat',
+    }
+    const exec = scriptedExec({
+      'worktree unlock /repo/.claude/worktrees/feat': new Error("error: unknown option `unlock'"),
+    })
+    await expect(unlockWorktreeSession(session, exec)).resolves.toBeUndefined()
   })
 })

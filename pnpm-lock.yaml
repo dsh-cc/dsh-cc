@@ -2477,6 +2477,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: link:../session-cwd
         version: link:../session-cwd
+      '@dsh-cc/settings-cascade':
+        specifier: link:../../settings/settings-cascade
+        version: link:../../settings/settings-cascade
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools

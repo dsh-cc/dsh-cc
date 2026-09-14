@@ -34,7 +34,8 @@
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.1.5-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/settings-cascade": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
@@ -51,7 +52,8 @@
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local"
+    "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
+    "@dsh-cc/settings-cascade": "link:../../settings/settings-cascade"
   },
   "publishConfig": {
     "access": "public"

@@ -405,9 +405,20 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
       emit(setWorktreeExit(rt.state(), undefined))
       return
     }
-    // Keep row: standard quit with resume persistence.
+    // Keep row: standard quit with resume persistence. WS-4: release the
+    // session lock at TUI dispose — advisory, never blocks quitting.
     if (view.focused === 0) {
       emit(setWorktreeExit(rt.state(), undefined))
+      try {
+        await worktreeExit.unlock({
+          kind: view.managed ? 'managed' : 'detected',
+          repoRoot: view.repoRoot,
+          worktreePath: view.worktreePath,
+          branch: view.branch,
+        })
+      } catch {
+        // Unlock is advisory.
+      }
       await finalizeQuit(true)
       return
     }

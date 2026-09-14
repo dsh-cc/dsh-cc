@@ -277,9 +277,11 @@ export function planWorktree(repoRoot, name, rand) {
  * LFS content arrives as pointer files; `git lfs pull` restores it.
  * @param {{ worktreePath: string, branch: string }} plan
  * @param {readonly string[]} [filterNames]
+ * @param {string} [base] - Resolved base ref/commit (WS-4 `worktree.baseRef`);
+ *   defaults to the literal `HEAD`.
  * @returns {string[]}
  */
-export function worktreeAddArgv(plan, filterNames = []) {
+export function worktreeAddArgv(plan, filterNames = [], base = 'HEAD') {
   const neutralize = []
   for (const filter of filterNames) {
     for (const key of ['command', 'smudge', 'clean', 'process']) {
@@ -287,7 +289,7 @@ export function worktreeAddArgv(plan, filterNames = []) {
     }
     neutralize.push('-c', `filter.${filter}.required=false`)
   }
-  return [...neutralize, 'worktree', 'add', '-B', plan.branch, plan.worktreePath, 'HEAD']
+  return [...neutralize, 'worktree', 'add', '-B', plan.branch, plan.worktreePath, base]
 }
 
 /**
@@ -415,18 +417,22 @@ export function worktreeIdentityRefusal(target, mainRoot) {
 /**
  * Env fragment handed to the spawned dsh process so the TUI can recognize
  * this session as launcher-managed worktree session at /quit time.
+ * `named` records whether the slug was user-chosen (WS-5's auto-remove
+ * predicate consumes it — keep in sync with the worktree-exit marker parse).
  * @param {{ worktreePath: string, branch: string }} plan
  * @param {string} repoRoot
  * @param {string} baseHead - The commit the worktree was based on.
+ * @param {boolean} named - True when the user supplied the slug.
  * @returns {Record<string, string>}
  */
-export function worktreeEnv(plan, repoRoot, baseHead) {
+export function worktreeEnv(plan, repoRoot, baseHead, named) {
   return {
     [WORKTREE_ENV]: JSON.stringify({
       repoRoot,
       worktreePath: plan.worktreePath,
       branch: plan.branch,
       baseHead,
+      named: Boolean(named),
     }),
   }
 }

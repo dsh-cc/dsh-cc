@@ -120,7 +120,16 @@ describe('worktreeEnv', () => {
       worktreePath: '/repo/.claude/worktrees/feat',
       branch: 'worktree-feat',
       baseHead: 'abc123',
+      named: false,
     })
+    // WS-5 coupling: the marker records whether the slug was user-chosen.
+    const namedEnv = worktreeEnv(
+      { worktreePath: '/repo/.claude/worktrees/feat', branch: 'worktree-feat' },
+      '/repo',
+      'abc123',
+      true,
+    )
+    expect(JSON.parse(namedEnv[WORKTREE_ENV]).named).toBe(true)
   })
 })
 

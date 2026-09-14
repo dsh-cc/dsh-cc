@@ -13,6 +13,9 @@
     },
     {
       "path": "../session-cwd"
+    },
+    {
+      "path": "../../settings/settings-cascade"
     }
   ]
 }

@@ -65,6 +65,12 @@ export interface WorktreeExitSession {
   readonly branch: string
   /** Managed sessions only: the commit the worktree was created from. */
   readonly baseHead?: string
+  /**
+   * Managed sessions only (WS-4 marker field): the slug was user-chosen.
+   * WS-5's auto-remove predicate consumes this; parsed here so the marker
+   * writer/parsers stay in sync.
+   */
+  readonly named?: boolean
 }
 
 /** Removal evidence shown in the exit overlay before the user confirms. */
@@ -86,6 +92,8 @@ export interface WorktreeExitHooks {
   probe(cwd: string): Promise<WorktreeExitSession | undefined>
   evidence(session: WorktreeExitSession): Promise<WorktreeExitEvidence>
   cleanup(session: WorktreeExitSession): Promise<WorktreeCleanupOutcome>
+  /** Best-effort `git worktree unlock` (WS-4); never throws. */
+  unlock(session: WorktreeExitSession): Promise<void>
 }
 
 /** Parse the launcher's env marker; garbage is treated as absent. */
@@ -104,6 +112,7 @@ function parseMarker(raw: string | undefined): Omit<WorktreeExitSession, 'kind'>
       ...(typeof parsed.baseHead === 'string' && parsed.baseHead.length > 0
         ? { baseHead: parsed.baseHead }
         : {}),
+      ...(parsed.named === true ? { named: true } : {}),
     }
   } catch {
     return undefined
@@ -193,6 +202,22 @@ export function ownsBranch(session: WorktreeExitSession): boolean {
 }
 
 /**
+ * Best-effort `git worktree unlock` (WS-4): release the session lock at
+ * TUI dispose for recognized sessions. Any failure — including pre-2.15
+ * git without `worktree lock` — is swallowed; quitting must not fail.
+ */
+export async function unlockWorktreeSession(
+  session: WorktreeExitSession,
+  exec: WorktreeExec = gitExec,
+): Promise<void> {
+  try {
+    await exec(['worktree', 'unlock', session.worktreePath], session.repoRoot)
+  } catch {
+    // Pre-2.15 git or a foreign lock: quitting proceeds regardless.
+  }
+}
+
+/**
  * Remove the worktree directory and (when owned) its branch. The branch
  * delete runs only after the worktree remove succeeds — git refuses to
  * delete a branch checked out in a registered worktree, and a failed remove
@@ -210,6 +235,13 @@ export async function removeWorktree(
   chdir: (dir: string) => void = dir => process.chdir(dir),
 ): Promise<WorktreeCleanupOutcome> {
   chdir(session.repoRoot)
+  // WS-4: release the session lock first — git refuses to remove a locked
+  // worktree. Failure is tolerated (pre-2.15 git / foreign lock).
+  try {
+    await exec(['worktree', 'unlock', session.worktreePath], session.repoRoot)
+  } catch {
+    // Unlock is advisory; the removal below is the real gate.
+  }
   await exec(['worktree', 'remove', '--force', session.worktreePath], session.repoRoot)
   if (!ownsBranch(session)) return { branchDeleted: false }
   try {
@@ -226,5 +258,6 @@ export function createWorktreeExitHooks(env: NodeJS.ProcessEnv = process.env): W
     probe: cwd => detectWorktreeSession(cwd, env, gitExec),
     evidence: session => gatherEvidence(session, gitExec),
     cleanup: session => removeWorktree(session, gitExec),
+    unlock: session => unlockWorktreeSession(session, gitExec),
   }
 }

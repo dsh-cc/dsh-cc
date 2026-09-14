@@ -10,38 +10,41 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { join, relative, sep } from 'node:path'
-import {
-  adoptionRefusal,
-  repoRootFromCommonDir,
-  scanLocalConfig,
-} from './harden.ts'
-import { defineTool, TOOL_ABORTED } from '@dsh-cc/tools'
-import type { ToolRunContext } from '@dsh-cc/tools'
-import { HarnessError } from '@deepseek-ai/dsh-llm'
+import { join } from 'node:path'
+import { adoptionRefusal, scanLocalConfig } from './harden.ts'
+import { defineTool } from '@dsh-cc/tools'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-shell'
-import type { ShellRunResult } from '@deepseek-ai/dsh-shell'
 import {
   addWorktree,
   clearActiveWorktreeSession,
-  commitsAhead,
   deleteBranch,
   forceRemoveWorktree,
   getActiveWorktreeSession,
   randomSlug,
   repoLabel,
   setActiveWorktreeSession,
-  status,
   validateSlug,
   worktreeBranch,
   worktreePathFor,
   worktreesDir,
+  quote,
 } from './worktree.ts'
-import type { GitCmd, WorktreeSession } from './worktree.ts'
 import { presentEnterCall, presentWorktreeResult, presentExitCall } from './render.ts'
-import { setSessionCwd } from '@dsh-cc/session-cwd'
+import {
+  assertNotSymlink,
+  assertPathInRepo,
+  countWorktreeChanges,
+  findRepoRoot,
+  gitFailure,
+  releaseLock,
+  runGit,
+  sessionCwd,
+  updateSessionCwd,
+} from './exec.ts'
+import { isUnknownOptionFailure, lockWorktree, resolveBaseRef, sessionLockReason } from './lifecycle.ts'
+import { worktreeSettings, WorktreeSchema, type Worktree } from '@dsh-cc/settings-cascade'
 
 export const name = 'tool-git-worktree'
 export const inject = ['tools', 'shell', 'systemPrompt', 'fs']
@@ -81,142 +84,6 @@ class WorktreeError extends Error {}
  * @param exec - the running tool call.
  * @returns the absolute cwd, or `undefined` when none is known.
  */
-function sessionCwd(exec: ToolRunContext): string | undefined {
-  return exec.agent?.session.header.cwd
-}
-
-/**
- * Propagate a cwd change into the session-cwd plugin (WS1): a durable
- * `worktree/entered` event plus the live overlay. Tolerant of test fakes and
- * headless contexts whose session face lacks the append seam — the tool must
- * not fail because a non-persistent session cannot record the move.
- * @param exec - the running tool call.
- * @param path - the new absolute session working directory.
- */
-function updateSessionCwd(exec: ToolRunContext, path: string): void {
-  const agent = exec.agent
-  if (agent === undefined) return
-  const session = agent.session as unknown as { append?: unknown } | undefined
-  if (session === undefined || typeof session.append !== 'function') return
-  // Fail-soft: a session that cannot persist the event still completes the
-  // worktree operation; the worktree session singleton remains authoritative.
-  try {
-    setSessionCwd(agent, path)
-  } catch {
-    // cwd bookkeeping is best-effort here.
-  }
-}
-
-/**
- * Run one git command to completion through the `ctx.shell` seam. Resolves a
- * fresh request (never passing an unresolved one to `run`) and maps abort /
- * spawn failures to a structured {@link HarnessError}; a nonzero git exit
- * resolves normally for the caller to interpret.
- * @param ctx - the Cordis context.
- * @param cmd - the constructed git command.
- * @param signal - the tool-call cancellation signal.
- * @returns the shell result, with `exitCode` nonzero representing a git-level failure.
- */
-async function runGit(
-  ctx: Context,
-  cmd: GitCmd,
-  signal: AbortSignal,
-): Promise<ShellRunResult> {
-  const result = await ctx.shell.run(ctx.shell.resolve({
-    command: cmd.command,
-    workdir: cmd.workdir,
-    signal,
-  }))
-  if (result.aborted) {
-    const error = new HarnessError('tool call aborted', TOOL_ABORTED)
-    error.name = 'AbortError'
-    throw error
-  }
-  return result
-}
-
-/** Truncated stderr tail used to surface git failure causes in messages. */
-function gitFailure(result: ShellRunResult): string {
-  return result.stderr.text.trim() || result.stdout.text.trim() || `exit code ${result.exitCode}`
-}
-
-/**
- * Assert a computed worktree path is contained by this repo's `worktrees`
- * directory. All paths a tool will act on are validated here before any git
- * command runs.
- * @param ctx - the Cordis context.
- * @param repoRoot - the canonical repository root.
- * @param worktreePath - candidate absolute worktree path.
- */
-async function assertPathInRepo(ctx: Context, repoRoot: string, worktreePath: string): Promise<void> {
-  if (relative(repoRoot, worktreePath).startsWith(`..${sep}`)) {
-    throw new WorktreeError(`refusing worktree path outside the repository: "${worktreePath}"`)
-  }
-  const rootTarget = await ctx.fs.resolve(repoRoot)
-  const pathTarget = await ctx.fs.resolve(worktreePath)
-  if (!ctx.fs.contains(rootTarget, pathTarget)) {
-    throw new WorktreeError(`refusing worktree path outside the repository: "${worktreePath}"`)
-  }
-}
-
-/**
- * Find the main repository root for a working directory using git, pinned to
- * the git common dir (WS-1): `--git-common-dir` already returns the main
- * checkout's `.git` from inside a linked worktree, so creation always
- * anchors at the main root (sibling worktrees, never nested).
- * @param ctx - the Cordis context.
- * @param cwd - the working directory to search from.
- * @param signal - the tool-call cancellation signal.
- * @returns the main repository root, or `undefined` when not a git repository.
- */
-async function findRepoRoot(ctx: Context, cwd: string, signal: AbortSignal): Promise<string | undefined> {
-  const result = await runGit(
-    ctx,
-    { command: 'git rev-parse --git-common-dir', workdir: cwd, label: 'locate repository common dir' },
-    signal,
-  )
-  return result.exitCode === 0 ? repoRootFromCommonDir(cwd, result.stdout.text) : undefined
-}
-
-/**
- * Refuse creation when a path on the creation route (`.claude`,
- * `.claude/worktrees`, the target) is itself a symlink — `ctx.fs.resolve`
- * follows symlinks, so the containment assert above cannot see them.
- * @param ctx - the Cordis context.
- * @param path - the candidate path.
- * @param what - human label used in the error.
- */
-async function assertNotSymlink(ctx: Context, path: string, what: string): Promise<void> {
-  const info = await ctx.fs.lstat(path)
-  if (info?.type === 'symlink') {
-    throw new WorktreeError(`refusing worktree path: ${what} is a symlink: "${path}"`)
-  }
-}
-
-/**
- * Probe whether the (remove-gate) worktree currently differs from the commit it
- * was created from, counting both uncommitted files and new commits. Returns
- * `null` when the state cannot be determined reliably — callers treat that as
- * "unknown, assume unsafe" (fail-closed) so a silent 0/0 can never let a remove
- * destroy real work.
- * @param ctx - the Cordis context.
- * @param session - the active worktree session.
- * @returns the change counts, or `null` when unknown.
- */
-async function countWorktreeChanges(
-  ctx: Context,
-  session: WorktreeSession,
-  signal: AbortSignal,
-): Promise<{ changedFiles: number; commits: number } | null> {
-  const statusResult = await runGit(ctx, status(session.worktreePath), signal)
-  if (statusResult.exitCode !== 0) return null
-  const changedFiles = statusResult.stdout.text.split('\n').filter(line => line.trim() !== '').length
-  const revResult = await runGit(ctx, commitsAhead(session.worktreePath, session.originalHead), signal)
-  if (revResult.exitCode !== 0) return null
-  const commits = parseInt(revResult.stdout.text.trim(), 10) || 0
-  return { changedFiles, commits }
-}
-
 /**
  * Register the runtime-context entry that surfaces the active worktree cwd to
  * the model. When no worktree is active the provider contributes nothing, so
@@ -237,6 +104,18 @@ function registerWorktreeCwdContext(ctx: Context): void {
 
 export function apply(ctx: Context, config: Config = {}): void {
   registerWorktreeCwdContext(ctx)
+
+  // WS-4 `worktree` settings section (baseRef, cleanupPeriodDays). The
+  // cascade may be absent (headless) — then only the documented defaults
+  // apply. The live merged section is snapshotted here and read at
+  // EnterWorktree time via the thunk.
+  let sectionSource: (() => Worktree | undefined) | undefined
+  ctx.inject(['settings'], (sctx) => {
+    sctx.settings.installSection(ctx, 'worktree', WorktreeSchema, {}, {
+      setSource: (current: () => Worktree | undefined) => { sectionSource = current },
+      onChange: () => {},
+    })
+  })
 
   if (config.enableEnterWorktree ?? true) {
     ctx.tools.register(defineTool({
@@ -325,9 +204,37 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
         const originalHead = headResult.stdout.text.trim()
 
-        const create = await runGit(ctx, addWorktree(repoRoot, slug, scan.filters), exec.signal)
+        // WS-4: resolve the creation base from the `worktree` settings
+        // section. `fresh` refreshes the cached origin/HEAD with one fetch
+        // (creation path only — the sweep never does network I/O); every
+        // probe failure degrades toward local HEAD inside resolveBaseRef.
+        const base = await resolveBaseRef({
+          baseRef: worktreeSettings(sectionSource?.()).baseRef,
+          git: async (argv) => {
+            const result = await runGit(
+              ctx,
+              { command: `git ${argv.map(quote).join(' ')}`, workdir: repoRoot, label: argv.join(' ') },
+              exec.signal,
+            )
+            return { ok: result.exitCode === 0, stdout: result.stdout.text }
+          },
+        })
+
+        const create = await runGit(ctx, addWorktree(repoRoot, slug, scan.filters, base), exec.signal)
         if (create.exitCode !== 0) {
           throw new WorktreeError(`failed to create worktree: ${gitFailure(create)}`)
+        }
+
+        // WS-4: lock the worktree to this session (sweep ownership key).
+        // Pre-2.15 git lacks `worktree lock`: an "unknown option" failure
+        // is a tolerated no-op with a one-line warn.
+        const lock = await runGit(ctx, lockWorktree(repoRoot, worktreePath, sessionLockReason(slug)), exec.signal)
+        if (lock.exitCode !== 0) {
+          if (!isUnknownOptionFailure(lock.stderr.text + lock.stdout.text)) {
+            ctx.logger.warn(`could not lock worktree ${worktreePath}: ${gitFailure(lock)}`)
+          } else {
+            ctx.logger.warn(`git worktree lock unsupported by this git version; ${worktreePath} left unlocked`)
+          }
         }
 
         setActiveWorktreeSession({ originalCwd: cwd, repoRoot, worktreePath, worktreeBranch: branch, originalHead })
@@ -397,6 +304,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
 
         if (args.action === 'keep') {
+          await releaseLock(ctx, session, exec.signal)
           clearActiveWorktreeSession()
           updateSessionCwd(exec, session.originalCwd)
           return {
@@ -430,6 +338,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
 
         await assertPathInRepo(ctx, session.repoRoot, session.worktreePath)
+        await releaseLock(ctx, session, exec.signal)
         const removed = await runGit(ctx, forceRemoveWorktree(session.repoRoot, session.worktreePath), exec.signal)
         if (removed.exitCode !== 0) {
           throw new WorktreeError(`failed to remove worktree: ${gitFailure(removed)}`)
@@ -477,4 +386,14 @@ export {
   status,
 } from './worktree.ts'
 export type { GitCmd } from './worktree.ts'
+// WS-4 lifecycle surface (locks, baseRef resolution) — subagent isolation and
+// tests reuse the same constructors.
+export {
+  DSH_CC_LOCK_PREFIX,
+  isUnknownOptionFailure,
+  lockWorktree,
+  resolveBaseRef,
+  sessionLockReason,
+  unlockWorktree,
+} from './lifecycle.ts'
 export { repoRootFromCommonDir, scanLocalConfig } from './harden.ts'

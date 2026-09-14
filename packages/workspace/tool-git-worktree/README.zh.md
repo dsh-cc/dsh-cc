@@ -29,6 +29,14 @@
 
 `ExitWorktree` 只操作当前会话中由 `EnterWorktree` 创建的 worktree：否则为 no-op，绝不触碰手动创建或先前会话的 worktree。执行 `remove` 前会用 `git status --porcelain` 与 `git rev-list --count <base>..HEAD` 探测状态并**失败即关闭（fail closed）**——若状态无法核实，则没有 `discard_changes: true` 就拒绝，从而绝不让静默的 0/0 摧毁真实工作。
 
+## 生命周期（WS-4）
+
+`EnterWorktree` 创建的 worktree 会以 `git worktree lock
+--reason="dsh-cc session <slug>"` 加锁，并在两个退出动作中解锁。创建基准
+遵循 `worktree` 设置节（`baseRef: 'fresh' | 'head'`，默认 `fresh`）：
+`fresh` 使用缓存的 `origin/HEAD`（reflog 超过 24 小时时做一次限 5 秒的
+fetch 刷新），`head` 使用字面 `HEAD`。任何探测失败都会退回本地 `HEAD`。
+
 ## 安全
 
 - 两个工具都为 `isConcurrencySafe = () => false`；不得与其他工具重叠。

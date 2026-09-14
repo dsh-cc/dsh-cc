@@ -29,6 +29,16 @@ Leaves the active EnterWorktree session and returns to the original directory.
 
 `ExitWorktree` only operates on worktrees created by `EnterWorktree` in the current session: it is a no-op otherwise and never touches manually-created or previous-session worktrees. Before a `remove` it probes `git status --porcelain` and `git rev-list --count <base>..HEAD` and **fails closed** — if the state cannot be verified it refuses without `discard_changes: true`, so a silent 0/0 can never destroy real work.
 
+## Lifecycle (WS-4)
+
+Worktrees created by `EnterWorktree` are locked with `git worktree lock
+--reason="dsh-cc session <slug>"` and unlocked on both exit actions. The
+base the worktree branches from follows the `worktree` settings section
+(`baseRef: 'fresh' | 'head'`, default `fresh`): `fresh` uses the cached
+`origin/HEAD` (refreshed with one fetch, capped at 5s, when its reflog is
+older than 24h), `head` uses the literal current `HEAD`. Any probe failure
+degrades to local `HEAD`.
+
 ## Safety
 
 - Both tools are `isConcurrencySafe = () => false`; they must not overlap other tools.

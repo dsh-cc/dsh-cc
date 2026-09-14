@@ -97,7 +97,7 @@ Install them inside a session:
 | Settings | 2 | 1 | 0 | 0 |
 | Permissions | 0 | 1 | 0 | 0 |
 | Models | 0 | 1 | 0 | 0 |
-| Workspace | 0 | 2 | 0 | 0 |
+| Workspace | 0 | 3 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
 Statuses were verified against upstream documentation retrieved as of 2026-09-14 (freshness threshold: 120 days).

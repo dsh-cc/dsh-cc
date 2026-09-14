@@ -100,14 +100,16 @@ export interface GitCmd {
  * @param repoRoot - The canonical repository root.
  * @param slug - A validated worktree slug.
  * @param filterNames - Repository-local filter names to neutralize.
+ * @param base - The resolved base commit/ref (WS-4 `worktree.baseRef`).
+ *   Defaults to the literal `HEAD` (legacy behavior).
  * @returns the command to run.
  */
-export function addWorktree(repoRoot: string, slug: string, filterNames: readonly string[] = []): GitCmd {
+export function addWorktree(repoRoot: string, slug: string, filterNames: readonly string[] = [], base = 'HEAD'): GitCmd {
   const path = worktreePathFor(repoRoot, slug)
   const neutralize = neutralizationArgv(filterNames).map(quote).join(' ')
   const prefix = neutralize.length > 0 ? `git ${neutralize} ` : 'git '
   return {
-    command: `${prefix}worktree add -B ${quote(worktreeBranch(slug))} ${quote(path)} HEAD`,
+    command: `${prefix}worktree add -B ${quote(worktreeBranch(slug))} ${quote(path)} ${base}`,
     workdir: repoRoot,
     label: `create worktree "${path}"`,
   }

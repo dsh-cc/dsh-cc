@@ -2422,6 +2422,45 @@ capabilities:
         cascade, and there is no include-copy, no baseRef freshness, and no
         PR-reference support (WS-4/WS-6 scope).
 
+  workspace.worktree-lifecycle:
+    title: Worktree lifecycle (settings, locks, sweep, base selection)
+    category: workspace
+    plane: preset
+    upstream:
+      summary: >-
+        `worktree` settings section (`baseRef` fresh/head,
+        `cleanupPeriodDays`) shared through the settings cascade; session
+        locks (`git worktree lock --reason "dsh-cc session <id>"`) taken at
+        EnterWorktree create and launcher-managed session start and released
+        at exit/remove/TUI dispose; `baseRef: fresh` branches new worktrees
+        from the cached origin/HEAD with a 24h-stale refresh fetch (5s cap);
+        a boot-time sweep removes clean, unpushed-free worktrees older than
+        the window and reports stale dsh-cc-prefixed locks as advisories
+        (never auto-releases them); named reuse hard-resets to the fresh
+        base when the tree is clean and all its commits are merged.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: partial
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-git-worktree" }
+      - { type: source, path: packages/launcher/tui/worktree-lifecycle.mjs }
+      - { type: test, path: packages/workspace/tool-git-worktree/tests/lifecycle.spec.ts }
+      - { type: test, path: packages/launcher/tui/tests/worktree-lifecycle.spec.ts }
+    deviation:
+      kind: downgrade
+      summary: >-
+        The launcher cannot load the settings cascade (pre-build,
+        dependency-free): it performs a fail-open JSON subset read of the
+        user/project/local settings files only — flag/policy layers and
+        hot-reload are cascade-side. dsh-cc never auto-releases stale locks
+        (no trustworthy cross-process liveness oracle): killed sessions
+        surface as advisory output, never silent deletion, unlike CC.
+        WorktreeCreate/WorktreeRemove hooks and PR-reference reuse remain
+        pending (WS-6).
+
   workspace.worktree-tools:
     title: Worktree tools (EnterWorktree/ExitWorktree)
     category: workspace
