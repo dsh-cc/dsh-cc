@@ -1743,7 +1743,11 @@ capabilities:
     upstream:
       summary: >-
         jsonl session storage with resume and fork; session titles; /rename to
-        pin a user title.
+        pin a user title; resuming a session recorded in a `.claude/worktrees/`
+        worktree verifies the worktree's git identity (registration under the
+        same repo's `.git/worktrees/`, no network paths, not containing the
+        launch dir) and warns per refusal class instead of silently following
+        a destroyed or redirected tree.
       refs: []
     dimensions:
       recognized: true
@@ -1754,7 +1758,15 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-resume" }
       - { type: test, path: packages/compat/session-title-provider/tests/provider.spec.ts }
       - { type: test, path: packages/ui/tui/tests/session-list.spec.ts }
-    deviation: { kind: none }
+      - { type: source, path: packages/ui/tui/src/harness/worktree-identity.ts }
+      - { type: test, path: packages/ui/tui/tests/worktree-identity.spec.ts }
+    deviation:
+      kind: downgrade
+      summary: >-
+        A failed resume-identity verification warns and stays in the launch
+        directory; CC additionally re-binds the session into the launch dir
+        and clears the persisted binding, which needs the upstream
+        `resume({ meta })` cwd-override seam (plan §11.3).
 
   # ── memory ──────────────────────────────────────────────────────────────
   memory.claude-md-imports:
@@ -2437,7 +2449,10 @@ capabilities:
         a boot-time sweep removes clean, unpushed-free worktrees older than
         the window and reports stale dsh-cc-prefixed locks as advisories
         (never auto-releases them); named reuse hard-resets to the fresh
-        base when the tree is clean and all its commits are merged.
+        base when the tree is clean and all its commits are merged; quitting
+        a managed, user-unnamed session with a fully clean tree (zero
+        changes, zero commits) removes the worktree, deletes its owned
+        branch, and tombstones the resume anchor silently.
       refs: []
     dimensions:
       recognized: true
@@ -2449,6 +2464,8 @@ capabilities:
       - { type: source, path: packages/launcher/tui/worktree-lifecycle.mjs }
       - { type: test, path: packages/workspace/tool-git-worktree/tests/lifecycle.spec.ts }
       - { type: test, path: packages/launcher/tui/tests/worktree-lifecycle.spec.ts }
+      - { type: source, path: packages/ui/tui/src/harness/worktree-exit.ts }
+      - { type: test, path: packages/ui/tui/tests/driver-worktree-exit.spec.ts }
     deviation:
       kind: downgrade
       summary: >-

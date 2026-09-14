@@ -18,6 +18,7 @@ import { bootBannerRows } from './boot-banner.ts'
 import { filterSessions, sortByActivity, type SessionListEntry } from './session-list.ts'
 import { defaultTuiDir } from '../history.ts'
 import { liveSessionCwd } from './driver-live.ts'
+import { warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
 import { isProjectMember, resolveProject, type ProjectInfo } from '../project.ts'
 import { readProjectSessionIds } from '../project-sessions.ts'
 import {
@@ -259,6 +260,13 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
     }
 
     await bindSession(newHandle, { reseedModel: true })
+    // WS-5 resume guard: verify a worktree-shaped stored cwd before the user
+    // keeps working in it. This section has no showNotice — the notice flows
+    // through the status-row channel. Fail-open: notice + stay.
+    const resumedCwdNotice = warnIfResumedCwdMissing(liveSessionCwd(rt.current.agent, rt.cwd), rt.cwd)
+    if (resumedCwdNotice !== undefined) {
+      emit(upsertRow(rt.state(), { kind: 'status', text: resumedCwdNotice }))
+    }
   }
 
   // Shared bind path (also used by startFreshSession). dispose() stops the

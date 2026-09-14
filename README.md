@@ -88,7 +88,7 @@ Install them inside a session:
 | Engine subsystems | 11 | 10 | 4 | 2 |
 | Hook events | 12 | 4 | 4 | 0 |
 | Command surface | 21 | 7 | 1 | 2 |
-| Sessions and context | 1 | 0 | 1 | 0 |
+| Sessions and context | 0 | 1 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
 | Skills | 0 | 1 | 0 | 0 |
 | Subagents | 0 | 2 | 0 | 0 |

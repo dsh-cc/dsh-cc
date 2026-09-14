@@ -396,4 +396,4 @@ export {
   sessionLockReason,
   unlockWorktree,
 } from './lifecycle.ts'
-export { repoRootFromCommonDir, scanLocalConfig } from './harden.ts'
+export { adoptionRefusal, repoRootFromCommonDir, scanLocalConfig } from './harden.ts'

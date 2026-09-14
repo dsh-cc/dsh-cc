@@ -19,6 +19,7 @@ import { createCatalogSection } from './driver-catalog.ts'
 import type { DriverBashCtx, DriverQueueCtx, PermissionRulesLike } from './driver-ctx.ts'
 import { createModeSection } from './driver-mode.ts'
 import { liveModeWithDefault, liveSessionCwd } from './driver-live.ts'
+import { warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
 import { createHudSection } from './driver-hud.ts'
 import { createStatusLineWiring } from './statusline-wiring.ts'
 import type { OnboardingGate } from './onboarding.ts'
@@ -231,6 +232,10 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     // project's sidecar index.
     rebindHistory(liveSessionCwd(current.agent, cwd))
     recordProjectSession(String(current.agent.session.id), liveSessionCwd(current.agent, cwd))
+    // WS-5 resume guard: verify a worktree-shaped recorded cwd before the
+    // session settles in it — fail-open notice + stay (plan §11.3).
+    const resumedCwdNotice = warnIfResumedCwdMissing(liveSessionCwd(current.agent, cwd), cwd)
+    if (resumedCwdNotice !== undefined) showNotice(resumedCwdNotice)
   }
   emit(setPermissionMode(state, liveModeWithDefault(ctx)(current.agent)))
 

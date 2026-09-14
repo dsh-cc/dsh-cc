@@ -202,6 +202,17 @@ export function ownsBranch(session: WorktreeExitSession): boolean {
 }
 
 /**
+ * WS-5 auto-remove predicate (CC's unnamed-session rule): a managed launcher
+ * session with no user-pinned name and a fully readable, fully clean evidence
+ * probe is removed silently on `/quit`, without the overlay. Any unreadable
+ * probe dimension (undefined) fails closed — the overlay decides instead.
+ */
+export function autoRemovable(session: WorktreeExitSession, evidence: WorktreeExitEvidence): boolean {
+  return session.kind === 'managed' && session.named !== true
+    && evidence.dirtyFiles === 0 && evidence.commitsAhead === 0
+}
+
+/**
  * Best-effort `git worktree unlock` (WS-4): release the session lock at
  * TUI dispose for recognized sessions. Any failure — including pre-2.15
  * git without `worktree lock` — is swallowed; quitting must not fail.

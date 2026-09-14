@@ -32,10 +32,12 @@ import { createProviderSection, type ProviderRuntime } from '../provider-command
 import { wireOnboarding, type OnboardingHandle } from './onboarding.ts'
 import { enqueue, moveWorktreeExitFocus, openUsagePanel, setBusy, setTurnActive, setWorktreeExit, upsertRow } from '../store.ts'
 import {
+  autoRemovable,
   createWorktreeExitHooks,
   ownsBranch,
   type WorktreeExitSession,
 } from './worktree-exit.ts'
+import { clearResumeTarget } from '../resume-target.ts'
 import type {
   ContextPressureStateLike,
   TokenUsageStateLike,
@@ -179,6 +181,24 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
       }
       if (session !== undefined) {
         const evidence = await worktreeExit.evidence(session)
+        // WS-5: a managed, user-unnamed session whose probe is fully clean is
+        // removed silently (CC's unnamed-session rule) — no overlay. Any
+        // other shape, or a failed removal, falls through to the overlay.
+        if (autoRemovable(session, evidence)) {
+          try {
+            await worktreeExit.cleanup(session)
+            // Tombstone the resume anchor: worktrees collapse onto the main
+            // root's project key, so clearing at the worktree cwd clears the
+            // shared marker this quitting session wrote.
+            clearResumeTarget({ cwd: session.worktreePath })
+            showNotice(`已清理无改动的 worktree：${session.worktreePath}`)
+            rt.setMarkedContent(false)
+            await finalizeQuit(false)
+            return
+          } catch {
+            // Removal failed — let the user decide (fail-open).
+          }
+        }
         emit(setWorktreeExit(rt.state(), {
           repoRoot: session.repoRoot,
           worktreePath: session.worktreePath,

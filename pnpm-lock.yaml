@@ -2365,6 +2365,9 @@ importers:
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
+      '@dsh-cc/tool-git-worktree':
+        specifier: workspace:^
+        version: link:../../workspace/tool-git-worktree
       highlight.js:
         specifier: 11.12.0
         version: 11.12.0

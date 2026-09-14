@@ -3312,7 +3312,7 @@
       "category": "sessions",
       "plane": "preset",
       "upstream": {
-        "summary": "jsonl session storage with resume and fork; session titles; /rename to pin a user title.",
+        "summary": "jsonl session storage with resume and fork; session titles; /rename to pin a user title; resuming a session recorded in a `.claude/worktrees/` worktree verifies the worktree's git identity (registration under the same repo's `.git/worktrees/`, no network paths, not containing the launch dir) and warns per refusal class instead of silently following a destroyed or redirected tree.",
         "refs": []
       },
       "dimensions": {
@@ -3342,10 +3342,19 @@
         {
           "type": "test",
           "path": "packages/ui/tui/tests/session-list.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/worktree-identity.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/worktree-identity.spec.ts"
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "downgrade",
+        "summary": "A failed resume-identity verification warns and stays in the launch directory; CC additionally re-binds the session into the launch dir and clears the persisted binding, which needs the upstream `resume({ meta })` cwd-override seam (plan §11.3)."
       }
     },
     "memory.claude-md-imports": {
@@ -4307,7 +4316,7 @@
       "category": "workspace",
       "plane": "preset",
       "upstream": {
-        "summary": "`worktree` settings section (`baseRef` fresh/head, `cleanupPeriodDays`) shared through the settings cascade; session locks (`git worktree lock --reason \"dsh-cc session <id>\"`) taken at EnterWorktree create and launcher-managed session start and released at exit/remove/TUI dispose; `baseRef: fresh` branches new worktrees from the cached origin/HEAD with a 24h-stale refresh fetch (5s cap); a boot-time sweep removes clean, unpushed-free worktrees older than the window and reports stale dsh-cc-prefixed locks as advisories (never auto-releases them); named reuse hard-resets to the fresh base when the tree is clean and all its commits are merged.",
+        "summary": "`worktree` settings section (`baseRef` fresh/head, `cleanupPeriodDays`) shared through the settings cascade; session locks (`git worktree lock --reason \"dsh-cc session <id>\"`) taken at EnterWorktree create and launcher-managed session start and released at exit/remove/TUI dispose; `baseRef: fresh` branches new worktrees from the cached origin/HEAD with a 24h-stale refresh fetch (5s cap); a boot-time sweep removes clean, unpushed-free worktrees older than the window and reports stale dsh-cc-prefixed locks as advisories (never auto-releases them); named reuse hard-resets to the fresh base when the tree is clean and all its commits are merged; quitting a managed, user-unnamed session with a fully clean tree (zero changes, zero commits) removes the worktree, deletes its owned branch, and tombstones the resume anchor silently.",
         "refs": []
       },
       "dimensions": {
@@ -4341,6 +4350,14 @@
         {
           "type": "test",
           "path": "packages/launcher/tui/tests/worktree-lifecycle.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/worktree-exit.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/driver-worktree-exit.spec.ts"
         }
       ],
       "deviation": {
