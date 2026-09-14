@@ -9,18 +9,23 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { bootstrapCommand, dshUnavailableMessage, existingWorktreeDecision, interceptResume, parseWorktreeFlag, planWorktree, PROFILE, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, versionGate, worktreeAddArgv, worktreeEnv } from '../bootstrap.mjs'
+import { bootstrapCommand, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, interceptResume, parseWorktreeFlag, planWorktree, PROFILE, readBuildInfo, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, versionGate, worktreeAddArgv, worktreeEnv } from '../bootstrap.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ownVersion = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version
 
-if (process.argv.includes('--version') || process.argv.includes('-V')) {
-  console.log(ownVersion)
-  process.exit(0)
-}
-
 const home = process.env.DSH_HOME || join(homedir(), '.dsh')
 const profileDir = join(home, 'profiles', PROFILE)
+// Dev-build stamp lives with the synced profile code (see
+// scripts/stamp-build-info.mjs); read once per launch, sub-millisecond, no
+// subprocess (W2 law). Missing/malformed -> null, fail-open to release.
+const stampPath = join(profileDir, 'node_modules', '@dsh-cc', 'dsh-cc-build.json')
+const buildInfo = readBuildInfo(stampPath)
+
+if (process.argv.includes('--version') || process.argv.includes('-V')) {
+  console.log(formatVersionLabel(ownVersion, buildInfo))
+  process.exit(0)
+}
 const add = bootstrapCommand(existsSync(join(profileDir, 'package.json')), ownVersion)
 if (add !== undefined) {
   console.error(`dsh-cc: initializing profile "${PROFILE}"…`)
@@ -46,6 +51,12 @@ if (add !== undefined) {
     process.exit(installed.status ?? 1)
   }
 }
+
+// A dev-synced profile paired with a DIFFERENT launcher version converges
+// back to store bundles before the session starts (plan 2026-09-13 §3.4).
+// A fresh profile has no stamp, so this can never fire on the bootstrap path.
+const restorePlan = devStoreRestoreDecision(buildInfo, ownVersion)
+if (restorePlan !== null) runStoreRestore(profileDir, ownVersion)
 
 // A parent dsh-cc TUI process leaks DSH_CC_RESUME_SESSION / DSH_CC_AUTO_RESUME
 // / DSH_CC_CONTINUE into a child launcher's environment. Strip them up front —
