@@ -262,7 +262,7 @@ describe('agent.cordis.yml composition', () => {
     // converts 1:1 to semver) and fails the moment a row loses install
     // reachability.
     const repoRoot = join(dirname(agentCordisPath), '..', '..', '..')
-    const manifest = new Map<string, { dependencies: Record<string, string>, isPrivate: boolean }>()
+    const manifest = new Map<string, { dependencies: Record<string, string>, peerDependencies: Record<string, string>, isPrivate: boolean }>()
     for (const group of readdirSync(join(repoRoot, 'packages'))) {
       const groupDir = join(join(repoRoot, 'packages'), group)
       if (!statSync(groupDir).isDirectory()) continue
@@ -270,7 +270,7 @@ describe('agent.cordis.yml composition', () => {
         const pkgJsonPath = join(groupDir, pkg, 'package.json')
         if (!existsSync(pkgJsonPath)) continue
         const m = JSON.parse(readFileSync(pkgJsonPath, 'utf8'))
-        manifest.set(m.name, { dependencies: m.dependencies ?? {}, isPrivate: m.private === true })
+        manifest.set(m.name, { dependencies: m.dependencies ?? {}, peerDependencies: m.peerDependencies ?? {}, isPrivate: m.private === true })
       }
     }
 
@@ -314,6 +314,24 @@ describe('agent.cordis.yml composition', () => {
         `${row.id} -> ${row.name} is not installed by any package in the launcher bootstrap closure; `
         + 'add it to @dsh-cc/preset-cc dependencies and ensure @dsh-cc/tui depends on preset-cc',
       ).toContain(row.name)
+    }
+
+    // Peers must be provided by the closure too: an @dsh-cc peer is resolved
+    // from the profile's node_modules like any bare import, and pnpm does not
+    // auto-install it there — an uncovered peer is an ERR_MODULE_NOT_FOUND at
+    // boot (@dsh-cc/hook-protocol shipped that way in 0.7.1-rc.2).
+    const peerNames = new Set<string>()
+    for (const name of reachable) {
+      for (const peer of Object.keys(manifest.get(name)!.peerDependencies)) {
+        if (peer.startsWith('@dsh-cc/')) peerNames.add(peer)
+      }
+    }
+    for (const peer of peerNames) {
+      expect(
+        reachable,
+        `${peer} is a peer of packages in the launcher bootstrap closure but nothing in the closure provides it; `
+        + 'add it as a runtime dependency of the host-plane provider (bundle-shell)',
+      ).toContain(peer)
     }
   })
 

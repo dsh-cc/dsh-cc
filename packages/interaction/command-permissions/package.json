@@ -41,7 +41,8 @@
     "bundle": "tsdown"
   },
   "dependencies": {
-    "@dsh-cc/command-usage": "workspace:^"
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/permission-rules": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.5-rc.1",

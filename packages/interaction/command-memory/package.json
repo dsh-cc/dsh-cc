@@ -46,6 +46,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@dsh-cc/command-usage": "workspace:^"
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/memory": "workspace:^"
   }
 }

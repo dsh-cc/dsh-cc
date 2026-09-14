@@ -70,6 +70,9 @@ importers:
       '@dsh-cc/claude-code-agents':
         specifier: workspace:^
         version: link:../../preset/claude-code-agents
+      '@dsh-cc/hook-protocol':
+        specifier: workspace:^
+        version: link:../../hooks/hook-protocol
       '@dsh-cc/mcp-client':
         specifier: workspace:^
         version: link:../../mcp/mcp-client
@@ -1101,6 +1104,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/memory':
+        specifier: workspace:^
+        version: link:../../memory/memory
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1138,6 +1144,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/permission-rules':
+        specifier: workspace:^
+        version: link:../permission-rules
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2365,6 +2374,9 @@ importers:
       '@dsh-cc/preset-cc':
         specifier: workspace:^
         version: link:../../preset/cc
+      '@dsh-cc/session-cwd':
+        specifier: workspace:^
+        version: link:../../workspace/session-cwd
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
