@@ -3,7 +3,9 @@
  * decision table without spawning dsh.
  */
 
-import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { closeSync, existsSync, openSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 
 export const PROFILE = 'tui'
 export const BUNDLES = [
@@ -429,4 +431,190 @@ export function versionGate(runVersion) {
     return { ok: false, message: belowMinimumMessage(found) }
   }
   return { ok: true }
+}
+
+// --- dev-build version stamp + store restore ---------------------------------
+
+/**
+ * Read a dev-build stamp written by scripts/stamp-build-info.mjs into the
+ * profile's @dsh-cc scope. Any problem (missing file, EACCES, malformed
+ * JSON) fails open to null — the launcher must never brick on a stamp.
+ *
+ * @param {string} stampPath
+ * @returns {Record<string, unknown> | null}
+ */
+export function readBuildInfo(stampPath) {
+  try {
+    return JSON.parse(readFileSync(stampPath, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Version label for `dsh-cc --version`: bare semver for release installs,
+ * `<base>-dev+<commit>[.dirty]` for a dev-synced profile. The stamp's own
+ * version wins over the launcher's — the commit describes that tree.
+ *
+ * @param {string} version launcher's own package.json version
+ * @param {Record<string, unknown> | null} info parsed stamp or null
+ * @returns {string}
+ */
+export function formatVersionLabel(version, info) {
+  if (info?.channel !== 'dev') return version
+  const base = (typeof info.version === 'string' && info.version) || version
+  const commit = (typeof info.commit === 'string' && info.commit) || 'unknown'
+  return `${base}-dev+${commit}${info.dirty === true ? '.dirty' : ''}`
+}
+
+/**
+ * Decide whether the profile's dev store copy must be restored to store
+ * bundles: only when the stamp pairs this profile with a DIFFERENT launcher
+ * version than the one now running. Unknown pairing (no launcherVersion)
+ * never destroys dev state.
+ *
+ * @param {Record<string, unknown> | null} info
+ * @param {string} ownVersion
+ * @returns {{ from: string, to: string } | null}
+ */
+export function devStoreRestoreDecision(info, ownVersion) {
+  if (info?.channel !== 'dev') return null
+  const seen = info.launcherVersion
+  if (typeof seen !== 'string' || seen.length === 0 || seen === ownVersion) return null
+  return { from: seen, to: ownVersion }
+}
+
+/**
+ * Restore a dev-synced profile to store bundles after a launcher update
+ * (plan §3.4). Set-aside + rename dance is atomic per step; any unexpected
+ * throw is rolled back best-effort and reported, never escaping to the bin.
+ *
+ * @param {string} profileDir
+ * @param {string} ownVersion
+ * @param {{ spawnSyncImpl?: typeof import('node:child_process').spawnSync, log?: (...a: unknown[]) => void, now?: () => number }} [deps]
+ * @returns {{ restored: boolean, reason?: string, from?: string, to?: string }>}
+ */
+export function runStoreRestore(profileDir, ownVersion, deps = {}) {
+  const { spawnSyncImpl = spawnSync, log = console.error, now = Date.now } = deps
+  const scope = join(profileDir, 'node_modules', '@dsh-cc')
+  const backup = `${scope}.__dev-restore-backup`
+  const lock = join(profileDir, 'node_modules', '.dsh-cc-restore.lock')
+  const stamp = join(scope, 'dsh-cc-build.json')
+  const home = dirname(dirname(profileDir))
+  const presetDir = join(home, '.agent-presets', 'cc')
+  // The bin always hands us <home>/profiles/<PROFILE>; deriving the name keeps
+  // the function honest when tests pass tmp profile dirs.
+  const profileName = basename(profileDir)
+  let locked = false
+  // Rollback cleanup may only touch `scope` once the dev state is safely in
+  // `backup` — a throw BEFORE the set-aside must leave the profile untouched.
+  let setAside = false
+
+  const tryRename = (from, to) => {
+    try {
+      renameSync(from, to)
+      return true
+    } catch (error) {
+      log(`dsh-cc: dev-store restore: rename ${from} -> ${to} failed: ${/** @type {Error} */ (error).message}`)
+      return false
+    }
+  }
+  const tryRm = (target, recursive) => {
+    try {
+      rmSync(target, { recursive, force: true })
+      return true
+    } catch (error) {
+      log(`dsh-cc: dev-store restore: failed to remove ${target}: ${/** @type {Error} */ (error).message}`)
+      return false
+    }
+  }
+
+  try {
+    // 1. Lock FIRST: exclusive create; a lock younger than ten minutes means
+    // another launch is mid-restore — skip (launch as-is; transient until the
+    // holder finishes). Stale locks are taken over. Crash recovery MUST run
+    // only with the lock held: recovering backup->scope while a live holder
+    // re-materializes would let the holder delete the stamp out of the
+    // recovered dev scope and report success — dev code booting while
+    // --version claims a release, with no retry ever firing again.
+    let handle
+    try {
+      handle = openSync(lock, 'wx')
+      locked = true
+    } catch (error) {
+      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') throw error
+      let fresh = true
+      try {
+        fresh = now() - statSync(lock).mtimeMs < 10 * 60 * 1000
+      } catch { /* lock vanished between EEXIST and stat: proceed to retry */ }
+      if (fresh) {
+        log('dsh-cc: dev-store restore already in progress, skipping')
+        return { restored: false, reason: 'locked' }
+      }
+      tryRm(lock, false)
+      try {
+        handle = openSync(lock, 'wx')
+        locked = true
+      } catch {
+        log('dsh-cc: dev-store restore already in progress, skipping')
+        return { restored: false, reason: 'locked' }
+      }
+    }
+    closeSync(handle)
+
+    // 2. Crash recovery: a previous restore died between set-aside and commit.
+    if (existsSync(backup) && !existsSync(scope)) {
+      log('dsh-cc: dev-store restore: recovering interrupted restore (backup -> scope)')
+      if (!tryRename(backup, scope)) return { restored: false, reason: 'error' }
+    }
+
+    // Read the stamp BEFORE renaming the scope away, for the notice's `from`.
+    const info = readBuildInfo(stamp)
+    const from = (typeof info?.launcherVersion === 'string' && info.launcherVersion) || 'unknown'
+
+    // 3. Set aside the whole dev scope — presence is not content (pnpm trusts
+    // name+version), so it must never stay in place during re-materialize.
+    if (!tryRename(scope, backup)) return { restored: false, reason: 'error' }
+    setAside = true
+
+    // 4. Re-materialize from the registry, same command surface as first boot.
+    const result = spawnSyncImpl('dsh', ['plugin', '--profile', profileName, 'add', ...BUNDLES.map(n => `${n}@${ownVersion}`)], {
+      stdio: 'inherit',
+      env: spawnEnv(sanitizeInheritedEnv(process.env), home),
+    })
+    const success = !result.error && result.status === 0
+
+    if (success) {
+      // 5. Commit: drop backup + stamp, then preset cleanup.
+      tryRm(backup, true)
+      tryRm(stamp, false)
+      try {
+        if (existsSync(presetDir)) {
+          const marker = JSON.parse(readFileSync(join(presetDir, '.dsh-cc-managed.json'), 'utf8'))
+          if (marker?.owner !== '@dsh-cc/tui') throw new Error('unowned preset copy')
+        }
+      } catch {
+        tryRm(presetDir, true)
+        log('dsh-cc: removed dev preset copy at .agent-presets/cc (store boot will reinstall it)')
+      }
+      log(`dsh-cc: launcher updated ${from} → ${ownVersion}; restored store bundles in profile "${profileName}" (re-run scripts/sync-local-profile.sh to resume a dev build)`)
+      return { restored: true, from, to: ownVersion }
+    }
+
+    // 6. Failure: drop pnpm's partials and put the dev state back.
+    tryRm(scope, true)
+    if (!tryRename(backup, scope)) return { restored: false, reason: 'plugin-add-failed' }
+    log(`dsh-cc: dev-store restore failed (will retry on next launch; if the new dsh-cc version was just published, npm/pnpm's minimum-release-age window may still be hiding it)`)
+    return { restored: false, reason: 'plugin-add-failed' }
+  } catch (error) {
+    log(`dsh-cc: dev-store restore failed unexpectedly: ${/** @type {Error} */ (error).message}`)
+    // Roll back ONLY if the set-aside happened: removing the scope before
+    // that point would destroy intact dev state over a transient error
+    // (e.g. EACCES creating the lock) and brick the profile.
+    if (setAside) tryRm(scope, true)
+    if (existsSync(backup) && !existsSync(scope)) tryRename(backup, scope)
+    return { restored: false, reason: 'error' }
+  } finally {
+    if (locked) tryRm(lock, false)
+  }
 }
