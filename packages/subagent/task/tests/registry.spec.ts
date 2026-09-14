@@ -76,4 +76,22 @@ describe('AgentRegistry', () => {
     const defs = await registry.list(root)
     expect(defs.filter(d => d.source !== 'bundled').map(d => d.agentType)).toEqual(['a'])
   })
+
+  it('drops a failed discovery so the next ensure retries the scan', async () => {
+    const root = freshDir('ws')
+    // A malformed agent file makes discovery reject loudly (by design).
+    const agents = join(root, '.claude', 'agents')
+    mkdirSync(agents, { recursive: true })
+    writeFileSync(join(agents, 'broken.json'), '{ not json', 'utf8')
+    const registry = new AgentRegistry()
+    await expect(registry.list(root)).rejects.toThrow()
+    // Repair the layer: the registry must rescan rather than rejoin a stale
+    // rejection cached for the process lifetime — one transient failure used
+    // to erase the file-layer catalog (and its catalog-section entry) for
+    // good.
+    rmSync(join(agents, 'broken.json'))
+    writeAgent(root, 'fast-worker', { description: 'Mechanical execution' })
+    const defs = await registry.list(root)
+    expect(defs.some(d => d.agentType === 'fast-worker')).toBe(true)
+  })
 })
