@@ -317,6 +317,31 @@ describe('agent.cordis.yml composition', () => {
     }
   })
 
+  it('every @dsh-cc loader entry in the launcher bundles is a runtime dependency of its bundle', () => {
+    // Loader entries mounted by a bundle's cordis.patch.yml are imported at
+    // profile boot — they must be runtime deps of that bundle, not devDeps
+    // (@dsh-cc/settings-migrations shipped this way and broke 0.7.1-rc.1's
+    // first scratch boot: present in the yml, absent from node_modules).
+    const repoRoot = join(dirname(agentCordisPath), '..', '..', '..')
+    for (const group of readdirSync(join(repoRoot, 'packages', 'bundle'))) {
+      const bundleDir = join(join(repoRoot, 'packages', 'bundle'), group)
+      if (!statSync(bundleDir).isDirectory()) continue
+      for (const file of readdirSync(bundleDir)) {
+        if (!file.startsWith('cordis') || !file.endsWith('.yml')) continue
+        const text = readFileSync(join(bundleDir, file), 'utf8')
+        const manifest = JSON.parse(readFileSync(join(bundleDir, 'package.json'), 'utf8'))
+        const deps = new Set(Object.keys(manifest.dependencies ?? {}))
+        for (const match of text.matchAll(/name: '(@dsh-cc\/[a-z-]+)'/g)) {
+          const name = match[1]!
+          expect(
+            deps,
+            `${manifest.name}/${file} mounts ${name} but it is not a runtime dependency — a devDep loader entry is never installed on a store profile`,
+          ).toContain(name)
+        }
+      }
+    }
+  })
+
   it('resolves every @deepseek-ai row name against an installed deployment', () => {
     const rows = doc.filter((r) => r.name && r.name.startsWith('@deepseek-ai/'))
     const seen = new Set<string>()
