@@ -12,6 +12,7 @@
  * @module @dsh-cc/tui/harness/worktree-exit
  */
 
+import { runWorktreeRemoveHook } from '@dsh-cc/tool-git-worktree'
 import { execFile } from 'node:child_process'
 import { dirname, join, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
@@ -65,6 +66,12 @@ export interface WorktreeExitSession {
   readonly branch: string
   /** Managed sessions only: the commit the worktree was created from. */
   readonly baseHead?: string
+  /**
+   * Managed sessions only (WS-4 marker field): the slug was user-chosen.
+   * WS-5's auto-remove predicate consumes this; parsed here so the marker
+   * writer/parsers stay in sync.
+   */
+  readonly named?: boolean
 }
 
 /** Removal evidence shown in the exit overlay before the user confirms. */
@@ -86,6 +93,8 @@ export interface WorktreeExitHooks {
   probe(cwd: string): Promise<WorktreeExitSession | undefined>
   evidence(session: WorktreeExitSession): Promise<WorktreeExitEvidence>
   cleanup(session: WorktreeExitSession): Promise<WorktreeCleanupOutcome>
+  /** Best-effort `git worktree unlock` (WS-4); never throws. */
+  unlock(session: WorktreeExitSession): Promise<void>
 }
 
 /** Parse the launcher's env marker; garbage is treated as absent. */
@@ -104,6 +113,7 @@ function parseMarker(raw: string | undefined): Omit<WorktreeExitSession, 'kind'>
       ...(typeof parsed.baseHead === 'string' && parsed.baseHead.length > 0
         ? { baseHead: parsed.baseHead }
         : {}),
+      ...(parsed.named === true ? { named: true } : {}),
     }
   } catch {
     return undefined
@@ -193,6 +203,33 @@ export function ownsBranch(session: WorktreeExitSession): boolean {
 }
 
 /**
+ * WS-5 auto-remove predicate (CC's unnamed-session rule): a managed launcher
+ * session with no user-pinned name and a fully readable, fully clean evidence
+ * probe is removed silently on `/quit`, without the overlay. Any unreadable
+ * probe dimension (undefined) fails closed — the overlay decides instead.
+ */
+export function autoRemovable(session: WorktreeExitSession, evidence: WorktreeExitEvidence): boolean {
+  return session.kind === 'managed' && session.named !== true
+    && evidence.dirtyFiles === 0 && evidence.commitsAhead === 0
+}
+
+/**
+ * Best-effort `git worktree unlock` (WS-4): release the session lock at
+ * TUI dispose for recognized sessions. Any failure — including pre-2.15
+ * git without `worktree lock` — is swallowed; quitting must not fail.
+ */
+export async function unlockWorktreeSession(
+  session: WorktreeExitSession,
+  exec: WorktreeExec = gitExec,
+): Promise<void> {
+  try {
+    await exec(['worktree', 'unlock', session.worktreePath], session.repoRoot)
+  } catch {
+    // Pre-2.15 git or a foreign lock: quitting proceeds regardless.
+  }
+}
+
+/**
  * Remove the worktree directory and (when owned) its branch. The branch
  * delete runs only after the worktree remove succeeds — git refuses to
  * delete a branch checked out in a registered worktree, and a failed remove
@@ -210,6 +247,13 @@ export async function removeWorktree(
   chdir: (dir: string) => void = dir => process.chdir(dir),
 ): Promise<WorktreeCleanupOutcome> {
   chdir(session.repoRoot)
+  // WS-4: release the session lock first — git refuses to remove a locked
+  // worktree. Failure is tolerated (pre-2.15 git / foreign lock).
+  try {
+    await exec(['worktree', 'unlock', session.worktreePath], session.repoRoot)
+  } catch {
+    // Unlock is advisory; the removal below is the real gate.
+  }
   await exec(['worktree', 'remove', '--force', session.worktreePath], session.repoRoot)
   if (!ownsBranch(session)) return { branchDeleted: false }
   try {
@@ -226,5 +270,48 @@ export function createWorktreeExitHooks(env: NodeJS.ProcessEnv = process.env): W
     probe: cwd => detectWorktreeSession(cwd, env, gitExec),
     evidence: session => gatherEvidence(session, gitExec),
     cleanup: session => removeWorktree(session, gitExec),
+    unlock: session => unlockWorktreeSession(session, gitExec),
+  }
+}
+
+/**
+ * WS-6: wrap a hooks set so `/quit` cleanup fires the WorktreeRemove point
+ * through the bridge's `hookRun` invoke seam on `ctx` (absent → 'default' →
+ * git-direct removal unchanged).
+ */
+export function withBridgeRemoveHook(
+  hooks: WorktreeExitHooks,
+  ctx: { get(key: string): unknown },
+): WorktreeExitHooks {
+  return withRemoveHook(hooks, session =>
+    runWorktreeRemoveHook(ctx as never, {
+      sessionId: '',
+      cwd: session.worktreePath,
+      worktreePath: session.worktreePath,
+      reason: 'exit',
+    }, new AbortController().signal))
+}
+
+/**
+ * WS-6: wrap a hooks set so `/quit` cleanup fires the WorktreeRemove point
+ * through the bridge's invoke seam first. `'replaced'` (every hook exited 0)
+ * skips git removal entirely; `'kept'` (a hook failed) keeps the tree and
+ * surfaces as a failed cleanup; `'default'` (no hook ran) proceeds as before.
+ */
+export function withRemoveHook(
+  hooks: WorktreeExitHooks,
+  run: (session: WorktreeExitSession) => Promise<'default' | 'replaced' | 'kept'>,
+): WorktreeExitHooks {
+  const cleanup = hooks.cleanup
+  return {
+    ...hooks,
+    cleanup: async session => {
+      const outcome = await run(session)
+      if (outcome === 'kept') {
+        throw new Error(`WorktreeRemove hook failed: ${session.worktreePath} was kept`)
+      }
+      if (outcome === 'replaced') return { branchDeleted: false }
+      return cleanup(session)
+    },
   }
 }

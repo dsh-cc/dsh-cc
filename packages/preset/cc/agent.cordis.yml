@@ -319,6 +319,10 @@
 # only in-group loader fibers ctx.get('hooks'); the providing fiber is
 # hooks-claude-code, inside this group — a root-realm provide would trip
 # leakedServices.
+# The bridge's second provide, `hookRun` (WorktreeCreate / WorktreeRemove
+# invocation; docs/plans/2026-09-14-cc-worktree-parity.md WS-6), is
+# deliberately NOT isolated, mirroring `ccPlugins`: its consumer
+# (tool-git-worktree) mounts top-level, outside this group's realm.
 - id: cc-services
   name: cordis:group
   group: true

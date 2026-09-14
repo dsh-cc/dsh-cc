@@ -56,6 +56,11 @@ import {
   wantsBackground,
   type SubagentsLike,
 } from './background-start.ts'
+import {
+  dispatchWorktreeIsolation,
+  mountWorktreeIsolation,
+  SubagentWorktreeRegistry,
+} from './worktree-isolation.ts'
 
 export {
   MAX_LIVE_CONTINUABLE_CHILDREN,
@@ -141,12 +146,17 @@ export function registerTaskTool(
   } | undefined
   if (tools === undefined) return undefined
 
+  // WS-3: per-child isolation-worktree records + the adopt/settle lifecycle
+  // listeners. Safe on any bus; entries exist only for isolated dispatches.
+  const worktrees = new SubagentWorktreeRegistry()
+  const offWorktreeIsolation = mountWorktreeIsolation(ctx, worktrees)
+
   // Keep the disabled harness `subagent` row's name restrictable (the CC
   // frontmatter `Task` translates to both `subagent` and `subagent_fork`), and
   // `workflow` for the deferred workflow row.
   for (const name of RESERVED_TOOL_NAMES) tools.reserve(name)
 
-  return tools.register(defineTool({
+  const offTools = tools.register(defineTool({
     name: TASK_TOOL,
     description:
       'Delegate a well-scoped task to a subagent. The child starts with a fresh conversation: '
@@ -313,6 +323,25 @@ export function registerTaskTool(
           tools,
           warn: message => ctx.logger.warn(message),
         }))
+        // WS-3: `isolation: worktree` definitions create a hardened worktree
+        // first and dispatch the child into it (create/adopt/settle/lock live
+        // in ./worktree-isolation.ts). Any creation failure refuses the
+        // dispatch — never a silent fallback to the parent tree.
+        if (definition.isolation === 'worktree') {
+          const isolated = await dispatchWorktreeIsolation(ctx, capture, routes, definition, worktrees, {
+            parent: agent,
+            argsPrompt: args.prompt,
+            label: args.description,
+            signal: exec.signal,
+            maxDepth: DEFAULT_MAX_DEPTH,
+            toolFilter,
+            agentOptions,
+          }, async request =>
+            wantsBackground(args, definition, disabled)
+              ? await startBackground(seam, request, capture)
+              : await collectForeground(ctx, seam, request, capture, exec))
+          return preloadText === '' ? isolated : { ...isolated, text: `${isolated.text}\n${preloadText}` }
+        }
         const folded = {
           ...base,
           persona: definition.systemPrompt,
@@ -329,6 +358,10 @@ export function registerTaskTool(
       return dispatchDefinition(definition)
     },
   }))
+  return () => {
+    offTools()
+    offWorktreeIsolation()
+  }
 }
 
 /** Await a run's terminal result and project it onto the tool output shape. */

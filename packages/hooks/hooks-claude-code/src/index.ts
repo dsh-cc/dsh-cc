@@ -204,6 +204,14 @@ export function apply(ctx: Context, config: Config): void {
   const httpAllowedEnvVars = (): ReadonlySet<string> => new Set(config.httpAllowedEnvVars ?? [])
   const runPoint = createRunPoint({ ctx, parsed, config, defaultTimeoutMs, stderrSummaryMaxChars, httpAllowedEnvVars, ...recordIssue !== undefined ? { recordIssue } : {} })
 
+  // WS-6 invoke seam: other plugins (tool-git-worktree's WorktreeCreate/
+  // WorktreeRemove, subagent isolation) fire bridge-configured hooks through
+  // here instead of re-implementing the runner. Matcher-less: worktree events
+  // ignore matchers ('' subject). Agent-less (worktree events carry no agent);
+  // the run point degrades gracefully without one.
+  ctx.provide('hookRun', (point, payload, opts) =>
+    runPoint(point, '', payload, { signal: opts.signal }))
+
   // The plugin hooks seam (the `hooks` guest contract from @dsh-cc/plugin-loader),
   // provided UNCONDITIONALLY — including with no boot config or a failed boot
   // parse — so a plugin shipping hooks/hooks.json still gets its hooks merged

@@ -235,6 +235,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     // project's sidecar index.
     rebindHistory(liveSessionCwd(current.agent, cwd))
     recordProjectSession(String(current.agent.session.id), liveSessionCwd(current.agent, cwd))
+
   }
   emit(setPermissionMode(state, liveModeWithDefault(ctx)(current.agent)))
 

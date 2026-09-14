@@ -8,7 +8,8 @@
   },
   "files": [
     "bin",
-    "bootstrap.mjs"
+    "bootstrap.mjs",
+    "worktree-lifecycle.mjs"
   ],
   "repository": {
     "type": "git",

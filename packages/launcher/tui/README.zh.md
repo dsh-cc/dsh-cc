@@ -18,6 +18,18 @@ worktree 共享它）划分作用域，会退回默认的 auto-resume——TUI �
 `DSH_CC_WORKTREE` 标记会话，TUI 会在 `/quit` 时询问保留还是删除该
 worktree。要求 git 仓库至少有一个提交。
 
+每次启动还会运行一次引导清扫（不做网络 I/O，10 秒上限，失败静默）：
+`.claude/worktrees/` 下位于 `worktree-*` 分支、超过
+`worktree.cleanupPeriodDays`（默认 30，从 user → project → local 设置文件
+中 fail-open 读取的 `worktree` 设置节取得）的 worktree，只有在干净且没有
+未推送提交时才会被移除；过期的 dsh-cc 会话锁绝不自动释放——它们只以
+`git worktree unlock <path>` 建议行出现。新 worktree 的创建基准由
+`worktree.baseRef` 决定（`fresh` = 缓存的 origin/HEAD，reflog 超过 24 小时
+时限 5 秒 fetch 刷新；`head` = 字面 HEAD）；复用的命名 worktree 在干净且
+自身提交全部已合入该基准时会被硬重置到该基准。创建与复用的 worktree 都会
+以 `git worktree lock --reason="dsh-cc session <slug>"` 加锁，会话期间
+保持锁定。
+
 ## Resume environment contract
 
 启动器通过三个变量（经由 `cordis.patch.yml` 的 `!!js` 表达式）把用户的会话

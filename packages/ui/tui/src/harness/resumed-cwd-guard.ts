@@ -16,6 +16,7 @@ import { resolve as resolvePath, sep } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { liveSessionCwd } from './driver-live.ts'
 import { clearResumeTarget, readResumeTarget } from '../resume-target.ts'
+import { worktreeIdentityVerdict } from './worktree-identity.ts'
 import type { PersistenceLike } from './session-service-likes.ts'
 
 /**
@@ -34,10 +35,25 @@ export function warnIfResumedCwdMissing(
   showNotice: (message: string) => void,
 ): void {
   const guard = resumedCwdGuard(agent, launchCwd)
-  if (guard === undefined) return
-  showNotice(
-    `会话原目录已不存在：${guard.missingCwd}。文件工具可能失败，建议 /clear 开启新会话，或在正确目录中重启`,
-  )
+  if (guard !== undefined) {
+    showNotice(
+      `会话原目录已不存在：${guard.missingCwd}。文件工具可能失败，建议 /clear 开启新会话，或在正确目录中重启`,
+    )
+    return
+  }
+  // WS-5 fold: an existing worktree-shaped cwd still needs identity
+  // verification before the session settles in it. Fail-open: notice + stay.
+  const sessionCwd = liveSessionCwd(agent, launchCwd)
+  const verdict = worktreeIdentityVerdict(sessionCwd, launchCwd)
+  if (verdict.kind === 'refused') {
+    showNotice(
+      `已拒绝进入原 worktree：${sessionCwd}（${verdict.reason}）。会话将在当前目录继续，文件操作可能指向主检目录`,
+    )
+  } else if (verdict.kind === 'unverified') {
+    showNotice(
+      `暂时无法验证原 worktree：${sessionCwd}。会话已在当前目录继续；重试 resume 可再次尝试`,
+    )
+  }
 }
 
 /**

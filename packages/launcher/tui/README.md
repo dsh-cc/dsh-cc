@@ -20,6 +20,20 @@ auto-resume — the TUI resumes the project's last session. `--resume` /
 `DSH_CC_WORKTREE`, and the TUI offers to keep or remove the worktree at
 `/quit`. Requires a git repository with at least one commit.
 
+Every launch also runs a boot-time sweep (never network I/O, 10s cap,
+fail-silent): worktrees under `.claude/worktrees/` on `worktree-*` branches
+older than `worktree.cleanupPeriodDays` (default 30, from the `worktree`
+settings section read fail-open from user → project → local settings files)
+are removed only when clean and nothing is unpushed; stale dsh-cc session
+locks are never auto-released — they surface as advisory `git worktree
+unlock <path>` lines. New worktrees branch from the base chosen by
+`worktree.baseRef` (`fresh` = cached origin/HEAD with a 24h-stale refresh
+fetch capped at 5s, `head` = literal HEAD); a reused named worktree is
+hard-reset to that base when it is clean and all its own commits are
+already merged into it. Created and reused worktrees are locked with
+`git worktree lock --reason="dsh-cc session <slug>"` for the session's
+duration.
+
 ## Resume environment contract
 
 The launcher communicates the user's session intent to the TUI plugin (via

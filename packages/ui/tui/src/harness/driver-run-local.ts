@@ -34,8 +34,10 @@ import { createProviderSection, type ProviderRuntime } from '../provider-command
 import { wireOnboarding, type OnboardingHandle } from './onboarding.ts'
 import { enqueue, moveWorktreeExitFocus, openUsagePanel, setBusy, setTurnActive, setWorktreeExit, upsertRow } from '../store.ts'
 import {
+  autoRemovable,
   createWorktreeExitHooks,
   ownsBranch,
+  withBridgeRemoveHook,
   type WorktreeExitSession,
 } from './worktree-exit.ts'
 import type {
@@ -109,7 +111,8 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
     modelMissing: () => rt.onboardingGate.modelMissing,
   })
   rt.onboardingGate.handle = onboarding
-  const worktreeExit = rt.config.worktreeExit ?? createWorktreeExitHooks()
+  // WS-6: /quit cleanup fires WorktreeRemove hooks via the bridge's seam.
+  const worktreeExit = withBridgeRemoveHook(rt.config.worktreeExit ?? createWorktreeExitHooks(), rt.ctx)
 
   // The section owns the quit finalizer: after a `/quit` decision settles it
   // persists the resume target (unless the worktree is being removed), tears
@@ -181,6 +184,26 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
       }
       if (session !== undefined) {
         const evidence = await worktreeExit.evidence(session)
+        // WS-5: a managed, user-unnamed session whose probe is fully clean is
+        // removed silently (CC's unnamed-session rule) — no overlay. Any
+        // other shape, or a failed removal, falls through to the overlay.
+        if (autoRemovable(session, evidence)) {
+          try {
+            await worktreeExit.cleanup(session)
+            // Tombstone the resume anchor when its session lived under the
+            // removed worktree (fail-open; anchor bookkeeping is best-effort).
+            await tombstoneResumeTargetForRemovedWorktree({
+              cwd: rt.cwd, removedPath: session.worktreePath,
+              persistence: rt.ctx.get('sessionPersistence') as PersistenceLike | undefined,
+            }).catch(() => {})
+            showNotice(`已清理无改动的 worktree：${session.worktreePath}`)
+            rt.setMarkedContent(false)
+            await finalizeQuit(false)
+            return
+          } catch {
+            // Removal failed — let the user decide (fail-open).
+          }
+        }
         emit(setWorktreeExit(rt.state(), {
           repoRoot: session.repoRoot,
           worktreePath: session.worktreePath,
@@ -407,9 +430,20 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
       emit(setWorktreeExit(rt.state(), undefined))
       return
     }
-    // Keep row: standard quit with resume persistence.
+    // Keep row: standard quit with resume persistence. WS-4: release the
+    // session lock at TUI dispose — advisory, never blocks quitting.
     if (view.focused === 0) {
       emit(setWorktreeExit(rt.state(), undefined))
+      try {
+        await worktreeExit.unlock({
+          kind: view.managed ? 'managed' : 'detected',
+          repoRoot: view.repoRoot,
+          worktreePath: view.worktreePath,
+          branch: view.branch,
+        })
+      } catch {
+        // Unlock is advisory.
+      }
       await finalizeQuit(true)
       return
     }

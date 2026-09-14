@@ -86,21 +86,21 @@ Install them inside a session:
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
 | Engine subsystems | 11 | 10 | 4 | 2 |
-| Hook events | 12 | 4 | 4 | 0 |
+| Hook events | 12 | 5 | 4 | 0 |
 | Command surface | 21 | 7 | 1 | 2 |
-| Sessions and context | 1 | 0 | 1 | 0 |
+| Sessions and context | 0 | 1 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
 | Skills | 0 | 1 | 0 | 0 |
-| Subagents | 0 | 1 | 0 | 0 |
+| Subagents | 0 | 2 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 2 | 0 | 0 |
 | Settings | 2 | 1 | 0 | 0 |
 | Permissions | 0 | 1 | 0 | 0 |
 | Models | 0 | 1 | 0 | 0 |
-| Workspace | 1 | 0 | 0 | 0 |
+| Workspace | 0 | 4 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
-Statuses were verified against upstream documentation retrieved as of 2026-09-05 (freshness threshold: 120 days).
+Statuses were verified against upstream documentation retrieved as of 2026-09-14 (freshness threshold: 120 days).
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->

@@ -16,7 +16,7 @@ Creates a worktree on a fresh `worktree-<name>` branch from HEAD and switches th
 |---|---|---|
 | `name` | string | Worktree slug. Each `/`-separated segment allows letters, digits, `.`, `_`, `-`; max 64 chars. A random `adjective-noun-suffix` slug is generated when omitted. |
 
-The tool locates the repository root from the calling agent's session cwd (`git rev-parse --show-toplevel`); outside a git working tree it returns a structured error rather than changing anything. Because the session working directory is fixed at session creation in this harness, the cwd switch is declared two ways that are safe given the immutable session cwd: the tool result and a `tool:worktree:cwd` systemPrompt runtime context both state the new working directory, and the model is told to pass `workdir` equal to the reported `worktreePath` for subsequent shell and fs calls. The pre-release-state choice is recorded in the [git-worktree-tools Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-git-worktree-tools.md).
+The tool locates the repository root by pinning the git common dir (`git rev-parse --git-common-dir`), so entering from inside a linked worktree creates a sibling under the MAIN checkout's `.claude/worktrees/`, never a nested tree. Creation is hardened: repository-local filter drivers are neutralized before `git worktree add` (consequence: LFS-tracked content arrives as pointer files; run `git lfs pull` inside the worktree to restore it), `.claude`, `.claude/worktrees`, and the target path may not be symlinks, and an existing target directory is only adopted when its `.git` entry resolves into this repository's `.git/worktrees/` registration. Outside a git working tree it returns a structured error rather than changing anything. Because the session working directory is fixed at session creation in this harness, the cwd switch is declared two ways that are safe given the immutable session cwd: the tool result and a `tool:worktree:cwd` systemPrompt runtime context both state the new working directory, and the model is told to pass `workdir` equal to the reported `worktreePath` for subsequent shell and fs calls. The pre-release-state choice is recorded in the [git-worktree-tools Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-git-worktree-tools.md).
 
 ### `ExitWorktree`
 
@@ -28,6 +28,16 @@ Leaves the active EnterWorktree session and returns to the original directory.
 | `discard_changes` | boolean | Required `true` with `action: "remove"` when the worktree has uncommitted files or commits not on the base branch; the tool refuses and lists the evidence otherwise. |
 
 `ExitWorktree` only operates on worktrees created by `EnterWorktree` in the current session: it is a no-op otherwise and never touches manually-created or previous-session worktrees. Before a `remove` it probes `git status --porcelain` and `git rev-list --count <base>..HEAD` and **fails closed** — if the state cannot be verified it refuses without `discard_changes: true`, so a silent 0/0 can never destroy real work.
+
+## Lifecycle (WS-4)
+
+Worktrees created by `EnterWorktree` are locked with `git worktree lock
+--reason="dsh-cc session <slug>"` and unlocked on both exit actions. The
+base the worktree branches from follows the `worktree` settings section
+(`baseRef: 'fresh' | 'head'`, default `fresh`): `fresh` uses the cached
+`origin/HEAD` (refreshed with one fetch, capped at 5s, when its reflog is
+older than 24h), `head` uses the literal current `HEAD`. Any probe failure
+degrades to local `HEAD`.
 
 ## Safety
 
@@ -44,6 +54,8 @@ All git commands are built in one module (`src/worktree.ts`) as `{ command, work
 `EnterWorktree` and `ExitWorktree` own their `presentCall`/`presentResult` render intent as generic cards. `presentCall` is a pure function of the arguments (an `EnterWorktree` call names the worktree; an `ExitWorktree` call distinguishes `remove` (destructive) from `keep` in its title and content). `presentResult` shows a plain message on success and fenced text on error; a `diff` card is not used because a worktree exit has no textual diff to render.
 
 ## Known limitations
+
+- Repository-local filter drivers are neutralized during creation (unreadable local config, `includeIf`, and ambiguous filter names refuse creation; remaining drivers get empty `-c` overrides), so smudge/clean filters never run for the initial checkout.
 
 - The session cwd is immutable, so the worktree switch is expressed through the declared cwd and the systemPrompt runtime context rather than a true per-session cwd mutation; subsequent shell/fs calls must pass `workdir`.
 - The active worktree session is a process-wide singleton (mirroring the claude-code reference), so one process has at most one active worktree at a time.

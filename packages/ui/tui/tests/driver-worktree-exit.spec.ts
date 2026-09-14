@@ -10,6 +10,7 @@ import type {
   WorktreeExitHooks,
   WorktreeExitSession,
 } from '@dsh-cc/tui/harness/worktree-exit.ts'
+import { withRemoveHook } from '@dsh-cc/tui/harness/worktree-exit.ts'
 
 interface FakeAgent extends Record<string, unknown> {
   options: Record<string, unknown>
@@ -278,6 +279,79 @@ describe('createDriver /quit worktree-exit', () => {
   })
 })
 
+describe('WS-5 auto-remove on /quit', () => {
+  const CLEAN = { dirtyFiles: 0, commitsAhead: 0 } satisfies WorktreeExitEvidence
+
+  it('managed unnamed clean session: silent remove, no overlay', async () => {
+    const agent = makeFakeAgent('idle')
+    const dispose = vi.fn()
+    const ctx = makeCtx(agent, dispose)
+    const hooks = makeHooks({ evidence: vi.fn(async () => CLEAN) })
+    const onQuit = vi.fn()
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks, onQuit })
+    await driver.submit('/quit')
+    expect(hooks.cleanup).toHaveBeenCalledOnce()
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(onQuit).toHaveBeenCalledOnce()
+    expect(driver.state.worktreeExit).toBeUndefined()
+  })
+
+  it('named session keeps the overlay', async () => {
+    const agent = makeFakeAgent('idle')
+    const dispose = vi.fn()
+    const ctx = makeCtx(agent, dispose)
+    const hooks = makeHooks({ evidence: vi.fn(async () => CLEAN) })
+    hooks.ref.session = { ...MANAGED, named: true }
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks })
+    await driver.submit('/quit')
+    expect(hooks.cleanup).not.toHaveBeenCalled()
+    expect(driver.state.worktreeExit).toBeDefined()
+  })
+
+  it('dirty tree keeps the overlay', async () => {
+    const agent = makeFakeAgent('idle')
+    const ctx = makeCtx(agent, vi.fn())
+    const hooks = makeHooks({ evidence: vi.fn(async () => ({ dirtyFiles: 1, commitsAhead: 0 })) })
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks })
+    await driver.submit('/quit')
+    expect(driver.state.worktreeExit).toBeDefined()
+  })
+
+  it('detected (non-managed) session keeps the overlay', async () => {
+    const agent = makeFakeAgent('idle')
+    const ctx = makeCtx(agent, vi.fn())
+    const hooks = makeHooks()
+    hooks.ref.session = { ...MANAGED, kind: 'detected', baseHead: undefined }
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks })
+    await driver.submit('/quit')
+    expect(driver.state.worktreeExit).toBeDefined()
+  })
+
+  it('unverifiable probe (undefined evidence) keeps the overlay', async () => {
+    const agent = makeFakeAgent('idle')
+    const ctx = makeCtx(agent, vi.fn())
+    const hooks = makeHooks({ evidence: vi.fn(async () => ({})) })
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks })
+    await driver.submit('/quit')
+    expect(driver.state.worktreeExit).toBeDefined()
+  })
+
+  it('failed silent removal falls back to the overlay (fail-open)', async () => {
+    const agent = makeFakeAgent('idle')
+    const dispose = vi.fn()
+    const ctx = makeCtx(agent, dispose)
+    const hooks = makeHooks({
+      evidence: vi.fn(async () => CLEAN),
+      cleanup: vi.fn(async () => { throw new Error('worktree in use') }),
+    })
+    const driver = await createDriver(ctx as never, { worktreeExit: hooks })
+    await driver.submit('/quit')
+    expect(hooks.cleanup).toHaveBeenCalledOnce()
+    expect(driver.state.worktreeExit).toBeDefined()
+    expect(dispose).not.toHaveBeenCalled()
+  })
+})
+
 /**
  * Tombstone wiring: a successful Remove must clear the project resume anchor
  * when the anchored session's persisted cwd lived under the removed worktree
@@ -339,5 +413,44 @@ describe('createDriver /quit worktree-exit tombstone', () => {
     await driver.worktreeExitSubmit()
     expect(hooks.cleanup).not.toHaveBeenCalled()
     expect(readResumeTarget({ cwd: tempCwd })).toBe('s-wt')
+  })
+})
+
+describe('WS-6 withRemoveHook (WorktreeReplace semantics at /quit cleanup)', () => {
+  const session: WorktreeExitSession = {
+    kind: 'managed', repoRoot: '/repo', worktreePath: '/repo/.claude/worktrees/x',
+    branch: 'worktree-x', baseHead: 'abc', named: true,
+  }
+  const baseHooks: WorktreeExitHooks = {
+    probe: async () => undefined,
+    evidence: async () => ({}),
+    cleanup: async () => ({ branchDeleted: true }),
+    unlock: async () => {},
+  }
+
+  it('skips git removal when every hook exits 0 (replaced)', async () => {
+    let removed = false
+    const hooks = withRemoveHook(
+      { ...baseHooks, cleanup: async () => { removed = true; return { branchDeleted: true } } },
+      async () => 'replaced',
+    )
+    const outcome = await hooks.cleanup(session)
+    expect(outcome).toEqual({ branchDeleted: false })
+    expect(removed).toBe(false)
+  })
+
+  it('keeps the tree (throws) when a hook fails', async () => {
+    const hooks = withRemoveHook(baseHooks, async () => 'kept')
+    await expect(hooks.cleanup(session)).rejects.toThrow(/was kept/)
+  })
+
+  it('falls through to git removal when no hook ran (default)', async () => {
+    let removed = false
+    const hooks = withRemoveHook(
+      { ...baseHooks, cleanup: async () => { removed = true; return { branchDeleted: true } } },
+      async () => 'default',
+    )
+    await hooks.cleanup(session)
+    expect(removed).toBe(true)
   })
 })

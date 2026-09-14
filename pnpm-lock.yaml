@@ -2198,9 +2198,15 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
+      '@dsh-cc/session-cwd':
+        specifier: workspace:^
+        version: link:../../workspace/session-cwd
       '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../resume-pins
+      '@dsh-cc/tool-git-worktree':
+        specifier: workspace:^
+        version: link:../../workspace/tool-git-worktree
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2217,6 +2223,12 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
         version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-bash-local':
+        specifier: link:../../../../deepseek-harness/packages/shell/bash-local
+        version: link:../../../../deepseek-harness/packages/shell/bash-local
+      '@deepseek-ai/dsh-fs-local':
+        specifier: link:../../../../deepseek-harness/packages/fs/fs-local
+        version: link:../../../../deepseek-harness/packages/fs/fs-local
       '@deepseek-ai/dsh-invariants':
         specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
         version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
@@ -2238,12 +2250,18 @@ importers:
       '@deepseek-ai/dsh-session-query':
         specifier: link:../../../../deepseek-harness/packages/session-query/session-query
         version: link:../../../../deepseek-harness/packages/session-query/session-query
+      '@deepseek-ai/dsh-shell':
+        specifier: link:../../../../deepseek-harness/packages/shell/shell
+        version: link:../../../../deepseek-harness/packages/shell/shell
       '@deepseek-ai/dsh-subagent':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent
         version: link:../../../../deepseek-harness/packages/subagent/subagent
       '@deepseek-ai/dsh-subagent-spawn-in-process':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process
         version: link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+        version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
@@ -2347,6 +2365,9 @@ importers:
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
+      '@dsh-cc/tool-git-worktree':
+        specifier: workspace:^
+        version: link:../../workspace/tool-git-worktree
       highlight.js:
         specifier: 11.12.0
         version: 11.12.0
@@ -2453,12 +2474,21 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-user-approval':
+        specifier: link:../../../../deepseek-harness/packages/interaction/user-approval
+        version: link:../../../../deepseek-harness/packages/interaction/user-approval
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/hook-protocol':
+        specifier: link:../../hooks/hook-protocol
+        version: link:../../hooks/hook-protocol
       '@dsh-cc/session-cwd':
         specifier: link:../session-cwd
         version: link:../session-cwd
+      '@dsh-cc/settings-cascade':
+        specifier: link:../../settings/settings-cascade
+        version: link:../../settings/settings-cascade
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools

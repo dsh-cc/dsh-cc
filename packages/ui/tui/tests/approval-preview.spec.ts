@@ -118,6 +118,11 @@ describe('payloadOf dispatch', () => {
 })
 
 describe('allowRuleOf rule generation', () => {
+  it('never derives a persisted rule for EnterWorktree (the outside-path ask always fires)', () => {
+    expect(allowRuleOf('EnterWorktree', { kind: 'args', json: '{"path":"/tmp/x"}' })).toBeUndefined()
+    expect(allowRuleOf('EnterWorktree', undefined)).toBeUndefined()
+  })
+
   it('writes a trailing-space first-word prefix rule for shell commands', () => {
     expect(allowRuleOf('Bash', { kind: 'command', command: 'npm install foo' })).toBe('Bash(npm )')
   })

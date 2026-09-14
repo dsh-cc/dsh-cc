@@ -9,7 +9,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { bootstrapCommand, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, interceptResume, parseWorktreeFlag, planWorktree, PROFILE, readBuildInfo, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, versionGate, worktreeAddArgv, worktreeEnv } from '../bootstrap.mjs'
+import { bootstrapCommand, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, interceptResume, parseLocalConfig, parseWorktreeFlag, parseWorktreeRef, planWorktree, planWorktreeRef, prFetchRefs, remoteHost, PROFILE, readBuildInfo, repoRootFromCommonDir, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal } from '../bootstrap.mjs'
+import { readWorktreeSettings, resolveBaseRef, sweepWorktrees, SWEEP_CAP_MS, worktreeReuseReset, worktreeSettingsPaths } from '../worktree-lifecycle.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ownVersion = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version
@@ -65,6 +66,36 @@ if (restorePlan !== null) runStoreRestore(profileDir, ownVersion)
 // DSH_CC_AUTO_RESUME=1 would otherwise defeat an explicit --new / --worktree.
 const env0 = sanitizeInheritedEnv({ ...process.env })
 
+// WS-4 boot-time sweep: remove long-orphaned dsh-cc worktrees and REPORT
+// stale dsh-cc session locks (locks are never auto-released — no
+// trustworthy cross-process liveness oracle). Runs on every launch whether
+// or not this launch is a --worktree session, never does network I/O, is
+// bounded by the 10s cap, and degrades to a silent no-op on any failure —
+// launch must never block on the sweep.
+try {
+  const sweepCommon = spawnSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8', timeout: 2000 })
+  const sweepRoot = sweepCommon.status === 0 ? repoRootFromCommonDir(process.cwd(), sweepCommon.stdout) : undefined
+  if (sweepRoot !== undefined && existsSync(sweepRoot)) {
+    const sweepSettings = readWorktreeSettings(worktreeSettingsPaths({ home, projectRoot: sweepRoot }))
+    const swept = sweepWorktrees({
+      repoRoot: sweepRoot,
+      cleanupPeriodDays: sweepSettings.cleanupPeriodDays,
+      git: (argv, opts) => spawnSync('git', argv, {
+        encoding: 'utf8',
+        ...(opts?.timeoutMs ? { timeout: opts.timeoutMs } : {}),
+        ...(opts?.cwd ? { cwd: opts.cwd } : {}),
+      }),
+      onAdvisory: line => console.error(line),
+      deadline: SWEEP_CAP_MS,
+    })
+    if (swept.removed.length > 0) {
+      console.error(`dsh-cc: swept ${swept.removed.length} stale worktree(s) older than ${sweepSettings.cleanupPeriodDays} days`)
+    }
+  }
+} catch {
+  // Sweep failures never block launch.
+}
+
 // `--worktree [name]` is intercepted here (never forwarded to dsh): the
 // launcher creates `<repoRoot>/.claude/worktrees/<slug>` itself and starts
 // the session inside it, marking it via DSH_CC_WORKTREE so the TUI offers
@@ -76,12 +107,31 @@ if (worktree.name !== undefined) {
   // of this block. A REUSED worktree leaves DSH_CC_RESUME_SESSION undefined,
   // so interceptResume sets DSH_CC_AUTO_RESUME=1 and the TUI resumes the
   // project's last session.
-  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
-  if (top.error || top.status !== 0) {
+  // WS-1 root pinning: anchor at the git common dir so a session launched
+  // from inside a linked worktree still creates a SIBLING under the main
+  // root's .claude/worktrees/, never a nested tree.
+  const common = spawnSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' })
+  if (common.error || common.status !== 0) {
     console.error('dsh-cc: --worktree requires a git repository (run from inside a git working tree).')
     process.exit(1)
   }
-  const repoRoot = top.stdout.trim()
+  const repoRoot = repoRootFromCommonDir(process.cwd(), common.stdout)
+  if (repoRoot === undefined || !existsSync(repoRoot)) {
+    console.error('dsh-cc: --worktree requires a git repository (could not locate the main checkout).')
+    process.exit(1)
+  }
+  // WS-1: neutralize repository-local filter drivers — read the local config
+  // up front and refuse on unreadable config or CC-parity refusal shapes.
+  const localConfig = spawnSync('git', ['-C', repoRoot, 'config', '--local', '--list', '-z'], { encoding: 'utf8' })
+  if (localConfig.error || localConfig.status !== 0) {
+    console.error('dsh-cc: refusing to create a worktree: repository local config is unreadable.')
+    process.exit(1)
+  }
+  const configScan = parseLocalConfig(localConfig.stdout)
+  if (configScan.refusals.length > 0) {
+    console.error(`dsh-cc: refusing to create a worktree: ${configScan.refusals.join('; ')}`)
+    process.exit(1)
+  }
   // Drop stale registrations left by crashed sessions before planning paths.
   spawnSync('git', ['-C', repoRoot, 'worktree', 'prune'], { encoding: 'utf8' })
   const head = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' })
@@ -89,19 +139,109 @@ if (worktree.name !== undefined) {
     console.error('dsh-cc: could not resolve HEAD; is this a repository without commits?')
     process.exit(1)
   }
-  const named = worktree.name !== null
+  // WS-4: read the `worktree` settings subset (user → project → local,
+  // fail-open) and resolve the creation base. The refresh fetch (when the
+  // cached origin/HEAD is older than 24h) is capped at 5s and happens on
+  // the creation path only.
+  const wtSettings = readWorktreeSettings(worktreeSettingsPaths({ home, projectRoot: repoRoot }))
+  const base = await resolveBaseRef(
+    (argv, opts) => spawnSync('git', argv, {
+      encoding: 'utf8',
+      cwd: repoRoot,
+      ...(opts?.timeoutMs ? { timeout: opts.timeoutMs } : {}),
+    }),
+    wtSettings.baseRef,
+  )
+  const baseHead = base === 'HEAD'
+    ? head.stdout.trim()
+    : (spawnSync('git', ['-C', repoRoot, 'rev-parse', base], { encoding: 'utf8' }).stdout.trim() || head.stdout.trim())
+  // WS-6 item 3: PR references (`#<n>`, GitHub PR / GitLab MR URLs) are
+  // parsed BEFORE any slug validation; the fetched head becomes the base.
+  // Pre-build limitation: no hooks run on this path (documented deviation).
+  const pr = parseWorktreeRef(worktree.name)
+  let prBase = null
+  if (pr !== undefined) {
+    let host = pr.host
+    if (host === undefined) {
+      const url = spawnSync('git', ['-C', repoRoot, 'remote', 'get-url', 'origin'], { encoding: 'utf8' })
+      host = url.status === 0 ? remoteHost(url.stdout) : undefined
+    }
+    const refs = prFetchRefs(host, pr.pr)
+    let fetched = null
+    for (const ref of refs) {
+      const f = spawnSync('git', ['-C', repoRoot, 'fetch', 'origin', ref], { encoding: 'utf8', timeout: 5000 })
+      if (!f.error && f.status === 0) { fetched = ref; break }
+    }
+    if (fetched === null) {
+      console.error(`dsh-cc: could not resolve PR ${pr.pr} from origin (tried ${refs.join(', ')}). Check the reference, the remote, and your network.`)
+      process.exit(1)
+    }
+    prBase = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'FETCH_HEAD'], { encoding: 'utf8' }).stdout.trim() || null
+    if (prBase === null) {
+      console.error(`dsh-cc: fetched ${fetched} but could not resolve FETCH_HEAD.`)
+      process.exit(1)
+    }
+  }
+  const createBase = prBase ?? base
+  // WS-4: `git worktree lock --reason="dsh-cc session <slug>"` at managed
+  // session start (created OR reused). Pre-2.15 git without `worktree
+  // lock` is a tolerated no-op with a one-line warn.
+  const lockWorktreeSession = (slug, path) => {
+    const lock = spawnSync('git', ['-C', repoRoot, 'worktree', 'lock', `--reason=dsh-cc session ${slug}`, path], { encoding: 'utf8' })
+    if (lock.status !== 0) {
+      if (/unknown option|unknown switch/i.test(lock.stderr ?? '')) {
+        console.error(`dsh-cc: git worktree lock unsupported by this git version; ${path} left unlocked`)
+      } else {
+        console.error(`dsh-cc: could not lock worktree ${path}: ${(lock.stderr ?? '').trim()}`)
+      }
+    }
+  }
+  // A PR reference is user-pinned: the /quit overlay treats it as named.
+  const named = worktree.name !== null || pr !== undefined
   let plan = null
   let created = false
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     let candidate
     try {
-      candidate = planWorktree(repoRoot, worktree.name)
+      candidate = pr !== undefined ? planWorktreeRef(repoRoot, pr.pr) : planWorktree(repoRoot, worktree.name)
     } catch (error) {
       console.error(`dsh-cc: ${error.message}`)
       process.exit(1)
     }
+    // WS-1 symlink refusal on the creation route (CC v2.1.212 parity).
+    const symlink = symlinkedPath([join(repoRoot, '.claude'), join(repoRoot, '.claude', 'worktrees'), candidate.worktreePath])
+    if (symlink !== null) {
+      console.error(`dsh-cc: refusing to create a worktree: a creation path is a symlink: ${symlink}`)
+      process.exit(1)
+    }
     const pathExists = existsSync(candidate.worktreePath)
     if (existingWorktreeDecision({ named, pathExists }) === 'reuse') {
+      // WS-1 adoption gate: verify the existing directory's git identity
+      // before handing it over (leave the directory in place on refusal).
+      const refusal = worktreeIdentityRefusal(candidate.worktreePath, repoRoot)
+      if (refusal !== null) {
+        console.error(`dsh-cc: ${refusal}`)
+        process.exit(1)
+      }
+      // WS-4 merged-reset rule: when the reused tree is clean, still on its
+      // worktree-* branch, and its own commits are all reachable from the
+      // resolved fresh base, hard-reset it to the base before handover;
+      // otherwise (or when any probe is unverifiable) continue at the old
+      // tip. `source: 'name'` keeps the WS-6 PR-reuse skip open.
+      const reset = worktreeReuseReset({
+        plan: candidate,
+        repoRoot,
+        freshBase: base,
+        source: pr !== undefined ? 'pr' : 'name',
+        git: (argv, opts) => spawnSync('git', argv, {
+          encoding: 'utf8',
+          ...(opts?.timeoutMs ? { timeout: opts.timeoutMs } : {}),
+          ...(opts?.cwd ? { cwd: opts.cwd } : {}),
+        }),
+      })
+      if (reset.action === 'reset') {
+        console.error(`dsh-cc: reset reused worktree "${candidate.slug}" to ${base}`)
+      }
       plan = candidate
       created = false
       break
@@ -110,7 +250,7 @@ if (worktree.name !== undefined) {
       ? `path already exists: ${candidate.worktreePath}`
       : null
     if (failure === null) {
-      const add = spawnSync('git', ['-C', repoRoot, ...worktreeAddArgv(candidate)], { encoding: 'utf8' })
+      const add = spawnSync('git', ['-C', repoRoot, ...worktreeAddArgv(candidate, configScan.filters, createBase)], { encoding: 'utf8' })
       if (add.error || add.status !== 0) {
         failure = (add.stderr ?? (add.error ? String(add.error) : '')).trim() || 'git worktree add failed'
       }
@@ -133,7 +273,8 @@ if (worktree.name !== undefined) {
     console.error('dsh-cc: could not allocate a worktree name after several attempts; try --worktree <name>.')
     process.exit(1)
   }
-  Object.assign(env0, worktreeEnv(plan, repoRoot, head.stdout.trim()))
+  lockWorktreeSession(plan.slug, plan.worktreePath)
+  Object.assign(env0, worktreeEnv(plan, repoRoot, prBase ?? baseHead, named))
   spawnCwd = plan.worktreePath
   const verb = created ? 'created' : 'reusing'
   console.error(`dsh-cc: worktree "${plan.slug}" ${verb} at ${plan.worktreePath} (branch ${plan.branch})`)

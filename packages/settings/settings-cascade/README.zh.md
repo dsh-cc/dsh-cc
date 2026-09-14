@@ -37,7 +37,7 @@
 
 ## 权限 schema
 
-`permissions` 字段 schema（`allow`、`deny`、`ask`、`defaultMode`、`disableBypassPermissionsMode`、`additionalDirectories`、`protectedFiles`、`dangerousPatterns`）与 Claude Code 的 settings.json 一致，以 `PermissionsSchema` 导出（连同 `PermissionRuleSchema` 与 `PERMISSION_MODES`），供权限规则引擎使用。
+`permissions` 字段 schema（`allow`、`deny`、`ask`、`defaultMode`、`disableBypassPermissionsMode`、`additionalDirectories`、`protectedFiles`、`dangerousPatterns`）与 Claude Code 的 settings.json 一致，以 `PermissionsSchema` 导出（连同 `PermissionRuleSchema` 与 `PERMISSION_MODES`），供权限规则引擎使用。`worktree` 设置节（`baseRef: 'fresh' | 'head'`、`cleanupPeriodDays`）以 `WorktreeSchema` 导出（连同消费端默认值辅助函数 `worktreeSettings()`），供 git-worktree 工具使用。
 
 ## 模型体验
 

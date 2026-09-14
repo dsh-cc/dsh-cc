@@ -9,10 +9,16 @@
   ],
   "references": [
     {
+      "path": "../../hooks/hook-protocol"
+    },
+    {
       "path": "../../core/tools"
     },
     {
       "path": "../session-cwd"
+    },
+    {
+      "path": "../../settings/settings-cascade"
     }
   ]
 }

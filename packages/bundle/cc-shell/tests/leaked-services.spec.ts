@@ -127,13 +127,20 @@ describe('cc-shell glue leakedServices (cc-services isolate map)', () => {
     const group = isolateGroup(root, CC_SERVICES_ISOLATE.filter(name => name !== 'hooks'))
     const bridge = group.plugin(HooksClaude, { configPath: join(tmp, 'nonexistent-hooks.json') })
     const fiber = await bridge
-    expect(leakedServices(root, fiber)).toEqual(['hooks'])
+    // hookRun (WS-6, docs/plans/2026-09-14-cc-worktree-parity.md) is a
+    // deliberately UNISOLATED public invoke seam — tool-git-worktree mounts
+    // top-level (outside cc-services), so isolating hookRun would shadow it
+    // exactly like the ccPlugins root-realm exception documented in
+    // agent.cordis.yml. It therefore leaks in every mount shape by design.
+    expect(leakedServices(root, fiber)).toEqual(['hookRun', 'hooks'])
     await fiber.dispose()
     // With the full isolate map, the same mount leaks nothing.
     const okGroup = isolateGroup(root, CC_SERVICES_ISOLATE)
     const ok = okGroup.plugin(HooksClaude, { configPath: join(tmp, 'nonexistent-hooks.json') })
     const okFiber = await ok
-    expect(leakedServices(root, okFiber)).toEqual([])
+    // The full map still cannot contain hookRun: it is the deliberately
+    // public seam (see above), provided without an isolate key.
+    expect(leakedServices(root, okFiber)).toEqual(['hookRun'])
     await okFiber.dispose()
     await root.fiber.dispose()
   })

@@ -78,6 +78,14 @@ describe('git command construction', () => {
     })
   })
 
+  it('add prepends empty -c overrides neutralizing repository-local filter drivers', () => {
+    expect(addWorktree(repo, 'f', ['lfs']).command).toBe(
+      "git '-c' 'filter.lfs.command=' '-c' 'filter.lfs.smudge=' '-c' 'filter.lfs.clean=' "
+      + "'-c' 'filter.lfs.process=' '-c' 'filter.lfs.required=false' "
+      + `worktree add -B 'worktree-f' '${join(repo, '.claude', 'worktrees', 'f')}' HEAD`,
+    )
+  })
+
   it('forceRemove runs from the repo root with a quoted path', () => {
     expect(forceRemoveWorktree(repo, path)).toEqual({
       command: `git worktree remove --force '${path}'`,

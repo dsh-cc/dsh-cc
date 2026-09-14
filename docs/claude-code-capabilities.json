@@ -2072,6 +2072,69 @@
         "kind": "none"
       }
     },
+    "hooks.worktree-events": {
+      "title": "WorktreeCreate/WorktreeRemove hooks",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when a worktree is created (with its name, path, branch, and origin: `--worktree` flag, EnterWorktree, or subagent isolation) and when it is removed (`exit`, `subagent-finished`, `sweep`). A WorktreeCreate hook exiting 0 with a stdout path replaces default creation (the path is adopted after a git-identity check; a metadata-less directory is accepted only when no git repository contains it); a WorktreeRemove hook replaces default removal and a failing hook keeps the tree.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks-guide",
+            "retrieved": "2026-09-14"
+          },
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-09-14"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: hooks-claude-code"
+        },
+        {
+          "type": "source",
+          "path": "packages/hooks/hooks-claude-code/src/run-point.ts",
+          "anchor": "HookRunResult"
+        },
+        {
+          "type": "test",
+          "path": "packages/hooks/hooks-claude-code/tests/worktree-events.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/workspace/tool-git-worktree/src/hooks.ts",
+          "anchor": "runWorktreeCreateHook"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/hooks.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Launcher-side lifecycles cannot run hooks: the pre-build `bin/dsh-cc.js` has no hooks bridge, so `--worktree` (`worktree-flag`) creation and the boot-time sweep (`sweep`) removal keep their git-direct behavior — the two source values exist in the payload type for CC-shape parity. The in-process points (EnterWorktree/ExitWorktree, subagent isolation, TUI /quit cleanup) run the hooks through the bridge's `hookRun` invoke seam."
+      }
+    },
     "commands.agents": {
       "title": "/agents",
       "category": "commands",
@@ -3312,7 +3375,7 @@
       "category": "sessions",
       "plane": "preset",
       "upstream": {
-        "summary": "jsonl session storage with resume and fork; session titles; /rename to pin a user title.",
+        "summary": "jsonl session storage with resume and fork; session titles; /rename to pin a user title; resuming a session recorded in a `.claude/worktrees/` worktree verifies the worktree's git identity (registration under the same repo's `.git/worktrees/`, no network paths, not containing the launch dir) and warns per refusal class instead of silently following a destroyed or redirected tree.",
         "refs": []
       },
       "dimensions": {
@@ -3370,10 +3433,19 @@
         {
           "type": "test",
           "path": "packages/ui/tui/tests/session-list.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/worktree-identity.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/worktree-identity.spec.ts"
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "downgrade",
+        "summary": "A failed resume-identity verification warns and stays in the launch directory; CC additionally re-binds the session into the launch dir and clears the persisted binding, which needs the upstream `resume({ meta })` cwd-override seam (plan §11.3)."
       }
     },
     "memory.claude-md-imports": {
@@ -3519,6 +3591,62 @@
       "deviation": {
         "kind": "downgrade",
         "summary": "Loader + base tool-skill, CC paths conditional activation, bundled subset (debug/simplify/batch), and TUI /name routing all work; CC's verify/stuck skills are not ported (ant-only; verify companion files absent)."
+      }
+    },
+    "subagents.isolation": {
+      "title": "Subagent isolation: worktree",
+      "category": "subagents",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Agent definitions accept `isolation: worktree`; the Task tool runs the child in an isolated git worktree under <repo>/.claude/worktrees/ (fresh branch from HEAD, worktree kept or removed after the run).",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/sub-agents",
+            "retrieved": "2026-09-14"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: tool-task"
+        },
+        {
+          "type": "source",
+          "path": "packages/subagent/task/src/worktree-isolation.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/worktree-isolation.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/worktree-isolation.integration.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/workspace/tool-git-worktree/src/worktree.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "The child's session-cwd overlay moves to the worktree (permission-rules workspace, boundary guard, context buckets follow), but the child's header.cwd, the harness sandbox root, and the bash default workdir stay the parent's (needs a SubagentStartRequest.cwd seam, upstream §11.2). Containment is therefore strongest when the parent runs at the repo root; a parent cwd that cannot contain <repoRoot>/.claude/worktrees refuses the dispatch. Delegated children cannot answer approval prompts, so sandbox-denied writes hard-fail — the absolute-path contract is injected into the persona and the first prompt line. Serena (user-mounted) pins one project root per session and does not follow the child."
       }
     },
     "subagents.task-tool": {
@@ -4236,12 +4364,12 @@
         "summary": "Frontmatter aliases (sonnet/opus/haiku/fable + dsh lanes + open set), settings model-aliases overlay with null-delete and builtin fallback, shared toAgentOptions per-field inheritance, and the ccModelRoutes service all work. Follow-ups: the /model command, ANTHROPIC_* env vars (no Anthropic semantics), and aliasing the main-session default model."
       }
     },
-    "workspace.worktree": {
-      "title": "Worktree tools",
+    "workspace.worktree-ecosystem": {
+      "title": "Worktree ecosystem (include-copy, PR references, path form)",
       "category": "workspace",
       "plane": "preset",
       "upstream": {
-        "summary": "Enter/exit isolated git worktrees mid-session.",
+        "summary": "`.worktreeinclude` copies matched, git-check-ignore-confirmed files (gitignore subset: comments, `!` negation, trailing `/`, `*`, `?`, `**`, plus CC's `**/`-piercing rule) into every newly created worktree; `--worktree` accepts `#<n>` PR references and GitHub PR / GitLab MR URLs, fetching the head from origin (5s cap, clear failure when unresolvable) and creating at `.claude/worktrees/pr-<n>` on `worktree-pr-<n>` with PR-reuse never resetting; EnterWorktree gains a `path` form that adopts an existing directory directly under the convention dir and ALWAYS asks outside it — \"don't ask again\" persistence cannot suppress the prompt, only bypassPermissions skips it.",
         "refs": []
       },
       "dimensions": {
@@ -4252,10 +4380,159 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "partial"
         },
         "ux": {
-          "status": "full"
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: tool-git-worktree"
+        },
+        {
+          "type": "source",
+          "path": "packages/workspace/tool-git-worktree/src/include.ts",
+          "anchor": "copyIncludedFiles"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/include.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/workspace/tool-git-worktree/src/pathform.ts",
+          "anchor": "resolveAdoptPath"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/pathform.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/launcher/tui/tests/worktree.spec.ts",
+          "anchor": "WS-6 PR references"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "`.worktreeinclude` copy is tool-side only: launcher `--worktree` sessions (pre-build plain JS) have no include-copy — cloning the matcher would be the first semantic duplication (a parser, not a command string). PR-reference worktrees also skip the reuse-reset (CC parity). EnterWorktree keeps allowing `name` creation from within a worktree (WS-1 pinned root), strictly more permissive than CC."
+      }
+    },
+    "workspace.worktree-launcher": {
+      "title": "Worktree launcher (--worktree)",
+      "category": "workspace",
+      "plane": "host",
+      "upstream": {
+        "summary": "Plain-JS launcher creates or reuses `.claude/worktrees/` sessions via `--worktree`, with the same creation hardening as the tool side: common-dir root pinning, repository-local filter-driver neutralization, symlink refusal, and the adoption identity check on named reuse.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/launcher/tui/bootstrap.mjs",
+          "anchor": "export function worktreeIdentityRefusal"
+        },
+        {
+          "type": "test",
+          "path": "packages/launcher/tui/tests/worktree.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Launcher `--worktree` sessions keep git-direct creation: the pre-build bin/dsh-cc.js cannot run hooks or read the settings cascade, and there is no include-copy, no baseRef freshness, and no PR-reference support (WS-4/WS-6 scope)."
+      }
+    },
+    "workspace.worktree-lifecycle": {
+      "title": "Worktree lifecycle (settings, locks, sweep, base selection)",
+      "category": "workspace",
+      "plane": "preset",
+      "upstream": {
+        "summary": "`worktree` settings section (`baseRef` fresh/head, `cleanupPeriodDays`) shared through the settings cascade; session locks (`git worktree lock --reason \"dsh-cc session <id>\"`) taken at EnterWorktree create and launcher-managed session start and released at exit/remove/TUI dispose; `baseRef: fresh` branches new worktrees from the cached origin/HEAD with a 24h-stale refresh fetch (5s cap); a boot-time sweep removes clean, unpushed-free worktrees older than the window and reports stale dsh-cc-prefixed locks as advisories (never auto-releases them); named reuse hard-resets to the fresh base when the tree is clean and all its commits are merged; quitting a managed, user-unnamed session with a fully clean tree (zero changes, zero commits) removes the worktree, deletes its owned branch, and tombstones the resume anchor silently.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: tool-git-worktree"
+        },
+        {
+          "type": "source",
+          "path": "packages/launcher/tui/worktree-lifecycle.mjs"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/lifecycle.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/launcher/tui/tests/worktree-lifecycle.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/worktree-exit.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/driver-worktree-exit.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "The launcher cannot load the settings cascade (pre-build, dependency-free): it performs a fail-open JSON subset read of the user/project/local settings files only — flag/policy layers and hot-reload are cascade-side. dsh-cc never auto-releases stale locks (no trustworthy cross-process liveness oracle): killed sessions surface as advisory output, never silent deletion, unlike CC. WorktreeCreate/WorktreeRemove hooks and PR-reference reuse are tracked on `hooks.worktree-events` / `workspace.worktree-ecosystem` (WS-6); the launcher-side hook gap is documented there."
+      }
+    },
+    "workspace.worktree-tools": {
+      "title": "Worktree tools (EnterWorktree/ExitWorktree)",
+      "category": "workspace",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Enter/exit isolated git worktrees mid-session with creation hardening: the repository root is pinned to the git common dir, repository-local filter drivers are neutralized before `git worktree add` (unreadable local config, includeIf, and ambiguous filter names refuse), symlinked creation paths refuse, and adopting an existing directory verifies its git identity. Exit keeps a fail-closed gate with discard confirmation.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
         }
       },
       "evidence": [
@@ -4267,10 +4544,19 @@
         {
           "type": "test",
           "path": "packages/workspace/tool-git-worktree/tests/worktree.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/harden.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/integration.spec.ts"
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "downgrade",
+        "summary": "Pending vs CC: git writes to the shared `.git` (worktree add/remove, branch ops) require a sandbox escalation; the auto-allow interim was evaluated and rejected — the approval payload carries no command identity and an argv0 gate is exploitable via `git -c core.fsmonitor=<cmd>`."
       }
     },
     "ux.output-styles": {

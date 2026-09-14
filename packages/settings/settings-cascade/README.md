@@ -37,7 +37,7 @@ Defaulting is one explicit `resolveSpec(config)` step.
 
 ## Permissions schema
 
-The `permissions` field schema (`allow`, `deny`, `ask`, `defaultMode`, `disableBypassPermissionsMode`, `additionalDirectories`, `protectedFiles`, `dangerousPatterns`), matching Claude Code's settings.json, is exported as `PermissionsSchema` (with `PermissionRuleSchema` and `PERMISSION_MODES`) for the permission-rule engine. The optional LLM risk-classifier section is exported as `AutoModeSchema` (delivered as `permissions.autoMode`, not a root-level `autoMode` key — a documented deviation from Claude Code's settings surface).
+The `permissions` field schema (`allow`, `deny`, `ask`, `defaultMode`, `disableBypassPermissionsMode`, `additionalDirectories`, `protectedFiles`, `dangerousPatterns`), matching Claude Code's settings.json, is exported as `PermissionsSchema` (with `PermissionRuleSchema` and `PERMISSION_MODES`) for the permission-rule engine. The optional LLM risk-classifier section is exported as `AutoModeSchema` (delivered as `permissions.autoMode`, not a root-level `autoMode` key — a documented deviation from Claude Code's settings surface). The `worktree` section (`baseRef: 'fresh' | 'head'`, `cleanupPeriodDays`) is exported as `WorktreeSchema` (with the `worktreeSettings()` consumption-defaults helper) for the git-worktree tools.
 
 ## Model Experience
 

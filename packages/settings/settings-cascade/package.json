@@ -9,10 +9,6 @@
   },
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./lib/index.d.ts",
-      "default": "./lib/index.js"
-    },
     "./invariant": {
       "types": "./lib/invariant.d.ts",
       "default": "./lib/invariant.js"
@@ -21,9 +17,17 @@
       "types": "./lib/permissions.d.ts",
       "default": "./lib/permissions.js"
     },
+    "./worktree": {
+      "types": "./lib/worktree.d.ts",
+      "default": "./lib/worktree.js"
+    },
     "./local-root": {
       "types": "./lib/local-root.d.ts",
       "default": "./lib/local-root.js"
+    },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"

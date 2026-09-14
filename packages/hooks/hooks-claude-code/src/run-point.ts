@@ -17,8 +17,8 @@ import {
   mergeHookOutputs,
   type HookIssue,
   type HookOutput,
+  type HookRunResult,
   type MatcherGroup,
-  type MergedHookOutcome,
 } from '@dsh-cc/hook-protocol'
 import type { ClaudeCodeHookConfig } from './config.ts'
 import { dispatchHook } from './dispatch.ts'
@@ -60,7 +60,7 @@ export interface RunPointDeps {
  * Build the runner. See index.ts for the per-point call sites; the returned
  * function's contract is unchanged from the pre-split in-apply closure.
  */
-export function createRunPoint(deps: RunPointDeps): (point: string, matchQuery: string, payload: unknown, opts: { agent?: Agent; turn?: number; readonly signal: AbortSignal }) => Promise<MergedHookOutcome> {
+export function createRunPoint(deps: RunPointDeps): (point: string, matchQuery: string, payload: unknown, opts: { agent?: Agent; turn?: number; readonly signal: AbortSignal }) => Promise<HookRunResult> {
   const { ctx, parsed, config, defaultTimeoutMs, stderrSummaryMaxChars, httpAllowedEnvVars, recordIssue } = deps
   /**
    * Run every hook configured for `point` whose matcher selects
@@ -77,7 +77,7 @@ export function createRunPoint(deps: RunPointDeps): (point: string, matchQuery: 
     matchQuery: string,
     payload: unknown,
     opts: { agent?: Agent; turn?: number; readonly signal: AbortSignal },
-  ): Promise<MergedHookOutcome> {
+  ): Promise<HookRunResult> {
     const groups: MatcherGroup[] = parsed[point] ?? []
     const outputs: HookOutput[] = []
     // Run the hook in the agent's session workspace (the `session/new` cwd on the session
@@ -130,7 +130,9 @@ export function createRunPoint(deps: RunPointDeps): (point: string, matchQuery: 
         }
       }
     }
-    return mergeHookOutputs(outputs)
+    // WS-6 invoke seam: the raw outputs ride along so event hooks (e.g.
+    // WorktreeCreate) that communicate through plain stdout stay decodable.
+    return { ...mergeHookOutputs(outputs), outputs }
   }
 }
 

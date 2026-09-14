@@ -10,9 +10,37 @@
  */
 
 import type { HookOutput } from './types.ts'
+import type {} from '@deepseek-ai/cordis'
 
 /** The single decision a hook point resolves to after merging all matched hooks. */
 export type MergedDecision = 'allow' | 'ask' | 'deny' | 'none'
+
+/**
+ * The run-point outcome plus the raw per-hook outputs that folded into it.
+ * The merged view alone drops stdout, which event hooks like WorktreeCreate
+ * communicate through — the invoke seam therefore returns this supertype.
+ */
+export interface HookRunResult extends MergedHookOutcome {
+  /** Every matched hook's decoded output, in hook order (empty when none matched). */
+  outputs: HookOutput[]
+}
+
+/**
+ * The invoke seam a hooks bridge provides (WS-6): run every hook configured
+ * for `point`, with `payload` on stdin, and resolve the folded outcome WITH
+ * the raw outputs. Optional — consumers (tool-git-worktree's
+ * WorktreeCreate/WorktreeRemove) degrade to their default behavior when no
+ * bridge is mounted.
+ */
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    hookRun?: (
+      point: string,
+      payload: unknown,
+      opts: { signal: AbortSignal },
+    ) => Promise<HookRunResult>
+  }
+}
 
 /** The folded outcome of every hook that matched one point. */
 export interface MergedHookOutcome {

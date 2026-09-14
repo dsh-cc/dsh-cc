@@ -34,7 +34,10 @@
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.1.5-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/settings-cascade": "workspace:^",
+    "@dsh-cc/hook-protocol": "workspace:^",
+    "@deepseek-ai/dsh-user-approval": ">=0.1.5-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
@@ -51,7 +54,10 @@
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local"
+    "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
+    "@dsh-cc/settings-cascade": "link:../../settings/settings-cascade",
+    "@dsh-cc/hook-protocol": "link:../../hooks/hook-protocol",
+    "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval"
   },
   "publishConfig": {
     "access": "public"
