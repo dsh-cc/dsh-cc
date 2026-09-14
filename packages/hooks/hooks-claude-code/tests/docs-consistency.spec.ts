@@ -49,11 +49,11 @@ describe('hooks-claude-code README event enumerations', () => {
         expect(unsupportedStart).toBeGreaterThan(supportedStart)
       })
 
-      it('supported enumeration === SUPPORTED_CLAUDE_EVENTS (18)', () => {
+      it('supported enumeration === SUPPORTED_CLAUDE_EVENTS (20)', () => {
         const section = readme.slice(supportedStart, unsupportedStart)
         const names = eventNames(section)
         expect(new Set(names)).toEqual(new Set(SUPPORTED_CLAUDE_EVENTS))
-        expect(SUPPORTED_CLAUDE_EVENTS).toHaveLength(18)
+        expect(SUPPORTED_CLAUDE_EVENTS).toHaveLength(20)
       })
 
       it('stated unsupported count equals the enumerated unsupported names', () => {
@@ -65,7 +65,7 @@ describe('hooks-claude-code README event enumerations', () => {
         const names = eventNames(end === -1 ? rest : rest.slice(0, end))
         expect(Number(count)).toBe(names.length)
         expect(names).toContain('UserPromptCancel')
-        expect(Number(count)).toBe(14)
+        expect(Number(count)).toBe(12)
       })
     })
   }

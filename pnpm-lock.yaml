@@ -2474,9 +2474,15 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-user-approval':
+        specifier: link:../../../../deepseek-harness/packages/interaction/user-approval
+        version: link:../../../../deepseek-harness/packages/interaction/user-approval
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/hook-protocol':
+        specifier: link:../../hooks/hook-protocol
+        version: link:../../hooks/hook-protocol
       '@dsh-cc/session-cwd':
         specifier: link:../session-cwd
         version: link:../session-cwd

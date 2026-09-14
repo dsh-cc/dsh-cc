@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../hooks/hook-protocol"
+    },
+    {
       "path": "../../core/tools"
     },
     {

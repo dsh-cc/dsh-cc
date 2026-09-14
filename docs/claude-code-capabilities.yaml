@@ -1112,6 +1112,44 @@ capabilities:
       - { type: test, path: packages/hooks/hooks-claude-code/tests/events.spec.ts }
     deviation: { kind: none }
 
+  hooks.worktree-events:
+    title: WorktreeCreate/WorktreeRemove hooks
+    category: hooks
+    plane: preset
+    upstream:
+      summary: >-
+        Fires when a worktree is created (with its name, path, branch, and
+        origin: `--worktree` flag, EnterWorktree, or subagent isolation) and
+        when it is removed (`exit`, `subagent-finished`, `sweep`). A
+        WorktreeCreate hook exiting 0 with a stdout path replaces default
+        creation (the path is adopted after a git-identity check; a
+        metadata-less directory is accepted only when no git repository
+        contains it); a WorktreeRemove hook replaces default removal and a
+        failing hook keeps the tree.
+      refs:
+        - { source: cc-docs, path: /docs/en/hooks-guide, retrieved: '2026-09-14' }
+        - { source: cc-docs, path: /docs/en/hooks, retrieved: '2026-09-14' }
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: partial
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: hooks-claude-code" }
+      - { type: source, path: packages/hooks/hooks-claude-code/src/run-point.ts, anchor: "HookRunResult" }
+      - { type: test, path: packages/hooks/hooks-claude-code/tests/worktree-events.spec.ts }
+      - { type: source, path: packages/workspace/tool-git-worktree/src/hooks.ts, anchor: "runWorktreeCreateHook" }
+      - { type: test, path: packages/workspace/tool-git-worktree/tests/hooks.spec.ts }
+    deviation:
+      kind: downgrade
+      summary: >-
+        Launcher-side lifecycles cannot run hooks: the pre-build `bin/dsh-cc.js`
+        has no hooks bridge, so `--worktree` (`worktree-flag`) creation and the
+        boot-time sweep (`sweep`) removal keep their git-direct behavior — the
+        two source values exist in the payload type for CC-shape parity. The
+        in-process points (EnterWorktree/ExitWorktree, subagent isolation, TUI
+        /quit cleanup) run the hooks through the bridge's `hookRun` invoke
+        seam.
   # ── commands ────────────────────────────────────────────────────────────
   # Mounted set taken from packages/preset/cc/agent.cordis.yml reality (21
   # command-* rows) plus commands mounted by non-command rows (/plan via
@@ -2412,6 +2450,46 @@ capabilities:
         (no Anthropic semantics), and aliasing the main-session default model.
 
   # ── workspace ───────────────────────────────────────────────────────────
+  workspace.worktree-ecosystem:
+    title: Worktree ecosystem (include-copy, PR references, path form)
+    category: workspace
+    plane: preset
+    upstream:
+      summary: >-
+        `.worktreeinclude` copies matched, git-check-ignore-confirmed files
+        (gitignore subset: comments, `!` negation, trailing `/`, `*`, `?`,
+        `**`, plus CC's `**/`-piercing rule) into every newly created
+        worktree; `--worktree` accepts `#<n>` PR references and GitHub PR /
+        GitLab MR URLs, fetching the head from origin (5s cap, clear failure
+        when unresolvable) and creating at `.claude/worktrees/pr-<n>` on
+        `worktree-pr-<n>` with PR-reuse never resetting; EnterWorktree gains a
+        `path` form that adopts an existing directory directly under the
+        convention dir and ALWAYS asks outside it — "don't ask again"
+        persistence cannot suppress the prompt, only bypassPermissions skips
+        it.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: partial
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-git-worktree" }
+      - { type: source, path: packages/workspace/tool-git-worktree/src/include.ts, anchor: "copyIncludedFiles" }
+      - { type: test, path: packages/workspace/tool-git-worktree/tests/include.spec.ts }
+      - { type: source, path: packages/workspace/tool-git-worktree/src/pathform.ts, anchor: "resolveAdoptPath" }
+      - { type: test, path: packages/workspace/tool-git-worktree/tests/pathform.spec.ts }
+      - { type: test, path: packages/launcher/tui/tests/worktree.spec.ts, anchor: "WS-6 PR references" }
+    deviation:
+      kind: downgrade
+      summary: >-
+        `.worktreeinclude` copy is tool-side only: launcher `--worktree`
+        sessions (pre-build plain JS) have no include-copy — cloning the
+        matcher would be the first semantic duplication (a parser, not a
+        command string). PR-reference worktrees also skip the reuse-reset (CC
+        parity). EnterWorktree keeps allowing `name` creation from within a
+        worktree (WS-1 pinned root), strictly more permissive than CC.
+
   workspace.worktree-launcher:
     title: Worktree launcher (--worktree)
     category: workspace
@@ -2481,8 +2559,9 @@ capabilities:
         hot-reload are cascade-side. dsh-cc never auto-releases stale locks
         (no trustworthy cross-process liveness oracle): killed sessions
         surface as advisory output, never silent deletion, unlike CC.
-        WorktreeCreate/WorktreeRemove hooks and PR-reference reuse remain
-        pending (WS-6).
+        WorktreeCreate/WorktreeRemove hooks and PR-reference reuse are
+        tracked on `hooks.worktree-events` / `workspace.worktree-ecosystem`
+        (WS-6); the launcher-side hook gap is documented there.
 
   workspace.worktree-tools:
     title: Worktree tools (EnterWorktree/ExitWorktree)
@@ -2511,9 +2590,7 @@ capabilities:
     deviation:
       kind: downgrade
       summary: >-
-        Pending vs CC: `worktree.baseRef` fresh/head, the `path` form,
-        WorktreeCreate/WorktreeRemove hooks, `.worktreeinclude` copy, and
-        lock/sweep lifecycle (WS-3..WS-6). Git writes to the shared `.git`
+        Pending vs CC: git writes to the shared `.git`
         (worktree add/remove, branch ops) require a sandbox escalation; the
         auto-allow interim was evaluated and rejected — the approval payload
         carries no command identity and an argv0 gate is exploitable via

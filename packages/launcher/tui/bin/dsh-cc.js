@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { bootstrapCommand, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, interceptResume, parseLocalConfig, parseWorktreeFlag, planWorktree, PROFILE, readBuildInfo, repoRootFromCommonDir, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal } from '../bootstrap.mjs'
+import { bootstrapCommand, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, interceptResume, parseLocalConfig, parseWorktreeFlag, parseWorktreeRef, planWorktree, planWorktreeRef, prFetchRefs, remoteHost, PROFILE, readBuildInfo, repoRootFromCommonDir, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal } from '../bootstrap.mjs'
 import { readWorktreeSettings, resolveBaseRef, sweepWorktrees, SWEEP_CAP_MS, worktreeReuseReset, worktreeSettingsPaths } from '../worktree-lifecycle.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -155,6 +155,34 @@ if (worktree.name !== undefined) {
   const baseHead = base === 'HEAD'
     ? head.stdout.trim()
     : (spawnSync('git', ['-C', repoRoot, 'rev-parse', base], { encoding: 'utf8' }).stdout.trim() || head.stdout.trim())
+  // WS-6 item 3: PR references (`#<n>`, GitHub PR / GitLab MR URLs) are
+  // parsed BEFORE any slug validation; the fetched head becomes the base.
+  // Pre-build limitation: no hooks run on this path (documented deviation).
+  const pr = parseWorktreeRef(worktree.name)
+  let prBase = null
+  if (pr !== undefined) {
+    let host = pr.host
+    if (host === undefined) {
+      const url = spawnSync('git', ['-C', repoRoot, 'remote', 'get-url', 'origin'], { encoding: 'utf8' })
+      host = url.status === 0 ? remoteHost(url.stdout) : undefined
+    }
+    const refs = prFetchRefs(host, pr.pr)
+    let fetched = null
+    for (const ref of refs) {
+      const f = spawnSync('git', ['-C', repoRoot, 'fetch', 'origin', ref], { encoding: 'utf8', timeout: 5000 })
+      if (!f.error && f.status === 0) { fetched = ref; break }
+    }
+    if (fetched === null) {
+      console.error(`dsh-cc: could not resolve PR ${pr.pr} from origin (tried ${refs.join(', ')}). Check the reference, the remote, and your network.`)
+      process.exit(1)
+    }
+    prBase = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'FETCH_HEAD'], { encoding: 'utf8' }).stdout.trim() || null
+    if (prBase === null) {
+      console.error(`dsh-cc: fetched ${fetched} but could not resolve FETCH_HEAD.`)
+      process.exit(1)
+    }
+  }
+  const createBase = prBase ?? base
   // WS-4: `git worktree lock --reason="dsh-cc session <slug>"` at managed
   // session start (created OR reused). Pre-2.15 git without `worktree
   // lock` is a tolerated no-op with a one-line warn.
@@ -168,13 +196,14 @@ if (worktree.name !== undefined) {
       }
     }
   }
-  const named = worktree.name !== null
+  // A PR reference is user-pinned: the /quit overlay treats it as named.
+  const named = worktree.name !== null || pr !== undefined
   let plan = null
   let created = false
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     let candidate
     try {
-      candidate = planWorktree(repoRoot, worktree.name)
+      candidate = pr !== undefined ? planWorktreeRef(repoRoot, pr.pr) : planWorktree(repoRoot, worktree.name)
     } catch (error) {
       console.error(`dsh-cc: ${error.message}`)
       process.exit(1)
@@ -203,7 +232,7 @@ if (worktree.name !== undefined) {
         plan: candidate,
         repoRoot,
         freshBase: base,
-        source: 'name',
+        source: pr !== undefined ? 'pr' : 'name',
         git: (argv, opts) => spawnSync('git', argv, {
           encoding: 'utf8',
           ...(opts?.timeoutMs ? { timeout: opts.timeoutMs } : {}),
@@ -221,7 +250,7 @@ if (worktree.name !== undefined) {
       ? `path already exists: ${candidate.worktreePath}`
       : null
     if (failure === null) {
-      const add = spawnSync('git', ['-C', repoRoot, ...worktreeAddArgv(candidate, configScan.filters, base)], { encoding: 'utf8' })
+      const add = spawnSync('git', ['-C', repoRoot, ...worktreeAddArgv(candidate, configScan.filters, createBase)], { encoding: 'utf8' })
       if (add.error || add.status !== 0) {
         failure = (add.stderr ?? (add.error ? String(add.error) : '')).trim() || 'git worktree add failed'
       }
@@ -245,7 +274,7 @@ if (worktree.name !== undefined) {
     process.exit(1)
   }
   lockWorktreeSession(plan.slug, plan.worktreePath)
-  Object.assign(env0, worktreeEnv(plan, repoRoot, baseHead, named))
+  Object.assign(env0, worktreeEnv(plan, repoRoot, prBase ?? baseHead, named))
   spawnCwd = plan.worktreePath
   const verb = created ? 'created' : 'reusing'
   console.error(`dsh-cc: worktree "${plan.slug}" ${verb} at ${plan.worktreePath} (branch ${plan.branch})`)

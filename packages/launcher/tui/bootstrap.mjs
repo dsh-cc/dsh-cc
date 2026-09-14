@@ -268,6 +268,62 @@ export function planWorktree(repoRoot, name, rand) {
 }
 
 /**
+ * WS-6 item 3: parse a PR reference `--worktree` value — `#<n>`, a GitHub PR
+ * URL, or a GitLab MR URL. Runs BEFORE any slug validation so `#12` never
+ * reaches validateWorktreeSlug. Anything else is not a PR reference.
+ * @param {string | null | undefined} value - the parsed flag value.
+ * @returns {{ pr: number, host?: string } | undefined}
+ *   `host` is the URL's host when the value was a URL (it selects the fetch
+ *   ref shape); undefined for a bare `#<n>`.
+ */
+export function parseWorktreeRef(value) {
+  if (value === null || value === undefined) return undefined
+  let m = /^#(\d+)$/.exec(value)
+  if (m !== null) return { pr: Number(m[1]) }
+  m = /^https:\/\/([^/]+)\/.+(?:\/pull|\/-\/merge_requests|\/merge_requests)\/(\d+)\/?$/.exec(value)
+  if (m !== null) return { pr: Number(m[2]), host: m[1] }
+  return undefined
+}
+
+/**
+ * The origin fetch refs for a PR head, in try order (WS-6 item 3):
+ * `pull/<n>/head` on github.com, `merge-requests/<n>/head` on gitlab.com,
+ * first-then-second on any other (or unknown) host.
+ * @param {string | undefined} host
+ * @param {number} n
+ * @returns {string[]}
+ */
+export function prFetchRefs(host, n) {
+  if (host === 'github.com') return [`pull/${n}/head`]
+  if (host === 'gitlab.com') return [`merge-requests/${n}/head`]
+  return [`pull/${n}/head`, `merge-requests/${n}/head`]
+}
+
+/**
+ * Host of a git remote URL (`https://…`, `git@host:…`, `ssh://…`), or
+ * undefined when it has none.
+ * @param {string} url
+ * @returns {string | undefined}
+ */
+export function remoteHost(url) {
+  const m = /^(?:(?:https?|ssh):\/\/)?(?:[^/@]+@)?([^/:]+)/.exec(url.trim())
+  return m !== null ? m[1] : undefined
+}
+
+/**
+ * The fixed PR plan: slug `pr-<n>`, branch `worktree-pr-<n>`, path under the
+ * convention dir. Deliberately NOT routed through validateWorktreeSlug —
+ * the `pr-<n>` shape is generated here and always valid.
+ * @param {string} repoRoot
+ * @param {number} n
+ * @returns {{ slug: string, worktreePath: string, branch: string }}
+ */
+export function planWorktreeRef(repoRoot, n) {
+  const slug = `pr-${n}`
+  return { slug, worktreePath: join(repoRoot, '.claude', 'worktrees', slug), branch: `worktree-pr-${n}` }
+}
+
+/**
  * argv for `git worktree add -B <branch> <path> HEAD` (execFile form — no
  * shell, so no quoting concerns). `-B` resets a stale orphan branch left by
  * a removed worktree. When `filterNames` is nonempty, empty-string `-c`

@@ -119,6 +119,10 @@ function diffsOf(name: string, args: Record<string, unknown>): readonly { path: 
 export function allowRuleOf(toolName: string, preview: ApprovalPreview | undefined): string | undefined {
   const name = toolName.trim()
   if (name === '') return undefined
+  // WS-6: EnterWorktree's outside-worktrees-dir ask must ALWAYS fire (CC
+  // v2.1.206 parity) — never persist a rule for it, so "don't ask again"
+  // cannot suppress later prompts (bypassPermissions is the only bypass).
+  if (name === 'EnterWorktree') return undefined
   if (preview?.kind === 'command') {
     const command = preview.command.trim()
     if (command === '') return undefined

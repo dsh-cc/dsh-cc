@@ -187,3 +187,26 @@ export function taskCreatedPayload(_ctx: Context, job: { id: JobId; label: strin
 export function teammateIdlePayload(_ctx: Context, agent: Agent): Record<string, unknown> {
   return { ...base(agent, 'TeammateIdle') }
 }
+
+/**
+ * WorktreeCreate (WS-6): the requested worktree plus its origin. `source` is
+ * 'worktree-flag' (launcher `--worktree` — pre-build, hooks cannot actually
+ * fire there, kept for CC-shape parity), 'enter-worktree', or
+ * 'subagent-isolation'.
+ */
+export function worktreeCreatePayload(
+  _ctx: Context,
+  agent: Agent | undefined,
+  fields: { name: string; worktreePath: string; branch: string; source: 'worktree-flag' | 'enter-worktree' | 'subagent-isolation' },
+): Record<string, unknown> {
+  return { ...base(agent, 'WorktreeCreate'), name: fields.name, worktree_path: fields.worktreePath, branch: fields.branch, source: fields.source }
+}
+
+/** WorktreeRemove (WS-6): the removed worktree plus the removal trigger. */
+export function worktreeRemovePayload(
+  _ctx: Context,
+  agent: Agent | undefined,
+  fields: { worktreePath: string; reason: 'exit' | 'subagent-finished' | 'sweep' },
+): Record<string, unknown> {
+  return { ...base(agent, 'WorktreeRemove'), worktree_path: fields.worktreePath, reason: fields.reason }
+}

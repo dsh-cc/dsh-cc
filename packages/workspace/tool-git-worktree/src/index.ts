@@ -42,8 +42,12 @@ import {
   runGit,
   sessionCwd,
   updateSessionCwd,
+  includeGitRunner,
 } from './exec.ts'
 import { isUnknownOptionFailure, lockWorktree, resolveBaseRef, sessionLockReason } from './lifecycle.ts'
+import { copyIncludedFiles } from './include.ts'
+import { runWorktreeCreateHook, runWorktreeRemoveHook } from './hooks.ts'
+import { branchOfAdopted, headOfAdopted, resolveAdoptPath } from './pathform.ts'
 import { worktreeSettings, WorktreeSchema, type Worktree } from '@dsh-cc/settings-cascade'
 
 export const name = 'tool-git-worktree'
@@ -66,6 +70,8 @@ export const Config: z<Config> = z.object({
 /** Arguments accepted by the EnterWorktree tool. */
 interface EnterWorktreeArgs {
   name?: string
+  /** WS-6: adopt an existing directory instead of creating one. */
+  path?: string
 }
 
 /** Arguments accepted by the ExitWorktree tool. */
@@ -131,11 +137,22 @@ export function apply(ctx: Context, config: Config = {}): void {
         + 'arrive as pointer files; run `git lfs pull` inside the worktree to fetch real content. '
         + 'Refuses when .claude, .claude/worktrees, or the target path is a symlink, when the repository local '
         + 'config is unreadable or uses includeIf/ambiguous filter drivers, or when the target directory already '
-        + 'exists and is not a registered worktree of this repository.',
+        + 'exists and is not a registered worktree of this repository. '
+        + 'Optional `path` argument: adopt an EXISTING directory as the worktree instead of creating one. '
+        + 'A path under the repository\'s .claude/worktrees/ is adopted directly (after an identity check). '
+        + 'Any path OUTSIDE that directory ALWAYS asks for confirmation — "don\'t ask again" persistence never '
+        + 'suppresses this prompt; only bypassPermissions mode skips it. From within a worktree session, `path` '
+        + 'must stay under the same repository\'s worktrees directory. '
+        + 'Files matched by the repository\'s .worktreeinclude (and confirmed gitignored) are copied into every '
+        + 'newly created worktree.',
       parameters: {
         name: {
           type: 'string',
           description: 'Optional name for the worktree. Each "/"-separated segment may contain only letters, digits, dots, underscores, and dashes; max 64 chars total. A random name is generated if not provided.',
+        },
+        path: {
+          type: 'string',
+          description: 'Optional absolute or repository-relative path to an existing directory to adopt as the worktree. Under .claude/worktrees/ it is adopted directly; anywhere else it ALWAYS asks for confirmation (never suppressed by "don\'t ask again"; only bypassPermissions skips it). When both `name` and `path` are given, `path` wins.',
         },
       },
       output: {
@@ -164,6 +181,24 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
         const slug = args.name ?? randomSlug()
         validateSlug(slug)
+
+        // WS-6 item 4: the `path` form adopts an existing directory (name
+        // creation stays available per WS-1's pinned root).
+        if (args.path !== undefined) {
+          const adopted = await resolveAdoptPath(ctx, exec, { rawPath: args.path, cwd, repoRoot })
+          const adoptedBranch = await branchOfAdopted(ctx, adopted, exec.signal)
+          const adoptedHead = await headOfAdopted(ctx, adopted, exec.signal)
+          setActiveWorktreeSession({ originalCwd: cwd, repoRoot, worktreePath: adopted, worktreeBranch: adoptedBranch, originalHead: adoptedHead })
+          updateSessionCwd(exec, adopted)
+          return {
+            worktreePath: adopted,
+            worktreeBranch: adoptedBranch,
+            message:
+              `Adopted existing directory ${adopted} as the worktree (branch ${adoptedBranch}). `
+              + `The session's working directory is now the worktree; pass \`workdir: ${adopted}\` to shell and fs calls. `
+              + 'Use ExitWorktree to leave it (keep or remove).',
+          }
+        }
 
         const worktreePath = worktreePathFor(repoRoot, slug)
         await assertPathInRepo(ctx, repoRoot, worktreePath)
@@ -204,6 +239,34 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
         const originalHead = headResult.stdout.text.trim()
 
+        // WS-6 item 2: WorktreeCreate hooks may replace default creation. A
+        // hook exiting 0 with a stdout path adopts that path (WS-1-style
+        // verification inside runWorktreeCreateHook); any non-zero hook exit
+        // falls back to git-direct creation below.
+        const hookOutcome = await runWorktreeCreateHook(ctx, {
+          sessionId: exec.agent?.session.header.id ?? '',
+          cwd,
+          name: slug,
+          worktreePath,
+          branch,
+          source: 'enter-worktree',
+        }, { mainRoot: repoRoot, signal: exec.signal })
+        if (hookOutcome.kind === 'adopt') {
+          const hookHead = await headOfAdopted(ctx, hookOutcome.path, exec.signal)
+          const hookBranch = (await branchOfAdopted(ctx, hookOutcome.path, exec.signal)) || branch
+          setActiveWorktreeSession({ originalCwd: cwd, repoRoot, worktreePath: hookOutcome.path, worktreeBranch: hookBranch, originalHead: hookHead })
+          updateSessionCwd(exec, hookOutcome.path)
+          await copyIncludedFiles(repoRoot, hookOutcome.path, includeGitRunner(ctx, exec.signal))
+          return {
+            worktreePath: hookOutcome.path,
+            worktreeBranch: hookBranch,
+            message:
+              `WorktreeCreate hook adopted ${hookOutcome.path} for "${slug}" (branch ${hookBranch}). `
+              + `The session's working directory is now the worktree; pass \`workdir: ${hookOutcome.path}\` to shell and fs calls. `
+              + 'Use ExitWorktree to leave it (keep or remove).',
+          }
+        }
+
         // WS-4: resolve the creation base from the `worktree` settings
         // section. `fresh` refreshes the cached origin/HEAD with one fetch
         // (creation path only — the sweep never does network I/O); every
@@ -236,6 +299,10 @@ export function apply(ctx: Context, config: Config = {}): void {
             ctx.logger.warn(`git worktree lock unsupported by this git version; ${worktreePath} left unlocked`)
           }
         }
+
+        // WS-6 item 1: copy .worktreeinclude-matched, git-ignored files into
+        // every newly created worktree (tool-side only).
+        await copyIncludedFiles(repoRoot, worktreePath, includeGitRunner(ctx, exec.signal))
 
         setActiveWorktreeSession({ originalCwd: cwd, repoRoot, worktreePath, worktreeBranch: branch, originalHead })
         updateSessionCwd(exec, worktreePath)
@@ -338,15 +405,33 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
 
         await assertPathInRepo(ctx, session.repoRoot, session.worktreePath)
-        await releaseLock(ctx, session, exec.signal)
-        const removed = await runGit(ctx, forceRemoveWorktree(session.repoRoot, session.worktreePath), exec.signal)
-        if (removed.exitCode !== 0) {
-          throw new WorktreeError(`failed to remove worktree: ${gitFailure(removed)}`)
+
+        // WS-6 item 2: WorktreeRemove hooks replace the default removal.
+        // A failing hook keeps the tree (CC parity); a successful run skips
+        // git-direct removal AND the owned-branch delete entirely.
+        const hookOutcome = await runWorktreeRemoveHook(ctx, {
+          sessionId: exec.agent?.session.header.id ?? '',
+          cwd: session.worktreePath,
+          worktreePath: session.worktreePath,
+          reason: 'exit',
+        }, exec.signal)
+        if (hookOutcome === 'kept') {
+          throw new WorktreeError(
+            `WorktreeRemove hook failed for ${session.worktreePath}: the worktree was KEPT. `
+            + 'Inspect the hook output, then re-invoke with action "keep" or retry "remove".',
+          )
         }
-        const branchDeleted = await runGit(ctx, deleteBranch(session.repoRoot, session.worktreeBranch), exec.signal)
-        if (branchDeleted.exitCode !== 0) {
-          // The worktree directory is gone; a surviving branch is a lint residue, not a locked failure.
-          ctx.logger.warn(`could not delete worktree branch ${session.worktreeBranch}: ${gitFailure(branchDeleted)}`)
+        await releaseLock(ctx, session, exec.signal)
+        if (hookOutcome === 'default') {
+          const removed = await runGit(ctx, forceRemoveWorktree(session.repoRoot, session.worktreePath), exec.signal)
+          if (removed.exitCode !== 0) {
+            throw new WorktreeError(`failed to remove worktree: ${gitFailure(removed)}`)
+          }
+          const branchDeleted = await runGit(ctx, deleteBranch(session.repoRoot, session.worktreeBranch), exec.signal)
+          if (branchDeleted.exitCode !== 0) {
+            // The worktree directory is gone; a surviving branch is a lint residue, not a locked failure.
+            ctx.logger.warn(`could not delete worktree branch ${session.worktreeBranch}: ${gitFailure(branchDeleted)}`)
+          }
         }
 
         clearActiveWorktreeSession()
@@ -397,3 +482,9 @@ export {
   unlockWorktree,
 } from './lifecycle.ts'
 export { adoptionRefusal, repoRootFromCommonDir, scanLocalConfig } from './harden.ts'
+// WS-6 ecosystem surface: .worktreeinclude matcher/copy, WorktreeCreate/
+// WorktreeRemove hook adapters, and the path-form adoption helpers.
+export { copyIncludedFiles, includeMatches, parseWorktreeInclude } from './include.ts'
+export { runWorktreeCreateHook, runWorktreeRemoveHook } from './hooks.ts'
+export type { WorktreeCreateOutcome, WorktreeRemoveOutcome } from './hooks.ts'
+export { resolveAdoptPath, resolvePathArgument } from './pathform.ts'

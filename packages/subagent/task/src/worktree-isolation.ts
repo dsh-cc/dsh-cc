@@ -27,6 +27,8 @@ import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
 import { setSessionCwd } from '@dsh-cc/session-cwd'
 import {
+  runWorktreeCreateHook,
+  runWorktreeRemoveHook,
   addWorktree,
   commitsAhead,
   deleteBranch,
@@ -214,18 +216,35 @@ export async function createIsolationWorktree(
   if (head.exitCode !== 0) fail(`cannot resolve repository HEAD at ${repoRoot}: ${gitFailure(head)}`)
   const baseHead = stdoutOf(head).trim()
 
-  const create = await runGit(ctx, addWorktree(repoRoot, slug, scan.filters), signal)
-  if (create.exitCode !== 0) fail(`failed to create worktree: ${gitFailure(create)}`)
+  // WS-6: WorktreeCreate hooks may replace default creation here too
+  // (source 'subagent-isolation'); a failing hook falls back to git-direct.
+  let hookPath = worktreePath
+  const hookOutcome = await runWorktreeCreateHook(ctx, {
+    sessionId: '',
+    cwd: parentCwd,
+    name: slug,
+    worktreePath,
+    branch: worktreeBranch(slug),
+    source: 'subagent-isolation',
+  }, { mainRoot: repoRoot, signal: signal ?? new AbortController().signal })
+  if (hookOutcome.kind === 'adopt') {
+    hookPath = hookOutcome.path
+  }
+
+  if (hookOutcome.kind !== 'adopt') {
+    const create = await runGit(ctx, addWorktree(repoRoot, slug, scan.filters), signal)
+    if (create.exitCode !== 0) fail(`failed to create worktree: ${gitFailure(create)}`)
+  }
 
   const lockReason = `dsh-cc subagent ${childId}`
-  const lock = await runGit(ctx, lockWorktree(worktreePath, lockReason), signal)
+  const lock = await runGit(ctx, lockWorktree(hookPath, lockReason), signal)
   if (lock.exitCode !== 0 && !isUnknownOptionFailure(lock)) {
     // The tree exists and is usable; a failed lock only weakens WS-4's sweep
     // protection. Surface it, don't fail the dispatch.
-    ctx.logger?.warn?.(`worktree lock failed for ${worktreePath}: ${gitFailure(lock)}`)
+    ctx.logger?.warn?.(`worktree lock failed for ${hookPath}: ${gitFailure(lock)}`)
   }
 
-  return { repoRoot, worktreePath, branch: worktreeBranch(slug), baseHead, lockReason, parentCwd, removed: false }
+  return { repoRoot, worktreePath: hookPath, branch: worktreeBranch(slug), baseHead, lockReason, parentCwd, removed: false }
 }
 
 /**
@@ -247,6 +266,21 @@ export async function settleIsolationWorktree(
   if (rev.exitCode !== 0) return failClosed
   const commits = parseInt(stdoutOf(rev).trim(), 10) || 0
   if (changed || commits > 0) return failClosed
+
+  // WS-6: WorktreeRemove hooks replace the default removal. 'replaced' → the
+  // hooks own the tree's end of life; report removed so the entry does not
+  // re-fire per epoch. 'kept' → a hook failed; the tree stays.
+  const hookOutcome = await runWorktreeRemoveHook(ctx, {
+    sessionId: '',
+    cwd: entry.worktreePath,
+    worktreePath: entry.worktreePath,
+    reason: 'subagent-finished',
+  }, new AbortController().signal)
+  if (hookOutcome === 'replaced') {
+    entry.removed = true
+    return 'removed'
+  }
+  if (hookOutcome === 'kept') return failClosed
 
   const unlock = await runGit(ctx, unlockWorktree(entry.worktreePath))
   if (unlock.exitCode !== 0 && !isUnknownOptionFailure(unlock)) {

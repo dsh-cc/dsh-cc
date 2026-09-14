@@ -14,6 +14,7 @@ import type { ToolRunContext } from '@dsh-cc/tools'
 import { setSessionCwd } from '@dsh-cc/session-cwd'
 import type { ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { repoRootFromCommonDir } from './harden.ts'
+import type { IncludeGit } from './include.ts'
 import { unlockWorktree } from './lifecycle.ts'
 import { commitsAhead, status } from './worktree.ts'
 import type { GitCmd, WorktreeSession } from './worktree.ts'
@@ -166,5 +167,22 @@ export async function releaseLock(ctx: Context, session: WorktreeSession, signal
   const unlock = await runGit(ctx, unlockWorktree(session.repoRoot, session.worktreePath), signal)
   if (unlock.exitCode !== 0) {
     ctx.logger.warn(`could not unlock worktree ${session.worktreePath}: ${gitFailure(unlock)}`)
+  }
+}
+
+/**
+ * WS-6: adapt `ctx.shell` to the `.worktreeinclude` copy step's injectable
+ * runner. Spawn failures return `undefined` (the copy step degrades);
+ * an abort still propagates.
+ */
+export function includeGitRunner(ctx: Context, signal: AbortSignal): IncludeGit {
+  return async (command, workdir) => {
+    try {
+      const result = await runGit(ctx, { command, workdir, label: command }, signal)
+      return { status: result.exitCode, stdout: result.stdout.text }
+    } catch (error) {
+      if ((error as { name?: unknown }).name === 'AbortError') throw error
+      return undefined
+    }
   }
 }

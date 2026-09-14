@@ -5,7 +5,11 @@ import { join } from 'node:path'
 import {
   flattenSlug,
   parseWorktreeFlag,
+  parseWorktreeRef,
   planWorktree,
+  planWorktreeRef,
+  prFetchRefs,
+  remoteHost,
   randomWorktreeSlug,
   existingWorktreeDecision,
   slugRetryDecision,
@@ -224,5 +228,53 @@ describe('worktreeIdentityRefusal', () => {
   it('refuses a target that contains the main checkout', () => {
     const root = makeRepo()
     expect(worktreeIdentityRefusal(root, root)).toContain('contains the main checkout')
+  })
+})
+
+describe('WS-6 PR references', () => {
+  it('parses #<n> without a host', () => {
+    expect(parseWorktreeRef('#12')).toEqual({ pr: 12 })
+    expect(parseWorktreeRef('#0')).toEqual({ pr: 0 })
+    expect(parseWorktreeRef('#x')).toBeUndefined()
+    expect(parseWorktreeRef('feature')).toBeUndefined()
+    expect(parseWorktreeRef(null)).toBeUndefined()
+    expect(parseWorktreeRef(undefined)).toBeUndefined()
+  })
+
+  it('parses GitHub PR URLs and GitLab MR URLs with their hosts', () => {
+    expect(parseWorktreeRef('https://github.com/o/r/pull/12'))
+      .toEqual({ pr: 12, host: 'github.com' })
+    expect(parseWorktreeRef('https://github.com/o/r/pull/12/'))
+      .toEqual({ pr: 12, host: 'github.com' })
+    expect(parseWorktreeRef('https://gitlab.com/o/r/-/merge_requests/9'))
+      .toEqual({ pr: 9, host: 'gitlab.com' })
+    expect(parseWorktreeRef('https://gitlab.com/o/r/merge_requests/9'))
+      .toEqual({ pr: 9, host: 'gitlab.com' })
+    expect(parseWorktreeRef('https://example.com/o/r/pull/3'))
+      .toEqual({ pr: 3, host: 'example.com' })
+  })
+
+  it('selects the fetch ref shape per host, first-then-second elsewhere', () => {
+    expect(prFetchRefs('github.com', 12)).toEqual(['pull/12/head'])
+    expect(prFetchRefs('gitlab.com', 9)).toEqual(['merge-requests/9/head'])
+    expect(prFetchRefs('example.com', 3)).toEqual(['pull/3/head', 'merge-requests/3/head'])
+    expect(prFetchRefs(undefined, 3)).toEqual(['pull/3/head', 'merge-requests/3/head'])
+  })
+
+  it('plans pr-<n> at the convention dir on branch worktree-pr-<n>', () => {
+    expect(planWorktreeRef('/repo', 12)).toEqual({
+      slug: 'pr-12',
+      worktreePath: join('/repo', '.claude', 'worktrees', 'pr-12'),
+      branch: 'worktree-pr-12',
+    })
+    // PR values never pass through the slug validator.
+    expect(() => validateWorktreeSlug('#12')).toThrow(/invalid worktree name/)
+  })
+
+  it('extracts the host of https and scp-style remote URLs', () => {
+    expect(remoteHost('https://github.com/o/r.git')).toBe('github.com')
+    expect(remoteHost('git@github.com:o/r.git')).toBe('github.com')
+    expect(remoteHost('ssh://git@gitlab.com/o/r.git')).toBe('gitlab.com')
+    expect(remoteHost('/local/path')).toBeUndefined()
   })
 })

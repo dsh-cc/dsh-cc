@@ -41,6 +41,8 @@ const CLAUDE_EVENTS = [
   'Setup',
   'PostToolUseFailure',
   'SessionResume',
+  'WorktreeCreate',
+  'WorktreeRemove',
 ] as const
 
 /**

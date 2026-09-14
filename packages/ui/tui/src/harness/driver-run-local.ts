@@ -37,6 +37,7 @@ import {
   autoRemovable,
   createWorktreeExitHooks,
   ownsBranch,
+  withBridgeRemoveHook,
   type WorktreeExitSession,
 } from './worktree-exit.ts'
 import type {
@@ -110,7 +111,8 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
     modelMissing: () => rt.onboardingGate.modelMissing,
   })
   rt.onboardingGate.handle = onboarding
-  const worktreeExit = rt.config.worktreeExit ?? createWorktreeExitHooks()
+  // WS-6: /quit cleanup fires WorktreeRemove hooks via the bridge's seam.
+  const worktreeExit = withBridgeRemoveHook(rt.config.worktreeExit ?? createWorktreeExitHooks(), rt.ctx)
 
   // The section owns the quit finalizer: after a `/quit` decision settles it
   // persists the resume target (unless the worktree is being removed), tears

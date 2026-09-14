@@ -12,6 +12,7 @@
  * @module @dsh-cc/tui/harness/worktree-exit
  */
 
+import { runWorktreeRemoveHook } from '@dsh-cc/tool-git-worktree'
 import { execFile } from 'node:child_process'
 import { dirname, join, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
@@ -270,5 +271,47 @@ export function createWorktreeExitHooks(env: NodeJS.ProcessEnv = process.env): W
     evidence: session => gatherEvidence(session, gitExec),
     cleanup: session => removeWorktree(session, gitExec),
     unlock: session => unlockWorktreeSession(session, gitExec),
+  }
+}
+
+/**
+ * WS-6: wrap a hooks set so `/quit` cleanup fires the WorktreeRemove point
+ * through the bridge's `hookRun` invoke seam on `ctx` (absent → 'default' →
+ * git-direct removal unchanged).
+ */
+export function withBridgeRemoveHook(
+  hooks: WorktreeExitHooks,
+  ctx: { get(key: string): unknown },
+): WorktreeExitHooks {
+  return withRemoveHook(hooks, session =>
+    runWorktreeRemoveHook(ctx as never, {
+      sessionId: '',
+      cwd: session.worktreePath,
+      worktreePath: session.worktreePath,
+      reason: 'exit',
+    }, new AbortController().signal))
+}
+
+/**
+ * WS-6: wrap a hooks set so `/quit` cleanup fires the WorktreeRemove point
+ * through the bridge's invoke seam first. `'replaced'` (every hook exited 0)
+ * skips git removal entirely; `'kept'` (a hook failed) keeps the tree and
+ * surfaces as a failed cleanup; `'default'` (no hook ran) proceeds as before.
+ */
+export function withRemoveHook(
+  hooks: WorktreeExitHooks,
+  run: (session: WorktreeExitSession) => Promise<'default' | 'replaced' | 'kept'>,
+): WorktreeExitHooks {
+  const cleanup = hooks.cleanup
+  return {
+    ...hooks,
+    cleanup: async session => {
+      const outcome = await run(session)
+      if (outcome === 'kept') {
+        throw new Error(`WorktreeRemove hook failed: ${session.worktreePath} was kept`)
+      }
+      if (outcome === 'replaced') return { branchDeleted: false }
+      return cleanup(session)
+    },
   }
 }

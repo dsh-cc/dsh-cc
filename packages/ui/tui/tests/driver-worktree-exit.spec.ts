@@ -10,6 +10,7 @@ import type {
   WorktreeExitHooks,
   WorktreeExitSession,
 } from '@dsh-cc/tui/harness/worktree-exit.ts'
+import { withRemoveHook } from '@dsh-cc/tui/harness/worktree-exit.ts'
 
 interface FakeAgent extends Record<string, unknown> {
   options: Record<string, unknown>
@@ -412,5 +413,44 @@ describe('createDriver /quit worktree-exit tombstone', () => {
     await driver.worktreeExitSubmit()
     expect(hooks.cleanup).not.toHaveBeenCalled()
     expect(readResumeTarget({ cwd: tempCwd })).toBe('s-wt')
+  })
+})
+
+describe('WS-6 withRemoveHook (WorktreeReplace semantics at /quit cleanup)', () => {
+  const session: WorktreeExitSession = {
+    kind: 'managed', repoRoot: '/repo', worktreePath: '/repo/.claude/worktrees/x',
+    branch: 'worktree-x', baseHead: 'abc', named: true,
+  }
+  const baseHooks: WorktreeExitHooks = {
+    probe: async () => undefined,
+    evidence: async () => ({}),
+    cleanup: async () => ({ branchDeleted: true }),
+    unlock: async () => {},
+  }
+
+  it('skips git removal when every hook exits 0 (replaced)', async () => {
+    let removed = false
+    const hooks = withRemoveHook(
+      { ...baseHooks, cleanup: async () => { removed = true; return { branchDeleted: true } } },
+      async () => 'replaced',
+    )
+    const outcome = await hooks.cleanup(session)
+    expect(outcome).toEqual({ branchDeleted: false })
+    expect(removed).toBe(false)
+  })
+
+  it('keeps the tree (throws) when a hook fails', async () => {
+    const hooks = withRemoveHook(baseHooks, async () => 'kept')
+    await expect(hooks.cleanup(session)).rejects.toThrow(/was kept/)
+  })
+
+  it('falls through to git removal when no hook ran (default)', async () => {
+    let removed = false
+    const hooks = withRemoveHook(
+      { ...baseHooks, cleanup: async () => { removed = true; return { branchDeleted: true } } },
+      async () => 'default',
+    )
+    await hooks.cleanup(session)
+    expect(removed).toBe(true)
   })
 })
