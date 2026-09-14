@@ -1,7 +1,7 @@
 # Claude Code Worktree Parity Program — Design Document
 
 **Date:** 2026-09-14
-**Status:** Reviewed — critic verdict approve-with-changes, all must-fix findings folded in (Codex blind review attempted; blocked by sandbox: the companion runtime needs `~/.codex` writes and approval prompts were disabled)
+**Status:** Implemented — PR #62 (open). Review provenance: critic verdict approve-with-changes with all must-fix findings folded in; Codex blind review attempted but blocked by the session sandbox
 **Scope:** `dsh-cc` monorepo; upstream `deepseek-harness` touched as proposal-only annex
 **Baseline:** Claude Code worktree surface per the official docs (`code.claude.com/docs/en/worktrees`, `settings-reference`, `tools-reference`, `hooks`), verified 2026-09-14; dsh-cc at `origin/main` d5227f0.
 
