@@ -17,7 +17,7 @@
 
 import { lstatSync } from 'node:fs'
 import { relative, resolve, sep } from 'node:path'
-import { adoptionRefusal } from '@dsh-cc/tool-git-worktree/src/harden.ts'
+import { adoptionRefusal } from '@dsh-cc/tool-git-worktree'
 
 /** Outcome of verifying a stored cwd before following it on resume. */
 export type WorktreeIdentityVerdict =
