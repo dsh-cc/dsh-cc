@@ -43,7 +43,9 @@
     "@dsh-cc/mcp-client": "workspace:^",
     "@dsh-cc/mcp-config": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
-    "@dsh-cc/session-title-provider": "workspace:^"
+    "@dsh-cc/session-title-provider": "workspace:^",
+    "@dsh-cc/settings-migrations": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
@@ -76,11 +78,9 @@
     "@deepseek-ai/dsh-web-fetch-http": "link:../../../../deepseek-harness/packages/web/web-fetch-http",
     "typescript": "6.0.3",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
-    "@dsh-cc/tools": "workspace:^",
     "@dsh-cc/tool-notebook-edit": "workspace:^",
     "@dsh-cc/tool-sleep": "workspace:^",
     "@dsh-cc/tool-structured-output": "workspace:^",
-    "@dsh-cc/settings-migrations": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/subagent-task": "workspace:^"
   },

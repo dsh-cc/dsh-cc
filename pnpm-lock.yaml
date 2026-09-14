@@ -88,6 +88,12 @@ importers:
       '@dsh-cc/session-title-provider':
         specifier: workspace:^
         version: link:../../compat/session-title-provider
+      '@dsh-cc/settings-migrations':
+        specifier: workspace:^
+        version: link:../../settings/settings-migrations
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -176,9 +182,6 @@ importers:
       '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code
-      '@dsh-cc/settings-migrations':
-        specifier: workspace:^
-        version: link:../../settings/settings-migrations
       '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../../subagent/resume-pins
@@ -194,9 +197,6 @@ importers:
       '@dsh-cc/tool-structured-output':
         specifier: workspace:^
         version: link:../../core/tool-structured-output
-      '@dsh-cc/tools':
-        specifier: workspace:^
-        version: link:../../core/tools
       typescript:
         specifier: 6.0.3
         version: 6.0.3
