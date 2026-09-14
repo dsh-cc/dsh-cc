@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-learn",
   "description": "Human-facing slash command distilling session failure patterns into memory (/learn)",
-  "version": "0.0.1",
+  "version": "0.7.1-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
@@ -52,8 +52,5 @@
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

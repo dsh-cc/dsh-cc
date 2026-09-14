@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/cli",
-  "version": "0.7.0",
+  "version": "0.7.1-rc.1",
   "description": "Optional dsh-cc shortcut: bootstraps the tui profile and runs dsh --profile tui",
   "type": "module",
   "bin": {
