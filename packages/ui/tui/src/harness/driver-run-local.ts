@@ -16,6 +16,8 @@ import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { rowsToMarkdown } from '../export-markdown.ts'
 import { defaultExportDir, exportStamp } from './shell-output.ts'
+import type { PersistenceLike } from './session-service-likes.ts'
+import { tombstoneResumeTargetForRemovedWorktree } from './resumed-cwd-guard.ts'
 import {
   breakdownOf,
   occupancyOf,
@@ -37,7 +39,6 @@ import {
   ownsBranch,
   type WorktreeExitSession,
 } from './worktree-exit.ts'
-import { clearResumeTarget } from '../resume-target.ts'
 import type {
   ContextPressureStateLike,
   TokenUsageStateLike,
@@ -187,10 +188,12 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
         if (autoRemovable(session, evidence)) {
           try {
             await worktreeExit.cleanup(session)
-            // Tombstone the resume anchor: worktrees collapse onto the main
-            // root's project key, so clearing at the worktree cwd clears the
-            // shared marker this quitting session wrote.
-            clearResumeTarget({ cwd: session.worktreePath })
+            // Tombstone the resume anchor when its session lived under the
+            // removed worktree (fail-open; anchor bookkeeping is best-effort).
+            await tombstoneResumeTargetForRemovedWorktree({
+              cwd: rt.cwd, removedPath: session.worktreePath,
+              persistence: rt.ctx.get('sessionPersistence') as PersistenceLike | undefined,
+            }).catch(() => {})
             showNotice(`已清理无改动的 worktree：${session.worktreePath}`)
             rt.setMarkedContent(false)
             await finalizeQuit(false)
@@ -466,6 +469,18 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
     // the plugin's shutdown invokes) does not re-persist a resume marker that
     // points into the deleted worktree.
     rt.setMarkedContent(false)
+    // Tombstone the resume anchor when its session lived under the removed
+    // worktree (fail-open: quitting is never blocked by anchor bookkeeping).
+    try {
+      const persistence = rt.ctx.get('sessionPersistence') as PersistenceLike | undefined
+      await tombstoneResumeTargetForRemovedWorktree({
+        cwd: rt.cwd,
+        removedPath: view.worktreePath,
+        persistence,
+      })
+    } catch {
+      // Anchor bookkeeping is best-effort.
+    }
     await finalizeQuit(false)
   }
 

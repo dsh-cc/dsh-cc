@@ -260,13 +260,13 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
     }
 
     await bindSession(newHandle, { reseedModel: true })
-    // WS-5 resume guard: verify a worktree-shaped stored cwd before the user
-    // keeps working in it. This section has no showNotice — the notice flows
-    // through the status-row channel. Fail-open: notice + stay.
-    const resumedCwdNotice = warnIfResumedCwdMissing(liveSessionCwd(rt.current.agent, rt.cwd), rt.cwd)
-    if (resumedCwdNotice !== undefined) {
-      emit(upsertRow(rt.state(), { kind: 'status', text: resumedCwdNotice }))
-    }
+    // Resumed-cwd guard: the picker has no showNotice channel (ctx has none),
+    // so surface the dead-cwd warning through the file's status-row idiom.
+    warnIfResumedCwdMissing(
+      rt.current.agent,
+      rt.cwd,
+      (message) => emit(upsertRow(rt.state(), { kind: 'status', text: message })),
+    )
   }
 
   // Shared bind path (also used by startFreshSession). dispose() stops the

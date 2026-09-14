@@ -3,11 +3,13 @@
  *
  * The host process serves many workspaces at once, so discovery is keyed by
  * the session's cwd (`cwdOf(agent)`) rather than the process cwd — a web host
- * started from `~/.dsh` must still see `my-repo/.claude/agents`. Results are
- * cached per root for the process lifetime: the registry does not watch the
- * filesystem (v1), so editing an agent file takes effect on the next session
- * for a workspace whose cache entry has not yet been created, and on process
- * restart otherwise.
+ * started from `~/.dsh` must still see `my-repo/.claude/agents`. Successful
+ * results are cached per root for the process lifetime: the registry does not
+ * watch the filesystem (v1), so editing an agent file takes effect on the
+ * next session for a workspace whose cache entry has not yet been created,
+ * and on process restart otherwise. A REJECTED discovery is NOT cached —
+ * the entry is evicted so the next call retries the scan, or a single
+ * transient failure would permanently erase the file-layer agents.
  *
  * @module @dsh-cc/subagent-task/registry
  */
@@ -45,6 +47,12 @@ export class AgentRegistry {
         const map = new Map<string, AgentDefinition>()
         for (const def of defs) map.set(def.agentType, def)
         return map
+      })
+      // A failed scan must not poison the process-lifetime cache: evict the
+      // rejected promise so the next `ensure` retries instead of every later
+      // consumer rejoining the same stale rejection.
+      pending.catch(() => {
+        if (this.cache.get(root) === pending) this.cache.delete(root)
       })
       this.cache.set(root, pending)
     }

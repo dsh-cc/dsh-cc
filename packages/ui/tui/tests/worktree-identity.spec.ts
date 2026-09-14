@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { worktreeIdentityVerdict } from '@dsh-cc/tui/harness/worktree-identity.ts'
 import { warnIfResumedCwdMissing } from '@dsh-cc/tui/harness/resumed-cwd-guard.ts'
 
@@ -91,27 +92,48 @@ describe('worktreeIdentityVerdict', () => {
   })
 })
 
-describe('warnIfResumedCwdMissing', () => {
-  it('ok cwd → undefined', () => {
+describe('warnIfResumedCwdMissing (unified guard)', () => {
+  /** Minimal agent stub: empty event fold → liveSessionCwd falls back to header cwd. */
+  function fakeAgentWithCwd(cwd: string): Agent {
+    return { session: { snapshotEvents: () => [], header: { cwd } } } as unknown as Agent
+  }
+
+  function collect(cwd: string, launchCwd = launch): string[] {
+    const notices: string[] = []
+    warnIfResumedCwdMissing(fakeAgentWithCwd(cwd), launchCwd, (m) => notices.push(m))
+    return notices
+  }
+
+  it('ok cwd → no notice', () => {
     const dir = makeWorktree('feat', join(root, '.git', 'worktrees', 'feat'))
-    expect(warnIfResumedCwdMissing(dir, launch)).toBeUndefined()
-    expect(warnIfResumedCwdMissing(launch, launch)).toBeUndefined()
+    expect(collect(dir)).toEqual([])
+    expect(collect(launch)).toEqual([])
   })
 
   it('missing dir → the plain missing-directory notice', () => {
-    const notice = warnIfResumedCwdMissing(join(root, 'gone'), launch)
-    expect(notice).toContain('已不存在')
+    expect(collect(join(root, 'gone'))[0]).toContain('已不存在')
   })
 
   it('refusal → Refusing-to-use notice naming the cwd', () => {
-    const notice = warnIfResumedCwdMissing('/net/repo/.claude/worktrees/feat', launch)
-    expect(notice).toContain('已拒绝进入')
-    expect(notice).toContain('/net/repo/.claude/worktrees/feat')
+    const dir = makeWorktree('anc', join(root, '.git', 'worktrees', 'anc'))
+    const inside = join(dir, 'sub')
+    mkdirSync(inside)
+    const notice = collect(dir, inside)[0]
+    expect(notice).toContain('已拒绝进入原 worktree')
+    expect(notice).toContain(dir)
   })
 
   it('unverified → could-not-verify notice with the retry hint', () => {
-    const notice = warnIfResumedCwdMissing('\0bad', launch)
-    expect(notice).toContain('暂时无法验证')
-    expect(notice).toContain('重试 resume')
+    // Mirror the verdict-level test: an unreadable worktree dir degrades to
+    // `unverified` (fail-open), which the guard surfaces with the retry hint.
+    const dir = makeWorktree('locked', join(root, '.git', 'worktrees', 'locked'))
+    chmodSync(dir, 0o000)
+    try {
+      const notice = collect(dir)[0]
+      expect(notice).toContain('暂时无法验证')
+      expect(notice).toContain('重试 resume')
+    } finally {
+      chmodSync(dir, 0o755)
+    }
   })
 })

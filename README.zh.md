@@ -304,6 +304,10 @@ pnpm run typecheck
 pnpm test
 ```
 
+要在真实 profile 中测试未发布的本地构建，可运行 `bash scripts/sync-local-profile.sh web` 同步。
+同步后 `dsh-cc --version` 会显示 `-dev+<commit>[.dirty]` 标签标识源码树；通过 npm 更新启动器会自动
+让 profile 回退到商店发布的 bundle。
+
 当前 dogfooding 配置使用 `serena-hooks`：
 
 ```sh

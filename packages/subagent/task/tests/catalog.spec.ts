@@ -394,7 +394,7 @@ describe('AgentCatalog assemble waterfall', () => {
     await ctx.fiber.dispose()
   })
 
-  it('degrades to the placeholder when discovery exceeds the readiness budget', async () => {
+  it('degrades to a bundled-seeded placeholder when discovery exceeds the readiness budget', async () => {
     const ws = freshDir('ws')
     const deferred = deferredDefs() // never resolves
     vi.useFakeTimers()
@@ -404,7 +404,16 @@ describe('AgentCatalog assemble waterfall', () => {
 
       const pending = textOf(agentAt(ws))
       await vi.advanceTimersByTimeAsync(501)
-      expect(await pending).toBe('')
+      const text = await pending
+      // The placeholder must STILL list the in-package agents. While
+      // discovery was in flight the catalog used to render NOTHING from the
+      // file layer — observed in the wild as a model planning over a prompt
+      // in which `explore` did not exist and consequently spawning
+      // general-purpose children on the main model's route. A slow scan is
+      // transient; a missing catalog entry steers the whole session.
+      expect(text).toContain('## Available subagents')
+      expect(text).toContain('explore')
+      expect(text).toContain('dsh-cc-guide')
       expect(warn).toHaveBeenCalledOnce()
       await ctx.fiber.dispose()
     } finally {

@@ -12,8 +12,10 @@
  * snapshot has not landed it joins the in-flight discovery (bounded), stores
  * the snapshot, and re-renders the section with the same render function, so
  * the FIRST assembly already carries the real catalog and no later request
- * sees a different prefix; on timeout the placeholder ships and the
- * `system-prompt/change` path lands the catalog on a later assembly. When a
+ * sees a different prefix; on timeout the placeholder ships — but the
+ * placeholder itself is seeded with the bundled agents (they need no fs
+ * scan), so the in-package catalog is never missing — and the
+ * `system-prompt/change` path lands the full catalog on a later assembly. When a
  * workspace defines no agents of its own (or there is no agent to scope to)
  * the section still lists the bundled agents, or renders an empty string when
  * there is nothing to scope to.
@@ -23,7 +25,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
+import { discoverBundledAgents, type AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { cwdOf } from '@dsh-cc/memory'
 import type { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex, isPluginAgentProvider } from './plugin-agents.ts'
@@ -76,6 +78,15 @@ function agentFromScope(scope: unknown): Agent | undefined {
 export class AgentCatalogSection {
   /** Sorted definitions per workspace root, populated once discovery lands. */
   private readonly snapshot = new Map<string, readonly AgentDefinition[]>()
+  /**
+   * The in-package bundled definitions. They need no filesystem scan, so the
+   * per-root placeholder is seeded with them synchronously: the very first
+   * assembly already lists `explore`/`dsh-cc-guide` instead of dropping the
+   * whole file layer to nothing until discovery lands. Only the shadowing
+   * question (does a user/project agent override a bundled namesake?) waits
+   * on the real scan.
+   */
+  private readonly bundled: readonly AgentDefinition[] = discoverBundledAgents()
   /** Roots whose background discovery has already been kicked off. */
   private readonly seen = new Set<string>()
   /**
@@ -193,8 +204,9 @@ export class AgentCatalogSection {
   /**
    * Compose the catalog text for the agent behind an assemble scope.
    * Kicks the root's background discovery on first sight; renders from the
-   * snapshot until it lands. Returns '' (section drops out) when there is no
-   * agent or the snapshot holds no definitions.
+   * snapshot until it lands, seeded with the bundled agents so the
+   * placeholder is never empty. Returns '' (section drops out) when there is
+   * no agent to scope to.
    */
   private render(scope: unknown): string {
     const agent = agentFromScope(scope)
@@ -207,7 +219,9 @@ export class AgentCatalogSection {
     // so render only reads current state.
     const pluginEntries = this.pluginIndex.list()
     const merged = [
-      ...(this.snapshot.get(root) ?? []),
+      // Before discovery lands the snapshot is absent: render the bundled
+      // seed so the placeholder still lists the in-package agents.
+      ...(this.snapshot.get(root) ?? this.bundled),
       ...pluginEntries.map(entry => ({
         // Plugin entries render under their scoped id (`plugin:agent`), with
         // the provider definition's whenToUse as the guide line. The guard is
@@ -224,8 +238,9 @@ export class AgentCatalogSection {
    * Kick background discovery for one workspace root exactly once. When it
    * lands, the snapshot is populated and `system-prompt/change` fires so the
    * next assembly renders the catalog. Failures are swallowed: a missing or
-   * unreadable agents directory simply leaves an empty snapshot (the section
-   * stays absent, which is itself the correct "no agents" rendering).
+   * unreadable agents directory simply leaves the bundled-seeded placeholder
+   * in place, and the registry drops rejected scans, so every later assembly
+   * re-attempts the join through the waterfall listener.
    * @param root - the workspace root.
    */
   private ensureDefs(root: string): void {

@@ -19,7 +19,8 @@ import { createCatalogSection } from './driver-catalog.ts'
 import type { DriverBashCtx, DriverQueueCtx, PermissionRulesLike } from './driver-ctx.ts'
 import { createModeSection } from './driver-mode.ts'
 import { liveModeWithDefault, liveSessionCwd } from './driver-live.ts'
-import { warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
+import { gateAutoResumeTarget, warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
+import type { PersistenceLike } from './session-service-likes.ts'
 import { createHudSection } from './driver-hud.ts'
 import { createStatusLineWiring } from './statusline-wiring.ts'
 import type { OnboardingGate } from './onboarding.ts'
@@ -118,8 +119,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   })
 
   // Boot session resolution (§2.3): non-empty sessionId → resume that id;
-  // '' → explicit fresh (never read the marker); undefined + autoResume →
-  // read the project marker; else fresh. `SessionId` is never built from ''.
+  // '' → fresh; undefined + autoResume → marker; else fresh. Never SessionId('').
   let resumeSession: SessionId | undefined
   let attemptedAutoResume = false
   let markerFound = false
@@ -131,7 +131,10 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     attemptedAutoResume = true
     const markerId = readResumeTarget({ cwd })
     markerFound = markerId !== undefined && markerId.length > 0
-    resumeSession = markerFound ? SessionId(markerId!) : undefined
+    // Auto-resume gate (fail-open): fresh when the anchored session's cwd is gone.
+    resumeSession = markerFound && await gateAutoResumeTarget({
+      markerId: markerId!, persistence: ctx.get('sessionPersistence') as PersistenceLike | undefined, showNotice, cwd,
+    }) === 'resume' ? SessionId(markerId!) : undefined
   }
 
   let resumed = false
@@ -144,10 +147,10 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
         ...agentOptions === undefined ? {} : { agentOptions },
       })
       resumed = true
+      warnIfResumedCwdMissing(handle.agent, cwd, showNotice)
     } catch {
-      // Stale marker: the recorded session is gone. Clear it so the next boot
-      // does not loop on the same failure, then degrade to a fresh session
-      // (which must not steal the marker — persist only fires on real content).
+      // Stale marker: session gone — clear it (no loop) and degrade to a fresh
+      // session, which must not steal the marker (persist fires on real content).
       clearResumeTarget({ cwd })
       showNotice('上次会话已失效，已开启新会话，可 /resume 手动选择')
       handle = await ctx.agents.create(createArgs(SessionId(`tui-${randomUUID()}`)))
@@ -232,10 +235,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     // project's sidecar index.
     rebindHistory(liveSessionCwd(current.agent, cwd))
     recordProjectSession(String(current.agent.session.id), liveSessionCwd(current.agent, cwd))
-    // WS-5 resume guard: verify a worktree-shaped recorded cwd before the
-    // session settles in it — fail-open notice + stay (plan §11.3).
-    const resumedCwdNotice = warnIfResumedCwdMissing(liveSessionCwd(current.agent, cwd), cwd)
-    if (resumedCwdNotice !== undefined) showNotice(resumedCwdNotice)
+
   }
   emit(setPermissionMode(state, liveModeWithDefault(ctx)(current.agent)))
 

@@ -92,16 +92,51 @@ function stubAgent(sid: string): unknown {
 describe('buildSettleText', () => {
   it('all ready with tool counts', () => {
     const entries: McpConnectionEntry[] = [
-      { name: 'a', state: 'ready', toolCount: 16 },
-      { name: 'b', state: 'ready', toolCount: 4 },
+      { name: 'a', state: 'ready', toolCount: 16, eagerCount: 0, deferredCount: 16 },
+      { name: 'b', state: 'ready', toolCount: 4, eagerCount: 0, deferredCount: 4 },
     ]
     expect(buildSettleText(entries, ['a', 'b']))
-      .toBe('MCP: servers ready — a (16 tools), b (4 tools). Load their mcp__* tools via ToolSearch.')
+      .toBe('MCP: servers ready — a (16 tools), b (4 tools). Loadable via ToolSearch: a, b.')
   })
 
   it('ready without toolCount omits the count', () => {
     expect(buildSettleText([{ name: 'a', state: 'ready' }], ['a']))
       .toBe('MCP: servers ready — a. Load their mcp__* tools via ToolSearch.')
+  })
+
+  it('all-eager ready set points at direct invocation, not ToolSearch', () => {
+    const entries: McpConnectionEntry[] = [
+      { name: 'a', state: 'ready', toolCount: 4, eagerCount: 4, deferredCount: 0 },
+    ]
+    expect(buildSettleText(entries, ['a']))
+      .toBe('MCP: servers ready — a (4 tools). Already available in your tool list, call them directly: a. ToolSearch only indexes deferred tools and will not find them.')
+  })
+
+  it('mixed groups split into eager and deferred clauses', () => {
+    const entries: McpConnectionEntry[] = [
+      { name: 'a', state: 'ready', toolCount: 16, eagerCount: 0, deferredCount: 16 },
+      { name: 'b', state: 'ready', toolCount: 4, eagerCount: 4, deferredCount: 0 },
+    ]
+    expect(buildSettleText(entries, ['a', 'b']))
+      .toBe('MCP: servers ready — a (16 tools), b (4 tools). Already available in your tool list, call them directly: b. ToolSearch only indexes deferred tools and will not find them. Loadable via ToolSearch: a.')
+  })
+
+  it('mixed server is annotated inline and absent from group clauses', () => {
+    const entries: McpConnectionEntry[] = [
+      { name: 'm', state: 'ready', toolCount: 18, eagerCount: 2, deferredCount: 16 },
+    ]
+    expect(buildSettleText(entries, ['m']))
+      .toBe('MCP: servers ready — m (18 tools: 2 direct, 16 via ToolSearch).')
+  })
+
+  it('missing breakdown falls back to the legacy blanket clause', () => {
+    expect(buildSettleText([{ name: 'a', state: 'ready', toolCount: 16 }], ['a']))
+      .toBe('MCP: servers ready — a (16 tools). Load their mcp__* tools via ToolSearch.')
+  })
+
+  it('all-zero ready set emits no guidance clause', () => {
+    expect(buildSettleText([{ name: 'a', state: 'ready', toolCount: 0, eagerCount: 0, deferredCount: 0 }], ['a']))
+      .toBe('MCP: servers ready — a (0 tools).')
   })
 
   it('missing announced name renders as gone', () => {
@@ -118,16 +153,16 @@ describe('mountMcpReadyNotice', () => {
     registry.emit({ name: 'b', state: 'connecting' })
     mountMcpReadyNotice(ctx as never, registry, ['a', 'b'], 'sid-1')
 
-    registry.emit({ name: 'a', state: 'ready', toolCount: 16 })
+    registry.emit({ name: 'a', state: 'ready', toolCount: 16, eagerCount: 0, deferredCount: 16 })
     // Not yet settled (b still pending) → no text appended.
     const listener = ctx.preStepListener()
     const before = await drive(listener!, stubAgent('sid-1'), enter())
     expect(before.appended).toEqual([])
 
-    registry.emit({ name: 'b', state: 'ready', toolCount: 4 })
+    registry.emit({ name: 'b', state: 'ready', toolCount: 4, eagerCount: 4, deferredCount: 0 })
     const delivered = await drive(ctx.preStepListener()!, stubAgent('sid-1'), enter())
     expect(delivered.appended).toHaveLength(1)
-    expect(delivered.appended[0]!.text).toBe('MCP: servers ready — a (16 tools), b (4 tools). Load their mcp__* tools via ToolSearch.')
+    expect(delivered.appended[0]!.text).toBe('MCP: servers ready — a (16 tools), b (4 tools). Already available in your tool list, call them directly: b. ToolSearch only indexes deferred tools and will not find them. Loadable via ToolSearch: a.')
     // A later decision is untouched (listener disposed itself).
     const after = await drive(listener!, stubAgent('sid-1'), enter())
     expect(after.appended).toEqual([])
@@ -161,16 +196,16 @@ describe('mountMcpReadyNotice', () => {
     expect(appended[0]!.text).toBe('MCP: servers unavailable — a (error: boom happened). Retry with /mcp reconnect a.')
   })
 
-  it('mixed settle keeps the ToolSearch clause and names the failure', async () => {
+  it('mixed settle keeps grouped clauses naming only the ready subset', async () => {
     const ctx = new FakeCtx()
     const registry = new FakeRegistry()
     mountMcpReadyNotice(ctx as never, registry, ['a', 'b'], 'sid-1')
-    registry.emit({ name: 'a', state: 'ready', toolCount: 2 })
+    registry.emit({ name: 'a', state: 'ready', toolCount: 16, eagerCount: 0, deferredCount: 16 })
     registry.emit({ name: 'b', state: 'error', error: 'kaboom' })
 
     const { appended } = await drive(ctx.preStepListener()!, stubAgent('sid-1'), enter())
     expect(appended[0]!.text)
-      .toBe('MCP: servers settled — ready: a (2 tools); unavailable/active: b (error: kaboom). Ready servers\' mcp__* tools are loadable via ToolSearch.')
+      .toBe('MCP: servers settled — ready: a (16 tools); unavailable/active: b (error: kaboom). Loadable via ToolSearch: a.')
   })
 
   it('sid mismatch leaves the decision unchanged and keeps the latch', async () => {

@@ -375,6 +375,10 @@ bash scripts/sync-local-profile.sh web
 dsh web
 ```
 
+After a dev sync, `dsh-cc --version` shows a `-dev+<commit>[.dirty]` label
+identifying the source tree; updating the launcher via npm automatically
+returns the profile to the store bundles.
+
 To prove the production bundle set actually boots in a user-grade
 environment (fresh `DSH_HOME`, harness-healed fallback, pseudo-TTY, no LLM
 calls) — the same gate presubmit and publish run:

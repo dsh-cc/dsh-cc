@@ -24,30 +24,86 @@ interface Registry {
   onDidChange(listener: (entry: McpConnectionEntry) => void): () => void
 }
 
+/** Classification of a ready server's eager/deferred tool breakdown. */
+type ToolGroup = 'unknown' | 'mixed' | 'pure-deferred' | 'pure-eager' | 'zero'
+
+/**
+ * Classify a ready entry by its tool breakdown. Deferred servers can still
+ * expose eager tools (`anthropic/alwaysLoad`), so groups are not binary;
+ * a missing breakdown (duck-typed/foreign registry) is UNKNOWN.
+ */
+function classify(entry: McpConnectionEntry): ToolGroup {
+  const { eagerCount, deferredCount } = entry
+  if (eagerCount === undefined && deferredCount === undefined) return 'unknown'
+  const eager = eagerCount ?? 0
+  const deferred = deferredCount ?? 0
+  if (eager > 0 && deferred > 0) return 'mixed'
+  if (deferred > 0) return 'pure-deferred'
+  if (eager > 0) return 'pure-eager'
+  return 'zero'
+}
+
+/**
+ * Build the trailing guidance clauses for the ready subset: mixed servers are
+ * annotated inline, pure-eager ones get a direct-call clause, pure-deferred
+ * ones a ToolSearch clause. Any UNKNOWN entry falls back to the legacy
+ * blanket clause (safe for foreign registries without a breakdown).
+ */
+function buildGuidance(readyEntries: McpConnectionEntry[], allReady: boolean): string {
+  const groups = readyEntries.map(entry => ({ entry, group: classify(entry) }))
+  if (groups.some(({ group }) => group === 'unknown')) {
+    return allReady
+      ? 'Load their mcp__* tools via ToolSearch.'
+      : "Ready servers' mcp__* tools are loadable via ToolSearch."
+  }
+  const name = ({ entry }: { entry: McpConnectionEntry }): string => entry.name
+  const clauses: string[] = []
+  const eager = groups.filter(({ group }) => group === 'pure-eager').map(name)
+  if (eager.length > 0) {
+    clauses.push(`Already available in your tool list, call them directly: ${eager.join(', ')}. ToolSearch only indexes deferred tools and will not find them.`)
+  }
+  const deferred = groups.filter(({ group }) => group === 'pure-deferred').map(name)
+  if (deferred.length > 0) {
+    clauses.push(`Loadable via ToolSearch: ${deferred.join(', ')}.`)
+  }
+  return clauses.join(' ')
+}
+
 /**
  * Build the settle summary line for the announced servers. For each announced
  * name the latest entry decides the wording: ready names the tool count when
  * known, error names the message, anything else (or a vanished server) names
- * the state (`gone` when unregistered).
+ * the state (`gone` when unregistered). The trailing guidance distinguishes
+ * eager from deferred tools so the model is not sent searching ToolSearch for
+ * eagerly registered tools it can already call directly.
  */
 export function buildSettleText(entries: readonly McpConnectionEntry[], announced: readonly string[]): string {
   const describe = (name: string): string => {
     const entry = entries.find(candidate => candidate.name === name)
     if (entry === undefined) return `${name} (gone)`
-    if (entry.state === 'ready') return entry.toolCount === undefined ? name : `${name} (${entry.toolCount} tools)`
+    if (entry.state === 'ready') {
+      if (entry.toolCount === undefined) return name
+      if (classify(entry) === 'mixed') {
+        const eager = entry.eagerCount ?? 0
+        const deferred = entry.deferredCount ?? 0
+        return `${name} (${entry.toolCount} tools: ${eager} direct, ${deferred} via ToolSearch)`
+      }
+      return `${name} (${entry.toolCount} tools)`
+    }
     if (entry.state === 'error') return `${name} (error: ${entry.error ?? 'unknown'})`
     return `${name} (${entry.state})`
   }
   const descriptions = announced.map(describe)
   const ready = announced.filter(name => entries.find(candidate => candidate.name === name)?.state === 'ready')
+  const readyEntries = ready.map(name => entries.find(candidate => candidate.name === name)!).filter(entry => classify(entry) !== 'zero')
   if (ready.length === announced.length) {
-    return `MCP: servers ready — ${descriptions.join(', ')}. Load their mcp__* tools via ToolSearch.`
+    return `MCP: servers ready — ${descriptions.join(', ')}. ${buildGuidance(readyEntries, true)}`.trimEnd()
   }
   if (ready.length === 0) {
     return `MCP: servers unavailable — ${descriptions.join(', ')}. Retry with /mcp reconnect ${announced.join(' ')}.`
   }
   const notReady = announced.filter(name => !ready.includes(name)).map(describe)
-  return `MCP: servers settled — ready: ${ready.map(describe).join(', ')}; unavailable/active: ${notReady.join(', ')}. Ready servers' mcp__* tools are loadable via ToolSearch.`
+  return `MCP: servers settled — ready: ${ready.map(describe).join(', ')}; unavailable/active: ${notReady.join(', ')}. ${buildGuidance(readyEntries, false)}`.trimEnd()
 }
 
 /**

@@ -195,6 +195,42 @@ describe('resume replay — folding a durable event log', () => {
     expect(leaked).toEqual([])
   })
 
+  it('folds v3-style assistant/message events carrying a packed data.stream', () => {
+    const events: SessionEventLike[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'tool/call', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}' } },
+      { type: 'tool/result', data: { turn: 1, step: 1, callId: 'c1', name: 'bash', text: 'ok' } },
+      // No assistant/chunk events at all — 0.1.5 durability only.
+      {
+        type: 'assistant/message',
+        seq: 4,
+        data: {
+          turn: 1,
+          step: 1,
+          message: { content: [{ type: 'reasoning', text: 'thinking' }, { type: 'text', text: 'done' }] },
+          stream: [
+            { type: 'chunk', time: 1, chunk: { type: 'block-start', index: 0, blockType: 'reasoning' } },
+            { type: 'reasoning-chunks', time0: 1, index: 0, dt: [1], texts: ['thin', 'king'] },
+            { type: 'chunk', time: 2, chunk: { type: 'block-end', index: 0, block: { type: 'reasoning', text: 'thinking' } } },
+            { type: 'chunk', time: 3, chunk: { type: 'block-start', index: 1, blockType: 'text' } },
+            { type: 'text-chunks', time0: 3, index: 1, dt: [1], texts: ['don', 'e'] },
+            { type: 'chunk', time: 4, chunk: { type: 'block-end', index: 1, block: { type: 'text', text: 'done' } } },
+            { type: 'chunk', time: 5, chunk: { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } } },
+            { type: 'chunk', time: 5, chunk: { type: 'finish', reason: { kind: 'stop' } } },
+          ],
+        },
+      },
+      { type: 'turn/end', data: { turn: 1, reason: 'normal' } },
+    ]
+
+    let folded = createInitialState()
+    for (const event of events) folded = applySessionEvent(folded, event)
+
+    expect(folded.rows).toContainEqual({ kind: 'thinking', text: 'thinking', seq: 4 })
+    expect(folded.rows).toContainEqual({ kind: 'assistant', text: 'done', seq: 4 })
+    expect(folded.rows.filter(row => row.kind === 'assistant')).toHaveLength(1)
+  })
+
   it('renders the folded rows through TranscriptView into the terminal', async () => {
     const events: SessionEventLike[] = [
       { type: 'user/message', data: { content: [{ type: 'text', text: 'list files' }], source: { kind: 'user' } } },

@@ -18,6 +18,8 @@
 # dsh.profile.bundles (after the in-box bundles; do NOT add dependencies
 # entries — the dsh plugin reconciler never touches bundles that aren't
 # dependencies, so hand-registered entries survive).
+# The sync also writes a dev-build stamp (dsh-cc-build.json) consumed by
+# `dsh-cc --version` — see docs/plans/2026-09-13-dev-build-version-stamp.md.
 #
 # Re-run after every `pnpm run build` and restart dsh to pick up code changes.
 # (Only patch layers are hot-reloaded; plugin code is read at boot.)
@@ -171,6 +173,7 @@ if [ -d "$pi_tui_src" ]; then
 fi
 
 echo "synced ${#synced[@]} packages into $dest"
+node "$repo_root/scripts/stamp-build-info.mjs" "$dest/dsh-cc-build.json"
 [ "$missing_lib" -eq 0 ] || exit 1
 
 # The runtime reads the cc preset composition from the per-user
