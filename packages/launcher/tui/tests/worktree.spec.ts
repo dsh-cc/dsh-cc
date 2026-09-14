@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   flattenSlug,
   parseWorktreeFlag,
@@ -8,7 +11,10 @@ import {
   slugRetryDecision,
   validateWorktreeSlug,
   WORKTREE_ENV,
+  parseLocalConfig,
+  repoRootFromCommonDir,
   worktreeAddArgv,
+  worktreeIdentityRefusal,
   worktreeBranch,
   worktreeEnv,
   worktreePathFor,
@@ -144,5 +150,70 @@ describe('existingWorktreeDecision', () => {
     expect(existingWorktreeDecision({ named: true, pathExists: false })).toBe('create')
     expect(existingWorktreeDecision({ named: false, pathExists: true })).toBe('create')
     expect(existingWorktreeDecision({ named: false, pathExists: false })).toBe('create')
+  })
+})
+
+// WS-1 creation hardening parity (mirrors tool-git-worktree tests/harden.spec.ts).
+describe('repoRootFromCommonDir', () => {
+  it('resolves relative answers against the probe cwd and absolute ones as-is', () => {
+    expect(repoRootFromCommonDir('/repo', '.git')).toBe('/repo')
+    expect(repoRootFromCommonDir('/repo/.claude/worktrees/wt', '/main/.git')).toBe('/main')
+    expect(repoRootFromCommonDir('/x', '  \n')).toBeUndefined()
+  })
+})
+
+describe('parseLocalConfig', () => {
+  it('collects filter names and refuses includeIf / ambiguous names', () => {
+    const ok = parseLocalConfig('filter.lfs.required\ntrue\0user.name\nx\0')
+    expect(ok.filters).toEqual(['lfs'])
+    expect(ok.refusals).toEqual([])
+    const inc = parseLocalConfig('includeif.gitdir:~/x/.path\n~/x/.gitconfig\0')
+    expect(inc.refusals[0]).toContain('includeIf')
+    const amb = parseLocalConfig('filter.a=b.clean\nx\0')
+    expect(amb.filters).toEqual([])
+    expect(amb.refusals[0]).toContain('ambiguous name')
+  })
+})
+
+describe('worktreeAddArgv neutralization', () => {
+  it('prepends empty -c overrides per filter plus required=false', () => {
+    expect(worktreeAddArgv({ branch: 'b', worktreePath: '/p' }, ['lfs'])).toEqual([
+      '-c', 'filter.lfs.command=',
+      '-c', 'filter.lfs.smudge=',
+      '-c', 'filter.lfs.clean=',
+      '-c', 'filter.lfs.process=',
+      '-c', 'filter.lfs.required=false',
+      'worktree', 'add', '-B', 'b', '/p', 'HEAD',
+    ])
+    expect(worktreeAddArgv({ branch: 'b', worktreePath: '/p' })).toEqual(
+      ['worktree', 'add', '-B', 'b', '/p', 'HEAD'],
+    )
+  })
+})
+
+describe('worktreeIdentityRefusal', () => {
+  const makeRepo = () => mkdtempSync(join(tmpdir(), 'dsh-launcher-ident-'))
+
+  it('accepts a gitdir pointer into the main worktrees registration', () => {
+    const root = makeRepo()
+    const target = join(root, '.claude', 'worktrees', 'wt')
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, '.git'), `gitdir: ${join(root, '.git', 'worktrees', 'wt')}\n`)
+    expect(worktreeIdentityRefusal(target, root)).toBeNull()
+  })
+
+  it('refuses a directory with no git metadata and a plain clone', () => {
+    const root = makeRepo()
+    const plain = join(root, '.claude', 'worktrees', 'plain')
+    mkdirSync(plain, { recursive: true })
+    expect(worktreeIdentityRefusal(plain, root)).toContain('no .git entry')
+    const clone = join(root, '.claude', 'worktrees', 'clone')
+    mkdirSync(join(clone, '.git'), { recursive: true })
+    expect(worktreeIdentityRefusal(clone, root)).toContain('separate checkout')
+  })
+
+  it('refuses a target that contains the main checkout', () => {
+    const root = makeRepo()
+    expect(worktreeIdentityRefusal(root, root)).toContain('contains the main checkout')
   })
 })

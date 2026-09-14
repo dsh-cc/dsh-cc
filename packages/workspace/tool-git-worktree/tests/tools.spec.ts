@@ -125,8 +125,8 @@ describe('EnterWorktree', () => {
   it('returns a structured error when not in a git repository', async () => {
     const { ctx } = await setup()
     const notRepo = join(mkdtempSync(join(tmpdir(), 'dsh-wt-notrepo-')), 'plain')
-    // git rev-parse --show-toplevel fails (exit 128).
-    ;(ctx.shell as ScriptedShell).script.push({ match: /show-toplevel/, result: { exitCode: 128, stderr: { text: 'fatal: not a git repository', truncated: false } } })
+    // git rev-parse --git-common-dir fails (exit 128).
+    ;(ctx.shell as ScriptedShell).script.push({ match: /git-common-dir/, result: { exitCode: 128, stderr: { text: 'fatal: not a git repository', truncated: false } } })
     const result = await call(ctx, 'EnterWorktree', {}, sessionCwdAgent(notRepo))
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('not in a git repository')
@@ -134,7 +134,7 @@ describe('EnterWorktree', () => {
 
   it('rejects a name that is not a safe slug before running git worktree add', async () => {
     const { ctx, shell } = await setup()
-    shell.script = [{ match: /show-toplevel/, result: { stdout: { text: repo, truncated: false } } }]
+    shell.script = [{ match: /git-common-dir/, result: { stdout: { text: repo + "/.git", truncated: false } } }]
     const result = await call(ctx, 'EnterWorktree', { name: '../escape' }, sessionCwdAgent(repo))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/invalid worktree name "\.\.\/escape"/)
@@ -145,7 +145,7 @@ describe('EnterWorktree', () => {
   it('creates a worktree with a named slug, builds the git command, and declares the cwd', async () => {
     const { ctx, shell } = await setup()
     shell.script = [
-      { match: /show-toplevel/, result: { stdout: { text: repo, truncated: false } } },
+      { match: /git-common-dir/, result: { stdout: { text: repo + "/.git", truncated: false } } },
       { match: /rev-parse HEAD/, result: { stdout: { text: 'abc123', truncated: false } } },
       { match: /worktree add/, result: { exitCode: 0 } },
     ]
@@ -168,7 +168,7 @@ describe('EnterWorktree', () => {
   it('generates a random, valid slug when no name is given', async () => {
     const { ctx, shell } = await setup()
     shell.script = [
-      { match: /show-toplevel/, result: { stdout: { text: repo, truncated: false } } },
+      { match: /git-common-dir/, result: { stdout: { text: repo + "/.git", truncated: false } } },
       { match: /rev-parse HEAD/, result: { stdout: { text: 'abc123', truncated: false } } },
       { match: /worktree add/, result: { exitCode: 0 } },
     ]
@@ -191,7 +191,7 @@ describe('ExitWorktree', () => {
   async function entered(ctx: Context): Promise<void> {
     const shell = ctx.shell as ScriptedShell
     shell.script = [
-      { match: /show-toplevel/, result: { stdout: { text: repo, truncated: false } } },
+      { match: /git-common-dir/, result: { stdout: { text: repo + "/.git", truncated: false } } },
       { match: /rev-parse HEAD/, result: { stdout: { text: 'abc123', truncated: false } } },
       { match: /worktree add/, result: { exitCode: 0 } },
     ]

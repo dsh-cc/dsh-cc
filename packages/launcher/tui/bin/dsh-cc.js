@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { bootstrapCommand, dshUnavailableMessage, existingWorktreeDecision, interceptResume, parseWorktreeFlag, planWorktree, PROFILE, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, versionGate, worktreeAddArgv, worktreeEnv } from '../bootstrap.mjs'
+import { bootstrapCommand, dshUnavailableMessage, existingWorktreeDecision, interceptResume, parseLocalConfig, parseWorktreeFlag, planWorktree, PROFILE, repoRootFromCommonDir, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal } from '../bootstrap.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ownVersion = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version
@@ -65,12 +65,31 @@ if (worktree.name !== undefined) {
   // of this block. A REUSED worktree leaves DSH_CC_RESUME_SESSION undefined,
   // so interceptResume sets DSH_CC_AUTO_RESUME=1 and the TUI resumes the
   // project's last session.
-  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
-  if (top.error || top.status !== 0) {
+  // WS-1 root pinning: anchor at the git common dir so a session launched
+  // from inside a linked worktree still creates a SIBLING under the main
+  // root's .claude/worktrees/, never a nested tree.
+  const common = spawnSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' })
+  if (common.error || common.status !== 0) {
     console.error('dsh-cc: --worktree requires a git repository (run from inside a git working tree).')
     process.exit(1)
   }
-  const repoRoot = top.stdout.trim()
+  const repoRoot = repoRootFromCommonDir(process.cwd(), common.stdout)
+  if (repoRoot === undefined || !existsSync(repoRoot)) {
+    console.error('dsh-cc: --worktree requires a git repository (could not locate the main checkout).')
+    process.exit(1)
+  }
+  // WS-1: neutralize repository-local filter drivers — read the local config
+  // up front and refuse on unreadable config or CC-parity refusal shapes.
+  const localConfig = spawnSync('git', ['-C', repoRoot, 'config', '--local', '--list', '-z'], { encoding: 'utf8' })
+  if (localConfig.error || localConfig.status !== 0) {
+    console.error('dsh-cc: refusing to create a worktree: repository local config is unreadable.')
+    process.exit(1)
+  }
+  const configScan = parseLocalConfig(localConfig.stdout)
+  if (configScan.refusals.length > 0) {
+    console.error(`dsh-cc: refusing to create a worktree: ${configScan.refusals.join('; ')}`)
+    process.exit(1)
+  }
   // Drop stale registrations left by crashed sessions before planning paths.
   spawnSync('git', ['-C', repoRoot, 'worktree', 'prune'], { encoding: 'utf8' })
   const head = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' })
@@ -89,8 +108,21 @@ if (worktree.name !== undefined) {
       console.error(`dsh-cc: ${error.message}`)
       process.exit(1)
     }
+    // WS-1 symlink refusal on the creation route (CC v2.1.212 parity).
+    const symlink = symlinkedPath([join(repoRoot, '.claude'), join(repoRoot, '.claude', 'worktrees'), candidate.worktreePath])
+    if (symlink !== null) {
+      console.error(`dsh-cc: refusing to create a worktree: a creation path is a symlink: ${symlink}`)
+      process.exit(1)
+    }
     const pathExists = existsSync(candidate.worktreePath)
     if (existingWorktreeDecision({ named, pathExists }) === 'reuse') {
+      // WS-1 adoption gate: verify the existing directory's git identity
+      // before handing it over (leave the directory in place on refusal).
+      const refusal = worktreeIdentityRefusal(candidate.worktreePath, repoRoot)
+      if (refusal !== null) {
+        console.error(`dsh-cc: ${refusal}`)
+        process.exit(1)
+      }
       plan = candidate
       created = false
       break
@@ -99,7 +131,7 @@ if (worktree.name !== undefined) {
       ? `path already exists: ${candidate.worktreePath}`
       : null
     if (failure === null) {
-      const add = spawnSync('git', ['-C', repoRoot, ...worktreeAddArgv(candidate)], { encoding: 'utf8' })
+      const add = spawnSync('git', ['-C', repoRoot, ...worktreeAddArgv(candidate, configScan.filters)], { encoding: 'utf8' })
       if (add.error || add.status !== 0) {
         failure = (add.stderr ?? (add.error ? String(add.error) : '')).trim() || 'git worktree add failed'
       }

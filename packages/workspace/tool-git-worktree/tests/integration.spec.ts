@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import { execSync } from 'node:child_process'
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -133,5 +133,104 @@ describe('real-git worktree lifecycle', () => {
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/invalid worktree name "\.\.\/escape"/)
     expect(text(result)).toMatch(/must not contain/)
+  })
+})
+
+describe('WS-1 creation hardening (real git)', () => {
+  it('anchors creation at the MAIN repo root when invoked from inside a linked worktree', async () => {
+    const repo = fixtureRepo()
+    const ctx = await harness(repo)
+    const agent = agentAt(repo)
+    const first = await call(ctx, 'EnterWorktree', { name: 'outer' }, agent)
+    expect(first.isError).toBe(false)
+    const outerPath = (first.value as { worktreePath: string }).worktreePath
+
+    // Re-enter from INSIDE the first worktree: the new tree must be a
+    // sibling under the main root's .claude/worktrees/, never nested.
+    const agentInside = agentAt(outerPath)
+    const second = await call(ctx, 'EnterWorktree', { name: 'inner' }, agentInside)
+    expect(second.isError).toBe(false)
+    const innerPath = (second.value as { worktreePath: string }).worktreePath
+    expect(realpathSync(innerPath)).toBe(realpathSync(join(repo, '.claude', 'worktrees', 'inner')))
+  })
+
+  it('refuses creation when a route path is a symlink', async () => {
+    const repo = fixtureRepo()
+    const ctx = await harness(repo)
+    const agent = agentAt(repo)
+    symlinkSync('/nonexistent-dsh-wt-target', join(repo, '.claude'))
+    const result = await call(ctx, 'EnterWorktree', { name: 'feat' }, agent)
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('is a symlink')
+    expect(text(result)).toContain(join(repo, '.claude'))
+  })
+
+  it('refuses to adopt an existing directory that is not a registered worktree', async () => {
+    const repo = fixtureRepo()
+    const ctx = await harness(repo)
+    const agent = agentAt(repo)
+    const target = join(repo, '.claude', 'worktrees', 'userdir')
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'user-file.txt'), 'mine\n')
+    const result = await call(ctx, 'EnterWorktree', { name: 'userdir' }, agent)
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('no .git entry')
+    expect(text(result)).toContain('Remove or rename')
+    // The directory is left in place.
+    expect(existsSync(join(target, 'user-file.txt'))).toBe(true)
+  })
+
+  it('lets git decide on a properly registered existing worktree directory (identity gate passes)', async () => {
+    const repo = fixtureRepo()
+    const ctx = await harness(repo)
+    const agent = agentAt(repo)
+    const created = await call(ctx, 'EnterWorktree', { name: 'reent' }, agent)
+    expect(created.isError).toBe(false)
+    const worktreePath = (created.value as { worktreePath: string }).worktreePath
+    await call(ctx, 'ExitWorktree', { action: 'keep' }, agent)
+
+    // Re-entering the same name passes the WS-1 identity gate; `git worktree
+    // add` itself refuses a registered path (still an error, but NOT an
+    // identity refusal, and the directory is left untouched).
+    const again = await call(ctx, 'EnterWorktree', { name: 'reent' }, agent)
+    expect(again.isError).toBe(true)
+    expect(text(again)).not.toContain('refusing to adopt')
+    expect(existsSync(join(worktreePath, 'file.txt'))).toBe(true)
+  })
+
+  it('neutralizes repository-local filter drivers: no filter execution during worktree add', async () => {
+    const repo = fixtureRepo()
+    // Wire a "malicious-looking" filter driver: smudge rewrites content AND
+    // appends to a marker file (the marker write is what a filter binary
+    // would do; unsandboxed CI sees it appear iff the filter executed).
+    const script = join(repo, 'smudge.sh')
+    const marker = join(repo, 'smudge-marker')
+    writeFileSync(script, `#!/bin/sh\ncat\nprintf '%s\\n' "$1" >> ${marker}\n`)
+    execSync(`chmod +x ${script}`)
+    execSync(`git config filter.dirty.smudge "${script} %f"`, { cwd: repo })
+    execSync('git config filter.dirty.required true', { cwd: repo })
+    // clean must succeed while committing .gitattributes (no write, unlike
+    // the smudge script whose marker write is the execution evidence).
+    execSync('git config filter.dirty.clean cat', { cwd: repo })
+    writeFileSync(join(repo, '.gitattributes'), '*.txt filter=dirty\n')
+    execSync('git add .gitattributes && git commit -qm attrs', { cwd: repo })
+
+    const ctx = await harness(repo)
+    const created = await call(ctx, 'EnterWorktree', { name: 'nofilter' }, agentAt(repo))
+    expect(created.isError).toBe(false)
+    const worktreePath = (created.value as { worktreePath: string }).worktreePath
+    // The blob content must be untouched (smudge would produce a different
+    // first line) and the marker file must not exist.
+    expect(readFileSync(join(worktreePath, 'file.txt'), 'utf8')).toBe('hello\n')
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  it('refuses creation when the local config is unreadable or uses includeIf', async () => {
+    const repo = fixtureRepo()
+    execSync('git config includeif.gitdir:~/x/.path ~/x/.gitconfig', { cwd: repo })
+    const ctx = await harness(repo)
+    const result = await call(ctx, 'EnterWorktree', { name: 'feat' }, agentAt(repo))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('includeIf')
   })
 })

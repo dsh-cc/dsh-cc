@@ -10,7 +10,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { relative, sep } from 'node:path'
+import { join, relative, sep } from 'node:path'
+import {
+  adoptionRefusal,
+  repoRootFromCommonDir,
+  scanLocalConfig,
+} from './harden.ts'
 import { defineTool, TOOL_ABORTED } from '@dsh-cc/tools'
 import type { ToolRunContext } from '@dsh-cc/tools'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
@@ -32,6 +37,7 @@ import {
   validateSlug,
   worktreeBranch,
   worktreePathFor,
+  worktreesDir,
 } from './worktree.ts'
 import type { GitCmd, WorktreeSession } from './worktree.ts'
 import { presentEnterCall, presentWorktreeResult, presentExitCall } from './render.ts'
@@ -154,17 +160,37 @@ async function assertPathInRepo(ctx: Context, repoRoot: string, worktreePath: st
 }
 
 /**
- * Find the canonical repository root for a working directory using git. A
- * nonzero exit means the cwd is not inside a git working tree.
+ * Find the main repository root for a working directory using git, pinned to
+ * the git common dir (WS-1): `--git-common-dir` already returns the main
+ * checkout's `.git` from inside a linked worktree, so creation always
+ * anchors at the main root (sibling worktrees, never nested).
  * @param ctx - the Cordis context.
  * @param cwd - the working directory to search from.
  * @param signal - the tool-call cancellation signal.
- * @returns the canonical root, or `undefined` when not a git repository.
+ * @returns the main repository root, or `undefined` when not a git repository.
  */
 async function findRepoRoot(ctx: Context, cwd: string, signal: AbortSignal): Promise<string | undefined> {
-  const result = await runGit(ctx, { command: 'git rev-parse --show-toplevel', workdir: cwd, label: 'locate repository root' }, signal)
-  const root = result.stdout.text.trim()
-  return result.exitCode === 0 && root.length > 0 ? root : undefined
+  const result = await runGit(
+    ctx,
+    { command: 'git rev-parse --git-common-dir', workdir: cwd, label: 'locate repository common dir' },
+    signal,
+  )
+  return result.exitCode === 0 ? repoRootFromCommonDir(cwd, result.stdout.text) : undefined
+}
+
+/**
+ * Refuse creation when a path on the creation route (`.claude`,
+ * `.claude/worktrees`, the target) is itself a symlink — `ctx.fs.resolve`
+ * follows symlinks, so the containment assert above cannot see them.
+ * @param ctx - the Cordis context.
+ * @param path - the candidate path.
+ * @param what - human label used in the error.
+ */
+async function assertNotSymlink(ctx: Context, path: string, what: string): Promise<void> {
+  const info = await ctx.fs.lstat(path)
+  if (info?.type === 'symlink') {
+    throw new WorktreeError(`refusing worktree path: ${what} is a symlink: "${path}"`)
+  }
 }
 
 /**
@@ -221,7 +247,12 @@ export function apply(ctx: Context, config: Config = {}): void {
         + 'Because the session working directory is fixed at creation, subsequent shell and fs calls should pass '
         + '`workdir` equal to the reported worktreePath to operate inside it; the runtime context and this result '
         + 'both declare the current working directory. This tool is NOT concurrency-safe and must not overlap '
-        + 'other tools. Only call it when the user explicitly asks to work in a worktree.',
+        + 'other tools. Only call it when the user explicitly asks to work in a worktree. '
+        + 'Repository-local filter drivers (e.g. git-lfs) are neutralized during creation, so LFS-tracked files '
+        + 'arrive as pointer files; run `git lfs pull` inside the worktree to fetch real content. '
+        + 'Refuses when .claude, .claude/worktrees, or the target path is a symlink, when the repository local '
+        + 'config is unreadable or uses includeIf/ambiguous filter drivers, or when the target directory already '
+        + 'exists and is not a registered worktree of this repository.',
       parameters: {
         name: {
           type: 'string',
@@ -257,6 +288,35 @@ export function apply(ctx: Context, config: Config = {}): void {
 
         const worktreePath = worktreePathFor(repoRoot, slug)
         await assertPathInRepo(ctx, repoRoot, worktreePath)
+        await assertNotSymlink(ctx, join(repoRoot, '.claude'), '.claude')
+        await assertNotSymlink(ctx, worktreesDir(repoRoot), '.claude/worktrees')
+        await assertNotSymlink(ctx, worktreePath, 'worktree target path')
+
+        // Adoption gate (WS-1): the target directory already exists (a -B
+        // reuse). Verify its git identity before touching it.
+        if (await ctx.fs.lstat(worktreePath) !== undefined) {
+          const refusal = adoptionRefusal(worktreePath, repoRoot)
+          if (refusal !== null) throw new WorktreeError(refusal)
+        }
+
+        // Neutralize repository-local filter drivers before `worktree add`
+        // (WS-1): unreadable local config or CC-parity refusal shapes abort
+        // creation; remaining filter names get empty `-c` overrides so no
+        // driver executes during the checkout.
+        const cfg = await runGit(
+          ctx,
+          { command: 'git config --local --list -z', workdir: repoRoot, label: 'read local config' },
+          exec.signal,
+        )
+        if (cfg.exitCode !== 0) {
+          throw new WorktreeError(
+            `refusing to create a worktree: repository local config is unreadable at ${repoRoot}: ${gitFailure(cfg)}`,
+          )
+        }
+        const scan = scanLocalConfig(cfg.stdout.text)
+        if (scan.refusals.length > 0) {
+          throw new WorktreeError(`refusing to create a worktree: ${scan.refusals.join('; ')}`)
+        }
 
         const branch = worktreeBranch(slug)
         const headResult = await runGit(ctx, { command: 'git rev-parse HEAD', workdir: repoRoot, label: 'resolve HEAD' }, exec.signal)
@@ -265,7 +325,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
         const originalHead = headResult.stdout.text.trim()
 
-        const create = await runGit(ctx, addWorktree(repoRoot, slug), exec.signal)
+        const create = await runGit(ctx, addWorktree(repoRoot, slug, scan.filters), exec.signal)
         if (create.exitCode !== 0) {
           throw new WorktreeError(`failed to create worktree: ${gitFailure(create)}`)
         }

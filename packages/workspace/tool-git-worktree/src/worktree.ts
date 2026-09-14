@@ -7,6 +7,7 @@
  */
 
 import { basename, join } from 'node:path'
+import { neutralizationArgv } from './harden.ts'
 
 /**
  * Maximum length of a worktree slug. Mirrors the claude-code reference constraint.
@@ -91,15 +92,22 @@ export interface GitCmd {
 /**
  * `git worktree add` on a fresh branch based on the current HEAD. Uses `-B`
  * (not `-b`) so a stale orphan branch left by a removed worktree is reset
- * rather than failing.
+ * rather than failing..
+ * When `filterNames` is nonempty, empty-string `-c` overrides neutralize
+ * every repository-local filter driver first (see harden.ts for the
+ * empirical mechanism evidence) — see also the EnterWorktree description
+ * for the LFS-pointer consequence.
  * @param repoRoot - The canonical repository root.
  * @param slug - A validated worktree slug.
+ * @param filterNames - Repository-local filter names to neutralize.
  * @returns the command to run.
  */
-export function addWorktree(repoRoot: string, slug: string): GitCmd {
+export function addWorktree(repoRoot: string, slug: string, filterNames: readonly string[] = []): GitCmd {
   const path = worktreePathFor(repoRoot, slug)
+  const neutralize = neutralizationArgv(filterNames).map(quote).join(' ')
+  const prefix = neutralize.length > 0 ? `git ${neutralize} ` : 'git '
   return {
-    command: `git worktree add -B ${quote(worktreeBranch(slug))} ${quote(path)} HEAD`,
+    command: `${prefix}worktree add -B ${quote(worktreeBranch(slug))} ${quote(path)} HEAD`,
     workdir: repoRoot,
     label: `create worktree "${path}"`,
   }

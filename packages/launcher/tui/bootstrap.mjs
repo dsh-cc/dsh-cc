@@ -3,7 +3,8 @@
  * decision table without spawning dsh.
  */
 
-import { join } from 'node:path'
+import { join, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { lstatSync, readFileSync } from 'node:fs'
 
 export const PROFILE = 'tui'
 export const BUNDLES = [
@@ -268,12 +269,147 @@ export function planWorktree(repoRoot, name, rand) {
 /**
  * argv for `git worktree add -B <branch> <path> HEAD` (execFile form — no
  * shell, so no quoting concerns). `-B` resets a stale orphan branch left by
- * a removed worktree.
+ * a removed worktree. When `filterNames` is nonempty, empty-string `-c`
+ * overrides neutralize every repository-local filter driver first
+ * (mechanism verified empirically — content-marker experiment, git 2.54:
+ * overriding all `filter.<name>.*` keys + `required=false` suppresses
+ * execution; `required=false` alone does NOT). Consequence (CC parity):
+ * LFS content arrives as pointer files; `git lfs pull` restores it.
  * @param {{ worktreePath: string, branch: string }} plan
+ * @param {readonly string[]} [filterNames]
  * @returns {string[]}
  */
-export function worktreeAddArgv(plan) {
-  return ['worktree', 'add', '-B', plan.branch, plan.worktreePath, 'HEAD']
+export function worktreeAddArgv(plan, filterNames = []) {
+  const neutralize = []
+  for (const filter of filterNames) {
+    for (const key of ['command', 'smudge', 'clean', 'process']) {
+      neutralize.push('-c', `filter.${filter}.${key}=`)
+    }
+    neutralize.push('-c', `filter.${filter}.required=false`)
+  }
+  return [...neutralize, 'worktree', 'add', '-B', plan.branch, plan.worktreePath, 'HEAD']
+}
+
+/**
+ * WS-1 root pinning: main repository root from `git rev-parse
+ * --git-common-dir` output run at `cwd`. Inside a linked worktree the
+ * common dir already points at the main checkout's `.git`, so creation
+ * always anchors at the main root (sibling worktrees, never nested).
+ * @param {string} cwd - Directory the git probe ran in.
+ * @param {string} output - Raw stdout of the probe.
+ * @returns {string | undefined}
+ */
+export function repoRootFromCommonDir(cwd, output) {
+  const raw = output.trim()
+  if (raw.length === 0) return undefined
+  return dirname(isAbsolute(raw) ? raw : resolve(cwd, raw))
+}
+
+/**
+ * Parse `git config --local --list -z` output (NUL-separated `key\nvalue`
+ * entries — the NUL form keeps filter names containing `=` decidable).
+ * Refuses includeIf and filter names containing `=`; collects the rest.
+ * Keep in sync with tool-git-worktree/src/harden.ts.
+ * @param {string} text
+ * @returns {{ filters: string[], refusals: string[] }}
+ */
+export function parseLocalConfig(text) {
+  const filters = new Set()
+  const refusals = []
+  for (const entry of text.split('\0')) {
+    if (entry.length === 0) continue
+    const nl = entry.indexOf('\n')
+    const rawKey = nl < 0 ? entry : entry.slice(0, nl)
+    const key = rawKey.toLowerCase()
+    if (key.startsWith('includeif.')) {
+      refusals.push(`refusing local config with includeIf: ${rawKey}`)
+      continue
+    }
+    if (!key.startsWith('filter.')) continue
+    const name = key.slice('filter.'.length, key.lastIndexOf('.'))
+    if (name.length === 0) continue
+    if (name.includes('=') || name.includes('\n')) {
+      refusals.push(`refusing filter driver with ambiguous name: filter.${name}.*`)
+      continue
+    }
+    filters.add(name)
+  }
+  return { filters: [...filters], refusals }
+}
+
+/**
+ * WS-1 symlink refusal: the first path in the list that is itself a symlink
+ * (CC v2.1.212 parity). Callers check `.claude`, `.claude/worktrees`, and
+ * the computed target path.
+ * @param {string[]} paths
+ * @returns {string | null} the offending path, or null when none is a symlink.
+ */
+export function symlinkedPath(paths) {
+  for (const path of paths) {
+    try {
+      if (lstatSync(path).isSymbolicLink()) return path
+    } catch {
+      // missing is fine
+    }
+  }
+  return null
+}
+
+/**
+ * WS-1 adoption identity check for reusing an existing directory as a
+ * worktree: its `.git` entry must be a gitdir pointer file resolving into
+ * the main checkout's `.git/worktrees/` registration. Refuses plain clones,
+ * core.worktree redirects, unreadable entries, directories that contain the
+ * main checkout, and directories with no git metadata (may hold user work).
+ * Keep in sync with tool-git-worktree/src/harden.ts.
+ * @param {string} target - Absolute path of the existing directory.
+ * @param {string} mainRoot - Main checkout repository root.
+ * @returns {string | null} the refusal reason, or null when adoptable.
+ */
+export function worktreeIdentityRefusal(target, mainRoot) {
+  const rel = relative(target, mainRoot)
+  if (rel === '' || !rel.startsWith(`..${sep}`)) {
+    return `refusing to reuse ${target}: it contains the main checkout at ${mainRoot}. Remove or rename the directory (or pick another name) and retry.`
+  }
+  const gitEntry = join(target, '.git')
+  let info
+  try {
+    info = lstatSync(gitEntry)
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT') {
+      return `refusing to reuse ${target}: it holds no git worktree (no .git entry) and may contain user work. Remove or rename the directory (or pick another name) and retry.`
+    }
+    return `refusing to reuse ${target}: its .git entry is unreadable (${/** @type {NodeJS.ErrnoException} */ (error).message}). Inspect the directory manually; remove or rename it (or pick another name) and retry.`
+  }
+  if (!info.isFile()) {
+    let detail = 'it is a separate checkout (directory .git), not a linked worktree'
+    try {
+      const common = readFileSync(join(gitEntry, 'commondir'), 'utf8').trim()
+      const gitRoot = join(mainRoot, '.git')
+      const resolved = resolve(gitEntry, common)
+      if (resolved.startsWith(gitRoot + sep) || resolved === gitRoot) {
+        detail = 'its .git commondir resolves into the main checkout\'s own .git (plain-clone/core.worktree redirect shape)'
+      }
+    } catch {
+      // no commondir file — separate-checkout message stands
+    }
+    return `refusing to reuse ${target}: ${detail}. Remove or rename the directory (or pick another name) and retry.`
+  }
+  let gitdir
+  try {
+    gitdir = readFileSync(gitEntry, 'utf8').trim()
+  } catch {
+    return `refusing to reuse ${target}: its .git pointer file is unreadable. Inspect the directory manually; remove or rename it (or pick another name) and retry.`
+  }
+  if (!gitdir.startsWith('gitdir:')) {
+    return `refusing to reuse ${target}: its .git entry is a file but not a gitdir pointer. Remove or rename the directory (or pick another name) and retry.`
+  }
+  const registered = resolve(target, gitdir.slice('gitdir:'.length).trim())
+  const registrations = join(mainRoot, '.git', 'worktrees')
+  if (!registered.startsWith(registrations + sep) && registered !== registrations) {
+    return `refusing to reuse ${target}: its .git pointer resolves to ${registered}, which is not this repository's worktree registration (.git/worktrees/). It may be a clone, redirect, or foreign worktree. Remove or rename the directory (or pick another name) and retry.`
+  }
+  return null
 }
 
 /**

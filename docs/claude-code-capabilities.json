@@ -4208,12 +4208,12 @@
         "summary": "Frontmatter aliases (sonnet/opus/haiku/fable + dsh lanes + open set), settings model-aliases overlay with null-delete and builtin fallback, shared toAgentOptions per-field inheritance, and the ccModelRoutes service all work. Follow-ups: the /model command, ANTHROPIC_* env vars (no Anthropic semantics), and aliasing the main-session default model."
       }
     },
-    "workspace.worktree": {
-      "title": "Worktree tools",
+    "workspace.worktree-launcher": {
+      "title": "Worktree launcher (--worktree)",
       "category": "workspace",
-      "plane": "preset",
+      "plane": "host",
       "upstream": {
-        "summary": "Enter/exit isolated git worktrees mid-session.",
+        "summary": "Plain-JS launcher creates or reuses `.claude/worktrees/` sessions via `--worktree`, with the same creation hardening as the tool side: common-dir root pinning, repository-local filter-driver neutralization, symlink refusal, and the adoption identity check on named reuse.",
         "refs": []
       },
       "dimensions": {
@@ -4224,10 +4224,48 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "partial"
         },
         "ux": {
-          "status": "full"
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/launcher/tui/bootstrap.mjs",
+          "anchor": "export function worktreeIdentityRefusal"
+        },
+        {
+          "type": "test",
+          "path": "packages/launcher/tui/tests/worktree.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Launcher `--worktree` sessions keep git-direct creation: the pre-build bin/dsh-cc.js cannot run hooks or read the settings cascade, and there is no include-copy, no baseRef freshness, and no PR-reference support (WS-4/WS-6 scope)."
+      }
+    },
+    "workspace.worktree-tools": {
+      "title": "Worktree tools (EnterWorktree/ExitWorktree)",
+      "category": "workspace",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Enter/exit isolated git worktrees mid-session with creation hardening: the repository root is pinned to the git common dir, repository-local filter drivers are neutralized before `git worktree add` (unreadable local config, includeIf, and ambiguous filter names refuse), symlinked creation paths refuse, and adopting an existing directory verifies its git identity. Exit keeps a fail-closed gate with discard confirmation.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
         }
       },
       "evidence": [
@@ -4239,10 +4277,19 @@
         {
           "type": "test",
           "path": "packages/workspace/tool-git-worktree/tests/worktree.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/harden.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/workspace/tool-git-worktree/tests/integration.spec.ts"
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "downgrade",
+        "summary": "Pending vs CC: `worktree.baseRef` fresh/head, the `path` form, WorktreeCreate/WorktreeRemove hooks, `.worktreeinclude` copy, and lock/sweep lifecycle (WS-3..WS-6). Git writes to the shared `.git` (worktree add/remove, branch ops) require a sandbox escalation; the auto-allow interim was evaluated and rejected — the approval payload carries no command identity and an argv0 gate is exploitable via `git -c core.fsmonitor=<cmd>`."
       }
     },
     "ux.output-styles": {
