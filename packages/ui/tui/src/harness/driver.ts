@@ -149,8 +149,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
       resumed = true
       warnIfResumedCwdMissing(handle.agent, cwd, showNotice)
     } catch {
-      // Stale marker: session gone — clear it (no loop) and degrade to a fresh
-      // session, which must not steal the marker (persist fires on real content).
+      // Stale marker: session gone — clear it (no loop); fresh must not steal the marker.
       clearResumeTarget({ cwd })
       showNotice('上次会话已失效，已开启新会话，可 /resume 手动选择')
       handle = await ctx.agents.create(createArgs(SessionId(`tui-${randomUUID()}`)))
@@ -425,6 +424,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     get statusLine() { return statusLineOf() },
     statusLineIn: (width?: number) => statusLineOf(width),
     get cwd() { return cwd },
+    // Live, not a snapshot: /resume (switchSession) rebinds current.agent in place.
+    get currentSessionId() { return String(current.agent.session.id) },
     get promptHistory() { return agent.getHistory() },
     get bashHistory() { return agent.getBashHistory() },
     subscribe(listener) {

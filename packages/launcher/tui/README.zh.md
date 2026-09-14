@@ -45,6 +45,8 @@ worktree。要求 git 仓库至少有一个提交。
 - `DSH_CC_CONTINUE='1'` — 用户传入了 `-c`/`--continue`；当没有标记存在时，
   TUI 显示"没有可继续的上一个会话"提示（此前这是启动器一行 stderr 提示；
   标记读取移入 TUI 后，启动器不再掌握这一信息）。
+- `DSH_CC_DISABLE_EXIT_TIP='1'` — 禁用 TUI 退出时打印到回滚缓冲区的
+  resume 提示（见 `packages/ui/tui/src/exit-tip.ts`）。
 
 `DSH_CC_RESUME_SESSION`、`DSH_CC_AUTO_RESUME` 和 `DSH_CC_CONTINUE` 由
 **启动器负责**：bin 在入口处会把它们从继承环境中清除（父级 dsh-cc TUI 会

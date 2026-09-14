@@ -50,6 +50,8 @@ The launcher communicates the user's session intent to the TUI plugin (via
   a "no previous session to continue" notice when no marker exists
   (previously this was a one-line launcher stderr hint; the marker-read
   move into the TUI took that knowledge away from the launcher).
+- `DSH_CC_DISABLE_EXIT_TIP='1'` — disables the resume tip printed to
+  scrollback when the TUI quits (see `packages/ui/tui/src/exit-tip.ts`).
 
 `DSH_CC_RESUME_SESSION`, `DSH_CC_AUTO_RESUME`, and `DSH_CC_CONTINUE` are
 **launcher-owned**: the bin sanitizes them from the inherited environment at
