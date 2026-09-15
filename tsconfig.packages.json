@@ -98,6 +98,9 @@
       "path": "./packages/llm-tuning/side-query"
     },
     {
+      "path": "./packages/interaction/prompt-suggest"
+    },
+    {
       "path": "./packages/subagent/resume-pins"
     },
     {

@@ -1,7 +1,8 @@
 # Side Queries Design: a First-Class Auxiliary-LLM Primitive and Its Pipelines
 
-**Status:** Reviewed — critic cold review 2026-09-15; findings F1–F9 incorporated
-(F1 cut W3 to documented-not-now). Ready for TDD implementation.
+**Status:** **Implemented** — PR #75 (W5), PR #76 (W1 + this doc), PR #77 (W2,
+stacked on #76), PR #78 (W4, stacked on #76). W3 cut to documented-not-now (§6)
+during critic cold review 2026-09-15; findings F1–F9 incorporated.
 **Date:** 2026-09-15
 **Worktree:** `.claude/worktrees/side-queries` (branch `worktree-side-queries`)
 

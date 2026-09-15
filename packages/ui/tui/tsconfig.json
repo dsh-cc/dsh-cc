@@ -19,6 +19,9 @@
       "path": "../../interaction/permission-rules"
     },
     {
+      "path": "../../interaction/prompt-suggest"
+    },
+    {
       "path": "../pi-tui"
     },
     {

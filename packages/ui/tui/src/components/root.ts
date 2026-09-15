@@ -28,6 +28,7 @@ import { formatWorkingLine } from '../working-line.ts'
 import { buildArgCompleters } from './arg-completers.ts'
 import { attachBashMode } from './root-bash.ts'
 import { resetEditorHistory } from './editor-history.ts'
+import { getSuggestion } from '@dsh-cc/prompt-suggest'
 import { TuiAutocompleteProvider } from './completion.ts'
 import { DOUBLE_PRESS_WINDOW_MS, openSystemUrl, sanitizeWindowTitle, truncateActive } from './root-utils.ts'
 import { createEditorTheme, createTheme } from './theme.ts'
@@ -119,7 +120,12 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 	// request, so a single map built once at mount never goes stale.
 	const argCompleters = buildArgCompleters(driver)
 	let lastCatalog = driver.listCommands()
-	let autocompleteProvider = new TuiAutocompleteProvider(lastCatalog, driver.cwd, undefined, argCompleters)
+	// Predicted next-prompt suggestion (design §7.2): the module-level registry
+	// lookup plus the live session id (re-read per call so /resume rebinds).
+	// Survives provider re-instantiation below: the registry is module-level,
+	// and both constructor sites pass the same seam.
+	const predictionSeam = { getSuggestion, getSessionId: () => driver.currentSessionId }
+	let autocompleteProvider = new TuiAutocompleteProvider(lastCatalog, driver.cwd, undefined, argCompleters, predictionSeam)
 	editor.setAutocompleteProvider(autocompleteProvider)
 
 	// D5: the statusline string is width-dependent — rebuild it from
@@ -364,7 +370,7 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 			const latestCatalog = driver.listCommands()
 			if (latestCatalog !== lastCatalog) {
 				lastCatalog = latestCatalog
-				autocompleteProvider = new TuiAutocompleteProvider(latestCatalog, driver.cwd, undefined, argCompleters)
+				autocompleteProvider = new TuiAutocompleteProvider(latestCatalog, driver.cwd, undefined, argCompleters, predictionSeam)
 				editor.setAutocompleteProvider(autocompleteProvider)
 			}
 

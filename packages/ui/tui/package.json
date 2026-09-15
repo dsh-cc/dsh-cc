@@ -51,6 +51,7 @@
     "@dsh-cc/permission-rules": "workspace:^",
     "@dsh-cc/pi-tui": "workspace:^",
     "@dsh-cc/preset-cc": "workspace:^",
+    "@dsh-cc/prompt-suggest": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/subagent-task": "workspace:^",
     "@dsh-cc/tool-git-worktree": "workspace:^",
