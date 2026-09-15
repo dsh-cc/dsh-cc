@@ -29,8 +29,13 @@
 | `retainResults` | 否（默认 `10`） | 原样保留最近的 N 个工具结果，更早的结果可被折叠。 |
 | `auto` | 否（默认 `false`） | 注册一个 `agent/pre-step` 钩子，在回合请求之前折叠过期结果。 |
 | `placeholderChars` | 否（默认 `256`） | 生成占位符的最大文本码点数（不包含重新嵌入的 spill locator）。 |
+| `failureCap` | 否（默认 `3`） | 每个会话在自动 pre-step 连续失败达到该次数后暂停。 |
 
-所有值都必须是整数；`retainResults` 与 `placeholderChars` 必须为正数。
+所有值都必须是整数；`retainResults`、`placeholderChars` 与 `failureCap` 必须为正数。
+
+### 暂停通知（自动 pass）
+
+一个会话的自动 pass 连续失败达到 `failureCap` 次后，该 pass 对此会话暂停（后续 pre-step 完全跳过；之后的任何一次成功都会解除暂停），并通过 `agent.inject` 注入恰好一条持久的、模型可见的通知——它是一条来自插件来源（`{ kind: 'plugin', plugin: 'compaction-micro' }`）的 next-step 用户消息，让模型得知自动微压缩已暂停、`/compact` 是手动压缩路径。
 
 ## 用法
 

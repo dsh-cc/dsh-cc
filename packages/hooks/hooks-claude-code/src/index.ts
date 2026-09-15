@@ -36,6 +36,8 @@ import { registerEvents } from './register-events.ts'
 export type { HookBridgeStatus } from './status.ts'
 import { createRunPoint } from './run-point.ts'
 import { createTurnSafety } from './turn-safety.ts'
+import { createErrorStreak } from './error-streak.ts'
+import { createContinuation } from './continuation.ts'
 import { sessionStartPayload, setupPayload, sessionResumePayload } from './payloads.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -285,6 +287,11 @@ export function apply(ctx: Context, config: Config): void {
   // notice shaping), built once like the run point.
   const turnSafety = createTurnSafety({ ctx, ...recordIssue !== undefined ? { recordIssue } : {} })
 
+  // A2/A3 error-recovery state (streak breaker + output-token continuation),
+  // built once like the turn-safety cluster; the notice seam is F3.
+  const errorStreak = createErrorStreak({ ctx, surfaceNotices: turnSafety.surfaceNotices })
+  const continuation = createContinuation({ ctx })
+
   // SessionStart injects context when its detached hook resolves; a slow hook
   // may miss the first request.
   // TODO(session-start-gating): add a startup gate before promising first-turn delivery.
@@ -320,7 +327,7 @@ export function apply(ctx: Context, config: Config): void {
   // lifecycle, approval, observe, SessionEnd, StopFailure, TaskCreated,
   // TeammateIdle) live in register-events.ts, extracted to keep this entry
   // under the 500-line source budget.
-  registerEvents({ ctx, detached, runPoint, turnSafety, subagentChildren, subagentIds })
+  registerEvents({ ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds })
 }
 
 // Public surface preserved from the pre-split monolith: prompt interpolation and

@@ -45,13 +45,55 @@ export interface SessionMeta {
   policyNever: boolean;
 }
 
+/** Outcome kinds carried by `turn/end` events (harness `agent.ts`). */
+export type TurnEndKind = "completed" | "max-tokens" | "aborted" | "error";
+
+/** One normalized `turn/end` outcome, captured tolerantly by the scanner. */
+export interface TurnOutcome {
+  project: string;
+  sessionId: string;
+  turn: number;
+  kind: TurnEndKind;
+  /** Only for `kind: "error"`: the error's `code` (e.g. an LlmError code or `UNKNOWN`). */
+  errorCode?: string | undefined;
+  /** Only for `kind: "error"`: truncated error message. */
+  message?: string | undefined;
+}
+
+/**
+ * Per-session error-retry stats. NOTE (stickiness, plan §1): a turn that hit
+ * the model's output ceiling and then recovered STILL records
+ * `reason.kind: "max-tokens"` in `turn/end` — the reason is sticky within the
+ * turn. The max-tokens turn count therefore reads "touched the ceiling at
+ * least once", NOT "ended truncated"; do not misread it during threshold
+ * calibration.
+ */
+export interface SessionErrorStats {
+  project: string;
+  sessionId: string;
+  totalErrorTurns: number;
+  maxConsecutiveErrorTurns: number;
+  maxTokensTurns: number;
+}
+
+/** Histogram buckets over sessions, keyed by each session's max streak. */
+export type StreakBucket = "0" | "1" | "2" | "3" | "4-9" | "10-19" | "20-49" | "50+";
+
+/** Output of the error-retry analyzer (also surfaced on `ForensicsResult`). */
+export interface ErrorRetryResult {
+  sessions: SessionErrorStats[];
+  histogram: Record<StreakBucket, number>;
+  findings: Finding[];
+}
+
 export interface Finding {
   kind:
     | "path-correlation"
     | "env-fact"
     | "search-scope"
     | "permission-denial"
-    | "large-file";
+    | "large-file"
+    | "error-retry";
   title: string;
   detail: string;
   occurrences: number;
@@ -70,6 +112,7 @@ export interface ScanStats {
 export interface ForensicsResult {
   findings: Finding[];
   stats: ScanStats;
+  errorRetry: ErrorRetryResult;
 }
 
 export interface ForensicsOptions {

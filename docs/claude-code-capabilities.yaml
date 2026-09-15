@@ -280,6 +280,37 @@ capabilities:
         in-repo file to anchor a positive claim against, so per the evidence
         backfill rule the claim is downgraded until an in-repo seam exists.
 
+  engine.error-streak-surfacing:
+    title: Agent-error streak surfacing
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        CC caps its own internal retry loops (3 consecutive / 20 cumulative,
+        from production telemetry) before escalating. In dsh-cc the request
+        retry loop is harness-owned, so the bridge surfaces the burn pattern
+        instead: per-agent consecutive/total agent/error counters trip a
+        durable user notice once each (CLAUDE_CODE_AGENT_ERROR_CONSECUTIVE_CAP,
+        CLAUDE_CODE_AGENT_ERROR_TOTAL_CAP).
+      refs:
+        - { source: cc-docs, path: /docs/en/hooks, retrieved: '2026-09-15' }
+        - { source: cc-docs, path: /docs/en/errors, retrieved: '2026-09-15' }
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: partial
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: hooks-claude-code" }
+      - { type: test, path: packages/hooks/hooks-claude-code/tests/error-recovery.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        Notice-level rather than an internal retry cap (request retry is
+        harness-owned), and streaks are per-agent.id where CC's caps are
+        session-wide; the consecutive counter resets on every real user
+        prompt, so cross-prompt streaks do not accumulate.
+
   engine.file-tools:
     title: File tools (Read/Edit/Write), Glob/Grep
     category: engine
@@ -325,6 +356,35 @@ capabilities:
         cc-plugin-loader does not parse lspServers/.lsp.json manifests; PreToolUse
         hooks ignore additionalContext. /ide and editor pods remain host-shell
         scope; headless does not apply.
+
+  engine.microcompact:
+    title: Model-free tool-result microcompaction
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. Model-free collapse of
+        stale tool results into deterministic placeholders (spill locators /
+        TUS digests re-embedded so originals stay retrievable). The auto
+        pre-step pass carries a per-session failure cap (failureCap, default
+        3): after that many consecutive failures the pass pauses for the
+        session and injects one model-visible notice pointing at manual
+        /compact; a later success re-arms it.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: compaction-micro" }
+      - { type: test, path: packages/compaction/compaction-micro/tests/failure-cap.spec.ts }
+      - { type: test, path: packages/compaction/compaction-micro/tests/microcompact.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. The paused notice is a
+        plugin-source next-step user message (model-visible by design).
 
   engine.notebook-edit:
     title: NotebookEdit
@@ -386,6 +446,41 @@ capabilities:
         on a TTY, dismissal keeps the no-model notice, and the
         `cc-onboarding.suppressed` settings section (cleared by `/onboard`)
         is the only stored flag. Contextual tips are not implemented.
+
+  engine.output-token-continuation:
+    title: Output-token continuation
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        When the model hits its output ceiling, CC resumes mid-thought with a
+        meta continuation message (max 3 continuations; the recovery is
+        invisible when it succeeds). dsh-cc realizes this at the
+        agent/turn-stopping seam: if the LAST assistant attempt's stream ended
+        on a max-tokens finish, a CC-worded resume message is steered (up to
+        CLAUDE_CODE_OUTPUT_TOKEN_CONTINUATION_CAP, default 3, 0 disables) and
+        Stop is skipped for that stopping; a recovered completion or an
+        exhausted cap falls through to the normal Stop path.
+      refs:
+        - { source: cc-docs, path: /docs/en/errors, retrieved: '2026-09-15' }
+        - { source: cc-docs, path: /docs/en/sub-agents, retrieved: '2026-09-15' }
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: partial
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: hooks-claude-code" }
+      - { type: test, path: packages/hooks/hooks-claude-code/tests/error-recovery.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        The continuation is a model-visible plugin-source next-step user
+        message (CC resumes invisibly inside the same response), and
+        user-configured blocking Stop hooks are suppressed while
+        output-ceiling recovery is in progress (CC never runs Stop
+        mid-recovery either; the transcript still records one sticky
+        max-tokens turn/end).
 
   engine.plan-mode:
     title: Plan mode
@@ -1080,6 +1175,7 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: hooks-claude-code" }
       - { type: test, path: packages/hooks/hooks-claude-code/tests/coverage-stop.spec.ts }
+      - { type: test, path: packages/hooks/hooks-claude-code/tests/error-recovery.spec.ts }
     deviation: { kind: none }
 
   hooks.subagent-start:
@@ -1471,7 +1567,9 @@ capabilities:
       ux: full
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-learn" }
+      - { type: source, path: packages/session/session-forensics/src/analyze/error-retry.ts, anchor: "analyzeErrorRetry" }
       - { type: test, path: packages/session/command-learn/tests/command-learn.spec.ts }
+      - { type: test, path: packages/session/session-forensics/tests/error-retry.spec.ts }
     deviation: { kind: none }
 
   commands.mcp:

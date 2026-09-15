@@ -15,8 +15,8 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { freezeMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, ToolResultBlock } from '@deepseek-ai/dsh-llm'
+import { freezeMessage, ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, ToolResultBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 // Type-only: the `compaction/prune` shadow-price SessionEventMap merge.
@@ -60,6 +60,23 @@ interface SnapshotCandidate {
 
 const keepSchema = z.number().step(1).min(1)
 const placeholderCharsSchema = z.number().step(1).min(1)
+const failureCapSchema = z.number().step(1).min(1)
+
+/** Per-session auto-pass failure state (plan §3): consecutive failures, pause, and notice latch. */
+interface FailureState {
+  count: number
+  paused: boolean
+  noticed: boolean
+}
+
+/**
+ * Minimal agent surface the auto pass needs (structural: satisfied by the
+ * harness `Agent`, injectable by tests with a stub).
+ */
+interface AutoPassAgent {
+  readonly session: Session
+  inject(message: UserMessage): void
+}
 
 /** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
 type HomeFn = (...segments: string[]) => string
@@ -91,6 +108,7 @@ export class Microcompactor extends Service {
     retainResults: keepSchema,
     auto: z.boolean(),
     placeholderChars: placeholderCharsSchema,
+    failureCap: failureCapSchema,
   })
 
   /** Resolved and immutable policy. */
@@ -103,6 +121,9 @@ export class Microcompactor extends Service {
    * registration). Only `upgradeMicroPlaceholders` is consulted here.
    */
   private readonly readTusSettings: () => { upgradeMicroPlaceholders: boolean }
+
+  /** Per-session auto-pass failure state, keyed by session id. */
+  private readonly failureState = new Map<string, FailureState>()
 
   constructor(ctx: Context, config: MicrocompactConfig = {}) {
     super(ctx, 'microcompactor')
@@ -122,22 +143,78 @@ export class Microcompactor extends Service {
       { agent, signal },
       next,
     ): Promise<PreStepDecision> => {
-      if (!signal.aborted) {
-        try {
-          const result = this.microcompactSession(agent.session, await this.loadTusSummaries(agent.session))
-          if (result.replaced.length > 0) {
-            ctx.logger.info(
-              `microcompact: collapsed ${result.replaced.length} stale tool result(s) `
-              + `(retain ${this.config.retainResults})`,
-            )
-          }
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error)
-          ctx.logger.warn(`microcompact failed: ${message}; continuing the turn`)
-        }
-      }
+      await this.autoMicrocompactPass(agent, signal)
       return next()
     })
+    // Free the per-session failure state when the session goes away (no leak).
+    ctx.on('session/disposed', (session: Session): void => {
+      this.failureState.delete(String(session.header.id))
+    })
+  }
+
+  /**
+   * One automatic pre-step pass: collapse stale tool results ahead of the
+   * turn's request, capped per session. After `failureCap` consecutive
+   * failures the pass pauses for the session and exactly one durable
+   * model-visible notice is injected via `agent.inject` (a next-step user
+   * message from plugin source, so the model learns auto-microcompact is
+   * paused and /compact is the manual path). Any later success resets the
+   * count, the pause, and the notice latch.
+   * @param agent - the agent whose session is compacted and which receives the pause notice.
+   * @param signal - the pre-step abort signal; an aborted signal skips the pass.
+   */
+  async autoMicrocompactPass(
+    agent: AutoPassAgent,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const { ctx } = this
+    const sessionId = String(agent.session.header.id)
+    const state = this.failureState.get(sessionId)
+    if (state?.paused) return
+    if (signal.aborted) return
+    try {
+      const result = this.microcompactSession(agent.session, await this.loadTusSummaries(agent.session))
+      // Success (even with 0 replacements) resets attempts, pause, and latch.
+      this.failureState.set(sessionId, { count: 0, paused: false, noticed: false })
+      if (result.replaced.length > 0) {
+        ctx.logger.info(
+          `microcompact: collapsed ${result.replaced.length} stale tool result(s) `
+          + `(retain ${this.config.retainResults})`,
+        )
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      ctx.logger.warn(`microcompact failed: ${message}; continuing the turn`)
+      const entry = state ?? { count: 0, paused: false, noticed: false }
+      entry.count += 1
+      this.failureState.set(sessionId, entry)
+      if (entry.count >= this.config.failureCap && !entry.noticed) {
+        entry.paused = true
+        entry.noticed = true
+        this._injectPauseNotice(agent, message)
+      }
+    }
+  }
+
+  /**
+   * Inject ONE durable model-visible pause notice as a next-step user message
+   * from plugin source. Defensive try/catch only: the harness does not
+   * restrict `inject` by agent level (`agent.ts:145-146` maps it to
+   * `send(input, 'next-step', false)`), so a failure here must not break the
+   * pause itself.
+   */
+  private _injectPauseNotice(agent: AutoPassAgent, lastError: string): void {
+    const text = `microcompact failed ${this.config.failureCap} consecutive time(s) (last: ${lastError}); `
+      + 'auto-microcompact paused for this session — run /compact manually to compress context'
+    try {
+      agent.inject(createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: 'plugin', plugin: 'compaction-micro' },
+      }))
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.ctx.logger.warn(`microcompact: failed to inject pause notice: ${message}`)
+    }
   }
 
   /**

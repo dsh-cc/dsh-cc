@@ -114,6 +114,101 @@ describe("parseStream", () => {
   });
 });
 
+/** Build a `turn/end` event line. */
+function turnEndLine(turn: number, reason: unknown): string {
+  return JSON.stringify({ type: "turn/end", data: { turn, reason } });
+}
+
+describe("parseStream turn/end capture", () => {
+  it("captures completed / max-tokens / aborted kinds without error fields", () => {
+    const text = [
+      headerLine(),
+      turnEndLine(1, { kind: "completed" }),
+      turnEndLine(2, { kind: "max-tokens" }),
+      turnEndLine(3, { kind: "aborted" }),
+    ].join("\n");
+    const parsed = parseStream("proj", "s1", text);
+    expect(parsed.turns).toEqual([
+      { project: "proj", sessionId: "s1", turn: 1, kind: "completed" },
+      { project: "proj", sessionId: "s1", turn: 2, kind: "max-tokens" },
+      { project: "proj", sessionId: "s1", turn: 3, kind: "aborted" },
+    ]);
+  });
+
+  it("captures error kind with errorCode and message from the LlmError failure object", () => {
+    const text = [
+      headerLine(),
+      turnEndLine(7, {
+        kind: "error",
+        error: { message: "rate limited", code: "RATE_LIMITED", status: 429 },
+      }),
+    ].join("\n");
+    const parsed = parseStream("proj", "s1", text);
+    expect(parsed.turns).toEqual([
+      {
+        project: "proj",
+        sessionId: "s1",
+        turn: 7,
+        kind: "error",
+        errorCode: "RATE_LIMITED",
+        message: "rate limited",
+      },
+    ]);
+  });
+
+  it("captures error kind with UNKNOWN-code plain error object", () => {
+    const text = [
+      headerLine(),
+      turnEndLine(4, { kind: "error", error: { message: "boom", code: "UNKNOWN" } }),
+    ].join("\n");
+    const parsed = parseStream("proj", "s1", text);
+    expect(parsed.turns[0]).toMatchObject({
+      kind: "error",
+      errorCode: "UNKNOWN",
+      message: "boom",
+    });
+  });
+
+  it("ignores malformed reasons but keeps a bare error turn (no error object)", () => {
+    const text = [
+      headerLine(),
+      turnEndLine(1, undefined),
+      turnEndLine(2, {}),
+      turnEndLine(3, { kind: "something-else" }),
+      turnEndLine(4, { kind: "error" }), // error kind without error object: still an error turn
+      turnEndLine(5, { kind: "error", error: "not-an-object" }),
+    ].join("\n");
+    const parsed = parseStream("proj", "s1", text);
+    expect(parsed.turns).toEqual([
+      { project: "proj", sessionId: "s1", turn: 4, kind: "error" },
+      { project: "proj", sessionId: "s1", turn: 5, kind: "error" },
+    ]);
+  });
+
+  it("ignores turn/end entries without a numeric turn", () => {
+    const text = [
+      headerLine(),
+      JSON.stringify({ type: "turn/end", data: { reason: { kind: "completed" } } }),
+    ].join("\n");
+    expect(parseStream("proj", "s1", text).turns).toEqual([]);
+  });
+
+  it("scanSessions aggregates turns across sessions", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forensics-turns-"));
+    for (const sessionId of ["sa", "sb"]) {
+      const dir = join(root, "proj", sessionId);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "session.jsonl.zstd"), Buffer.from(""));
+    }
+    const scan = await scanSessions(root, {
+      decompress: async () =>
+        [headerLine(), turnEndLine(1, { kind: "error", error: { message: "x", code: "UNKNOWN" } })].join("\n"),
+    });
+    expect(scan.turns).toHaveLength(2);
+    expect(scan.turns.every((t) => t.kind === "error")).toBe(true);
+  });
+});
+
 describe("scanSessions", () => {
   function makeStore(): string {
     const root = mkdtempSync(join(tmpdir(), "forensics-"));

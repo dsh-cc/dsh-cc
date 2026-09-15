@@ -14,22 +14,32 @@ export { correlatePaths } from "./analyze/path-correlation.ts";
 export { findEnvFacts } from "./analyze/env-facts.ts";
 export { findSearchScope } from "./analyze/search-scope.ts";
 export { findPermissionDenials } from "./analyze/permission-denials.ts";
+export {
+  STREAK_BUCKETS,
+  analyzeErrorRetry,
+} from "./analyze/error-retry.ts";
 export { LARGE_FILE_THRESHOLD, findLargeFiles } from "./analyze/large-files.ts";
 export { anchor } from "./types.ts";
 export type {
   ApprovalPair,
+  ErrorRetryResult,
   Finding,
   ForensicsOptions,
   ForensicsResult,
   ScanStats,
+  SessionErrorStats,
   SessionMeta,
+  StreakBucket,
   ToolRecord,
+  TurnEndKind,
+  TurnOutcome,
 } from "./types.ts";
 import { scanSessions } from "./scan.ts";
 import { correlatePaths } from "./analyze/path-correlation.ts";
 import { findEnvFacts } from "./analyze/env-facts.ts";
 import { findSearchScope } from "./analyze/search-scope.ts";
 import { findPermissionDenials } from "./analyze/permission-denials.ts";
+import { analyzeErrorRetry } from "./analyze/error-retry.ts";
 import { findLargeFiles } from "./analyze/large-files.ts";
 import type {
   ForensicsOptions,
@@ -85,5 +95,5 @@ export async function runForensics(
     sessionsByPolicyNever: scan.sessions.filter((s) => s.meta.policyNever)
       .length,
   };
-  return { findings: ranked, stats };
+  return { findings: ranked, stats, errorRetry: analyzeErrorRetry(scan.turns) };
 }
