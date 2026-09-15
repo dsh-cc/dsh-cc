@@ -102,7 +102,7 @@ Install them inside a session:
 | Skills | 0 | 1 | 0 | 0 |
 | Subagents | 0 | 2 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
-| Plugins and marketplaces | 0 | 2 | 0 | 0 |
+| Plugins and marketplaces | 0 | 3 | 0 | 0 |
 | Settings | 2 | 1 | 0 | 0 |
 | Permissions | 0 | 1 | 0 | 0 |
 | Models | 0 | 1 | 0 | 0 |

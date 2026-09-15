@@ -113,6 +113,9 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
         version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-bash-local':
+        specifier: link:../../../../deepseek-harness/packages/shell/bash-local
+        version: link:../../../../deepseek-harness/packages/shell/bash-local
       '@deepseek-ai/dsh-fs-local':
         specifier: link:../../../../deepseek-harness/packages/fs/fs-local
         version: link:../../../../deepseek-harness/packages/fs/fs-local
@@ -152,6 +155,9 @@ importers:
       '@deepseek-ai/dsh-subagent-spawn-in-process':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process
         version: link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+        version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
@@ -182,6 +188,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/agent-loop-mock':
+        specifier: workspace:^
+        version: link:../../test-support/agent-loop-mock
       '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code

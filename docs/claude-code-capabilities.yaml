@@ -2225,8 +2225,9 @@ capabilities:
           .claude-plugin → .cursor-plugin → top-level (first hit wins, a
           dual-manifest root warns that the cc manifest takes precedence),
           and the load report carries the flavor plus a per-plugin warnings
-          array; rules are parsed but tallied as skipped until the rules
-          seam lands (PR-B); cursor hooks map through the verified dialect
+          array; rules mount via the `rules` guest seam + cc-shell bridge
+          (PR-B, the plugins.rules row) and are skipped only when the seam is
+          unmounted outside preset/cc; cursor hooks map through the verified dialect
           table in hooks.ts with unmapped events skipped as warnings;
           commands accept .txt on the cursor flavor; mcp.json default
           discovery, the mcpServers array form, and `dir/**` glob expansion
@@ -2304,6 +2305,44 @@ capabilities:
         dirs, first-hit precedence), but the manager itself still reads only
         .claude-plugin marketplace/manifest dirs — it gains cursor-dir reads
         in PR-C. State-file byte shapes are unchanged either way.
+
+  plugins.rules:
+    title: Plugin rules (cursor dialect)
+    category: plugins
+    plane: preset
+    upstream:
+      summary: >-
+        Cursor-plugin `rules/*.mdc` files render into the system prompt as
+        rule segments (alwaysApply entries verbatim, glob-scoped entries as
+        conditional instructions).
+      refs:
+        - { source: cc-docs, path: /docs/en/plugins-reference, retrieved: '2026-09-03' }
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: divergent
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-shell-glue" }
+      - { type: source, path: packages/bundle/cc-shell/src/rulesSeam.ts }
+      - { type: source, path: packages/bundle/cc-shell/src/index.ts, anchor: "cc-rules-seam" }
+      - { type: source, path: packages/compat/cc-plugin-loader/src/rules.ts }
+      - { type: test, path: packages/bundle/cc-shell/tests/rules-seam.spec.ts }
+      - { type: test, path: packages/compat/cc-plugin-loader/tests/discovery.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        Rules render as static/conditional-instruction prompt segments via the
+        `rules` guest seam (cc-shell bridge): per plugin, alwaysApply entries
+        render verbatim under "Rules from plugin <name>", glob-scoped entries
+        render as "When editing files matching `<globs>`: <body>", scopeless
+        entries surface as general guidance with a warning, and each plugin's
+        contribution is capped at a 4000-character prompt budget with explicit
+        truncation. Runtime glob file-matching activation (Claude Code's
+        per-turn rule activation against edited paths) is a documented
+        build-time degradation and is not implemented, hence ux partial. The
+        seam exists only in the cc preset plane; outside it the seam is
+        unmounted and the rules tally reports skipped with a warning.
 
   # ── settings ────────────────────────────────────────────────────────────
   settings.hot-reload:
