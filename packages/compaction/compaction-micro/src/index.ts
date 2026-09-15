@@ -15,7 +15,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { freezeMessage } from '@deepseek-ai/dsh-llm'
+import { freezeMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, ToolResultBlock } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -23,6 +23,9 @@ import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-compaction'
 // Type-only: the `ctx.tokenMeter` Context merge for the declared injection.
 import type {} from '@deepseek-ai/dsh-token-meter'
+import { isCrusherStub, tusFramedSummary } from '@dsh-cc/tool-use-summary'
+import type { SummaryRow } from '@dsh-cc/tool-use-summary'
+import { registerTusSettings, loadSummaries } from '@dsh-cc/tool-use-summary'
 import {
   MICROCOMPACT_MARKER,
   isMicrocompactPlaceholder,
@@ -58,6 +61,17 @@ interface SnapshotCandidate {
 const keepSchema = z.number().step(1).min(1)
 const placeholderCharsSchema = z.number().step(1).min(1)
 
+/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
+type HomeFn = (...segments: string[]) => string
+
+function dshHomeFn(ctx: Context): HomeFn | undefined {
+  try {
+    return ctx.dshHomePath
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Model-free retention-window microcompaction service. Keeps the most recent
  * {@link MicrocompactConfig.retainResults} tool results verbatim and replaces
@@ -82,9 +96,18 @@ export class Microcompactor extends Service {
   /** Resolved and immutable policy. */
   readonly config: ResolvedConfig
 
+  /**
+   * Live `cc-tool-use-summary` settings reader (SINGLE SOURCE: the TUS
+   * package's settings.ts; `registerTusSettings` is idempotent per settings
+   * provider, so the producer plugin and this consumer share one
+   * registration). Only `upgradeMicroPlaceholders` is consulted here.
+   */
+  private readonly readTusSettings: () => { upgradeMicroPlaceholders: boolean }
+
   constructor(ctx: Context, config: MicrocompactConfig = {}) {
     super(ctx, 'microcompactor')
     this.config = resolveConfig(config)
+    this.readTusSettings = registerTusSettings(ctx)
     if (this.config.auto) this._registerAutomaticMicrocompact()
   }
 
@@ -101,7 +124,7 @@ export class Microcompactor extends Service {
     ): Promise<PreStepDecision> => {
       if (!signal.aborted) {
         try {
-          const result = this.microcompactSession(agent.session)
+          const result = this.microcompactSession(agent.session, await this.loadTusSummaries(agent.session))
           if (result.replaced.length > 0) {
             ctx.logger.info(
               `microcompact: collapsed ${result.replaced.length} stale tool result(s) `
@@ -124,12 +147,21 @@ export class Microcompactor extends Service {
    * deterministic placeholder (reusing the original's spill locator when one is
    * cited). Already-collapsed results are never re-decided, so a repeated pass
    * over unchanged history emits a byte-identical prompt (freeze semantics).
+   *
+   * TUS upgrade (design doc §5.4 Consumer A): when a TUS summary row exists
+   * for a node's `callId` (and the `cc-tool-use-summary.upgradeMicroPlaceholders`
+   * gate is on), the placeholder carries the framed digest instead. Absent
+   * rows → the legacy placeholder bit-for-bit. Nodes whose body is already a
+   * context-crusher stub are never substituted (the stub's `context_retrieve`
+   * locator must survive). Pass `tus` explicitly when calling directly; the
+   * auto hook loads it from the TUS ledger.
    * @param session - session whose current surface is rewritten.
+   * @param tus - TUS summaries for this session (callId → row), when available.
    * @returns landed placeholder replacements and a stability flag.
    * @throws when the session rejects a replacement; replacements committed
    * earlier in the pass remain durable.
    */
-  microcompactSession(session: Session): MicrocompactResult {
+  microcompactSession(session: Session, tus?: ReadonlyMap<ToolCallId, SummaryRow>): MicrocompactResult {
     const candidates = snapshotCandidates(session)
     const retainedFrom = Math.max(0, candidates.length - this.config.retainResults)
 
@@ -141,9 +173,18 @@ export class Microcompactor extends Service {
       const resultBlock = content?.type === 'tool-result' ? content : undefined
       const blocks: readonly ContentBlock[] = resultBlock?.content ?? []
       if (isMicrocompactPlaceholder(blocks)) continue
+      // §5.6: a crushed result's reversibility lives in its `context_retrieve`
+      // locator — a TUS substitution would destroy it, so skip.
+      if (isCrusherStub(plainText(blocks))) continue
 
       const locatorLine = reuseSpillLocator(plainText(blocks))
-      const placeholder = this.placeholderContent(locatorLine)
+      const tusRow = tus?.get(message.source.callId)
+      const placeholder = tusRow !== undefined
+        && this.readTusSettings().upgradeMicroPlaceholders
+        && tusRow.status === 'ok'
+        && typeof tusRow.summary === 'string'
+        ? `${tusFramedSummary(tusRow)}${locatorLine === undefined ? '' : `\n${locatorLine}`}`
+        : this.placeholderContent(locatorLine)
 
       // Preserve every non-content field of the original tool-result block (type,
       // toolCallId, isError, plus future additions) so the surface rewrite honors
@@ -183,6 +224,23 @@ export class Microcompactor extends Service {
       })
     }
     return { replaced, stable: replaced.length === 0 }
+  }
+
+  /**
+   * Load the TUS ledger for one session (§5.3 pure reader). Empty/absent when
+   * the gate is off, the dshHomePath seam is missing, or the ledger has no
+   * rows — every failure degrades to `undefined` (legacy placeholders).
+   */
+  private async loadTusSummaries(session: Session): Promise<Map<ToolCallId, SummaryRow> | undefined> {
+    try {
+      if (!this.readTusSettings().upgradeMicroPlaceholders) return undefined
+      const home = dshHomeFn(this.ctx)
+      if (home === undefined) return undefined
+      const rows = await loadSummaries(home(), String(session.header.id))
+      return rows.size === 0 ? undefined : new Map([...rows].map(([callId, row]) => [ToolCallId(callId), row]))
+    } catch {
+      return undefined
+    }
   }
 
   /** Deterministic placeholder body for one collapsed tool result. */

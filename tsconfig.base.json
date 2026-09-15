@@ -29,6 +29,9 @@
       "@dsh-cc/side-query": [
         "./packages/llm-tuning/side-query/src/index.ts"
       ],
+      "@dsh-cc/tool-use-summary": [
+        "./packages/compaction/tool-use-summary/src/index.ts"
+      ],
       "@dsh-cc/settings-cascade": [
         "./packages/settings/settings-cascade/src/index.ts"
       ],
