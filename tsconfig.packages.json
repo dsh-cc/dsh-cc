@@ -95,6 +95,9 @@
       "path": "./packages/llm-tuning/reasoning-fold"
     },
     {
+      "path": "./packages/llm-tuning/side-query"
+    },
+    {
       "path": "./packages/subagent/resume-pins"
     },
     {

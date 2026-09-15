@@ -26,6 +26,9 @@
       "node"
     ],
     "paths": {
+      "@dsh-cc/side-query": [
+        "./packages/llm-tuning/side-query/src/index.ts"
+      ],
       "@dsh-cc/settings-cascade": [
         "./packages/settings/settings-cascade/src/index.ts"
       ],
