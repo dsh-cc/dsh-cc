@@ -339,6 +339,11 @@
     hookBridgeStatus: true
     mcp: true
     hooks: true
+    # The plugin rules seam (cursor-plugin plan PR-B S5): provided by
+    # cc-shell-glue (inside this group) via the awaited child-plugin provide
+    # idiom, like mcp/hooks; the loader's mountRules consults it, and the
+    # consolidated `cc:plugin-rules` prompt section renders its entries.
+    rules: true
     contextCrusher: true
   config:
     # ToolSearch: model-called search that activates deferred tools per scope.

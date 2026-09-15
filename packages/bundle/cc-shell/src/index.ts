@@ -38,6 +38,7 @@ import * as CcMcpClient from '@dsh-cc/mcp-client'
 import { CcPluginManagerService } from './ccPluginManager.ts'
 import { CcPluginsService } from './ccPlugins.ts'
 import { createPluginMcpSeam } from './mcpSeam.ts'
+import { createPluginRulesSeam, RULES_SECTION_NAME, RULES_SECTION_ORDER } from './rulesSeam.ts'
 
 /** Plugin config: which on-disk CC surfaces to mount. */
 export interface Config {
@@ -129,6 +130,22 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       name: 'cc-mcp-seam',
       apply(c: Context) {
         c.provide('mcp', seam)
+      },
+    })
+  }
+  // The plugin rules seam (plan docs/plans/2026-09-15-cursor-plugin-dialect.md
+  // §3.3): same LOADING-fiber constraint as the mcp seam above — provide via
+  // an awaited child plugin so `mountRules` finds it, and register the
+  // `cc:plugin-rules` prompt section the merged entries render into.
+  if (ctx.get('rules') === undefined) {
+    const host = createPluginRulesSeam(ctx)
+    await ctx.plugin({
+      name: 'cc-rules-seam',
+      apply(c: Context) {
+        c.provide('rules', host.seam)
+        // Renders '' while no plugin contributes rules — no stray header.
+        const systemPrompt = c.get('systemPrompt') as { section(s: { name: string; order: number; text: () => string }): void } | undefined
+        systemPrompt?.section({ name: RULES_SECTION_NAME, order: RULES_SECTION_ORDER, text: () => host.sectionText() })
       },
     })
   }
