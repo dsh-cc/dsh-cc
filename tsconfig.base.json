@@ -35,6 +35,9 @@
       "@dsh-cc/prompt-suggest": [
         "./packages/interaction/prompt-suggest/src/index.ts"
       ],
+      "@dsh-cc/settings-ns": [
+        "./packages/settings/settings-ns/src/index.ts"
+      ],
       "@dsh-cc/settings-cascade": [
         "./packages/settings/settings-cascade/src/index.ts"
       ],
