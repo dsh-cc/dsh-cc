@@ -1,0 +1,7 @@
+---
+description: Always-on repo hygiene rule.
+alwaysApply: true
+globs: ["*.md"]
+---
+
+Keep docs in sync with code.

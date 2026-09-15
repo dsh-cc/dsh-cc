@@ -30,10 +30,20 @@ import { mountMcpServers } from './mcp.ts'
 import { mountSettings } from './settings.ts'
 import { resolvePluginManifest } from './resolve-manifest.ts'
 
-export type { CcPluginManifest, CcCommand, CcSkillRef, CcAgentRef, CcMcpServer, ComponentKind, ComponentResult, PluginLoadReport } from './types.ts'
+export type { CcPluginManifest, CcCommand, CcSkillRef, CcAgentRef, CcMcpServer, ComponentKind, ComponentResult, PluginLoadReport, PluginFlavor } from './types.ts'
 export type { CcPluginCommandInfo, MountedPluginCommand } from './commands.ts'
 export { parsePluginManifest } from './manifest.ts'
-export { discoverCcPluginRoots, resolveClaudeHome, NESTED_MANIFEST, TOP_LEVEL_MANIFEST } from './discovery.ts'
+export {
+  discoverCcPluginRoots,
+  resolveClaudeHome,
+  NESTED_MANIFEST,
+  CURSOR_MANIFEST,
+  TOP_LEVEL_MANIFEST,
+  MANIFEST_CANDIDATE_DIRS,
+  MARKETPLACE_CANDIDATE_FILES,
+  findPluginManifestPath,
+  findPluginManifestPaths,
+} from './discovery.ts'
 export type { DiscoveredCcPlugin, DiscoverCcPluginRootsOptions } from './discovery.ts'
 export { AgentProvider, STANDARD_AGENTS_DIR, PLUGIN_AGENT_PROVIDER_BRAND, isPluginAgentProvider } from './agents.ts'
 export type { ResolveModel } from './agents.ts'
@@ -107,10 +117,13 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const resolved = resolvePluginManifest(root, options.nameHint)
   const manifest = parsePluginManifest(resolved.raw, root, {
     skillsReplaceDefault: resolved.skillsReplaceDefault,
+    flavor: resolved.flavor,
+    warnings: resolved.warnings,
   })
   const probed = await probeSeams(ctx, options.seams)
   const disposers: (() => void)[] = []
   const components: ComponentResult[] = []
+  const mountWarnings: string[] = []
 
   let commandMount: ReturnType<typeof mountCommands>
   try {
@@ -120,7 +133,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
       manifest,
       skills: probed.skills,
       subagentsPresent: probed.subagents !== undefined,
-    }))
+    }), mountWarnings)
     fold(components, disposers, await mountAgents({
       pluginRoot: root,
       manifest,
@@ -130,13 +143,23 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
       // parse/synthesis in resolve-manifest already falls back to nameHint,
       // then the root basename), used to namespace agent provider names.
       namespacePrefix: manifest.name,
-    }))
+    }), mountWarnings)
     commandMount = mountCommands({ pluginRoot: root, manifest, commands: probed.commands })
     components.push(commandMount.tally.result())
+    mountWarnings.push(...commandMount.warnings ?? [])
     disposers.push(...commandMount.disposers)
-    fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }))
-    fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }))
-    fold(components, disposers, mountSettings({ manifest, settings: probed.settings }))
+    fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }), mountWarnings)
+    fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }), mountWarnings)
+    fold(components, disposers, mountSettings({ manifest, settings: probed.settings }), mountWarnings)
+    // Rules (Cursor dialect; PR-B mounts them): parsed but never mounted in
+    // v1 — tallied skipped-with-reason so the report says so, never silently.
+    if (manifest.rules.length > 0) {
+      const rulesTally = new ComponentTally('rules')
+      for (const rulePath of manifest.rules) {
+        rulesTally.addSkipped(`rule path "${rulePath}": rules are not mounted in v1 (planned PR-B)`)
+      }
+      components.push(rulesTally.result())
+    }
   } catch (error) {
     // Component-level rollback: a component mount that throws after earlier
     // components succeeded recalls everything mounted so far, so a failed
@@ -151,7 +174,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const effectDisposer = ctx.effect(() => tearDown, 'cc-plugin-loader.mount')
 
   return {
-    report: { name: manifest.name, components },
+    report: { name: manifest.name, flavor: manifest.flavor, warnings: [...manifest.warnings, ...mountWarnings], components },
     commands: commandMount.mounted,
     dispose: () => effectDisposer(),
   }
@@ -173,8 +196,10 @@ async function probeSeams(ctx: Context, overrides: MountedSeams | undefined): Pr
 function fold(
   components: ComponentResult[],
   disposers: (() => void)[],
-  mount: { disposers: (() => void)[]; tally: ComponentTally },
+  mount: { disposers: (() => void)[]; tally: ComponentTally; warnings?: readonly string[] },
+  mountWarnings: string[],
 ): void {
   components.push(mount.tally.result())
   disposers.push(...mount.disposers)
+  mountWarnings.push(...mount.warnings ?? [])
 }

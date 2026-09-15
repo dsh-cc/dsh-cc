@@ -7,6 +7,13 @@
  * seam is absent the component is reported skipped, never failed, so a
  * deployment without the bridge keeps loading the rest of the plugin.
  *
+ * Cursor-flavored plugins go through the verified dialect mapping table
+ * (plan §3.5, S0 probe verdict DIVERGENT): camelCase cursor events map onto
+ * their CC equivalents, cursor wire entries (`{command, matcher?, loop_limit?}`)
+ * become CC matcher groups, `${CURSOR_PLUGIN_ROOT}` expands to the plugin root,
+ * unmapped events skip with a warning, and `loop_limit` warns. CC-flavored
+ * plugins pass through untouched.
+ *
  * @module
  */
 
@@ -14,6 +21,23 @@ import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { CcPluginManifest } from './types.ts'
 import { ComponentTally } from './seams.ts'
+
+/**
+ * Cursor → CC hooks event mapping (plan §3.5, verified table). Cursor events
+ * absent here have no CC equivalent and skip with a warning.
+ */
+const CURSOR_HOOK_EVENT_MAP: Readonly<Record<string, string>> = {
+  sessionStart: 'SessionStart',
+  sessionEnd: 'SessionEnd',
+  preToolUse: 'PreToolUse',
+  postToolUse: 'PostToolUse',
+  postToolUseFailure: 'PostToolUseFailure',
+  subagentStart: 'SubagentStart',
+  subagentStop: 'SubagentStop',
+  beforeSubmitPrompt: 'UserPromptSubmit',
+  preCompact: 'PreCompact',
+  stop: 'Stop',
+}
 
 /** The hooks seam: accepts a plugin's translated per-event hooks. */
 export interface HooksSeam {
@@ -46,25 +70,68 @@ export interface MountHooksOptions {
  * @param options - plugin root, manifest, and the hooks seam.
  * @returns mounted disposers and per-component counts.
  */
-export function mountHooks(options: MountHooksOptions): { disposers: (() => void)[]; tally: ComponentTally } {
+export function mountHooks(options: MountHooksOptions): { disposers: (() => void)[]; tally: ComponentTally; warnings: string[] } {
   const tally = new ComponentTally('hooks')
   const disposers: (() => void)[] = []
+  const warnings: string[] = []
   if (options.hooks === undefined) {
     tally.addSkipped('hooks seam "hooks" is not mounted')
-    return { disposers, tally }
+    return { disposers, tally, warnings }
   }
   const hooks = resolveHooks(options.pluginRoot, options.manifest)
   if (hooks.error !== undefined) {
     tally.addFailed(hooks.error)
-    return { disposers, tally }
+    return { disposers, tally, warnings }
   }
   if (hooks.value === undefined) {
     tally.addSkipped('plugin declares no hooks')
-    return { disposers, tally }
+    return { disposers, tally, warnings }
   }
-  disposers.push(options.hooks.mergePluginHooks(options.manifest.name, hooks.value, options.pluginRoot))
+  let value: unknown = hooks.value
+  if (options.manifest.flavor === 'cursor') {
+    const translated = translateCursorHooks(hooks.value, options.pluginRoot, tally, warnings)
+    value = translated
+  }
+  disposers.push(options.hooks.mergePluginHooks(options.manifest.name, value, options.pluginRoot))
   tally.addLoaded()
-  return { disposers, tally }
+  return { disposers, tally, warnings }
+}
+
+/**
+ * Translate a cursor hooks map (plan §3.5) into the CC `ClaudeCodeHookConfig`
+ * shape: camelCase event keys map through {@link CURSOR_HOOK_EVENT_MAP}, flat
+ * `{command, matcher?, loop_limit?}` entries become matcher groups,
+ * `${CURSOR_PLUGIN_ROOT}` expands to the plugin root, unmapped events tally as
+ * skipped, and unsupported entry fields surface as warnings.
+ */
+function translateCursorHooks(value: unknown, pluginRoot: string, tally: ComponentTally, warnings: string[]): Record<string, unknown> {
+  const source = value as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const [event, entries] of Object.entries(source)) {
+    const ccEvent = CURSOR_HOOK_EVENT_MAP[event]
+    if (ccEvent === undefined) {
+      tally.addSkipped(`skipped hook event "${event}": no Claude Code equivalent`)
+      continue
+    }
+    if (!Array.isArray(entries)) continue
+    const groups: unknown[] = []
+    for (const raw of entries) {
+      if (typeof raw !== 'object' || raw === null) continue
+      const entry = raw as Record<string, unknown>
+      if (typeof entry['command'] !== 'string') continue
+      const unsupported = Object.keys(entry).filter(key => !['command', 'matcher', 'loop_limit'].includes(key))
+      if (unsupported.length > 0 || entry['loop_limit'] !== undefined) {
+        const reason = `hook event "${event}": unsupported hook fields ignored (${entry['loop_limit'] !== undefined ? 'loop_limit' : unsupported.join(', ')})`
+        warnings.push(reason)
+      }
+      groups.push({
+        ...typeof entry['matcher'] === 'string' ? { matcher: entry['matcher'] } : {},
+        hooks: [{ type: 'command', command: entry['command'].split('${CURSOR_PLUGIN_ROOT}').join(pluginRoot) }],
+      })
+    }
+    if (groups.length > 0) out[ccEvent] = groups
+  }
+  return out
 }
 
 /** Resolve the plugin's hooks map, or a failure reason. */

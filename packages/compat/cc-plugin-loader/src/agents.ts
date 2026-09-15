@@ -12,12 +12,14 @@
  * @module
  */
 
+import { readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { loadAgentsDir } from '@dsh-cc/claude-code-agents'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { toAgentOptions } from '@dsh-cc/model-aliases'
 import type { CcPluginManifest } from './types.ts'
 import { ComponentTally } from './seams.ts'
+import { globPathKind } from './manifest.ts'
 
 /**
  * Resolve a frontmatter `model` into a dsh `{provider, model, reasoningEffort?}`
@@ -189,17 +191,18 @@ export interface MountAgentsOptions {
  * @param options - plugin root, manifest, and the subagent seam.
  * @returns mounted disposers and per-component counts.
  */
-export async function mountAgents(options: MountAgentsOptions): Promise<{ disposers: (() => void)[]; tally: ComponentTally }> {
+export async function mountAgents(options: MountAgentsOptions): Promise<{ disposers: (() => void)[]; tally: ComponentTally; warnings: string[] }> {
   const tally = new ComponentTally('agents')
   const disposers: (() => void)[] = []
+  const globWarnings: string[] = []
   if (options.subagents === undefined) {
     tally.addSkipped('subagent seam "subagents" is not mounted')
-    return { disposers, tally }
+    return { disposers, tally, warnings: globWarnings }
   }
-  const definitions = await loadAgentDefinitions(options.pluginRoot, options.manifest)
+  const definitions = await loadAgentDefinitions(options.pluginRoot, options.manifest, globWarnings)
   if (definitions.length === 0) {
     tally.addSkipped('plugin ships no agents directory or manifest agents paths')
-    return { disposers, tally }
+    return { disposers, tally, warnings: globWarnings }
   }
   const subagents = options.subagents
   const prefix = options.namespacePrefix
@@ -235,18 +238,32 @@ export async function mountAgents(options: MountAgentsOptions): Promise<{ dispos
     for (const dispose of disposers) dispose()
     throw error
   }
-  return { disposers, tally }
+  return { disposers, tally, warnings: globWarnings }
 }
 
 /** Load agent definitions from the standard `agents/` dir and manifest paths. */
-async function loadAgentDefinitions(pluginRoot: string, manifest: CcPluginManifest): Promise<AgentDefinition[]> {
+async function loadAgentDefinitions(pluginRoot: string, manifest: CcPluginManifest, globWarnings: string[]): Promise<AgentDefinition[]> {
   const dirs: string[] = [join(pluginRoot, STANDARD_AGENTS_DIR)]
-  const extra = manifest.agents.map((path) => {
-    const resolved = resolve(pluginRoot, path)
+  for (const path of manifest.agents) {
+    // Glob policy (plan §3.4): `agents/**` walks recursively; any other glob
+    // metacharacter is skipped with a warning, never expanded.
+    const kind = globPathKind(path)
+    if (kind === 'unsupported') {
+      const reason = `skipped agents entry "${path}": glob patterns other than a trailing "/**" are not expanded`
+      globWarnings.push(reason)
+      continue
+    }
+    const recursive = kind === 'recursive'
+    const expanded = recursive ? path.slice(0, -3) : path
+    const resolved = resolve(pluginRoot, expanded)
     // An inline path may name one `.md`/`.json` file; load its parent dir.
-    return /\.(md|json)$/.test(resolved) ? dirname(resolved) : resolved
-  })
-  dirs.push(...extra)
+    const dir = /\.(md|json)$/.test(resolved) ? dirname(resolved) : resolved
+    if (recursive) {
+      dirs.push(...await collectAgentDirs(dir))
+    } else {
+      dirs.push(dir)
+    }
+  }
   const byName = new Map<string, AgentDefinition>()
   for (const dir of dirs) {
     for (const agent of await loadAgentsDir(dir, 'project')) {
@@ -254,6 +271,22 @@ async function loadAgentDefinitions(pluginRoot: string, manifest: CcPluginManife
     }
   }
   return Array.from(byName.values())
+}
+
+/** The dir itself plus every subdirectory, recursively (plan §3.4 cheap `/**` expansion). */
+async function collectAgentDirs(dir: string): Promise<string[]> {
+  const found: string[] = [dir]
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return found
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    found.push(...await collectAgentDirs(join(dir, entry.name)))
+  }
+  return found
 }
 
 function dirname(path: string): string {

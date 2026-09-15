@@ -74,6 +74,17 @@ describe('/plugin rendering (pure)', () => {
   it('reports an empty mount set gracefully', () => {
     expect(formatPluginList([])).toContain('No Claude Code plugins are mounted.')
   })
+  it('shows flavor and warnings for cursor plugins, nothing extra for cc', () => {
+    const ccText = formatPluginList([{ name: 'cc-a', root: '/r', components }])
+    expect(ccText).not.toContain('flavor:')
+    expect(ccText).not.toContain('warning:')
+    const cursorText = formatPluginList([{
+      name: 'cur', root: '/r', flavor: 'cursor', warnings: ['client-version gating is not enforced'],
+      components,
+    }])
+    expect(cursorText).toContain('flavor: cursor')
+    expect(cursorText).toContain('warning: client-version gating is not enforced')
+  })
 })
 
 describe('/reload-plugins rendering (pure)', () => {

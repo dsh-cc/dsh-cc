@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [{ "command": "echo start" }],
+    "sessionEnd": [{ "command": "echo end" }],
+    "preToolUse": [{ "command": "echo pre", "matcher": "Bash" }],
+    "postToolUse": [{ "command": "echo post" }],
+    "postToolUseFailure": [{ "command": "echo failed" }],
+    "subagentStop": [{ "command": "echo subagent" }],
+    "beforeSubmitPrompt": [{ "command": "echo prompt" }],
+    "preCompact": [{ "command": "echo compact" }],
+    "stop": [{ "command": "echo stop" }],
+    "afterAgentResponse": [{ "command": "echo response" }]
+  }
+}

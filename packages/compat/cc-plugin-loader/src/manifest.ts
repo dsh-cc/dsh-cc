@@ -12,12 +12,16 @@
  * @module
  */
 
-import type { CcPluginManifest, CcCommand, CcMcpServer } from './types.ts'
+import type { CcPluginManifest, CcCommand, CcMcpServer, PluginFlavor } from './types.ts'
 
 /** Extra flags the resolver threads in (not authored in plugin.json). */
 export interface ParsePluginManifestOptions {
   /** Marketplace-root overlay: listed `skills` replace the default `skills/` scan. */
   readonly skillsReplaceDefault?: boolean
+  /** Dialect of the winning manifest candidate (resolver-injected, plan §3.1). */
+  readonly flavor?: PluginFlavor
+  /** Resolution warnings to carry on the parsed manifest (S2 promotes to report). */
+  readonly warnings?: readonly string[]
 }
 
 /**
@@ -40,10 +44,23 @@ export function parsePluginManifest(
   const commands = normalizeCommands(raw['commands'], name)
   const agents = normalizeStringList(raw['agents'], name, 'agents')
   const skills = normalizeStringList(raw['skills'], name, 'skills')
+  // Cursor default-dir inference (plan §3.2 component conventions): an
+  // undeclared `rules` still scans `rules/`, as with the implicit dirs.
+  const rules = normalizeRules(raw['rules'] ?? ((options.flavor ?? 'cc') === 'cursor' ? 'rules' : undefined), name)
   const { mcpServers, mcpServersPath } = normalizeMcpServers(raw['mcpServers'], name)
   const settings = isRecord(raw['settings']) ? raw['settings'] : {}
+  // Cursor-dialect tolerance warnings (plan §3.4): metadata fields are silently
+  // tolerated, but these two degrade silently unless surfaced.
+  const dialectWarnings = (options.flavor ?? 'cc') === 'cursor'
+    ? [
+      ...raw['minClientVersions'] !== undefined ? ['client-version gating is not enforced'] : [],
+      ...raw['variables'] !== undefined ? ['plugin variables are not prompted; set values via environment'] : [],
+    ]
+    : []
   return {
     name,
+    flavor: options.flavor ?? 'cc',
+    warnings: [...options.warnings ?? [], ...dialectWarnings],
     ...typeof raw['version'] === 'string' ? { version: raw['version'] } : {},
     ...typeof raw['description'] === 'string' ? { description: raw['description'] } : {},
     ...raw['author'] !== undefined ? { author: raw['author'] } : {},
@@ -51,6 +68,7 @@ export function parsePluginManifest(
     commandsDeclared: raw['commands'] !== undefined,
     agents,
     skills,
+    rules,
     skillsReplaceDefault: options.skillsReplaceDefault === true,
     ...raw['hooks'] !== undefined ? { hooks: raw['hooks'] } : {},
     mcpServers,
@@ -130,11 +148,49 @@ function normalizeStringList(raw: unknown, name: string, field: string): string[
   throw new Error(`plugin ${name}: "${field}" must be a path or a list of paths`)
 }
 
-function normalizeMcpServers(raw: unknown, name: string): { mcpServers: Readonly<Record<string, CcMcpServer>>; mcpServersPath?: string } {
+/** Rules accept stringOrArray only — the Cursor schema has no map form. */
+function normalizeRules(raw: unknown, name: string): string[] {
+  if (raw === undefined) return []
+  if (typeof raw === 'string') return [raw]
+  if (isStringArray(raw)) return [...raw]
+  throw new Error(`plugin ${name}: "rules" must be a path or a list of paths; a map form is not supported`)
+}
+
+function normalizeMcpServers(raw: unknown, name: string): {
+  mcpServers: Readonly<Record<string, CcMcpServer>>
+  mcpServersPath?: string
+  mcpServersPaths?: string[]
+} {
   if (raw === undefined) return { mcpServers: {} }
   if (typeof raw === 'string') return { mcpServers: {}, mcpServersPath: raw } // an `.mcp.json` path
   if (isRecord(raw)) return { mcpServers: raw as Readonly<Record<string, CcMcpServer>> }
-  throw new Error(`plugin ${name}: "mcpServers" must be a path or an object map of server configs`)
+  // Cursor array form (plan §3.4): elements are `.mcp.json` paths or inline records.
+  if (Array.isArray(raw)) {
+    const servers: Record<string, CcMcpServer> = {}
+    const paths: string[] = []
+    for (const item of raw) {
+      if (typeof item === 'string') paths.push(item)
+      else if (isRecord(item)) Object.assign(servers, item as Record<string, CcMcpServer>)
+      else throw new Error(`plugin ${name}: "mcpServers" array elements must be a path or an object map`)
+    }
+    return {
+      mcpServers: servers,
+      // Single path keeps the existing seam; multiple use the plural field.
+      ...paths.length === 1 ? { mcpServersPath: paths[0] } : {},
+      ...paths.length > 0 ? { mcpServersPaths: paths } : {},
+    }
+  }
+  throw new Error(`plugin ${name}: "mcpServers" must be a path, a list of paths/objects, or an object map`)
+}
+
+/**
+ * Classify a manifest component path against the v1 glob policy (plan §3.4):
+ * `dir/**` is directory-recursive, any other glob metacharacter is unsupported
+ * (skipped with a warning, never expanded), everything else is literal.
+ */
+export function globPathKind(path: string): 'literal' | 'recursive' | 'unsupported' {
+  if (path.endsWith('/**')) return 'recursive'
+  return /[*?[]/.test(path) ? 'unsupported' : 'literal'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

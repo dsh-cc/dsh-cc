@@ -1,0 +1,7 @@
+---
+description: Lint rule.
+alwaysApply: true
+globs: []
+---
+
+Always run the linter before finishing.

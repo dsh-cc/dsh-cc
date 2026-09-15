@@ -49,8 +49,35 @@ export interface DiscoverCcPluginRootsOptions {
 /** Nested Claude Code manifest path, preferred over a top-level `plugin.json`. */
 export const NESTED_MANIFEST = join('.claude-plugin', 'plugin.json')
 
+/** Cursor dialect nested manifest path (plan §3.1), between cc-nested and legacy top-level. */
+export const CURSOR_MANIFEST = join('.cursor-plugin', 'plugin.json')
+
 /** Legacy / fixture manifest path at the plugin root. */
 export const TOP_LEVEL_MANIFEST = 'plugin.json'
+
+/**
+ * Ordered manifest candidate dirs (plan §3.1): first existing hit wins.
+ * CC dialect first so existing behavior is stable when both dialects exist.
+ */
+export const MANIFEST_CANDIDATE_DIRS: readonly string[] = ['.claude-plugin', '.cursor-plugin']
+
+/** Ordered marketplace overlay files (plan §3.1), symmetric with the manifest dirs. */
+export const MARKETPLACE_CANDIDATE_FILES: readonly string[] = [
+  join('.claude-plugin', 'marketplace.json'),
+  join('.cursor-plugin', 'marketplace.json'),
+]
+
+/** Ordered absolute manifest candidate paths for one plugin root (first hit wins). */
+export function findPluginManifestPaths(root: string): string[] {
+  const candidates = MANIFEST_CANDIDATE_DIRS.map(dir => join(root, dir, TOP_LEVEL_MANIFEST))
+  candidates.push(join(root, TOP_LEVEL_MANIFEST))
+  return candidates.filter(path => existsSync(path))
+}
+
+/** First-hit winning manifest path for one plugin root, if the root is a plugin. */
+export function findPluginManifestPath(root: string): string | undefined {
+  return findPluginManifestPaths(root)[0]
+}
 
 /**
  * Discover plugin roots for the glue to mount.
@@ -119,7 +146,7 @@ function flattenPluginDirs(dirs: readonly string[]): DiscoveredCcPlugin[] {
  * Missing files are not a plugin root; unreadable/invalid JSON still is (basename fallback).
  */
 function nameHintFromRoot(dir: string): string | undefined {
-  for (const file of [NESTED_MANIFEST, TOP_LEVEL_MANIFEST]) {
+  for (const file of [NESTED_MANIFEST, CURSOR_MANIFEST, TOP_LEVEL_MANIFEST]) {
     const text = readText(join(dir, file))
     if (text === undefined) continue
     const parsed = parseJson(text)

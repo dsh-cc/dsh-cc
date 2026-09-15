@@ -2219,7 +2219,20 @@ capabilities:
           follow-up); OAuth is not supported for plugin-declared servers; a
           plugin server with the same name shadows a same-name .mcp.json
           server (plugins mount first and mcp-client rejects duplicate
-          names).
+          names). Cursor dialect (PR-A, plan
+          docs/plans/2026-09-15-cursor-plugin-dialect.md): the same pipeline
+          loads cursor plugins via manifest candidates
+          .claude-plugin → .cursor-plugin → top-level (first hit wins, a
+          dual-manifest root warns that the cc manifest takes precedence),
+          and the load report carries the flavor plus a per-plugin warnings
+          array; rules are parsed but tallied as skipped until the rules
+          seam lands (PR-B); cursor hooks map through the verified dialect
+          table in hooks.ts with unmapped events skipped as warnings;
+          commands accept .txt on the cursor flavor; mcp.json default
+          discovery, the mcpServers array form, and `dir/**` glob expansion
+          are supported (other glob forms skip with a warning);
+          minClientVersions/variables are warn-only; an unresolved ${VAR}
+          fails only that MCP server.
       behavioral: full
       ux: full
     evidence:
@@ -2286,6 +2299,11 @@ capabilities:
         the dsh installed file stop tracking later claude-side changes
         (takeover staleness). Setting CLAUDE_CONFIG_DIR no longer relocates
         writes; a claudeHome-alone caller keeps legacy single-root behavior.
+        Dialect tolerance (PR-A): the loader already discovers cursor-flavored
+        plugins through the shared manifest-candidate helper (dual-dialect
+        dirs, first-hit precedence), but the manager itself still reads only
+        .claude-plugin marketplace/manifest dirs — it gains cursor-dir reads
+        in PR-C. State-file byte shapes are unchanged either way.
 
   # ── settings ────────────────────────────────────────────────────────────
   settings.hot-reload:
