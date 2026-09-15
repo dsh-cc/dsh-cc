@@ -14,6 +14,8 @@ import type {
   ForensicsOptions,
   SessionMeta,
   ToolRecord,
+  TurnEndKind,
+  TurnOutcome,
 } from "./types.ts";
 
 /** Event outcome strings observed on approval/decided events. */
@@ -47,6 +49,7 @@ export interface ParsedStream {
   meta: SessionMeta;
   records: ToolRecord[];
   approvals: ApprovalPair[];
+  turns: TurnOutcome[];
   linesParsed: number;
   corruptLinesSkipped: number;
   truncatedTail: boolean;
@@ -90,6 +93,7 @@ export function parseStream(
   let headerTs: number | undefined;
   const records: ToolRecord[] = [];
   const approvals: ApprovalPair[] = [];
+  const turns: TurnOutcome[] = [];
   const pending = new Map<string, ToolRecord>();
   const lines = text.split("\n").filter((line) => line.length > 0);
   const stats = { linesParsed: 0, corruptLinesSkipped: 0, truncatedTail: false };
@@ -116,6 +120,29 @@ export function parseStream(
     }
     if (type === "approval/policy") {
       if (data?.policy === "never") meta.policyNever = true;
+      continue;
+    }
+    if (type === "turn/end") {
+      // Tolerant capture (plan §4): malformed/missing reasons are ignored.
+      const kind = data?.reason?.kind;
+      if (
+        kind === "completed" ||
+        kind === "max-tokens" ||
+        kind === "aborted" ||
+        kind === "error"
+      ) {
+        const turn = data?.turn;
+        if (typeof turn === "number") {
+          const outcome: TurnOutcome = { project, sessionId, turn, kind: kind as TurnEndKind };
+          if (kind === "error" && typeof data.reason.error === "object" && data.reason.error !== null) {
+            const err = data.reason.error;
+            if (typeof err.code === "string") outcome.errorCode = err.code;
+            if (typeof err.message === "string")
+              outcome.message = err.message.slice(0, 200);
+          }
+          turns.push(outcome);
+        }
+      }
       continue;
     }
     if (type === "approval/asked") {
@@ -196,6 +223,7 @@ export function parseStream(
     meta,
     records,
     approvals,
+    turns,
     headerTs,
     ...stats,
   };
@@ -216,6 +244,7 @@ export async function scanSessions(
 ): Promise<{
   sessions: Array<{ meta: SessionMeta; records: ToolRecord[] }>;
   approvals: ApprovalPair[];
+  turns: TurnOutcome[];
   linesParsed: number;
   corruptLinesSkipped: number;
   truncatedTails: number;
@@ -226,6 +255,7 @@ export async function scanSessions(
   const cutoff = Date.now() - days * DAY_MS;
   const sessions: Array<{ meta: SessionMeta; records: ToolRecord[] }> = [];
   const approvals: ApprovalPair[] = [];
+  const turns: TurnOutcome[] = [];
   let linesParsed = 0;
   let corruptLinesSkipped = 0;
   let truncatedTails = 0;
@@ -265,6 +295,7 @@ export async function scanSessions(
         continue;
       sessions.push({ meta: parsed.meta, records: parsed.records });
       approvals.push(...parsed.approvals);
+      turns.push(...parsed.turns);
       linesParsed += parsed.linesParsed;
       corruptLinesSkipped += parsed.corruptLinesSkipped;
       if (parsed.truncatedTail) truncatedTails++;
@@ -273,6 +304,7 @@ export async function scanSessions(
   return {
     sessions,
     approvals,
+    turns,
     sessionsScanned: sessions.length,
     linesParsed,
     corruptLinesSkipped,
