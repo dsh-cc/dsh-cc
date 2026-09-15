@@ -11,6 +11,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { MARKETPLACE_CANDIDATE_FILES, findMarketplaceManifestPath } from '@dsh-cc/plugin-loader'
 import {
   ambiguousPluginName,
   marketplaceManifestMissing,
@@ -98,7 +99,9 @@ export async function readDeclaredPlugins(deps: PathInputs, marketplaceName: str
   const dir = entry.installLocation
   let raw: string
   try {
-    raw = await readFile(join(dir, '.claude-plugin', 'marketplace.json'), 'utf8')
+    // Shared dialect selection (S6): claude manifest first, cursor overlay second.
+    const manifestPath = findMarketplaceManifestPath(dir) ?? join(dir, MARKETPLACE_CANDIDATE_FILES[0]!)
+    raw = await readFile(manifestPath, 'utf8')
   } catch (error) {
     throw marketplaceManifestMissing(dir, (error as NodeJS.ErrnoException).code ?? (error as Error).message)
   }

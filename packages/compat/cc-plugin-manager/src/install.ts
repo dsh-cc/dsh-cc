@@ -11,6 +11,7 @@
 
 import { cp, readFile, writeFile } from 'node:fs/promises'
 import { join, sep } from 'node:path'
+import { MANIFEST_CANDIDATE_DIRS } from '@dsh-cc/plugin-loader'
 import type { GitRunner } from './git.ts'
 import { pluginAlreadyInstalled, unknownMarketplace, unknownScope } from './errors.ts'
 import { canonicalizeExistingPath, pluginsStatePaths, type PathInputs } from './paths.ts'
@@ -54,17 +55,26 @@ export function cacheDirFor(cacheDir: string, marketplace: string, plugin: strin
 
 /**
  * Read a plugin manifest at `<dir>/.claude-plugin/plugin.json` (nested
- * preferred, loader convention) falling back to top-level `<dir>/plugin.json`.
- * A missing/unreadable manifest is tolerated as `{ name, version: 'unknown' }`
- * — the loader tolerates auto-discovery of manifest-less plugin dirs.
+ * preferred, loader convention), then the Cursor dialect
+ * `<dir>/.cursor-plugin/plugin.json` (S6), falling back to top-level
+ * `<dir>/plugin.json`. The winning candidate's dialect is recorded as
+ * `flavor` ('cursor' only; 'cc' is the default and is not added, keeping
+ * existing results shape-stable). A missing/unreadable manifest is
+ * tolerated as `{ name, version: 'unknown' }` — the loader tolerates
+ * auto-discovery of manifest-less plugin dirs.
  */
-export async function readPluginManifest(dir: string, fallbackName: string): Promise<{ name: string, version: string }> {
-  for (const rel of ['.claude-plugin/plugin.json', 'plugin.json']) {
+export async function readPluginManifest(dir: string, fallbackName: string): Promise<{ name: string, version: string, flavor?: 'cursor' }> {
+  const rels = [...MANIFEST_CANDIDATE_DIRS.map(d => join(d, 'plugin.json')), 'plugin.json']
+  for (const rel of rels) {
     try {
       const manifest = JSON.parse(await readFile(join(dir, rel), 'utf8')) as Record<string, unknown>
       const name = typeof manifest['name'] === 'string' ? manifest['name'] : fallbackName
       const version = typeof manifest['version'] === 'string' ? manifest['version'] : 'unknown'
-      return { name, version }
+      return {
+        name,
+        version,
+        ...(rel.startsWith('.cursor-plugin') ? { flavor: 'cursor' as const } : {}),
+      }
     } catch {
       // try the next convention; a missing manifest is tolerated
     }

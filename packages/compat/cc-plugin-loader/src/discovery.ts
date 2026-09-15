@@ -80,6 +80,20 @@ export function findPluginManifestPath(root: string): string | undefined {
 }
 
 /**
+ * First-hit marketplace manifest path for a marketplace repo root (plan §3.1
+ * symmetric overlay: claude first, then cursor), or undefined when neither
+ * exists. Shared by the loader overlay and the plugin-manager reads so the
+ * dialect selection lives in exactly one place.
+ */
+export function findMarketplaceManifestPath(root: string): string | undefined {
+  for (const file of MARKETPLACE_CANDIDATE_FILES) {
+    const path = join(root, file)
+    if (existsSync(path)) return path
+  }
+  return undefined
+}
+
+/**
  * Discover plugin roots for the glue to mount.
  * @param options - explicit dirs or the Claude-home / cwd pair for the default path.
  * @returns unique `{ root, nameHint }` entries, in discovery order.

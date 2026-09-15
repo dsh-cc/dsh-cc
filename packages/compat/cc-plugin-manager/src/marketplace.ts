@@ -13,6 +13,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { mkdir, readFile, rename, rm } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { gitFailure, createSystemGitRunner, type GitRunner } from './git.ts'
+import { MARKETPLACE_CANDIDATE_FILES, findMarketplaceManifestPath } from '@dsh-cc/plugin-loader'
 import {
   invalidMarketplaceSource,
   marketplaceConflict,
@@ -124,7 +125,9 @@ function sourcesEqual(a: MarketplaceSource, b: MarketplaceSource): boolean {
 async function readManifest(dir: string): Promise<{ name: string, pluginCount: number }> {
   let raw: string
   try {
-    raw = await readFile(join(dir, '.claude-plugin', 'marketplace.json'), 'utf8')
+    // Shared dialect selection (S6): claude manifest first, cursor overlay second.
+    const manifestPath = findMarketplaceManifestPath(dir) ?? join(dir, MARKETPLACE_CANDIDATE_FILES[0]!)
+    raw = await readFile(manifestPath, 'utf8')
   } catch (error) {
     throw marketplaceManifestMissing(dir, (error as NodeJS.ErrnoException).code ?? (error as Error).message)
   }
@@ -322,7 +325,9 @@ export async function addMarketplace(deps: MarketplaceDeps, source: string, opts
 /** Plugin count for an already-known marketplace: read its manifest in place. */
 function manifestPluginCount(dir: string): number {
   try {
-    const manifest = JSON.parse(readFileSync(join(dir, '.claude-plugin', 'marketplace.json'), 'utf8')) as { plugins?: unknown }
+    // Shared dialect selection (S6): claude first, then cursor; absent ⇒ count 0.
+    const manifestPath = findMarketplaceManifestPath(dir)
+    const manifest = JSON.parse(readFileSync(manifestPath ?? join(dir, MARKETPLACE_CANDIDATE_FILES[0]!), 'utf8')) as { plugins?: unknown }
     return Array.isArray(manifest['plugins']) ? manifest['plugins'].length : 0
   } catch {
     return 0
