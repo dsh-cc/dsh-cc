@@ -58,6 +58,36 @@ Each component is peer-style: the loader probes the host seam via `ctx.get(...)`
 
 The `hooks` and `mcp` seams have no harness-owned service in this package itself; a deployment that wants those components provides a guest seam or they are reported skipped. The dsh host wiring now supplies the `mcp` seam: the cc-shell glue provides a built-in `mcp` seam (`cc-shell/src/mcpSeam.ts`, the `cc-mcp-seam` child plugin), so plugin `mcpServers` mount for real in shipped deployments (see docs/plans/2026-09-07-plugin-mcp-seam.md). `hooks` remains host-depended.
 
+## Cursor dialect
+
+Cursor plugins load through the same pipeline as CC plugins — one tolerant parser with flavor-keyed branches, not a second loader. The dialect delta is manifest candidates plus small per-component normalizations; every degraded or ignored field surfaces as a warning on the load report.
+
+**Manifest candidates.** A plugin root is probed in order: `.claude-plugin/plugin.json` → `.cursor-plugin/plugin.json` → top-level `plugin.json`. First hit wins. When both dialect manifests exist the CC one is used and the report carries the warning `cursor manifest ignored: cc manifest takes precedence`. The flavor (`cc` or `cursor`) is recorded on the resolved manifest and on the load report.
+
+**Cursor-only behaviors:**
+
+- **Rules** — `rules/*.mdc` files (declared or the default `rules/` dir) are parsed and tallied as skipped with a warning; they do not mount until the rules seam lands (planned PR-B).
+- **Hooks** — camelCase Cursor events map through the verified dialect table in `hooks.ts`; cursor wire entries (`{command, matcher?, loop_limit?}`) become CC matcher groups and `${CURSOR_PLUGIN_ROOT}` expands to the plugin root:
+
+  | Cursor event | CC event |
+  |---|---|
+  | `sessionStart` | `SessionStart` |
+  | `sessionEnd` | `SessionEnd` |
+  | `preToolUse` | `PreToolUse` |
+  | `postToolUse` | `PostToolUse` |
+  | `postToolUseFailure` | `PostToolUseFailure` |
+  | `subagentStart` | `SubagentStart` |
+  | `subagentStop` | `SubagentStop` |
+  | `beforeSubmitPrompt` | `UserPromptSubmit` |
+  | `preCompact` | `PreCompact` |
+  | `stop` | `Stop` |
+
+  Unmapped events (`beforeShellExecution`, `afterShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `afterFileEdit`, `afterAgentResponse`, `afterAgentThought`, Tab and app hooks) skip with a warning; `loop_limit` warns.
+- **Commands** — `.txt` files mount as plain text on the cursor flavor (in addition to `.md`).
+- **MCP** — `mcp.json` in the plugin root is default discovery (no manifest declaration needed); `mcpServers` accepts the Cursor array form. An unresolved `${VAR}` in a server's env fails only that server, with a named warning.
+- **Glob paths** — `dir/**` expands directory-recursively; any other glob form is skipped with a warning.
+- **Warn-only fields** — `minClientVersions` (client-version gating not enforced) and `variables` (not prompted; set values via environment) surface as warnings and are otherwise ignored.
+
 ## Skill semantic wiring
 
 On top of the skill mount, this package is the consumer that turns `skill-claude-code`'s metadata into actionable registrations:
