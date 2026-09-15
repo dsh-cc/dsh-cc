@@ -5,6 +5,8 @@
  * @module @dsh-cc/memory/truncate
  */
 
+import { Buffer } from 'node:buffer'
+
 /** The always-loaded index filename inside a memory directory. */
 export const ENTRYPOINT_NAME = 'MEMORY.md'
 
@@ -13,6 +15,14 @@ export const MAX_ENTRYPOINT_LINES = 200
 
 /** Byte cap for the entrypoint index (long lines are the failure mode). */
 export const MAX_ENTRYPOINT_BYTES = 25_000
+
+/**
+ * Body caps for the truncated output: the appended warning banner adds ~2
+ * lines / ~250 bytes, so the body is capped below the entrypoint limits and
+ * the truncation output always satisfies the write-side gate.
+ */
+const BODY_LINE_CAP = MAX_ENTRYPOINT_LINES - 2
+const BODY_BYTE_CAP = MAX_ENTRYPOINT_BYTES - 256
 
 /** Result of applying the entrypoint caps. */
 export interface EntrypointTruncation {
@@ -40,7 +50,7 @@ export function truncateEntrypointContent(raw: string): EntrypointTruncation {
   const trimmed = raw.trim()
   const contentLines = trimmed.split('\n')
   const lineCount = contentLines.length
-  const byteCount = trimmed.length
+  const byteCount = Buffer.byteLength(trimmed, 'utf8')
 
   const wasLineTruncated = lineCount > MAX_ENTRYPOINT_LINES
   const wasByteTruncated = byteCount > MAX_ENTRYPOINT_BYTES
@@ -49,14 +59,17 @@ export function truncateEntrypointContent(raw: string): EntrypointTruncation {
     return { content: trimmed, lineCount, byteCount, wasLineTruncated, wasByteTruncated }
   }
 
-  let truncated = wasLineTruncated
-    ? contentLines.slice(0, MAX_ENTRYPOINT_LINES).join('\n')
-    : trimmed
-
-  if (truncated.length > MAX_ENTRYPOINT_BYTES) {
-    const cutAt = truncated.lastIndexOf('\n', MAX_ENTRYPOINT_BYTES)
-    truncated = truncated.slice(0, cutAt > 0 ? cutAt : MAX_ENTRYPOINT_BYTES)
+  // Byte-accurate slicing: accumulate whole lines (never mid-character) while
+  // the running UTF-8 byte total fits the body budget.
+  const bodyLines: string[] = []
+  let runningBytes = 0
+  for (const line of contentLines.slice(0, BODY_LINE_CAP)) {
+    const cost = Buffer.byteLength(line, 'utf8') + (bodyLines.length > 0 ? 1 : 0)
+    if (runningBytes + cost > BODY_BYTE_CAP) break
+    bodyLines.push(line)
+    runningBytes += cost
   }
+  const truncated = bodyLines.join('\n')
 
   const size = byteCount >= 1024 ? `${(byteCount / 1024).toFixed(1)}KB` : `${byteCount}B`
   const reason = wasByteTruncated && !wasLineTruncated
