@@ -48,6 +48,10 @@ export interface CcMcpServer {
 export interface CcPluginManifest {
   /** Unique kebab-case plugin identifier (must not contain spaces). */
   readonly name: string
+  /** Dialect of the winning manifest (plan §3.1), resolver-injected. */
+  readonly flavor: PluginFlavor
+  /** Warnings produced during resolution (e.g. dual-manifest precedence). */
+  readonly warnings: readonly string[]
   /** Semantic version, optional. */
   readonly version?: string
   /** Brief user-facing description, optional. */
@@ -77,6 +81,9 @@ export interface CcPluginManifest {
   readonly settings: Readonly<Record<string, unknown>>
 }
 
+/** Dialect of the winning manifest (plan §3.1): CC layout or Cursor layout. */
+export type PluginFlavor = 'cc' | 'cursor'
+
 /** The six component kinds a plugin can contribute. */
 export type ComponentKind = 'commands' | 'agents' | 'skills' | 'hooks' | 'mcpServers' | 'settings'
 
@@ -98,6 +105,10 @@ export interface ComponentResult {
 export interface PluginLoadReport {
   /** The mounted plugin's manifest name. */
   readonly name: string
+  /** Dialect of the winning manifest. */
+  readonly flavor: PluginFlavor
+  /** Resolution-level warnings (e.g. dual-manifest precedence); distinct from skipped reasons. */
+  readonly warnings: readonly string[]
   /** Per-component outcome. */
   readonly components: readonly ComponentResult[]
 }

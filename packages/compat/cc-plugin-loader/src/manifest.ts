@@ -12,12 +12,16 @@
  * @module
  */
 
-import type { CcPluginManifest, CcCommand, CcMcpServer } from './types.ts'
+import type { CcPluginManifest, CcCommand, CcMcpServer, PluginFlavor } from './types.ts'
 
 /** Extra flags the resolver threads in (not authored in plugin.json). */
 export interface ParsePluginManifestOptions {
   /** Marketplace-root overlay: listed `skills` replace the default `skills/` scan. */
   readonly skillsReplaceDefault?: boolean
+  /** Dialect of the winning manifest candidate (resolver-injected, plan §3.1). */
+  readonly flavor?: PluginFlavor
+  /** Resolution warnings to carry on the parsed manifest (S2 promotes to report). */
+  readonly warnings?: readonly string[]
 }
 
 /**
@@ -44,6 +48,8 @@ export function parsePluginManifest(
   const settings = isRecord(raw['settings']) ? raw['settings'] : {}
   return {
     name,
+    flavor: options.flavor ?? 'cc',
+    warnings: options.warnings ?? [],
     ...typeof raw['version'] === 'string' ? { version: raw['version'] } : {},
     ...typeof raw['description'] === 'string' ? { description: raw['description'] } : {},
     ...raw['author'] !== undefined ? { author: raw['author'] } : {},

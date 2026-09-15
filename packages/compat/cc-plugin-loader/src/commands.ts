@@ -118,7 +118,7 @@ export function mountCommands(options: MountCommandsOptions): {
     return { disposers, mounted, tally }
   }
   const entries = options.manifest.commandsDeclared
-    ? [...options.manifest.commands]
+    ? expandDeclaredCommandDirs(options.pluginRoot, [...options.manifest.commands], tally)
     : defaultCommandEntries(options.pluginRoot, tally)
   if (entries.length === 0) {
     tally.addSkipped('plugin ships no commands')
@@ -160,7 +160,41 @@ export function mountCommands(options: MountCommandsOptions): {
  * subdirectories are skipped with a reason (no silent drop, no colon names).
  */
 function defaultCommandEntries(pluginRoot: string, tally: ComponentTally): CcCommand[] {
-  const dir = join(pluginRoot, STANDARD_COMMANDS_DIR)
+  return scanCommandDir(pluginRoot, STANDARD_COMMANDS_DIR, tally)
+}
+
+/**
+ * Expand manifest-declared command entries whose `source` names a directory
+ * into one entry per `*.md` file inside it (plan §3.4); files pass through.
+ */
+function expandDeclaredCommandDirs(pluginRoot: string, entries: CcCommand[], _tally: ComponentTally): CcCommand[] {
+  const expanded: CcCommand[] = []
+  for (const entry of entries) {
+    if (entry.source === undefined) {
+      expanded.push(entry)
+      continue
+    }
+    const path = resolve(pluginRoot, entry.source)
+    let files
+    try {
+      files = readdirSync(path, { withFileTypes: true })
+    } catch {
+      // Not a directory (or unreadable): keep the entry and let renderCommand fail loud.
+      expanded.push(entry)
+      continue
+    }
+    for (const file of files) {
+      if (!file.isFile() && !file.isSymbolicLink()) continue
+      if (!file.name.endsWith('.md')) continue
+      expanded.push({ ...entry, name: basename(file.name, '.md'), source: join(path, file.name) })
+    }
+  }
+  return expanded
+}
+
+/** List `*.md` files under one commands directory, relative paths preserved. */
+function scanCommandDir(pluginRoot: string, dirRelativeToRoot: string, tally: ComponentTally): CcCommand[] {
+  const dir = join(pluginRoot, dirRelativeToRoot)
   let entries
   try {
     entries = readdirSync(dir, { withFileTypes: true })
@@ -175,7 +209,7 @@ function defaultCommandEntries(pluginRoot: string, tally: ComponentTally): CcCom
     }
     if (!entry.isFile() && !entry.isSymbolicLink()) continue
     if (!entry.name.endsWith('.md')) continue
-    found.push({ name: basename(entry.name, '.md'), source: join(STANDARD_COMMANDS_DIR, entry.name) })
+    found.push({ name: basename(entry.name, '.md'), source: join(dirRelativeToRoot, entry.name) })
   }
   return found
 }

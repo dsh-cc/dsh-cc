@@ -297,9 +297,10 @@ PR-A — Dialect discovery & manifest plumbing:
   S1; report-level assertions follow in S2 once the `warnings` array exists.)
 - S2: manifest.ts `rules` field, mcpServers array form, `minClientVersions`/`variables`
   warnings, unresolved-`${VAR}` server-failure semantics, `/**`-globs + skip-warning
-  policy, command `.txt` acceptance on cursor flavor — PLUS the new per-plugin
-  `warnings: string[]` on the load report and its downstream consumers (cc-shell
-  aggregation, `/plugin` rendering incl. flavor display).
+  policy, command `.txt` acceptance on cursor flavor — PLUS the §3.5 hooks mapping table
+  in `hooks.ts` keyed by flavor (unmapped events → skipped warnings), and the new
+  per-plugin `warnings: string[]` on the load report and its downstream consumers
+  (cc-shell aggregation, `/plugin` rendering incl. flavor display).
 - S3: e2e fixture pack mirroring cursor/plugins official shapes (a
   skills+agents+commands plugin; the github MCP plugin shape) mounted via a directory
   source in isolated homes; report tallies, warnings, and `/plugin` output asserted.

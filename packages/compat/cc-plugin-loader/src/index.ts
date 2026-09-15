@@ -30,10 +30,20 @@ import { mountMcpServers } from './mcp.ts'
 import { mountSettings } from './settings.ts'
 import { resolvePluginManifest } from './resolve-manifest.ts'
 
-export type { CcPluginManifest, CcCommand, CcSkillRef, CcAgentRef, CcMcpServer, ComponentKind, ComponentResult, PluginLoadReport } from './types.ts'
+export type { CcPluginManifest, CcCommand, CcSkillRef, CcAgentRef, CcMcpServer, ComponentKind, ComponentResult, PluginLoadReport, PluginFlavor } from './types.ts'
 export type { CcPluginCommandInfo, MountedPluginCommand } from './commands.ts'
 export { parsePluginManifest } from './manifest.ts'
-export { discoverCcPluginRoots, resolveClaudeHome, NESTED_MANIFEST, TOP_LEVEL_MANIFEST } from './discovery.ts'
+export {
+  discoverCcPluginRoots,
+  resolveClaudeHome,
+  NESTED_MANIFEST,
+  CURSOR_MANIFEST,
+  TOP_LEVEL_MANIFEST,
+  MANIFEST_CANDIDATE_DIRS,
+  MARKETPLACE_CANDIDATE_FILES,
+  findPluginManifestPath,
+  findPluginManifestPaths,
+} from './discovery.ts'
 export type { DiscoveredCcPlugin, DiscoverCcPluginRootsOptions } from './discovery.ts'
 export { AgentProvider, STANDARD_AGENTS_DIR, PLUGIN_AGENT_PROVIDER_BRAND, isPluginAgentProvider } from './agents.ts'
 export type { ResolveModel } from './agents.ts'
@@ -107,6 +117,8 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const resolved = resolvePluginManifest(root, options.nameHint)
   const manifest = parsePluginManifest(resolved.raw, root, {
     skillsReplaceDefault: resolved.skillsReplaceDefault,
+    flavor: resolved.flavor,
+    warnings: resolved.warnings,
   })
   const probed = await probeSeams(ctx, options.seams)
   const disposers: (() => void)[] = []
@@ -151,7 +163,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const effectDisposer = ctx.effect(() => tearDown, 'cc-plugin-loader.mount')
 
   return {
-    report: { name: manifest.name, components },
+    report: { name: manifest.name, flavor: manifest.flavor, warnings: [...manifest.warnings], components },
     commands: commandMount.mounted,
     dispose: () => effectDisposer(),
   }
