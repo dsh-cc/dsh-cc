@@ -302,3 +302,60 @@ describe('TuiAutocompleteProvider — default real-fs walk (smoke)', () => {
     expect(out!.items.every(i => !i.value.includes('.git'))).toBe(true)
   })
 })
+
+describe('TuiAutocompleteProvider — predicted next-prompt suggestion', () => {
+  const SUGGESTION = 'run the full test suite'
+  const lookup = (sessionId: string) => (sessionId === 'sess-1' ? SUGGESTION : undefined)
+  const provider = new TuiAutocompleteProvider(COMMANDS, '/unused', undefined, {}, {
+    getSuggestion: lookup,
+    getSessionId: () => 'sess-1',
+  })
+  const sig = () => new AbortController().signal
+
+  it('prefix match returns one prediction item with its description', async () => {
+    const out = await provider.getSuggestions([SUGGESTION.slice(0, 7)], 0, 7, { signal: sig() })
+    expect(out).not.toBeNull()
+    expect(out!.items).toEqual([{ value: SUGGESTION, label: SUGGESTION, description: 'predicted next prompt' }])
+    expect(out!.prefix).toBe(SUGGESTION.slice(0, 7))
+  })
+
+  it('non-matching prefix returns nothing', async () => {
+    const out = await provider.getSuggestions(['zz'], 0, 2, { signal: sig() })
+    expect(out).toBeNull()
+  })
+
+  it('no stored suggestion for the session returns nothing', async () => {
+    const p = new TuiAutocompleteProvider(COMMANDS, '/unused', undefined, {}, {
+      getSuggestion: lookup,
+      getSessionId: () => 'sess-other',
+    })
+    const out = await p.getSuggestions([SUGGESTION.slice(0, 3)], 0, 3, { signal: sig() })
+    expect(out).toBeNull()
+  })
+
+  it('empty input returns nothing (prefix-match-only surface)', async () => {
+    const out = await provider.getSuggestions([''], 0, 0, { signal: sig() })
+    expect(out).toBeNull()
+  })
+
+  it('applyCompletion replaces the whole line with the full suggestion', () => {
+    const typed = SUGGESTION.slice(0, 7)
+    const out = provider.applyCompletion([typed], 0, typed.length, { value: SUGGESTION, label: SUGGESTION }, typed)
+    expect(out.lines).toEqual([SUGGESTION])
+    expect(out.cursorCol).toBe(SUGGESTION.length)
+  })
+
+  it('disabled lookup (registry miss) → zero suggestion items', async () => {
+    const p = new TuiAutocompleteProvider(COMMANDS, '/unused', undefined, {}, {
+      getSuggestion: () => undefined,
+      getSessionId: () => 'sess-1',
+    })
+    const out = await p.getSuggestions([SUGGESTION.slice(0, 4)], 0, 4, { signal: sig() })
+    expect(out).toBeNull()
+  })
+
+  it('slash and @ prefixes stay owned by their own branches', async () => {
+    const out = await provider.getSuggestions(['/mo'], 0, 3, { signal: sig() })
+    expect(out!.items.every((i) => i.description !== 'predicted next prompt')).toBe(true)
+  })
+})

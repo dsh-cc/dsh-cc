@@ -157,10 +157,19 @@ function buildPathItems(
   })
 }
 
+/** Session-suggestion wiring for the predicted next-prompt branch. */
+export interface PredictionSeam {
+  /** Module-level registry lookup from `@dsh-cc/prompt-suggest`. */
+  readonly getSuggestion: (sessionId: string) => string | undefined
+  /** Live session id source (re-read per call so /resume rebinds). */
+  readonly getSessionId: () => string
+}
+
 /**
  * Autocomplete provider for the TUI composer. Handles `/command` suggestions
- * (prefix-filtered from an injected catalog) and `@file` completion (fuzzy
- * prefix match against a workspace walk rooted at `cwd`).
+ * (prefix-filtered from an injected catalog), `@file` completion (fuzzy
+ * prefix match against a workspace walk rooted at `cwd`), and the optional
+ * predicted next-prompt suggestion (`@dsh-cc/prompt-suggest` registry).
  */
 export class TuiAutocompleteProvider implements AutocompleteProvider {
   readonly triggerCharacters = ['/', '@']
@@ -169,17 +178,20 @@ export class TuiAutocompleteProvider implements AutocompleteProvider {
   private readonly cwd: string
   private readonly walk: WorkspaceWalk
   private readonly argCompleters: ArgCompleterMap
+  private readonly prediction: PredictionSeam | undefined
 
   constructor(
     commands: readonly CommandItem[],
     cwd: string,
     walk: WorkspaceWalk = defaultWalk,
     argCompleters: ArgCompleterMap = {},
+    prediction?: PredictionSeam,
   ) {
     this.commands = commands
     this.cwd = cwd
     this.walk = walk
     this.argCompleters = argCompleters
+    this.prediction = prediction
   }
 
   async getSuggestions(
@@ -226,6 +238,24 @@ export class TuiAutocompleteProvider implements AutocompleteProvider {
       })
       if (items.length === 0) return null
       return { items, prefix: before }
+    }
+
+    // --- predicted next-prompt suggestion ----------------------------------
+    // Surface (probe §7.2): the vendored Editor only consults providers on
+    // trigger chars ('/' and '@') or forced Tab — NEVER on empty input — so
+    // this branch is prefix-match-only: the user types a few characters of
+    // the stored suggestion and completes (Tab). Reachable only when no
+    // slash/@ branch claimed the input. The registry is written only by the
+    // enabled producer, so a disabled feature yields zero items here.
+    if (this.prediction !== undefined && before.length > 0
+      && !before.startsWith('/') && !before.startsWith('@')) {
+      const suggestion = this.prediction.getSuggestion(this.prediction.getSessionId())
+      if (suggestion !== undefined && suggestion.length > before.length && suggestion.startsWith(before)) {
+        return {
+          items: [{ value: suggestion, label: suggestion, description: 'predicted next prompt' }],
+          prefix: before,
+        }
+      }
     }
 
     // --- /command argument completion --------------------------------------
@@ -309,6 +339,18 @@ export class TuiAutocompleteProvider implements AutocompleteProvider {
         lines: newLines,
         cursorLine,
         cursorCol: beforePrefix.length + item.value.length + separator.length,
+      }
+    }
+
+    // Predicted next-prompt suggestion: replace the WHOLE current line with
+    // the full suggestion (the prefix is everything typed so far on the line).
+    if (!prefix.startsWith('/') && !prefix.startsWith('@')) {
+      const newLines = [...lines]
+      newLines[cursorLine] = item.value
+      return {
+        lines: newLines,
+        cursorLine,
+        cursorCol: item.value.length,
       }
     }
 

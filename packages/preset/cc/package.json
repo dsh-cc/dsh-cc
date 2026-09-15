@@ -67,6 +67,7 @@
     "@dsh-cc/tool-web-fetch": "workspace:^",
     "@dsh-cc/handoff-store": "workspace:^",
     "@dsh-cc/tool-use-summary": "workspace:^",
+    "@dsh-cc/prompt-suggest": "workspace:^",
     "@dsh-cc/reasoning-fold": "workspace:^"
   },
   "devDependencies": {
