@@ -171,4 +171,60 @@ describe('memory_save tool', () => {
     const section = { refresh: vi.fn(async () => {}) }
     expect(registerMemorySaveTool(ctx, HOME, section as unknown as MemorySection)).toBeUndefined()
   })
+
+  describe('entrypoint write gate', () => {
+    function fullIndex(entries = 200): string {
+      return Array.from({ length: entries }, (_, i) => `- [topic-${i}](topic-${i}.md) — entry ${i}`).join('\n')
+    }
+
+    it('rejects a save that pushes a within-limit index over the cap, writing nothing', async () => {
+      const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex() })
+      const before = fs.backingText(`${WS_DIR}/MEMORY.md`)
+
+      const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+      expect(result.isError).toBe(true)
+      expect(String((result.error as { message?: string })?.message ?? '')).toContain('under 140 lines')
+      expect(fs.backingText(`${WS_DIR}/MEMORY.md`)).toBe(before)
+      expect(fs.backingText(`${WS_DIR}/user-profile.md`)).toBeUndefined()
+    })
+
+    it('rejects the same push-over in the global scope', async () => {
+      const { ctx, fs } = await setup({ [`${HOME}/MEMORY.md`]: fullIndex() })
+      const before = fs.backingText(`${HOME}/MEMORY.md`)
+
+      const result = await call(ctx, { ...VALID, scope: 'global' }, agentAt(WORKSPACE))
+
+      expect(result.isError).toBe(true)
+      expect(fs.backingText(`${HOME}/MEMORY.md`)).toBe(before)
+      expect(fs.backingText(`${HOME}/user-profile.md`)).toBeUndefined()
+    })
+
+    it('fail-opens when the index was ALREADY over the cap, warning in the message', async () => {
+      const { ctx, fs, section } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex(300) })
+
+      const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')
+      expect(text).toContain('already over its 200-line/25000-byte cap')
+      expect(text).toContain('tail entries are invisible until consolidation compacts it')
+      expect(fs.backingText(`${WS_DIR}/user-profile.md`)).toBe(renderTopicFile(VALID))
+      expect(fs.backingText(`${WS_DIR}/MEMORY.md`)).toContain('- [user-profile](user-profile.md)')
+      expect(section.refresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('succeeds overwriting an existing topic on a 200-line index (update-without-growth)', async () => {
+      const seeded = `${fullIndex(199)}\n- [user-profile](user-profile.md) — old\n`
+      const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: seeded })
+
+      const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+      expect(result.isError).toBeFalsy()
+      expect((result.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')).not.toContain('already over')
+      const after = fs.backingText(`${WS_DIR}/MEMORY.md`) ?? ''
+      expect(after.trim().split('\n').length).toBe(200)
+      expect(after).toContain('principal engineer, Chinese communication')
+    })
+  })
 })

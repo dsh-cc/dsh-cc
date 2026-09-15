@@ -17,8 +17,10 @@
  * @module @dsh-cc/memory-consolidation/writeback
  */
 
+import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
+import { ENTRYPOINT_NAME, MAX_ENTRYPOINT_BYTES, MAX_ENTRYPOINT_LINES } from './truncate.ts'
 
 /** One file the fork asks the plugin to write: a flat filename plus full body. */
 export interface MemoryWrite {
@@ -84,7 +86,20 @@ export function memoryWritePolicy(dir: string): MemoryWritePolicy {
  * @param input - the raw `structured` value captured from the fork.
  * @returns the validated writes.
  */
-export function validateMemoryWrites(input: unknown): MemoryWrite[] {
+/** Options for {@link validateMemoryWrites}. */
+export interface ValidateMemoryWritesOptions {
+  /**
+   * Fail-open for `memory_save` against an index that was ALREADY over the
+   * entrypoint cap before the write (the save did not cause the overflow, and
+   * rejecting would brick every save with no repair path). Default strict.
+   */
+  readonly allowOverLimitEntrypoint?: boolean
+}
+
+export function validateMemoryWrites(
+  input: unknown,
+  opts?: ValidateMemoryWritesOptions,
+): MemoryWrite[] {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new Error('memory fork output must be an object with a "writes" array')
   }
@@ -121,6 +136,21 @@ export function validateMemoryWrites(input: unknown): MemoryWrite[] {
   })
   if (total > WRITEBACK_MAX_TOTAL_BYTES) {
     throw new Error(`memory batch is ${total} bytes, over the ${WRITEBACK_MAX_TOTAL_BYTES} cap`)
+  }
+  const entrypoint = writes.find(w => w.path === ENTRYPOINT_NAME)
+  if (entrypoint !== undefined && opts?.allowOverLimitEntrypoint !== true) {
+    const trimmed = entrypoint.content.trim()
+    const lines = trimmed.split('\n').length
+    const bytes = Buffer.byteLength(trimmed, 'utf8')
+    if (lines > MAX_ENTRYPOINT_LINES || bytes > MAX_ENTRYPOINT_BYTES) {
+      throw new Error(
+        `${ENTRYPOINT_NAME} index would exceed its cap (${lines} lines / ${bytes} bytes; `
+        + `limits: ${MAX_ENTRYPOINT_LINES} lines / ${MAX_ENTRYPOINT_BYTES} bytes). `
+        + 'Rewrite the index to target under 140 lines, one line per entry: move detail into topic files, '
+        + 'merge or drop stale entries. To update without growing the index, overwrite an existing memory '
+        + "(same name); if this is not genuinely cross-workspace, save with scope 'workspace'.",
+      )
+    }
   }
   return writes
 }

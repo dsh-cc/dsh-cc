@@ -522,8 +522,12 @@ describe('extract-memories index injection', () => {
       'You are consolidating persistent memory from past sessions. Review the sessions listed below (transcripts in `/transcripts`), distill durable facts, and rewrite the memory directory `/mem`.',
       'The memory directory contains MEMORY.md (an index of topic files) and topic `.md` files with YAML frontmatter (name, description, type).',
       'Return the complete rewritten file set via the `structured_output` tool as `{ "writes": [{ "path", "content" }] }` — flat `.md` filenames with complete bodies. Only the files you return are written; omitted files stay unchanged on disk.',
-      'Rewrite `MEMORY.md` to be a concise index (one line per topic) and keep topic files organized by semantic topic, not chronology.',
-      'Remove memories that are wrong or outdated from the index. Do not drop a fact that is still load-bearing.',
+      'Work in this order:',
+      `1. Orient: list \`/mem\`, then read MEMORY.md and the topic files it points at — that is your primary review material.`,
+      `2. Verify against reality: the fork's working directory IS the session's workspace. Before keeping any load-bearing fact, check it against the current codebase (paths, commands, behavior) with read/grep/glob. On a contradiction between two memories, fix the wrong side. Delete facts referencing things that no longer exist.`,
+      `3. Normalize dates: convert every relative date ("yesterday", "last week") to the absolute date it referred to.`,
+      `4. Search transcripts narrowly: do NOT exhaustively read the session transcripts in \`/transcripts\` — grep them only for things already suspected important (symbols, paths, error strings surfaced by the memory files).`,
+      `5. Prune and index: rewrite MEMORY.md as one line per topic, targeting under 140 lines (an index over 200 lines / 25 KB is rejected host-side, so stay well under). Move detail into topic files, organized by semantic topic, and keep still-true load-bearing facts.`,
       `You may use only: ${MEMORY_AGENT_TOOLS.join(', ')}.`,
       '',
       'Sessions since the last consolidation:',
@@ -531,5 +535,62 @@ describe('extract-memories index injection', () => {
       '- s2',
     ].join('\n')
     expect(buildConsolidationPrompt('/mem', '/transcripts', ['s1', 's2'])).toBe(expected)
+  })
+})
+
+/**
+ * Design §2.4: the write-side entrypoint gate (in @dsh-cc/memory) rejects an
+ * over-limit `MEMORY.md` batch. Plain rejection would fail the dream job,
+ * roll back the lock, and retry every turn-end forever — so the done handler
+ * applies a fallback: over-limit entrypoint content is replaced with the
+ * deterministic truncation output before validation/write, and the job
+ * completes. A compliant batch passes through untouched.
+ */
+describe('memory write fallback (entrypoint gate livelock, design §2.4)', () => {
+  const MEM = '/mem'
+  // resolveWorkspaceMemoryDir(home, cwd): home + /projects/<slug>.
+  const MEM_DIR = '/mem/projects/mem'
+  const topicWrite = { path: 'topic-a.md', content: '# Topic A\n\nsome durable fact\n' }
+
+  it('an over-limit MEMORY.md batch is truncated, written, and completes the job', async () => {
+    const fs = makeFsMock()
+    const { ctx, jobs, subagents } = mount({ memoryHome: MEM, dreamEnabled: false, fs })
+    const overLimit = Array.from({ length: 500 }, (_, i) => `- [topic-${i}]: detail ${i}`).join('\n')
+    subagents.start.mockImplementation(async () => ({
+      result: Promise.resolve({
+        structured: { writes: [topicWrite, { path: 'MEMORY.md', content: overLimit }] },
+        stopReason: 'completed',
+      }),
+    }))
+
+    await stopTurn(ctx, fakeAgent(MEM))
+    await vi.waitFor(() => expect(controlsOf(jobs, 'extract-memories').length).toBe(1))
+    await expect(controlsOf(jobs, 'extract-memories')[0].done).resolves.toEqual({ status: 'completed' })
+
+    const written = fs.backing.get(`${MEM_DIR}/MEMORY.md`)
+    // 500-line index was replaced by the capped truncation output, not dropped.
+    expect(written).toBeDefined()
+    expect(written!.split('\n').length).toBeLessThan(500)
+    expect(written).toContain('WARNING')
+    // Topic file from the same batch was preserved.
+    expect(fs.backing.get(`${MEM_DIR}/topic-a.md`)).toBe(topicWrite.content)
+  })
+
+  it('a compliant batch passes through untouched (no fallback applied)', async () => {
+    const fs = makeFsMock()
+    const { ctx, jobs, subagents } = mount({ memoryHome: MEM, dreamEnabled: false, fs })
+    const compliantIndex = '- [topic-a]: see topic-a.md\n- [topic-b]: fine\n'
+    subagents.start.mockImplementation(async () => ({
+      result: Promise.resolve({
+        structured: { writes: [{ path: 'MEMORY.md', content: compliantIndex }, topicWrite] },
+        stopReason: 'completed',
+      }),
+    }))
+
+    await stopTurn(ctx, fakeAgent(MEM))
+    await vi.waitFor(() => expect(controlsOf(jobs, 'extract-memories').length).toBe(1))
+    await expect(controlsOf(jobs, 'extract-memories')[0].done).resolves.toEqual({ status: 'completed' })
+
+    expect(fs.backing.get(`${MEM_DIR}/MEMORY.md`)).toBe(compliantIndex)
   })
 })

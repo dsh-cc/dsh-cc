@@ -87,6 +87,73 @@ describe('validateMemoryWrites', () => {
       writes: ['a.md', 'b.md', 'c.md', 'd.md', 'e.md'].map(path => ({ path, content: sixtyKib })),
     })).toThrow(/over the .* cap/)
   })
+
+  it('accepts MEMORY.md at exactly 200 lines and exactly 25 000 bytes', () => {
+    const index = (lines: number) =>
+      Array.from({ length: lines }, (_, i) => `- [a](a.md) — entry ${i}`).join('\n')
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'MEMORY.md', content: index(200) }],
+    })).not.toThrow()
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'MEMORY.md', content: 'x'.repeat(25_000) }],
+    })).not.toThrow()
+  })
+
+  it('accepts 200 entries with a trailing newline (trim-then-count semantics)', () => {
+    const index = `${Array.from({ length: 200 }, (_, i) => `- [a](a.md) — entry ${i}`).join('\n')}\n`
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'MEMORY.md', content: index }],
+    })).not.toThrow()
+  })
+
+  it('rejects a 201-line MEMORY.md with the remediation message', () => {
+    const index = Array.from({ length: 201 }, (_, i) => `- [a](a.md) — entry ${i}`).join('\n')
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'MEMORY.md', content: index }],
+    })).toThrow(/under 140 lines/)
+    try {
+      validateMemoryWrites({ writes: [{ path: 'MEMORY.md', content: index }] })
+    } catch (error) {
+      const message = (error as Error).message
+      expect(message).toContain('one line per entry')
+      expect(message).toContain('move detail into topic files')
+      expect(message).toContain('merge or drop stale entries')
+      expect(message).toContain('overwrite an existing memory (same name)')
+      expect(message).toContain("scope 'workspace'")
+    }
+  })
+
+  it('rejects an over-25 000-byte MEMORY.md even within the line cap', () => {
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'MEMORY.md', content: 'x'.repeat(25_001) }],
+    })).toThrow()
+  })
+
+  it('counts UTF-8 bytes, not UTF-16 code units (CJK)', () => {
+    // 9 000 CJK chars = 9 000 code units but 27 000 bytes, one line.
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'MEMORY.md', content: '你'.repeat(9_000) }],
+    })).toThrow()
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'MEMORY.md', content: '你'.repeat(8_000) }],
+    })).not.toThrow()
+  })
+
+  it('does not gate a non-entrypoint .md write', () => {
+    const index = Array.from({ length: 201 }, (_, i) => `- [a](a.md) — entry ${i}`).join('\n')
+    expect(() => validateMemoryWrites({
+      writes: [{ path: 'notes.md', content: index }],
+    })).not.toThrow()
+  })
+
+  it('fail-opens when allowOverLimitEntrypoint is set (pre-existing over-limit index)', () => {
+    const index = Array.from({ length: 300 }, (_, i) => `- [a](a.md) — entry ${i}`).join('\n')
+    const writes = validateMemoryWrites(
+      { writes: [{ path: 'MEMORY.md', content: index }] },
+      { allowOverLimitEntrypoint: true },
+    )
+    expect(writes).toHaveLength(1)
+  })
 })
 
 describe('writeMemoryFiles', () => {
