@@ -67,7 +67,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const scope = settings?.register(MODEL_ALIASES_NAMESPACE, SettingsAliasesSchema, {
     // Reject a half-written object route at write time (the dict schema cannot
     // express a non-empty cross-field check).
-    validate: (value: Record<string, AliasTarget | null>) => {
+    validate: (value: Record<string, AliasTarget | null | boolean>) => {
       for (const [alias, target] of Object.entries(value)) {
         if (target !== null && typeof target === 'object') {
           if (typeof target.model !== 'string' || target.model.trim().length === 0) {
@@ -84,7 +84,11 @@ export function apply(ctx: Context, config: Config = {}): void {
     config.modelAliases,
     scope?.get?.() as Record<string, AliasTarget | null> | undefined,
   )
-  const warnOptions = { warn: (message: string) => ctx.logger.warn(message) }
+  const warnOptions = {
+    warn: (message: string) => ctx.logger.warn(message),
+    // W5 cheap-lane inherit observability, default on.
+    warnOnInherit: (scope?.get?.() as { warnOnInherit?: boolean } | undefined)?.warnOnInherit !== false,
+  }
   const resolver = createModelResolver(aliasSources, warnOptions)
   const inspect = createModelInspector(aliasSources, warnOptions)
   const resolveDetailed = resolver.resolveDetailed
@@ -121,10 +125,13 @@ export function resolveAlias(ctx: Context, alias: string | undefined): ResolvedR
   const routes = ctx.get('ccModelRoutes') as ModelRoutes | undefined
   if (routes !== undefined) return routes.resolve(alias)
   const settings = ctx.get('settings') as SettingsProvider | undefined
-  const overlay = settings?.get?.(MODEL_ALIASES_NAMESPACE) as Record<string, AliasTarget | null> | undefined
+  const overlay = settings?.get?.(MODEL_ALIASES_NAMESPACE) as (Record<string, AliasTarget | null> & { warnOnInherit?: boolean }) | undefined
   return createModelResolver(
     () => mergeAliasMaps(undefined, overlay),
-    { warn: message => ctx.logger.warn(message) },
+    {
+      warn: message => ctx.logger.warn(message),
+      warnOnInherit: overlay?.warnOnInherit !== false,
+    },
   )(alias)
 }
 
@@ -140,9 +147,12 @@ export function resolveDetailedAlias(ctx: Context, alias: string | undefined): D
   const routes = ctx.get('ccModelRoutes') as ModelRoutes | undefined
   if (routes !== undefined) return routes.resolveDetailed(alias)
   const settings = ctx.get('settings') as SettingsProvider | undefined
-  const overlay = settings?.get?.(MODEL_ALIASES_NAMESPACE) as Record<string, AliasTarget | null> | undefined
+  const overlay = settings?.get?.(MODEL_ALIASES_NAMESPACE) as (Record<string, AliasTarget | null> & { warnOnInherit?: boolean }) | undefined
   return createModelResolver(
     () => mergeAliasMaps(undefined, overlay),
-    { warn: message => ctx.logger.warn(message) },
+    {
+      warn: message => ctx.logger.warn(message),
+      warnOnInherit: overlay?.warnOnInherit !== false,
+    },
   ).resolveDetailed(alias)
 }

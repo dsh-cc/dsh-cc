@@ -47,9 +47,10 @@ export const ConfigAliasSchema = z.union([MODEL_ONLY, EXPLICIT_ROUTE])
 
 /**
  * Schema for a settings `model-aliases` value: a model id, an explicit route,
- * or `null` meaning "delete a same-named config-default entry".
+ * `null` meaning "delete a same-named config-default entry", or a boolean —
+ * the boolean case exists for the `warnOnInherit` control key only.
  */
-export const SettingsAliasSchema = z.union([MODEL_ONLY, EXPLICIT_ROUTE, z.const(null)])
+export const SettingsAliasSchema = z.union([MODEL_ONLY, EXPLICIT_ROUTE, z.const(null), z.boolean()])
 
 /**
  * Schema for the whole config `modelAliases` record.
@@ -57,7 +58,10 @@ export const SettingsAliasSchema = z.union([MODEL_ONLY, EXPLICIT_ROUTE, z.const(
 export const ConfigAliasesSchema = z.dict(ConfigAliasSchema)
 
 /**
- * Schema for the whole settings `model-aliases` section.
+ * Schema for the whole settings `model-aliases` section: a dict of alias
+ * entries plus the `warnOnInherit: boolean` control key (default true) that
+ * gates the cheap-lane inherit warning. Non-`warnOnInherit` booleans are
+ * ignored by `mergeAliasMaps`.
  */
 export const SettingsAliasesSchema = z.dict(SettingsAliasSchema)
 
