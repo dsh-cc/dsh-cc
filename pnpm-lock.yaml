@@ -1511,6 +1511,24 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/llm-tuning/side-query:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@dsh-cc/model-aliases':
+        specifier: workspace:^
+        version: link:../../compat/cc-model-aliases
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/mcp/mcp-client:
     dependencies:
       '@modelcontextprotocol/sdk':
