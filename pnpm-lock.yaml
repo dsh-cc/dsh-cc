@@ -311,6 +311,10 @@ importers:
         version: link:../tool-use-summary
 
   packages/compaction/tool-use-summary:
+    dependencies:
+      '@dsh-cc/side-query':
+        specifier: workspace:^
+        version: link:../../llm-tuning/side-query
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -333,9 +337,6 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@dsh-cc/side-query':
-        specifier: workspace:^
-        version: link:../../llm-tuning/side-query
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -1912,6 +1913,9 @@ importers:
       '@dsh-cc/tool-structured-output':
         specifier: workspace:^
         version: link:../../core/tool-structured-output
+      '@dsh-cc/tool-use-summary':
+        specifier: workspace:^
+        version: link:../../compaction/tool-use-summary
       '@dsh-cc/tool-web-fetch':
         specifier: workspace:^
         version: link:../../core/tool-web-fetch

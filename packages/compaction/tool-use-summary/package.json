@@ -20,6 +20,9 @@
     "lib"
   ],
   "license": "Apache-2.0",
+  "dependencies": {
+    "@dsh-cc/side-query": "workspace:^"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.5-rc.1",
     "@deepseek-ai/dsh-agent": ">=0.1.5-rc.1",
@@ -27,7 +30,6 @@
     "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@dsh-cc/model-aliases": "workspace:^",
-    "@dsh-cc/side-query": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
