@@ -64,7 +64,13 @@ const scopes = new WeakMap<object, SettingsScope | undefined>()
 /**
  * Register the namespace once per settings provider and return the live
  * settings reader. Idempotent: callers after the first (the compaction-micro
- * consumer reads the same namespace) receive the same scope. Without a
+ * consumer reads the same namespace) receive the same scope; a duplicate
+ * registration on the same provider (observed under dereferenced profile
+ * installs, where separate module copies split this WeakMap across the TUS
+ * plugin and the compaction-micro consumer mounting first) degrades to the
+ * provider's existing registration via `settings.get`. Registration is a
+ * fiber effect on whoever registered first — if that fiber disposes, `get`
+ * returns undefined and the reader degrades to schema defaults. Without a
  * settings provider the reader returns the schema defaults.
  * @param ctx - the host context.
  * @returns a per-use settings reader (never undefined).
@@ -73,7 +79,13 @@ export function registerTusSettings(ctx: Context): () => TusSettings {
   const settings = ctx.get('settings') as SettingsProvider | undefined
   if (settings === undefined) return () => ({ ...DEFAULT_SETTINGS })
   if (!scopes.has(settings)) {
-    const scope = settings.register(SETTINGS_NAMESPACE, SettingsSchema) as SettingsScope | undefined
+    let scope: SettingsScope | undefined
+    try {
+      scope = settings.register(SETTINGS_NAMESPACE, SettingsSchema) as SettingsScope | undefined
+    } catch (error) {
+      if (!String(error).includes('is already registered')) throw error
+      scope = { get: () => settings.get(SETTINGS_NAMESPACE) }
+    }
     scopes.set(settings, scope)
   }
   const scope = scopes.get(settings)
