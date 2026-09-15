@@ -1,9 +1,10 @@
 # Memory Write-Side Index Gate (G4) and Consolidation Prompt Quality (G5)
 
-**Status:** **Revised r2** — critic cold review 2026-09-16 round 1 (F1–F9:
-composition-point fix, counting semantics, global-scope deadlock mitigation,
-consolidation fallback, test gaps) and round 2 (banner-headroom arithmetic,
-fail-open mechanism flag, byte-accurate truncation slicing) incorporated.
+**Status:** **Implemented** — PR #80 (2026-09-16). Critic cold review round 1
+(F1–F9: composition-point fix, counting semantics, global-scope deadlock
+mitigation, consolidation fallback, test gaps) and round 2 (banner-headroom
+arithmetic, fail-open mechanism flag, byte-accurate truncation slicing)
+incorporated.
 **Date:** 2026-09-16
 **Worktree:** `.claude/worktrees/memory-enhancement` (branch `worktree-memory-enhancement`)
 
