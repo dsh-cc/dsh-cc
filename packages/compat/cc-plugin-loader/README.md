@@ -66,7 +66,7 @@ Cursor plugins load through the same pipeline as CC plugins — one tolerant par
 
 **Cursor-only behaviors:**
 
-- **Rules** — `rules/*.mdc` files (declared or the default `rules/` dir) are parsed and tallied as skipped with a warning; they do not mount until the rules seam lands (planned PR-B).
+- **Rules** — `rules/*.mdc` files (declared or the default `rules/` dir) are parsed and mounted via the `rules` guest seam: the cc-shell bridge renders one consolidated `cc:plugin-rules` system-prompt section per plugin (static for `alwaysApply`, conditional-instruction for glob-scoped; a 4000-character per-plugin budget with explicit truncation). Where the seam is absent they are tallied as skipped with a warning.
 - **Hooks** — camelCase Cursor events map through the verified dialect table in `hooks.ts`; cursor wire entries (`{command, matcher?, loop_limit?}`) become CC matcher groups and `${CURSOR_PLUGIN_ROOT}` expands to the plugin root:
 
   | Cursor event | CC event |

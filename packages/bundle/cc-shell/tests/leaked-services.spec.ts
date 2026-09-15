@@ -24,6 +24,7 @@ const CC_SERVICES_ISOLATE = [
   'hookBridgeStatus',
   'mcp',
   'hooks',
+  'rules',
 ] as const
 
 interface FiberLike {
@@ -91,7 +92,7 @@ afterEach(() => {
 })
 
 describe('cc-shell glue leakedServices (cc-services isolate map)', () => {
-  it('publishes no process-global services when the seven isolate keys are set', async () => {
+  it('publishes no process-global services when the nine isolate keys are set', async () => {
     const root = new Context()
     root.provide('commands', { register: () => () => {} })
     const group = isolateGroup(root, CC_SERVICES_ISOLATE)
