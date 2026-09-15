@@ -92,9 +92,9 @@ describe('microcompact configuration', () => {
     const raw = { retainResults: 4, auto: true, placeholderChars: 100 }
     const resolved = resolveConfig(raw)
     raw.retainResults = 1
-    expect(resolved).toEqual({ retainResults: 4, auto: true, placeholderChars: 100 })
+    expect(resolved).toEqual({ retainResults: 4, auto: true, placeholderChars: 100, failureCap: 3 })
     expect(Object.isFrozen(resolved)).toBe(true)
-    expect(DEFAULTS).toEqual({ retainResults: 10, auto: false, placeholderChars: 256 })
+    expect(DEFAULTS).toEqual({ retainResults: 10, auto: false, placeholderChars: 256, failureCap: 3 })
     expect(Object.isFrozen(DEFAULTS)).toBe(true)
   })
 

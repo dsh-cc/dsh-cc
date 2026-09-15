@@ -16,6 +16,12 @@ export interface MicrocompactConfig {
   auto?: boolean
   /** Maximum text code points in a generated placeholder (excluding a re-embedded spill locator). Defaults to `256`. */
   placeholderChars?: number
+  /**
+   * Consecutive auto pre-step pass failures tolerated before the pass pauses
+   * for the session and one durable model-visible notice is injected. Defaults
+   * to `3`.
+   */
+  failureCap?: number
 }
 
 /** Validated, detached, deeply immutable microcompact configuration. */
@@ -23,6 +29,7 @@ export interface ResolvedConfig {
   readonly retainResults: number
   readonly auto: boolean
   readonly placeholderChars: number
+  readonly failureCap: number
 }
 
 /** One landed placeholder replacement during a microcompact pass. */
