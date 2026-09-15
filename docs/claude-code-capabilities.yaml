@@ -2507,7 +2507,10 @@ capabilities:
         Frontmatter aliases (sonnet/opus/haiku/fable + dsh lanes + open set),
         settings model-aliases overlay with null-delete and builtin fallback,
         shared toAgentOptions per-field inheritance, and the ccModelRoutes
-        service all work. Follow-ups: the /model command, ANTHROPIC_* env vars
+        service all work. Cheap-lane observability: an unconfigured builtin
+        alias inheriting the parent route emits a once-per-alias
+        `model-aliases.warnOnInherit`-gated logger.warn (dsh-cc W5). Follow-ups:
+        the /model command, ANTHROPIC_* env vars
         (no Anthropic semantics), and aliasing the main-session default model.
 
   # ── workspace ───────────────────────────────────────────────────────────

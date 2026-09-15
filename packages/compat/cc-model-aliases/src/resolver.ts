@@ -65,6 +65,19 @@ export const BUILTIN_ALIASES: readonly string[] = [...CC_ALIASES, ...LANE_ALIASE
 const BUILTIN_SET = new Set(BUILTIN_ALIASES)
 
 /**
+ * Once-per-alias ledger for the cheap-lane inherit warning (plan §8 W5):
+ * an unconfigured builtin alias resolving to "inherit the parent route"
+ * warns once per alias per process lifetime. Module-level so both the
+ * service path and the `resolveAlias` no-service fallback share it.
+ */
+const inheritWarned = new Set<string>()
+
+/** Test seam: clear the once-per-alias inherit-warning ledger. */
+export function resetInheritWarned(): void {
+  inheritWarned.clear()
+}
+
+/**
  * Merge the deployment `config` defaults and the settings overlay into one
  * effective alias map (aliases keyed by lowercased name). Entry-shallow:
  * a settings value replaces a config value wholesale and never field-merges a
@@ -87,6 +100,9 @@ export function mergeAliasMaps(
     if (value !== null) merged.set(key, value)
   }
   for (const [key, value] of foldKeys(settings)) {
+    // Settings control keys (e.g. `warnOnInherit`) are booleans, not aliases;
+    // never let them enter the alias map.
+    if (typeof value === 'boolean') continue
     if (value === null) merged.delete(key)
     else merged.set(key, value)
   }
@@ -115,12 +131,23 @@ export interface ModelResolver {
 
 export function createModelResolver(
   getAliases: () => ReadonlyMap<string, AliasTarget>,
-  options?: { warn?: (message: string) => void },
+  options?: { warn?: (message: string) => void; warnOnInherit?: boolean },
 ): ModelResolver {
   const inspect = createModelInspector(getAliases, options)
+  const warn = options?.warn ?? ((message: string) => console.warn(message))
+  // W5 cheap-lane inherit observability: warn once per alias when an
+  // unconfigured builtin (or a lane falling through to a builtin peer)
+  // inherits the parent route. Default on; `warnOnInherit: false` suppresses.
+  const warnOnInherit = options?.warnOnInherit !== false
   const resolveDetailed = (model: string | undefined): DetailedRoute => {
     const verdict: AliasInspection = inspect(model)
     if (verdict.kind === 'inherit') {
+      const folded = model?.trim().toLowerCase()
+      const peerInherit = verdict.via === 'peer' && BUILTIN_SET.has(verdict.hop ?? '')
+      if (warnOnInherit && folded && (verdict.via === 'builtin' || peerInherit) && !inheritWarned.has(folded)) {
+        inheritWarned.add(folded)
+        warn(`cc-model-aliases: alias "${folded}" is unconfigured; route inherited from parent — cheap-lane savings are zero for this session`)
+      }
       return { selector: model === undefined || model.trim().length === 0 ? undefined : model.trim(), via: 'inherit', route: undefined }
     }
     const selector = model?.trim()
