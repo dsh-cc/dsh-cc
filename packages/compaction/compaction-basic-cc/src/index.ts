@@ -8,9 +8,22 @@
  */
 
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+import type { Context } from '@deepseek-ai/cordis'
 import { applyCompactHint, takeCompactHint } from './hint.ts'
+import { applyTusSummaries } from './tus.ts'
 
 export { applyCompactHint, setCompactHint, takeCompactHint } from './hint.ts'
+export { applyTusSummaries, TUS_CONSUMER_PROBE } from './tus.ts'
+
+/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
+function dshHomeFn(ctx: Context | undefined): string | undefined {
+  if (ctx === undefined) return undefined
+  try {
+    return (ctx as { dshHomePath?: () => string }).dshHomePath?.()
+  } catch {
+    return undefined
+  }
+}
 
 export class CcBasicCompactionEngine extends BasicCompactionEngine {
   /**
@@ -29,7 +42,14 @@ export class CcBasicCompactionEngine extends BasicCompactionEngine {
     const [input, agent, signal] = args
     const hint = takeCompactHint(agent)
     const next = hint === undefined ? input : applyCompactHint(input, hint)
-    return super.summarize(next, agent, signal)
+    // Consumer B (§5.4): substitute TUS digests for qualifying tool results.
+    // Never throws; absent rows → the input unchanged (byte-identical call).
+    const upgraded = await applyTusSummaries(
+      next,
+      dshHomeFn((this as unknown as { ctx?: Context }).ctx),
+      agent === undefined ? '' : String((agent as { session?: { header?: { id?: unknown } } }).session?.header?.id ?? ''),
+    )
+    return super.summarize(upgraded, agent, signal)
   }
 }
 

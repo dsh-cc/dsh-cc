@@ -1,0 +1,48 @@
+{
+  "name": "@dsh-cc/tool-use-summary",
+  "description": "Tool Use Summary (TUS) pipeline: fire-and-forget cheap-lane digests of large tool results, stored in an append-only per-session ledger and consumed at compaction time",
+  "version": "0.7.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/compaction/tool-use-summary"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-agent": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/side-query": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/side-query": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
+    "vitest": "^4.1.8",
+    "@dsh-cc/context-crusher": "workspace:^"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

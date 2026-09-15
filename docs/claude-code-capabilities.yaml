@@ -582,6 +582,38 @@ capabilities:
       - { type: test, path: packages/core/tool-search/tests/tool-search.spec.ts }
     deviation: { kind: none }
 
+  engine.tool-use-summary:
+    title: Tool Use Summary (TUS) pipeline
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Claude Code's Tool Use Summary: a cheap-lane model digest of each
+        bulky tool result, computed while the main model streams and consumed
+        at compaction time instead of re-reading raw output.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-use-summary" }
+      - { type: test, path: packages/compaction/tool-use-summary/tests/producer.spec.ts }
+      - { type: test, path: packages/compaction/compaction-micro/tests/tus-upgrade.spec.ts }
+      - { type: test, path: packages/compaction/compaction-basic-cc/tests/tus-probe.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension completing the CC Tool-Use-Summary surface: digests
+        are fire-and-forget side queries over the `haiku` alias (inherit
+        fallback), stored in an append-only per-session JSONL ledger under
+        $DSH_HOME/tool-use-summary/ with 7-day retention, and substituted at
+        compaction time inside a mandatory untrusted-framing wrapper
+        (`<tool-result-summary untrusted="true" ...>`). Every gate has a
+        settings kill switch (cc-tool-use-summary namespace); context-crusher
+        stubs are never substituted (§5.6).
+
   engine.tui:
     title: Vim mode / keybindings / ghost text
     category: engine

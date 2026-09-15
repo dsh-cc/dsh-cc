@@ -478,6 +478,17 @@
     - id: reasoning-fold
       name: '@dsh-cc/reasoning-fold'
 
+    # Tool Use Summary pipeline (plan docs/plans/2026-09-15-side-queries.md §5):
+    # a fire-and-forget cheap-lane digest of every large tool result, keyed by
+    # callId in $DSH_HOME/tool-use-summary/<sessionId>.jsonl and consumed at
+    # compaction time (compaction-micro placeholder upgrade; §5.4). Publishes
+    # no Service (plain plugin, handoff-store pattern), so it needs no isolate
+    # key of its own; the `tools/post-execute` listener is registered WITHOUT
+    # prepend so the context-crusher stays the outermost listener (§5.6), and
+    # every fault degrades to a ledger row — never into the waterfall.
+    - id: tool-use-summary
+      name: '@dsh-cc/tool-use-summary'
+
 # ── parallel rows ──────────────────────────────────────────────────────────
 
 # Claude Code skills from user/project/additional roots.

@@ -94,7 +94,7 @@ Install them inside a session:
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 10 | 4 | 2 |
+| Engine subsystems | 11 | 11 | 4 | 2 |
 | Hook events | 12 | 5 | 4 | 0 |
 | Command surface | 21 | 7 | 1 | 2 |
 | Sessions and context | 0 | 1 | 1 | 0 |

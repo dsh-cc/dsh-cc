@@ -107,6 +107,9 @@
       "path": "./packages/compaction/compaction-basic-cc"
     },
     {
+      "path": "./packages/compaction/tool-use-summary"
+    },
+    {
       "path": "./packages/observability/cache-health"
     },
     {
