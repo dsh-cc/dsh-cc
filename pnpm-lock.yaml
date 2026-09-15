@@ -436,6 +436,10 @@ importers:
         version: link:../../core/tools
 
   packages/compat/cc-plugin-manager:
+    dependencies:
+      '@dsh-cc/plugin-loader':
+        specifier: workspace:^
+        version: link:../cc-plugin-loader
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -443,9 +447,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@dsh-cc/plugin-loader':
-        specifier: workspace:^
-        version: link:../cc-plugin-loader
 
   packages/compat/cc-serena-first:
     devDependencies:

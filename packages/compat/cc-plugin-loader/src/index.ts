@@ -44,6 +44,7 @@ export {
   MARKETPLACE_CANDIDATE_FILES,
   findPluginManifestPath,
   findPluginManifestPaths,
+  findMarketplaceManifestPath,
 } from './discovery.ts'
 export type { DiscoveredCcPlugin, DiscoverCcPluginRootsOptions } from './discovery.ts'
 export { AgentProvider, STANDARD_AGENTS_DIR, PLUGIN_AGENT_PROVIDER_BRAND, isPluginAgentProvider } from './agents.ts'
