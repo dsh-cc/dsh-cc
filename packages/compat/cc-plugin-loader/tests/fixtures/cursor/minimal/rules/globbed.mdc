@@ -1,0 +1,9 @@
+---
+description: Rule scoped to test files.
+alwaysApply: false
+globs:
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+---
+
+Run the tests after edits.

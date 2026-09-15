@@ -1,0 +1,7 @@
+{
+  "name": "cursor-declared-paths",
+  "skills": "skills",
+  "agents": "agents/**",
+  "commands": "commands",
+  "rules": "rules/*.mdc"
+}

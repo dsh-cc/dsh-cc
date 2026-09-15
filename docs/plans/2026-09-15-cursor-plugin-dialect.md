@@ -186,16 +186,42 @@ Follow the hooks/mcp seam precedent instead of special-casing inside the loader:
 
 ### 3.5 Hooks dialect — probe FIRST, not last
 
-CC hook events (PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop /
-SessionStart / PreCompact / Notification) versus Cursor's hooks.json vocabulary is NOT yet
-verified identical, and no implementation PR mounts cursor hooks before this is settled.
-The probe (event-name inventory + fixture build from cursor/plugins official shapes) is
-slice S0, landing before any hook-bearing cursor fixture enters the e2e pack — so no test
-ever asserts against unverified behavior. Probe outcomes:
+PROBE VERDICT (2026-09-15, S0): DIVERGENT — Cursor's hooks.json vocabulary is a camelCase
+superset that only partially overlaps CC semantics; a flavor-keyed mapping table in
+`hooks.ts` is required. Unmapped events tally as skipped warnings.
 
-- Names match CC semantics → flavor-agnostic pass-through, no mapping code.
-- Divergent → a small mapping table in `hooks.ts` keyed by flavor; unmapped events tally as
-  skipped warnings.
+- CC inventory (source of truth: `packages/hooks/hooks-claude-code/src/config.ts`
+  `CLAUDE_EVENTS`, consumed by the loader's hooks mount): SessionStart, UserPromptSubmit,
+  PreToolUse, PostToolUse, Stop, SubagentStart, SubagentStop, PermissionRequest,
+  PermissionDenied, Notification, PostCompact, SessionEnd, StopFailure, TaskCreated,
+  TeammateIdle, Setup, PostToolUseFailure, SessionResume, WorktreeCreate, WorktreeRemove.
+- Cursor inventory (source: https://cursor.com/docs/agent/hooks + official hooks.json in
+  cursor/plugins `ralph-loop` and `advisor`; cross-checked, two independent sources):
+  sessionStart, sessionEnd, preToolUse, postToolUse, postToolUseFailure, subagentStart,
+  subagentStop, beforeShellExecution, afterShellExecution, beforeMCPExecution,
+  afterMCPExecution, beforeReadFile, afterFileEdit, beforeSubmitPrompt, preCompact, stop,
+  afterAgentResponse, afterAgentThought, plus Tab (beforeTabFileRead, afterTabFileEdit)
+  and app (workspaceOpen) hooks; wire shape `{"version":1,"hooks":{<event>:[{"command",
+  "matcher"?, "loop_limit"?}]}}` with `${CURSOR_PLUGIN_ROOT}` substitution.
+- Mapping table (cursor → CC): sessionStart→SessionStart; sessionEnd→SessionEnd;
+  preToolUse→PreToolUse; postToolUse→PostToolUse; postToolUseFailure→PostToolUseFailure;
+  subagentStart→SubagentStart; subagentStop→SubagentStop; beforeSubmitPrompt→
+  UserPromptSubmit; preCompact→PreCompact (CC emits PostCompact too — map Cursor's single
+  compaction hook to the observed boundary the bridge supports); stop→Stop;
+  afterAgentResponse/afterAgentThought→no CC equivalent (skipped warning);
+  beforeShellExecution/afterShellExecution/beforeMCPExecution/beforeReadFile/afterFileEdit→
+  no CC equivalent (skipped warning; CC models these as matcher-scoped PreToolUse/PostToolUse,
+  so a later slice MAY map beforeShellExecution→PreToolUse matcher `Bash` etc. — deferred,
+  not in the S-later mapping table's required set); Notification, PermissionRequest,
+  PermissionDenied and the remaining CC-only events have no Cursor source (harmless —
+  cursor plugins simply never emit them).
+- Fixture pack (the S0 deliverable every later slice consumes):
+  `packages/compat/cc-plugin-loader/tests/fixtures/cursor/` — `minimal/` (default-layout
+  plugin exercising all inventoried event names in hooks/hooks.json, skills/agents/
+  commands .md+.txt/mcp.json/rules .mdc inline+block globs), `declared-paths/` (manifest
+  declares component paths incl. `agents/**`), `github-mcp/` (third_party/github shape:
+  mcpServers "./mcp.json" + variables JSON Schema + metadata fields), `dual-manifest/`
+  (both dialect manifests present).
 
 The hooks seam contract (`mergePluginHooks`) and its bridge stay unchanged either way.
 
