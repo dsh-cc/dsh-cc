@@ -26,6 +26,7 @@ import { mountSkills, type SkillsSeam } from './skills.ts'
 import { mountAgents, type ResolveModel, type SubagentsSeam } from './agents.ts'
 import { mountCommands, type MountedPluginCommand } from './commands.ts'
 import { mountHooks } from './hooks.ts'
+import { mountRules, type RulesSeam } from './rules.ts'
 import { mountMcpServers } from './mcp.ts'
 import { mountSettings } from './settings.ts'
 import { resolvePluginManifest } from './resolve-manifest.ts'
@@ -47,7 +48,9 @@ export {
 export type { DiscoveredCcPlugin, DiscoverCcPluginRootsOptions } from './discovery.ts'
 export { AgentProvider, STANDARD_AGENTS_DIR, PLUGIN_AGENT_PROVIDER_BRAND, isPluginAgentProvider } from './agents.ts'
 export type { ResolveModel } from './agents.ts'
-export type { McpSeam, HooksSeam } from './seams.ts'
+export type { McpSeam, HooksSeam, RulesSeam } from './seams.ts'
+export type { RuleEntry } from './types.ts'
+export { mountRules } from './rules.ts'
 export {
   skillToolRestriction,
   resolveSkillExecution,
@@ -76,6 +79,8 @@ export interface MountedSeams {
   settings?: SettingsSeam | undefined
   /** Hooks bridge seam (guest; absent in the harness today). */
   hooks?: HooksSeam | undefined
+  /** Rules merge seam (guest; absent in the harness today). */
+  rules?: RulesSeam | undefined
   /** MCP server seam (guest; absent in the harness today). */
   mcp?: McpSeam | undefined
 }
@@ -149,17 +154,13 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
     mountWarnings.push(...commandMount.warnings ?? [])
     disposers.push(...commandMount.disposers)
     fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }), mountWarnings)
+    // Rules (Cursor dialect) mount after hooks, before mcpServers (plan §3.3).
+    // A manifest declaring no rules mounts no rules component (cc zero-change).
+    if (manifest.rules.length > 0) {
+      fold(components, disposers, await mountRules({ pluginRoot: root, manifest, rules: probed.rules }), mountWarnings)
+    }
     fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }), mountWarnings)
     fold(components, disposers, mountSettings({ manifest, settings: probed.settings }), mountWarnings)
-    // Rules (Cursor dialect; PR-B mounts them): parsed but never mounted in
-    // v1 — tallied skipped-with-reason so the report says so, never silently.
-    if (manifest.rules.length > 0) {
-      const rulesTally = new ComponentTally('rules')
-      for (const rulePath of manifest.rules) {
-        rulesTally.addSkipped(`rule path "${rulePath}": rules are not mounted in v1 (planned PR-B)`)
-      }
-      components.push(rulesTally.result())
-    }
   } catch (error) {
     // Component-level rollback: a component mount that throws after earlier
     // components succeeded recalls everything mounted so far, so a failed
@@ -188,6 +189,7 @@ async function probeSeams(ctx: Context, overrides: MountedSeams | undefined): Pr
     commands: overrides?.commands ?? ctx.get('commands') as CommandsSeam | undefined,
     settings: overrides?.settings ?? ctx.get('settings') as SettingsSeam | undefined,
     hooks: overrides?.hooks ?? ctx.get('hooks') as HooksSeam | undefined,
+    rules: overrides?.rules ?? ctx.get('rules') as RulesSeam | undefined,
     mcp: overrides?.mcp ?? ctx.get('mcp') as McpSeam | undefined,
   }
 }

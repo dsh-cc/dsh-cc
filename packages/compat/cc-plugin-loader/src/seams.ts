@@ -11,7 +11,7 @@
  * @module
  */
 
-import type { ComponentKind, ComponentResult } from './types.ts'
+import type { ComponentKind, ComponentResult, RuleEntry } from './types.ts'
 
 /** A guest MCP seam: registers one named server for tool discovery. */
 export interface McpSeam {
@@ -37,6 +37,17 @@ export interface HooksSeam {
    * @returns the exact disposer that removes the injected hooks.
    */
   mergePluginHooks(pluginName: string, config: unknown, pluginRoot?: string): () => void
+}
+
+/** A guest rules seam: merges a plugin's parsed `.mdc` rule entries. */
+export interface RulesSeam {
+  /**
+   * Merge a plugin's rules into the host's rule set.
+   * @param pluginName - the plugin that owns the rules, for namespacing.
+   * @param entries - the parsed rule entries (typed frontmatter + body).
+   * @returns the exact disposer that removes the plugin's contributions.
+   */
+  mergePluginRules(pluginName: string, entries: readonly RuleEntry[]): () => void
 }
 
 /** Probe a guest seam by key, returning `undefined` when the host lacks it. */

@@ -33,6 +33,20 @@ export interface CcAgentRef {
   readonly paths: readonly string[]
 }
 
+/** One Cursor `.mdc` rule mounted through the `rules` guest seam (plan §3.3). */
+export interface RuleEntry {
+  /** The rule file path, relative to the plugin root. */
+  readonly path: string
+  /** Optional frontmatter `description`. */
+  readonly description: string | undefined
+  /** Frontmatter `alwaysApply` (default false when absent or malformed). */
+  readonly alwaysApply: boolean
+  /** Frontmatter `globs` (inline or block YAML list form; default empty). */
+  readonly globs: readonly string[]
+  /** Markdown body after the frontmatter. */
+  readonly body: string
+}
+
 /** A Claude Code skill entry, loaded from `skills/` or an inline path. */
 export interface CcSkillRef {
   /** Skill directories or files, relative to the plugin root. */
