@@ -11,6 +11,8 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import { cpSync } from 'node:fs'
+import { formatPluginList } from '@dsh-cc/command-plugin/plugin'
 import { apply, Config as GlueConfig, type Config } from '@dsh-cc/bundle-shell/src/index.ts'
 import { CcPluginsService } from '@dsh-cc/bundle-shell/src/ccPlugins.ts'
 
@@ -334,6 +336,40 @@ describe('cursor dialect surfacing (S2)', () => {
       expect(cursorEntry?.warnings).toContain('client-version gating is not enforced')
       const plainEntry = listed.find(entry => entry.name === 'plain')
       expect(plainEntry).toMatchObject({ flavor: 'cc', warnings: [] })
+    } finally {
+      if (previousClaude === undefined) delete process.env['CLAUDE_CONFIG_DIR']
+      else process.env['CLAUDE_CONFIG_DIR'] = previousClaude
+      if (previousDsh === undefined) delete process.env['DSH_HOME']
+      else process.env['DSH_HOME'] = previousDsh
+    }
+  })
+})
+
+describe('cursor dialect end-to-end via directory source (S3)', () => {
+  it('surfaces flavor and warnings through the registry and /plugin render', async () => {
+    // House rule: seed BOTH homes for specs touching plugin state.
+    const previousClaude = process.env['CLAUDE_CONFIG_DIR']
+    const previousDsh = process.env['DSH_HOME']
+    process.env['CLAUDE_CONFIG_DIR'] = tmpRoot
+    process.env['DSH_HOME'] = tmpRoot
+    try {
+      // Copy the cursor minimal fixture into the discovery dir.
+      const fixture = new URL('../../../compat/cc-plugin-loader/tests/fixtures/cursor/github-mcp', import.meta.url).pathname
+      cpSync(fixture, join(tmpRoot, 'cursorish'), { recursive: true })
+      writePlugin(join(tmpRoot, 'plain'), 'plain', 'plain-command')
+
+      await apply(ctx, configFor([tmpRoot]))
+
+      const listed = ctx.ccPlugins.list()
+      const cursorEntry = listed.find(entry => entry.name === 'github')
+      expect(cursorEntry).toMatchObject({ flavor: 'cursor' })
+      const rendered = formatPluginList(listed)
+      expect(rendered).toContain('flavor: cursor')
+      expect(rendered).toMatch(/warning: .+/)
+      // Regression guard: cc-only plugin renders unchanged (no flavor/warning lines).
+      const plainBlock = rendered.split('\n').filter((line: string) => line.includes('plain'))
+      expect(plainBlock.join('\n')).not.toContain('flavor')
+      expect(plainBlock.join('\n')).not.toContain('warning')
     } finally {
       if (previousClaude === undefined) delete process.env['CLAUDE_CONFIG_DIR']
       else process.env['CLAUDE_CONFIG_DIR'] = previousClaude

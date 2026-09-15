@@ -92,7 +92,7 @@ export interface CcPluginManifest {
 export type PluginFlavor = 'cc' | 'cursor'
 
 /** The six component kinds a plugin can contribute. */
-export type ComponentKind = 'commands' | 'agents' | 'skills' | 'hooks' | 'mcpServers' | 'settings'
+export type ComponentKind = 'commands' | 'agents' | 'skills' | 'hooks' | 'mcpServers' | 'settings' | 'rules'
 
 /** Per-component load outcome counts and reasons for a mount. */
 export interface ComponentResult {

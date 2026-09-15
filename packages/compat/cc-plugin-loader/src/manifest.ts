@@ -44,7 +44,9 @@ export function parsePluginManifest(
   const commands = normalizeCommands(raw['commands'], name)
   const agents = normalizeStringList(raw['agents'], name, 'agents')
   const skills = normalizeStringList(raw['skills'], name, 'skills')
-  const rules = normalizeRules(raw['rules'], name)
+  // Cursor default-dir inference (plan §3.2 component conventions): an
+  // undeclared `rules` still scans `rules/`, as with the implicit dirs.
+  const rules = normalizeRules(raw['rules'] ?? ((options.flavor ?? 'cc') === 'cursor' ? 'rules' : undefined), name)
   const { mcpServers, mcpServersPath } = normalizeMcpServers(raw['mcpServers'], name)
   const settings = isRecord(raw['settings']) ? raw['settings'] : {}
   // Cursor-dialect tolerance warnings (plan §3.4): metadata fields are silently

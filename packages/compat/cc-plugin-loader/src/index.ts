@@ -151,6 +151,15 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
     fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }), mountWarnings)
     fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }), mountWarnings)
     fold(components, disposers, mountSettings({ manifest, settings: probed.settings }), mountWarnings)
+    // Rules (Cursor dialect; PR-B mounts them): parsed but never mounted in
+    // v1 — tallied skipped-with-reason so the report says so, never silently.
+    if (manifest.rules.length > 0) {
+      const rulesTally = new ComponentTally('rules')
+      for (const rulePath of manifest.rules) {
+        rulesTally.addSkipped(`rule path "${rulePath}": rules are not mounted in v1 (planned PR-B)`)
+      }
+      components.push(rulesTally.result())
+    }
   } catch (error) {
     // Component-level rollback: a component mount that throws after earlier
     // components succeeded recalls everything mounted so far, so a failed
