@@ -1,6 +1,13 @@
 # Idempotent Settings-Namespace Registration: a Shared Guard for Per-Session Preset Mounts
 
-**Status:** **Planned** — critic cold review 2026-09-16 incorporated (B1, M1–M4, m1–m5).
+**Status:** **Implemented** — critic cold review 2026-09-16 incorporated (B1, M2,
+M3, M4 incorporated pre-implementation; M1's `INACTIVE_EFFECT` class covered by
+defensive catch + `isUnloading` pre-check). Implementation notes beyond the plan:
+the reader serves a register-returned scope only after a re-acquisition **in the
+same read call** — the resume-pins spec fixture boots a provider whose
+provider-level `get` is disconnected from its `register` (pinned in
+`settings-ns/tests/unit.spec.ts`), while the integration spec pins that a stale
+reader from a disposed mount never serves the previous scope's frozen value.
 **Date:** 2026-09-16
 **Worktree:** `.claude/worktrees/side-queries` (branch `worktree-settings-ns-idempotence`)
 
