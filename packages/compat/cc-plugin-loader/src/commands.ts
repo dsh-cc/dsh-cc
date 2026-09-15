@@ -12,9 +12,10 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { parseCcFrontmatter, parseCcFrontmatterDocument } from '@dsh-cc/skill-loader'
-import { basename, join, resolve } from 'node:path'
-import type { CcPluginManifest, CcCommand } from './types.ts'
+import { basename, extname, join, resolve } from 'node:path'
+import type { CcPluginManifest, CcCommand, PluginFlavor } from './types.ts'
 import { ComponentTally } from './seams.ts'
+import { globPathKind } from './manifest.ts'
 
 /** The commands seam: accepts a typed slash-command definition. */
 export interface CommandsSeam {
@@ -109,20 +110,23 @@ export function mountCommands(options: MountCommandsOptions): {
   disposers: (() => void)[]
   mounted: MountedPluginCommand[]
   tally: ComponentTally
+  warnings?: string[]
 } {
   const tally = new ComponentTally('commands')
   const disposers: (() => void)[] = []
   const mounted: MountedPluginCommand[] = []
+  const globWarnings: string[] = []
   if (options.commands === undefined) {
     tally.addSkipped('commands seam "commands" is not mounted')
     return { disposers, mounted, tally }
   }
+  const flavor = options.manifest.flavor
   const entries = options.manifest.commandsDeclared
-    ? expandDeclaredCommandDirs(options.pluginRoot, [...options.manifest.commands], tally)
-    : defaultCommandEntries(options.pluginRoot, tally)
+    ? expandDeclaredCommandDirs(options.pluginRoot, [...options.manifest.commands], flavor, tally, globWarnings)
+    : defaultCommandEntries(options.pluginRoot, flavor, tally, globWarnings)
   if (entries.length === 0) {
     tally.addSkipped('plugin ships no commands')
-    return { disposers, mounted, tally }
+    return { disposers, mounted, tally, warnings: globWarnings }
   }
   for (const entry of entries) {
     const rendered = renderCommand(options.pluginRoot, entry)
@@ -152,26 +156,73 @@ export function mountCommands(options: MountCommandsOptions): {
       tally.addSkipped(`bare name "${entry.name}" not registered: ${String(error)}`)
     }
   }
-  return { disposers, mounted, tally }
+  return { disposers, mounted, tally, warnings: globWarnings }
 }
 
 /**
- * Scan `commands/*.md` when the manifest omitted `commands`. Nested
+ * Scan `commands/*.{md,txt}` when the manifest omitted `commands`. Nested
  * subdirectories are skipped with a reason (no silent drop, no colon names).
+ * `.txt` files mount only on the cursor flavor (plan §3.2) as plain text.
  */
-function defaultCommandEntries(pluginRoot: string, tally: ComponentTally): CcCommand[] {
-  return scanCommandDir(pluginRoot, STANDARD_COMMANDS_DIR, tally)
+function defaultCommandEntries(
+  pluginRoot: string,
+  flavor: PluginFlavor,
+  tally: ComponentTally,
+  globWarnings: string[],
+): CcCommand[] {
+  void globWarnings // the default dir is a literal path; no glob policy applies
+  return scanCommandDir(pluginRoot, STANDARD_COMMANDS_DIR, flavor, tally)
+}
+
+/** Whether a command file name mounts for this flavor. */
+function isCommandFile(name: string, flavor: PluginFlavor): boolean {
+  return name.endsWith('.md') || (flavor === 'cursor' && name.endsWith('.txt'))
+}
+
+/** Walk one directory recursively collecting command files (plan §3.4 `/**`). */
+function walkCommandDir(dir: string, flavor: PluginFlavor, found: CcCommand[], tally: ComponentTally): void {
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) walkCommandDir(path, flavor, found, tally)
+    else if ((entry.isFile() || entry.isSymbolicLink()) && isCommandFile(entry.name, flavor)) {
+      found.push({ name: basename(entry.name, extname(entry.name)), source: path })
+    }
+  }
 }
 
 /**
- * Expand manifest-declared command entries whose `source` names a directory
- * into one entry per `*.md` file inside it (plan §3.4); files pass through.
+ * Expand manifest-declared command entries (plan §3.4): a `/**` suffix walks
+ * the base directory recursively; any other glob metacharacter skips the
+ * entry with a warning (never expanded); literals keep today's semantics.
  */
-function expandDeclaredCommandDirs(pluginRoot: string, entries: CcCommand[], _tally: ComponentTally): CcCommand[] {
+function expandDeclaredCommandDirs(
+  pluginRoot: string,
+  entries: CcCommand[],
+  flavor: PluginFlavor,
+  tally: ComponentTally,
+  globWarnings: string[],
+): CcCommand[] {
   const expanded: CcCommand[] = []
   for (const entry of entries) {
     if (entry.source === undefined) {
       expanded.push(entry)
+      continue
+    }
+    const kind = globPathKind(entry.source)
+    if (kind === 'unsupported') {
+      const reason = `skipped commands entry "${entry.source}": glob patterns other than a trailing "/**" are not expanded`
+      tally.addSkipped(reason)
+      globWarnings.push(reason)
+      continue
+    }
+    if (kind === 'recursive') {
+      walkCommandDir(resolve(pluginRoot, entry.source.slice(0, -3)), flavor, expanded, tally)
       continue
     }
     const path = resolve(pluginRoot, entry.source)
@@ -185,15 +236,20 @@ function expandDeclaredCommandDirs(pluginRoot: string, entries: CcCommand[], _ta
     }
     for (const file of files) {
       if (!file.isFile() && !file.isSymbolicLink()) continue
-      if (!file.name.endsWith('.md')) continue
-      expanded.push({ ...entry, name: basename(file.name, '.md'), source: join(path, file.name) })
+      if (!isCommandFile(file.name, flavor)) continue
+      expanded.push({ ...entry, name: basename(file.name, extname(file.name)), source: join(path, file.name) })
     }
   }
   return expanded
 }
 
-/** List `*.md` files under one commands directory, relative paths preserved. */
-function scanCommandDir(pluginRoot: string, dirRelativeToRoot: string, tally: ComponentTally): CcCommand[] {
+/** List command files under one commands directory, relative paths preserved. */
+function scanCommandDir(
+  pluginRoot: string,
+  dirRelativeToRoot: string,
+  flavor: PluginFlavor,
+  tally: ComponentTally,
+): CcCommand[] {
   const dir = join(pluginRoot, dirRelativeToRoot)
   let entries
   try {
@@ -208,8 +264,8 @@ function scanCommandDir(pluginRoot: string, dirRelativeToRoot: string, tally: Co
       continue
     }
     if (!entry.isFile() && !entry.isSymbolicLink()) continue
-    if (!entry.name.endsWith('.md')) continue
-    found.push({ name: basename(entry.name, '.md'), source: join(dirRelativeToRoot, entry.name) })
+    if (!isCommandFile(entry.name, flavor)) continue
+    found.push({ name: basename(entry.name, extname(entry.name)), source: join(dirRelativeToRoot, entry.name) })
   }
   return found
 }

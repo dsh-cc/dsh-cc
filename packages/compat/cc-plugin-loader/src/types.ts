@@ -67,6 +67,11 @@ export interface CcPluginManifest {
   /** Skill paths from the manifest `skills` field. */
   readonly skills: readonly string[]
   /**
+   * Rule paths from the manifest `rules` field (Cursor dialect; stringOrArray).
+   * Parsed and retained in v1 — mounting is PR-B.
+   */
+  readonly rules: readonly string[]
+  /**
    * When true, do not scan the default `skills/` directory — the listed
    * `skills` paths replace it (marketplace-root overlay).
    */
@@ -77,6 +82,8 @@ export interface CcPluginManifest {
   readonly mcpServers: Readonly<Record<string, CcMcpServer>>
   /** Path to an `.mcp.json` file when the manifest referenced one. */
   readonly mcpServersPath?: string
+  /** `.mcp.json` paths from the Cursor mcpServers ARRAY form (plan §3.4). */
+  readonly mcpServersPaths?: readonly string[]
   /** Settings to merge on enable, allowlisted before writing. */
   readonly settings: Readonly<Record<string, unknown>>
 }

@@ -14,6 +14,10 @@ export interface CcPluginSummary {
   root: string
   /** Per-component load outcome counts. */
   components: readonly CcComponentResult[]
+  /** Manifest dialect; present on loader reports that record it (S2). */
+  flavor?: 'cc' | 'cursor'
+  /** Resolution/mount warnings (S2); absent or empty means none. */
+  warnings?: readonly string[]
 }
 
 /** Per-component load outcome counts for one plugin. */
@@ -59,6 +63,9 @@ export function formatPluginList(plugins: readonly CcPluginSummary[]): string {
   for (const plugin of plugins) {
     lines.push(`- ${plugin.name}`)
     lines.push(`  root: ${plugin.root}`)
+    // Byte-compat: cc-flavored, warning-free plugins render exactly as before.
+    if (plugin.flavor === 'cursor') lines.push('  flavor: cursor')
+    for (const warning of plugin.warnings ?? []) lines.push(`  warning: ${warning}`)
     lines.push(`  components: ${formatComponentTallies(plugin.components)}`)
   }
   return lines.join('\n')

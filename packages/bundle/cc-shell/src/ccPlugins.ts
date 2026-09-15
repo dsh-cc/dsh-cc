@@ -63,6 +63,10 @@ export interface CcPluginSummary {
   name: string
   /** The plugin root directory holding `plugin.json`. */
   root: string
+  /** Manifest dialect (S2). */
+  flavor: PluginLoadReport['flavor']
+  /** Resolution/mount warnings (S2). */
+  warnings: readonly string[]
   /** Per-component load outcome. */
   components: PluginLoadReport['components']
 }
@@ -193,6 +197,8 @@ export class CcPluginsService {
     return Array.from(this.mounts.values()).map(mount => ({
       name: mount.name,
       root: mount.root,
+      flavor: mount.report.flavor,
+      warnings: mount.report.warnings,
       components: mount.report.components,
     }))
   }

@@ -52,7 +52,8 @@ describe('cursor flavor recording', () => {
       expect(mount.report.flavor).toBe('cursor')
       expect(mount.report.name).toBe('cursor-minimal')
       const byKindReport = byKind(mount.report)
-      expect(byKindReport['commands']?.loaded).toBe(1)
+      // S2: cursor flavor accepts commands/*.txt too (hi.md + bye.txt).
+      expect(byKindReport['commands']?.loaded).toBe(2)
       expect(byKindReport['skills']?.loaded).toBe(1)
       expect(byKindReport['agents']?.loaded).toBe(1)
       expect(byKindReport['hooks']?.loaded).toBeGreaterThan(0)

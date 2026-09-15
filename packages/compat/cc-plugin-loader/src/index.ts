@@ -123,6 +123,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const probed = await probeSeams(ctx, options.seams)
   const disposers: (() => void)[] = []
   const components: ComponentResult[] = []
+  const mountWarnings: string[] = []
 
   let commandMount: ReturnType<typeof mountCommands>
   try {
@@ -132,7 +133,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
       manifest,
       skills: probed.skills,
       subagentsPresent: probed.subagents !== undefined,
-    }))
+    }), mountWarnings)
     fold(components, disposers, await mountAgents({
       pluginRoot: root,
       manifest,
@@ -142,13 +143,14 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
       // parse/synthesis in resolve-manifest already falls back to nameHint,
       // then the root basename), used to namespace agent provider names.
       namespacePrefix: manifest.name,
-    }))
+    }), mountWarnings)
     commandMount = mountCommands({ pluginRoot: root, manifest, commands: probed.commands })
     components.push(commandMount.tally.result())
+    mountWarnings.push(...commandMount.warnings ?? [])
     disposers.push(...commandMount.disposers)
-    fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }))
-    fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }))
-    fold(components, disposers, mountSettings({ manifest, settings: probed.settings }))
+    fold(components, disposers, mountHooks({ pluginRoot: root, manifest, hooks: probed.hooks }), mountWarnings)
+    fold(components, disposers, mountMcpServers({ pluginRoot: root, manifest, mcp: probed.mcp }), mountWarnings)
+    fold(components, disposers, mountSettings({ manifest, settings: probed.settings }), mountWarnings)
   } catch (error) {
     // Component-level rollback: a component mount that throws after earlier
     // components succeeded recalls everything mounted so far, so a failed
@@ -163,7 +165,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const effectDisposer = ctx.effect(() => tearDown, 'cc-plugin-loader.mount')
 
   return {
-    report: { name: manifest.name, flavor: manifest.flavor, warnings: [...manifest.warnings], components },
+    report: { name: manifest.name, flavor: manifest.flavor, warnings: [...manifest.warnings, ...mountWarnings], components },
     commands: commandMount.mounted,
     dispose: () => effectDisposer(),
   }
@@ -185,8 +187,10 @@ async function probeSeams(ctx: Context, overrides: MountedSeams | undefined): Pr
 function fold(
   components: ComponentResult[],
   disposers: (() => void)[],
-  mount: { disposers: (() => void)[]; tally: ComponentTally },
+  mount: { disposers: (() => void)[]; tally: ComponentTally; warnings?: readonly string[] },
+  mountWarnings: string[],
 ): void {
   components.push(mount.tally.result())
   disposers.push(...mount.disposers)
+  mountWarnings.push(...mount.warnings ?? [])
 }

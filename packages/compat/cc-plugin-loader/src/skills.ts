@@ -12,6 +12,7 @@
  */
 
 import { access, readdir, readFile } from 'node:fs/promises'
+import { readdirSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import {
@@ -23,6 +24,7 @@ import {
 import { isSkillName, type SkillDefinition } from '@deepseek-ai/dsh-skill'
 import type { CcPluginManifest } from './types.ts'
 import { ComponentTally } from './seams.ts'
+import { globPathKind } from './manifest.ts'
 import { PROVIDER, registerSkillPathActivator, activationFor } from './skill-semantics.ts'
 
 /** Skills live under this directory in a plugin root, when present. */
@@ -64,22 +66,23 @@ export interface MountSkillsOptions {
  * @param options - plugin root, manifest, and the skill/subagent seams.
  * @returns mounted disposers and per-component counts.
  */
-export async function mountSkills(options: MountSkillsOptions): Promise<{ disposers: (() => void)[]; tally: ComponentTally }> {
+export async function mountSkills(options: MountSkillsOptions): Promise<{ disposers: (() => void)[]; tally: ComponentTally; warnings: string[] }> {
   const tally = new ComponentTally('skills')
   const disposers: (() => void)[] = []
+  const globWarnings: string[] = []
   if (options.skills === undefined) {
     tally.addSkipped('skill registry seam "skills" is not mounted')
-    return { disposers, tally }
+    return { disposers, tally, warnings: globWarnings }
   }
-  const roots = skillRoots(options.pluginRoot, options.manifest)
+  const roots = skillRoots(options.pluginRoot, options.manifest, globWarnings)
   if (roots.length === 0) {
     tally.addSkipped('plugin ships no skills directory or manifest skills paths')
-    return { disposers, tally }
+    return { disposers, tally, warnings: globWarnings }
   }
   const files = await collectSkillFiles(roots)
   if (files.length === 0) {
     tally.addSkipped('plugin ships no skills')
-    return { disposers, tally }
+    return { disposers, tally, warnings: globWarnings }
   }
   for (const file of files) {
     const loaded = await loadSkillFile(file)
@@ -110,15 +113,47 @@ export async function mountSkills(options: MountSkillsOptions): Promise<{ dispos
     activationFor(metadata, options.subagentsPresent)
     tally.addLoaded()
   }
-  return { disposers, tally }
+  return { disposers, tally, warnings: globWarnings }
 }
 
 /** Default `skills/` plus manifest paths; overlay replace drops the default dir. */
-function skillRoots(pluginRoot: string, manifest: CcPluginManifest): string[] {
+function skillRoots(pluginRoot: string, manifest: CcPluginManifest, globWarnings: string[]): string[] {
   const roots: string[] = []
   if (!manifest.skillsReplaceDefault) roots.push(join(pluginRoot, STANDARD_SKILLS_DIR))
-  for (const path of manifest.skills) roots.push(resolve(pluginRoot, path))
+  for (const path of manifest.skills) {
+    // Glob policy (plan §3.4): `dir/**` walks recursively; other globs skip
+    // with a warning, never expanded; literals keep today's semantics.
+    const kind = globPathKind(path)
+    if (kind === 'unsupported') {
+      globWarnings.push(`skipped skills entry "${path}": glob patterns other than a trailing "/**" are not expanded`)
+      continue
+    }
+    if (kind === 'recursive') roots.push(...collectSkillDirsSync(resolve(pluginRoot, path.slice(0, -3))))
+    else roots.push(resolve(pluginRoot, path))
+  }
   return roots
+}
+
+/** The dir plus every subdir that directly holds a `SKILL.md` (cheap `/**` walk). */
+function collectSkillDirsSync(dir: string): string[] {
+  const found: string[] = []
+  const walk = (current: string): void => {
+    let entries
+    try {
+      entries = readdirSync(current, { withFileTypes: true })
+    } catch {
+      return
+    }
+    if (entries.some(entry => entry.isFile() && entry.name === 'SKILL.md')) {
+      found.push(current)
+      return
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) walk(join(current, entry.name))
+    }
+  }
+  walk(dir)
+  return found
 }
 
 /**
