@@ -32,6 +32,8 @@ import {
 } from './payloads.ts'
 import { createRunPoint } from './run-point.ts'
 import { lastTurn, type TurnSafety } from './turn-safety.ts'
+import type { ErrorStreak } from './error-streak.ts'
+import type { Continuation } from './continuation.ts'
 
 /** The run-point function shape (return type of {@link createRunPoint}). */
 type RunPoint = ReturnType<typeof createRunPoint>
@@ -42,6 +44,10 @@ export interface ListenerDeps {
   readonly detached: DetachedRuns
   readonly runPoint: RunPoint
   readonly turnSafety: TurnSafety
+  /** A2 error-streak breaker state. */
+  readonly errorStreak: ErrorStreak
+  /** A3 output-token continuation gate state. */
+  readonly continuation: Continuation
   /** Retained subagent children keyed by run id, for stop hooks. */
   readonly subagentChildren: Map<SubagentRunId, Agent>
   /** Every subagent id seen via start/end, for the TeammateIdle filter. */
@@ -53,7 +59,7 @@ export interface ListenerDeps {
  * config is parsed and the run point / turn-safety cluster are built.
  */
 export function registerEvents(deps: ListenerDeps): void {
-  const { ctx, detached, runPoint, turnSafety, subagentChildren, subagentIds } = deps
+  const { ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds } = deps
 
   // --- UserPromptSubmit → PreStepDecision. The prompt text is the payload; no
   // matcher subject (CC ignores matchers for this event). ---
@@ -61,7 +67,13 @@ export function registerEvents(deps: ListenerDeps): void {
     if (messages.length === 0) return next()
     // F1: a REAL user turn breaks the stop-block chain (plugin-source steering
     // and notices must not reset it — they all use `{kind:'plugin'}` sources).
-    if (messages.some(message => message.source.kind === 'user')) turnSafety.resetBlocks(agent.id)
+    if (messages.some(message => message.source.kind === 'user')) {
+      turnSafety.resetBlocks(agent.id)
+      // A2/A3: a REAL user turn resets the error-streak consecutive counter
+      // and ends any open continuation chain for this agent.
+      errorStreak.onUserPrompt(agent)
+      continuation.onUserPrompt(agent.id)
+    }
     const content = messages.flatMap(message => message.content)
     const merged = await runPoint('UserPromptSubmit', '', promptPayload(ctx, agent, content), { agent, turn, signal })
     const halted = turnSafety.applyHalt('UserPromptSubmit', merged, agent)
@@ -178,6 +190,15 @@ export function registerEvents(deps: ListenerDeps): void {
   // payload's `stop_hook_active` is computed BEFORE incrementing (block #1
   // observes false), and after `cap` consecutive blocks the hook is overridden.
   ctx.on('agent/turn-stopping', async ({ agent, turn, signal }): Promise<void> => {
+    // A2: a stopping event proves the last step did not end in an API error
+    // (stopping only exists for non-error endings), so reset the streak.
+    errorStreak.onTurnSettled(agent, turn)
+    // A3: an output-ceiling hit on the LAST assistant attempt continues the
+    // turn — steer CC's resume wording and skip Stop entirely for this
+    // stopping event (CC never runs Stop mid-recovery). When the gate is
+    // false (recovered completion, cap reached, or feature disabled) fall
+    // through to the normal Stop path untouched.
+    if (continuation.tryContinue(agent, turn)) return
     const merged = await runPoint('Stop', '', stopPayload(ctx, agent, turnSafety.hasBlocks(agent.id)), { agent, turn, signal })
     if (turnSafety.applyHalt('Stop', merged, agent)) {
       turnSafety.surfaceNotices('Stop', merged, agent)
@@ -258,6 +279,8 @@ export function registerEvents(deps: ListenerDeps): void {
   // are keyed by agent.id, paired to its session id at first block).
   ctx.on('session/disposed', (session: Session) => {
     turnSafety.releaseSession(session.header.id)
+    errorStreak.releaseSession(session.header.id)
+    continuation.releaseSession(session.header.id)
     detached.track(runPoint('SessionEnd', '', sessionEndPayload(ctx, session), { signal: detached.signal })
       .then((merged) => { turnSafety.detachedOutcome('SessionEnd', merged) })
       .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: SessionEnd hook failed: ${String(error)}`) }))
@@ -266,6 +289,9 @@ export function registerEvents(deps: ListenerDeps): void {
   // StopFailure → an agent/error, with the error mapped onto CC's error-code
   // vocabulary where possible (default `unknown`).
   ctx.on('agent/error', ({ agent, error }) => {
+    // A2: count the error BEFORE dispatching the detached StopFailure — the
+    // breaker is independent of, and must not delay, the hook dispatch.
+    errorStreak.onError(agent, error)
     detached.track(runPoint('StopFailure', '', stopFailurePayload(ctx, agent, error), { agent, signal: detached.signal })
       .then((merged) => { turnSafety.detachedOutcome('StopFailure', merged, agent) })
       .catch((failure: unknown) => { ctx.logger.warn(`hooks-claude-code: StopFailure hook failed: ${String(failure)}`) }))

@@ -40,4 +40,18 @@ describe('buildConsolidationPrompt', () => {
     expect(prompt).toContain('structured_output')
     expect(prompt).toContain('read, read_image, grep, glob, structured_output')
   })
+
+  it('prescribes the 5-phase workflow invariants', () => {
+    const prompt = buildConsolidationPrompt('/mem', '/transcripts', ['s1'])
+    // Phase 3: relative dates become absolute.
+    expect(prompt).toContain('convert every relative date')
+    expect(prompt).toContain('absolute date')
+    // Phase 2: drift check names the workspace as the fork's cwd.
+    expect(prompt).toContain("working directory IS the session's workspace")
+    expect(prompt).toContain('contradiction between two memories')
+    // Phase 4: narrow transcript search, not exhaustive reading.
+    expect(prompt).toContain('do NOT exhaustively read the session transcripts')
+    // Phase 5: index size target.
+    expect(prompt).toContain('under 140 lines')
+  })
 })

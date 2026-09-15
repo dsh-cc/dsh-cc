@@ -12,12 +12,13 @@
  */
 
 import { join } from 'node:path'
+import { Buffer } from 'node:buffer'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import { defineTool } from '@dsh-cc/tools'
 import { MEMORY_TYPES } from './types.ts'
-import { ENTRYPOINT_NAME } from './truncate.ts'
+import { ENTRYPOINT_NAME, MAX_ENTRYPOINT_BYTES, MAX_ENTRYPOINT_LINES } from './truncate.ts'
 import { validateMemoryWrites, writeMemoryFiles } from './writeback.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 import type { MemorySection } from './section.ts'
@@ -184,26 +185,42 @@ export function registerMemorySaveTool(
         ? home
         : resolveWorkspaceMemoryDir(home, exec.agent !== undefined ? cwdOf(exec.agent) : process.cwd())
       const filename = `${args.name}.md`
-      const writes = [
-        { path: filename, content: renderTopicFile(args) },
-      ]
-      // Reuse the write-back validator so tool saves and fork reports share
-      // one security boundary (filename rule + size caps).
-      const validated = validateMemoryWrites({ writes })
-      // Upsert the index pointer first from the CURRENT entrypoint body, then
-      // write both files under the policy confined to the memory directory.
+      // Read the index BEFORE validating so the gate sees the resulting
+      // entrypoint (topic file + upserted pointer validated as one batch).
       let entrypoint = ''
       try {
         entrypoint = await fs.readText(await fs.resolve(join(dir, ENTRYPOINT_NAME)))
       } catch {
         // No index yet — the upsert starts from an empty body.
       }
-      validated.push({ path: ENTRYPOINT_NAME, content: upsertPointer(entrypoint, args) })
+      const trimmed = entrypoint.trim()
+      const preExistingOverLimit = trimmed.split('\n').length > MAX_ENTRYPOINT_LINES
+        || Buffer.byteLength(trimmed, 'utf8') > MAX_ENTRYPOINT_BYTES
+      // Reuse the write-back validator so tool saves and fork reports share
+      // one security boundary (filename rule + size caps + index gate). An
+      // index that was ALREADY over-limit fail-opens: the save did not cause
+      // the overflow, and rejecting would brick every save with no repair
+      // path (a consolidation run compacts it instead).
+      const validated = validateMemoryWrites(
+        {
+          writes: [
+            { path: filename, content: renderTopicFile(args) },
+            { path: ENTRYPOINT_NAME, content: upsertPointer(entrypoint, args) },
+          ],
+        },
+        { allowOverLimitEntrypoint: preExistingOverLimit },
+      )
       await writeMemoryFiles(fs, dir, validated)
       await section.refresh(exec.agent)
+      let message = `Saved memory "${args.name}" (${args.type}) to ${filename} and updated ${ENTRYPOINT_NAME}.`
+      if (preExistingOverLimit) {
+        message += ` WARNING: ${ENTRYPOINT_NAME} was already over its ${MAX_ENTRYPOINT_LINES}-line/`
+          + `${MAX_ENTRYPOINT_BYTES}-byte cap before this save; tail entries are invisible until `
+          + 'consolidation compacts it.'
+      }
       return {
         path: join(dir, filename),
-        message: `Saved memory "${args.name}" (${args.type}) to ${filename} and updated ${ENTRYPOINT_NAME}.`,
+        message,
       }
     },
   }))

@@ -35,12 +35,14 @@ export const DEFAULTS: ResolvedConfig = deepFreeze({
   retainResults: 10,
   auto: false,
   placeholderChars: 256,
+  failureCap: 3,
 })
 
 const CONFIG_KEYS: ReadonlySet<string> = new Set([
   'retainResults',
   'auto',
   'placeholderChars',
+  'failureCap',
 ])
 
 /**
@@ -85,7 +87,7 @@ export function resolveConfig(config: MicrocompactConfig = {}): ResolvedConfig {
     if (!CONFIG_KEYS.has(key)) {
       throw new Error(
         `MicrocompactConfig: unknown key "${key}" `
-        + '(allowed: retainResults, auto, placeholderChars)',
+        + '(allowed: retainResults, auto, placeholderChars, failureCap)',
       )
     }
   }
@@ -94,9 +96,11 @@ export function resolveConfig(config: MicrocompactConfig = {}): ResolvedConfig {
     retainResults: config.retainResults ?? DEFAULTS.retainResults,
     auto: config.auto ?? DEFAULTS.auto,
     placeholderChars: config.placeholderChars ?? DEFAULTS.placeholderChars,
+    failureCap: config.failureCap ?? DEFAULTS.failureCap,
   }
   assertPositiveInteger('retainResults', resolved.retainResults)
   assertPositiveInteger('placeholderChars', resolved.placeholderChars)
+  assertPositiveInteger('failureCap', resolved.failureCap)
   return deepFreeze(structuredClone(resolved))
 }
 

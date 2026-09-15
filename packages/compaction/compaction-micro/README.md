@@ -29,8 +29,13 @@ Unrecognized keys fail at plugin construction. Resolved config is detached and d
 | `retainResults` | no (default `10`) | Keep the most recent N tool results verbatim; older ones are eligible. |
 | `auto` | no (default `false`) | Register an `agent/pre-step` hook that collapses stale results ahead of the turn's request. |
 | `placeholderChars` | no (default `256`) | Maximum text code points in a generated placeholder (excluding a re-embedded spill locator). |
+| `failureCap` | no (default `3`) | Consecutive auto pre-step pass failures tolerated per session before the pass pauses. |
 
-All values are integers; `retainResults` and `placeholderChars` are positive.
+All values are integers; `retainResults`, `placeholderChars`, and `failureCap` are positive.
+
+### Paused notice (auto pass)
+
+After `failureCap` consecutive auto-pass failures for a session, the pass pauses for that session (later pre-steps skip it entirely; any later success resets the pause) and exactly one durable, model-visible notice is injected via `agent.inject` as a next-step user message from plugin source (`{ kind: 'plugin', plugin: 'compaction-micro' }`) — the model learns that auto-microcompact is paused and that `/compact` is the manual path.
 
 ## Usage
 
