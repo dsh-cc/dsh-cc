@@ -3,8 +3,9 @@
  *
  * ONE defaults module for the namespace: the TUS producer plugin AND the
  * compaction-micro consumer both read through `registerTusSettings`, which is
- * idempotent per settings provider (WeakMap) so a second caller gets the
- * already-registered scope instead of failing the duplicate registration.
+ * idempotent per settings provider via the shared `@dsh-cc/settings-ns`
+ * helper so a second caller reads the already-registered namespace instead of
+ * failing the duplicate registration.
  * Consumers without a settings provider run on the schema defaults.
  *
  * @module @dsh-cc/tool-use-summary/settings
@@ -12,7 +13,8 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace, SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 
 /** The settings namespace carrying the TUS pipeline settings. */
 export const SETTINGS_NAMESPACE = 'cc-tool-use-summary' as SettingsNamespace
@@ -58,39 +60,18 @@ export const SettingsSchema: z<TusSettings> = z.object({
   upgradeMicroPlaceholders: z.boolean().default(true),
 })
 
-type SettingsScope = { get?: () => unknown }
-const scopes = new WeakMap<object, SettingsScope | undefined>()
-
 /**
- * Register the namespace once per settings provider and return the live
- * settings reader. Idempotent: callers after the first (the compaction-micro
- * consumer reads the same namespace) receive the same scope; a duplicate
- * registration on the same provider (observed under dereferenced profile
- * installs, where separate module copies split this WeakMap across the TUS
- * plugin and the compaction-micro consumer mounting first) degrades to the
- * provider's existing registration via `settings.get`. Registration is a
- * fiber effect on whoever registered first — if that fiber disposes, `get`
- * returns undefined and the reader degrades to schema defaults. Without a
- * settings provider the reader returns the schema defaults.
+ * Register the namespace and return the live settings reader. Idempotent
+ * through the shared `registerNamespaceSafe` helper: callers after the first
+ * (the compaction-micro consumer reads the same namespace) — and separate
+ * module copies under dereferenced profile installs (PR #79's failure class)
+ * — degrade to the provider's existing registration and read live through
+ * `settings.get`. Without a settings provider the reader returns the schema
+ * defaults.
  * @param ctx - the host context.
  * @returns a per-use settings reader (never undefined).
  */
 export function registerTusSettings(ctx: Context): () => TusSettings {
-  const settings = ctx.get('settings') as SettingsProvider | undefined
-  if (settings === undefined) return () => ({ ...DEFAULT_SETTINGS })
-  if (!scopes.has(settings)) {
-    let scope: SettingsScope | undefined
-    try {
-      scope = settings.register(SETTINGS_NAMESPACE, SettingsSchema) as SettingsScope | undefined
-    } catch (error) {
-      if (!String(error).includes('is already registered')) throw error
-      scope = { get: () => settings.get(SETTINGS_NAMESPACE) }
-    }
-    scopes.set(settings, scope)
-  }
-  const scope = scopes.get(settings)
-  return () => {
-    const value = scope?.get?.() as Partial<TusSettings> | undefined
-    return { ...DEFAULT_SETTINGS, ...value }
-  }
+  const read = registerNamespaceSafe<TusSettings>(ctx, SETTINGS_NAMESPACE, SettingsSchema)
+  return () => ({ ...DEFAULT_SETTINGS, ...read() })
 }

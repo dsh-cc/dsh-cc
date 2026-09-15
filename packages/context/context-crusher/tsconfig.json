@@ -13,6 +13,9 @@
     },
     {
       "path": "../../workspace/session-cwd"
+    },
+    {
+      "path": "../../settings/settings-ns"
     }
   ]
 }

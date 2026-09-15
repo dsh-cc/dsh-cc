@@ -8,6 +8,11 @@
     "src"
   ],
   "references": [
-    { "path": "../../llm-tuning/side-query" }
+    {
+      "path": "../../llm-tuning/side-query"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    }
   ]
 }

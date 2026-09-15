@@ -16,6 +16,9 @@
     },
     {
       "path": "../../core/tools"
+    },
+    {
+      "path": "../../settings/settings-ns"
     }
   ]
 }

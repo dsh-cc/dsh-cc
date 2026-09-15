@@ -10,6 +10,7 @@
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace, SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 
 /** The settings namespace carrying the probe flag. */
 export const SETTINGS_NAMESPACE = 'cc-reasoning-fold' as SettingsNamespace
@@ -33,6 +34,6 @@ export const SettingsSchema: z<{ probe: boolean }> = z.object({
 export function registerProbeSetting(ctx: Context): (() => boolean) | undefined {
   const settings = ctx.get('settings') as SettingsProvider | undefined
   if (settings === undefined) return undefined
-  const scope = settings.register(SETTINGS_NAMESPACE, SettingsSchema)
-  return () => (scope?.get?.() as { probe?: boolean } | undefined)?.probe ?? true
+  const read = registerNamespaceSafe(ctx, SETTINGS_NAMESPACE, SettingsSchema)
+  return () => read()?.probe ?? true
 }

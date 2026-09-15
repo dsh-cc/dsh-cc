@@ -110,6 +110,25 @@ describe('registerNamespaceSafe', () => {
     registerNamespaceSafe(ctx, NS, schema, { base: { level: 9 }, validate })
     expect(provider.calls[0]!.options).toEqual({ base: { level: 9 }, validate })
   })
+
+  it('reads a live register-returned scope when the provider-level get is disconnected (resume-pins fixture shape)', () => {
+    // The resume-pins spec boots a provider whose `get` always returns
+    // undefined while `register` hands back a scope reading a mutable live
+    // value — the pre-migration plugin read only through the scope. The
+    // reader must serve that live scope value, and observe later mutations,
+    // rather than degrading to defaults.
+    const live = { value: { onWorkspaceChanged: 'block' } }
+    const provider = {
+      register: (ns: string) => (ns === 'subagents-resume' ? { get: () => live.value } : undefined),
+      get: () => undefined,
+    }
+    const ctx = new Context()
+    ctx.provide('settings', provider)
+    const read = registerNamespaceSafe(ctx, 'subagents-resume' as never, schema)
+    expect(read()).toEqual({ onWorkspaceChanged: 'block' })
+    live.value = { onWorkspaceChanged: 'allow' }
+    expect(read()).toEqual({ onWorkspaceChanged: 'allow' })
+  })
 })
 
 describe('installSectionSafe', () => {

@@ -124,24 +124,45 @@ export function registerNamespaceSafe<T>(
   const memoized = readers.get(settings)
   if (memoized !== undefined) return memoized as SettingsReader<T>
   const registerOptions = options as SettingsRegisterOptions<T> | undefined
+  // Scope fallback: some test doubles (and legacy provider shapes) return the
+  // namespace scope from `register` and expose no provider-level `get`. Prefer
+  // the provider read-through; only when `settings.get` is unavailable fall
+  // back to the most recently obtained scope object.
+  const providerGet = typeof settings.get === 'function' ? () => settings.get(ns) as T | undefined : undefined
+  let scope: { get?: () => unknown } | undefined
   try {
-    settings.register(ns, schema, registerOptions)
+    scope = settings.register(ns, schema, registerOptions) as { get?: () => unknown } | undefined
   } catch (error) {
     // A duplicate means another mount or module copy owns the namespace;
     // degrade to live reads and let self-healing retry when it disappears.
     if (!isDuplicate(error, ns)) throw error
   }
+  const readValue = (): T | undefined =>
+    providerGet !== undefined ? providerGet() : (scope?.get?.() as T | undefined)
   const reader: SettingsReader<T> = () => {
-    const value = settings.get(ns) as T | undefined
+    const value = readValue()
     if (value !== undefined) return value
+    let reacquired = false
     if (!isUnloading(ctx)) {
       try {
-        settings.register(ns, schema, registerOptions)
+        scope = settings.register(ns, schema, registerOptions) as { get?: () => unknown } | undefined
+        reacquired = true
       } catch (error) {
         if (!isDuplicate(error, ns) && !isInactive(error)) throw error
       }
     }
-    return settings.get(ns) as T | undefined
+    // A re-acquisition in THIS call makes this mount the namespace owner: its
+    // scope is the freshest read (a real provider's provider-level `get`
+    // reflects it too, but a provider whose `get` is disconnected from its
+    // `register` — the resume-pins spec fixture shape — is only readable
+    // through the scope). The PREVIOUS scope must never be served: after the
+    // owning fiber disposed it returns a stale frozen value — that is the
+    // #79 hole this helper exists to close.
+    if (reacquired) {
+      const acquired = scope?.get?.() as T | undefined
+      if (acquired !== undefined) return acquired
+    }
+    return readValue()
   }
   readers.set(settings, reader as SettingsReader<never>)
   return reader

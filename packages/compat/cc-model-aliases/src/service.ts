@@ -17,11 +17,11 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace, SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 // Type-only: pull in the declaration-merged `agent/request` event so the host
 // overlay listener typechecks. Does not extend AgentOptions.
 import type {} from '@deepseek-ai/dsh-agent'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { ConfigAliasesSchema, SettingsAliasesSchema } from './schema.ts'
 import { createModelInspector, createModelResolver, mergeAliasMaps } from './resolver.ts'
 import { overlayStampedEffort, stampedEffortOf } from './effort.ts'
@@ -63,8 +63,7 @@ export const name = 'cc-model-routes'
  * @param config - deployment defaults.
  */
 export function apply(ctx: Context, config: Config = {}): void {
-  const settings = ctx.get('settings') as SettingsProvider | undefined
-  const scope = settings?.register(MODEL_ALIASES_NAMESPACE, SettingsAliasesSchema, {
+  const read = registerNamespaceSafe(ctx, MODEL_ALIASES_NAMESPACE, SettingsAliasesSchema, {
     // Reject a half-written object route at write time (the dict schema cannot
     // express a non-empty cross-field check).
     validate: (value: Record<string, AliasTarget | null | boolean>) => {
@@ -80,14 +79,12 @@ export function apply(ctx: Context, config: Config = {}): void {
       }
     },
   })
-  const aliasSources = () => mergeAliasMaps(
-    config.modelAliases,
-    scope?.get?.() as Record<string, AliasTarget | null> | undefined,
-  )
+  const aliasSources = () => mergeAliasMaps(config.modelAliases, read() as Record<string, AliasTarget | null> | undefined)
+  const overlayAtMount = read() as (Record<string, AliasTarget | null> & { warnOnInherit?: boolean }) | undefined
   const warnOptions = {
     warn: (message: string) => ctx.logger.warn(message),
     // W5 cheap-lane inherit observability, default on.
-    warnOnInherit: (scope?.get?.() as { warnOnInherit?: boolean } | undefined)?.warnOnInherit !== false,
+    warnOnInherit: overlayAtMount?.warnOnInherit !== false,
   }
   const resolver = createModelResolver(aliasSources, warnOptions)
   const inspect = createModelInspector(aliasSources, warnOptions)
