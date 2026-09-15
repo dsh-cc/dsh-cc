@@ -23,6 +23,7 @@ import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
 import { resolveAlias, toOneShotRoute } from '@dsh-cc/model-aliases'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { installSectionSafe } from '@dsh-cc/settings-ns'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value
 // dependency on the seam.
@@ -190,8 +191,10 @@ export class PermissionRulesService extends Service {
     // Optional settings inject: absent `ctx.settings` leaves only the Config
     // rules in force, exactly as the fallback contract requires. A stored
     // change re-enters reload() to rebuild merged state and the guards.
-    ctx.inject(['settings'], (sctx) => {
-      sctx.settings.installSection(ctx, PERMISSION_SETTINGS_NAMESPACE, permissionSettingsSchema(), {}, {
+    ctx.inject(['settings'], () => {
+      // Idempotent install: a duplicate namespace skips the throwing
+      // installSection and wires live reads + settings/updated instead.
+      installSectionSafe(ctx, PERMISSION_SETTINGS_NAMESPACE, permissionSettingsSchema(), {}, {
         setSource: (current) => { this.settingsRead = current },
         onChange: () => this.reload(),
         validate: value => this.validateSettings(value),

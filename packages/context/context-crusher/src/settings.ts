@@ -6,7 +6,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace, SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import { Config, SettingsSchema } from './config.ts'
 import type { CrusherConfig, ResolvedConfig } from './types.ts'
 
@@ -25,8 +26,7 @@ export type SettingsReader = () => CrusherConfig | undefined
  * @returns the live scope reader.
  */
 export function registerSettings(ctx: Context, base: ResolvedConfig): SettingsReader {
-  const settings = ctx.get('settings') as SettingsProvider | undefined
-  const scope = settings?.register(SETTINGS_NAMESPACE, SettingsSchema, {
+  const read = registerNamespaceSafe<CrusherConfig>(ctx, SETTINGS_NAMESPACE, SettingsSchema, {
     validate: (value: CrusherConfig) => {
       // Re-run the same cross-field validation as the config layer so a
       // half-written scope is rejected at write time.
@@ -34,5 +34,8 @@ export function registerSettings(ctx: Context, base: ResolvedConfig): SettingsRe
       Config(merged)
     },
   })
-  return () => scope?.get?.() as CrusherConfig | undefined
+  return () => {
+    const value = read()
+    return value === undefined ? undefined : { ...base, ...value }
+  }
 }

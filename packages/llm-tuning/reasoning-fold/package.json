@@ -31,9 +31,13 @@
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/settings-ns": "workspace:^",
     "vitest": "^4.1.8"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@dsh-cc/settings-ns": "workspace:^"
   }
 }

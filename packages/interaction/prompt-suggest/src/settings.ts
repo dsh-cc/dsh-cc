@@ -9,6 +9,7 @@
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace, SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 
 /** The settings namespace carrying the feature flag and cheap-lane knobs. */
 export const SETTINGS_NAMESPACE = 'cc-prompt-suggest' as SettingsNamespace
@@ -41,10 +42,7 @@ export const SettingsSchema: z<PromptSuggestSettings> = z.object({
 export function registerSettings(ctx: Context): (() => PromptSuggestSettings) | undefined {
   const settings = ctx.get('settings') as SettingsProvider | undefined
   if (settings === undefined) return undefined
-  const scope = settings.register(SETTINGS_NAMESPACE, SettingsSchema)
+  const read = registerNamespaceSafe<PromptSuggestSettings>(ctx, SETTINGS_NAMESPACE, SettingsSchema)
   const fallback: PromptSuggestSettings = { enabled: false, alias: 'haiku', timeoutMs: 4000, maxTokens: 128 }
-  return () => {
-    const live = scope?.get?.() as Partial<PromptSuggestSettings> | undefined
-    return { ...fallback, ...live }
-  }
+  return () => ({ ...fallback, ...read() })
 }

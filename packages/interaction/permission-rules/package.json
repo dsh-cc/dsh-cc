@@ -47,25 +47,29 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-plan-mode": "link:../../../../deepseek-harness/packages/plan/plan-mode",
     "@deepseek-ai/dsh-sandbox": "link:../../../../deepseek-harness/packages/sandbox/sandbox",
     "@deepseek-ai/dsh-sandbox-policy": "link:../../../../deepseek-harness/packages/sandbox/sandbox-policy",
     "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
-    "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
+    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "link:../../workspace/session-cwd",
-    "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
-    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
-    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
-    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt"
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@dsh-cc/settings-ns": "workspace:^"
   }
 }

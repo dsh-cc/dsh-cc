@@ -33,6 +33,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-agent'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import { loadAgentsDir, discoverBundledAgents, type AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { evaluateGate, type GateDecision, type GateEnv, type GateResolvedConfig } from './gate.ts'
@@ -169,11 +170,8 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
 
   // §4.9: register the policy namespace when a settings provider is mounted;
   // read LIVE on every gate evaluation (a flip is authoritative immediately).
-  const settings = ctx.get('settings') as
-    | { register: (ns: unknown, schema: unknown) => { get?: () => unknown } | undefined }
-    | undefined
-  const scope = settings?.register?.(RESUME_POLICY_NAMESPACE, ResumePolicySchema)
-  const policy = (): ResumePolicy => readResumePolicy(scope?.get?.())
+  const readPolicyScope = registerNamespaceSafe(ctx, RESUME_POLICY_NAMESPACE, ResumePolicySchema)
+  const policy = (): ResumePolicy => readResumePolicy(readPolicyScope())
 
   // Pre→post communication: gate-computed notices for a child's NEXT
   // send_message result, keyed by the tool execution identity (`exec.token`,

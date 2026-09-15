@@ -21,6 +21,7 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
+    "@dsh-cc/settings-ns": "workspace:^",
     "@dsh-cc/side-query": "workspace:^"
   },
   "peerDependencies": {

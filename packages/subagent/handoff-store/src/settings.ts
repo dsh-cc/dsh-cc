@@ -7,8 +7,9 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace, SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import type { HandoffConfig } from './types.ts'
 
 /** The settings namespace carrying the live handoff overlay. */
@@ -34,9 +35,8 @@ export const SettingsSchema: z<HandoffConfig> = z.object({
  * @returns the live scope reader.
  */
 export function registerSettings(ctx: Context): () => HandoffConfig | undefined {
-  const settings = ctx.get('settings') as SettingsProvider | undefined
-  const scope = settings?.register(SETTINGS_NAMESPACE, SettingsSchema)
-  return () => scope?.get?.() as HandoffConfig | undefined
+  const read = registerNamespaceSafe<HandoffConfig>(ctx, SETTINGS_NAMESPACE, SettingsSchema)
+  return () => read() as HandoffConfig | undefined
 }
 
 /** Effective configuration for one use: defaults overlaid by the live scope. */

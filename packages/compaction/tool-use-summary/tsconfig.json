@@ -13,6 +13,9 @@
     },
     {
       "path": "../../llm-tuning/side-query"
+    },
+    {
+      "path": "../../settings/settings-ns"
     }
   ]
 }

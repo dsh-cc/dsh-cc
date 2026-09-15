@@ -37,13 +37,17 @@
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
-    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/settings-ns": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "vitest": "^4.1.8"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@dsh-cc/settings-ns": "workspace:^"
   }
 }
