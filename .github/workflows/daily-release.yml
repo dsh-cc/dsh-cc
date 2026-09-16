@@ -1,22 +1,27 @@
 # =============================================================================
 # Daily Release (propose) — dsh-cc
 #
-# Weekdays at 08:00 Beijing (00:00 UTC; China has no DST). Checks whether
-# main has unreleased work: HEAD is not contained in the latest v* tag
-# (merge-base ancestry, no commit-date window — a missed run self-heals
-# the next day). If so, opens a release PR (branch release/v<next>,
-# lockstep version bump only). After merge, release-tag.yml tags the
-# merge commit and dispatches publish.yml.
+# Weekdays at 08:00 Beijing (00:00 UTC; China has no DST). Asia/Singapore
+# Mon–Sun week drives the RC ladder (scheme B) via
+# scripts/daily-release-decide.mjs:
 #
-# Why two stages: main is branch-protected (no direct push), and a
-# GITHUB_TOKEN push does not start other workflows, so the tag must be
-# created after the PR lands and publish.yml must be dispatched
-# explicitly. This workflow never tags and never pushes main.
+#   - Monday (or any weekday with no rc on the candidate line yet): propose
+#     next-line X.Y.Z-rc.1 when main has unreleased work vs last stable.
+#   - Tue–Fri: commits after previous rc → rc.N+1; else stabilize to X.Y.Z.
+#   - If this calendar week already has a stable vX.Y.Z → skip all proposes.
+#
+# Opens a release PR (branch release/v<next>, lockstep version bump only).
+# After merge, release-tag.yml tags the merge commit and dispatches
+# publish.yml. This workflow never tags and never pushes main.
 #
 # Guards: open-PR dedupe on the release/v* branch name + release.mjs
 # validations (HEAD === origin/main, tag uniqueness, clean tree).
 # Manual dispatch defaults to dry_run=true (gates + release.mjs --dry-run,
 # no PR) so the logic can be exercised without proposing a release.
+#
+# 2026-09-15 root cause: gate picked LAST_TAG=v0.7.1-rc.3 via version-sorted
+# v* tags; daily-release-next-version.mjs rejected prerelease. Decide now
+# selects last *stable* separately and ladders rc on the candidate line.
 # =============================================================================
 
 name: Daily Release (propose)
@@ -61,65 +66,78 @@ jobs:
           fetch-depth: 0   # ancestry check + tag --merged need full history
 
       # checkout@v4 leaves a detached HEAD; release.mjs requires branch == main.
-      # --force --tags: LAST_TAG selection and ancestry need a complete tag set.
+      # --force --tags: tag listing and ancestry need a complete tag set.
       - name: Sync main (undetach + tags)
         run: |
           set -euo pipefail
           git fetch --force --tags origin
           git checkout -B main origin/main
 
-      # Predicate: HEAD already contained in the latest tag → nothing to ship.
-      # Tags are version-sorted so a stray non-v* tag or out-of-order tag
-      # cannot become the baseline (git describe is "nearest on the graph").
-      - id: gate
-        name: Gate — unreleased work on main?
+      # RC ladder decide: stdout = GITHUB_OUTPUT key=value lines; diagnostics
+      # on stderr. Never fails the job on action=skip (week_has_stable /
+      # no_unreleased_work) — those are successful no-ops.
+      - id: decide
+        name: Decide — RC ladder (Asia/Singapore week)
         run: |
           set -euo pipefail
-          LAST_TAG=$(git tag --list 'v*' --merged origin/main --sort=-v:refname | head -n1)
-          if [ -z "$LAST_TAG" ]; then
-            echo "::error::no v* tag reachable from main; cannot establish a release baseline"
+          # Capture machine-readable lines for step outputs; also mirror to summary.
+          OUT=$(mktemp)
+          node scripts/daily-release-decide.mjs --bump "$BUMP" | tee "$OUT"
+          cat "$OUT" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Daily Release decide"
+            echo '```'
+            cat "$OUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          action=$(grep -E '^action=' "$OUT" | head -n1 | cut -d= -f2-)
+          reason=$(grep -E '^reason=' "$OUT" | head -n1 | cut -d= -f2-)
+          if [ "$action" = "skip" ]; then
+            echo "skip: $reason (exit 0 — no propose)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$action" != "propose" ]; then
+            echo "::error::unexpected action='$action'"
             exit 1
           fi
-          if git merge-base --is-ancestor origin/main "$LAST_TAG"; then
-            should_release=false
-            echo "main HEAD is contained in $LAST_TAG; no unreleased work" >> "$GITHUB_STEP_SUMMARY"
-          else
-            should_release=true
-            echo "main HEAD is ahead of $LAST_TAG; unreleased work exists" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          {
-            echo "last_tag=$LAST_TAG"
-            echo "should_release=$should_release"
-          } >> "$GITHUB_OUTPUT"
 
-      # Recovery: tag covers HEAD but the GitHub Release is missing ⇒ the last
-      # publish never finished (dispatch failed / environment approval died).
-      # publish.yml is idempotent (already-published versions are skipped), so
-      # re-dispatching is cheap; otherwise just record the skip.
+      # Recovery: only when HEAD is contained in last stable (no unreleased
+      # work) but the GitHub Release is missing — re-dispatch publish.
+      # Do NOT recover on week_has_stable (that would re-fire mid-week noise);
+      # recovery may still re-dispatch the last stable tag if its Release is
+      # missing even mid-week, which is intentional and does not open a propose.
       - name: Recover stuck release
-        if: steps.gate.outputs.should_release == 'false' && env.DRY_RUN != 'true'
+        if: >-
+          steps.decide.outputs.action == 'skip' &&
+          steps.decide.outputs.reason == 'no_unreleased_work' &&
+          env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LAST_TAG: ${{ steps.gate.outputs.last_tag }}
+          LAST_STABLE: ${{ steps.decide.outputs.last_stable }}
         run: |
           set -euo pipefail
-          if gh release view "$LAST_TAG" > /dev/null 2>&1; then
-            echo "$LAST_TAG already published; recovery skip" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "${LAST_STABLE:-}" ]; then
+            echo "no last_stable in decide output; recovery skip" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if gh release view "$LAST_STABLE" > /dev/null 2>&1; then
+            echo "$LAST_STABLE already published; recovery skip" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "$LAST_TAG has no GitHub Release; re-dispatching publish.yml" >> "$GITHUB_STEP_SUMMARY"
-            gh workflow run publish.yml -f tag="$LAST_TAG"
+            echo "$LAST_STABLE has no GitHub Release; re-dispatching publish.yml" >> "$GITHUB_STEP_SUMMARY"
+            gh workflow run publish.yml -f tag="$LAST_STABLE"
           fi
 
       - id: plan
-        name: Compute next version + open-PR dedupe
-        if: steps.gate.outputs.should_release == 'true'
+        name: Open-PR dedupe
+        if: steps.decide.outputs.action == 'propose'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LAST_TAG: ${{ steps.gate.outputs.last_tag }}
+          NEXT: ${{ steps.decide.outputs.version }}
           HEAD_REF: release/v
         run: |
           set -euo pipefail
-          NEXT=$(node scripts/daily-release-next-version.mjs "$LAST_TAG" "$BUMP")
+          if [ -z "${NEXT:-}" ]; then
+            echo "::error::decide action=propose but version is empty"
+            exit 1
+          fi
           echo "next version: $NEXT" >> "$GITHUB_STEP_SUMMARY"
           open_prs=$(gh pr list --head "${HEAD_REF}${NEXT}" --state open --json number --jq length)
           if [ "$open_prs" -gt 0 ]; then
@@ -135,8 +153,8 @@ jobs:
 
       - name: Dry run (no branch, no PR)
         if: >-
+          steps.decide.outputs.action == 'propose' &&
           steps.plan.outputs.exists == 'false' &&
-          steps.gate.outputs.should_release == 'true' &&
           env.DRY_RUN == 'true'
         run: |
           set -euo pipefail
@@ -146,8 +164,8 @@ jobs:
 
       - name: Propose release PR
         if: >-
+          steps.decide.outputs.action == 'propose' &&
           steps.plan.outputs.exists == 'false' &&
-          steps.gate.outputs.should_release == 'true' &&
           env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -170,10 +188,11 @@ jobs:
           url=$(gh pr create --base main --head "$HEAD_REF" \
             --title "chore(release): v$NEXT" \
             --body "$(cat <<'EOF'
-          Auto-opened by [daily-release.yml](.github/workflows/daily-release.yml): lockstep version bump only (all publishable manifests + FALLBACK_VERSION).
+          Auto-opened by [daily-release.yml](.github/workflows/daily-release.yml) (RC ladder): lockstep version bump only (all publishable manifests + FALLBACK_VERSION).
 
           - After merge, [release-tag.yml](.github/workflows/release-tag.yml) tags the merge commit and dispatches publish.yml.
           - publish.yml runs the full gate chain, then waits on the `npm-publish` environment for a human approval before publishing to npmjs and creating the GitHub Release.
+          - dist-tag: `-rc.N` → `next`; stable → `latest`.
           - If publish fails: `gh workflow run publish.yml -f tag=<tag>`.
           EOF
           )")

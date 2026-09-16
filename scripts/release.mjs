@@ -111,6 +111,15 @@ const argVersion = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
 const label = dryRun ? "DRY-RUN" : "release";
 
+// Compatibility with daily-release-next-version.mjs under the pre-#83 workflow:
+// when the RC ladder decides to skip, CI still invokes release.mjs with this
+// sentinel so dry-run / propose steps exit 0 without opening a release PR.
+const DAILY_RELEASE_SKIP_SENTINEL = "__daily_release_skip__";
+if (argVersion === DAILY_RELEASE_SKIP_SENTINEL) {
+  console.log(`  [${label}] daily-release decide skip sentinel — no-op`);
+  process.exit(0);
+}
+
 if (!argVersion || !isValidVersionShape(argVersion)) {
   fail(`invalid version '${argVersion ?? ""}'. Expected a semver shape like 0.1.0 or 0.1.0-rc.1`);
 }
