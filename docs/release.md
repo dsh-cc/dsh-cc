@@ -104,3 +104,46 @@ workflow 校验 `vX.Y.Z` 必须落在 `origin/main` 上的提交。推完去 Act
 
 granular token 最长 1 年。到期前在 npmjs 生成新 token 并替换 GitHub secret;
 或完成上面的 OIDC 升级后不再依赖静态 token。
+
+## Daily Release RC ladder（工作日自动提案）
+
+工作日 08:00 北京时间（cron `0 0 * * 1-5`，UTC 00:00）由
+[daily-release.yml](../.github/workflows/daily-release.yml) 跑一次**提案**
+（只开 `release/v*` 分支 + PR，**从不**在本 workflow 里 tag / publish）。
+决策在 `scripts/daily-release-decide.mjs`，时区按 **Asia/Singapore** 的
+周一至周日自然周：
+
+| 条件 | 动作 |
+|------|------|
+| 本周（周一–周日 SGT）已有正式版 `vX.Y.Z` | **跳过**全部提案 |
+| main 相对上一正式版无未发布提交 | **跳过**（可触发 stuck-publish 恢复：若该正式版缺 GitHub Release 则重派 `publish.yml`） |
+| 本周尚无该候选线上的 rc | 提案下一线路 `X.Y.Z-rc.1`（含周中首次跑） |
+| 上一 rc 之后 main 有新提交 | 提案 `X.Y.Z-rc.(N+1)` |
+| 上一 rc 之后无新提交 | 提案正式版 `X.Y.Z` |
+
+线路 bump：`auto` 时自上一正式版以来有 conventional `feat` → minor，否则
+patch；`workflow_dispatch` 可显式选 `patch` / `minor`。
+
+### 人工门禁
+
+1. **合并 release PR**：仍走 main 的分支保护（rebase/squash）；合并后
+   [release-tag.yml](../.github/workflows/release-tag.yml) 打 tag 并
+   dispatch publish。
+2. **npm 发布**：`publish.yml` 的 `npm-publish` environment 需人工批准。
+3. **不要**在 daily-release 里手动补 tag；缺 Release 时用
+   `gh workflow run publish.yml -f tag=vX.Y.Z`。
+
+### dist-tag
+
+- 预发布（`vX.Y.Z-rc.N`）→ npm dist-tag **`next`**
+- 正式版（`vX.Y.Z`）→ npm dist-tag **`latest`**
+- prerelease **永不**占 `latest`（与上文「dist-tag 约定」一致）
+
+### 9/15 故障根因（已修）
+
+[actions/runs/34928203604](https://github.com/dsh-cc/dsh-cc/actions/runs/34928203604)：
+gate 用版本序 `v*` 选中了 `LAST_TAG=v0.7.1-rc.3`，随后
+`daily-release-next-version.mjs` 拒绝 prerelease 基线导致 job 失败。
+现改为单独选取最高**正式** tag 作 `lastStable`，并在候选线上爬 rc 梯；
+CI **不再**调用旧的 stable-only 路径。
+
