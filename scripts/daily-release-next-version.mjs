@@ -1,33 +1,26 @@
 #!/usr/bin/env node
 /**
- * daily-release-next-version.mjs <lastTag> <bump> — daily auto-release
- * version calculator (CI only; no node_modules in the calling job).
+ * daily-release-next-version.mjs <lastTag> <bump> — DEPRECATED for CI.
  *
- * Contract:
- *   stdin/args: lastTag = stable baseline tag `v<major>.<minor>.<patch>`
- *     (prerelease suffixes are rejected — the daily auto-release only bumps
- *     off stable baselines); bump = `auto` | `patch` | `minor`.
- *   stdout: the bare next semver (no `v` prefix) and NOTHING else — the
- *     caller captures stdout via `$(...)`. All diagnostics go to stderr.
+ * Historically computed the next *stable line* from a stable baseline and
+ * rejected prerelease tags (that rejection is what broke the 2026-09-15
+ * daily-release run when the gate passed LAST_TAG=v0.7.1-rc.3).
  *
- * Preconditions (asserted, fail-loud):
- *   - Lockstep invariant: root package.json version === lastTag. The root
- *     manifest is private but kept in lockstep by release.mjs (see its
- *     header + check-release-version.mjs). A mismatch means the previous
- *     release half-completed (tag pushed without a matching manifest
- *     commit, or vice versa) — we refuse to compute on top of that and
- *     print the manual recovery recipe instead.
- *   - `auto`: scans `git log --format=%s <lastTag>..origin/main`; any
- *     conventional-commit `feat(` / `feat!` / `feat:` subject → minor,
- *     otherwise patch. `patch`/`minor` map directly (minor resets patch
- *     to 0). Never produces a major bump — revisit before 1.0.
+ * CI now uses `scripts/daily-release-decide.mjs` (RC ladder). This file
+ * remains as a thin hand-use helper: given a stable `vX.Y.Z` baseline it
+ * prints the next bare line version (no `-rc.N`) to stdout — same bump
+ * rules as before (`auto` feat→minor else patch). Prefer decide.mjs for
+ * anything that must handle an rc tip on main.
  *
- * No external dependencies; only node stdlib + git.
+ * Contract (hand use only):
+ *   args: lastTag = `v<major>.<minor>.<patch>`; bump = auto|patch|minor
+ *   stdout: bare next semver line (no `v`); diagnostics on stderr
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { nextLineVersion, parseStable } from "./daily-release-decide.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -41,12 +34,15 @@ function git(...args) {
   return execFileSync("git", args, { encoding: "utf-8", cwd: ROOT }).trim();
 }
 
+console.error(
+  "daily-release-next-version: DEPRECATED for CI — use daily-release-decide.mjs (RC ladder)",
+);
+
 const [lastTag, bump] = process.argv.slice(2);
-const tagMatch = typeof lastTag === "string" && lastTag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-if (!tagMatch) {
+if (!parseStable(lastTag)) {
   fail(
     `invalid last tag '${lastTag ?? ""}'. Expected a stable v<major>.<minor>.<patch>; ` +
-      "daily auto-release only accepts a stable baseline (use release.mjs by hand for prereleases)",
+      "for RC-ladder decisions use: node scripts/daily-release-decide.mjs --bump auto",
   );
 }
 if (!["auto", "patch", "minor"].includes(bump)) {
@@ -54,7 +50,6 @@ if (!["auto", "patch", "minor"].includes(bump)) {
 }
 
 /* ---- lockstep assertion: root manifest version must equal lastTag ---- */
-
 const rootJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const rootVersion = rootJson.version;
 if (`v${rootVersion}` !== lastTag) {
@@ -66,21 +61,10 @@ if (`v${rootVersion}` !== lastTag) {
   );
 }
 
-/* ---- bump calculation ---- */
-
-const [M, m, p] = tagMatch.slice(1).map(Number);
-let next;
-if (bump === "patch") {
-  next = `${M}.${m}.${p + 1}`;
-} else if (bump === "minor") {
-  next = `${M}.${m + 1}.0`;
-} else {
-  // auto: any conventional `feat(`/`feat!`/`feat:` subject since the last
-  // tag → minor, else patch. Relies on PR titles following conventional
-  // commits (repo discipline: squash merge, titles are the subjects).
+let hasFeat = false;
+if (bump === "auto") {
   const subjects = git("log", "--format=%s", `${lastTag}..origin/main`);
-  const hasFeat = subjects.split("\n").some((s) => /^feat(?:\(|!|:)/.test(s));
-  next = hasFeat ? `${M}.${m + 1}.0` : `${M}.${m}.${p + 1}`;
+  hasFeat = subjects.split("\n").some((s) => /^feat(?:\(|!|:)/.test(s));
 }
 
-console.log(next);
+console.log(nextLineVersion(lastTag, bump, hasFeat));
