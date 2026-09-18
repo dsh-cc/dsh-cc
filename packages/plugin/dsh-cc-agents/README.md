@@ -2,12 +2,13 @@
 
 English | [中文](README.zh.md)
 
-Official dsh-cc plugin shipping three subagents and an orchestration skill:
+Official dsh-cc plugin shipping three subagents and two skills:
 
 - **`dsh-cc-agents:critic`** — reasoning-heavy work: complex analysis, architectural decisions, adversarial plan review, root-cause analysis. Runs on the `opus` model alias; read-only persona.
 - **`dsh-cc-agents:executor`** — mechanical execution of pre-approved, fully specified plans: formatting, simple refactors, boilerplate, renames, tests, docs, checks. Runs on the `sonnet` model alias.
 - **`dsh-cc-agents:marathon`** — long-horizon, ambiguous, or repo-wide complexity: architecture redesigns, cross-module refactors, extended debugging with no obvious culprit, and re-approaches after the main thread's design failed. Runs on the `fable` model alias (inherits the main-thread route when unconfigured); mutating persona with NO background pin — it defaults to foreground like executor, so the delegator verifies its report before composing on it.
 - **`dsh-cc-agents-orchestration` skill** — routing table for choosing between the agents, the background asymmetry, and their report contracts.
+- **`data-analysis` skill** — data-analysis tasks (caliber doubt, reconciliation, external reports; 数据分析/口径/对账) route through critic/executor with review/verification/execution meta-rules inlined into the dispatch prompts.
 
 ## Prerequisites
 
