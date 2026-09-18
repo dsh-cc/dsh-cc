@@ -1,11 +1,12 @@
 # Multi-agent orchestration for data-analysis tasks
 
-Status: **Approved design** — two rounds of cold Staff-Engineer review
-(dsh-cc-agents:critic); both rounds returned ship-with-changes and the
-changes are folded in. Not yet implemented.
+Status: **Implemented** — PR #85 (merged 2026-09-18). Approved design —
+two rounds of cold Staff-Engineer review (dsh-cc-agents:critic); both
+rounds returned ship-with-changes and the changes are folded in.
 Date: 2026-09-18
 Scope: `packages/plugin/dsh-cc-agents` (one new skill, a cross-reference
-in the orchestration routing skill, version bump),
+in the orchestration routing skill; no version bump — versions move with
+the repo-wide `chore(release)` commits),
 `packages/compat/cc-plugin-loader` (one loader test assertion), and
 opportunistically `docs/claude-code-capabilities.yaml` prose. No new
 subagent types. No changes to the critic/executor/marathon definitions.
@@ -134,7 +135,7 @@ cross-caliber reconciliation, or external-deliverable reports.**
 |---|---|---|---|
 | 1 | `packages/plugin/dsh-cc-agents/skills/data-analysis/SKILL.md` | New; content per §4 | required |
 | 2 | `packages/compat/cc-plugin-loader/tests/dsh-cc-agents.spec.ts:179` | `skills.loaded` 1→2. Verified `package-shape.spec.ts:63-65` has no skill-count assertion and `:67` agents.loaded==3 is unaffected | required (CI red otherwise) |
-| 3 | plugin `plugin.json` + `package.json` | Version bump in lockstep (`package-shape.spec.ts:68-71` enforces), following the repo-wide release cadence — no solo jump | required |
+| 3 | plugin `plugin.json` + `package.json` | ~~Version bump~~ — dropped at implementation: feature PRs never bump; versions move repo-wide via `chore(release)` commits (Daily Release cadence), which also carries marketplace update detection | dropped |
 | 4 | `packages/plugin/dsh-cc-agents/skills/dsh-cc-agents-orchestration/SKILL.md` | One cross-reference line: data-analysis tasks route per the `data-analysis` skill (D6 threshold) | required — plugin-borne, so it reaches every workspace session |
 | 5 | `docs/claude-code-capabilities.yaml` prose + plugin READMEs | Opportunistic prose fix + `pnpm docs:parity`; README pair changes require `node scripts/check-readme.mjs --write`. Run an empty-change parity check first to confirm this item is truly optional | optional (to be confirmed) |
 
