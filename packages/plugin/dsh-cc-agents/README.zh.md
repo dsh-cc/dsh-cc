@@ -2,12 +2,13 @@
 
 [English](README.md) | 中文
 
-官方 dsh-cc 插件，提供三个 subagent 和一个编排 skill：
+官方 dsh-cc 插件，提供三个 subagent 和两个 skill：
 
 - **`dsh-cc-agents:critic`** — 推理密集型工作：复杂分析、架构决策、对抗性计划评审、根因分析。运行在 `opus` 模型别名上；只读人格。
 - **`dsh-cc-agents:executor`** — 对已批准、已完全指定的计划做机械执行：格式化、简单重构、样板代码、重命名、测试、文档、检查。运行在 `sonnet` 模型别名上。
 - **`dsh-cc-agents:marathon`** — 长周期、模糊或仓库级复杂度：架构重设计、跨模块重构、无明显线索的长期调试，以及主线程设计失败后的重新攻关。运行在 `fable` 模型别名上（未配置时继承主线程路由）；可变更人格，且没有后台 pin——默认像 executor 一样前台运行，因此委派方应在基于其报告继续之前先核验其报告。
 - **`dsh-cc-agents-orchestration` skill** — 用于在这些 agent 之间做选择的路由表，以及后台不对称性与它们的报告契约。
+- **`data-analysis` skill** — 数据分析类任务（口径存疑、对账、对外报告）经 critic/executor 编排执行，评审/验证/执行元规则内联进派发 prompt。
 
 ## Prerequisites
 

@@ -28,6 +28,11 @@ match a plugin definition.
 Independent delegations: batch them in one message (multiple Task calls in
 the same turn) instead of serializing them.
 
+Data-analysis tasks (metrics-caliber/口径 doubt, cross-caliber
+reconciliation/对账, external deliverable reports) route per the
+`data-analysis` skill; routine single-caliber queries stay single-agent —
+no multi-agent escalation.
+
 ## Background asymmetry (important)
 
 - **critic** is read-only, so it runs in the BACKGROUND by default —
