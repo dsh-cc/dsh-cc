@@ -59,10 +59,10 @@ function findingLines(): string {
 }
 
 /** Seed a fixture project session (zstd-compressed real JSONL) and return its dir. */
-function seedSession(project: string, id: string, lines: string): string {
+function seedSession(project: string, id: string, lines: string, filename = 'session.jsonl.zstd'): string {
   const dir = join(homeDir, 'sessions', project, id)
   mkdirSync(dir, { recursive: true })
-  const file = join(dir, 'session.jsonl.zstd')
+  const file = join(dir, filename)
   if (HAS_ZSTD) execFileSync('zstd', ['-f', '-o', file], { input: lines })
   else writeFileSync(file, lines)
   return dir
@@ -165,6 +165,17 @@ describe('/learn dry-run', () => {
     expect(text).toContain('Proposed session-learnings.md block')
     expect(existsSync(join(homeDir, 'memory'))).toBe(false)
   })
+  it('finds content in a session.v3.jsonl.zstd stream (0.1.5+ writer layout)', { skip: !HAS_ZSTD }, async () => {
+    // One v3 + one v1 stream with the same pattern: hitting the 2-occurrence
+    // threshold proves the v3 stream was read and parsed.
+    seedSession(PROJECT, 's1', findingLines(), 'session.v3.jsonl.zstd')
+    seedSession(PROJECT, 's2', findingLines())
+    const test = await harness()
+    const text = await run(test)
+    expect(text).toContain('Scanned 2 session(s)')
+    expect(text).toContain('1 finding(s)')
+    expect(text).toContain('prefer /b/ over /a for config.json (2 occurrences)')
+  })
   it('reports an empty store cleanly', async () => {
     const test = await harness()
     const text = await run(test)
@@ -237,7 +248,7 @@ describe('block renderer', () => {
       occurrences: 3,
       evidence: ['session:s1#turn=2'],
     }],
-    stats: { sessionsScanned: 2, linesParsed: 10, corruptLinesSkipped: 0, truncatedTails: 0, sessionsByPolicyNever: 0 },
+    stats: { sessionsScanned: 2, linesParsed: 10, corruptLinesSkipped: 0, truncatedTails: 0, sessionsNoStream: 0, sessionsUnreadable: 0, sessionsByPolicyNever: 0 },
   }
   it('is deterministic and keeps the description stable (no count/date churn)', async () => {
     const one = renderBlock(result, '2026-09-10')

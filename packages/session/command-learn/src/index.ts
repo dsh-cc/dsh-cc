@@ -118,9 +118,11 @@ export function sessionsProjectKey(cwd: string): string {
 /** Human-readable ranked findings + the proposed block (dry-run output). */
 export function renderDryRun(result: ForensicsResult): string {
   const s = result.stats
+  const skipped = s.sessionsNoStream + s.sessionsUnreadable
   const head =
     `Scanned ${s.sessionsScanned} session(s) (${s.linesParsed} lines, ` +
-    `${s.corruptLinesSkipped} corrupt skipped, ${s.truncatedTails} truncated tails).`
+    `${s.corruptLinesSkipped} corrupt skipped, ${s.truncatedTails} truncated tails).` +
+    (skipped > 0 ? `, ${skipped} session dir(s) skipped (missing/unreadable stream)` : '')
   if (result.findings.length === 0) {
     return `${head}\nNo findings above the occurrence threshold — nothing to apply.`
   }
