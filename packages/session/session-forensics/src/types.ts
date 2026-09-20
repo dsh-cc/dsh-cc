@@ -106,6 +106,10 @@ export interface ScanStats {
   linesParsed: number;
   corruptLinesSkipped: number;
   truncatedTails: number;
+  /** Session dirs skipped: no stream file under either known filename. */
+  sessionsNoStream: number;
+  /** Session dirs skipped: the stream failed to decompress. */
+  sessionsUnreadable: number;
   sessionsByPolicyNever: number;
 }
 

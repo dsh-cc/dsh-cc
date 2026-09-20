@@ -92,6 +92,8 @@ export async function runForensics(
     linesParsed: scan.linesParsed,
     corruptLinesSkipped: scan.corruptLinesSkipped,
     truncatedTails: scan.truncatedTails,
+    sessionsNoStream: scan.sessionsNoStream,
+    sessionsUnreadable: scan.sessionsUnreadable,
     sessionsByPolicyNever: scan.sessions.filter((s) => s.meta.policyNever)
       .length,
   };

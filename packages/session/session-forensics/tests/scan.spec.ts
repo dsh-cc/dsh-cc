@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decompressJsonl, parseStream, scanSessions } from "../src/scan.ts";
@@ -257,6 +257,66 @@ describe("scanSessions", () => {
     });
     expect(calls).toBe(1);
     expect(scan.sessionsScanned).toBe(1);
+  });
+
+  it("scans a v3 stream (session.v3.jsonl.zstd) through a path-aware seam", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forensics-v3-"));
+    const dir = join(root, "proj-key", "sess-v3");
+    mkdirSync(dir, { recursive: true });
+    const text = [
+      headerLine(),
+      ...toolLines("c1", "read", { file_path: "/a/b.ts" }, "body"),
+    ].join("\n");
+    writeFileSync(join(dir, "session.v3.jsonl.zstd"), Buffer.from(text));
+    // Path-aware seam: succeeds only for the path it is actually handed, so
+    // a resolver that ignores its path argument cannot pass this test.
+    const scan = await scanSessions(root, {
+      decompress: async (f) => (existsSync(f) ? text : Promise.reject(new Error(f))),
+    });
+    expect(scan.sessionsScanned).toBe(1);
+    // headerLine + toolLines (call + result) = 3 parsed lines.
+    expect(scan.linesParsed).toBe(3);
+    expect(scan.sessionsNoStream).toBe(0);
+    expect(scan.sessionsUnreadable).toBe(0);
+  });
+
+  it("counts a session dir with no stream file as sessionsNoStream", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forensics-nostream-"));
+    mkdirSync(join(root, "proj-key", "empty"), { recursive: true });
+    const scan = await scanSessions(root, { decompress: async () => headerLine() });
+    expect(scan.sessionsScanned).toBe(0);
+    expect(scan.sessionsNoStream).toBe(1);
+    expect(scan.sessionsUnreadable).toBe(0);
+  });
+
+  it("counts a failing decompress as sessionsUnreadable instead of crashing", async () => {
+    const root = makeStore();
+    const scan = await scanSessions(root, {
+      decompress: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(scan.sessionsScanned).toBe(0);
+    expect(scan.sessionsUnreadable).toBe(1);
+    expect(scan.sessionsNoStream).toBe(0);
+  });
+
+  it("prefers session.v3.jsonl.zstd when both stream files exist", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forensics-both-"));
+    const dir = join(root, "proj-key", "sess-both");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "session.jsonl.zstd"), Buffer.from(headerLine()));
+    writeFileSync(join(dir, "session.v3.jsonl.zstd"), Buffer.from(headerLine()));
+    const seen: string[] = [];
+    const scan = await scanSessions(root, {
+      decompress: async (f) => {
+        seen.push(f);
+        return headerLine();
+      },
+    });
+    expect(scan.sessionsScanned).toBe(1);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].endsWith("session.v3.jsonl.zstd")).toBe(true);
   });
 });
 

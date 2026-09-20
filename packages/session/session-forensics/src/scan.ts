@@ -1,13 +1,15 @@
 /**
  * Scanner: walk the dsh-cc sessions store and normalize events into records.
  *
- * Layout: `<sessionsRoot>/<projectKey>/<sessionId>/session.jsonl.zstd`.
+ * Layout: `<sessionsRoot>/<projectKey>/<sessionId>/session.jsonl.zstd` or
+ * `<sessionsRoot>/<projectKey>/<sessionId>/session.v3.jsonl.zstd` (v3 since
+ * harness 0.1.5; the writer emits exactly one format per session dir).
  * Child sessions are separate directories; they are distinguished only by
  * the `type: "session"` header line (`origin`, `delegationDepth`,
  * `parentSession`), never by file naming.
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type {
   ApprovalPair,
@@ -248,6 +250,10 @@ export async function scanSessions(
   linesParsed: number;
   corruptLinesSkipped: number;
   truncatedTails: number;
+  /** Session dirs skipped: no stream file under either known filename. */
+  sessionsNoStream: number;
+  /** Session dirs skipped: the stream failed to decompress. */
+  sessionsUnreadable: number;
   sessionsScanned: number;
 }> {
   const decompress = options.decompress ?? decompressJsonl;
@@ -259,6 +265,8 @@ export async function scanSessions(
   let linesParsed = 0;
   let corruptLinesSkipped = 0;
   let truncatedTails = 0;
+  let sessionsNoStream = 0;
+  let sessionsUnreadable = 0;
 
   let projectKeys: string[];
   try {
@@ -272,7 +280,17 @@ export async function scanSessions(
     const projectDir = join(sessionsRoot, projectKey);
     for (const sessionId of readdirSync(projectDir)) {
       const dir = join(projectDir, sessionId);
-      const file = join(dir, "session.jsonl.zstd");
+      // The writer emits exactly one stream format per session dir (v3 since
+      // harness 0.1.5), so prefer-v3 is only a pathological-transition
+      // tie-break for a dir that somehow holds both files.
+      let file = join(dir, "session.v3.jsonl.zstd");
+      if (!existsSync(file)) {
+        file = join(dir, "session.jsonl.zstd");
+        if (!existsSync(file)) {
+          sessionsNoStream++;
+          continue;
+        }
+      }
       let mtimeMs: number | undefined;
       try {
         mtimeMs = statSync(dir).mtimeMs;
@@ -286,6 +304,7 @@ export async function scanSessions(
       try {
         text = await decompress(file);
       } catch {
+        sessionsUnreadable++;
         continue;
       }
       const parsed = parseStream(projectKey, sessionId, text);
@@ -309,5 +328,7 @@ export async function scanSessions(
     linesParsed,
     corruptLinesSkipped,
     truncatedTails,
+    sessionsNoStream,
+    sessionsUnreadable,
   };
 }
