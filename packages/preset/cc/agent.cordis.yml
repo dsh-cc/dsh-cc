@@ -345,6 +345,7 @@
     # consolidated `cc:plugin-rules` prompt section renders its entries.
     rules: true
     contextCrusher: true
+    compactionCostGate: true
   config:
     # ToolSearch: model-called search that activates deferred tools per scope.
     - id: tool-search
@@ -353,6 +354,16 @@
     # Model-free staleness microcompaction (auto: false by default).
     - id: compaction-micro
       name: '@dsh-cc/compaction-micro'
+
+    # Cost-gated plan-step compaction (plan docs/plans/2026-09-20-cost-gated-plan-step-compaction.md):
+    # arms on completed todo_write transitions, and at the agent/status idle
+    # seam calls compactNow on the latched root session only when projected
+    # input-token savings beat the cache rewrite plus unamortized debt.
+    # Ships dark: settings namespace `cc-compaction-cost-gate` (enabled:
+    # false, mode: 'dry-run'). The compaction service is NOT injected (cordis
+    # strict-read); it is read through the guarded optional accessor.
+    - id: compaction-cost-gate
+      name: '@dsh-cc/compaction-cost-gate'
 
     # CCR tool-output compression (plan docs/plans/2026-09-10-ccr-tool-output-compression.md):
     # a `tools/post-execute` listener registered with `prepend: true`, composed
