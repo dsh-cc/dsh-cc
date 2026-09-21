@@ -19,6 +19,7 @@ import ToolRuntime from '@dsh-cc/tools'
 import { AgentRegistry } from '../src/registry.ts'
 import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
 import { sessionCwdStore } from '@dsh-cc/session-cwd'
+import { mountActorContractGate, ActorContractGate } from '../src/actor-contract-gate.ts'
 
 const signal = new AbortController().signal
 
@@ -106,6 +107,7 @@ interface Mount {
   continuableStarts(): Record<string, unknown>[]
   childAgent: Agent & { appended: { type: string; data?: unknown }[] }
   agent: Agent
+  gate: ActorContractGate
 }
 
 const tmpRoots: string[] = []
@@ -114,13 +116,14 @@ afterEach(() => {
   sessionCwdStore.clear()
 })
 
-async function mount(opts: { parentCwdInSubdir?: boolean } = {}): Promise<Mount> {
+async function mount(opts: { parentCwdInSubdir?: boolean; definitionBody?: string } = {}): Promise<Mount> {
   const ws = mkdtempSync(join(tmpdir(), 'task-isolation-'))
   tmpRoots.push(ws)
   mkdirSync(join(ws, '.claude', 'agents'), { recursive: true })
   writeFileSync(
     join(ws, '.claude', 'agents', 'isolated.md'),
-    '---\nname: isolated\ndescription: isolated worker\nisolation: worktree\n---\nISOLATED PERSONA MARKER\n',
+    opts.definitionBody
+      ?? '---\nname: isolated\ndescription: isolated worker\nisolation: worktree\n---\nISOLATED PERSONA MARKER\n',
   )
   const parentCwd = opts.parentCwdInSubdir === true ? join(ws, 'packages', 'app') : ws
 
@@ -161,8 +164,10 @@ async function mount(opts: { parentCwdInSubdir?: boolean } = {}): Promise<Mount>
   registerTaskTool(ctx, registry)
 
   const agent = { session: { header: { cwd: parentCwd } } } as unknown as Agent
+  const gate = mountActorContractGate(ctx)
   return {
     ctx,
+    gate,
     requests: () => shell.requests,
     setScript: overrides => { shell.script = [...overrides, ...creationScript(ws)] },
     emit,
@@ -289,5 +294,39 @@ describe('WS-3 subagent isolation: worktree (fake shell)', () => {
     const result = await call(m.ctx, { subagent_type: 'isolated', description: 'w', prompt: 't' }, m.agent)
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('worktree isolation for subagent')
+  })
+})
+
+const ISOLATED_BODY = (model: string | null): string =>
+  '---\nname: isolated\ndescription: isolated worker\nisolation: worktree\n'
+  + (model === null ? '' : `model: ${model}\n`)
+  + '---\nISOLATED MARKER\n\n'
+  + '<!-- actor-contract:start -->\n'
+  + '## Actor and evidence contract\n'
+  + 'NO-USER-IDENTITY-SENTINEL\n'
+  + '<!-- actor-contract:end -->\n'
+
+describe('WS-3 + actor-contract gate (§3.1 worktree seam)', () => {
+  it('gate open (raw glm-4.7 token): marked block kept BEFORE the worktree contract, markers gone', async () => {
+    const m = await mount({ definitionBody: ISOLATED_BODY('glm-4.7') })
+    const result = await call(m.ctx, { subagent_type: 'isolated', description: 'w', prompt: 't' }, m.agent)
+    expect(result.isError).toBe(false)
+    const persona = m.continuableStarts()[0]!['persona'] as string
+    expect(persona).toContain('NO-USER-IDENTITY-SENTINEL')
+    expect(persona).not.toContain('actor-contract:')
+    expect(persona.indexOf('NO-USER-IDENTITY-SENTINEL')).toBeLessThan(persona.indexOf('## Isolated worktree'))
+  })
+
+  it('gate closed: block+markers absent, worktree contract still appended', async () => {
+    const m = await mount({ definitionBody: ISOLATED_BODY('sonnet') })
+    m.gate.setSource(() => ({ models: [] }))
+    m.gate.onChange()
+    const result = await call(m.ctx, { subagent_type: 'isolated', description: 'w', prompt: 't' }, m.agent)
+    expect(result.isError).toBe(false)
+    const persona = m.continuableStarts()[0]!['persona'] as string
+    expect(persona).not.toContain('NO-USER-IDENTITY-SENTINEL')
+    expect(persona).not.toContain('actor-contract:')
+    expect(persona).toContain('ISOLATED MARKER')
+    expect(persona).toContain('## Isolated worktree')
   })
 })

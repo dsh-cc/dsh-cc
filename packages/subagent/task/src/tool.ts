@@ -42,6 +42,8 @@ import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { defineTool } from '@dsh-cc/tools'
 import { cwdOf } from '@dsh-cc/memory'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
+import { applyActorContract } from '@dsh-cc/claude-code-agents'
+import { actorContractPatterns, gateCandidates } from './actor-contract-gate.ts'
 import { toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex } from './plugin-agents.ts'
@@ -301,6 +303,14 @@ export function registerTaskTool(
       > => {
         const routes = ctx.get('ccModelRoutes') as ModelRoutes | undefined
         const agentOptions = toAgentOptions(routes?.resolve(definition.model))
+        // Actor-contract gate (§3.1): strip/keep the marked block per the
+        // configured model patterns, read live at spawn time. Inherit model
+        // → no candidates → fail-closed strip.
+        const gatedPersona = applyActorContract(
+          definition.systemPrompt,
+          gateCandidates(definition.model, routes?.resolve(definition.model)),
+          actorContractPatterns(ctx),
+        )
         // LIVE known set, read at execute time so MCP tools mounted or deferred
         // after this plugin's apply (including hash-suffixed public names) are
         // all restrictable candidates for the child's filter. Pass the calling
@@ -344,7 +354,7 @@ export function registerTaskTool(
         }
         const folded = {
           ...base,
-          persona: definition.systemPrompt,
+          persona: gatedPersona,
           ...(toolFilter !== undefined ? { toolFilter } : {}),
           ...(agentOptions !== undefined ? { agentOptions } : {}),
         }

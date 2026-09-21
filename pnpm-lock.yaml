@@ -501,6 +501,9 @@ importers:
       '@dsh-cc/settings-cascade':
         specifier: workspace:^
         version: link:../../settings/settings-cascade
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -523,6 +526,9 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent
         version: link:../../../../deepseek-harness/packages/subagent/subagent
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
       '@dsh-cc/claude-code-agents':
         specifier: workspace:^
         version: link:../../preset/claude-code-agents
@@ -2492,6 +2498,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
       '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../resume-pins
@@ -2541,6 +2550,9 @@ importers:
       '@deepseek-ai/dsh-session-query':
         specifier: link:../../../../deepseek-harness/packages/session-query/session-query
         version: link:../../../../deepseek-harness/packages/session-query/session-query
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../../../deepseek-harness/packages/settings/settings
+        version: link:../../../../deepseek-harness/packages/settings/settings
       '@deepseek-ai/dsh-shell':
         specifier: link:../../../../deepseek-harness/packages/shell/shell
         version: link:../../../../deepseek-harness/packages/shell/shell

@@ -34,7 +34,7 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-agent'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
-import { loadAgentsDir, discoverBundledAgents, type AgentDefinition } from '@dsh-cc/claude-code-agents'
+import { loadAgentsDir, discoverBundledAgents, applyActorContract, gateCandidates, DEFAULT_ACTOR_CONTRACT_MODELS, type AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { evaluateGate, type GateDecision, type GateEnv, type GateResolvedConfig } from './gate.ts'
 import { PinBlockedError, applyPinOverlay } from './overlay.ts'
@@ -131,14 +131,22 @@ function gitIdentity(cwd: string): { gitDir: string; gitCommonDir: string; branc
  * the changed-by-replacement class). `'missing'` for a gone/unreadable
  * definition; `null` when no current information exists (a pin without a
  * file location).
+ *
+ * §3.7: when `effectivePersona` is provided it receives the CURRENTLY read
+ * definition and must return the persona text to hash — the caller (which
+ * owns the ctx) computes the GATED persona so a gate toggle is a drift
+ * signal. Omitted → the raw persona (pre-§3.7 behavior).
  */
-export async function refingerprintDefinition(pin: ResumePin): Promise<string | 'missing' | null> {
+export async function refingerprintDefinition(
+  pin: ResumePin,
+  effectivePersona?: (def: AgentDefinition) => string,
+): Promise<string | 'missing' | null> {
   const definition = pin.definition
   if (definition.kind !== 'named') return null
   if (definition.source === 'bundled') {
     try {
       const found = discoverBundledAgents().find(def => def.agentType === definition.agentType)
-      return found === undefined ? 'missing' : definitionFingerprint(found)
+      return found === undefined ? 'missing' : definitionFingerprint(found, effectivePersona?.(found))
     } catch {
       return 'missing'
     }
@@ -148,7 +156,7 @@ export async function refingerprintDefinition(pin: ResumePin): Promise<string | 
     const defs: AgentDefinition[] = await loadAgentsDir(definition.baseDir, definition.source)
     const found = defs.find(def => def.filename === definition.filename)
       ?? defs.find(def => def.agentType === definition.agentType)
-    return found === undefined ? 'missing' : definitionFingerprint(found)
+    return found === undefined ? 'missing' : definitionFingerprint(found, effectivePersona?.(found))
   } catch {
     return 'missing'
   }
@@ -172,6 +180,23 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   // read LIVE on every gate evaluation (a flip is authoritative immediately).
   const readPolicyScope = registerNamespaceSafe(ctx, RESUME_POLICY_NAMESPACE, ResumePolicySchema)
   const policy = (): ResumePolicy => readResumePolicy(readPolicyScope())
+
+  // §3.7: the gated persona of a CURRENTLY read definition — the SAME rule
+  // the dispatch fold uses (task's tool.ts seam): candidates from the
+  // definition's model + its resolved route, patterns read LIVE from the
+  // mounted `ccActorContractGate` service (dispatch-time default when the
+  // task plugin is not mounted). Duck-typed services: this package must not
+  // depend on the task package (task depends on resume-pins).
+  const gatedPersonaOf = (def: AgentDefinition): string => applyActorContract(
+    def.systemPrompt,
+    gateCandidates(
+      def.model,
+      (ctx.get('ccModelRoutes') as { resolve(model?: string): { model?: string } | undefined } | undefined)
+        ?.resolve(def.model),
+    ),
+    (ctx.get('ccActorContractGate') as { patterns(): readonly string[] } | undefined)
+      ?.patterns() ?? DEFAULT_ACTOR_CONTRACT_MODELS,
+  )
 
   // Pre→post communication: gate-computed notices for a child's NEXT
   // send_message result, keyed by the tool execution identity (`exec.token`,
@@ -257,7 +282,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
       sessionExists,
       cwdExists: existsSync(pin.workspace.cwd),
       currentGit: gitIdentity(pin.workspace.cwd),
-      currentDefinitionFingerprint: await refingerprintDefinition(pin),
+      currentDefinitionFingerprint: await refingerprintDefinition(pin, gatedPersonaOf),
       restrictableNames,
       resolveCallConfig: config => {
         if (llm?.resolveCallConfig === undefined) return Promise.reject(new Error('no llm service for the availability preflight'))
@@ -353,7 +378,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
           annotations.push(`[resume-pin] ${childId}: state blocked (pin unreadable)`)
           continue
         }
-        const current = await refingerprintDefinition(pin)
+        const current = await refingerprintDefinition(pin, gatedPersonaOf)
         const pinnedFingerprint = pin.definition.kind === 'named' ? pin.definition.fingerprint : undefined
         const definitionChanged = current !== null && (pinnedFingerprint === undefined || current !== pinnedFingerprint)
         const parts = [`state ${pin.resume.state}`]

@@ -4517,6 +4517,61 @@
         "summary": "Rules render as static/conditional-instruction prompt segments via the `rules` guest seam (cc-shell bridge): per plugin, alwaysApply entries render verbatim under \"Rules from plugin <name>\", glob-scoped entries render as \"When editing files matching `<globs>`: <body>\", scopeless entries surface as general guidance with a warning, and each plugin's contribution is capped at a 4000-character prompt budget with explicit truncation. Runtime glob file-matching activation (Claude Code's per-turn rule activation against edited paths) is a documented build-time degradation and is not implemented, hence ux partial. The seam exists only in the cc preset plane; outside it the seam is unmounted and the rules tally reports skipped with a warning."
       }
     },
+    "settings.actor-contract": {
+      "title": "Subagent actor-contract settings gate",
+      "category": "settings",
+      "plane": "host",
+      "upstream": {
+        "summary": "Claude Code has no counterpart: there is no settings namespace that gates persona blocks inside subagent definitions by model pattern."
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "divergent"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/subagent/task/src/actor-contract-gate.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/compat/cc-plugin-loader/src/actor-contract-gate.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/preset/claude-code-agents/src/actor-contract.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/preset/claude-code-agents/tests/actor-contract.spec.ts",
+          "anchor": "matchesModelPattern"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/actor-contract-gate.spec.ts",
+          "anchor": "actor-contract gate reader"
+        },
+        {
+          "type": "test",
+          "path": "packages/compat/cc-plugin-loader/tests/actor-contract-gate.spec.ts",
+          "anchor": "actor-contract gate reader (loader-local duplicate)"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "Deliberate dsh-cc extension with no Claude Code analog: the opt-in `actor-contract` settings namespace ({ models: string[] }, default ['glm-*']) decides whether a `<!-- actor-contract -->`-marked persona block inside a subagent definition survives into the child's system prompt, matched case-insensitively against the child's resolved model. The gate is installed via installSectionSafe in packages/subagent/task and packages/compat/cc-plugin-loader (inside already-mounted plugins — no new preset mount line), so the surface is host-plane; the task plugin's `ccActorContractGate` service sits behind the preset cc-services isolate realm (agent.cordis.yml)."
+      }
+    },
     "settings.hot-reload": {
       "title": "Settings hot reload",
       "category": "settings",

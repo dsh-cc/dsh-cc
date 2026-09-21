@@ -226,3 +226,31 @@ describe('parseAgentJson', () => {
       .toThrow(/memory must be one of user, project, local/)
   })
 })
+
+describe('actor-contract marker validation', () => {
+  const start = '<!-- actor-contract:start -->'
+  const end = '<!-- actor-contract:end -->'
+  const md = (body: string): string => `---\ndescription: x\n---\n${body}`
+
+  it('throws on a start marker with no later end marker', () => {
+    expect(() => parseAgentMarkdown('/tmp/a.md', md(`p\n${start}\ngated`), 'project'))
+      .toThrow(/\/tmp\/a\.md.*actor-contract:start/)
+  })
+
+  it('throws on an end marker with no prior start marker', () => {
+    expect(() => parseAgentMarkdown('/tmp/a.md', md(`p\n${end}\nq`), 'project'))
+      .toThrow(/actor-contract:end/)
+  })
+
+  it('throws on a nested second start before the pair closes', () => {
+    expect(() => parseAgentMarkdown('/tmp/a.md', md(`${start}\na\n${start}\nb\n${end}`), 'project'))
+      .toThrow(/actor-contract:start/)
+  })
+
+  it('parses a valid marked definition and leaves systemPrompt unchanged', () => {
+    const text = md(`head\n${start}\nblock\n${end}\ntail`)
+    const def = parseAgentMarkdown('/tmp/a.md', text, 'project')
+    expect(def.systemPrompt).toContain('<!-- actor-contract:start -->')
+    expect(def.systemPrompt).toContain('block')
+  })
+})

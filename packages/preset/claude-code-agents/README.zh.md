@@ -20,6 +20,8 @@
 - `discoverAgents(projectRoot, userDir?): Promise<AgentDefinition[]>` 不含 home 目录默认值的层合并。
 - `loadAgentsDir(dir, source): Promise<AgentDefinition[]>` 与 `findProjectAgentsDir(start): Promise<string | undefined>` 按目录扫描与向上遍历。
 - `resolveToolRestriction(tools, disallowedTools): ToolRestriction | undefined` 与 `normalizeModel(model): string | undefined` 纯约束合并与模型归一化辅助函数，导出以供复用与测试。
+- `applyActorContract(persona, candidates, patterns): string` 对 persona 应用 `<!-- actor-contract:start -->`/`end` 标记门控：标记行总是被移除，两标记之间的内容仅当某个候选模型 id 匹配某个 pattern 时保留——否则内容一并剔除，且周边文本被干净地折叠。无标记的输入原样返回（逐字节相同）。
+- `matchesModelPattern(value, pattern): boolean` 与 `matchesAnyModelPattern(values, patterns): boolean` 门控背后的模型匹配器：大小写不敏感、整串匹配，`*` 是唯一通配符，pattern 中其余正则元字符均按字面处理。
 
 `AgentDefinition` 携带 `agentType`（文件 basename）、`whenToUse`、`systemPrompt`、`source`（`user` | `project` | `bundled`）、`baseDir`、`filename`，以及翻译后的可选字段。`toolRestriction` 值在结构上与 [`dsh-tools`](../../core/tools/README.md) 的 `ToolRestriction` 完全一致，因此消费方可以原样将其交给有作用域的 `ctx.tools.restrict()`。
 

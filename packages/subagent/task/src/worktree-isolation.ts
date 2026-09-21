@@ -24,6 +24,7 @@ import { isAbsolute, relative } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
+import { applyActorContract } from '@dsh-cc/claude-code-agents'
 import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
 import { setSessionCwd } from '@dsh-cc/session-cwd'
 import {
@@ -42,6 +43,7 @@ import {
   type GitCmd,
 } from '@dsh-cc/tool-git-worktree'
 import { SpawnPinCapture } from './resume-capture.ts'
+import { actorContractPatterns, gateCandidates } from './actor-contract-gate.ts'
 import type { BackgroundRequest } from './background-start.ts'
 import type { ShellRunResult } from '@deepseek-ai/dsh-shell'
 import type {} from '@deepseek-ai/dsh-shell'
@@ -413,7 +415,15 @@ export async function dispatchWorktreeIsolation(
   const record = await createIsolationWorktree(ctx, { parentCwd, childId, signal: parts.signal })
   worktrees.record(childId, record)
 
-  const persona = `${definition.systemPrompt}\n\n${worktreeContract(record.worktreePath, record.parentCwd)}`
+  // Actor-contract gate (§3.1): the isolation persona is built from the raw
+  // definition body BEFORE the dispatch fold exists, so the gate applies here,
+  // before the worktree contract is appended.
+  const gatedPersona = applyActorContract(
+    definition.systemPrompt,
+    gateCandidates(definition.model, routes?.resolve(definition.model)),
+    actorContractPatterns(ctx),
+  )
+  const persona = `${gatedPersona}\n\n${worktreeContract(record.worktreePath, record.parentCwd)}`
   const request: BackgroundRequest = {
     label: parts.label,
     prompt: [{ type: 'text', text: promptWithWorktreeNote(parts.argsPrompt, record.worktreePath) }],

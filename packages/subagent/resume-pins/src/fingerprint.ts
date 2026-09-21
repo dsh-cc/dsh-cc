@@ -8,6 +8,13 @@
  * (`source`, `baseDir`, `filename`) is deliberately excluded: the same file
  * discovered from a different layer must keep its identity.
  *
+ * §3.7: `effectivePersona` overrides the raw `systemPrompt` in the hashed
+ * content. Callers on a ctx-bearing path pass the GATED persona
+ * (`applyActorContract(systemPrompt, gateCandidates(...), patterns)`) so a
+ * gate toggle changes the fingerprint — a resume-drift signal — while an
+ * UNMARKED definition's gated persona is byte-identical to the raw one, so
+ * existing pins keep matching (zero retro-invalidation). Omitted → raw
+ * persona (the pre-§3.7 behavior).
  * @module @dsh-cc/subagent-resume-pins/fingerprint
  */
 
@@ -31,11 +38,11 @@ export function personaHash(persona: string): string {
  * stable key order. Optional fields absent from the definition are simply
  * omitted from the canonical form.
  */
-export function definitionFingerprint(def: AgentDefinition): string {
+export function definitionFingerprint(def: AgentDefinition, effectivePersona?: string): string {
   const content = {
     agentType: def.agentType,
     whenToUse: def.whenToUse,
-    systemPrompt: def.systemPrompt,
+    systemPrompt: effectivePersona ?? def.systemPrompt,
     toolRestriction: def.toolRestriction ?? null,
     skills: def.skills ?? null,
     mcpServers: def.mcpServers ?? null,

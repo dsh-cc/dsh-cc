@@ -78,3 +78,20 @@ critic carries `Bash` for read-only verification. Its read-only
 nature is a PERSONA CONTRACT, not an enforced restriction — the host does
 not block a mutating command from a backgrounded reasoner. Do not hand it
 tasks that tempt mutation, and review any backgrounded output before acting.
+
+## Writing subagent prompts (authoring rules)
+
+Order: identity → tool surface → evidence/contract → evaluation criteria.
+Evaluation never precedes capability: state what the agent has and lacks
+before what you will grade it on. The tool surface is one positive sentence
+("You have file-edit, search, and shell tools.") followed by negative
+exclusions that name behaviorally ABSENT surfaces only (e.g. "no tool that
+asks a person anything") — never enumerate the frontmatter tool list, and
+never copy surface names from other harnesses that do not exist in dsh-cc.
+
+Gateable blocks: sections wrapped in `<!-- actor-contract:start -->` /
+`<!-- actor-contract:end -->` (whole lines) are stripped at spawn unless the
+resolved child model matches the `actor-contract.models` settings patterns
+(default `['glm-*']`). Agents whose contract is GLM-specific (actor framing,
+evidence rules) opt in by adding their own marked block near the identity
+line; content outside markers reaches every model.
