@@ -1,6 +1,7 @@
 # Subagent Actor Contracts: pin identity, pin tool surface, then pin evidence
 
-Date: 2026-09-21. Status: **Proposed (amended ×2)**. Origin: ZCode design borrow analysis
+Date: 2026-09-21. Status: **Implemented** — PR #98 (pending merge), config-is-prompt
+follow-up verification outstanding (§4). Origin: ZCode design borrow analysis
 (zai-org/ZCode @ 872ad960).
 
 Design-review record:
