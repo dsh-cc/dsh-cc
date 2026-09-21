@@ -116,3 +116,24 @@ export async function gateAutoResumeTarget(opts: {
   )
   return 'fresh'
 }
+
+/**
+ * Boot auto-resume failure policy. A live lock contention (the anchored
+ * session is still open in another running TUI) rejects with
+ * `SessionAlreadyOwnedError` — that is NOT a stale marker, so the resume
+ * anchor must survive. Duck-typed by `error.name` because the error class
+ * lives in @deepseek-ai/dsh-session-persistence, which this UI package does
+ * not depend on.
+ */
+export function handleResumeFailure(
+  error: unknown,
+  opts: { cwd: string; showNotice: (message: string) => void },
+): void {
+  if (error instanceof Error && error.name === 'SessionAlreadyOwnedError') {
+    opts.showNotice('该会话仍在另一个窗口运行，已为你开启新会话；如需找回它，请先关闭那个窗口')
+    return
+  }
+  // Stale marker: session gone — clear it (no loop); fresh must not steal the marker.
+  clearResumeTarget({ cwd: opts.cwd })
+  opts.showNotice('上次会话已失效，已开启新会话，可 /resume 手动选择')
+}
