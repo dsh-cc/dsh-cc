@@ -12,6 +12,9 @@
     "./package.json": "./package.json"
   },
   "license": "Apache-2.0",
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.85.1"
+  },
   "dependencies": {
     "zod": "^4.4.3",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
