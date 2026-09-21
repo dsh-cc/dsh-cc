@@ -3,7 +3,8 @@
 Date: 2026-09-20. Status: design — critic cold review passed with amendments (12 findings:
 marker-contract violation fixed per §3.5, lane-inheritance gap closed via `onUnrouted: 'skip'`,
 exit-consistency reduced to decidable rules, route-null escalation added, input-size cap
-added; all baked in below).
+added; all baked in below). Implementation-gate re-review against HEAD a110b99 (same date):
+GO-WITH-AMENDMENTS, findings F1-F8 baked in below.
 
 Origin: borrowed from SoL-Pi (arXiv:2609.20519), whose Evidence-Preserving Reducer was one of
 four mechanisms to survive a ~150-direction auto-research funnel. The paper's finding we are
@@ -42,7 +43,7 @@ Harness-repo anchors are read-only per the harness-repo-readonly directive.
   skips non-`accept` decisions, and on any internal failure catches and returns the
   downstream decision unchanged — fail-soft is a hard invariant of this seam (a throw
   would turn a user tool result into an error and lose data).
-- Passthrough gate list: `index.ts:155-190` (`!cfg.enabled`, protected tools,
+- Passthrough gate list: `index.ts:155-176` (savings gate at :175, projectKey at :184) (`!cfg.enabled`, protected tools,
   self-retrieve, decision with `value`, no content blocks, non-text blocks, error results
   under `2*minBytes`, under `minBytes`, `route()` null, savings under `minSavingsRatio`,
   missing projectKey). **`minBytes` default 8192 is compared against the tokenMeter token
@@ -51,18 +52,21 @@ Harness-repo anchors are read-only per the harness-repo-readonly directive.
 - Deterministic compression: `route(text)` in `context-crusher/src/router.ts:134` — pure,
   no I/O; may return `null`.
 - Store and marker: content-addressed store `<dshHome>/ccr/<projectKey>/<hash16>` with
-  atomic temp+rename writes (`src/store.ts:68-71`). **`buildMarker` output is a PINNED
+  atomic temp+rename writes (`src/store.ts:60-75`; put at :60, temp/rename at :71-74). **`buildMarker` output is a PINNED
   CONTRACT** — exact grammar
   `^\[dsh-cc compressed (\d+)→(\d+) tokens\. Original: ccr:\/\/([0-9a-f]{16})\]$`
-  (`src/marker.ts`, pinned by test). Both `isCrusherStub`
-  (`tool-use-summary/src/framing.ts:36`) and the microcompact substitution guard
-  (`compaction-micro/src/index.ts` §5.6 region — "a crushed result's reversibility lives
-  in its `context_retrieve` locator") call `parseMarker`, so any replacement body MUST end
+  (`src/marker.ts`, pinned by test). The microcompact substitution guard
+  (`compaction-micro/src/index.ts:255`) calls `isCrusherStub` imported from
+  tool-use-summary, which parses via its OWN mirrored grammar
+  (`tool-use-summary/src/crusher-marker.ts`) — neither downstream consumer calls the
+  crusher's `parseMarker` directly, but the verbatim `buildMarker(...)` line as the last
+  line of the replacement body remains sufficient for both guards (framing.ts:36-39 tests
+  any line, not only the last), so any replacement body MUST end
   with the verbatim `buildMarker(...)` line or downstream stub protection silently fails
   and a later pass would destroy the retrieve locator.
 - Cheap-lane access: `runSideQuery(ctx, { alias, system, prompt, ... })`
   (`packages/compaction/tool-use-summary/src/index.ts:139`; implementation
-  `side-query/src/index.ts:72`). **Default behavior inherits the caller's route when the
+  `packages/llm-tuning/side-query/src/index.ts:72`). **Default behavior inherits the caller's route when the
   alias is unrouted** — the known dsh-cc-shunt pitfall. The mitigation exists in the same
   API: `opts.onUnrouted: 'skip'` returns `{ ok: false, reason: 'unrouted' }` instead of
   inheriting, and successful results expose route provenance. Using the default here would
@@ -108,10 +112,13 @@ reducer is disabled.
 A tool result is a reducer candidate only when all hold:
 
 - `reducer-enabled` is true;
-- the tool name is in the command surface (default `['bash', 'shell']` — runtime names per
-  `packages/core/tools/src/cc-names.ts`);
-- the **invocation command line** (from the tool input, e.g. `input.command`) matches one
-  of the configured command patterns (default set below);
+- the tool name is in the command surface (default `['bash']` — there is no runtime
+  `shell` tool; runtime names per `packages/core/tools/src/cc-names.ts` HARNESS_TOOLS,
+  where `Bash` is only the CC-facing alias);
+- the **invocation command line** (from `exec.arguments` — `ToolExecutionInput.arguments:
+  unknown`, `packages/core/tools/src/tool-types.ts:124`; the bash tool's argument key is
+  `command`, read as `(exec.arguments as Record<string, unknown>).command` when it is a
+  string) matches one of the configured command patterns (default set below);
 - the result already passed the crusher's existing size gates (no separate reducer floor
   knob — the `minBytes`/`2*minBytes` gates in tokenMeter tokens apply, so the reducer only
   ever sees results the crusher itself considered big enough);
@@ -125,6 +132,8 @@ pnpm .* (build|test|vitest|tsc|lint)   npm (run )?(build|test)   yarn (build|tes
 npx (vitest|jest|tsc|eslint)           vitest|jest|mocha|pytest|go test|cargo test|make\b
 ```
 
+(`make\b` also matches `cmake` — accepted as an eligibility-only over-trigger.)
+
 File reads and search results never enter the reducer — the paper routes them around it,
 and ccr already handles them deterministically. User-supplied patterns are compiled at
 resolve time inside try/catch; an invalid pattern is dropped with a debug log (arbitrary
@@ -133,14 +142,22 @@ more than the invocation line).
 
 ### 3.3 Receipt extraction (cheap lane)
 
-One side query per candidate, with the side-query discipline already established in the
-repo (timeout, maxTokens, declared fail-mode, purpose label):
+One side query per candidate. `SideQueryOptions` provides alias, agent, system, prompt,
+maxTokens, timeoutMs, onUnrouted, rejectToolCalls, signal
+(`packages/llm-tuning/side-query/src/index.ts:26-59`); fail-mode and purpose labeling are
+conventions this stage honors internally, not API options:
 
 - lane: `runSideQuery(ctx, { alias: reducer-alias, onUnrouted: 'skip', ... })` —
   **mandatory `onUnrouted: 'skip'`** so an unconfigured `haiku` alias never bills the
   parent route; `unrouted` maps to a ledger row `applied:false, reason:'lane-missing'`
-  (never an error). A response with inherited-route provenance is likewise rejected and
-  ledgered.
+  (never an error). Lane-provenance rejection must cover TWO cases: (i) the result
+  reports `inheritedRoute === true`; (ii) a model-only (string-form) alias hole —
+  `toOneShotRoute` (`packages/compat/cc-model-aliases/src/agentOptions.ts:41-52`) fills a
+  missing provider from the parent request header while side-query reports
+  `inheritedRoute: false`. The implementation must additionally resolve the reducer alias
+  and reject when the resolved route has no explicitly configured provider (ledger reason
+  `lane-inherited`); even through the hole, spend stays model-bound to the cheap alias
+  model.
 - budget: `reducer-timeout-ms` default **10 000** (the post-execute waterfall blocks the
   agent loop for the duration; the latency budget is stated, not hidden), hard ceiling
   `reducer-max-tokens` default 1024 for receipt output.
@@ -170,11 +187,17 @@ truncated) source view.
 
 ### 3.4 Deterministic verifier (the mechanism that makes this safe)
 
-Pure function `verifyReceipt(view, receipt, isError) -> { ok, reason? }` — `isError` is the
-tool result's own error flag, passed in from the decision context; it is the only exit
-signal we fully trust. A receipt is rejected when any check fails:
+Pure function `verifyReceipt(view, receipt, isError, estimate) -> { ok, reason? }` —
+`isError` is the tool result's own error flag, passed in from the decision context; it is
+the only exit signal we fully trust. `estimate: (text: string) => number` is injected
+(token estimation needs the tokenMeter service, which would break the stated purity; the
+call site binds `ctx.tokenMeter.estimateMessage`; Phase 0 tests inject a deterministic
+stub). A receipt is rejected when any check fails:
 
-1. **schema** — zod parse against the receipt shape; unknown keys rejected.
+1. **schema** — parse against the receipt shape with `@deepseek-ai/schemastery` (see
+   `packages/context/context-crusher/src/config.ts:6`), not zod; schemastery `z.object`
+   STRIPS unknown keys by default, so "unknown keys rejected" requires an explicit
+   exact-key-set mechanism, pinned by a test.
 2. **exact quotes** — every `evidence` and `key_output` string satisfies
    `view.includes(q)` after NFC normalization of both sides; quotes shorter than 8 chars
    rejected outright (stops vacuous matches like `"FAIL"`).
@@ -185,8 +208,8 @@ signal we fully trust. A receipt is rejected when any check fails:
    `/exit(?:ed with)? code (\d+)/i`, `/make.*Error (\d+)/` — and the captured number
    equals the claim; otherwise the field must be absent. A claimed-but-unverifiable code
    rejects the receipt.
-4. **size gain** — receipt token estimate < `reducer-min-savings-ratio` (default 0.5) ×
-   source token estimate. No gain, no receipt.
+4. **size gain** — `estimate(receipt text)` < `reducer-min-savings-ratio` (default 0.5) ×
+   `estimate(source text)`. No gain, no receipt.
 5. **count consistency** — when `counts` present, `fail` must equal `failures.length`.
 
 On rejection the stage returns the **original text untouched** (not the deterministic
@@ -194,6 +217,12 @@ route output: when route produced a sub-threshold candidate we do not mix partia
 compressions — one failure story per blob). The ledger records
 `applied:false, reason:'verify:<check>'` for every rejection — rejection patterns are
 instrumentation, not noise.
+
+Type note: `LedgerRow.kind` is currently typed `'search' | 'log'`
+(`packages/context/context-crusher/src/types.ts:50`) and rows carry no `reason` field;
+the reducer extends the type additively with `kind: 'receipt'` plus a `reason` field
+(values like `verify:<check>`, `lane-missing`, `lane-inherited`). savings.jsonl is
+append-only with no in-repo consumer; extend, never overload the existing kinds.
 
 ### 3.5 Replacement body and downstream interplay
 
@@ -255,7 +284,14 @@ existing dry-run ordering — and ledger rows carry `applied:false`.
   `mountAgentLoopTestDependencies` with a ReplayAdapter serving a scripted receipt (TUS
   `producer.spec.ts` assembly pattern: fake `ccModelRoutes`, fake settings scope).
   Explicit tests: unrouted-alias path ledgered `lane-missing` with no model call;
-  oversized source degrades through truncation and still verifies; marker round-trip.
+  oversized source degrades through truncation and still verifies; marker round-trip;
+  a composition test pinning that a real bash tool execution surfaces its command line
+  under `exec.arguments.command` (the eligibility input source); the manifest/parity
+  obligation — amend the `engine.context-compression` entry in
+  docs/claude-code-capabilities.yaml (currently :227-245) to describe the reducer stage
+  and the new `reducer-*` keys, regenerate with `pnpm docs:parity`, and commit the
+  regenerated docs in the same commit (house rule per AGENTS.md;
+  check:capabilities/check:parity run in pre-commit/presubmit).
 - **Phase 2 — dogfood.** Enable for this repo's own test/build commands on one worktree
   for a week; read the ledger: trigger rate, verify-failure rate by check, median savings
   ratio, side-query latency percentiles (the 10 s waterfall budget must hold in
@@ -277,7 +313,19 @@ existing dry-run ordering — and ledger rows carry `applied:false`.
   receipt of failing tests + verbatim evidence, and the full log stays retrievable; when
   the cheap lane is unrouted the feature is byte-identical to off.
 
+File-size house rule: 500-line hard cap per non-test .ts file
+(scripts/check-file-size.mjs; the baseline file currently lists zero baselined files and
+must stay that way). index.ts is at 273 lines (227 headroom); eligibility + escalation +
+dry-run edits are expected at roughly +100-160 lines, so if index.ts approaches the cap
+the reducer stage logic must live in its own module (e.g. reducer.ts, alongside the
+planned receipt.ts/verifier.ts) — never ratchet the baseline.
+
 ## 6. Risks and explicit non-goals
+
+- **Sequencing with deferred externalization.**
+  docs/plans/2026-09-20-ccr-deferred-externalization.md references this plan and edits
+  the same index.ts insertion path (:189, :242 in that doc); land the reducer first, or
+  rebase the externalization doc's anchors after whichever lands second.
 
 - **Cheap-lane quality variance.** The verifier bounds the blast radius to "wasted side
   query, original bytes shown" — the verifier's failure costs a bounded side query, never

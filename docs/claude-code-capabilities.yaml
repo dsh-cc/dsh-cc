@@ -242,12 +242,23 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: context-crusher" }
       - { type: test, path: packages/context/context-crusher/tests/composition.spec.ts }
+      - { type: test, path: packages/context/context-crusher/tests/composition-reducer.spec.ts }
     deviation:
       kind: divergent
       summary: >-
         Not an upstream CC surface: a dsh-cc extension shipped flag-gated
         (enabled: false, mode: dry-run by default) so savings are measured
-        before any replacement.
+        before any replacement. An optional evidence-preserving reducer
+        escalates noisy build/test output the deterministic router declines
+        to a cheap-lane receipt (a failing-test list with verbatim evidence
+        quotes), verified deterministically before substitution (schema,
+        exact quotes, exit consistency, size gain, count consistency) with
+        original-bytes fallback on any failure. The reducer ships dark
+        (reducer-enabled: false) with knobs reducer-commands,
+        reducer-max-input-tokens (30000), reducer-min-savings-ratio (0.5),
+        reducer-max-tokens (1024), reducer-timeout-ms (10000), and
+        reducer-alias ('haiku'; unrouted or inherited-provider lanes are
+        skipped, never billed to the parent route).
 
   engine.coordinator:
     title: Coordinator mode

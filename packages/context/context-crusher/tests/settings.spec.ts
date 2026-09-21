@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveConfig, overlaySettings, DEFAULTS } from '../src/config.ts'
+import { resolveConfig, overlaySettings, DEFAULTS, DEFAULT_REDUCER_COMMANDS } from '../src/config.ts'
 import type { CrusherConfig } from '../src/types.ts'
 
 describe('config resolution', () => {
@@ -7,6 +7,10 @@ describe('config resolution', () => {
     expect(resolveConfig()).toEqual({
       enabled: false, mode: 'dry-run', minBytes: 8192, minSavingsRatio: 0.4,
       protectedTools: DEFAULTS.protectedTools,
+      reducerEnabled: false,
+      reducerCommands: DEFAULT_REDUCER_COMMANDS.map((source) => new RegExp(source)),
+      reducerMaxInputTokens: 30_000, reducerMinSavingsRatio: 0.5,
+      reducerMaxTokens: 1024, reducerTimeoutMs: 10_000, reducerAlias: 'haiku',
     })
   })
 

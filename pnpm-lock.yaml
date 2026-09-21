@@ -642,12 +642,18 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: link:../../../../deepseek-harness/packages/settings/settings
         version: link:../../../../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/dsh-shell-env':
+        specifier: link:../../../../deepseek-harness/packages/shell/shell-env
+        version: link:../../../../deepseek-harness/packages/shell/shell-env
       '@deepseek-ai/dsh-subprocess-local':
         specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
         version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-tool-bash':
+        specifier: link:../../../../deepseek-harness/packages/shell/tool-bash
+        version: link:../../../../deepseek-harness/packages/shell/tool-bash
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
@@ -663,9 +669,18 @@ importers:
       '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code
+      '@dsh-cc/model-aliases':
+        specifier: workspace:^
+        version: link:../../compat/cc-model-aliases
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
+      '@dsh-cc/side-query':
+        specifier: workspace:^
+        version: link:../../llm-tuning/side-query
+      '@dsh-cc/tool-use-summary':
+        specifier: workspace:^
+        version: link:../../compaction/tool-use-summary
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
