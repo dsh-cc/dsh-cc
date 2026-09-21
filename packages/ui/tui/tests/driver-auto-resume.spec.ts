@@ -102,9 +102,12 @@ describe('createDriver auto-resume failure policy', () => {
     expect(resumeCalls).toHaveLength(1)
     expect(createCalls).toHaveLength(0)
     expect(readResumeTarget()).toBe('s-old')
-    // No resume-failure notice (an unrelated boot/worktree notice may exist).
-    expect(driver.state.notice).not.toContain('上次会话已失效')
-    expect(driver.state.notice).not.toContain('仍在另一个窗口')
+    // No resume-failure notice. `state.notice` is undefined until any notice
+    // fires — and whether an unrelated boot/worktree notice fires depends on
+    // the checkout path (worktree vs plain CI checkout), so normalize to ''.
+    const notice = driver.state.notice ?? ''
+    expect(notice).not.toContain('上次会话已失效')
+    expect(notice).not.toContain('仍在另一个窗口')
     await driver.dispose()
   })
 })
