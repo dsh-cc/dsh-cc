@@ -627,6 +627,9 @@ importers:
       '@deepseek-ai/dsh-bash-local':
         specifier: link:../../../../deepseek-harness/packages/shell/bash-local
         version: link:../../../../deepseek-harness/packages/shell/bash-local
+      '@deepseek-ai/dsh-compaction':
+        specifier: link:../../../../deepseek-harness/packages/compaction/compaction
+        version: link:../../../../deepseek-harness/packages/compaction/compaction
       '@deepseek-ai/dsh-invariants':
         specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
         version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants

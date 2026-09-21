@@ -1,6 +1,11 @@
 # CCR Deferred Externalization: send full output twice, swap on the third request
 
-Date: 2026-09-20. Status: design — critic cold review passed with amendments (7 findings:
+Date: 2026-09-20. Status: design — two reviews passed with amendments, all baked in.
+Second (pre-implementation, code-grounded) review: GO-WITH-AMENDMENTS — B1 cache-safety
+test claims rewritten (the cited test was vacuous), M1 `eventSeq` dropped from the
+resident entry (unknowable at insertion time), M2 subagent-exclusion rationale corrected,
+plus four minor pins (listener registration flags, ledger path, Phase-0 test scope,
+dry-run I/O divergence). First review (7 findings:
 gate arithmetic rewritten to suffix cost, prune-row pairing added to the swap, all swaps
 pinned to the pre-step boundary, send counting moved to first-chunk with a purpose
 allowlist; all baked in below).
@@ -64,9 +69,14 @@ Harness-repo anchors are read-only per the harness-repo-readonly directive.
 - Crusher insertion-time path: `context-crusher/src/index.ts:178-201` — savings check at
   `:178`, store put at `:187-190`, replacement assembly at `:192-195`, decision rewrite at
   `:197-201`. When deferral applies, steps `:192-201` are skipped; `:187-190` still runs.
-- PR #34's cache-safety test asserts old events' bytes never change. Deferred mode
-  **intentionally relaxes that invariant** — the relaxation lands as a scoped test change
-  gated on `defer-requests > 0` (§3.6), not a silent behavior flip.
+- PR #34's composition test contains a *vacuous* byte-stability assertion (it compares each
+  event to its own deep clone). Deferred mode amends the test story rather than relaxing a
+  real guard: the executor must (a) harden the existing test to capture pre-tool event
+  bytes before running the tool and compare after, (b) keep it green under
+  `defer-requests: 0` (bit-identical to today), (c) add a surface-level test for
+  `defer-requests > 0` asserting the surface shows the stub after the swap while the log
+  stays append-only (the swap changes the surface via `surfaceOp: replace`, not old
+  events' bytes).
 - Store keys deliberately carry no session id (resume would dead-reference them). The
   resident-entry ledger below keys rows by **store hash** for the same reason; see §3.5
   for why session-keyed rows would strand entries across resume/fork.
@@ -88,8 +98,12 @@ agent/pre-step: evaluate swaps for every eligible entry, one atomic critical sec
   per entry (3.3); entries that fail the cost gate stay resident (3.4)
 ```
 
-A "resident entry": `{ hash, eventSeq, callId, sentCount: 0, tokensSaved, createdAt }`.
-(No session id and no prefix-size snapshot — both would go stale; see §3.4/§3.5.)
+A "resident entry": `{ hash, callId, sentCount: 0, tokensSaved, createdAt }`. `callId` is
+the **sole locator** — `eventSeq` is unknowable at insertion time (the crusher acts in
+`tools/post-execute` and returns a decision; the harness appends the `tool/result`
+downstream), so the swap pass resolves the event by scanning the live surface for the
+callId at pre-step time (compaction-micro's `snapshotCandidates` precedent). (No session
+id and no prefix-size snapshot — both would go stale; see §3.4/§3.5.)
 
 ### 3.2 Counting without fragility
 
@@ -101,17 +115,26 @@ reaching the provider (network errors, aborts, adapter retries): an attempt that
 produced a chunk never aged evidence.
 
 Purpose filtering is an **allowlist**, not a denylist: only main-loop requests count
-(`purpose` undefined or the main-loop value); `compaction`, `session-title`, subagent
-fan-outs, and any future auxiliary purpose never age evidence out of context. Swapped or
+(`purpose` undefined or the main-loop value; the harness purpose union is closed to
+`'compaction' | 'session-title'`, so the allowlist is exact). Subagent fan-outs carry
+`purpose: undefined` like the main loop — their exclusion is a **fingerprint side
+effect** (subagents get fresh history that never contains the resident), not a purpose
+filter. To close the fork-inheriting corner, the listener additionally requires
+`options.sessionId` to equal the crusher's own session id (held in memory only, never in
+the ledger — the ledger stays session-id-free per §3.5). The stream listener registers
+with `{ global: true, prepend: true }` (cache-health precedent) because the crusher runs
+in its own realm; swapped or
 dropped entries stop matching by construction — the invariant is that a resident entry
 always matches its stored full text until it is swapped or dropped.
 
 ### 3.3 The swap pass (pre-step boundary, atomic per entry)
 
 Counter updates never swap directly. On every `agent/pre-step`, each entry whose
-`sentCount > residency` runs one **non-awaiting critical section**:
+`sentCount` has reached the residency threshold (`>=` — "send full output twice, swap on
+the third request"; an earlier draft's `>` contradicted the title and §5 and is corrected
+here) runs one **non-awaiting critical section**:
 
-1. Locate the current event by `callId`, confirm `eventSeq`, and confirm the current body
+1. Locate the current event by `callId` (the sole locator — see §3.1) and confirm the current body
    still byte-equals the stored full text (user compacted / microcompact already folded /
    manual intervention → drop the entry, ledger `swap:stale`).
 2. Append the two rows, microcompact shape exactly:
@@ -158,7 +181,7 @@ ledger `swap:abandoned` so decks of stale residents cannot accumulate unboundedl
 
 ### 3.5 Resume and durability
 
-- Resident entries persist to `<dshHome>/ccr/<projectKey>/defer-<sessionId>.jsonl` as
+- Resident entries persist to `<dshHome>/ccr/defer/<sessionId>.jsonl` as
   append-only rows (store write succeeded → row; swap committed → row).
 - On session start, rebuild by **fingerprint match against the live surface**, not by
   session id: for each recorded hash, the stored full text is searched among current
@@ -181,8 +204,11 @@ ledger `swap:abandoned` so decks of stale residents cannot accumulate unboundedl
 
 `mode: 'dry-run'` interaction: the deferral path stores and counts but **never appends
 anything to the session**; intent rows in the ledger carry `applied:false`. A test pins
-this. `defer-requests: 0` must be byte-identical to current behavior (the existing
-composition cache-safety test stays; a second test pins the relaxed invariant for `> 0`).
+this. Note the divergence this creates with today's dry-run, which returns *before*
+`store.put` — deferred dry-run writes store files and ledger rows, it only skips session
+appends. `defer-requests: 0` must be byte-identical to current behavior: the hardened
+pre-tool-bytes composition test (see §2, B1) stays green, and a second test pins the
+surface-level swap for `> 0` while the log stays append-only.
 
 ### 3.7 Interaction boundaries
 
@@ -261,6 +287,9 @@ in above:
    ordering-race, retry-over-count, and dry-run tests added.
 
 Residual risk handed to the executor: `llm/stream` chunk delivery for errored streams must
-be confirmed against the adapter implementation during Phase 0 (the counting rule assumes
-a stream that fails before any chunk emits zero chunks) — pin it with a ReplayAdapter test
-before trusting the counter.
+be pinned during Phase 0 — the counting rule assumes a stream that fails before any
+chunk emits zero chunks. The adapter contract itself lives in the read-only harness repo
+and cannot be confirmed from this checkout, so the pin is scoped to our listener: an
+in-repo test asserting the listener counts zero on a stream that throws before its first
+yield. Phase 0 also verifies the `llm/stream` registration uses `{ global: true,
+prepend: true }` (realm boundary; receipt checked in-test).

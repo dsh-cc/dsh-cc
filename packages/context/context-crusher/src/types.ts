@@ -44,6 +44,25 @@ export interface CrusherConfig {
   'reducer-timeout-ms'?: number
   /** Cheap-lane alias for the side query (§3.3). Defaults to 'haiku'. */
   'reducer-alias'?: string
+  /**
+   * Deferred externalization residency (design §3.6): eligible results are
+   * stored immediately but enter the session UNMODIFIED, and are swapped to
+   * the standard stub after this many counted main-loop sends
+   * (`2` = paper parity). `0` (default) disables deferral — behavior is
+   * byte-identical to immediate mode.
+   */
+  'defer-requests'?: number
+  /** Suffix-cost gate multiplier for the deferred swap. Defaults to `1.5`. */
+  'defer-margin'?: number
+  /** Sweep age (ms) for residents that never swapped. Defaults to `1_800_000`. */
+  'defer-max-age-ms'?: number
+  /**
+   * Window-pressure override distance in tokens: when the session estimate
+   * comes within this distance of the model window, residents swap
+   * regardless of the gate. Unset = inactive (also inactive without a
+   * window source).
+   */
+  'defer-urgency-tokens'?: number
 }
 
 /** Validated, detached, deeply immutable configuration. */
@@ -61,6 +80,10 @@ export interface ResolvedConfig {
   readonly reducerMaxTokens: number
   readonly reducerTimeoutMs: number
   readonly reducerAlias: string
+  readonly deferRequests: number
+  readonly deferMargin: number
+  readonly deferMaxAgeMs: number
+  readonly deferUrgencyTokens?: number
 }
 
 /** One append-only savings-ledger row (`savings.jsonl`). */

@@ -37,7 +37,8 @@
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/side-query": "workspace:^",
-    "@dsh-cc/tools": "workspace:^"
+    "@dsh-cc/tools": "workspace:^",
+    "@deepseek-ai/dsh-compaction": ">=0.1.5-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
@@ -67,7 +68,8 @@
     "@dsh-cc/side-query": "workspace:^",
     "@dsh-cc/tool-use-summary": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@deepseek-ai/dsh-compaction": "link:../../../../deepseek-harness/packages/compaction/compaction"
   },
   "publishConfig": {
     "access": "public"

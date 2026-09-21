@@ -44,6 +44,9 @@ export const DEFAULTS: ResolvedConfig = deepFreeze({
   reducerMaxTokens: 1024,
   reducerTimeoutMs: 10_000,
   reducerAlias: 'haiku',
+  deferRequests: 0,
+  deferMargin: 1.5,
+  deferMaxAgeMs: 1_800_000,
 })
 
 const MODES: readonly CrusherMode[] = ['dry-run', 'on']
@@ -62,6 +65,10 @@ export const Config: z<CrusherConfig> = z.object({
   'reducer-max-tokens': z.number().step(1).min(1),
   'reducer-timeout-ms': z.number().step(1).min(1),
   'reducer-alias': z.string(),
+  'defer-requests': z.number().step(1).min(0),
+  'defer-margin': z.number().min(0),
+  'defer-max-age-ms': z.number().step(1).min(1),
+  'defer-urgency-tokens': z.number().step(1).min(1),
 })
 
 /** Settings namespace schema (same shape as the config layer). */
@@ -109,6 +116,22 @@ export function resolveConfig(config: CrusherConfig = {}, options?: { log?: (mes
       return []
     }
   })
+  if (config['defer-requests'] !== undefined
+    && (!Number.isInteger(config['defer-requests']) || config['defer-requests'] < 0)) {
+    throw new Error('context-crusher: defer-requests must be a non-negative integer')
+  }
+  if (config['defer-margin'] !== undefined
+    && (!Number.isFinite(config['defer-margin']) || config['defer-margin'] <= 0)) {
+    throw new Error('context-crusher: defer-margin must be a positive number')
+  }
+  if (config['defer-max-age-ms'] !== undefined
+    && (!Number.isFinite(config['defer-max-age-ms']) || config['defer-max-age-ms'] <= 0)) {
+    throw new Error('context-crusher: defer-max-age-ms must be a positive number')
+  }
+  if (config['defer-urgency-tokens'] !== undefined
+    && (!Number.isFinite(config['defer-urgency-tokens']) || config['defer-urgency-tokens'] <= 0)) {
+    throw new Error('context-crusher: defer-urgency-tokens must be a positive number')
+  }
   return deepFreeze({
     enabled: config.enabled ?? DEFAULTS.enabled,
     mode: config.mode ?? DEFAULTS.mode,
@@ -122,6 +145,12 @@ export function resolveConfig(config: CrusherConfig = {}, options?: { log?: (mes
     reducerMaxTokens: config['reducer-max-tokens'] ?? DEFAULTS.reducerMaxTokens,
     reducerTimeoutMs: config['reducer-timeout-ms'] ?? DEFAULTS.reducerTimeoutMs,
     reducerAlias: config['reducer-alias'] ?? DEFAULTS.reducerAlias,
+    deferRequests: config['defer-requests'] ?? DEFAULTS.deferRequests,
+    deferMargin: config['defer-margin'] ?? DEFAULTS.deferMargin,
+    deferMaxAgeMs: config['defer-max-age-ms'] ?? DEFAULTS.deferMaxAgeMs,
+    ...(config['defer-urgency-tokens'] !== undefined
+      ? { deferUrgencyTokens: config['defer-urgency-tokens'] }
+      : {}),
   })
 }
 
@@ -158,5 +187,11 @@ export function overlaySettings(base: ResolvedConfig, scope: CrusherConfig | und
     reducerMaxTokens: scope['reducer-max-tokens'] ?? base.reducerMaxTokens,
     reducerTimeoutMs: scope['reducer-timeout-ms'] ?? base.reducerTimeoutMs,
     reducerAlias: scope['reducer-alias'] ?? base.reducerAlias,
+    deferRequests: scope['defer-requests'] ?? base.deferRequests,
+    deferMargin: scope['defer-margin'] ?? base.deferMargin,
+    deferMaxAgeMs: scope['defer-max-age-ms'] ?? base.deferMaxAgeMs,
+    ...(scope['defer-urgency-tokens'] !== undefined || base.deferUrgencyTokens !== undefined
+      ? { deferUrgencyTokens: scope['defer-urgency-tokens'] ?? base.deferUrgencyTokens }
+      : {}),
   }
 }
