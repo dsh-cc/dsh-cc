@@ -215,6 +215,12 @@
       "@dsh-cc/cache-trajectory/*": [
         "./packages/test-support/cache-trajectory/src/*"
       ],
+      "@dsh-cc/token-efficiency": [
+        "./packages/test-support/token-efficiency/src/index.ts"
+      ],
+      "@dsh-cc/token-efficiency/*": [
+        "./packages/test-support/token-efficiency/src/*"
+      ],
       "@dsh-cc/bundle-shell": [
         "./packages/bundle/cc-shell/src/index.ts"
       ],

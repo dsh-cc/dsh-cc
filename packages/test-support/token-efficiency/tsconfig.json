@@ -1,0 +1,30 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../cache-trajectory"
+    },
+    {
+      "path": "../../session/command-cost"
+    },
+    {
+      "path": "../agent-loop-mock"
+    },
+    {
+      "path": "../../compaction/compaction-basic-cc"
+    },
+    {
+      "path": "../../compaction/compaction-cost-gate"
+    },
+    {
+      "path": "../../context/context-crusher"
+    }
+  ]
+}

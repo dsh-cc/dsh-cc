@@ -203,6 +203,9 @@
       "path": "./packages/test-support/cache-trajectory"
     },
     {
+      "path": "./packages/test-support/token-efficiency"
+    },
+    {
       "path": "./packages/bundle/cc-shell"
     },
     {
