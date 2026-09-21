@@ -36,6 +36,8 @@ export { route } from './router.ts'
 export { CrusherStore, shortHash, STORE_MAX_ENTRIES, STORE_TTL_MS } from './store.ts'
 export { SavingsLedger } from './ledger.ts'
 export { buildMarker, parseMarker } from './marker.ts'
+export { foldCounters } from './fold-counters.ts'
+export type { FoldCounterMaterials } from './fold-counters.ts'
 export type { CrusherConfig, CrusherMode, ResolvedConfig, LedgerRow, RetrieveError } from './types.ts'
 
 export const RETRIEVE_TOOL_NAME = 'context_retrieve'

@@ -32,6 +32,10 @@ Namespace `cc-context-compression` (settings overlay re-read on every use; confi
 | `min-savings-ratio` | `0.4` | Minimum token saving fraction. |
 | `protected-tools` | over-inclusive default list | Tools never crushed. |
 
+## foldCounters convention
+
+This package exports `foldCounters(materials)` for `@dsh-cc/token-efficiency`; any change to the marker/ledger shape MUST update the fold and its tests in the same PR.
+
 ## Caveats
 
 - The transcript keeps the COMPRESSED form forever: TUI replay and `command-export` show the compressed blob (the original lives only in the store + ledger).
