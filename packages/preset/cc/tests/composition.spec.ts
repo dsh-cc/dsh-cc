@@ -182,7 +182,7 @@ describe('agent.cordis.yml composition', () => {
     expect(row.config).toBeUndefined()
   })
 
-  it('isolates exactly the ten cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
+  it('isolates exactly the eleven cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')
     expect(group.isolate).toEqual({
@@ -196,6 +196,7 @@ describe('agent.cordis.yml composition', () => {
       hooks: true,
       rules: true,
       contextCrusher: true,
+      compactionCostGate: true,
     })
     const configIds = (group.config as any[]).map((r) => r.id)
     const topIds = doc.map((r) => r.id)

@@ -45,6 +45,7 @@
     "@dsh-cc/command-tasks": "workspace:^",
     "@dsh-cc/command-version": "workspace:^",
     "@dsh-cc/compaction-basic": "workspace:^",
+    "@dsh-cc/compaction-cost-gate": "workspace:^",
     "@dsh-cc/compaction-micro": "workspace:^",
     "@dsh-cc/context-crusher": "workspace:^",
     "@dsh-cc/coordinator": "workspace:^",

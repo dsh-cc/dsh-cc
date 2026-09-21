@@ -1,0 +1,24 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../tool-use-summary"
+    },
+    {
+      "path": "../compaction-basic-cc"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../session/command-cost"
+    }
+  ]
+}

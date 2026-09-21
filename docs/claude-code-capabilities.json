@@ -274,6 +274,48 @@
         "summary": "CC's TaskCreate/TaskOutput/TaskStop tool naming is not aliased; the dsh jobs tools (tool-jobs over the host job registry) carry the equivalent surface under dsh names."
       }
     },
+    "engine.compaction-cost-gate": {
+      "title": "Cost-gated plan-step compaction",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension (plan docs/plans/2026-09-20-cost-gated-plan-step-compaction.md). A todo_write completion arms a plan-step boundary; at the agent/status idle seam the cost gate compares projected input-token savings against the prompt-cache rewrite price plus unamortized debt and fires compactNow on the latched root session only on a pass. Ships dark (enabled: false, mode: dry-run); the ledger makes the gate's economics observable without flipping behavior.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: compaction-cost-gate"
+        },
+        {
+          "type": "test",
+          "path": "packages/compaction/compaction-cost-gate/tests/composition.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/compaction/compaction-cost-gate/tests/gate.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "Not an upstream CC surface: a dsh-cc extension. Expected busy/cancelled compaction failures are ledgered as skips, never counted by the breaker; the fuse pauses the feature with one model-visible notice pointing at manual /compact."
+      }
+    },
     "engine.context-compression": {
       "title": "CCR tool-output compression (context-crusher)",
       "category": "engine",

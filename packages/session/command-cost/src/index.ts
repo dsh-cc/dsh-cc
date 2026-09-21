@@ -11,6 +11,10 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 import { foldCost, formatCostReport, type ModelPrice } from './cost.ts'
 import { helpable } from '@dsh-cc/command-usage'
 
+/** Pricing primitives shared with other packages (e.g. compaction-cost-gate). */
+export { resolvePrice, foldCost } from './cost.ts'
+export type { ModelPrice } from './cost.ts'
+
 export const name = 'command-cost'
 export const inject = ['commands']
 

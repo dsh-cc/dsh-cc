@@ -110,6 +110,9 @@
       "path": "./packages/compaction/compaction-micro"
     },
     {
+      "path": "./packages/compaction/compaction-cost-gate"
+    },
+    {
       "path": "./packages/compaction/compaction-basic-cc"
     },
     {
