@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "cmd": "node_modules/.bin/vitest run --config .scratch-reducer/vitest.config.ts .scratch-reducer/fail.spec.ts",
+  "exit": { "ok": false },
+  "failures": [
+    {
+      "name": "scratch golden fixture > fails a diff-style assertion",
+      "evidence": "\"after\": 310,"
+    },
+    {
+      "name": "scratch golden fixture > fails a thrown error",
+      "evidence": "boom: deliberate scratch failure for the golden capture"
+    },
+    {
+      "name": "scratch golden fixture > fails a string comparison",
+      "evidence": "expected 'actual value from log' to be 'expected value from log'"
+    }
+  ],
+  "key_output": [
+    "Test Files  1 failed (1)",
+    "Tests  3 failed (3)",
+    "Failed Tests 3"
+  ]
+}

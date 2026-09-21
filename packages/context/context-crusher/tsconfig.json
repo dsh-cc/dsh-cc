@@ -12,6 +12,12 @@
       "path": "../../core/tools"
     },
     {
+      "path": "../../compat/cc-model-aliases"
+    },
+    {
+      "path": "../../llm-tuning/side-query"
+    },
+    {
       "path": "../../workspace/session-cwd"
     },
     {

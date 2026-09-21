@@ -30,6 +30,20 @@ export interface CrusherConfig {
    * explicitly set list replaces the defaults entirely (not a union).
    */
   'protected-tools'?: string[]
+  /** Evidence-preserving reducer master flag (§3.2). Defaults to `false`. */
+  'reducer-enabled'?: boolean
+  /** Regex sources matched against the invocation command line (§3.2). */
+  'reducer-commands'?: string[]
+  /** Head/tail truncation threshold in tokens (§3.3). Defaults to 30000. */
+  'reducer-max-input-tokens'?: number
+  /** Verifier size-gain ratio (§3.4.4). Defaults to 0.5. */
+  'reducer-min-savings-ratio'?: number
+  /** Side-query output token cap (§3.3). Defaults to 1024. */
+  'reducer-max-tokens'?: number
+  /** Side-query wall-clock budget in ms (§3.3). Defaults to 10000. */
+  'reducer-timeout-ms'?: number
+  /** Cheap-lane alias for the side query (§3.3). Defaults to 'haiku'. */
+  'reducer-alias'?: string
 }
 
 /** Validated, detached, deeply immutable configuration. */
@@ -39,6 +53,14 @@ export interface ResolvedConfig {
   readonly minBytes: number
   readonly minSavingsRatio: number
   readonly protectedTools: readonly string[]
+  /** Compiled command patterns (§3.2); invalid user regexes are dropped at resolve time. */
+  readonly reducerEnabled: boolean
+  readonly reducerCommands: readonly RegExp[]
+  readonly reducerMaxInputTokens: number
+  readonly reducerMinSavingsRatio: number
+  readonly reducerMaxTokens: number
+  readonly reducerTimeoutMs: number
+  readonly reducerAlias: string
 }
 
 /** One append-only savings-ledger row (`savings.jsonl`). */
@@ -47,7 +69,13 @@ export interface LedgerRow {
   readonly sessionId: string
   readonly tool: string
   /** Router kind that fired, or the reason a gate passed through. */
-  readonly kind: 'search' | 'log'
+  readonly kind: 'search' | 'log' | 'receipt'
+  /**
+   * Reducer-only detail: why the attempt did not apply (§3.4) —
+   * `lane-missing`, `lane-inherited`, `lane-timeout`, `lane-error`,
+   * `malformed`, or `verify:<check>`. Absent on plain router rows.
+   */
+  readonly reason?: string
   readonly charsBefore: number
   readonly charsAfter: number
   readonly tokensBefore: number

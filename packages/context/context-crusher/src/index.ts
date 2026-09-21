@@ -25,6 +25,7 @@ import { getSessionCwd } from '@dsh-cc/session-cwd'
 import { resolveConfig, overlaySettings, Config } from './config.ts'
 import { registerSettings } from './settings.ts'
 import { route } from './router.ts'
+import { reduceToolOutput } from './reducer.ts'
 import { CrusherStore, shortHash } from './store.ts'
 import { SavingsLedger } from './ledger.ts'
 import { buildMarker, CCR_HASH_RE } from './marker.ts'
@@ -33,6 +34,9 @@ import type { CrusherConfig, LedgerRow, RetrieveError, ResolvedConfig } from './
 export { resolveConfig, overlaySettings, DEFAULTS, DEFAULT_PROTECTED_TOOLS, Config } from './config.ts'
 export { SETTINGS_NAMESPACE } from './settings.ts'
 export { route } from './router.ts'
+export { REDUCER_COMMAND_TOOLS, invocationCommand, isReducerEligible, reduceToolOutput, truncateView } from './reducer.ts'
+export { parseReceipt, renderReceipt, ReceiptSchema } from './receipt.ts'
+export { verifyReceipt } from './verifier.ts'
 export { CrusherStore, shortHash, STORE_MAX_ENTRIES, STORE_TTL_MS } from './store.ts'
 export { SavingsLedger } from './ledger.ts'
 export { buildMarker, parseMarker } from './marker.ts'
@@ -88,7 +92,9 @@ function allTextBlocks(blocks: readonly ContentBlock[]): string | undefined {
  * and the `context_retrieve` agent tool.
  */
 export class ContextCrusher extends Service {
-  static inject = ['tokenMeter']
+  // `llm` backs the reducer's cheap-lane side query (runSideQuery reads it
+  // through the context; cordis requires a declared injection to read it).
+  static inject = ['tokenMeter', 'llm']
 
   static Config = Config
 
@@ -172,12 +178,16 @@ export class ContextCrusher extends Service {
     if (tokensBefore < cfg.minBytes) return d
 
     const candidate = route(originalText)
-    if (candidate === null) return d
+    if (candidate === null) return this.reduceOrPassthrough(exec, result, d, originalText, tokensBefore, cfg, ledgerRow)
 
     const compressedBody = candidate.text
     const tokensAfter = this.estimate(compressedBody)
     const savings = 1 - tokensAfter / tokensBefore
-    if (savings < cfg.minSavingsRatio) return d
+    if (savings < cfg.minSavingsRatio) {
+      // Escalation (§3.1): sub-threshold deterministic savings go to the
+      // reducer, never mixing partial compressions.
+      return this.reduceOrPassthrough(exec, result, d, originalText, tokensBefore, cfg, ledgerRow)
+    }
 
     if (cfg.mode !== 'on') {
       // Dry-run: measure only; the committed result stays original.
@@ -199,6 +209,46 @@ export class ContextCrusher extends Service {
     // D11: spread the downstream decision so its additionalContexts survive.
     // `content` is fresh (D2); the downstream decision cannot be value-carrying
     // here (checked above), so this is the content-carrying accept variant.
+    return { kind: 'accept', ...('additionalContexts' in d && d.additionalContexts !== undefined ? { additionalContexts: d.additionalContexts } : {}), content: [replacement] }
+  }
+
+  /**
+   * Reducer escalation stage (§3.1): after the deterministic route declined
+   * (null) or its savings fell below `minSavingsRatio`. Any reducer failure —
+   * eligibility, lane, timeout, verification — passes the ORIGINAL bytes
+   * through (fail-soft inside `reduceToolOutput` too).
+   */
+  private async reduceOrPassthrough(
+    exec: ToolExecution,
+    result: Readonly<ToolExecutionResult>,
+    d: Extract<PostToolDecision, { kind: 'accept' }>,
+    originalText: string,
+    tokensBefore: number,
+    cfg: ResolvedConfig,
+    ledgerRow: (row: Omit<LedgerRow, 'ts' | 'sessionId' | 'tool'>) => Promise<void>,
+  ): Promise<PostToolDecision> {
+    const replacementText = await reduceToolOutput({
+      ctx: this.ctx,
+      cfg,
+      exec,
+      originalText,
+      tokensBefore,
+      isError: result.isError,
+      estimate: (text) => this.estimate(text),
+      projectKey: this.projectKey(exec),
+      mode: cfg.mode,
+      put: (projectKey, text) => {
+        // The `store === undefined` gate above guarantees the store exists.
+        return this.store!.put(projectKey, text)
+      },
+      ledgerRow,
+    })
+    if (replacementText === undefined) return d
+    const replacement: ContentBlock = { type: 'text', text: replacementText }
+    // Fire-and-forget sweep AFTER the decision is formed (D6), matching the
+    // deterministic replacement path.
+    void this.store?.sweep()
+    // D11: spread the downstream decision so its additionalContexts survive.
     return { kind: 'accept', ...('additionalContexts' in d && d.additionalContexts !== undefined ? { additionalContexts: d.additionalContexts } : {}), content: [replacement] }
   }
 
