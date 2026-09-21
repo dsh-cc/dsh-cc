@@ -1,0 +1,7 @@
+id: mock/ccr-control
+kind: mock-script
+prompt: search the code
+counters:
+  expect:
+    ccr.applied: "=0"
+tags: [ccr, mock]

@@ -1,0 +1,4 @@
+id: subagent-heavy
+kind: replay
+fixture: fixtures/subagent-heavy.sanitized.jsonl
+tags: [subagent]

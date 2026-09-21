@@ -1,0 +1,4 @@
+id: editing-heavy
+kind: replay
+fixture: fixtures/editing-heavy.sanitized.jsonl
+tags: [editing]

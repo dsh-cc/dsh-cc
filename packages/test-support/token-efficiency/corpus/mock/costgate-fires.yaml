@@ -1,0 +1,8 @@
+id: mock/costgate-fires
+kind: mock-script
+prompt: work the plan
+counters:
+  expect:
+    costgate.gate: ">=1"
+    costgate.compacted: ">=1"
+tags: [costgate, mock]

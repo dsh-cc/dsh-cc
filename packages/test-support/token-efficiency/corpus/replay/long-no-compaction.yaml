@@ -1,0 +1,4 @@
+id: long-no-compaction
+kind: replay
+fixture: fixtures/long-no-compaction.sanitized.jsonl
+tags: [long-running, no-compaction]

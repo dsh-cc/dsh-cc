@@ -1,0 +1,7 @@
+id: mock/ccr-fires
+kind: mock-script
+prompt: search the code
+counters:
+  expect:
+    ccr.applied: ">=1"
+tags: [ccr, mock]

@@ -1,0 +1,7 @@
+baseline:
+  ref: "5ef992deb5685a8e6d4429150626209cb1621053"
+  vector: "fixtures/baseline-vectors.json"
+tolerance:
+  capability: 0
+# require-improvement-on intentionally omitted: live-tier only, no live tasks
+# yet (the gate rejects it otherwise).

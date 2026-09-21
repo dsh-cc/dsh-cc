@@ -1,0 +1,72 @@
+{
+  "foldedAt": "2026-09-21T02:54:38.979Z",
+  "ref": "5ef992deb5685a8e6d4429150626209cb1621053",
+  "vectors": {
+    "compaction-heavy-small": {
+      "task": "compaction-heavy-small",
+      "tokens": {
+        "input": 786,
+        "output": 4018,
+        "cacheRead": 170560,
+        "cacheWrite": 346304,
+        "total": 521668
+      },
+      "counters": {}
+    },
+    "editing-heavy": {
+      "task": "editing-heavy",
+      "tokens": {
+        "input": 435645,
+        "output": 16088,
+        "cacheRead": 1267200,
+        "cacheWrite": 0,
+        "total": 1718933
+      },
+      "counters": {}
+    },
+    "long-compaction-heavy": {
+      "task": "long-compaction-heavy",
+      "tokens": {
+        "input": 1312301,
+        "output": 73491,
+        "cacheRead": 20982528,
+        "cacheWrite": 0,
+        "total": 22368320
+      },
+      "counters": {}
+    },
+    "long-no-compaction": {
+      "task": "long-no-compaction",
+      "tokens": {
+        "input": 4394,
+        "output": 47682,
+        "cacheRead": 4644032,
+        "cacheWrite": 5901568,
+        "total": 10597676
+      },
+      "counters": {}
+    },
+    "multi-axis-medium": {
+      "task": "multi-axis-medium",
+      "tokens": {
+        "input": 50780,
+        "output": 52479,
+        "cacheRead": 1565184,
+        "cacheWrite": 1193472,
+        "total": 2861915
+      },
+      "counters": {}
+    },
+    "subagent-heavy": {
+      "task": "subagent-heavy",
+      "tokens": {
+        "input": 387403,
+        "output": 16952,
+        "cacheRead": 2274048,
+        "cacheWrite": 0,
+        "total": 2678403
+      },
+      "counters": {}
+    }
+  }
+}
