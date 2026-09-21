@@ -19,7 +19,7 @@ import { createCatalogSection } from './driver-catalog.ts'
 import type { DriverBashCtx, DriverQueueCtx, PermissionRulesLike } from './driver-ctx.ts'
 import { createModeSection } from './driver-mode.ts'
 import { liveModeWithDefault, liveSessionCwd } from './driver-live.ts'
-import { gateAutoResumeTarget, warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
+import { gateAutoResumeTarget, handleResumeFailure, warnIfResumedCwdMissing } from './resumed-cwd-guard.ts'
 import type { PersistenceLike } from './session-service-likes.ts'
 import { createHudSection } from './driver-hud.ts'
 import { createStatusLineWiring } from './statusline-wiring.ts'
@@ -36,7 +36,7 @@ export type { Driver } from '../state/driver-types.ts'
 import { createEmitChannel } from './driver-emit.ts'
 import type { DriverConfig } from '../state/driver-types.ts'
 
-import { clearResumeTarget, readResumeTarget, writeResumeTarget } from '../resume-target.ts'
+import { readResumeTarget, writeResumeTarget } from '../resume-target.ts'
 import { coldCutGlobalHistory, defaultTuiDir } from '../history.ts'
 import { resolveProject } from '../project.ts'
 import { recordProjectSessionId } from '../project-sessions.ts'
@@ -148,10 +148,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
       })
       resumed = true
       warnIfResumedCwdMissing(handle.agent, cwd, showNotice)
-    } catch {
-      // Stale marker: session gone — clear it (no loop); fresh must not steal the marker.
-      clearResumeTarget({ cwd })
-      showNotice('上次会话已失效，已开启新会话，可 /resume 手动选择')
+    } catch (error) {
+      handleResumeFailure(error, { cwd, showNotice })
       handle = await ctx.agents.create(createArgs(SessionId(`tui-${randomUUID()}`)))
     }
   } else {
