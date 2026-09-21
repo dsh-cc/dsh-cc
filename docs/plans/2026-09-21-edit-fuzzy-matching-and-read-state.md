@@ -4,7 +4,13 @@ Date: 2026-09-21. Status: **Proposed**. Origin: ZCode design borrow analysis
 (zai-org/ZCode @ 872ad960). Design-review record: first draft **amended** in cold review
 — it wrongly claimed the harness has no read-state structure (it has
 `fs-observation-policy`) and placed the dsh-cc mitigation on a hook point that cannot
-reach the model. Both corrected below; anchors re-verified 2026-09-21.
+reach the model. Both corrected below; anchors re-verified 2026-09-21. Round 3
+(2026-09-21, cold re-review against HEAD f81883d): the PostToolUse delivery mechanism
+was cited as `exec.agent.inject` — that is the PreToolUse path; PostToolUse context
+goes out as `additionalContexts` on the decision via `exec.deferContext`. Also fixed:
+the `FS_NOT_OBSERVED` throw-site anchor (policy `editIntent`, not edit.ts), the Track B
+trigger (no `isError` flag in the hook payload), and the ZCode reference label
+(anchors secondhand — no ZCode checkout present). No design-level changes.
 
 ## 1. Problem
 
@@ -26,7 +32,9 @@ workaround had to be discovered by hand.
   (`ObservedStateGate`, a per-session WeakMap registry of `FsObservation` entries whose
   discriminant keeps confirmed-absence distinct from never-seen); the edit tool consumes
   it as a single-slot decision — `{version}` basis for CAS/staleness or a thrown
-  `FS_NOT_OBSERVED` (`tool-fs/src/edit.ts:115-125`). The genuine deltas against ZCode
+  `FS_NOT_OBSERVED` — thrown by the policy's `editIntent`
+  (`fs-observation-policy/src/index.ts:82`), reached via the `fs/edit-intent` slot
+  consumed in `tool-fs/src/edit.ts:115-127`. The genuine deltas against ZCode
   are: **(a)** no full-vs-partial observation granularity (a partial Read satisfies the
   gate the same as a full one), **(b)** no bash read-backfill — `cat/head/tail/sed`
   output does not register an observation, so the model pays a redundant Read before the
@@ -35,7 +43,9 @@ workaround had to be discovered by hand.
   `apps/zcode-cli/packages/core/src/tool/handlers/edit.ts:421-437`,
   `bash-read-file-state.ts` are the reference behavior.)
 
-**ZCode edit-matcher reference (verified):**
+**ZCode edit-matcher reference (anchors secondhand — cited from the borrow analysis;
+the ZCode checkout is not present in this review environment, so verify against the
+ZCode checkout before citing upstream publicly):**
 
 - Eight strategies in fixed narrow→broad order (`edit-matchers.ts:2-9,52-58`); results
   are tri-state with `candidateCount` on ambiguity (`edit-matchers.ts:135`) — **counts
@@ -47,9 +57,12 @@ workaround had to be discovered by hand.
 - `PostToolUseFailure` bridging is detached and observe-only
   (`packages/hooks/hooks-claude-code/src/register-events.ts:135`): its outcome goes to
   `turnSafety.detachedOutcome` → user notices/logs. The model cannot see it.
-- `PostToolUse` **does run on isError results**, and its `additionalContext` is injected
-  via `exec.agent.inject` (`register-events.ts:109-118`, with the documented divergence
-  that context lands in the post-result FIFO). `updatedToolOutput` replacement returns
+- `PostToolUse` **does run on isError results**; its `additionalContext` is returned as
+  `additionalContexts` on the `PostToolDecision` (register-events.ts:144-181) and
+  delivered by the harness loop via `exec.deferContext`, landing after the tool result
+  and model-visible even on `isError` results. (The `exec.agent.inject` site at
+  register-events.ts:109-118 is the *PreToolUse* context path, not PostToolUse.)
+  `updatedToolOutput` replacement returns
   `kind:'accept'`, which on an error result would flatten the failure into a
   success-shaped result — forbidden here (see §3 Track B).
 
@@ -70,15 +83,22 @@ greenfield; Track B (dsh-cc mitigation) is re-anchored on PostToolUse.
    `cat/head/tail/sed -n` invocations and write the same observation records, so a later
    edit proceeds without a redundant Read; (c) keep the success hint ("file state is
    current — no need to Read it back", the ZCode behavior that suppresses pointless
-   re-reads).
+   re-reads). Fair-attribution note: the harness edit tool *description* already
+   carries description-level guidance (edit.ts:81: "Read the file first (the default
+   fs-observation-policy requires it), unless you just created or edited it in this
+   session"); what is absent is the per-result confirmation in the edit success output
+   (`formatEditOutput`, edit.ts:64-67) — (c) adds only that.
 3. The proposal states measurable deltas (edit not-found event rate, Read-call rate per
    session) instead of quality adjectives.
 
 ### Track B — dsh-cc-side mitigation (ships regardless of Track A)
 
 A `PostToolUse` hook (not PostToolUse-Failure: that point is detached and invisible to
-the model) that fires when: tool is edit/write, the result `isError`, and the response
-matches the not-found shape on a multi-line `old_string`. It returns
+the model) that fires when: tool is edit/write and the `tool_response` matches the
+not-found shape on a multi-line `old_string` — the hook payload (`payloads.ts:72`)
+exposes only `tool_name`, `tool_input`, `tool_response` with no `isError` flag, so
+error status is inferred from the not-found shape (which is distinctive; only the
+detached PostToolUseFailure payload differs, payloads.ts:81-83). It returns
 `additionalContext` with **a fixed, fully static recovery text** (strategy order:
 single-line anchor, then split per hunk — the production lesson already in dsh-cc
 memory). Hard rules:
@@ -91,7 +111,10 @@ memory). Hard rules:
 - Before shipping, verify the CCR crusher does not rewrite error tool results
   (`packages/context/context-crusher/src/router.ts` routes tool-result text to
   compressors): if error results are crushed, appended advice could be eaten before the
-  model sees it; the check result goes in the implementation commit either way.
+  model sees it; the check result goes in the implementation commit either way. Head
+  start already present: `context-crusher/src/index.ts:198` — `if (result.isError &&
+  tokensBefore < 2 * cfg.minBytes) return d` already exempts small error results from
+  crushing.
 
 ## 4. Expected effect
 

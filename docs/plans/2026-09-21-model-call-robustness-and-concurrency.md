@@ -7,7 +7,13 @@ anchored), proposals (a) and (b) were split into two separate filings so an AIMD
 cannot hold the retry-classification work hostage, the AIMD key-aggregation hazard under
 multiplexed gateways was made explicit, and the observation-only signature-hygiene item
 was moved out of scope. This document now batches the model-call-layer proposals that
-are individually small and share the retry/admission area of the upstream code.
+are individually small and share the retry/admission area of the upstream code. Round 3
+(2026-09-21, cold re-review against HEAD f81883d + harness 1ef9c1fa): one load-bearing
+correction — the non-goals claimed dsh-cc routes GLM behind llmbox, but dsh-cc's own
+forensics doc records GLM routed directly via zai (llmbox multiplexes other upstreams);
+plus precision fixes (`tool-calls.ts:105-108` anchor, the actual schema-violation
+message, and the ambiguous "#59" pointer). The §3(b) multiplexed-key hazard survives —
+llmbox does multiplex heterogeneous upstreams.
 
 ## 1. Problem
 
@@ -33,7 +39,7 @@ boundary exists as a named concept in the harness stream runner.
 **(b) Adaptive concurrency / admission.** Parallel tool calls per agent step are a fixed
 constant (`DEFAULT_MAX_PARALLEL_TOOL_CALLS = 10`,
 `core/agent-loop/src/constants.ts:6`); subagent fan-out parallelism is model behavior
-(PR #59 finding). There is no per-provider-key rate state and no admission port. ZCode
+(per `docs/plans/2026-08-31-subagent-parallel-cache-fix.md`, fixed at the prompt layer). There is no per-provider-key rate state and no admission port. ZCode
 has a pure, clock-free AIMD state machine per provider key — halve-factor 0.75 (their
 note: one 429 does not imply the cap was halved wrong), +1 on four consecutive
 successes, idle-forget at 5 minutes (`packages/dynamic-workflow/src/engine/concurrency.ts`), plus
@@ -50,9 +56,11 @@ consumes `result.structured` (harness
 enforced via `attachStructuredRuntime`
 (`packages/subagent/subagent-in-process-driver/src/structured.ts`,
 `validateJsonSchemaValue` from dsh-tools), and tool args are parsed at
-`packages/core/agent-loop/src/tool-calls.ts:107` (`parseArguments` preserves bad JSON as
-raw text). A double-encoded result therefore fails today with exactly ZCode's
-"expected object, got string". The spike below targets this known failure site.
+`packages/core/agent-loop/src/tool-calls.ts:105-108` (`parseArguments` preserves bad
+JSON as raw text). A double-encoded result therefore fails today with the equivalent
+type violation (`"value" must be an object`, harness
+`packages/core/tools/src/json-schema.ts:555`) — the same failure shape ZCode reported
+as "expected object, got string". The spike below targets this known failure site.
 
 **(d) Reasoning-block signature hygiene (out of scope here).** ZCode washes unsigned
 thinking blocks and groups providers by signature compatibility
@@ -122,7 +130,8 @@ dsh-cc-side and stay out of the upstream batch.
 ## 5. Non-goals and risks
 
 - No off-peak / quota-queue semantics: those are zhipu billing-plan concepts and dsh-cc
-  routes GLM behind llmbox; deliberately out of the batch.
+  routes GLM directly via zai (llmbox multiplexes other upstreams — deepseek-v4-flash,
+  kimi-k3); deliberately out of the batch.
 - AIMD mis-tuned can throttle below what the deployment would prefer; human-set ceilings
   stay authoritative, and the mis-aggregation caveat in §3(b) is a design requirement,
   not a footnote.
@@ -134,5 +143,5 @@ dsh-cc-side and stay out of the upstream batch.
 - [ ] Upstream proposals A and B filed separately, each with the ZCode anchors as
       reference behavior and harness anchors as the change surface.
 - [ ] (c) spike results committed as an addendum (reproduced against
-      `tool-calls.ts:107` JSON preservation / clean); leniency proposal only if
+      `tool-calls.ts:105-108` JSON preservation / clean); leniency proposal only if
       reproduced.

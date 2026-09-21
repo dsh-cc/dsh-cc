@@ -1,6 +1,6 @@
 # Cursor Plugin Dialect Support in cc-plugin-loader
 
-Date: 2026-09-15. Status: **Implemented** — PR-A #72 (S0–S3, dialect discovery/manifest/report), PR-B #73 (S4–S5, rules guest seam + cc-shell bridge), PR-C #74 (S6, manager dialect + full e2e), stacked branches pending merge. Design was critic-reviewed twice (approve-with-amendments, then confirm);
+Date: 2026-09-15. Status: **Implemented** — PR-A #72 (S0–S3, dialect discovery/manifest/report), PR-B #73 (S4–S5, rules guest seam + cc-shell bridge), PR-C #74 (S6, manager dialect + full e2e); all three merged 2026-09-15. Design was critic-reviewed twice (approve-with-amendments, then confirm);
 amendments baked in. Ground-truth anchors verified against the cursor-plugins-support
 worktree source during review; remaining line numbers re-verified in-slice.
 

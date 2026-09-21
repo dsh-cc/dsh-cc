@@ -4,7 +4,11 @@ Date: 2026-09-21. Status: **Proposed**. Origin: ZCode design borrow analysis
 (zai-org/ZCode @ 872ad960). Design-review record: first draft **rejected** in cold
 review — its premise (no effort field, no session selection object) was stale; dsh-cc and
 the harness have since shipped most of it. This is the slim rewrite against HEAD,
-covering only the verified remainder.
+covering only the verified remainder. Round 3 (2026-09-21, cold re-review against HEAD
+f81883d + harness 1ef9c1fa): all three gaps confirmed still open and the design
+implementable; four fixes baked in — one load-bearing (the §2 session-persistence
+anchor cited a nonexistent `webhook/src/session.ts`; the real machinery is harness
+`ui-model-selection` + dsh-cc `seedDefaultModel`), the rest anchor/wording precision.
 
 ## 1. Problem
 
@@ -29,14 +33,17 @@ gaps remain:
 
 - `GenerateOptions.reasoningEffort?: ReasoningEffortId` exists and flows end-to-end
   (harness `packages/llm/llm/lib/types/types.d.ts:409`; the opaque level values are
-  validated against the route profile, `types.d.ts:296`).
+  validated against the route's declared efforts by `resolveCallWithInfo`, throwing
+  `UNSUPPORTED_REASONING_EFFORT` — harness `packages/llm/llm/src/index.ts:880-899`).
 - `/effort` slash command: per-model level validation plus `default` reset
   (`packages/ui/tui/src/harness/driver-run-local.ts:258-306`, `slash.ts`); the selection
-  is persisted in the harness session selection and re-validated on resume
-  (harness `webhook/src/session.ts`).
+  is persisted in the harness session selection (harness
+  `packages/client/ui-model-selection`: `src/client/directory.ts:96-98`,
+  `src/client/ModelSelect.tsx:81-89,235`) and re-validated on resume in dsh-cc
+  (`packages/ui/tui/src/harness/driver-agent.ts:256-268`, `seedDefaultModel`).
 - **Tier is part of the resume-pin tuple**: drift produces an explicit pin-mismatch
   error (`packages/subagent/resume-pins/src/gate.ts:97`); agent definition `effort` is
-  fingerprinted (`resume-pins/src/fingerprint.ts:44`). This doc adopts that semantics
+  fingerprinted (`resume-pins/src/fingerprint.ts:51`). This doc adopts that semantics
   unchanged — tier is identity-adjacent for pins, by existing deliberate design.
 - Cost/pricing keys off model ids (`packages/session/command-cost/src/cost.ts:108-123`,
   three-tier resolvePrice); the auto-mode classifier breaker keys `provider/model`
@@ -49,7 +56,11 @@ gaps remain:
 
 1. **Classifier lane wiring (local change, no upstream ask).** The classifier's stream
    seam gains an optional `reasoningEffort`, populated from the classifier route's
-   lowest declared level (validated against the route profile via the same catalog the
+   **first declared level** — the catalog (`LlmModelReasoning.efforts`, harness
+   `types.d.ts:303-306`) is in adapter-preferred display order, the only ordering the
+   catalog supports; it carries no cost/latency semantics, so a PR #123-style audit of
+   the debug trail should confirm the chosen level actually lands under budget
+   (validated against the route via the same catalog face the
    `/effort` picker uses; absent levels → omit the field, never guess). This closes the
    R1-class gap with the mechanism that now exists.
 2. **`model$level` reference syntax (dsh-cc-side parser).** Wherever dsh-cc parses model

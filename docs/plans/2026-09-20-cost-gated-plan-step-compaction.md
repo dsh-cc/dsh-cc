@@ -1,7 +1,6 @@
 # Cost-Gated Plan-Step Compaction: compact at todo boundaries only when the cache math wins
 
-Date: 2026-09-20. Status: implemented — PR #88 (presubmit green; pending merge at time of
-writing). Design phase: two critic rounds; second round passed with amendments (8 findings:
+Date: 2026-09-20. Status: implemented — PR #88 (merged 2026-09-21). Design phase: two critic rounds; second round passed with amendments (8 findings:
 compactNow re-architected to the idle seam, optional-service guard pinned, shadow-aware
 surface accessor named, main-agent scoping added, breaker classes narrowed; all baked in
 below). This document doubled as the executor work order (§7).

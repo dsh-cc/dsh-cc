@@ -1,6 +1,6 @@
 # Evidence-Preserving Reducer: cheap-lane receipts for noisy build/test output
 
-Date: 2026-09-20. Status: **Implemented** — PR #91 (open, pending merge); Phase 2 dogfooding is a follow-up. Review provenance: critic cold review passed with amendments (12 findings:
+Date: 2026-09-20. Status: **Implemented** — PR #91 (merged 2026-09-21); Phase 2 dogfooding is a follow-up. Review provenance: critic cold review passed with amendments (12 findings:
 marker-contract violation fixed per §3.5, lane-inheritance gap closed via `onUnrouted: 'skip'`,
 exit-consistency reduced to decidable rules, route-null escalation added, input-size cap
 added; all baked in below). Implementation-gate re-review against HEAD a110b99 (same date):

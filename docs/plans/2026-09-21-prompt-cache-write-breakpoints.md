@@ -1,6 +1,6 @@
 # Prompt-Cache Write-Side Breakpoints: placement-pin + metering attribution; write side already flows on anthropic routes
 
-Date: 2026-09-21. Status: **Proposed** (round-2 revision; see Review record at the end).
+Date: 2026-09-21. Status: **Phase 0 Implemented (PR #94)** — remaining items: human-gated live A/B (§4) and the §6 upstream checklist (currently NO-GO per §7(c)). (Round-2 revision; see Review record at the end.)
 Origin: ZCode design borrow analysis (zai-org/ZCode @ 872ad960, design notes in dsh-cc
 memory `zcode-analysis-borrowables`). That analysis believed the single largest gap
 between the ZCode harness and dsh-cc to be that dsh-cc's request pipeline emits **no
@@ -27,7 +27,7 @@ attribute hit/miss accounting per route, and identify what an upstream change wo
 
 ## 2. Current state and gap (re-verified 2026-09-21, round 2)
 
-**dsh-cc (this repo @ 5dfc5ec), deepseek-harness @ 0.1.5-rc.1 (read-only sibling checkout,
+**dsh-cc (this repo @ f81883d; anchors verified at 5dfc5ec with no intervening changes to cited files), deepseek-harness @ 0.1.5-rc.1 (read-only sibling checkout,
 consumed via `link:` packages), and `@earendil-works/pi-ai@0.85.1` (the version
 llm-pi-ai resolves — verified through its pnpm symlink):**
 
@@ -108,14 +108,14 @@ llm-pi-ai resolves — verified through its pnpm symlink):**
   edits the deployment profile and spends provider budget, so it is documented as a
   follow-up procedure, not gateable CI work.
 
-## 4. Phase 0 spike (what this PR commits)
+## 4. Phase 0 spike (shipped in PR #94, commit f529df2)
 
 Everything lands **inside `packages/test-support/cache-trajectory`** — no new package
 (the round-1 "repo over package" argument now wins outright: this package already owns
 session-log io/analysis/runner/bin, and a new test-support package would buy a README trio
 plus registration checklist for code that belongs next to its siblings).
 
-- **sp-1 — placement-pin contract test (TDD, the PR's code).** New spec
+- **sp-1 — placement-pin contract test (TDD, shipped in PR #94).** Spec
   `tests/pi-ai-cache-control-placement.spec.ts` driving pi-ai 0.85.1 through the official
   `./api/*` subpath export (`import { streamSimple } from
   '@earendil-works/pi-ai/api/anthropic-messages'` — no `.js` suffix; the exports map
@@ -280,12 +280,12 @@ Nothing in the data indicates a paying move to take upstream.
 
 ## Acceptance (DoD)
 
-- [ ] sp-1 contract test merged: `tests/pi-ai-cache-control-placement.spec.ts` +
+- [x] sp-1 contract test merged: `tests/pi-ai-cache-control-placement.spec.ts` +
       exact-pinned `@earendil-works/pi-ai@0.85.1` devDependency in
       `packages/test-support/cache-trajectory/package.json` (+ lockfile); placement,
       strip, and no-op assertions green; repo gates pass: `check:spec-deps`, typecheck,
       test suite, `check:size`, `check:deep-imports`, `check:publish`, `check:readme`.
-- [ ] §7 addendum committed from sp-1 output and, where local session logs exist, a sp-2
+- [x] §7 addendum committed from sp-1 output and, where local session logs exist, a sp-2
       `analyzeSessionCache` attribution sample — with skipped items recorded explicitly.
 - [ ] `pnpm docs:parity` re-run with zero drift; no capability-manifest rows added
       (precedent pinned: test-support packages carry none).
@@ -323,3 +323,9 @@ Nothing in the data indicates a paying move to take upstream.
   `model.compat.cacheControlFormat`). Recorded as non-blocking: registry availability of
   the pinned pi-ai devDep, intentional pin-vs-`^0.85.1` drift as the tripwire, and
   session-log zstd readability exercised at API-signature level only.
+- **Post-#94 (merged 2026-09-21, commit f529df2):** Phase 0 landed as designed — the
+  sp-1 placement-pin spec passes (4/4) at HEAD, the pinned pi-ai devDep + §7 addendum are
+  in the tree. Doc status flipped from Proposed to Phase-0-Implemented; remaining open
+  items are the human-gated live A/B and the §6 upstream checklist (NO-GO per §7(c)).
+  Post-merge cold re-review at HEAD f81883d: all load-bearing anchors retraced to
+  file:line and hold; no code contradictions found.
