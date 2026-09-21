@@ -545,6 +545,41 @@ capabilities:
       - { type: test, path: packages/interaction/command-permissions/tests/plan-channel.integration.spec.ts }
     deviation: { kind: none }
 
+  engine.post-edit-auto-verify:
+    title: Post-edit auto-verify ([auto-verify] append)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        CC has no equivalent surface — the closest, PostToolUse
+        `updatedToolOutput`, REPLACES the whole tool-result content with a
+        single text block and cannot append. The appended `[auto-verify]`
+        text is a non-CC transcript element (same divergence class as hook
+        `additionalContext`); a known model self-rerun double-spend of the
+        verify command after a failure tail is documented, not engineered
+        against in v1.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: post-edit-verify" }
+      - { type: source, path: packages/interaction/post-edit-verify/src/wiring.ts, anchor: "ctx.on('tools/post-execute'" }
+      - { type: test, path: packages/interaction/post-edit-verify/tests/composition.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension (user-layer-only setting cc-post-edit-verify, rules
+        {glob, command, timeout-ms}): after an accepted edit/write result, a
+        fast POSIX-shell verification command runs through the harness
+        ShellExecutor and its outcome is APPENDED to the same tool result as
+        an `[auto-verify]` text block — one observation covers both events,
+        no extra model round-trip. Appended text, not replacement: divergent
+        vs PostToolUse `updatedToolOutput`. Default off; burst labeling via
+        debounce-ms, tail-only capture bounded by max-output-bytes.
+
   engine.prompt-suggest:
     title: Next-prompt suggestion
     category: engine

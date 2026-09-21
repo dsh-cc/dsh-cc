@@ -101,6 +101,9 @@
       "path": "./packages/interaction/prompt-suggest"
     },
     {
+      "path": "./packages/interaction/post-edit-verify"
+    },
+    {
       "path": "./packages/settings/settings-ns"
     },
     {
