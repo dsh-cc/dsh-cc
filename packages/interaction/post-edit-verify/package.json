@@ -1,0 +1,58 @@
+{
+  "name": "@dsh-cc/post-edit-verify",
+  "description": "Post-edit auto-verify: after an accepted edit/write result, run a user-declared fast verification command and append its outcome to the same tool result; rules are a user-layer-only setting",
+  "version": "0.7.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/interaction/post-edit-verify"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-shell": ">=0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/session-cwd": "workspace:^"
+  },
+  "dependencies": {
+    "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/skill-loader": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
+    "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
+    "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/agent-loop-mock": "workspace:^",
+    "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/skill-loader": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

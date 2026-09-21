@@ -206,6 +206,13 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('handoff-store')
     expect(topIds).not.toContain('handoff-store')
     expect(configIds.indexOf('handoff-store')).toBeGreaterThan(configIds.indexOf('tool-web-fetch'))
+    // The post-edit-verify row (plan docs/plans/2026-09-20-post-edit-auto-verify.md)
+    // publishes no Service (plain plugin) and sits inside the group right after
+    // tool-use-summary, with NO new isolate key; its post-execute listener is
+    // registered WITHOUT prepend so context-crusher stays outermost.
+    expect(configIds).toContain('post-edit-verify')
+    expect(topIds).not.toContain('post-edit-verify')
+    expect(configIds.indexOf('post-edit-verify')).toBeGreaterThan(configIds.indexOf('tool-use-summary'))
     expect(configIds).toContain('command-plugin')
     expect(configIds).toContain('command-mcp')
     // The serena-first steering row consumes the isolated `mcpConnections`
