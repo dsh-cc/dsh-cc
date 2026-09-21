@@ -63,6 +63,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: dsh-cc
+          # fetch-depth: 0 — the eval-gate freeze/rot check diffs against
+          # origin/main (scripts/check-eval-gate.mjs), which needs full history.
+          fetch-depth: 0
 
       - uses: actions/checkout@v4
         with:
@@ -89,6 +92,15 @@ jobs:
       - name: Spec dependency declarations (check:spec-deps)
         working-directory: dsh-cc
         run: node scripts/check-spec-deps.mjs
+
+      # Freeze/rot discipline for the token-efficiency eval gate (plan §5):
+      # the frozen eval-gate.yaml lands alone; metrics.ts changes must refresh
+      # the baseline vector. Needs git history → runs after the fetch-depth: 0
+      # checkout, before install (pure static like spec-deps).
+      - name: Eval-gate freeze discipline (check:eval-gate)
+        if: github.event_name == 'pull_request'
+        working-directory: dsh-cc
+        run: node scripts/check-eval-gate.mjs
 
       - name: Canonical project identity (check:identity)
         working-directory: dsh-cc
@@ -228,6 +240,13 @@ jobs:
       - name: Unit tests (vitest)
         working-directory: dsh-cc
         run: pnpm test
+
+      # Informational during the two-green-weeks prove-out (plan §4): tier
+      # failures do not block merges until the rule is tightened post-prove-out.
+      - name: Token-efficiency tiers (informational during prove-out)
+        working-directory: dsh-cc
+        continue-on-error: true
+        run: pnpm check:token-efficiency
 
       - name: check:subagent-paste
         working-directory: dsh-cc

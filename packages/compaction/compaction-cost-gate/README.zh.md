@@ -28,6 +28,10 @@
 
 账本：`<dshHome>/compaction-cost-gate/<projectKey>.jsonl`，仅追加、即发即忘。
 
+## foldCounters 约定
+
+本包为 `@dsh-cc/token-efficiency` 导出 `foldCounters(materials)`；标记/台账形态的任何变更必须在同一个 PR 中同步更新该 fold 及其测试。
+
 ## 用法
 
 ```ts

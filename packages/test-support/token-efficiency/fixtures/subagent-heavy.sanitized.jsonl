@@ -1,0 +1,613 @@
+{"type":"session"}
+{"data":{},"time":1789957035912,"type":"subagent/descriptor"}
+{"data":{},"time":1789957035912,"type":"sandbox/mode"}
+{"data":{},"time":1789957035912,"type":"approval/policy"}
+{"data":{},"time":1789957035931,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957035931,"type":"turn/start"}
+{"data":{},"time":1789957035931,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957035937,"type":"hook/invoked"}
+{"data":{},"time":1789957035968,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957035977,"type":"hook/result"}
+{"data":{},"time":1789957035979,"type":"step/start"}
+{"data":{},"time":1789957035979,"type":"system/message"}
+{"data":{},"time":1789957035979,"type":"user/message"}
+{"data":{},"time":1789957035980,"type":"user/message"}
+{"data":{"header":{"config":{"model":"llmbox_ant/glm-5.3-flash","provider":"orchestrix"}}},"time":1789957035980,"type":"request/header"}
+{"data":{"model":"llmbox_ant/glm-5.3-flash","provider":"orchestrix"},"time":1789957035980,"type":"request/context"}
+{"data":{},"time":1789957035981,"type":"session/title"}
+{"data":{"step":1,"turn":1,"usage":{"cacheReadTokens":6912,"inputTokens":6384,"outputTokens":86,"totalTokens":13382}},"time":1789957038846,"type":"assistant/message"}
+{"data":{},"time":1789957038847,"type":"tool/call"}
+{"data":{},"time":1789957038848,"type":"hook/invoked"}
+{"data":{},"time":1789957038933,"type":"hook/result"}
+{"data":{},"time":1789957039627,"type":"permission/classifier"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 3392 chars]","type":"text"}],"type":"tool-result"}]},"step":1,"turn":1},"time":1789957039739,"type":"tool/result"}
+{"data":{},"time":1789957039740,"type":"step/end"}
+{"data":{},"time":1789957039740,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957039749,"type":"hook/invoked"}
+{"data":{},"time":1789957039813,"type":"hook/result"}
+{"data":{},"time":1789957039815,"type":"step/start"}
+{"data":{},"time":1789957039815,"type":"user/message"}
+{"data":{"step":2,"turn":1,"usage":{"cacheReadTokens":6912,"inputTokens":8548,"outputTokens":115,"totalTokens":15575}},"time":1789957042052,"type":"assistant/message"}
+{"data":{},"time":1789957042053,"type":"tool/call"}
+{"data":{},"time":1789957042053,"type":"hook/invoked"}
+{"data":{},"time":1789957042134,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 23401 chars]","type":"text"}],"type":"tool-result"}]},"step":2,"turn":1},"time":1789957042167,"type":"tool/result"}
+{"data":{},"time":1789957042167,"type":"step/end"}
+{"data":{},"time":1789957042174,"type":"step/start"}
+{"data":{"step":3,"turn":1,"usage":{"cacheReadTokens":9216,"inputTokens":12274,"outputTokens":91,"totalTokens":21581}},"time":1789957044918,"type":"assistant/message"}
+{"data":{},"time":1789957044920,"type":"tool/call"}
+{"data":{},"time":1789957044921,"type":"hook/invoked"}
+{"data":{},"time":1789957044999,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 13348 chars]","type":"text"}],"type":"tool-result"}]},"step":3,"turn":1},"time":1789957045073,"type":"tool/result"}
+{"data":{},"time":1789957045073,"type":"step/end"}
+{"data":{},"time":1789957045080,"type":"step/start"}
+{"data":{"step":4,"turn":1,"usage":{"cacheReadTokens":18432,"inputTokens":6722,"outputTokens":142,"totalTokens":25296}},"time":1789957048786,"type":"assistant/message"}
+{"data":{},"time":1789957048787,"type":"tool/call"}
+{"data":{},"time":1789957048788,"type":"hook/invoked"}
+{"data":{},"time":1789957048868,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 5877 chars]","type":"text"}],"type":"tool-result"}]},"step":4,"turn":1},"time":1789957048913,"type":"tool/result"}
+{"data":{},"time":1789957048913,"type":"step/end"}
+{"data":{},"time":1789957048920,"type":"step/start"}
+{"data":{"step":5,"turn":1,"usage":{"cacheReadTokens":11520,"inputTokens":15377,"outputTokens":76,"totalTokens":26973}},"time":1789957051210,"type":"assistant/message"}
+{"data":{},"time":1789957051211,"type":"tool/call"}
+{"data":{},"time":1789957051212,"type":"hook/invoked"}
+{"data":{},"time":1789957051332,"type":"hook/result"}
+{"data":{},"time":1789957051332,"type":"hook/invoked"}
+{"data":{},"time":1789957051371,"type":"hook/result"}
+{"data":{},"time":1789957051371,"type":"tool/call"}
+{"data":{},"time":1789957051372,"type":"hook/invoked"}
+{"data":{},"time":1789957051435,"type":"hook/result"}
+{"data":{},"time":1789957051435,"type":"hook/invoked"}
+{"data":{},"time":1789957051474,"type":"hook/result"}
+{"data":{},"time":1789957051475,"type":"hook/invoked"}
+{"data":{},"time":1789957051511,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 10818 chars]","type":"text"}],"type":"tool-result"}]},"step":5,"turn":1},"time":1789957051513,"type":"tool/result"}
+{"data":{},"time":1789957051513,"type":"hook/invoked"}
+{"data":{},"time":1789957051548,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 5836 chars]","type":"text"}],"type":"tool-result"}]},"step":5,"turn":1},"time":1789957051549,"type":"tool/result"}
+{"data":{},"time":1789957051549,"type":"step/end"}
+{"data":{},"time":1789957051553,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957051557,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957051557,"type":"step/start"}
+{"data":{"step":6,"turn":1,"usage":{"cacheReadTokens":6912,"inputTokens":22118,"outputTokens":26,"totalTokens":29056}},"time":1789957056152,"type":"assistant/message"}
+{"data":{},"time":1789957056153,"type":"tool/call"}
+{"data":{},"time":1789957057210,"type":"permission/classifier"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 41 chars]","type":"text"}],"type":"tool-result"}]},"step":6,"turn":1},"time":1789957057220,"type":"tool/result"}
+{"data":{},"time":1789957057221,"type":"step/end"}
+{"data":{},"time":1789957057240,"type":"step/start"}
+{"data":{"step":7,"turn":1,"usage":{"cacheReadTokens":6912,"inputTokens":22159,"outputTokens":23,"totalTokens":29094}},"time":1789957061168,"type":"assistant/message"}
+{"data":{},"time":1789957061169,"type":"tool/call"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 291 chars]","type":"text"}],"type":"tool-result"}]},"step":7,"turn":1},"time":1789957061179,"type":"tool/result"}
+{"data":{},"time":1789957061179,"type":"step/end"}
+{"data":{},"time":1789957061195,"type":"step/start"}
+{"data":{"step":8,"turn":1,"usage":{"cacheReadTokens":25344,"inputTokens":3832,"outputTokens":66,"totalTokens":29242}},"time":1789957063225,"type":"assistant/message"}
+{"data":{},"time":1789957063226,"type":"tool/call"}
+{"data":{},"time":1789957063226,"type":"hook/invoked"}
+{"data":{},"time":1789957063351,"type":"hook/result"}
+{"data":{},"time":1789957063351,"type":"hook/invoked"}
+{"data":{},"time":1789957063392,"type":"hook/result"}
+{"data":{},"time":1789957063399,"type":"hook/invoked"}
+{"data":{},"time":1789957063433,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 7886 chars]","type":"text"}],"type":"tool-result"}]},"step":8,"turn":1},"time":1789957063434,"type":"tool/result"}
+{"data":{},"time":1789957063435,"type":"step/end"}
+{"data":{},"time":1789957063437,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957063444,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957063444,"type":"step/start"}
+{"data":{"step":9,"turn":1,"usage":{"cacheReadTokens":25344,"inputTokens":4742,"outputTokens":110,"totalTokens":30196}},"time":1789957066549,"type":"assistant/message"}
+{"data":{},"time":1789957066550,"type":"tool/call"}
+{"data":{},"time":1789957066551,"type":"hook/invoked"}
+{"data":{},"time":1789957066632,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1572 chars]","type":"text"}],"type":"tool-result"}]},"step":9,"turn":1},"time":1789957066658,"type":"tool/result"}
+{"data":{},"time":1789957066658,"type":"step/end"}
+{"data":{},"time":1789957066665,"type":"step/start"}
+{"data":{"step":10,"turn":1,"usage":{"cacheReadTokens":25344,"inputTokens":5261,"outputTokens":136,"totalTokens":30741}},"time":1789957069159,"type":"assistant/message"}
+{"data":{},"time":1789957069160,"type":"tool/call"}
+{"data":{},"time":1789957069161,"type":"hook/invoked"}
+{"data":{},"time":1789957069236,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 3245 chars]","type":"text"}],"type":"tool-result"}]},"step":10,"turn":1},"time":1789957069281,"type":"tool/result"}
+{"data":{},"time":1789957069282,"type":"step/end"}
+{"data":{},"time":1789957069288,"type":"step/start"}
+{"data":{"step":11,"turn":1,"usage":{"cacheReadTokens":27648,"inputTokens":4135,"outputTokens":564,"totalTokens":32347}},"time":1789957076685,"type":"assistant/message"}
+{"data":{},"time":1789957076686,"type":"tool/call"}
+{"data":{},"time":1789957076686,"type":"hook/invoked"}
+{"data":{},"time":1789957076754,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1042 chars]","type":"text"}],"type":"tool-result"}]},"step":11,"turn":1},"time":1789957076793,"type":"tool/result"}
+{"data":{},"time":1789957076793,"type":"step/end"}
+{"data":{},"time":1789957076800,"type":"step/start"}
+{"data":{"step":12,"turn":1,"usage":{"cacheReadTokens":6912,"inputTokens":25718,"outputTokens":73,"totalTokens":32703}},"time":1789957079508,"type":"assistant/message"}
+{"data":{},"time":1789957079509,"type":"tool/call"}
+{"data":{},"time":1789957079510,"type":"hook/invoked"}
+{"data":{},"time":1789957079594,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 167 chars]","type":"text"}],"type":"tool-result"}]},"step":12,"turn":1},"time":1789957079626,"type":"tool/result"}
+{"data":{},"time":1789957079626,"type":"step/end"}
+{"data":{},"time":1789957079633,"type":"step/start"}
+{"data":{"step":13,"turn":1,"usage":{"cacheReadTokens":27648,"inputTokens":5101,"outputTokens":113,"totalTokens":32862}},"time":1789957082058,"type":"assistant/message"}
+{"data":{},"time":1789957082059,"type":"tool/call"}
+{"data":{},"time":1789957082059,"type":"hook/invoked"}
+{"data":{},"time":1789957082116,"type":"hook/result"}
+{"data":{},"time":1789957082951,"type":"permission/classifier"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 506 chars]","type":"text"}],"type":"tool-result"}]},"step":13,"turn":1},"time":1789957083344,"type":"tool/result"}
+{"data":{},"time":1789957083344,"type":"step/end"}
+{"data":{},"time":1789957083350,"type":"step/start"}
+{"data":{"step":14,"turn":1,"usage":{"cacheReadTokens":29952,"inputTokens":3027,"outputTokens":76,"totalTokens":33055}},"time":1789957088616,"type":"assistant/message"}
+{"data":{},"time":1789957088618,"type":"tool/call"}
+{"data":{},"time":1789957088618,"type":"hook/invoked"}
+{"data":{},"time":1789957088699,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 417 chars]","type":"text"}],"type":"tool-result"}]},"step":14,"turn":1},"time":1789957088731,"type":"tool/result"}
+{"data":{},"time":1789957088731,"type":"step/end"}
+{"data":{},"time":1789957088738,"type":"step/start"}
+{"data":{"step":15,"turn":1,"usage":{"cacheReadTokens":29952,"inputTokens":3222,"outputTokens":552,"totalTokens":33726}},"time":1789957095853,"type":"assistant/message"}
+{"data":{},"time":1789957095854,"type":"tool/call"}
+{"data":{},"time":1789957095871,"type":"hook/invoked"}
+{"data":{},"time":1789957095935,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 174 chars]","type":"text"}],"type":"tool-result"}]},"step":15,"turn":1},"time":1789957095936,"type":"tool/result"}
+{"data":{},"time":1789957095936,"type":"step/end"}
+{"data":{},"time":1789957095940,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957095946,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957095946,"type":"step/start"}
+{"data":{"step":16,"turn":1,"usage":{"cacheReadTokens":29952,"inputTokens":3815,"outputTokens":71,"totalTokens":33838}},"time":1789957099829,"type":"assistant/message"}
+{"data":{},"time":1789957099830,"type":"tool/call"}
+{"data":{},"time":1789957099831,"type":"hook/invoked"}
+{"data":{},"time":1789957099913,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 543 chars]","type":"text"}],"type":"tool-result"}]},"step":16,"turn":1},"time":1789957100503,"type":"tool/result"}
+{"data":{},"time":1789957100503,"type":"step/end"}
+{"data":{},"time":1789957100512,"type":"step/start"}
+{"data":{"step":17,"turn":1,"usage":{"cacheReadTokens":29952,"inputTokens":4122,"outputTokens":232,"totalTokens":34306}},"time":1789957105279,"type":"assistant/message"}
+{"data":{},"time":1789957105280,"type":"tool/call"}
+{"data":{},"time":1789957105291,"type":"hook/invoked"}
+{"data":{},"time":1789957105358,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 202 chars]","type":"text"}],"type":"tool-result"}]},"step":17,"turn":1},"time":1789957105359,"type":"tool/result"}
+{"data":{},"time":1789957105359,"type":"step/end"}
+{"data":{},"time":1789957105364,"type":"step/start"}
+{"data":{"step":18,"turn":1,"usage":{"cacheReadTokens":27648,"inputTokens":6708,"outputTokens":67,"totalTokens":34423}},"time":1789957109036,"type":"assistant/message"}
+{"data":{},"time":1789957109037,"type":"tool/call"}
+{"data":{},"time":1789957109038,"type":"hook/invoked"}
+{"data":{},"time":1789957109123,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 857 chars]","type":"text"}],"type":"tool-result"}]},"step":18,"turn":1},"time":1789957109153,"type":"tool/result"}
+{"data":{},"time":1789957109153,"type":"step/end"}
+{"data":{},"time":1789957109160,"type":"step/start"}
+{"data":{"step":19,"turn":1,"usage":{"cacheReadTokens":29952,"inputTokens":4695,"outputTokens":51,"totalTokens":34698}},"time":1789957112565,"type":"assistant/message"}
+{"data":{},"time":1789957112567,"type":"tool/call"}
+{"data":{},"time":1789957112567,"type":"hook/invoked"}
+{"data":{},"time":1789957112673,"type":"hook/result"}
+{"data":{},"time":1789957112673,"type":"hook/invoked"}
+{"data":{},"time":1789957112715,"type":"hook/result"}
+{"data":{},"time":1789957112720,"type":"hook/invoked"}
+{"data":{},"time":1789957112762,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1003 chars]","type":"text"}],"type":"tool-result"}]},"step":19,"turn":1},"time":1789957112762,"type":"tool/result"}
+{"data":{},"time":1789957112763,"type":"step/end"}
+{"data":{},"time":1789957112766,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957112772,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957112772,"type":"step/start"}
+{"data":{"step":20,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":2707,"outputTokens":51,"totalTokens":35014}},"time":1789957115087,"type":"assistant/message"}
+{"data":{},"time":1789957115089,"type":"tool/call"}
+{"data":{},"time":1789957115089,"type":"hook/invoked"}
+{"data":{},"time":1789957115209,"type":"hook/result"}
+{"data":{},"time":1789957115210,"type":"hook/invoked"}
+{"data":{},"time":1789957115260,"type":"hook/result"}
+{"data":{},"time":1789957115267,"type":"hook/invoked"}
+{"data":{},"time":1789957115311,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 726 chars]","type":"text"}],"type":"tool-result"}]},"step":20,"turn":1},"time":1789957115311,"type":"tool/result"}
+{"data":{},"time":1789957115311,"type":"step/end"}
+{"data":{},"time":1789957115316,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957115321,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957115322,"type":"step/start"}
+{"data":{"step":21,"turn":1,"usage":{"cacheReadTokens":29952,"inputTokens":5256,"outputTokens":294,"totalTokens":35502}},"time":1789957119015,"type":"assistant/message"}
+{"data":{},"time":1789957119016,"type":"tool/call"}
+{"data":{},"time":1789957119030,"type":"hook/invoked"}
+{"data":{},"time":1789957119088,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 167 chars]","type":"text"}],"type":"tool-result"}]},"step":21,"turn":1},"time":1789957119089,"type":"tool/result"}
+{"data":{},"time":1789957119089,"type":"step/end"}
+{"data":{},"time":1789957119093,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957119099,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957119100,"type":"step/start"}
+{"data":{"step":22,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":3286,"outputTokens":180,"totalTokens":35722}},"time":1789957124996,"type":"assistant/message"}
+{"data":{},"time":1789957124998,"type":"tool/call"}
+{"data":{},"time":1789957125023,"type":"hook/invoked"}
+{"data":{},"time":1789957125096,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 167 chars]","type":"text"}],"type":"tool-result"}]},"step":22,"turn":1},"time":1789957125097,"type":"tool/result"}
+{"data":{},"time":1789957125097,"type":"step/end"}
+{"data":{},"time":1789957125102,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957125107,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957125107,"type":"step/start"}
+{"data":{"step":23,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":3506,"outputTokens":71,"totalTokens":35833}},"time":1789957128037,"type":"assistant/message"}
+{"data":{},"time":1789957128038,"type":"tool/call"}
+{"data":{},"time":1789957128039,"type":"hook/invoked"}
+{"data":{},"time":1789957128096,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 170 chars]","type":"text"}],"type":"tool-result"}]},"step":23,"turn":1},"time":1789957128901,"type":"tool/result"}
+{"data":{},"time":1789957128901,"type":"step/end"}
+{"data":{},"time":1789957128910,"type":"step/start"}
+{"data":{"step":24,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":3646,"outputTokens":75,"totalTokens":35977}},"time":1789957130741,"type":"assistant/message"}
+{"data":{},"time":1789957130742,"type":"tool/call"}
+{"data":{},"time":1789957130743,"type":"hook/invoked"}
+{"data":{},"time":1789957130823,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 504 chars]","type":"text"}],"type":"tool-result"}]},"step":24,"turn":1},"time":1789957131450,"type":"tool/result"}
+{"data":{},"time":1789957131451,"type":"step/end"}
+{"data":{},"time":1789957131457,"type":"step/start"}
+{"data":{"step":25,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":3937,"outputTokens":80,"totalTokens":36273}},"time":1789957133728,"type":"assistant/message"}
+{"data":{},"time":1789957133729,"type":"tool/call"}
+{"data":{},"time":1789957133729,"type":"hook/invoked"}
+{"data":{},"time":1789957133803,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 817 chars]","type":"text"}],"type":"tool-result"}]},"step":25,"turn":1},"time":1789957134422,"type":"tool/result"}
+{"data":{},"time":1789957134422,"type":"step/end"}
+{"data":{},"time":1789957134430,"type":"step/start"}
+{"data":{"step":26,"turn":1,"usage":{"cacheReadTokens":29952,"inputTokens":6613,"outputTokens":64,"totalTokens":36629}},"time":1789957137466,"type":"assistant/message"}
+{"data":{},"time":1789957137467,"type":"tool/call"}
+{"data":{},"time":1789957137468,"type":"hook/invoked"}
+{"data":{},"time":1789957137542,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1135 chars]","type":"text"}],"type":"tool-result"}]},"step":26,"turn":1},"time":1789957137576,"type":"tool/result"}
+{"data":{},"time":1789957137576,"type":"step/end"}
+{"data":{},"time":1789957137582,"type":"step/start"}
+{"data":{"step":27,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":4699,"outputTokens":297,"totalTokens":37252}},"time":1789957144553,"type":"assistant/message"}
+{"data":{},"time":1789957144554,"type":"tool/call"}
+{"data":{},"time":1789957144568,"type":"hook/invoked"}
+{"data":{},"time":1789957144622,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 174 chars]","type":"text"}],"type":"tool-result"}]},"step":27,"turn":1},"time":1789957144623,"type":"tool/result"}
+{"data":{},"time":1789957144623,"type":"step/end"}
+{"data":{},"time":1789957144627,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957144632,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957144632,"type":"step/start"}
+{"data":{"step":28,"turn":1,"usage":{"cacheReadTokens":34560,"inputTokens":2733,"outputTokens":67,"totalTokens":37360}},"time":1789957147744,"type":"assistant/message"}
+{"data":{},"time":1789957147745,"type":"tool/call"}
+{"data":{},"time":1789957147746,"type":"hook/invoked"}
+{"data":{},"time":1789957147828,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 160 chars]","type":"text"}],"type":"tool-result"}]},"step":28,"turn":1},"time":1789957148510,"type":"tool/result"}
+{"data":{},"time":1789957148510,"type":"step/end"}
+{"data":{},"time":1789957148517,"type":"step/start"}
+{"data":{"step":29,"turn":1,"usage":{"cacheReadTokens":34560,"inputTokens":2865,"outputTokens":528,"totalTokens":37953}},"time":1789957156902,"type":"assistant/message"}
+{"data":{},"time":1789957156903,"type":"tool/call"}
+{"data":{},"time":1789957156922,"type":"hook/invoked"}
+{"data":{},"time":1789957156989,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 194 chars]","type":"text"}],"type":"tool-result"}]},"step":29,"turn":1},"time":1789957156989,"type":"tool/result"}
+{"data":{},"time":1789957156990,"type":"step/end"}
+{"data":{},"time":1789957156996,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957157005,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957157005,"type":"step/start"}
+{"data":{"step":30,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":5751,"outputTokens":218,"totalTokens":38225}},"time":1789957162567,"type":"assistant/message"}
+{"data":{},"time":1789957162569,"type":"tool/call"}
+{"data":{},"time":1789957162577,"type":"hook/invoked"}
+{"data":{},"time":1789957162657,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 197 chars]","type":"text"}],"type":"tool-result"}]},"step":30,"turn":1},"time":1789957162658,"type":"tool/result"}
+{"data":{},"time":1789957162658,"type":"step/end"}
+{"data":{},"time":1789957162667,"type":"step/start"}
+{"data":{"step":31,"turn":1,"usage":{"cacheReadTokens":34560,"inputTokens":3714,"outputTokens":50,"totalTokens":38324}},"time":1789957166886,"type":"assistant/message"}
+{"data":{},"time":1789957166887,"type":"tool/call"}
+{"data":{},"time":1789957166887,"type":"hook/invoked"}
+{"data":{},"time":1789957166985,"type":"hook/result"}
+{"data":{},"time":1789957166986,"type":"hook/invoked"}
+{"data":{},"time":1789957167033,"type":"hook/result"}
+{"data":{},"time":1789957167042,"type":"hook/invoked"}
+{"data":{},"time":1789957167085,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 2291 chars]","type":"text"}],"type":"tool-result"}]},"step":31,"turn":1},"time":1789957167086,"type":"tool/result"}
+{"data":{},"time":1789957167086,"type":"step/end"}
+{"data":{},"time":1789957167090,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957167094,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957167094,"type":"step/start"}
+{"data":{"step":32,"turn":1,"usage":{"cacheReadTokens":32256,"inputTokens":6402,"outputTokens":129,"totalTokens":38787}},"time":1789957170463,"type":"assistant/message"}
+{"data":{},"time":1789957170464,"type":"tool/call"}
+{"data":{},"time":1789957170487,"type":"hook/invoked"}
+{"data":{},"time":1789957170546,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 162 chars]","type":"text"}],"type":"tool-result"}]},"step":32,"turn":1},"time":1789957170546,"type":"tool/result"}
+{"data":{},"time":1789957170546,"type":"step/end"}
+{"data":{},"time":1789957170551,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957170558,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957170559,"type":"step/start"}
+{"data":{"step":33,"turn":1,"usage":{"cacheReadTokens":34560,"inputTokens":4266,"outputTokens":113,"totalTokens":38939}},"time":1789957175749,"type":"assistant/message"}
+{"data":{},"time":1789957175750,"type":"tool/call"}
+{"data":{},"time":1789957175751,"type":"hook/invoked"}
+{"data":{},"time":1789957175824,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1900 chars]","type":"text"}],"type":"tool-result"}]},"step":33,"turn":1},"time":1789957175868,"type":"tool/result"}
+{"data":{},"time":1789957175868,"type":"step/end"}
+{"data":{},"time":1789957175874,"type":"step/start"}
+{"data":{"step":34,"turn":1,"usage":{"cacheReadTokens":34560,"inputTokens":4881,"outputTokens":96,"totalTokens":39537}},"time":1789957178850,"type":"assistant/message"}
+{"data":{},"time":1789957178852,"type":"tool/call"}
+{"data":{},"time":1789957178872,"type":"hook/invoked"}
+{"data":{},"time":1789957178950,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 162 chars]","type":"text"}],"type":"tool-result"}]},"step":34,"turn":1},"time":1789957178951,"type":"tool/result"}
+{"data":{},"time":1789957178951,"type":"step/end"}
+{"data":{},"time":1789957178956,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957178963,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957178963,"type":"step/start"}
+{"data":{"step":35,"turn":1,"usage":{"cacheReadTokens":34560,"inputTokens":5016,"outputTokens":103,"totalTokens":39679}},"time":1789957183752,"type":"assistant/message"}
+{"data":{},"time":1789957183753,"type":"tool/call"}
+{"data":{},"time":1789957183753,"type":"hook/invoked"}
+{"data":{},"time":1789957183862,"type":"hook/result"}
+{"data":{},"time":1789957183915,"type":"hook/invoked"}
+{"data":{},"time":1789957183967,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 2 chars]","type":"text"}],"type":"tool-result"}]},"step":35,"turn":1},"time":1789957183967,"type":"tool/result"}
+{"data":{},"time":1789957183968,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957183968,"type":"step/end"}
+{"data":{},"time":1789957183968,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957183973,"type":"hook/invoked"}
+{"data":{},"time":1789957184027,"type":"hook/result"}
+{"data":{},"time":1789957184028,"type":"step/start"}
+{"data":{},"time":1789957184029,"type":"user/message"}
+{"data":{"step":36,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":2859,"outputTokens":30,"totalTokens":39753}},"time":1789957186184,"type":"assistant/message"}
+{"data":{},"time":1789957186186,"type":"tool/call"}
+{"data":{},"time":1789957186187,"type":"hook/invoked"}
+{"data":{},"time":1789957186292,"type":"hook/result"}
+{"data":{},"time":1789957186935,"type":"permission/classifier"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 279 chars]","type":"text"}],"type":"tool-result"}]},"step":36,"turn":1},"time":1789957189525,"type":"tool/result"}
+{"data":{},"time":1789957189525,"type":"step/end"}
+{"data":{},"time":1789957189534,"type":"step/start"}
+{"data":{"step":37,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":2978,"outputTokens":99,"totalTokens":39941}},"time":1789957192021,"type":"assistant/message"}
+{"data":{},"time":1789957192023,"type":"tool/call"}
+{"data":{},"time":1789957192023,"type":"hook/invoked"}
+{"data":{},"time":1789957192317,"type":"hook/result"}
+{"data":{},"time":1789957192434,"type":"hook/invoked"}
+{"data":{},"time":1789957192509,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 2 chars]","type":"text"}],"type":"tool-result"}]},"step":37,"turn":1},"time":1789957192509,"type":"tool/result"}
+{"data":{},"time":1789957192509,"type":"step/end"}
+{"data":{},"time":1789957192517,"type":"step/start"}
+{"data":{"step":38,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":3082,"outputTokens":50,"totalTokens":39996}},"time":1789957195127,"type":"assistant/message"}
+{"data":{},"time":1789957195128,"type":"tool/call"}
+{"data":{},"time":1789957195128,"type":"hook/invoked"}
+{"data":{},"time":1789957195261,"type":"hook/result"}
+{"data":{},"time":1789957195261,"type":"hook/invoked"}
+{"data":{},"time":1789957195311,"type":"hook/result"}
+{"data":{},"time":1789957195317,"type":"hook/invoked"}
+{"data":{},"time":1789957195403,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 454 chars]","type":"text"}],"type":"tool-result"}]},"step":38,"turn":1},"time":1789957195403,"type":"tool/result"}
+{"data":{},"time":1789957195404,"type":"step/end"}
+{"data":{},"time":1789957195415,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957195416,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957195417,"type":"step/start"}
+{"data":{"step":39,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":3262,"outputTokens":86,"totalTokens":40212}},"time":1789957197279,"type":"assistant/message"}
+{"data":{},"time":1789957197281,"type":"tool/call"}
+{"data":{},"time":1789957197297,"type":"hook/invoked"}
+{"data":{},"time":1789957197373,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 164 chars]","type":"text"}],"type":"tool-result"}]},"step":39,"turn":1},"time":1789957197374,"type":"tool/result"}
+{"data":{},"time":1789957197374,"type":"step/end"}
+{"data":{},"time":1789957197380,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957197387,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957197387,"type":"step/start"}
+{"data":{"step":40,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":3387,"outputTokens":106,"totalTokens":40357}},"time":1789957200041,"type":"assistant/message"}
+{"data":{},"time":1789957200043,"type":"tool/call"}
+{"data":{},"time":1789957200043,"type":"hook/invoked"}
+{"data":{},"time":1789957200124,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 623 chars]","type":"text"}],"type":"tool-result"}]},"step":40,"turn":1},"time":1789957202271,"type":"tool/result"}
+{"data":{},"time":1789957202271,"type":"step/end"}
+{"data":{},"time":1789957202280,"type":"step/start"}
+{"data":{"step":41,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":3678,"outputTokens":1929,"totalTokens":42471}},"time":1789957216158,"type":"assistant/message"}
+{"data":{},"time":1789957216159,"type":"tool/call"}
+{"data":{},"time":1789957216172,"type":"hook/invoked"}
+{"data":{},"time":1789957216228,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 197 chars]","type":"text"}],"type":"tool-result"}]},"step":41,"turn":1},"time":1789957216228,"type":"tool/result"}
+{"data":{},"time":1789957216228,"type":"step/end"}
+{"data":{},"time":1789957216236,"type":"step/start"}
+{"data":{"step":42,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":5656,"outputTokens":38,"totalTokens":42558}},"time":1789957219094,"type":"assistant/message"}
+{"data":{},"time":1789957219096,"type":"tool/call"}
+{"data":{},"time":1789957219096,"type":"hook/invoked"}
+{"data":{},"time":1789957219220,"type":"hook/result"}
+{"data":{},"time":1789957219221,"type":"hook/invoked"}
+{"data":{},"time":1789957219274,"type":"hook/result"}
+{"data":{},"time":1789957219284,"type":"hook/invoked"}
+{"data":{},"time":1789957219338,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 368 chars]","type":"text"}],"type":"tool-result"}]},"step":42,"turn":1},"time":1789957219339,"type":"tool/result"}
+{"data":{},"time":1789957219340,"type":"step/end"}
+{"data":{},"time":1789957219344,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957219345,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957219345,"type":"step/start"}
+{"data":{"step":43,"turn":1,"usage":{"cacheReadTokens":34560,"inputTokens":8109,"outputTokens":1912,"totalTokens":44581}},"time":1789957235644,"type":"assistant/message"}
+{"data":{},"time":1789957235644,"type":"tool/call"}
+{"data":{},"time":1789957235659,"type":"hook/invoked"}
+{"data":{},"time":1789957235709,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 183 chars]","type":"text"}],"type":"tool-result"}]},"step":43,"turn":1},"time":1789957235710,"type":"tool/result"}
+{"data":{},"time":1789957235710,"type":"step/end"}
+{"data":{},"time":1789957235715,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957235722,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957235722,"type":"step/start"}
+{"data":{"step":44,"turn":1,"usage":{"cacheReadTokens":39168,"inputTokens":5465,"outputTokens":179,"totalTokens":44812}},"time":1789957241732,"type":"assistant/message"}
+{"data":{},"time":1789957241733,"type":"tool/call"}
+{"data":{},"time":1789957241749,"type":"hook/invoked"}
+{"data":{},"time":1789957241819,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 162 chars]","type":"text"}],"type":"tool-result"}]},"step":44,"turn":1},"time":1789957241819,"type":"tool/result"}
+{"data":{},"time":1789957241819,"type":"step/end"}
+{"data":{},"time":1789957241823,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957241830,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957241831,"type":"step/start"}
+{"data":{"step":45,"turn":1,"usage":{"cacheReadTokens":41472,"inputTokens":3379,"outputTokens":139,"totalTokens":44990}},"time":1789957245166,"type":"assistant/message"}
+{"data":{},"time":1789957245167,"type":"tool/call"}
+{"data":{},"time":1789957245185,"type":"hook/invoked"}
+{"data":{},"time":1789957245262,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 162 chars]","type":"text"}],"type":"tool-result"}]},"step":45,"turn":1},"time":1789957245262,"type":"tool/result"}
+{"data":{},"time":1789957245262,"type":"step/end"}
+{"data":{},"time":1789957245267,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957245273,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957245274,"type":"step/start"}
+{"data":{"step":46,"turn":1,"usage":{"cacheReadTokens":41472,"inputTokens":3557,"outputTokens":352,"totalTokens":45381}},"time":1789957252781,"type":"assistant/message"}
+{"data":{},"time":1789957252782,"type":"tool/call"}
+{"data":{},"time":1789957252804,"type":"hook/invoked"}
+{"data":{},"time":1789957252879,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 187 chars]","type":"text"}],"type":"tool-result"}]},"step":46,"turn":1},"time":1789957252880,"type":"tool/result"}
+{"data":{},"time":1789957252880,"type":"tool/call"}
+{"data":{},"time":1789957252894,"type":"hook/invoked"}
+{"data":{},"time":1789957252943,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 203 chars]","type":"text"}],"type":"tool-result"}]},"step":46,"turn":1},"time":1789957252944,"type":"tool/result"}
+{"data":{},"time":1789957252944,"type":"step/end"}
+{"data":{},"time":1789957252948,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957252956,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957252956,"type":"step/start"}
+{"data":{"step":47,"turn":1,"usage":{"cacheReadTokens":41472,"inputTokens":4016,"outputTokens":59,"totalTokens":45547}},"time":1789957256949,"type":"assistant/message"}
+{"data":{},"time":1789957256950,"type":"tool/call"}
+{"data":{},"time":1789957256951,"type":"hook/invoked"}
+{"data":{},"time":1789957257028,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1577 chars]","type":"text"}],"type":"tool-result"}]},"step":47,"turn":1},"time":1789957257062,"type":"tool/result"}
+{"data":{},"time":1789957257063,"type":"step/end"}
+{"data":{},"time":1789957257072,"type":"step/start"}
+{"data":{"step":48,"turn":1,"usage":{"cacheReadTokens":39168,"inputTokens":6835,"outputTokens":152,"totalTokens":46155}},"time":1789957259534,"type":"assistant/message"}
+{"data":{},"time":1789957259536,"type":"tool/call"}
+{"data":{},"time":1789957259536,"type":"hook/invoked"}
+{"data":{},"time":1789957259613,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 280 chars]","type":"text"}],"type":"tool-result"}]},"step":48,"turn":1},"time":1789957261876,"type":"tool/result"}
+{"data":{},"time":1789957261877,"type":"step/end"}
+{"data":{},"time":1789957261885,"type":"step/start"}
+{"data":{"step":49,"turn":1,"usage":{"cacheReadTokens":41472,"inputTokens":4748,"outputTokens":1161,"totalTokens":47381}},"time":1789957274771,"type":"assistant/message"}
+{"data":{},"time":1789957274771,"type":"tool/call"}
+{"data":{},"time":1789957274783,"type":"hook/invoked"}
+{"data":{},"time":1789957274823,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 161 chars]","type":"text"}],"type":"tool-result"}]},"step":49,"turn":1},"time":1789957274824,"type":"tool/result"}
+{"data":{},"time":1789957274824,"type":"step/end"}
+{"data":{},"time":1789957274827,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957274831,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957274832,"type":"step/start"}
+{"data":{"step":50,"turn":1,"usage":{"cacheReadTokens":43776,"inputTokens":3656,"outputTokens":559,"totalTokens":47991}},"time":1789957282585,"type":"assistant/message"}
+{"data":{},"time":1789957282585,"type":"tool/call"}
+{"data":{},"time":1789957282600,"type":"hook/invoked"}
+{"data":{},"time":1789957282658,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 166 chars]","type":"text"}],"type":"tool-result"}]},"step":50,"turn":1},"time":1789957282659,"type":"tool/result"}
+{"data":{},"time":1789957282659,"type":"step/end"}
+{"data":{},"time":1789957282663,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957282670,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957282670,"type":"step/start"}
+{"data":{"step":51,"turn":1,"usage":{"cacheReadTokens":43776,"inputTokens":4267,"outputTokens":98,"totalTokens":48141}},"time":1789957284975,"type":"assistant/message"}
+{"data":{},"time":1789957284976,"type":"tool/call"}
+{"data":{},"time":1789957284977,"type":"hook/invoked"}
+{"data":{},"time":1789957285052,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1835 chars]","type":"text"}],"type":"tool-result"}]},"step":51,"turn":1},"time":1789957285175,"type":"tool/result"}
+{"data":{},"time":1789957285175,"type":"step/end"}
+{"data":{},"time":1789957285184,"type":"step/start"}
+{"data":{"step":52,"turn":1,"usage":{"cacheReadTokens":43776,"inputTokens":4880,"outputTokens":122,"totalTokens":48778}},"time":1789957288076,"type":"assistant/message"}
+{"data":{},"time":1789957288077,"type":"tool/call"}
+{"data":{},"time":1789957288095,"type":"hook/invoked"}
+{"data":{},"time":1789957288173,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 140 chars]","type":"text"}],"type":"tool-result"}]},"step":52,"turn":1},"time":1789957288174,"type":"tool/result"}
+{"data":{},"time":1789957288174,"type":"step/end"}
+{"data":{},"time":1789957288180,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957288188,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957288188,"type":"step/start"}
+{"data":{"step":53,"turn":1,"usage":{"cacheReadTokens":43776,"inputTokens":5040,"outputTokens":119,"totalTokens":48935}},"time":1789957292925,"type":"assistant/message"}
+{"data":{},"time":1789957292926,"type":"tool/call"}
+{"data":{},"time":1789957292927,"type":"hook/invoked"}
+{"data":{},"time":1789957293010,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 222 chars]","type":"text"}],"type":"tool-result"}]},"step":53,"turn":1},"time":1789957293173,"type":"tool/result"}
+{"data":{},"time":1789957293173,"type":"step/end"}
+{"data":{},"time":1789957293180,"type":"step/start"}
+{"data":{"step":54,"turn":1,"usage":{"cacheReadTokens":46080,"inputTokens":2929,"outputTokens":265,"totalTokens":49274}},"time":1789957297345,"type":"assistant/message"}
+{"data":{},"time":1789957297346,"type":"tool/call"}
+{"data":{},"time":1789957297366,"type":"hook/invoked"}
+{"data":{},"time":1789957297440,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 144 chars]","type":"text"}],"type":"tool-result"}]},"step":54,"turn":1},"time":1789957297440,"type":"tool/result"}
+{"data":{},"time":1789957297441,"type":"step/end"}
+{"data":{},"time":1789957297445,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957297453,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957297453,"type":"step/start"}
+{"data":{"step":55,"turn":1,"usage":{"cacheReadTokens":36864,"inputTokens":12449,"outputTokens":242,"totalTokens":49555}},"time":1789957301566,"type":"assistant/message"}
+{"data":{},"time":1789957301567,"type":"tool/call"}
+{"data":{},"time":1789957301585,"type":"hook/invoked"}
+{"data":{},"time":1789957301654,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 144 chars]","type":"text"}],"type":"tool-result"}]},"step":55,"turn":1},"time":1789957301655,"type":"tool/result"}
+{"data":{},"time":1789957301655,"type":"step/end"}
+{"data":{},"time":1789957301659,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957301665,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957301665,"type":"step/start"}
+{"data":{"step":56,"turn":1,"usage":{"cacheReadTokens":46080,"inputTokens":3514,"outputTokens":207,"totalTokens":49801}},"time":1789957308188,"type":"assistant/message"}
+{"data":{},"time":1789957308189,"type":"tool/call"}
+{"data":{},"time":1789957308207,"type":"hook/invoked"}
+{"data":{},"time":1789957308284,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 144 chars]","type":"text"}],"type":"tool-result"}]},"step":56,"turn":1},"time":1789957308284,"type":"tool/result"}
+{"data":{},"time":1789957308285,"type":"step/end"}
+{"data":{},"time":1789957308288,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957308297,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957308297,"type":"step/start"}
+{"data":{"step":57,"turn":1,"usage":{"cacheReadTokens":46080,"inputTokens":3760,"outputTokens":630,"totalTokens":50470}},"time":1789957314657,"type":"assistant/message"}
+{"data":{},"time":1789957314658,"type":"tool/call"}
+{"data":{},"time":1789957314665,"type":"hook/invoked"}
+{"data":{},"time":1789957314723,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 196 chars]","type":"text"}],"type":"tool-result"}]},"step":57,"turn":1},"time":1789957314724,"type":"tool/result"}
+{"data":{},"time":1789957314724,"type":"step/end"}
+{"data":{},"time":1789957314732,"type":"step/start"}
+{"data":{"step":58,"turn":1,"usage":{"cacheReadTokens":46080,"inputTokens":4439,"outputTokens":38,"totalTokens":50557}},"time":1789957317190,"type":"assistant/message"}
+{"data":{},"time":1789957317191,"type":"tool/call"}
+{"data":{},"time":1789957317192,"type":"hook/invoked"}
+{"data":{},"time":1789957317326,"type":"hook/result"}
+{"data":{},"time":1789957317326,"type":"hook/invoked"}
+{"data":{},"time":1789957317381,"type":"hook/result"}
+{"data":{},"time":1789957317389,"type":"hook/invoked"}
+{"data":{},"time":1789957317438,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 2000 chars]","type":"text"}],"type":"tool-result"}]},"step":58,"turn":1},"time":1789957317439,"type":"tool/result"}
+{"data":{},"time":1789957317439,"type":"step/end"}
+{"data":{},"time":1789957317444,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957317449,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957317450,"type":"step/start"}
+{"data":{"step":59,"turn":1,"usage":{"cacheReadTokens":46080,"inputTokens":4958,"outputTokens":620,"totalTokens":51658}},"time":1789957324158,"type":"assistant/message"}
+{"data":{},"time":1789957324159,"type":"tool/call"}
+{"data":{},"time":1789957324174,"type":"hook/invoked"}
+{"data":{},"time":1789957324253,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 161 chars]","type":"text"}],"type":"tool-result"}]},"step":59,"turn":1},"time":1789957324254,"type":"tool/result"}
+{"data":{},"time":1789957324254,"type":"step/end"}
+{"data":{},"time":1789957324259,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957324268,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957324269,"type":"step/start"}
+{"data":{"step":60,"turn":1,"usage":{"cacheReadTokens":46080,"inputTokens":5617,"outputTokens":39,"totalTokens":51736}},"time":1789957331326,"type":"assistant/message"}
+{"data":{},"time":1789957331327,"type":"tool/call"}
+{"data":{},"time":1789957331328,"type":"hook/invoked"}
+{"data":{},"time":1789957331465,"type":"hook/result"}
+{"data":{},"time":1789957331466,"type":"hook/invoked"}
+{"data":{},"time":1789957331519,"type":"hook/result"}
+{"data":{},"time":1789957331529,"type":"hook/invoked"}
+{"data":{},"time":1789957331575,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1154 chars]","type":"text"}],"type":"tool-result"}]},"step":60,"turn":1},"time":1789957331575,"type":"tool/result"}
+{"data":{},"time":1789957331575,"type":"step/end"}
+{"data":{},"time":1789957331579,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957331584,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957331584,"type":"step/start"}
+{"data":{"step":61,"turn":1,"usage":{"cacheReadTokens":48384,"inputTokens":3891,"outputTokens":673,"totalTokens":52948}},"time":1789957340468,"type":"assistant/message"}
+{"data":{},"time":1789957340469,"type":"tool/call"}
+{"data":{},"time":1789957340490,"type":"hook/invoked"}
+{"data":{},"time":1789957340567,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 164 chars]","type":"text"}],"type":"tool-result"}]},"step":61,"turn":1},"time":1789957340567,"type":"tool/result"}
+{"data":{},"time":1789957340567,"type":"step/end"}
+{"data":{},"time":1789957340572,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957340581,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957340582,"type":"step/start"}
+{"data":{"step":62,"turn":1,"usage":{"cacheReadTokens":48384,"inputTokens":4604,"outputTokens":155,"totalTokens":53143}},"time":1789957344565,"type":"assistant/message"}
+{"data":{},"time":1789957344566,"type":"tool/call"}
+{"data":{},"time":1789957344567,"type":"hook/invoked"}
+{"data":{},"time":1789957344642,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 188 chars]","type":"text"}],"type":"tool-result"}]},"step":62,"turn":1},"time":1789957345870,"type":"tool/result"}
+{"data":{},"time":1789957345871,"type":"tool/call"}
+{"data":{},"time":1789957345871,"type":"hook/invoked"}
+{"data":{},"time":1789957345911,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 132 chars]","type":"text"}],"type":"tool-result"}]},"step":62,"turn":1},"time":1789957346767,"type":"tool/result"}
+{"data":{},"time":1789957346767,"type":"step/end"}
+{"data":{},"time":1789957346774,"type":"step/start"}
+{"data":{"step":63,"turn":1,"usage":{"cacheReadTokens":46080,"inputTokens":7182,"outputTokens":82,"totalTokens":53344}},"time":1789957349654,"type":"assistant/message"}
+{"data":{},"time":1789957349656,"type":"tool/call"}
+{"data":{},"time":1789957349674,"type":"hook/invoked"}
+{"data":{},"time":1789957349762,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 162 chars]","type":"text"}],"type":"tool-result"}]},"step":63,"turn":1},"time":1789957349763,"type":"tool/result"}
+{"data":{},"time":1789957349763,"type":"step/end"}
+{"data":{},"time":1789957349770,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957349770,"type":"agent/inbox/spliced"}
+{"data":{},"time":1789957349771,"type":"step/start"}
+{"data":{"step":64,"turn":1,"usage":{"cacheReadTokens":48384,"inputTokens":4999,"outputTokens":200,"totalTokens":53583}},"time":1789957353958,"type":"assistant/message"}
+{"data":{},"time":1789957353959,"type":"tool/call"}
+{"data":{},"time":1789957353960,"type":"hook/invoked"}
+{"data":{},"time":1789957354029,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 6 chars]","type":"text"}],"type":"tool-result"}]},"step":64,"turn":1},"time":1789957354971,"type":"tool/result"}
+{"data":{},"time":1789957354972,"type":"tool/call"}
+{"data":{},"time":1789957354972,"type":"hook/invoked"}
+{"data":{},"time":1789957355013,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 531 chars]","type":"text"}],"type":"tool-result"}]},"step":64,"turn":1},"time":1789957355395,"type":"tool/result"}
+{"data":{},"time":1789957355395,"type":"step/end"}
+{"data":{},"time":1789957355403,"type":"step/start"}
+{"data":{"step":65,"turn":1,"usage":{"cacheReadTokens":48384,"inputTokens":5354,"outputTokens":411,"totalTokens":54149}},"time":1789957367236,"type":"assistant/message"}
+{"data":{},"time":1789957367237,"type":"tool/call"}
+{"data":{},"time":1789957367237,"type":"hook/invoked"}
+{"data":{},"time":1789957367314,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 643 chars]","type":"text"}],"type":"tool-result"}]},"step":65,"turn":1},"time":1789957368603,"type":"tool/result"}
+{"data":{},"time":1789957368603,"type":"step/end"}
+{"data":{},"time":1789957368609,"type":"step/start"}
+{"data":{"step":66,"turn":1,"usage":{"cacheReadTokens":50688,"inputTokens":3628,"outputTokens":76,"totalTokens":54392}},"time":1789957372154,"type":"assistant/message"}
+{"data":{},"time":1789957372156,"type":"tool/call"}
+{"data":{},"time":1789957372157,"type":"hook/invoked"}
+{"data":{},"time":1789957372234,"type":"hook/result"}
+{"data":{"message":{"content":[{"content":[{"text":"[body redacted 1042 chars]","type":"text"}],"type":"tool-result"}]},"step":66,"turn":1},"time":1789957373196,"type":"tool/result"}
+{"data":{},"time":1789957373196,"type":"step/end"}
+{"data":{},"time":1789957373204,"type":"step/start"}
+{"data":{"step":67,"turn":1,"usage":{"cacheReadTokens":50688,"inputTokens":3987,"outputTokens":1038,"totalTokens":55713}},"time":1789957387155,"type":"assistant/message"}
+{"data":{},"time":1789957387155,"type":"step/end"}
+{"data":{},"time":1789957387156,"type":"hook/invoked"}
+{"data":{},"time":1789957387283,"type":"hook/result"}
+{"data":{},"time":1789957387283,"type":"turn/end"}

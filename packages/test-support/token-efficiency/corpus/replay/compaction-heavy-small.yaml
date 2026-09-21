@@ -1,0 +1,4 @@
+id: compaction-heavy-small
+kind: replay
+fixture: fixtures/compaction-heavy-small.sanitized.jsonl
+tags: [compaction]

@@ -42,6 +42,8 @@ import {
 
 export { CostGateLedger, projectKeyOf, type LedgerRow } from './ledger.ts'
 export { evaluateGate } from './gate.ts'
+export { foldCounters } from './fold-counters.ts'
+export type { FoldCounterMaterials } from './fold-counters.ts'
 export { diffTodos } from './todo-diff.ts'
 export { SETTINGS_NAMESPACE, registerCostGateSettings } from './settings.ts'
 export * from './types.ts'

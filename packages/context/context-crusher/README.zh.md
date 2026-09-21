@@ -32,6 +32,10 @@ CCR（Compress-Cache-Retrieve）可逆的工具输出压缩。一个 `tools/post
 | `min-savings-ratio` | `0.4` | 最小 token 节省比例。 |
 | `protected-tools` | 过宽的默认列表 | 永不压缩的工具。 |
 
+## foldCounters 约定
+
+本包为 `@dsh-cc/token-efficiency` 导出 `foldCounters(materials)`；标记/台账形态的任何变更必须在同一个 PR 中同步更新该 fold 及其测试。
+
 ## 注意事项
 
 - 转录中永久保留的是压缩后的形态：TUI 回放与 `command-export` 展示压缩块（原文只在存储与台账中）。

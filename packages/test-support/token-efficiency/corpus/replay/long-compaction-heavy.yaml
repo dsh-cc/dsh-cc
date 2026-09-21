@@ -1,0 +1,4 @@
+id: long-compaction-heavy
+kind: replay
+fixture: fixtures/long-compaction-heavy.sanitized.jsonl
+tags: [compaction, long-running, subagent, editing]

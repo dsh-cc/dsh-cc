@@ -2544,6 +2544,61 @@ importers:
         specifier: ^4.4.3
         version: 4.5.4
 
+  packages/test-support/token-efficiency:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: link:../../../../deepseek-harness/packages/core/agent-loop
+        version: link:../../../../deepseek-harness/packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-token-meter':
+        specifier: link:../../../../deepseek-harness/packages/llm/token-meter
+        version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@dsh-cc/agent-loop-mock':
+        specifier: workspace:^
+        version: link:../agent-loop-mock
+      '@dsh-cc/cache-trajectory':
+        specifier: workspace:^
+        version: link:../cache-trajectory
+      '@dsh-cc/command-cost':
+        specifier: workspace:^
+        version: link:../../session/command-cost
+      '@dsh-cc/compaction-basic':
+        specifier: workspace:^
+        version: link:../../compaction/compaction-basic-cc
+      '@dsh-cc/compaction-cost-gate':
+        specifier: workspace:^
+        version: link:../../compaction/compaction-cost-gate
+      '@dsh-cc/context-crusher':
+        specifier: workspace:^
+        version: link:../../context/context-crusher
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.3.2
+      zod:
+        specifier: ^4.4.3
+        version: 4.5.4
+    devDependencies:
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
+
   packages/ui/pi-tui:
     dependencies:
       get-east-asian-width:

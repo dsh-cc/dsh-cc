@@ -1,0 +1,4 @@
+id: multi-axis-medium
+kind: replay
+fixture: fixtures/multi-axis-medium.sanitized.jsonl
+tags: [compaction, subagent, editing]

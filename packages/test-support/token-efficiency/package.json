@@ -1,0 +1,35 @@
+{
+  "name": "@dsh-cc/token-efficiency",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Token-efficiency eval harness: sanitized replay fixtures, corpus, metrics, frozen gate (plan 2026-09-20).",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bin": "./src/bin.ts",
+    "./package.json": "./package.json"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^4.4.3",
+    "@dsh-cc/cache-trajectory": "workspace:^",
+    "@dsh-cc/command-cost": "workspace:^",
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
+    "@dsh-cc/agent-loop-mock": "workspace:^",
+    "@dsh-cc/compaction-basic": "workspace:^",
+    "@dsh-cc/compaction-cost-gate": "workspace:^",
+    "@dsh-cc/context-crusher": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
+  }
+}

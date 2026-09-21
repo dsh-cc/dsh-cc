@@ -28,6 +28,10 @@ Only real defect classes (`changed | summary | commit | persistence`, unexpected
 
 Ledger: `<dshHome>/compaction-cost-gate/<projectKey>.jsonl`, append-only, fire-and-forget.
 
+## foldCounters convention
+
+This package exports `foldCounters(materials)` for `@dsh-cc/token-efficiency`; any change to the marker/ledger shape MUST update the fold and its tests in the same PR.
+
 ## Usage
 
 ```ts
