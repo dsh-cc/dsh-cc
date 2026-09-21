@@ -30,7 +30,6 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
 import { loadEnv } from '@deepseek-ai/dsh-app-boot'
 import { Context } from '@deepseek-ai/cordis'
 import {
@@ -43,9 +42,9 @@ import {
   renderReportTable,
   runCacheTrajectory,
   thresholdsFromEnv,
-  type SessionLogEvent,
 } from './index.ts'
 import { mountTrajectoryTestStack } from './testing.ts'
+import { readSessionEvents } from './session-log-io.ts'
 
 const NAME = 'cache-trajectory-bin'
 
@@ -128,28 +127,6 @@ async function run(options: BinOptions): Promise<string> {
     await ctx.fiber.dispose()
   }
   return output
-}
-
-/** Parse a session log (plain JSONL, `-` for stdin, `.zstd` via the zstd CLI). */
-function readSessionEvents(path: string): SessionLogEvent[] {
-  let text: string
-  if (path === '-') {
-    text = readFileSync(0, 'utf8')
-  } else if (path.endsWith('.zstd')) {
-    const result = spawnSync('zstd', ['-dc', path], { encoding: 'utf8', maxBuffer: 1 << 30 })
-    if (result.status !== 0) {
-      throw new Error(`${NAME}: zstd -dc ${path} failed: ${result.stderr.trim() || `exit ${result.status}`}`)
-    }
-    text = result.stdout
-  } else {
-    text = readFileSync(path, 'utf8')
-  }
-  const events: SessionLogEvent[] = []
-  for (const line of text.split('\n')) {
-    if (line.trim().length === 0) continue
-    events.push(JSON.parse(line) as SessionLogEvent)
-  }
-  return events
 }
 
 function percent(value: number | undefined): string {

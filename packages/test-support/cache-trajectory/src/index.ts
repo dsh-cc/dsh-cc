@@ -46,3 +46,4 @@ export {
   type SessionCacheAnalysis,
   type SessionLogEvent,
 } from './session-log-analysis.ts'
+export { readSessionEvents } from './session-log-io.ts'
