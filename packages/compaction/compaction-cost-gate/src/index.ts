@@ -21,7 +21,7 @@
 import type {} from '@deepseek-ai/dsh-token-meter'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { CommandId } from '@deepseek-ai/dsh-commands/brand'
+import { CommandId } from '@deepseek-ai/dsh-commands'
 import { ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import { deriveEventMessage, type Session } from '@deepseek-ai/dsh-session'
 import type { PostToolDecision } from '@dsh-cc/tools'

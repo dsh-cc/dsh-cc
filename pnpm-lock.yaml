@@ -288,6 +288,9 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
         version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
       '@deepseek-ai/dsh-compaction':
         specifier: link:../../../../deepseek-harness/packages/compaction/compaction
         version: link:../../../../deepseek-harness/packages/compaction/compaction
