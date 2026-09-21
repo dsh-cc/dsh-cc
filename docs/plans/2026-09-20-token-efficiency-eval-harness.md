@@ -1,6 +1,6 @@
 # Token-Efficiency Eval Harness: frozen gates, Pareto acceptance, held-out discipline
 
-Date: 2026-09-20. Status: design — critic cold review passed with amendments (9 findings:
+Date: 2026-09-20. Status: **Implemented (Phases 0–1)** — PR #89 (2026-09-21). Phase 2 (live tier) is deferred per §4 (manual-only, one-way valve, nightly only after ≥3 hand runs). Original design-review record: critic cold review passed with amendments (9 findings:
 replay tier rebuilt on committed sanitized fixtures with honest gate semantics, freeze rule
 mechanized in presubmit, baseline refreshed with metrics.ts changes, counter folding moved
 upstream into feature packages; all baked in below).
