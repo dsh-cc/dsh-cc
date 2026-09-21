@@ -1,6 +1,6 @@
 # Post-Edit Auto-Verify: SoL-Pi Action Fusion without a new tool surface
 
-Date: 2026-09-20. Status: design — two reviews passed with amendments, all baked in. Second
+Date: 2026-09-20. Status: **Implemented** — PR #93 (open, pending merge); Phase 3 personal dogfood is a follow-up. Design: two reviews passed with amendments, all baked in. Second
 (pre-implementation, code-grounded) review at HEAD 705f586: GO-WITH-AMENDMENTS (shell seam
 corrected to the harness ShellExecutor resolve/run contract with value-accept guard,
 org-policy-layer read dropped as unreachable, plain-plugin form replacing the Service,
