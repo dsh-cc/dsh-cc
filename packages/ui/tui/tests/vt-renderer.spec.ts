@@ -823,6 +823,32 @@ describe('vt-renderer', () => {
     root.destroy()
   })
 
+  it('suppresses the verb when the running title already opens with the tool name', async () => {
+    const vt = new VirtualTerminal(80, 24)
+    let state = createInitialState()
+    state = upsertRow(state, {
+      kind: 'tool',
+      callId: 'r2',
+      name: 'read',
+      args: '{"file_path":"packages/a.md"}',
+      title: 'Read packages/a.md',
+      running: true,
+    })
+    const driver = fakeDriver(state)
+
+    const root = buildRoot(driver, { terminal: vt, onQuit: () => {} })
+    root.tui.start()
+    await settle()
+
+    const stripped = stripAnsi(vt.grid().join('\n'))
+    expect(stripped).not.toContain('Reading')
+    expect(stripped).toContain('Read packages/a.md')
+    expect(stripped).toContain('…')
+
+    root.tui.stop()
+    root.destroy()
+  })
+
   it('renders a completed tool row with a checkmark and no verb', async () => {
     const vt = new VirtualTerminal(80, 24)
     let state = createInitialState()

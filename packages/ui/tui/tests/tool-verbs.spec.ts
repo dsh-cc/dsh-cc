@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toolVerb } from '@dsh-cc/tui/tool-verbs.ts'
+import { toolVerb, verbIsRedundant } from '@dsh-cc/tui/tool-verbs.ts'
 
 describe('toolVerb', () => {
   it('maps bash and shell to Running (case-insensitive)', () => {
@@ -47,4 +47,31 @@ describe('toolVerb', () => {
     expect(toolVerb('')).toBe('Calling')
     expect(toolVerb('multiedit')).toBe('Calling')
   })
+})
+
+describe('verbIsRedundant', () => {
+  const cases: Array<[string, string, boolean]> = [
+    ['Read packages/a.md', 'read', true],
+    ['Read docs/plans/x.md (43 - 117)', 'read', true],
+    ['Write foo.ts', 'write', true],
+    ['Edit foo.ts', 'edit', true],
+    ['Glob *.ts', 'glob', true],
+    ['Grep foo', 'grep', true],
+    ['read', 'read', false],
+    ['Readme notes', 'read', false],
+    ['Reading list', 'read', false],
+    ['ls -la', 'bash', false],
+    // Accepted false positive: title is self-describing.
+    ['bash build.sh', 'bash', true],
+    ['List background jobs', 'job_list', false],
+    ['List background jobs', '', false],
+    ['', 'read', false],
+    ['mcp__foo__bar results', 'mcp__foo__bar', true],
+    ['mcp__foo__barista x', 'mcp__foo__bar', false],
+  ]
+  for (const [title, name, expected] of cases) {
+    it(`verbIsRedundant(${JSON.stringify(title)}, ${JSON.stringify(name)}) -> ${expected}`, () => {
+      expect(verbIsRedundant(title, name)).toBe(expected)
+    })
+  }
 })

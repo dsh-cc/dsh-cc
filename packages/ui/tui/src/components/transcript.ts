@@ -14,7 +14,7 @@ import {
   type Component,
 } from '@dsh-cc/pi-tui'
 import type { TranscriptRow } from '../store.ts'
-import { toolVerb } from '../tool-verbs.ts'
+import { toolVerb, verbIsRedundant } from '../tool-verbs.ts'
 import { renderDiffLines } from './diff-card.ts'
 import { createMarkdownTheme } from './markdown-theme.ts'
 import { groupReadRows, readGroupCacheKey, renderReadGroup } from './read-group.ts'
@@ -102,7 +102,8 @@ export function renderRowText(row: TranscriptRow, options?: RowRenderOptions, th
       // Running rows lead with a muted present-tense verb (Running/Reading/…);
       // completed rows drop the verb and show only a result glyph.
       const status = row.running ? '…' : (row.error === true ? '✗' : '✓')
-      const verbPrefix = row.running ? `${theme.muted(toolVerb(row.name))} ` : ''
+      const verbPrefix =
+        row.running && !verbIsRedundant(row.title, row.name) ? `${theme.muted(toolVerb(row.name))} ` : ''
       const head = theme.warning(`⏺ ${verbPrefix}${row.title} ${status}`)
       const headLine = row.error === true ? theme.error(head) : head
 
