@@ -1,0 +1,48 @@
+[
+  {
+    "type": "tool/call",
+    "seq": 47,
+    "time": 1789724084110,
+    "data": {
+      "turn": 1,
+      "step": 3,
+      "callId": "chatcmpl-tool-919b46170cda13a4",
+      "name": "read",
+      "arguments": "{\"file_path\":\"/Users/bytedance/workspace/capacitor/docs/data-sources.md\"}"
+    }
+  },
+  {
+    "type": "tool/result",
+    "seq": 51,
+    "time": 1789724084163,
+    "data": {
+      "turn": 1,
+      "step": 3,
+      "message": {
+        "source": {
+          "kind": "tool",
+          "callId": "chatcmpl-tool-919b46170cda13a4"
+        },
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "chatcmpl-tool-919b46170cda13a4",
+            "content": [
+              {
+                "type": "text",
+                "text": "Error: File is 684 lines (~43 KB), over the shunt threshold (350 lines / 100000 bytes). To understand it, delegate via the \"bulk-reader\" skill instead of reading it into your context. For exact content to edit a specific section, re-read just that range with offset/limit — targeted reads always pass."
+              }
+            ],
+            "isError": true
+          }
+        ],
+        "role": "user",
+        "id": "27d43c8b-4701-4714-81cb-388fa0c87f0d"
+      }
+    },
+    "sourceEventSeqs": [
+      47
+    ],
+    "surfaceOp": "append"
+  }
+]

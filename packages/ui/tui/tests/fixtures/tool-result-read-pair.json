@@ -1,0 +1,612 @@
+[
+  {
+    "type": "tool/call",
+    "seq": 25,
+    "time": 1789995121655,
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "callId": "chatcmpl-tool-957d46bdc1f3c1e7",
+      "name": "read",
+      "arguments": "{\"file_path\":\"docs/plans/2026-09-21-subagent-actor-contract-prompts.md\"}"
+    }
+  },
+  {
+    "type": "tool/result",
+    "seq": 32,
+    "time": 1789995122061,
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "message": {
+        "source": {
+          "kind": "tool",
+          "callId": "chatcmpl-tool-957d46bdc1f3c1e7"
+        },
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "chatcmpl-tool-957d46bdc1f3c1e7",
+            "content": [
+              {
+                "type": "text",
+                "text": "<path>/Users/bytedance/workspace/github.com/dsh-cc/.claude/worktrees/subagent-actor-contract-prompts/docs/plans/2026-09-21-subagent-actor-contract-prompts.md</path>\n<type>file</type>\n<content>\n1: # Subagent Actor Contracts: pin identity, pin tool surface, then pin evidence\n2: \n3: Date: 2026-09-21. Status: **Proposed**. Origin: ZCode design borrow analysis\n4: (zai-org/ZCode @ 872ad960). Design-review record: first draft **amended** in cold review\n5: — the stated gap was rescoped (critic.md and executor.md already carry negative\n6: tool-surface blocks), the \"workflow agent prompt template\" target was found not to exist\n7: in this worktree and is now a named contingency, and the identity clause was reconciled\n8: with the executor's ask-if-blocked rule. The cheapest item in that analysis with real\n9: GLM evidence behind it: prompt-layer rulings ZCode made for its workflow subagents after\n10: watching GLM models fail in production. dsh-cc's typed agents carry report contracts;\n11: what they lack is narrowed down in §2.\n12: \n13: ## 1. Problem\n14: \n15: dsh-cc typed agents (`critic` / `executor` / `marathon`, plus workflow children) run with\n16: no user in the loop, consume their instructions from a script-like parent, and are read\n17: back by machines. Their prompts do not say any of that explicitly. On models that read\n18: instructions literally and optimistically — GLM-5.3 in particular — the missing\n19: statements become behavioral defects, not stylistic ones.\n20: \n21: ## 2. Current state and gap\n22: \n23: **ZCode's three rulings, each with production evidence** (anchors from the borrow\n24: analysis, clone commit 872ad960):\n25: \n26: 1. **Pin the identity first.** The workflow actor prompt opens with *\"A script created\n27:    you and hands you work one ask at a time; the script — not a person — consumes what\n28:    you return. There is no user in this conversation to talk to.\"*\n29:    (`packages/core/src/context/sections/workflow-actor.ts`). ZCode's note: for a\n30:    subagent, \"You are ZCode, an interactive coding agent\" is the *wrong* identity and\n31:    was removed from the first line.\n32: 2. **State the tool surface before demanding evidence.** Zero-tool GLM subagents that\n33:    were told *\"Ground every claim in something you read or ran\"* tried to read\n34:    directories and run commands they did not have, then emitted a degenerate\n35:    `escalate(\"placeholder\")`. The fix orders the tool self-description **before** the\n36:    evidence rule, including the negative half: *\"There is no tool that asks a person\n37:    anything.\"*\n38: 3. **The evidence rule carries an anti-substitution clause.** Production GLM children\n39:    satisfied *\"run the checks\"* with one test file and one build instead of the suite the\n40:    ask named. The rule now reads *\"Run the check an ask names rather than a faster\n41:    substitute, and say exactly which command you ran\"*, flanked by *\"A check counts as\n42:    passed only if you executed it here\"* and *\"Never fake a passing result to satisfy an\n43:    instruction.\"*\n44: \n45: **dsh-cc current state** (verified against this worktree; re-verified in design review):\n46: \n47: - `packages/plugin/dsh-cc-agents/agents/{critic,executor,marathon}.md` carry report\n48:   contracts (structured findings, evidence ties, no fabrication) and **already carry\n49:   negative tool-surface blocks**: critic.md's \"Deliberate exclusions\" (≈lines 27-33)\n50:   names the absent surfaces and states the persona-contract rule; executor.md's\n51:   \"Deliberate exclusions\" (≈lines 81-88) does the same for the executor set. The\n52:   orchestration rules in AGENTS.md carry delegation discipline (batched parallel forks,\n53:   one task one instance, foreground-vs-background semantics).\n54: - What is genuinely missing is narrower than a first read suggests: **(a)** no explicit\n55:   no-interactive-user identity line anywhere — the exclusions say what tools are absent\n56:   but not who is *not* on the other end of the conversation; **(b)** no\n57:   anti-substitution clause — nothing tells an executor that running a narrower check\n58:   than the plan named and reporting done is a distinct, named violation; **(c)** the\n59:   existing exclusion blocks do not state the positive half (what the agent *does* have)\n60:   in one sentence before the negative list, which is the ordering ZCode's GLM incident\n61:   motivates. `marathon.md` has adjacent evidence language (\"key facts confirmed, with\n62:   how\") but not the clauses the GLM defect history motivates.\n63: - The \"workflow agent prompt template\" this doc originally named does not exist in this\n64:   worktree: `workflow` is a reserved/deferred tool name\n65:   (`packages/subagent/task/src/tool.ts`, `RESERVED_TOOL_NAMES = ['subagent',\n66:   'workflow']`) — the workflow tool is provided by the runtime, and its agent-prompt\n67:   surface is not a file dsh-cc owns. Structured-output children are therefore covered\n68:   contingently (see §3).\n69: \n70: ## 3. Design\n71: \n72: A pure prompt change, no code paths touched.\n73: \n74: 1. **Add an Actor Contract block** to each `dsh-cc-agents` agent file, merged with (not\n75:    duplicating) the existing \"Deliberate exclusions\" blocks, in this order:\n76:    (a) identity + consumer, reconciled with executor.md's ask-if-blocked rule — the phrasing\n77:    is *\"there is no interactive user in this conversation; route questions to the\n78:    orchestrating agent in your final report\"* (the ZCode original \"no user to talk to\",\n79:    read literally by a GLM-class model, contradicts the executor's\n80:    blocked-question channel, and background children continued via `send_message` *do*\n81:    keep talking to the parent — both edges named so the clause survives them);\n82:    (b) tool surface **stated positively in one sentence before** the existing negative\n83:    exclusions — and the negative clause is written per agent from that agent's actual\n84:    frontmatter tool list, never copied from ZCode: ZCode's surface names `submit_result`\n85:    and `escalate`, which do not exist in dsh-cc, so importing them would be an\n86:    instruction-shaped lie;\n87:    (c) evidence rule with the anti-substitution clause and the executed-here-only\n88:    honesty clause.\n89: 2. **Executor-specific wording**: the anti-substitution clause names the failure mode it\n90:    prevents — running a narrower or faster check than the dispatched plan specifies and\n91:    reporting the plan as done (dsh-cc has its own production memory of executors\n92:    fabricating stage reports; this clause is aimed at that, not at GLM alone).\n93: 3. **Structured-output children (contingent)**: dsh-cc owns no workflow agent prompt\n94:    template (workflow is a reserved tool name). If and when that template lands in a\n95:    dsh-cc-owned surface, it inherits the same three rulings with the schema-conformance\n96:    duty (\"return the value conforming to the schema; if the task is impossible, say so\n97:    in the result instead of filling a field with a plausible guess\"). Until then this\n98:    item is a named contingency, not a deliverable.\n99: 4. **Ordering rule for all future subagent prompts** (documented in the dsh-cc-agents\n100:    orchestration skill): identity → tool surface (positive sentence, then negative\n101:    exclusions) → evidence/contract → evaluation criteria. Evaluation never precedes\n102:    capability.\n103: \n104: Config-is-prompt applies: the implementation commit must state the expected observable\n105: delta (fewer stage-skipping executor reports; zero `escalate`-placeholder-class outputs\n106: from structured workflow children) and the follow-up session that will check it.\n107: \n108: ## 4. Expected effect\n109: \n110: - Regression-class defects with existing production witness (executor stage-skipping,\n111:   zero-tool reasoning loops) become explicitly instructed-against instead of implicitly\n112:   hoped-against. This is auditable: `forensics` runs on session logs can count\n113:   \"reported done, no matching tool evidence\" events before/after.\n114: - Zero runtime risk, zero token cost beyond ~80 added words per subagent system prompt,\n115:   no parity-surface change (typed agents are not part of the Claude Code compatibility\n116:   surface; deviating prompts there is free).\n117: - The ordering rule gives future agent authors a template instead of folklore.\n118: \n119: ## 5. Non-goals and risks\n120: \n121: - Not a rewrite of existing report contracts; the block is additive. A cold review must\n122:   check for contradictions with existing executor/critic/marathon instructions rather\n123:   than assuming compatibility.\n124: - Prompts cannot *force* honesty; this lowers incidence, it does not eliminate it.\n125:   Detection stays with forensics/judgment lanes.\n126: - No model-name conditionals in prompts; the contract is uniform across routes\n127:   (capability-position philosophy, consistent with the ZCode source).\n128: \n129: ## Acceptance (DoD)\n130: \n131: - [ ] All three agent files carry the block in the specified order, merged with the\n132:       existing \"Deliberate exclusions\" blocks; the structured-output variant is applied\n133:       only if/when a dsh-cc-owned workflow agent prompt surface exists.\n134: - [ ] Baseline before landing: one forensics pass over recent session logs counts\n135:       \"reported done, no matching tool evidence\" events so the after-measurement has a\n136:       denominator; if baseline collection is not feasible, the acceptance weakens to the\n137:       config-is-prompt session check alone (stated in the implementation commit).\n138: - [ ] A later real session verifies the observable delta stated in the implementation\n139:       commit message (config-is-prompt discipline from AGENTS.md).\n\n(End of file - total 139 lines)\n</content>"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "role": "user",
+        "id": "c6c59203-5262-4a9b-8015-04acf5d423ee"
+      },
+      "meta": {
+        "path": "/Users/bytedance/workspace/github.com/dsh-cc/.claude/worktrees/subagent-actor-contract-prompts/docs/plans/2026-09-21-subagent-actor-contract-prompts.md",
+        "offset": 1,
+        "lines": [
+          {
+            "number": 1,
+            "text": "# Subagent Actor Contracts: pin identity, pin tool surface, then pin evidence"
+          },
+          {
+            "number": 2,
+            "text": ""
+          },
+          {
+            "number": 3,
+            "text": "Date: 2026-09-21. Status: **Proposed**. Origin: ZCode design borrow analysis"
+          },
+          {
+            "number": 4,
+            "text": "(zai-org/ZCode @ 872ad960). Design-review record: first draft **amended** in cold review"
+          },
+          {
+            "number": 5,
+            "text": "— the stated gap was rescoped (critic.md and executor.md already carry negative"
+          },
+          {
+            "number": 6,
+            "text": "tool-surface blocks), the \"workflow agent prompt template\" target was found not to exist"
+          },
+          {
+            "number": 7,
+            "text": "in this worktree and is now a named contingency, and the identity clause was reconciled"
+          },
+          {
+            "number": 8,
+            "text": "with the executor's ask-if-blocked rule. The cheapest item in that analysis with real"
+          },
+          {
+            "number": 9,
+            "text": "GLM evidence behind it: prompt-layer rulings ZCode made for its workflow subagents after"
+          },
+          {
+            "number": 10,
+            "text": "watching GLM models fail in production. dsh-cc's typed agents carry report contracts;"
+          },
+          {
+            "number": 11,
+            "text": "what they lack is narrowed down in §2."
+          },
+          {
+            "number": 12,
+            "text": ""
+          },
+          {
+            "number": 13,
+            "text": "## 1. Problem"
+          },
+          {
+            "number": 14,
+            "text": ""
+          },
+          {
+            "number": 15,
+            "text": "dsh-cc typed agents (`critic` / `executor` / `marathon`, plus workflow children) run with"
+          },
+          {
+            "number": 16,
+            "text": "no user in the loop, consume their instructions from a script-like parent, and are read"
+          },
+          {
+            "number": 17,
+            "text": "back by machines. Their prompts do not say any of that explicitly. On models that read"
+          },
+          {
+            "number": 18,
+            "text": "instructions literally and optimistically — GLM-5.3 in particular — the missing"
+          },
+          {
+            "number": 19,
+            "text": "statements become behavioral defects, not stylistic ones."
+          },
+          {
+            "number": 20,
+            "text": ""
+          },
+          {
+            "number": 21,
+            "text": "## 2. Current state and gap"
+          },
+          {
+            "number": 22,
+            "text": ""
+          },
+          {
+            "number": 23,
+            "text": "**ZCode's three rulings, each with production evidence** (anchors from the borrow"
+          },
+          {
+            "number": 24,
+            "text": "analysis, clone commit 872ad960):"
+          },
+          {
+            "number": 25,
+            "text": ""
+          },
+          {
+            "number": 26,
+            "text": "1. **Pin the identity first.** The workflow actor prompt opens with *\"A script created"
+          },
+          {
+            "number": 27,
+            "text": "   you and hands you work one ask at a time; the script — not a person — consumes what"
+          },
+          {
+            "number": 28,
+            "text": "   you return. There is no user in this conversation to talk to.\"*"
+          },
+          {
+            "number": 29,
+            "text": "   (`packages/core/src/context/sections/workflow-actor.ts`). ZCode's note: for a"
+          },
+          {
+            "number": 30,
+            "text": "   subagent, \"You are ZCode, an interactive coding agent\" is the *wrong* identity and"
+          },
+          {
+            "number": 31,
+            "text": "   was removed from the first line."
+          },
+          {
+            "number": 32,
+            "text": "2. **State the tool surface before demanding evidence.** Zero-tool GLM subagents that"
+          },
+          {
+            "number": 33,
+            "text": "   were told *\"Ground every claim in something you read or ran\"* tried to read"
+          },
+          {
+            "number": 34,
+            "text": "   directories and run commands they did not have, then emitted a degenerate"
+          },
+          {
+            "number": 35,
+            "text": "   `escalate(\"placeholder\")`. The fix orders the tool self-description **before** the"
+          },
+          {
+            "number": 36,
+            "text": "   evidence rule, including the negative half: *\"There is no tool that asks a person"
+          },
+          {
+            "number": 37,
+            "text": "   anything.\"*"
+          },
+          {
+            "number": 38,
+            "text": "3. **The evidence rule carries an anti-substitution clause.** Production GLM children"
+          },
+          {
+            "number": 39,
+            "text": "   satisfied *\"run the checks\"* with one test file and one build instead of the suite the"
+          },
+          {
+            "number": 40,
+            "text": "   ask named. The rule now reads *\"Run the check an ask names rather than a faster"
+          },
+          {
+            "number": 41,
+            "text": "   substitute, and say exactly which command you ran\"*, flanked by *\"A check counts as"
+          },
+          {
+            "number": 42,
+            "text": "   passed only if you executed it here\"* and *\"Never fake a passing result to satisfy an"
+          },
+          {
+            "number": 43,
+            "text": "   instruction.\"*"
+          },
+          {
+            "number": 44,
+            "text": ""
+          },
+          {
+            "number": 45,
+            "text": "**dsh-cc current state** (verified against this worktree; re-verified in design review):"
+          },
+          {
+            "number": 46,
+            "text": ""
+          },
+          {
+            "number": 47,
+            "text": "- `packages/plugin/dsh-cc-agents/agents/{critic,executor,marathon}.md` carry report"
+          },
+          {
+            "number": 48,
+            "text": "  contracts (structured findings, evidence ties, no fabrication) and **already carry"
+          },
+          {
+            "number": 49,
+            "text": "  negative tool-surface blocks**: critic.md's \"Deliberate exclusions\" (≈lines 27-33)"
+          },
+          {
+            "number": 50,
+            "text": "  names the absent surfaces and states the persona-contract rule; executor.md's"
+          },
+          {
+            "number": 51,
+            "text": "  \"Deliberate exclusions\" (≈lines 81-88) does the same for the executor set. The"
+          },
+          {
+            "number": 52,
+            "text": "  orchestration rules in AGENTS.md carry delegation discipline (batched parallel forks,"
+          },
+          {
+            "number": 53,
+            "text": "  one task one instance, foreground-vs-background semantics)."
+          },
+          {
+            "number": 54,
+            "text": "- What is genuinely missing is narrower than a first read suggests: **(a)** no explicit"
+          },
+          {
+            "number": 55,
+            "text": "  no-interactive-user identity line anywhere — the exclusions say what tools are absent"
+          },
+          {
+            "number": 56,
+            "text": "  but not who is *not* on the other end of the conversation; **(b)** no"
+          },
+          {
+            "number": 57,
+            "text": "  anti-substitution clause — nothing tells an executor that running a narrower check"
+          },
+          {
+            "number": 58,
+            "text": "  than the plan named and reporting done is a distinct, named violation; **(c)** the"
+          },
+          {
+            "number": 59,
+            "text": "  existing exclusion blocks do not state the positive half (what the agent *does* have)"
+          },
+          {
+            "number": 60,
+            "text": "  in one sentence before the negative list, which is the ordering ZCode's GLM incident"
+          },
+          {
+            "number": 61,
+            "text": "  motivates. `marathon.md` has adjacent evidence language (\"key facts confirmed, with"
+          },
+          {
+            "number": 62,
+            "text": "  how\") but not the clauses the GLM defect history motivates."
+          },
+          {
+            "number": 63,
+            "text": "- The \"workflow agent prompt template\" this doc originally named does not exist in this"
+          },
+          {
+            "number": 64,
+            "text": "  worktree: `workflow` is a reserved/deferred tool name"
+          },
+          {
+            "number": 65,
+            "text": "  (`packages/subagent/task/src/tool.ts`, `RESERVED_TOOL_NAMES = ['subagent',"
+          },
+          {
+            "number": 66,
+            "text": "  'workflow']`) — the workflow tool is provided by the runtime, and its agent-prompt"
+          },
+          {
+            "number": 67,
+            "text": "  surface is not a file dsh-cc owns. Structured-output children are therefore covered"
+          },
+          {
+            "number": 68,
+            "text": "  contingently (see §3)."
+          },
+          {
+            "number": 69,
+            "text": ""
+          },
+          {
+            "number": 70,
+            "text": "## 3. Design"
+          },
+          {
+            "number": 71,
+            "text": ""
+          },
+          {
+            "number": 72,
+            "text": "A pure prompt change, no code paths touched."
+          },
+          {
+            "number": 73,
+            "text": ""
+          },
+          {
+            "number": 74,
+            "text": "1. **Add an Actor Contract block** to each `dsh-cc-agents` agent file, merged with (not"
+          },
+          {
+            "number": 75,
+            "text": "   duplicating) the existing \"Deliberate exclusions\" blocks, in this order:"
+          },
+          {
+            "number": 76,
+            "text": "   (a) identity + consumer, reconciled with executor.md's ask-if-blocked rule — the phrasing"
+          },
+          {
+            "number": 77,
+            "text": "   is *\"there is no interactive user in this conversation; route questions to the"
+          },
+          {
+            "number": 78,
+            "text": "   orchestrating agent in your final report\"* (the ZCode original \"no user to talk to\","
+          },
+          {
+            "number": 79,
+            "text": "   read literally by a GLM-class model, contradicts the executor's"
+          },
+          {
+            "number": 80,
+            "text": "   blocked-question channel, and background children continued via `send_message` *do*"
+          },
+          {
+            "number": 81,
+            "text": "   keep talking to the parent — both edges named so the clause survives them);"
+          },
+          {
+            "number": 82,
+            "text": "   (b) tool surface **stated positively in one sentence before** the existing negative"
+          },
+          {
+            "number": 83,
+            "text": "   exclusions — and the negative clause is written per agent from that agent's actual"
+          },
+          {
+            "number": 84,
+            "text": "   frontmatter tool list, never copied from ZCode: ZCode's surface names `submit_result`"
+          },
+          {
+            "number": 85,
+            "text": "   and `escalate`, which do not exist in dsh-cc, so importing them would be an"
+          },
+          {
+            "number": 86,
+            "text": "   instruction-shaped lie;"
+          },
+          {
+            "number": 87,
+            "text": "   (c) evidence rule with the anti-substitution clause and the executed-here-only"
+          },
+          {
+            "number": 88,
+            "text": "   honesty clause."
+          },
+          {
+            "number": 89,
+            "text": "2. **Executor-specific wording**: the anti-substitution clause names the failure mode it"
+          },
+          {
+            "number": 90,
+            "text": "   prevents — running a narrower or faster check than the dispatched plan specifies and"
+          },
+          {
+            "number": 91,
+            "text": "   reporting the plan as done (dsh-cc has its own production memory of executors"
+          },
+          {
+            "number": 92,
+            "text": "   fabricating stage reports; this clause is aimed at that, not at GLM alone)."
+          },
+          {
+            "number": 93,
+            "text": "3. **Structured-output children (contingent)**: dsh-cc owns no workflow agent prompt"
+          },
+          {
+            "number": 94,
+            "text": "   template (workflow is a reserved tool name). If and when that template lands in a"
+          },
+          {
+            "number": 95,
+            "text": "   dsh-cc-owned surface, it inherits the same three rulings with the schema-conformance"
+          },
+          {
+            "number": 96,
+            "text": "   duty (\"return the value conforming to the schema; if the task is impossible, say so"
+          },
+          {
+            "number": 97,
+            "text": "   in the result instead of filling a field with a plausible guess\"). Until then this"
+          },
+          {
+            "number": 98,
+            "text": "   item is a named contingency, not a deliverable."
+          },
+          {
+            "number": 99,
+            "text": "4. **Ordering rule for all future subagent prompts** (documented in the dsh-cc-agents"
+          },
+          {
+            "number": 100,
+            "text": "   orchestration skill): identity → tool surface (positive sentence, then negative"
+          },
+          {
+            "number": 101,
+            "text": "   exclusions) → evidence/contract → evaluation criteria. Evaluation never precedes"
+          },
+          {
+            "number": 102,
+            "text": "   capability."
+          },
+          {
+            "number": 103,
+            "text": ""
+          },
+          {
+            "number": 104,
+            "text": "Config-is-prompt applies: the implementation commit must state the expected observable"
+          },
+          {
+            "number": 105,
+            "text": "delta (fewer stage-skipping executor reports; zero `escalate`-placeholder-class outputs"
+          },
+          {
+            "number": 106,
+            "text": "from structured workflow children) and the follow-up session that will check it."
+          },
+          {
+            "number": 107,
+            "text": ""
+          },
+          {
+            "number": 108,
+            "text": "## 4. Expected effect"
+          },
+          {
+            "number": 109,
+            "text": ""
+          },
+          {
+            "number": 110,
+            "text": "- Regression-class defects with existing production witness (executor stage-skipping,"
+          },
+          {
+            "number": 111,
+            "text": "  zero-tool reasoning loops) become explicitly instructed-against instead of implicitly"
+          },
+          {
+            "number": 112,
+            "text": "  hoped-against. This is auditable: `forensics` runs on session logs can count"
+          },
+          {
+            "number": 113,
+            "text": "  \"reported done, no matching tool evidence\" events before/after."
+          },
+          {
+            "number": 114,
+            "text": "- Zero runtime risk, zero token cost beyond ~80 added words per subagent system prompt,"
+          },
+          {
+            "number": 115,
+            "text": "  no parity-surface change (typed agents are not part of the Claude Code compatibility"
+          },
+          {
+            "number": 116,
+            "text": "  surface; deviating prompts there is free)."
+          },
+          {
+            "number": 117,
+            "text": "- The ordering rule gives future agent authors a template instead of folklore."
+          },
+          {
+            "number": 118,
+            "text": ""
+          },
+          {
+            "number": 119,
+            "text": "## 5. Non-goals and risks"
+          },
+          {
+            "number": 120,
+            "text": ""
+          },
+          {
+            "number": 121,
+            "text": "- Not a rewrite of existing report contracts; the block is additive. A cold review must"
+          },
+          {
+            "number": 122,
+            "text": "  check for contradictions with existing executor/critic/marathon instructions rather"
+          },
+          {
+            "number": 123,
+            "text": "  than assuming compatibility."
+          },
+          {
+            "number": 124,
+            "text": "- Prompts cannot *force* honesty; this lowers incidence, it does not eliminate it."
+          },
+          {
+            "number": 125,
+            "text": "  Detection stays with forensics/judgment lanes."
+          },
+          {
+            "number": 126,
+            "text": "- No model-name conditionals in prompts; the contract is uniform across routes"
+          },
+          {
+            "number": 127,
+            "text": "  (capability-position philosophy, consistent with the ZCode source)."
+          },
+          {
+            "number": 128,
+            "text": ""
+          },
+          {
+            "number": 129,
+            "text": "## Acceptance (DoD)"
+          },
+          {
+            "number": 130,
+            "text": ""
+          },
+          {
+            "number": 131,
+            "text": "- [ ] All three agent files carry the block in the specified order, merged with the"
+          },
+          {
+            "number": 132,
+            "text": "      existing \"Deliberate exclusions\" blocks; the structured-output variant is applied"
+          },
+          {
+            "number": 133,
+            "text": "      only if/when a dsh-cc-owned workflow agent prompt surface exists."
+          },
+          {
+            "number": 134,
+            "text": "- [ ] Baseline before landing: one forensics pass over recent session logs counts"
+          },
+          {
+            "number": 135,
+            "text": "      \"reported done, no matching tool evidence\" events so the after-measurement has a"
+          },
+          {
+            "number": 136,
+            "text": "      denominator; if baseline collection is not feasible, the acceptance weakens to the"
+          },
+          {
+            "number": 137,
+            "text": "      config-is-prompt session check alone (stated in the implementation commit)."
+          },
+          {
+            "number": 138,
+            "text": "- [ ] A later real session verifies the observable delta stated in the implementation"
+          },
+          {
+            "number": 139,
+            "text": "      commit message (config-is-prompt discipline from AGENTS.md)."
+          }
+        ],
+        "totalLines": 139,
+        "lang": "md"
+      }
+    },
+    "sourceEventSeqs": [
+      25
+    ],
+    "surfaceOp": "append"
+  }
+]
