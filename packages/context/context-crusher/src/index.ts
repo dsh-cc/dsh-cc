@@ -29,6 +29,8 @@ import { reduceToolOutput } from './reducer.ts'
 import { CrusherStore, shortHash } from './store.ts'
 import { SavingsLedger } from './ledger.ts'
 import { buildMarker, CCR_HASH_RE } from './marker.ts'
+import { joinTextBlocks } from './defer/counter.ts'
+import { Deferral } from './defer/pass.ts'
 import type { CrusherConfig, LedgerRow, RetrieveError, ResolvedConfig } from './types.ts'
 
 export { resolveConfig, overlaySettings, DEFAULTS, DEFAULT_PROTECTED_TOOLS, Config } from './config.ts'
@@ -42,6 +44,18 @@ export { SavingsLedger } from './ledger.ts'
 export { buildMarker, parseMarker } from './marker.ts'
 export { foldCounters } from './fold-counters.ts'
 export type { FoldCounterMaterials } from './fold-counters.ts'
+export { Deferral } from './defer/pass.ts'
+export { evaluateDeferGate } from './defer/gate.ts'
+export { attemptSwap } from './defer/swap.ts'
+export {
+  DeferLedger,
+  ResidentTable,
+  foldDeferRows,
+  parseTodoCounts,
+  readDeferLedger,
+  rebuildResidents,
+} from './defer/residents.ts'
+export type { DeferLedgerRow, ResidentEntry } from './defer/residents.ts'
 export type { CrusherConfig, CrusherMode, ResolvedConfig, LedgerRow, RetrieveError } from './types.ts'
 
 export const RETRIEVE_TOOL_NAME = 'context_retrieve'
@@ -78,14 +92,7 @@ function dshHomeFn(ctx: Context): HomeFn | undefined {
 }
 
 /** Join text blocks; returns undefined when any block is non-text. */
-function allTextBlocks(blocks: readonly ContentBlock[]): string | undefined {
-  const parts: string[] = []
-  for (const block of blocks) {
-    if (block.type !== 'text') return undefined
-    parts.push(block.text)
-  }
-  return parts.join('\n')
-}
+const allTextBlocks = joinTextBlocks
 
 /**
  * The context-crusher service: registers the post-execute tripwire listener
@@ -103,12 +110,16 @@ export class ContextCrusher extends Service {
   private readonly readSettings: () => CrusherConfig | undefined
   private readonly store: CrusherStore | undefined
   private readonly ledger: SavingsLedger | undefined
+  private readonly home: HomeFn | undefined
+  /** Deferred-mode orchestration (counting, swap pass, resume, ledger). */
+  private readonly deferral: Deferral
 
   constructor(ctx: Context, config: CrusherConfig = {}) {
     super(ctx, 'contextCrusher')
     this.base = resolveConfig(config)
     this.readSettings = registerSettings(ctx, this.base)
     const home = dshHomeFn(ctx)
+    this.home = home
     if (home === undefined) {
       // D6 fail-closed: without a durable home the store/ledger cannot exist.
       ctx.logger.warn('context-crusher: no dshHomePath on the host context; force-disabled')
@@ -116,7 +127,14 @@ export class ContextCrusher extends Service {
       this.store = new CrusherStore(home('ccr'))
       this.ledger = new SavingsLedger(home('ccr', 'savings.jsonl'))
     }
+    this.deferral = new Deferral({
+      ctx,
+      store: () => this.store,
+      home: () => this.home,
+      effectiveConfig: () => this.effectiveConfig(),
+    })
     this.registerListener()
+    this.deferral.registerListeners()
     this.registerRetrieveTool()
   }
 
@@ -160,6 +178,9 @@ export class ContextCrusher extends Service {
       })
     }
     if (!cfg.enabled || this.store === undefined) return d
+    // Observe-only todo snapshot for the defer gate's remaining-requests
+    // estimate (compaction cost-gate doc); the decision is untouched.
+    if (exec.name === 'todo_write' && cfg.deferRequests > 0) this.deferral.observeTodoSnapshot(exec)
     // D7: protected tools REPLACE the default list when explicitly set.
     if ((cfg.protectedTools as readonly string[]).includes(exec.name)) return d
     // Never crush the retrieval tool's own output: it would recurse (the
@@ -189,15 +210,34 @@ export class ContextCrusher extends Service {
       return this.reduceOrPassthrough(exec, result, d, originalText, tokensBefore, cfg, ledgerRow)
     }
 
-    if (cfg.mode !== 'on') {
+    if (cfg.mode !== 'on' && cfg.deferRequests <= 0) {
       // Dry-run: measure only; the committed result stays original.
       await ledgerRow({ kind: candidate.kind, charsBefore: originalText.length, charsAfter: compressedBody.length, tokensBefore, tokensAfter, applied: false })
       return d
     }
 
     const projectKey = this.projectKey(exec)
-    if (projectKey === undefined) return d
+    if (projectKey === undefined) {
+      // Preserve the dry-run ledger row even when deferral wanted a store.
+      if (cfg.mode !== 'on') {
+        await ledgerRow({ kind: candidate.kind, charsBefore: originalText.length, charsAfter: compressedBody.length, tokensBefore, tokensAfter, applied: false })
+      }
+      return d
+    }
     const hash = await this.store.put(projectKey, originalText)
+
+    if (cfg.deferRequests > 0) {
+      // Deferred mode (§3.1): the store put happened (evidence is durable),
+      // the resident entry is recorded, and the downstream decision returns
+      // UNMODIFIED — the full text enters the session. §3.6: this applies to
+      // dry-run too (deferred dry-run writes store files and ledger rows; it
+      // only never appends to the session).
+      await this.deferral.recordResident(exec, hash, tokensBefore - tokensAfter)
+      await ledgerRow({ kind: candidate.kind, charsBefore: originalText.length, charsAfter: compressedBody.length, tokensBefore, tokensAfter, applied: false, hash })
+      void this.store.sweep()
+      return d
+    }
+
     const replacement: ContentBlock = {
       type: 'text',
       text: `${compressedBody}\n${buildMarker(tokensBefore, tokensAfter, hash)}`,

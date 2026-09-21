@@ -11,6 +11,7 @@ describe('config resolution', () => {
       reducerCommands: DEFAULT_REDUCER_COMMANDS.map((source) => new RegExp(source)),
       reducerMaxInputTokens: 30_000, reducerMinSavingsRatio: 0.5,
       reducerMaxTokens: 1024, reducerTimeoutMs: 10_000, reducerAlias: 'haiku',
+      deferRequests: 0, deferMargin: 1.5, deferMaxAgeMs: 1_800_000,
     })
   })
 
