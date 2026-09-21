@@ -204,10 +204,11 @@ describe('compaction-cost-gate composition (real loop)', () => {
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'work the plan' }], source: { kind: 'user' } }))
     await agent.whenIdle()
     await waitFor(() => compact.calls.length === 1)
-    await new Promise((r) => setTimeout(r, 20))
-    expect(takeCompactHint(agent)).toBeUndefined()
-    // The failure is ledgered as a real defect class.
-    expect(ledgerRows(home).some((r) => r.kind === 'failed:changed')).toBe(true)
+    // The failure is ledgered as a real defect class. Poll the ledger row —
+    // the failure-path side effects (ledger append + hint clear) resolve
+    // after the call itself, so a fixed sleep races under CI load.
+    await waitFor(() => ledgerRows(home).some((r) => r.kind === 'failed:changed'))
+    await waitFor(() => takeCompactHint(agent) === undefined)
     rmSync(home, { recursive: true, force: true })
   })
 })
