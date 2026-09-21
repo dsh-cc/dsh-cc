@@ -7,6 +7,9 @@ import {
   isCompactCheckpointSource,
   shouldEchoCommandResult,
 } from '@dsh-cc/tui/compact-fold.ts'
+import errorInfoPair from './fixtures/tool-result-error-info-pair.json' with { type: 'json' }
+import errorPair from './fixtures/tool-result-error-pair.json' with { type: 'json' }
+import readPair from './fixtures/tool-result-read-pair.json' with { type: 'json' }
 
 /** Build a compact checkpoint user/message replace event (real 0.1.5 shape). */
 function compactCheckpoint(
@@ -843,5 +846,105 @@ describe('session/title folding', () => {
     const cleared = setSessionTitle(titled, undefined)
     expect(cleared.title).toBeUndefined()
     expect(setSessionTitle(cleared, undefined)).toBe(cleared)
+  })
+})
+
+describe('wrapped tool/result folding', () => {
+  const callOf = (pair: { type: string }[]) => pair[0]
+  const resultOf = (pair: { type: string }[]) => pair[1]
+
+  it('fixtures are wrapped-shape pairs with tool-result blocks', () => {
+    for (const pair of [readPair, errorPair, errorInfoPair]) {
+      expect(callOf(pair).type).toBe('tool/call')
+      expect(resultOf(pair).type).toBe('tool/result')
+      const data = resultOf(pair).data as { message?: { content?: { type?: string; toolCallId?: unknown }[] } }
+      expect(data.message?.content?.[0]?.type).toBe('tool-result')
+      expect(data.message?.content?.[0]?.toolCallId).toBeTruthy()
+    }
+  })
+
+  it('completes a read row from the wrapped fixture pair', () => {
+    let state = createInitialState()
+    state = applySessionEvent(state, callOf(readPair) as never)
+    expect(state.rows.find((row) => row.kind === 'tool')).toMatchObject({ name: 'read', running: true })
+    state = applySessionEvent(state, resultOf(readPair) as never)
+    const resultRow = state.rows.find((row) => row.kind === 'tool' && !row.running)
+    expect(resultRow).toMatchObject({
+      kind: 'tool',
+      callId: 'chatcmpl-tool-957d46bdc1f3c1e7',
+      name: 'read',
+      running: false,
+      error: false,
+    })
+    expect((resultRow as { result?: string }).result?.length ?? 0).toBeGreaterThan(0)
+    expect((resultRow as { title?: string }).title).toBe('read')
+  })
+
+  it('passes pending name, parsed args, and meta to presentResult', () => {
+    let state = createInitialState()
+    let seenName: string | undefined
+    let seenArgs: unknown
+    let seenResult: { content: unknown; isError: boolean; meta?: unknown } | undefined
+    const presenters = {
+      presentCall: () => ({ card: 'terminal' as const, title: 'Read file' }),
+      presentResult: (name: string, args: unknown, result: { content: unknown; isError: boolean; meta?: unknown }) => {
+        seenName = name
+        seenArgs = args
+        seenResult = result
+        return { card: 'terminal' as const, output: 'x', exitCode: 0 }
+      },
+    }
+    state = applySessionEvent(state, callOf(readPair) as never, presenters)
+    state = applySessionEvent(state, resultOf(readPair) as never, presenters)
+    const data = resultOf(readPair).data as {
+      message?: { content?: { content?: unknown }[] }
+    }
+    expect(seenName).toBe('read')
+    expect(seenArgs).toEqual({ file_path: 'docs/plans/2026-09-21-subagent-actor-contract-prompts.md' })
+    expect(seenResult?.content).toEqual(data.message?.content?.[0]?.content)
+    expect(seenResult?.isError).toBe(false)
+    expect(seenResult?.meta).toEqual((resultOf(readPair).data as { meta?: unknown }).meta)
+  })
+
+  it.each([[errorPair], [errorInfoPair]])('marks the error fixture row red (%#)', (pair) => {
+    let state = createInitialState()
+    state = applySessionEvent(state, callOf(pair) as never)
+    state = applySessionEvent(state, resultOf(pair) as never)
+    const row = state.rows.find((item) => item.kind === 'tool' && !item.running)
+    expect(row).toMatchObject({ error: true, running: false })
+  })
+
+  it('drops an unresolvable result without touching rows', () => {
+    let state = createInitialState()
+    state = applySessionEvent(state, callOf(readPair) as never)
+    const before = state.rows
+    state = applySessionEvent(state, {
+      type: 'tool/result',
+      data: { message: { content: [{ type: 'text', text: 'orphan' }] } },
+    })
+    expect(state.rows).toBe(before)
+  })
+
+  it('appends a standalone completed row for a resolvable result with no pending call', () => {
+    const state = applySessionEvent(createInitialState(), resultOf(readPair) as never)
+    expect(state.rows).toHaveLength(1)
+    expect(state.rows[0]).toMatchObject({ kind: 'tool', running: false, name: 'tool', title: 'tool' })
+  })
+
+  it('completes two consecutive read rows so the read-group collapse can fire', () => {
+    // Second pair re-keyed to a distinct callId so two rows accumulate.
+    const secondCall = JSON.parse(JSON.stringify(callOf(readPair)))
+    const secondResult = JSON.parse(JSON.stringify(resultOf(readPair)))
+    secondCall.data.callId = 'chatcmpl-tool-second'
+    secondResult.data.message.source.callId = 'chatcmpl-tool-second'
+    secondResult.data.message.content[0].toolCallId = 'chatcmpl-tool-second'
+    let state = createInitialState()
+    state = applySessionEvent(state, callOf(readPair) as never)
+    state = applySessionEvent(state, resultOf(readPair) as never)
+    state = applySessionEvent(state, secondCall as never)
+    state = applySessionEvent(state, secondResult as never)
+    const toolRows = state.rows.filter((row) => row.kind === 'tool')
+    expect(toolRows).toHaveLength(2)
+    expect(toolRows.filter((row) => !row.running)).toHaveLength(2)
   })
 })

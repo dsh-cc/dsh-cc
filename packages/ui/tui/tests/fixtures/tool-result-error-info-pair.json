@@ -1,0 +1,52 @@
+[
+  {
+    "type": "tool/call",
+    "seq": 37,
+    "time": 1789724079746,
+    "data": {
+      "turn": 1,
+      "step": 2,
+      "callId": "chatcmpl-tool-9c902fe4dcbe66a2",
+      "name": "read",
+      "arguments": "{}"
+    }
+  },
+  {
+    "type": "tool/result",
+    "seq": 40,
+    "time": 1789724079820,
+    "data": {
+      "turn": 1,
+      "step": 2,
+      "message": {
+        "source": {
+          "kind": "tool",
+          "callId": "chatcmpl-tool-9c902fe4dcbe66a2"
+        },
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "chatcmpl-tool-9c902fe4dcbe66a2",
+            "content": [
+              {
+                "type": "text",
+                "text": "Error: invalid arguments: missing required property \"file_path\""
+              }
+            ],
+            "isError": true
+          }
+        ],
+        "role": "user",
+        "id": "c6ff6c47-e7d1-457e-94da-17ff65baed6d"
+      },
+      "error": {
+        "name": "ToolArgsError",
+        "code": "INVALID_ARGS"
+      }
+    },
+    "sourceEventSeqs": [
+      37
+    ],
+    "surfaceOp": "append"
+  }
+]

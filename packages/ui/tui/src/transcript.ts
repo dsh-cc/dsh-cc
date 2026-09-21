@@ -20,6 +20,7 @@ import {
 } from './store.ts'
 import { dropRowsInRange, extractCompactSummary, isCompactCheckpointSource } from './compact-fold.ts'
 import { foldSettledMessage } from './assistant-stream.ts'
+import { normalizeToolResult } from './tool-result-payload.ts'
 
 /**
  * Minimal session-event face the TUI understands. `seq` tags created rows so
@@ -373,22 +374,28 @@ export function applySessionEvent(
       })
     }
     case 'tool/result': {
-      const name = nameOf(data)
-      const callId = callIdOf(data)
-      const pending = state.rows.find(row => row.kind === 'tool' && row.callId === callId)
-      const pendingTitle = pending?.kind === 'tool' ? pending.title : name
-      const pendingArgs = pending?.kind === 'tool' ? pending.args : argsOf(data)
-      const isError = data !== null && typeof data === 'object' && (data as { error?: unknown }).error !== undefined
-      const fallback = textOf(data) || argsOf(data)
+      // Harness ≥0.1.2-rc.1 wraps the result in a message envelope (see
+      // normalizeToolResult); the legacy top-level shape still folds the same.
+      const payload = normalizeToolResult(data)
+      if (payload.callId === '') return state
+      const pending = state.rows.find(row => row.kind === 'tool' && row.callId === payload.callId)
+      const pendingRow = pending?.kind === 'tool' ? pending : undefined
+      const name = payload.name ?? pendingRow?.name ?? 'tool'
+      const pendingArgs = pendingRow?.args ?? ''
       const view = presenters?.presentResult?.(name, parseArgs(pendingArgs), {
-        content: data,
-        isError,
+        content: payload.content ?? [],
+        isError: payload.isError,
+        ...(payload.meta === undefined ? {} : { meta: payload.meta }),
       })
-      const card = formatResultCard(view, { pendingTitle, fallback, error: isError })
+      const card = formatResultCard(view, {
+        pendingTitle: pendingRow?.title ?? name,
+        fallback: payload.text,
+        error: payload.isError,
+      })
       const diffs = view !== undefined && view.card === 'diff' ? view.diffs : undefined
       return upsertRow(state, {
         kind: 'tool',
-        callId,
+        callId: payload.callId,
         name,
         args: pendingArgs,
         title: card.title,
