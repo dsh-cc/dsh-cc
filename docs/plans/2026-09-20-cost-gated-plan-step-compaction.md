@@ -1,9 +1,10 @@
 # Cost-Gated Plan-Step Compaction: compact at todo boundaries only when the cache math wins
 
-Date: 2026-09-20. Status: design — two critic rounds; second round passed with amendments
-(8 findings: compactNow re-architected to the idle seam, optional-service guard pinned,
-shadow-aware surface accessor named, main-agent scoping added, breaker classes narrowed;
-all baked in below). This document doubles as the executor work order (§7).
+Date: 2026-09-20. Status: implemented — PR #88 (presubmit green; pending merge at time of
+writing). Design phase: two critic rounds; second round passed with amendments (8 findings:
+compactNow re-architected to the idle seam, optional-service guard pinned, shadow-aware
+surface accessor named, main-agent scoping added, breaker classes narrowed; all baked in
+below). This document doubled as the executor work order (§7).
 
 Origin: SoL-Pi (arXiv:2609.20519) Online Context Compact. Two imported ideas: (1) trigger
 compaction at **plan-step completion boundaries** — the moment the session has a natural
@@ -296,3 +297,11 @@ an observe-only post-execute listener must match the harness signature (return t
 downstream decision unchanged after `await next()`); pin it in E4's first spec before
 writing the listener body. Residual risk handed to dogfood: `shrink`'s cold prior of 0.5
 is uncalibrated until §5's ledger study publishes measured values.
+
+**Post-implementation note (2026-09-20, PR #88 CI round):** the first rebased presubmit
+run failed on `src/index.ts` importing `CommandId` from `@deepseek-ai/dsh-commands/brand`
+— the harness package's exports map publishes only `.` and `./invariant`, and the deep
+specifier typechecks locally (vite/tsconfig paths resolve to source) while failing CI.
+Fixed by importing from the package root and declaring `@deepseek-ai/dsh-commands`
+(peer + linked dev). Rule recorded for future work: never deep-import `@deepseek-ai/*`
+packages either — the repo's deep-import gate only covers `@dsh-cc/*` internal paths.
