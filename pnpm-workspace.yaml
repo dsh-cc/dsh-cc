@@ -20,6 +20,11 @@ overrides:
 
 allowBuilds:
   esbuild: true
+  # Transitive deps of the pinned @earendil-works/pi-ai test devDep; their
+  # build scripts are irrelevant to vitest runs — declared so frozen CI
+  # installs pass the supply-chain policy instead of erroring.
+  '@google/genai': false
+  protobufjs: false
 
 minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-timeout@0.1.5-rc.1'
