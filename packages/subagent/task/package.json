@@ -38,13 +38,15 @@
     "@deepseek-ai/dsh-invariants": ">=0.1.5-rc.1",
     "@deepseek-ai/dsh-subagent": ">=0.1.5-rc.1",
     "@deepseek-ai/dsh-system-prompt": ">=0.1.5-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1"
   },
   "dependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/settings-ns": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/tool-git-worktree": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
@@ -61,6 +63,7 @@
     "@deepseek-ai/dsh-subagent-spawn-in-process": "link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process",
     "@deepseek-ai/dsh-tool-subagent-control": "link:../../../../deepseek-harness/packages/subagent/tool-subagent-control",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
     "@dsh-cc/agent-loop-mock": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
@@ -75,6 +78,7 @@
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@dsh-cc/tool-search": "workspace:*",
+    "@dsh-cc/settings-ns": "workspace:^",
     "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
     "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local"

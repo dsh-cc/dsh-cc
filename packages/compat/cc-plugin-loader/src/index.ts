@@ -30,6 +30,16 @@ import { mountRules, type RulesSeam } from './rules.ts'
 import { mountMcpServers } from './mcp.ts'
 import { mountSettings } from './settings.ts'
 import { resolvePluginManifest } from './resolve-manifest.ts'
+import { mountActorContractGate, type ActorContractGate } from './actor-contract-gate.ts'
+export {
+  ACTOR_CONTRACT_NAMESPACE,
+  DEFAULT_ACTOR_CONTRACT_MODELS,
+  actorContractSettingsSchema,
+  gateCandidates,
+  mountActorContractGate,
+  ActorContractGate,
+} from './actor-contract-gate.ts'
+export type { ActorContractSettings } from './actor-contract-gate.ts'
 
 export type { CcPluginManifest, CcCommand, CcSkillRef, CcAgentRef, CcMcpServer, ComponentKind, ComponentResult, PluginLoadReport, PluginFlavor } from './types.ts'
 export type { CcPluginCommandInfo, MountedPluginCommand } from './commands.ts'
@@ -108,6 +118,12 @@ export interface CcPluginMount {
    * Recall every mounted component. Effect-scoped: calling it also releases
    * the Cordis effect, and a context teardown calls it automatically.
    */
+  /**
+   * The plugin mount's local actor-contract gate (the live reader
+   * `AgentProvider.start` consults; drive `setSource`/`onChange` to simulate
+   * a settings hot reload).
+   */
+  gate: ActorContractGate
   dispose(): void
 }
 
@@ -130,6 +146,11 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   const disposers: (() => void)[] = []
   const components: ComponentResult[] = []
   const mountWarnings: string[] = []
+  // Actor-contract gate (§3.2): install the settings section (no cordis
+  // service — the task package owns `ccActorContractGate`) and thread the
+  // live patterns into every mounted agent's spawn seam.
+  const gate = mountActorContractGate(ctx)
+  const gatePatterns = (): readonly string[] => gate.patterns()
 
   let commandMount: ReturnType<typeof mountCommands>
   try {
@@ -145,6 +166,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
       manifest,
       subagents: probed.subagents,
       ...options.resolveModel !== undefined ? { resolveModel: options.resolveModel } : {},
+      gatePatterns,
       // Same name-resolution chain as the manifest itself: manifest name (the
       // parse/synthesis in resolve-manifest already falls back to nameHint,
       // then the root basename), used to namespace agent provider names.
@@ -178,6 +200,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
   return {
     report: { name: manifest.name, flavor: manifest.flavor, warnings: [...manifest.warnings, ...mountWarnings], components },
     commands: commandMount.mounted,
+    gate,
     dispose: () => effectDisposer(),
   }
 }

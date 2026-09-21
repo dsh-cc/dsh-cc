@@ -14,9 +14,10 @@
 
 import { readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { loadAgentsDir } from '@dsh-cc/claude-code-agents'
+import { loadAgentsDir, applyActorContract } from '@dsh-cc/claude-code-agents'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { toAgentOptions } from '@dsh-cc/model-aliases'
+import { gateCandidates, DEFAULT_ACTOR_CONTRACT_MODELS } from './actor-contract-gate.ts'
 import type { CcPluginManifest } from './types.ts'
 import { ComponentTally } from './seams.ts'
 import { globPathKind } from './manifest.ts'
@@ -78,6 +79,7 @@ export class AgentProvider implements SubagentBackend {
     private readonly resolve: (name: string) => SubagentBackend | undefined,
     private readonly resolveModel?: ResolveModel,
     private readonly registeredName?: string,
+    private readonly gatePatterns?: () => readonly string[],
   ) {}
 
   /** Register-time provider name; `start` forwards to the backend. */
@@ -119,9 +121,19 @@ export class AgentProvider implements SubagentBackend {
     }
     const delegation = request as Record<string, unknown>
     const modelOverride = this.resolveModelOverride()
+    // Actor-contract gate (§3.1): strip/keep the marked block per the
+    // configured model patterns, read live at spawn time. Inherit model →
+    // no candidates → fail-closed strip. Candidates reuse the same model
+    // resolution the agentOptions overlay uses: resolved route id leads, the
+    // raw frontmatter token is the sole candidate when no route resolves.
+    const gatedPrompt = applyActorContract(
+      this.agentDefinition.systemPrompt,
+      gateCandidates(this.agentDefinition.model, modelOverride),
+      this.gatePatterns?.() ?? DEFAULT_ACTOR_CONTRACT_MODELS,
+    )
     return backend.start({
       ...delegation,
-      prompt: this.agentDefinition.systemPrompt,
+      prompt: gatedPrompt,
       ...modelOverride !== undefined
         ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
         : {},
@@ -184,6 +196,8 @@ export interface MountAgentsOptions {
   readonly namespacePrefix?: string
   /** Optional spawn-time model resolver threaded into every provider. */
   readonly resolveModel?: ResolveModel
+  /** Live gate patterns for the actor-contract block (read at spawn time). */
+  readonly gatePatterns?: () => readonly string[]
 }
 
 /**
@@ -228,6 +242,7 @@ export async function mountAgents(options: MountAgentsOptions): Promise<{ dispos
         name => subagents.getProvider(name) as SubagentBackend | undefined,
         options.resolveModel,
         ...prefix !== undefined ? [scopedName] : [],
+        options.gatePatterns,
       )
       disposers.push(subagents.registerProvider(provider))
       tally.addLoaded()

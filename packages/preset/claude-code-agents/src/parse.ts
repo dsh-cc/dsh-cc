@@ -13,6 +13,7 @@
 
 import { load as loadYaml } from 'js-yaml'
 import { basename, dirname, extname } from 'node:path'
+import { validateMarkerPairing } from './actor-contract.ts'
 import { normalizeModel, resolveToolRestriction } from './restrict.ts'
 import {
   EFFORT_LEVELS,
@@ -141,6 +142,7 @@ function buildAgent(
   const initialPrompt = optionalString(filePath, 'initialPrompt', frontmatter['initialPrompt'])
   const background = optionalBoolean(filePath, 'background', frontmatter['background'])
   const systemPrompt = prompt ?? promptDefault
+  validateMarkerPairing(filePath, systemPrompt)
 
   const definition: Record<string, unknown> = {
     agentType,

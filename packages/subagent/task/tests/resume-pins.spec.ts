@@ -84,6 +84,8 @@ interface BootOptions {
   store?: PinStore
   /** Inject an agent/request listener (before the pin plugin) that adds junk maxTokens/effort keys. */
   junkRequestKeys?: boolean
+  /** Initial actor-contract gate patterns (mutate the returned liveGate ref + gate.onChange()). */
+  gatePatterns?: string[]
 }
 
 interface Boot {
@@ -93,6 +95,7 @@ interface Boot {
   store: PinStore
   workspace: string
   livePolicy: { value: Partial<ResumePolicy> }
+  liveGate: { value: { models: string[] } }
 }
 
 /**
@@ -155,9 +158,25 @@ async function boot(
   // The live policy: a minimal settings stub whose subagents-resume section
   // is a mutable ref the tests flip (the plugin reads it per evaluation).
   const livePolicy: { value: Partial<ResumePolicy> } = { value: opts.policy ?? {} }
+  const liveGate: { value: { models: string[] } } = {
+    value: { models: opts.gatePatterns ?? ['glm-*'] },
+  }
   ctx.provide('settings', {
     register: (ns: unknown) => ns === RESUME_POLICY_NAMESPACE ? { get: () => livePolicy.value } : undefined,
     get: () => undefined,
+    // Minimal installSection so the actor-contract gate mounts against the
+    // stub: serve the mutable liveGate ref through the gate's setSource hook.
+    installSection: (
+      _ictx: unknown,
+      ns: unknown,
+      _schema: unknown,
+      _entry: unknown,
+      hooks: { setSource(current: () => { models: string[] }): void; onChange(): void },
+    ) => {
+      if (ns !== 'actor-contract') return
+      hooks.setSource(() => liveGate.value)
+      hooks.onChange()
+    },
   })
   const junkSeen = { value: false }
   const pinsRoot = join(root, 'resume-pins')
@@ -203,7 +222,7 @@ async function boot(
     if (subject !== parent) return next()
     return { kind: 'reject' as const }
   })
-  return { ctx, parent, adapter, store: new PinStore(pinsRoot), workspace, livePolicy, junkSeen }
+  return { ctx, parent, adapter, store: new PinStore(pinsRoot), workspace, livePolicy, junkSeen, liveGate }
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -802,5 +821,125 @@ describe('§6 rename — the gate reads the harness control tool\'s `agent_id` k
     const legacy = await callTool(b.ctx, 'send_message', { subagent_id: agentId, message: 'continue' }, b.parent)
     expect(text(legacy as never)).not.toContain('SUBAGENT_MODEL_UNAVAILABLE')
     await b.ctx.fiber.dispose()
+  }, 40_000)
+})
+
+// ── §3.7: the resume-pin fingerprint hashes the GATED persona ──────────────
+
+const CONTRACT_BLOCK = 'EXECUTOR DISCIPLINE BLOCK'
+
+function writeMarkedDefinition(workspace: string, model: string | undefined): void {
+  mkdirSync(join(workspace, '.claude', 'agents'), { recursive: true })
+  const modelLine = model === undefined ? '' : `model: ${model}\n`
+  writeFileSync(
+    join(workspace, '.claude', 'agents', 'researcher.md'),
+    `---\nname: researcher\ndescription: reads things\n${modelLine}tools:\n  - read\n---\nYou are a researcher.\n<!-- actor-contract:start -->\n${CONTRACT_BLOCK}\n<!-- actor-contract:end -->\n`,
+  )
+}
+
+function setPatterns(boot: Boot, patterns: string[]): void {
+  boot.liveGate.value = { models: patterns }
+  const gate = boot.ctx.get('ccActorContractGate') as { onChange(): void } | undefined
+  expect(gate, 'gate service must be mounted').toBeTypeOf('object')
+  gate!.onChange()
+}
+
+describe('§3.7 — the pin fingerprint hashes the gated persona', () => {
+  it('unmarked definition: the fingerprint is unchanged by any actor-contract.models value (upgrade compat)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-'))
+    roots.push(root)
+    const a = await boot([textResponse('first answer')], root, {
+      researcherDefinition: true, // unmarked persona
+      routes: { sonnet: { provider: 'mock', model: 'glm-4.7' } },
+      reasoning: HIGH_EFFORT,
+      gatePatterns: ['glm-*'],
+    })
+    const id1 = await startBackground(a.ctx, a.parent, { subagent_type: 'researcher' })
+    await waitNoActivation(a.ctx, SessionId(id1))
+    // Flip the gate and capture a second child: the fingerprints must match.
+    setPatterns(a, [])
+    const id2 = await startBackground(a.ctx, a.parent, { subagent_type: 'researcher', description: 'more' })
+    await waitNoActivation(a.ctx, SessionId(id2))
+    const pin1 = a.store.read(id1)!
+    const pin2 = a.store.read(id2)!
+    expect(pin1).not.toMatchObject({ kind: expect.anything() })
+    expect(pin2).not.toMatchObject({ kind: expect.anything() })
+    expect((pin1 as { definition: { fingerprint: string } }).definition.fingerprint)
+      .toBe((pin2 as { definition: { fingerprint: string } }).definition.fingerprint)
+    await a.ctx.fiber.dispose()
+  }, 40_000)
+
+  it('marked definition + glm route: flipping the gate off between boots fires the definition-drift path', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-'))
+    roots.push(root)
+    const a = await boot([textResponse('first answer')], root, {
+      routes: { sonnet: { provider: 'mock', model: 'glm-4.7' } },
+      reasoning: HIGH_EFFORT,
+      gatePatterns: ['glm-*'],
+    })
+    writeMarkedDefinition(a.workspace, 'sonnet')
+    const agentId = await startBackground(a.ctx, a.parent, { subagent_type: 'researcher' })
+    await waitNoActivation(a.ctx, SessionId(agentId))
+    await a.ctx.fiber.dispose()
+
+    // Context B: gate off → the re-fingerprinted persona loses the block.
+    const b = await boot([textResponse('resumed answer')], root, {
+      reasoning: HIGH_EFFORT,
+      routes: { sonnet: { provider: 'mock', model: 'glm-4.7' } },
+      gatePatterns: [],
+    })
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
+    expect(send.isError, text(send as never)).toBe(false)
+    expect(text(send as never)).toContain('resumed with changed definition (pinned persona retained)')
+    expect(b.store.read(agentId)).toMatchObject({ lastNotice: expect.stringContaining('changed definition') })
+    await waitNoActivation(b.ctx, SessionId(agentId))
+    await b.ctx.fiber.dispose()
+  }, 40_000)
+
+  it('marked definition + glm route: same gate state at both computations → no drift notice', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-'))
+    roots.push(root)
+    const a = await boot([textResponse('first answer')], root, {
+      routes: { sonnet: { provider: 'mock', model: 'glm-4.7' } },
+      reasoning: HIGH_EFFORT,
+      gatePatterns: ['glm-*'],
+    })
+    writeMarkedDefinition(a.workspace, 'sonnet')
+    const agentId = await startBackground(a.ctx, a.parent, { subagent_type: 'researcher' })
+    await waitNoActivation(a.ctx, SessionId(agentId))
+    await a.ctx.fiber.dispose()
+
+    const b = await boot([textResponse('resumed answer')], root, {
+      reasoning: HIGH_EFFORT,
+      routes: { sonnet: { provider: 'mock', model: 'glm-4.7' } },
+      gatePatterns: ['glm-*'],
+    })
+    const send = await callTool(b.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, b.parent)
+    expect(send.isError, text(send as never)).toBe(false)
+    expect(text(send as never)).not.toContain('changed definition')
+    await waitNoActivation(b.ctx, SessionId(agentId))
+    await b.ctx.fiber.dispose()
+  }, 40_000)
+
+  it('inherit-model marked definition: no candidates → stripped persona, fingerprint stable across flips', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-'))
+    roots.push(root)
+    const a = await boot([textResponse('first answer')], root, {
+      routes: { sonnet: { provider: 'mock', model: 'glm-4.7' } },
+      reasoning: HIGH_EFFORT,
+      gatePatterns: ['*'],
+    })
+    writeMarkedDefinition(a.workspace, undefined) // no model: line
+    const id1 = await startBackground(a.ctx, a.parent, { subagent_type: 'researcher' })
+    await waitNoActivation(a.ctx, SessionId(id1))
+    // Even the maximally permissive flip must not move the fingerprint
+    // (inherit → no candidates → deterministic strip).
+    setPatterns(a, ['*'])
+    const id2 = await startBackground(a.ctx, a.parent, { subagent_type: 'researcher', description: 'more' })
+    await waitNoActivation(a.ctx, SessionId(id2))
+    const pin1 = a.store.read(id1) as { definition: { fingerprint: string } }
+    const pin2 = a.store.read(id2) as { definition: { fingerprint: string } }
+    expect(pin1.definition.fingerprint).toBe(pin2.definition.fingerprint)
+    await a.ctx.fiber.dispose()
   }, 40_000)
 })

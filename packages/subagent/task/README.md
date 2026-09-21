@@ -44,12 +44,22 @@ Given a `Task(subagent_type, description, prompt)` call from a CC preset session
    workspace file of the same name — `.claude/agents/fork.md` is unreachable.
 3. **A type that matches a definition** under the session cwd (`cwdOf` the assembling agent)
    → a `spawn` with:
-   - `persona` = the definition's `systemPrompt` (delivered as the child's system segment);
+   - `persona` = the definition's `systemPrompt` (delivered as the child's system segment),
+     with the model-gated actor-contract block applied first (see below);
    - the task text as the child's **first user message**;
    - `agentOptions` = the alias-resolved `{ provider?, model? }` from
      `ctx.get('ccModelRoutes').resolve(def.model)` (only provider/model fields that resolve
      to a value are forwarded, so per-field inheritance never breaks);
-   - `toolFilter` = the definition's `toolRestriction` (allow/deny), **sanitized** of tool
+   ##### Model-gated actor-contract block
+
+Definitions may author an `<!-- actor-contract:start -->` … `<!-- actor-contract:end -->` block.
+At dispatch (and on the worktree-isolation persona) the block is kept only when the resolved
+route model id (or the raw `model:` token when no routes service resolves) matches a pattern in
+the `actor-contract.models` settings namespace (default `['glm-*']`; `[]` disables the contract;
+`['*']` applies it uniformly). Marker lines never reach the prompt; a definition with `model:`
+unset (inherit) is fail-closed — the block is stripped.
+
+- `toolFilter` = the definition's `toolRestriction` (allow/deny), **sanitized** of tool
      names this composition no longer registers;
    - `maxDepth` = 3 (matches the harness default; configurable).
 4. **Any other type containing no colon** (not found in the workspace) → an **error
@@ -166,7 +176,8 @@ git worktree instead of the parent tree (WS-3 of `docs/plans/2026-09-14-cc-workt
    session-cwd boundary guard, and the context buckets follow. The contract paragraph
    ("your working directory is `<path>`; pass absolute paths inside it to every tool and
    shell `workdir`; the parent checkout is off-limits") is appended to the child persona
-   and a first-line note is prepended to the prompt.
+   and a first-line note is prepended to the prompt. The actor-contract gate applies to the
+   definition body before the contract paragraph is appended.
 3. **Clean up** — on `subagent/end` (re-fires per epoch for continuable children): probe
    `git status --porcelain` + commits ahead of the recorded base HEAD; clean and no commits
    → unlock + `worktree remove --force` + branch delete; otherwise the tree stays on disk

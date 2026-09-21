@@ -32,6 +32,7 @@ import { mountAgentCatalog } from './catalog.ts'
 import { createOneShotLedger } from './one-shot-ledger.ts'
 import { mountSubagentChildNotice } from './one-shot-notice.ts'
 import { mountStripWorkspaceInstructions } from './strip-instructions.ts'
+import { mountActorContractGate } from './actor-contract-gate.ts'
 
 export { AgentRegistry } from './registry.ts'
 export { PluginAgentIndex } from './plugin-agents.ts'
@@ -196,6 +197,7 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
   // lazily on every call so effect-scoped plugin mounts after apply() are seen.
   const pluginIndex = new PluginAgentIndex(ctx)
   registerTaskTool(ctx, registry, capture, pluginIndex)
+  mountActorContractGate(ctx)
   mountAgentCatalog(ctx, registry, pluginIndex)
   mountBackgroundSection(ctx)
   mountStripWorkspaceInstructions(ctx)

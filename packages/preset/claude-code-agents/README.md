@@ -20,6 +20,8 @@ Load Claude Code's `.claude/agents/*.md` and `*.json` sub-agent definitions as d
 - `discoverAgents(projectRoot, userDir?): Promise<AgentDefinition[]>` The layer merge without the home-dir default.
 - `loadAgentsDir(dir, source): Promise<AgentDefinition[]>` and `findProjectAgentsDir(start): Promise<string | undefined>` The per-directory scan and the upward walk.
 - `resolveToolRestriction(tools, disallowedTools): ToolRestriction | undefined` and `normalizeModel(model): string | undefined` The pure restriction-merge and model-normalization helpers, exported for reuse and for testing.
+- `applyActorContract(persona, candidates, patterns): string` Apply the `<!-- actor-contract:start -->`/`end` marker gate to a persona: the marker lines are always removed, and the block between them is kept iff some candidate model id matches some pattern — otherwise the content is excised too, with the surrounding text collapsed cleanly. Input with no markers is returned byte-identical.
+- `matchesModelPattern(value, pattern): boolean` and `matchesAnyModelPattern(values, patterns): boolean` The case-insensitive whole-string model matcher behind the gate: `*` is the only wildcard, every other regex metachar in the pattern is literal.
 
 `AgentDefinition` carries `agentType` (the file basename), `whenToUse`, `systemPrompt`, `source` (`user` | `project` | `bundled`), `baseDir`, `filename`, and the translated optional fields. The `toolRestriction` value is structurally identical to [`dsh-tools`](../../core/tools/README.md)'s `ToolRestriction`, so a consumer can hand it to a scoped `ctx.tools.restrict()` unchanged.
 

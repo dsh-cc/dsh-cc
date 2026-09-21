@@ -24,7 +24,7 @@ Claude Code 的 `Task` 工具允许主代理按 `subagent_type`(如 `deep-reason
 1. **`subagent_type` 省略、空白或为 `general-purpose`** → **全新 spawn**:prompt 文本成为 child 的首条 user message,无定义参与,不拷贝父对话。prompt 必须自包含。
 2. **`subagent_type` 等于保留哨兵 `fork`** → 继承对话的 **fork**(Claude Code 的 `subagent_type: "fork"`):父已完成轮次作为 seed,无定义参与。哨兵优先于同名文件,`.claude/agents/fork.md` 不可达。
 3. **命中会话 cwd(`cwdOf` 组装 agent)下的定义** → 以 `spawn` 启动并携带:
-   - `persona` = 定义的 `systemPrompt`(作为 child 的系统段下发);
+   - `persona` = 定义的 `systemPrompt`(作为 child 的系统段下发),先经过按模型门控的 actor-contract 块处理(见下);
    - 任务文本作为 child 的**首条 user message**;
    - `agentOptions` = 来自 `ctx.get('ccModelRoutes').resolve(def.model)` 的别名解析结果 `{ provider?, model? }`(只透传解析到值的 provider/model 字段,绝不破坏按字段继承);
    - `toolFilter` = 定义的 `toolRestriction`(allow/deny),**消毒**掉本组合已不再注册的工具名;
@@ -70,7 +70,7 @@ To delegate to one, pass its name as the `subagent_type` argument of the Task to
 frontmatter 钉了 `isolation: worktree` 的定义会被派发到 per-child 的 git worktree,而不是父工作树(`docs/plans/2026-09-14-cc-worktree-parity.md` WS-3):
 
 1. **创建** —— 在 `<主仓库根>/.claude/worktrees/subagent-<childId>` 建 worktree,分支 `worktree-subagent-<childId>`,走与 `EnterWorktree` 相同的加固路径(common-dir 根锚定、local-config 扫描、filter 驱动中和),随后 `git worktree lock --reason="dsh-cc subagent <id>"`(老版本 git 的 "unknown option" 失败按 no-op 容忍)。创建失败一律拒绝派发——绝不静默回落到父工作树。
-2. **收养** —— child 首次 `subagent/start` 时,`setSessionCwd` 把 **child** 的会话 cwd 切到 worktree(父日志不动);permission-rules 工作区、session-cwd 边界守卫、context bucket 随之生效。契约段落("你的工作目录是 `<path>`;所有工具都传其中的绝对路径,shell 传 `workdir`;父 checkout 禁入")追加进 child persona,prompt 首行加一条提示。
+2. **收养** —— child 首次 `subagent/start` 时,`setSessionCwd` 把 **child** 的会话 cwd 切到 worktree(父日志不动);permission-rules 工作区、session-cwd 边界守卫、context bucket 随之生效。契约段落("你的工作目录是 `<path>`;所有工具都传其中的绝对路径,shell 传 `workdir`;父 checkout 禁入")追加进 child persona,prompt 首行加一条提示。actor-contract 门控先作用于定义正文,再追加契约段落。
 3. **清理** —— `subagent/end` 时(continuable child 每个 epoch 重触发):探测 `git status --porcelain` 与相对基线 HEAD 的领先提交;干净且无提交 → unlock + `worktree remove --force` + 删分支;否则工作树留在磁盘上,并在最终文本中说明("LEFT on disk")。
 4. **拒绝** —— 当计算出的 worktree 路径落在父会话沙箱根(其 cwd 祖先——即父 cwd 是仓库根的子目录)之外时,以具名错误拒绝派发。
 

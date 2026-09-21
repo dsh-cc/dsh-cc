@@ -25,9 +25,11 @@
   },
   "dependencies": {
     "@dsh-cc/model-aliases": "workspace:^",
-    "@dsh-cc/settings-cascade": "workspace:^"
+    "@dsh-cc/settings-cascade": "workspace:^",
+    "@dsh-cc/settings-ns": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
@@ -43,6 +45,7 @@
     "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths"
   },
   "peerDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1",
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@deepseek-ai/dsh-commands": ">=0.1.5-rc.1",
     "@deepseek-ai/dsh-llm": ">=0.1.5-rc.1",

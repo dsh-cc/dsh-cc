@@ -346,6 +346,10 @@
     rules: true
     contextCrusher: true
     compactionCostGate: true
+    # The actor-contract model gate (docs/plans/2026-09-21-subagent-actor-contract-prompts.md):
+    # published by cc-subagent-task inside this group; an un-isolated provide
+    # trips the preset mount guard (process-global service from a preset row).
+    ccActorContractGate: true
   config:
     # ToolSearch: model-called search that activates deferred tools per scope.
     - id: tool-search

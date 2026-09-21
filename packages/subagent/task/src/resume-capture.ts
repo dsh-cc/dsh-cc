@@ -24,7 +24,9 @@ import { isAbsolute, join } from 'node:path'
 import { realpathSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentDefinition, ToolRestriction } from '@dsh-cc/claude-code-agents'
+import { applyActorContract, gateCandidates } from '@dsh-cc/claude-code-agents'
 import type { DetailedRoute } from '@dsh-cc/model-aliases'
+import { actorContractPatterns } from './actor-contract-gate.ts'
 import {
   PinStore,
   definitionFingerprint,
@@ -225,16 +227,27 @@ export class SpawnPinCapture {
     const effective = await this.preflight(overlay)
     const definition: PinDefinition = input.definition === undefined
       ? { kind: 'plain' }
-      : {
-          kind: 'named',
-          agentType: input.definition.agentType,
-          source: input.definition.source,
-          fingerprint: definitionFingerprint(input.definition),
-          personaHash: personaHash(input.definition.systemPrompt),
-          // Gate-time re-fingerprinting needs the discovery location (§4.4).
-          baseDir: input.definition.baseDir,
-          filename: input.definition.filename,
-        }
+      : (() => {
+          // §3.7: hash the GATED persona, computed with the SAME rule the
+          // dispatch fold uses (tool.ts seam): candidates from the definition's
+          // model + its resolved route (input.selector.route IS
+          // routes.resolveDetailed(model).route), patterns read LIVE from ctx.
+          const gatedPersona = applyActorContract(
+            input.definition.systemPrompt,
+            gateCandidates(input.definition.model, input.selector.route),
+            actorContractPatterns(this.ctx),
+          )
+          return {
+            kind: 'named',
+            agentType: input.definition.agentType,
+            source: input.definition.source,
+            fingerprint: definitionFingerprint(input.definition, gatedPersona),
+            personaHash: personaHash(gatedPersona),
+            // Gate-time re-fingerprinting needs the discovery location (§4.4).
+            baseDir: input.definition.baseDir,
+            filename: input.definition.filename,
+          }
+        })()
     const modelSelector: PinModelSelector = {
       raw: input.selector.selector ?? 'inherit',
       via: input.selector.via,

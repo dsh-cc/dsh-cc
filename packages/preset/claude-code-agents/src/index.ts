@@ -55,3 +55,4 @@ export { loadAgentsDir, findProjectAgentsDir, discoverAgents, AGENTS_DIR, CLAUDE
 export { parseAgentMarkdown, parseAgentJson, splitFrontmatter } from './parse.ts'
 export type { ParsedMarkdown } from './parse.ts'
 export { resolveToolRestriction, normalizeModel } from './restrict.ts'
+export { applyActorContract, matchesModelPattern, matchesAnyModelPattern, gateCandidates, DEFAULT_ACTOR_CONTRACT_MODELS } from './actor-contract.ts'
