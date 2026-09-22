@@ -49,8 +49,8 @@ describe('buildConsolidationPrompt', () => {
     // Phase 2: drift check names the workspace as the fork's cwd.
     expect(prompt).toContain("working directory IS the session's workspace")
     expect(prompt).toContain('contradiction between two memories')
-    // Phase 4: narrow transcript search, not exhaustive reading.
-    expect(prompt).toContain('do NOT exhaustively read the session transcripts')
+    // Phase 4: hints are provenance only; transcripts are never opened.
+    expect(prompt).toContain('never attempt to open or grep them')
     // Phase 5: index size target.
     expect(prompt).toContain('under 140 lines')
   })

@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { zstdCompressSync } from 'node:zlib'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply } from '../src/index.ts'
@@ -76,20 +80,19 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function mount(config: { memoryHome: string; dreamEnabled?: boolean; extractEnabled?: boolean; fs?: unknown; sessions?: unknown }) {
+function mount(config: { memoryHome: string; dreamEnabled?: boolean; extractEnabled?: boolean; fs?: unknown; sessionsRoot?: string }) {
   const ctx = new Context()
   const jobs = { start: vi.fn() }
   const subagents = { start: vi.fn() }
   const fs = config.fs ?? makeFsMock()
-  const sessions = config.sessions ?? { list: vi.fn(() => []) }
-  // Provide on the root context so the plugin under test (mounted on the same
-  // root) sees the services through ctx.get.
+  // No `sessions` service mock: the gates scan a REAL tmp sessions root on
+  // disk via config.sessionsRoot (plan §5). The in-memory fs fake stays only
+  // for the marker/lock/dir machinery.
   ctx.provide('jobs' as never, jobs as never)
   ctx.provide('subagents' as never, subagents as never)
   ctx.provide('fs' as never, fs as never)
-  ctx.provide('sessions' as never, sessions as never)
   apply(ctx, config)
-  return { ctx, jobs, subagents, fs, sessions }
+  return { ctx, jobs, subagents, fs }
 }
 
 /** Dispatch turn-stopping the way the agent loop does: serially, awaiting listeners. */
@@ -111,6 +114,40 @@ function controlsOf(
   return jobs.start.mock.calls
     .filter((c) => c[0]?.label === label)
     .map((c) => c[0].run())
+}
+
+/**
+ * Real tmp sessions root (plan §5): each test seeds actual directories with
+ * real zstd-compressed v3 header lines so the node:fs/zlib scanner reads them.
+ */
+let tmpRoot = ''
+beforeEach(async () => {
+  tmpRoot = await mkdtemp(join(tmpdir(), 'dream-sessions-'))
+})
+afterEach(async () => {
+  await rm(tmpRoot, { recursive: true, force: true })
+})
+
+/** Seed one session directory with a zstd-compressed v3 header line. */
+async function seedSession(
+  root: string,
+  id: string,
+  createdAt: number,
+  opts: { sub?: boolean; legacy?: boolean } = {},
+): Promise<void> {
+  const dir = join(root, 'proj', id)
+  await mkdir(dir, { recursive: true })
+  const header = JSON.stringify({
+    type: 'session', version: 3, id, createdAt, cwd: '/x',
+    delegationDepth: opts.sub ? 1 : 0, isSeeded: false,
+  })
+  const name = opts.legacy ? 'session.jsonl.zstd' : 'session.v3.jsonl.zstd'
+  await writeFile(join(dir, name), zstdCompressSync(Buffer.from(`${header}\n`)))
+}
+
+/** Seed N fresh top-level sessions (ids s1..sN). */
+async function seedFresh(root: string, n: number, startAt = Date.now()): Promise<void> {
+  for (let i = 1; i <= n; i++) await seedSession(root, `s${i}`, startAt + i)
 }
 
 describe('agent/turn-stopping listener', () => {
@@ -298,36 +335,22 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
   })
 })
 
-describe('dream listNewSessions filtering', () => {
+describe('dream sessions gate (scanned session store)', () => {
   const NOW = 2_000_000_000_000
-
-  function dreamSessions() {
-    // lastAt = 1000 => only the "old" session predates it. The dream agent's
-    // cwd is '/mem', so its workspace memory dir is '/mem/projects/mem'.
-    const seed = { '/mem/projects/mem/.consolidation-lock': '1\n1000\n' }
-    const fs = makeFsMock(seed)
-    const sessions = {
-      list: vi.fn(() => [
-        { id: 'old', header: { id: 'old', createdAt: 100 } },
-        { id: 'depth', header: { id: 'depth', createdAt: NOW, delegationDepth: 1 } },
-        { id: 'new-1', header: { id: 'new-1', createdAt: NOW } },
-        { id: 'invalid', header: { id: 'invalid', createdAt: -1 } },
-        { id: 'missing', header: { id: 'missing' } },
-        { id: 'fill-1', header: { id: 'fill-1', createdAt: NOW + 1 } },
-        { id: 'fill-2', header: { id: 'fill-2', createdAt: NOW + 2 } },
-      ]),
-    }
-    const { ctx, jobs, subagents } = mount({ memoryHome: '/mem', fs, sessions })
-    return { ctx, jobs, subagents }
-  }
+  // The dream agent's cwd is '/mem', so its workspace memory dir is here.
+  const LOCK = '/mem/projects/mem/.consolidation-lock'
 
   function dreamPromptOf(subagents: { start: ReturnType<typeof vi.fn> }): string {
     const call = subagents.start.mock.calls.find((c) => c[1]?.label === 'memory-consolidation')
     return call ? call[1].prompt[0].text : ''
   }
 
-  it('excludes old/delegated sessions and counts invalid/missing createdAt as new', async () => {
-    const { ctx, jobs, subagents } = dreamSessions()
+  it('spawns the dream once five or more new sessions exist since lastAt; prompt carries hint ids and the sessions root', async () => {
+    await seedSession(tmpRoot, 'old', 100)
+    await seedSession(tmpRoot, 'sub', NOW, { sub: true })
+    await seedFresh(tmpRoot, 5, NOW)
+    // lastAt = 1000: only sessions created after it qualify.
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: makeFsMock({ [LOCK]: '1\n1000\n' }), sessionsRoot: tmpRoot })
     subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
@@ -337,23 +360,45 @@ describe('dream listNewSessions filtering', () => {
       { timeout: 2000 },
     )
     const prompt = dreamPromptOf(subagents)
-    expect(prompt).toContain('new-1')
-    expect(prompt).toContain('invalid')
-    expect(prompt).toContain('missing')
-    expect(prompt).toContain('fill-1')
-    expect(prompt).toContain('fill-2')
+    expect(prompt).toContain(tmpRoot)
+    for (let i = 1; i <= 5; i++) expect(prompt).toContain(`s${i}`)
     // Excluded: older than lastAt, or a delegated session.
-    expect(prompt).not.toContain('old')
-    expect(prompt).not.toContain('depth')
-    // One memory-consolidation job (extraction runs a separate one).
+    expect(prompt).not.toContain('- old')
+    expect(prompt).not.toContain('- sub')
     expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1)
   })
 
+  it('an empty store blocks the dream', async () => {
+    await mkdir(tmpRoot, { recursive: true })
+    const { ctx, subagents } = mount({ memoryHome: '/mem', sessionsRoot: tmpRoot })
+    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await new Promise(r => setTimeout(r, 30))
+
+    expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(0)
+  })
+
+  it('a missing sessionsRoot blocks the dream and warns once per process', async () => {
+    const missing = join(tmpRoot, 'absent')
+    const { ctx, subagents } = mount({ memoryHome: '/mem', sessionsRoot: missing })
+    const warnSpy = vi.spyOn(ctx.logger, 'warn')
+    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await new Promise(r => setTimeout(r, 30))
+
+    expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(0)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(String(warnSpy.mock.calls[0][0])).toContain(missing)
+  })
+
   it('dream is single-flight across interleaved turn-stopping dispatches', async () => {
+    await seedFresh(tmpRoot, 5)
     // Keep the first dream pending (deferred stat) so the flag stays set when
     // the second dispatch fires.
     const dreamStat = deferred<unknown>()
-    const base = makeFsMock({ '/mem/.consolidation-lock': '1\n1000\n' })
+    const base = makeFsMock({ [LOCK]: '1\n1000\n' })
     const fs = {
       ...base,
       async stat(target: unknown) {
@@ -362,16 +407,7 @@ describe('dream listNewSessions filtering', () => {
         return base.stat(target)
       },
     }
-    const sessions = {
-      list: vi.fn(() => [
-        { id: 'a', header: { id: 'a', createdAt: NOW } },
-        { id: 'b', header: { id: 'b', createdAt: NOW } },
-        { id: 'c', header: { id: 'c', createdAt: NOW } },
-        { id: 'd', header: { id: 'd', createdAt: NOW } },
-        { id: 'e', header: { id: 'e', createdAt: NOW } },
-      ]),
-    }
-    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessions })
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessionsRoot: tmpRoot })
     subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
@@ -383,6 +419,44 @@ describe('dream listNewSessions filtering', () => {
       { timeout: 2000 },
     )
   })
+
+  it('scan is memoized within the window; a second repo reuses the raw list with its own filter', async () => {
+    // Repo A has no lock (lastAt = 0): all six sessions qualify. Repo B
+    // consolidated at 1000: only the five fresh ones do. If the memo cached a
+    // pre-filtered result (cold-review major #3), ONE of these prompts would
+    // carry the other repo's window.
+    await seedSession(tmpRoot, 'old', 100)
+    await seedFresh(tmpRoot, 5, NOW)
+    const { ctx, jobs, subagents } = mount({
+      memoryHome: '/mem',
+      sessionsRoot: tmpRoot,
+      fs: makeFsMock({ ['/mem/projects/mem2/.consolidation-lock']: '1\n1000\n' }),
+    })
+    const debugSpy = vi.spyOn(ctx.logger, 'debug')
+    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1), { timeout: 2000 })
+    // Let the first dream settle (dream single-flight), then repo B's own
+    // turn-end reuses the memoized raw list for its own lastAt window.
+    await vi.waitFor(() => expect(controlsOf(jobs, 'memory-consolidation').length).toBe(1), { timeout: 2000 })
+    await expect(controlsOf(jobs, 'memory-consolidation')[0].done).resolves.toEqual({ status: 'completed' })
+    await stopTurn(ctx, fakeAgent('/mem2'))
+    await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(2), { timeout: 2000 })
+
+    const scans = debugSpy.mock.calls.filter((c) => (c[0] as { event?: string })?.event === 'memory:scan')
+    const memoHits = debugSpy.mock.calls.filter((c) => (c[0] as { event?: string })?.event === 'memory:scan-memo-hit')
+    expect(scans.length).toBe(1)
+    expect(memoHits.length).toBe(1)
+
+    const dreamPrompts = subagents.start.mock.calls
+      .filter((c) => c[1]?.label === 'memory-consolidation')
+      .map((c) => c[1].prompt[0].text as string)
+    expect(dreamPrompts.length).toBe(2)
+    expect(dreamPrompts[0]).toContain('- old')
+    for (let i = 1; i <= 5; i++) expect(dreamPrompts[1]).toContain(`s${i}`)
+    expect(dreamPrompts[1]).not.toContain('- old')
+  })
 })
 
 describe('dream pressure marker (forced consolidation)', () => {
@@ -390,9 +464,9 @@ describe('dream pressure marker (forced consolidation)', () => {
   const PRESSURE = `${DIR}/.consolidation-needed`
   const COOLDOWN_MS = 60 * 60 * 1000
 
-  /** One fresh top-level session: enough to fail the periodic session gate. */
-  function oneSession() {
-    return { list: vi.fn(() => [{ id: 's1', header: { id: 's1', createdAt: Date.now() } }]) }
+  /** The dream agent's memory dir; the marker/lock machinery uses the fs mock. */
+  function pressureMount(marker: string, extra: Record<string, string> = {}) {
+    return mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker, ...extra }), sessionsRoot: tmpRoot })
   }
 
   async function spawnDream(ctx: Context, subagents: { start: ReturnType<typeof vi.fn> }): Promise<void> {
@@ -404,13 +478,15 @@ describe('dream pressure marker (forced consolidation)', () => {
   }
 
   it('an armed marker spawns even when both periodic gates would fail', async () => {
+    await seedFresh(tmpRoot, 1) // below minSessions; the time gate is also open too briefly to matter
     const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
-    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker }), sessions: oneSession() })
+    const { ctx, subagents } = pressureMount(marker)
 
     await spawnDream(ctx, subagents)
   })
 
   it('stamps lastForcedAt BEFORE the lock attempt: a held lock still consumes the cooldown', async () => {
+    await seedFresh(tmpRoot, 1)
     const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
     const writes: string[] = []
     const base = makeFsMock({
@@ -425,7 +501,7 @@ describe('dream pressure marker (forced consolidation)', () => {
         return base.writeText(target, content)
       },
     }
-    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessions: oneSession() })
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessionsRoot: tmpRoot })
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await new Promise(r => setTimeout(r, 20))
@@ -444,7 +520,7 @@ describe('dream pressure marker (forced consolidation)', () => {
     const marker = `${Date.now()}\n${Date.now() - 1000}\n`
     const base = makeFsMock({ [PRESSURE]: marker })
     const writeSpy = vi.spyOn(base, 'writeText')
-    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: base, sessions: oneSession() })
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: base, sessionsRoot: tmpRoot })
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await new Promise(r => setTimeout(r, 20))
@@ -455,8 +531,9 @@ describe('dream pressure marker (forced consolidation)', () => {
   })
 
   it('a successful forced dream tombs the marker', async () => {
+    await seedFresh(tmpRoot, 1)
     const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
-    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker }), sessions: oneSession() })
+    const { ctx, subagents, fs } = pressureMount(marker)
 
     await spawnDream(ctx, subagents)
 
@@ -468,8 +545,9 @@ describe('dream pressure marker (forced consolidation)', () => {
   })
 
   it('a failed forced dream keeps the marker with its fresh stamp', async () => {
+    await seedFresh(tmpRoot, 1)
     const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
-    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker }), sessions: oneSession() })
+    const { ctx, subagents, fs } = pressureMount(marker)
     subagents.start.mockImplementation(async () => ({
       result: Promise.resolve({ structured: undefined, stopReason: 'error' }),
     }))
@@ -482,13 +560,29 @@ describe('dream pressure marker (forced consolidation)', () => {
     expect(lastForcedAt).toBeGreaterThan(0)
   })
 
+  it('a scan-zero pressure run does NOT tomb the marker (retry next window, plan §3.3)', async () => {
+    const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
+    const base = makeFsMock({ [PRESSURE]: marker })
+    const writeSpy = vi.spyOn(base, 'writeText')
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: base, sessionsRoot: join(tmpRoot, 'absent') })
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await new Promise(r => setTimeout(r, 30))
+
+    // No spawn, no lock, no tomb: the marker keeps its armedAt (next window retries).
+    expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(0)
+    const lockWrites = writeSpy.mock.calls.filter((c) =>
+      String((c[0] as { targetKey?: { targetKey?: string } })?.targetKey?.targetKey).endsWith('.consolidation-lock'))
+    expect(lockWrites.length).toBe(0)
+    const [armedAt, lastForcedAt] = (base.backing.get(PRESSURE) ?? '').trim().split('\n').map(Number)
+    expect(armedAt).toBe(Number(marker.trim().split('\n')[0]))
+    expect(lastForcedAt).toBeGreaterThan(0)
+  })
+
   it('a successful periodic dream also clears a pending marker', async () => {
+    await seedFresh(tmpRoot, 5)
     const marker = `${Date.now()}\n0\n`
-    const seed = {
-      [`${DIR}/.consolidation-lock`]: '1\n1000\n',
-      [PRESSURE]: marker,
-    }
-    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock(seed), sessions: oneSession() })
+    const { ctx, subagents, fs } = pressureMount(marker)
 
     await spawnDream(ctx, subagents)
 
@@ -500,6 +594,7 @@ describe('dream pressure marker (forced consolidation)', () => {
   })
 
   it('a marker armed while a dream is in flight spawns no second dream', async () => {
+    await seedFresh(tmpRoot, 1)
     const dreamStat = deferred<unknown>()
     const base = makeFsMock({ [PRESSURE]: `${Date.now() - COOLDOWN_MS - 1000}\n0\n` })
     const fs = {
@@ -510,7 +605,7 @@ describe('dream pressure marker (forced consolidation)', () => {
         return base.stat(target)
       },
     }
-    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessions: oneSession() })
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessionsRoot: tmpRoot })
     subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
@@ -657,24 +752,27 @@ describe('extract-memories index injection', () => {
     expect(extractionPromptOf(subagents)).toContain('last 6 messages')
   })
 
-  it('keeps buildConsolidationPrompt byte-equal (no collateral change)', () => {
+  it('keeps buildConsolidationPrompt byte-equal (re-recorded golden, plan §3.6)', () => {
     const expected = [
-      'You are consolidating persistent memory from past sessions. Review the sessions listed below (transcripts in `/transcripts`), distill durable facts, and rewrite the memory directory `/mem`.',
+      'You are consolidating persistent memory from past sessions. Distill durable facts and rewrite the memory directory `/mem`.',
       'The memory directory contains MEMORY.md (an index of topic files) and topic `.md` files with YAML frontmatter (name, description, type).',
       'Return the complete rewritten file set via the `structured_output` tool as `{ "writes": [{ "path", "content" }] }` — flat `.md` filenames with complete bodies. Only the files you return are written; omitted files stay unchanged on disk.',
       'Work in this order:',
       `1. Orient: list \`/mem\`, then read MEMORY.md and the topic files it points at — that is your primary review material.`,
       `2. Verify against reality: the fork's working directory IS the session's workspace. Before keeping any load-bearing fact, check it against the current codebase (paths, commands, behavior) with read/grep/glob. On a contradiction between two memories, fix the wrong side. Delete facts referencing things that no longer exist.`,
       `3. Normalize dates: convert every relative date ("yesterday", "last week") to the absolute date it referred to.`,
-      `4. Search transcripts narrowly: do NOT exhaustively read the session transcripts in \`/transcripts\` — grep them only for things already suspected important (symbols, paths, error strings surfaced by the memory files).`,
+      `4. Treat the session hints below as provenance only: they mark which sessions the consolidation window covers. The fork cannot read transcripts (zstd) — never attempt to open or grep them.`,
       `5. Prune and index: rewrite MEMORY.md as one line per topic, targeting under 140 lines (an index over 200 lines / 25 KB is rejected host-side, so stay well under). Move detail into topic files, organized by semantic topic, and keep still-true load-bearing facts.`,
       `You may use only: ${MEMORY_AGENT_TOOLS.join(', ')}.`,
       '',
-      'Sessions since the last consolidation:',
+      'Session provenance hints (ids under `/sessions-root`):',
       '- s1',
       '- s2',
     ].join('\n')
-    expect(buildConsolidationPrompt('/mem', '/transcripts', ['s1', 's2'])).toBe(expected)
+    const prompt = buildConsolidationPrompt('/mem', '/sessions-root', ['s1', 's2'])
+    expect(prompt).toBe(expected)
+    expect(prompt).toContain('/sessions-root')
+    expect(prompt).not.toContain('grep them only')
   })
 })
 
