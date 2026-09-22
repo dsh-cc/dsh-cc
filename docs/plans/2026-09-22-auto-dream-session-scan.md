@@ -1,10 +1,12 @@
 # Auto-dream never fires: drop the `sessions` service dependency, scan the session store
 
-**Status:** **Planned** — amended after critic cold review round 1 (2026-09-22:
-blocker #1 prefix reads impossible via the fs seam → scanner reads via
-`node:fs` directly; blocker #2 v3 header contract pinned against a real
-stream; major #3 memo must cache the unfiltered list; major #4/#5 dogfood
-gate and scan-stats logging; minor #6–#10 incorporated).
+**Status:** **Implemented** — PR #109 (2026-09-22, open). Critic cold review round 1
+(2026-09-22, AMEND: fs-seam prefix reads impossible → scanner reads via
+`node:fs`; v3 header contract pinned from a real stream; memo caches the
+unfiltered list; scan-stats + dogfood gates) incorporated before
+implementation; implementation-diff review round 2 (CONFIRM: namespace zstd
+import, StringDecoder against torn multibyte, cross-repo memo test
+strengthened) landed as a follow-up commit.
 **Date:** 2026-09-22
 **Worktree:** `.claude/worktrees/auto-dream-debug` (branch `worktree-auto-dream-debug`)
 
