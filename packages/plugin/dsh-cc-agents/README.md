@@ -81,6 +81,40 @@ also assumes the servers keep their conventional aliases (`serena`,
 `sequential_thinking`, `context7`); a renamed server degrades to the
 same drop-with-warning path.
 
+## Serena hooks (optional)
+
+The plugin ships two Claude-Code hooks for projects that use
+[Serena](https://github.com/oraios/serena) symbolic code tools:
+
+- **PreToolUse** on `read`/`grep` (and serena tool calls) reminds the model
+  to reach for symbolic tools after a burst of raw reads/greps — a short
+  deny + nudge, at most once per two minutes per session.
+- **SessionEnd** cleans up the session's hook state
+  (`<project>/.serena/hook_data/<session-id>/`) when the session is disposed.
+
+Both hooks are double-gated and stay silent no-ops unless the current
+session's project is serena-onboarded (`<repo>/.serena/project.yml`, found by
+walking up from the session cwd through the git toplevel) **and** the
+`serena-hooks` binary resolves on `PATH`:
+
+```sh
+uv tool install git+https://github.com/oraios/serena@v1.7.0
+```
+
+Hook state is pinned into the project (`SERENA_HOME=<repo>/.serena`) because
+the session sandbox makes serena's `~/.serena` default unwritable. Keep
+`.serena/hook_data/` out of version control.
+
+Two operational notes:
+
+- **One channel per behavior.** If a repository also ships its own
+  `hooks.json` serena-remind entry, both fire and the shared counter
+  double-counts bursts. Keep the reminder in exactly one place — this plugin
+  or the repo.
+- **Cost on non-serena projects**: one ~50 ms gated node spawn per Read/Grep
+  and no python. Disable the plugin to opt out entirely; conversely, run
+  `/plugin update` after a dsh-cc release to pick up hook changes.
+
 ## Advisory safety: critic
 
 `critic` retains the `Bash` tool for read-only verification (run a

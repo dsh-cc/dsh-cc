@@ -71,6 +71,26 @@ dsh-cc 之外嵌入它们），请先剥离 `mcp__*` 条目或自行净化。该
 服务器保持其惯用别名（`serena`、`sequential_thinking`、`context7`）；改名
 的服务器会落入同样的"带警告丢弃"路径。
 
+## Serena hooks（可选）
+
+插件为使用 [Serena](https://github.com/oraios/serena) 符号化代码工具的项目附带两个 Claude-Code hook：
+
+- **PreToolUse** 作用于 `read`/`grep`（及 serena 工具调用）：连续爆发式裸读/裸搜之后提醒模型改用符号工具——一次简短的 deny + 提醒，每会话每两分钟至多一次。
+- **SessionEnd** 在会话销毁时清理本会话的 hook 状态（`<project>/.serena/hook_data/<session-id>/`）。
+
+两个 hook 都经双重门控，只有同时满足两个条件才会生效，否则静默空转：当前会话项目已完成 serena 初始化（存在 `<repo>/.serena/project.yml`，从会话 cwd 沿目录树向上穿过 git 根查找）**且** `serena-hooks` 二进制能经 `PATH` 解析：
+
+```sh
+uv tool install git+https://github.com/oraios/serena@v1.7.0
+```
+
+hook 状态钉在项目内（`SERENA_HOME=<repo>/.serena`），因为会话沙箱使 serena 默认的 `~/.serena` 不可写。请把 `.serena/hook_data/` 保持出版本库外。
+
+两条运维须知：
+
+- **一个行为只走一个渠道。** 如果仓库自己也带了 `hooks.json` 的 serena-remind 条目，两边会同时触发、共享计数器被双计。提醒只放在一处——本插件或仓库。
+- **非 serena 项目的开销**：每次 Read/Grep 多一个约 50 ms 的带门控 node 进程，不起 python。要完全退出可禁用本插件；反过来，dsh-cc 发版后用 `/plugin update` 拉取 hook 变更。
+
 ## Advisory safety: critic
 
 `critic` 保留 `Bash` 工具用于只读验证（跑测试、复现失败、查看历史）。

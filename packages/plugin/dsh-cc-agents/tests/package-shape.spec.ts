@@ -31,6 +31,7 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
     expect(pkg.files).toEqual(expect.arrayContaining([
       '.claude-plugin/plugin.json',
       'agents',
+      'hooks',
       'skills',
       'README.md',
     ]))
@@ -48,6 +49,16 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
   it('the agents directory holds both agent definitions', () => {
     expect(existsSync(join(PKG_DIR, 'agents', 'critic.md'))).toBe(true)
     expect(existsSync(join(PKG_DIR, 'agents', 'executor.md'))).toBe(true)
+  })
+
+  it('the hooks directory carries the serena gate trio and a valid hooks.json', () => {
+    expect(existsSync(join(PKG_DIR, 'hooks', 'serena-gate.mjs'))).toBe(true)
+    expect(existsSync(join(PKG_DIR, 'hooks', 'serena-remind.mjs'))).toBe(true)
+    expect(existsSync(join(PKG_DIR, 'hooks', 'serena-session-cleanup.mjs'))).toBe(true)
+    const hooksJson = JSON.parse(readFileSync(join(PKG_DIR, 'hooks', 'hooks.json'), 'utf8')) as {
+      hooks: Record<string, unknown>
+    }
+    expect(Object.keys(hooksJson.hooks).sort()).toEqual(['PreToolUse', 'SessionEnd'])
   })
 
   it('keeps the retired workspace shadow copies deleted (no dual existence)', () => {

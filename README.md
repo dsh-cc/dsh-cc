@@ -378,6 +378,8 @@ The hook pins its state to the project via `SERENA_HOME="${CLAUDE_PROJECT_DIR}/.
 
 A matcherless `SessionEnd` entry runs `serena-hooks cleanup` when a session is disposed, deleting that session's `.serena/hook_data/<session-id>/` so per-session state does not accumulate. The bridge dispatches SessionEnd hooks detached, so cleanup never blocks the interactive session.
 
+The portable pair (remind + cleanup) is also moving into the official `dsh-cc-agents` plugin (see its README's *Serena hooks* section): with the plugin enabled, the nudge applies to every serena-onboarded repository without a per-repo `hooks.json` copy. During the transition this repo's `hooks.json` keeps its own serena entries; they are removed once a release ships the plugin hooks.
+
 Health-check and index remain one-shot `uvx` commands; see [docs/code-intelligence-health.md](docs/code-intelligence-health.md).
 
 To test unpublished packages against a real profile:

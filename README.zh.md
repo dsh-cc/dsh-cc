@@ -318,6 +318,8 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 
 hooks.json 还挂了一个无 matcher 的 `SessionEnd` 项：会话销毁时跑 `serena-hooks cleanup`，删除本会话的 `.serena/hook_data/<session-id>/`，避免状态跨会话堆积。bridge 以 detached 方式跑 SessionEnd hook，清理不会阻塞交互会话。
 
+可移植的提醒 + 清理这对 hook 同时正在迁进官方 `dsh-cc-agents` 插件（见其 README 的 *Serena hooks* 一节）：启用插件后，任何完成 serena 初始化的仓库都自动获得提醒，无需逐仓拷贝 `hooks.json`。过渡期内本仓 `hooks.json` 保留自己的 serena 条目；待包含插件 hook 的版本发布后移除。
+
 更多离线开发、依赖和测试说明见 **[docs/dev.md](docs/dev.md)**。
 
 ## Packages 与版本发布
