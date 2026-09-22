@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/compaction-cost-gate",
   "description": "Cost-gated plan-step compaction: fire compactNow at todo boundaries only when projected input-token savings beat the prompt-cache rewrite price plus unamortized debt",
-  "version": "0.8.0-rc.1",
+  "version": "0.8.0-rc.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
