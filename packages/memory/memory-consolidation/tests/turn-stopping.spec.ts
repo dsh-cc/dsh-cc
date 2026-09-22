@@ -385,6 +385,146 @@ describe('dream listNewSessions filtering', () => {
   })
 })
 
+describe('dream pressure marker (forced consolidation)', () => {
+  const DIR = '/mem/projects/mem'
+  const PRESSURE = `${DIR}/.consolidation-needed`
+  const COOLDOWN_MS = 60 * 60 * 1000
+
+  /** One fresh top-level session: enough to fail the periodic session gate. */
+  function oneSession() {
+    return { list: vi.fn(() => [{ id: 's1', header: { id: 's1', createdAt: Date.now() } }]) }
+  }
+
+  async function spawnDream(ctx: Context, subagents: { start: ReturnType<typeof vi.fn> }): Promise<void> {
+    subagents.start.mockImplementation(async () => ({
+      result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }),
+    }))
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1), { timeout: 2000 })
+  }
+
+  it('an armed marker spawns even when both periodic gates would fail', async () => {
+    const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker }), sessions: oneSession() })
+
+    await spawnDream(ctx, subagents)
+  })
+
+  it('stamps lastForcedAt BEFORE the lock attempt: a held lock still consumes the cooldown', async () => {
+    const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
+    const writes: string[] = []
+    const base = makeFsMock({
+      [PRESSURE]: marker,
+      // A fresh lock: tryAcquireLock must return null (held, not stale).
+      [`${DIR}/.consolidation-lock`]: `1\n${Date.now()}\n`,
+    })
+    const fs = {
+      ...base,
+      async writeText(target: unknown, content: string) {
+        writes.push(String((target as { targetKey: unknown }).targetKey))
+        return base.writeText(target, content)
+      },
+    }
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessions: oneSession() })
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await new Promise(r => setTimeout(r, 20))
+
+    // No spawn (lock held), but the marker was stamped: the write to the
+    // pressure file happened before any lock write could, and armedAt survived.
+    expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(0)
+    expect(writes.filter(k => k.endsWith('.consolidation-needed')).length).toBe(1)
+    expect(writes.some(k => k.endsWith('.consolidation-lock'))).toBe(false)
+    const [armedAt, lastForcedAt] = (base.backing.get(PRESSURE) ?? '').trim().split('\n').map(Number)
+    expect(armedAt).toBe(Number(marker.trim().split('\n')[0]))
+    expect(lastForcedAt).toBeGreaterThan(0)
+  })
+
+  it('within the cooldown: no spawn AND no lock attempt', async () => {
+    const marker = `${Date.now()}\n${Date.now() - 1000}\n`
+    const base = makeFsMock({ [PRESSURE]: marker })
+    const writeSpy = vi.spyOn(base, 'writeText')
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: base, sessions: oneSession() })
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await new Promise(r => setTimeout(r, 20))
+
+    expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(0)
+    expect(writeSpy).not.toHaveBeenCalled()
+    expect(base.backing.get(PRESSURE)).toBe(marker)
+  })
+
+  it('a successful forced dream tombs the marker', async () => {
+    const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
+    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker }), sessions: oneSession() })
+
+    await spawnDream(ctx, subagents)
+
+    await vi.waitFor(() => {
+      const tomb = (fs.backing.get(PRESSURE) ?? '').trim().split('\n').map(Number)
+      expect(tomb[0]).toBe(0)
+      expect(tomb[1]).toBeGreaterThan(0)
+    })
+  })
+
+  it('a failed forced dream keeps the marker with its fresh stamp', async () => {
+    const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
+    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker }), sessions: oneSession() })
+    subagents.start.mockImplementation(async () => ({
+      result: Promise.resolve({ structured: undefined, stopReason: 'error' }),
+    }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await new Promise(r => setTimeout(r, 50))
+
+    const [armedAt, lastForcedAt] = (fs.backing.get(PRESSURE) ?? '').trim().split('\n').map(Number)
+    expect(armedAt).toBe(Number(marker.trim().split('\n')[0]))
+    expect(lastForcedAt).toBeGreaterThan(0)
+  })
+
+  it('a successful periodic dream also clears a pending marker', async () => {
+    const marker = `${Date.now()}\n0\n`
+    const seed = {
+      [`${DIR}/.consolidation-lock`]: '1\n1000\n',
+      [PRESSURE]: marker,
+    }
+    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock(seed), sessions: oneSession() })
+
+    await spawnDream(ctx, subagents)
+
+    await vi.waitFor(() => {
+      const tomb = (fs.backing.get(PRESSURE) ?? '').trim().split('\n').map(Number)
+      expect(tomb[0]).toBe(0)
+      expect(tomb[1]).toBeGreaterThan(0)
+    })
+  })
+
+  it('a marker armed while a dream is in flight spawns no second dream', async () => {
+    const dreamStat = deferred<unknown>()
+    const base = makeFsMock({ [PRESSURE]: `${Date.now() - COOLDOWN_MS - 1000}\n0\n` })
+    const fs = {
+      ...base,
+      async stat(target: unknown) {
+        const key = String((target as { targetKey: unknown }).targetKey)
+        if (key.endsWith('/.consolidation-lock')) return dreamStat.promise
+        return base.stat(target)
+      },
+    }
+    const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessions: oneSession() })
+    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await stopTurn(ctx, fakeAgent('/mem'))
+    dreamStat.resolve(undefined)
+
+    await vi.waitFor(() =>
+      expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1),
+      { timeout: 2000 },
+    )
+    expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1)
+  })
+})
+
 describe('extract-memories index injection', () => {
   const MEM = '/mem'
   // The extraction agent's cwd is MEM, so its workspace memory dir is here.

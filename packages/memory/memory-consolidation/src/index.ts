@@ -37,6 +37,9 @@ import {
   MAX_ENTRYPOINT_LINES,
   MAX_ENTRYPOINT_BYTES,
   truncateEntrypointContent,
+  readPressure,
+  markPressureForced,
+  clearPressure,
 } from '@dsh-cc/memory'
 
 export { LOCK_FILE, LOCK_STALE_MS, readLastConsolidatedAt, rollbackLock, tryAcquireLock } from './lock.ts'
@@ -75,6 +78,8 @@ export interface Config {
   minSessions?: number
   /** A lock holder is stale past this window (default 1 hour). */
   lockStaleMs?: number
+  /** Minimum minutes between forced (pressure) dreams (default 60). */
+  pressureCooldownMinutes?: number
   /** One-shot subagent provider for forks (default `fork`). */
   subagentProviderName?: string
 }
@@ -86,6 +91,7 @@ export const Config: z<Config> = z.object({
   minHours: z.number().default(24),
   minSessions: z.number().default(5),
   lockStaleMs: z.number().default(LOCK_STALE_MS),
+  pressureCooldownMinutes: z.number().default(60),
   subagentProviderName: z.string().default('fork'),
 })
 
@@ -259,6 +265,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const provider = config.subagentProviderName ?? 'fork'
   const minHours = config.minHours ?? 24
   const minSessions = config.minSessions ?? 5
+  const pressureCooldownMinutes = config.pressureCooldownMinutes ?? 60
 
   // Per-session extraction single-flight. Keyed by session id so each top-level
   // agent's in-flight flag and last-spawned event count are isolated.
@@ -295,7 +302,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     if (config.dreamEnabled ?? true) {
       if (!dreamInFlight) {
         dreamInFlight = true
-        void runDream(ctx, agent, home, provider, minHours, minSessions)
+        void runDream(ctx, agent, home, provider, minHours, minSessions, pressureCooldownMinutes)
           .catch(() => {})
           .finally(() => { dreamInFlight = false })
       }
@@ -397,26 +404,48 @@ async function runDream(
   provider: string,
   minHours: number,
   minSessions: number,
+  pressureCooldownMinutes: number,
 ): Promise<void> {
   const fs = ctx.get('fs')
   if (fs === undefined) return
   const dir = resolveWorkspaceMemoryDir(home, sessionTranscriptDir(agent))
   const now = Date.now()
+  const policy = memoryWritePolicy(dir)
+  const pressure = await readPressure(fs, dir)
   const lastAt = await readLastConsolidatedAt(fs, dir)
   const sessionIds = listNewSessions(ctx, lastAt)
-  if (!gatesPass({
+  if (pressure.armedAt > 0) {
+    // Pressure mode: an armed marker bypasses the time/session gates. The
+    // cooldown is measured from `lastForcedAt` (not `armedAt`) so a tight arm
+    // loop of rejecting saves cannot spin dreams faster than the knob;
+    // backwards clock skew (negative delta) counts as within-cooldown.
+    if (now - pressure.lastForcedAt < pressureCooldownMinutes * 60_000) return
+    // Stamp BEFORE acquiring the lock: consumes the cooldown slot even if the
+    // lock is held or the spawn never happens, making the crash-window spawn
+    // storm structurally impossible. Failure keeps the marker with this stamp
+    // so the next window retries.
+    await markPressureForced(fs, dir, pressure.armedAt, now, policy)
+  } else if (!gatesPass({
     lastConsolidatedAt: lastAt,
     now,
     minHours,
     sessionCount: sessionIds.length,
     minSessions,
-  })) return
-  const priorAt = await tryAcquireLock(fs, dir, process.pid, now, memoryWritePolicy(dir))
+  })) {
+    return
+  }
+  const priorAt = await tryAcquireLock(fs, dir, process.pid, now, policy)
   if (priorAt === null) return
   const prompt = buildConsolidationPrompt(dir, sessionTranscriptDir(agent), sessionIds)
   const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
   void job.settled.then((ok) => {
-    if (!ok) void rollbackLock(fs, dir, priorAt, memoryWritePolicy(dir))
+    if (!ok) {
+      void rollbackLock(fs, dir, priorAt, policy)
+      return
+    }
+    // Success tombs the marker in BOTH modes: a successful periodic dream
+    // rebuilds the index, so a stale pending marker is obsolete by definition.
+    void clearPressure(fs, dir, now, policy)
   })
 }
 
