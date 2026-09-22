@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/tool-use-summary",
   "description": "Tool Use Summary (TUS) pipeline: fire-and-forget cheap-lane digests of large tool results, stored in an append-only per-session ledger and consumed at compaction time",
-  "version": "0.7.1",
+  "version": "0.8.0-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
