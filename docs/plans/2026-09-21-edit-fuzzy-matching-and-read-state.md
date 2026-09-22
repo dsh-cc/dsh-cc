@@ -10,7 +10,12 @@ was cited as `exec.agent.inject` — that is the PreToolUse path; PostToolUse co
 goes out as `additionalContexts` on the decision via `exec.deferContext`. Also fixed:
 the `FS_NOT_OBSERVED` throw-site anchor (policy `editIntent`, not edit.ts), the Track B
 trigger (no `isError` flag in the hook payload), and the ZCode reference label
-(anchors secondhand — no ZCode checkout present). No design-level changes.
+(anchors secondhand — no ZCode checkout present). No design-level changes. Round 4
+(2026-09-21, ZCode checkout at 872ad96): all ZCode-side anchors verified against
+source — every behavioral claim holds exactly; anchor precision fixed
+(`edit-matchers.ts:1-10,51-59`, `edit.ts:421-441` with `hasReadStateChanged` at :444,
+bash parsing at `bash-read-file-sources.ts:50-63` incl. the single-command `grep`
+nuance); the secondhand label is retired.
 
 ## 1. Problem
 
@@ -37,19 +42,25 @@ workaround had to be discovered by hand.
   consumed in `tool-fs/src/edit.ts:115-127`. The genuine deltas against ZCode
   are: **(a)** no full-vs-partial observation granularity (a partial Read satisfies the
   gate the same as a full one), **(b)** no bash read-backfill — `cat/head/tail/sed`
-  output does not register an observation, so the model pays a redundant Read before the
-  next edit even when it just saw the content. (ZCode's `isPartialView`,
-  strict-full-read fast path, and mtime/size staleness in
-  `apps/zcode-cli/packages/core/src/tool/handlers/edit.ts:421-437`,
-  `bash-read-file-state.ts` are the reference behavior.)
+  (and single-command `grep`) output does not register an observation, so the model pays
+  a redundant Read before the
+  next edit even when it just saw the content. (ZCode's `isPartialView` refusal,
+  strict-full-read fast path, and mtime/size staleness at
+  `apps/zcode-cli/packages/core/src/tool/handlers/edit.ts:421-441` plus
+  `hasReadStateChanged` at :444, and the bash parser in
+  `handlers/bash-read-file-sources.ts:50-63` — single invocation only, bails on
+  pipes/redirects, registers only non-truncated ≤10 MB reads — are the reference
+  behavior.)
 
-**ZCode edit-matcher reference (anchors secondhand — cited from the borrow analysis;
-the ZCode checkout is not present in this review environment, so verify against the
-ZCode checkout before citing upstream publicly):**
+**ZCode edit-matcher reference (verified against zai-org/ZCode @ 872ad96):**
 
-- Eight strategies in fixed narrow→broad order (`edit-matchers.ts:2-9,52-58`); results
-  are tri-state with `candidateCount` on ambiguity (`edit-matchers.ts:135`) — **counts
-  only, no locations**; BROAD matchers are skipped under `replaceAll`
+- Eight strategies in fixed narrow→broad order (`edit-matchers.ts:1-10,51-59`: exact,
+  quote_normalized, line_number_prefix_stripped, escape_normalized,
+  unicode_escape_normalized, line_trimmed, indentation_flexible, block_anchor; `exact`
+  tried first, then the seven fuzzy tiers); results
+  are tri-state with `candidateCount` on ambiguity (`edit-matchers.ts:126-142`) — **counts
+  only, no locations**; BROAD matchers (`line_trimmed`, `indentation_flexible`,
+  `block_anchor`, `edit-matchers.ts:27-31`) are skipped under `replaceAll`
   (`edit-matchers.ts:62`), a safety property worth adopting as-is.
 
 **dsh-cc hook seam (verified):**
@@ -80,7 +91,10 @@ greenfield; Track B (dsh-cc mitigation) is re-anchored on PostToolUse.
 2. **Read-state delta, against the existing gate**: (a) record view extent
    (full vs partial with offset/limit) in `FsObservation` and let edit refuse on
    partial-only observation with a targeted message; (b) bash read-backfill: parse
-   `cat/head/tail/sed -n` invocations and write the same observation records, so a later
+   `cat/head/tail/sed -n` (and single-command `grep`) invocations and write the same
+   observation records — reference: ZCode `handlers/bash-read-file-sources.ts:50-63`
+   (single invocation only, bails on pipes/redirects, registers only non-truncated
+   ≤10 MB reads) — so a later
    edit proceeds without a redundant Read; (c) keep the success hint ("file state is
    current — no need to Read it back", the ZCode behavior that suppresses pointless
    re-reads). Fair-attribution note: the harness edit tool *description* already

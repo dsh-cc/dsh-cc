@@ -83,10 +83,21 @@ llm-pi-ai resolves — verified through its pnpm symlink):**
   actually sends. The ZCode tail-marker design concern is moot under this behavior; the
   anthropic 4-marker ceiling is NOT moot (system sites + tools tail + last message is
   already at/near the cap — see §8).
-- **ZCode reference design** (unverified line anchors; the checkout is not pinned in
-  this worktree): context sections declare `cacheHint: "stable"|"dynamic"`; assembly
-  sorts stable sections first and emits three separate system messages each carrying an
-  ephemeral marker; compaction is materialized as its own stable section. Remains useful
+- **ZCode reference design** (anchors verified against zai-org/ZCode @ 872ad96; paths
+  relative to `apps/zcode-cli/packages/`): context sections declare
+  `cacheHint: "stable"|"dynamic"` (`core/src/context/types.ts:66`, default `"dynamic"`
+  at `context/builder.ts:72`); assembly sorts stable-before-dynamic *within each
+  injection target* (`context/builder.ts:310-324`, applied at :207) and emits up to
+  three separate system messages each carrying an ephemeral marker
+  (`assembleSystemMessages`, `builder.ts:230-277` — cli-prefix, stable-body, dynamic;
+  each conditional on non-empty content, so three is a ceiling). Compaction materializes
+  as a synthetic user message in the runtime history, not a context section
+  (`runtime/methods/compact-active.ts:531-538`, `runtime/helpers/compact.ts:73-91`),
+  and the compact-summary request itself moves the tail marker back off the compact
+  prompt (`runtime/helpers/provider-request-messages.ts:292-323`, `skipCacheWrite` at
+  `compact-active-helpers.ts:87-88`). ZCode re-stamps the **last non-system message**
+  per request (`provider-request-messages.ts:81-84` — may be a tool result; never a
+  tools-array tail, unlike pi-ai's tools-tail stamp). Remains useful
   as the §6 design vocabulary, not as a claim about our runtime.
 
 ## 3. Design ruling (round 2)
@@ -328,4 +339,8 @@ Nothing in the data indicates a paying move to take upstream.
   in the tree. Doc status flipped from Proposed to Phase-0-Implemented; remaining open
   items are the human-gated live A/B and the §6 upstream checklist (NO-GO per §7(c)).
   Post-merge cold re-review at HEAD f81883d: all load-bearing anchors retraced to
-  file:line and hold; no code contradictions found.
+  file:line and hold; no code contradictions found. Round 4 (2026-09-21, ZCode
+  checkout at 872ad96): the ZCode reference-design passage upgraded from unverified
+  to verified anchors; one wrong claim fixed (compaction materializes as a synthetic
+  user message in the runtime history, not a stable context section), and the
+  last-non-system-message tail-marker semantics pinned.

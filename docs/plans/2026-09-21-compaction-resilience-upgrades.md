@@ -9,7 +9,13 @@ pi-ai 0.85.1): the classification premise was wrong in the other direction — p
 `isContextOverflow` Case 3 already maps the GLM length+empty shape to
 `CONTEXT_WINDOW_EXCEEDED` whenever usage and contextWindow are reported, so piece 1
 collapsed to a no-op plus a missing-usage residual branch, and piece 2's trigger was
-re-anchored accordingly. Remaining load-bearing anchors retraced and hold.
+re-anchored accordingly. Remaining load-bearing anchors retraced and hold. Round 4
+(2026-09-21, ZCode checkout at 872ad96): all ZCode-side anchors verified against
+source — behavior claims hold (marker text, shared 3-attempt budget, ≤5/≤5K/≤50K
+limits, flag semantics); the ladder's file anchor corrected
+(`runtime/helpers/compact-selection.ts`, not `compact/compact-selection.ts`) and the
+`willRetriggerNextTurn` flag clarified as boundary-event metadata, not an active
+retrigger; secondhand label retired.
 
 ## 1. Problem
 
@@ -74,15 +80,19 @@ Compaction has two silent failure taxes today:
   `2026-09-21-edit-fuzzy-matching-and-read-state.md`). A re-injection note can describe
   observation state without owning the registry.
 
-**ZCode reference (cited from the borrow analysis; the ZCode checkout is not present in
-this review environment, so these anchors are not re-verified here):** trigger policy, the prompt-too-long ladder (re-select with more
+**ZCode reference (verified against zai-org/ZCode @ 872ad96):** trigger policy, the prompt-too-long ladder (re-select with more
 recent rounds preserved → hard-truncation of oldest rounds behind an explicit
-`[earlier conversation truncated for compaction retry]` marker → error; max 3 attempts;
-`packages/core/src/compact/compact-selection.ts`,
-`packages/core/src/runtime/methods/compact-active.ts:288-303`), post-compact
+`[earlier conversation truncated for compaction retry]` marker (`packages/core/src/compact/manual.ts:55-57`) → error; a
+**shared** 3-attempt budget across both rungs (`MAX_COMPACT_PROMPT_TOO_LONG_RETRIES`,
+enforced at `runtime/helpers/compact-selection.ts:175`; rungs in
+`packages/core/src/runtime/methods/compact-active.ts:272-311,446-452`, selection
+logic in `packages/core/src/runtime/helpers/compact-selection.ts` — truncation only
+for eligible triggers, marker inserted only when truncation starts mid-round), post-compact
 re-injection (≤5 files, ≤5K tokens/file, ≤50K total;
-`packages/core/src/runtime/helpers/compact-post-reminders.ts`), and the
-`willRetriggerNextTurn` boundary flag.
+`packages/core/src/runtime/helpers/compact-post-reminders.ts:17-19`), and the
+`willRetriggerNextTurn` boundary-event metadata flag (computed at
+`compact-active.ts:569-571`; flags that post-compact tokens still meet the
+auto-compact threshold — consumers act on it, the runtime itself does not).
 
 ## 3. Design
 

@@ -12,7 +12,13 @@ against HEAD f81883d + harness 1ef9c1fa): **CONFIRM, no blocking findings** — 
 reachable anchors retraced; five wording/anchor fixes baked in (`approval/policy`
 acknowledged alongside asked/decided, firehose/merge line anchors re-pinned, the
 watchdog's arming signal made explicit as `tool/call`, and the ZCode anchor block
-relabeled secondhand). None of the items are already shipped at HEAD.
+relabeled secondhand). None of the items are already shipped at HEAD. Round 4
+(2026-09-21, ZCode checkout at 872ad96): all ZCode anchors verified against source —
+one BLOCKING mis-attribution fixed (the "hooks narrow, never widen" rule actually
+belongs to `prepareApproval` only; PreToolUse hook `allow` can auto-approve an
+ordinary ask — `hook-flow.ts:209-218`), one package path corrected
+(`workflow-model-failure-policy.ts` lives in `adapters/src/model/`, not
+`dynamic-workflow`), and the secondhand label retired.
 
 ## 1. Problem
 
@@ -71,13 +77,16 @@ Three integrity properties are currently held by convention rather than structur
   (`packages/interaction/permission-rules/src/llm-classifier.ts:23-25, 54-57`). Different
   failure domain from decision-transport liveness: complementary, never merge them.
 
-**ZCode anchors (secondhand — verified in the first draft's checkout; the ZCode repo is
-not present in this review environment, so re-verify before citing upstream):** `tool/types.ts:300-370`
-(resolveInput / prepareApproval; hooks narrow, never widen; approval may resolve ask→
-proceed, never allow→ask), `tool/executor/approval-gate.ts`,
-`tool/executor/permission-responder-race.ts`,
-`adapters/src/model/failure-provider-business-codes.ts`,
-`dynamic-workflow workflow-model-failure-policy.ts`.
+**ZCode anchors (re-verified against zai-org/ZCode @ 872ad960; paths relative to
+`apps/zcode-cli/packages/`):** `core/src/tool/types.ts:300-370` (`resolveInput` :322,
+`prepareApproval` :349; approval may resolve ask→proceed, never allow→ask),
+`core/src/tool/executor/approval-gate.ts`,
+`core/src/tool/executor/permission-responder-race.ts` (hook-vs-broker race, first
+valid decision wins, loser aborted; a hook *infrastructure* failure abstains rather
+than deciding), `adapters/src/model/failure-provider-business-codes.ts`
+(retryable-vs-terminal business-code tables), `adapters/src/model/workflow-model-failure-policy.ts`
+(the workflow runner's stop-policy table). PreToolUse hook bounds enforced at
+`core/src/tool/executor/hook-flow.ts:195-226`.
 
 ## 3. Design
 
@@ -86,15 +95,19 @@ proceed, never allow→ask), `tool/executor/approval-gate.ts`,
    section: schema validation moves (or is duplicated) to pre-execute, and a
    tool-declared `resolveInput` produces the execution-fact input consumed identically
    by hooks, permission matching, approval rendering, and the handler. Includes ZCode's
-   two structural rules unchanged: hooks narrow but never widen (`alwaysAsk` survives
-   hook `allow`; `deny` is never flipped); approval-side preparation may attach previews
-   or resolve ask→proceed, never widen.
+   structural rules, restated to match the code: PreToolUse hooks are bounded by two
+   invariants — `deny` is never flipped, and a tool-declared `alwaysAsk` confirmation
+   survives hook `allow` — but an ordinary `ask` **can** be auto-allowed by a hook
+   (`hook-flow.ts:209-218`); single-direction narrowing applies to the approval side
+   only: `prepareApproval` runs after the permission service has already decided `ask`
+   and may only resolve ask→proceed or attach a preview, never turn allow into ask.
 2. **Upstream proposal — decision liveness, not hook races.** Rescoped per review: the
    hook side is already bounded (§2). The proposal asks the broker for a **liveness
    signal** (heartbeat/ack appended while a dialog is open and owned) so that
    "asked-no-decided with no liveness" (ownerless) becomes distinguishable from
    "asked-no-decided with liveness" (slow human). A PermissionRequest hook answering
-   concurrently with the broker — first valid decision wins, loser aborted — rides the
+   concurrently with the broker — first valid decision wins, loser aborted, and a hook
+   infra failure abstains rather than deciding — rides the
    same proposal as the mechanism for hook-answer delivery.
 3. **Upstream proposal — extend the taxonomy seam.** Generalize the existing
    per-route `retryableCodes` into two explicit tables (retryable vs terminal business
