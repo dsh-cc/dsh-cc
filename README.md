@@ -376,6 +376,8 @@ That pin provides `serena`, `serena-agent`, and `serena-hooks`. Do **not** invok
 
 The hook pins its state to the project via `SERENA_HOME="${CLAUDE_PROJECT_DIR}/.serena"`. Serena's default state dir (`~/.serena/hook_data`) is outside the sandbox's writable surface: without the redirect the remind counter never persists (serena's `save()` swallows the failure), each hook process starts from a fresh counter, and the deny threshold is never reached — the hook no-ops silently. State lands in `.serena/hook_data/` (gitignored), per session id.
 
+A matcherless `SessionEnd` entry runs `serena-hooks cleanup` when a session is disposed, deleting that session's `.serena/hook_data/<session-id>/` so per-session state does not accumulate. The bridge dispatches SessionEnd hooks detached, so cleanup never blocks the interactive session.
+
 Health-check and index remain one-shot `uvx` commands; see [docs/code-intelligence-health.md](docs/code-intelligence-health.md).
 
 To test unpublished packages against a real profile:

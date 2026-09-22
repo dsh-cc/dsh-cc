@@ -45,6 +45,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SERENA_HOME=\"${CLAUDE_PROJECT_DIR}/.serena\" serena-hooks cleanup --client claude-code",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
