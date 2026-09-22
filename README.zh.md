@@ -8,7 +8,7 @@
 
 - **复用熟悉的工作流：** 支持 `.claude/agents`、`SKILL.md`、`CLAUDE.md`、hooks、权限规则、斜杠命令和会话恢复。
 - **自由组合模型：** 将 `sketch`、`draft`、`blueprint`、`masterplan` 等稳定别名映射到当前 dsh 部署支持的任意 provider/model。
-- **覆盖完整编程闭环：** 提供 TUI、MCP、记忆、子代理、后台任务、worktree、结构化输出和延迟工具发现。
+- **覆盖完整编程闭环：** 提供 TUI、MCP、记忆、子代理、后台任务、worktree、结构化输出、延迟工具发现、可逆的工具输出压缩（`context-crusher` + `context_retrieve`）以及成本门控的压缩（compaction）。
 - **保持可组合：** 通过 dsh 原生 profile/plugin 系统安装，无需长期维护 DeepSeek Harness fork。
 
 > `dsh-cc` 不是 Claude Code，也不是 Claude Code 的包装器。它在开放、可组合的 DeepSeek Harness 运行时上实现了开发者熟悉的 Claude Code 风格工作流。
@@ -54,7 +54,7 @@ dsh web
 
 上面的 bundle 就是快速开始的全部内容。仓库内建的 `dsh-cc` 插件市场另有两个按需安装的官方插件，提供预配置的子代理通道：
 
-- **`dsh-cc-agents`** — `dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）和 `dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）子代理，外加一个编排路由 skill。
+- **`dsh-cc-agents`** — `dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）和 `dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）子代理，外加一个编排路由 skill（`data-analysis`）和可选的 serena 代码智能 hooks（仅在完成 serena 初始化的仓库上启用）。
 - **`dsh-cc-shunt`** — PreToolUse 门禁，把批量文件阅读和样板代码生成重定向到廉价通道的 worker 子代理，让大文件语料不进入主上下文（配置 `haiku` 别名才能真正省 token）。
 
 在会话内安装：
@@ -118,7 +118,7 @@ CC skill provider 会发现基于 `SKILL.md` 的技能，包括项目自有技�
 
 ### 记忆
 
-记忆层支持 `CLAUDE.md` 风格的项目上下文，以及面向长期信息的独立写入通道。记忆按工作区隔离，也可配置团队共享记忆。
+记忆层支持 `CLAUDE.md` 风格的项目上下文，以及面向长期信息的独立写入通道。记忆按工作区隔离，也可配置团队共享记忆；当记忆索引压力增大时，后台 dream 整理会自动触发。
 
 ### MCP
 
@@ -180,6 +180,8 @@ CC preset 提供的命令包括：
 /tasks             查看任务和后台作业
 /resume            恢复中断的会话
 /branch            管理 worktree 分支
+/learn             把反复出现的纠正沉淀为工作区记忆
+/compact           压缩会话上下文
 /diff              查看 CLAUDE.md / settings 差异
 /init               扫描项目并生成 CLAUDE.md
 /plugin             管理插件
