@@ -1,2 +1,4 @@
 /cache
 /project.local.yml
+# Hook-state dirs written by hooks.json (serena counter, watchdog files).
+/hook_data

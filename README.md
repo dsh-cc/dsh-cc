@@ -374,6 +374,8 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 
 That pin provides `serena`, `serena-agent`, and `serena-hooks`. Do **not** invoke `uvx --from git+…` from the hook: that writes `~/.cache/uv` on every call, the session sandbox denies it, and Read hangs behind PreToolUse.
 
+The hook pins its state to the project via `SERENA_HOME="${CLAUDE_PROJECT_DIR}/.serena"`. Serena's default state dir (`~/.serena/hook_data`) is outside the sandbox's writable surface: without the redirect the remind counter never persists (serena's `save()` swallows the failure), each hook process starts from a fresh counter, and the deny threshold is never reached — the hook no-ops silently. State lands in `.serena/hook_data/` (gitignored), per session id.
+
 Health-check and index remain one-shot `uvx` commands; see [docs/code-intelligence-health.md](docs/code-intelligence-health.md).
 
 To test unpublished packages against a real profile:
