@@ -1,6 +1,6 @@
 # Worktree resume tombstone + boot gate
 
-Status: Proposed
+Status: **Implemented** — PR #58 (merged 2026-09-13).
 
 ## Problem
 

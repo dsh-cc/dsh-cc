@@ -7,7 +7,18 @@ general borrowables list, not the GLM-effective list. Design-review record: firs
 ownerless dialog from a slow human, it overstated how wedged a dsh-cc hook can get (the
 hook runner already bounds wedged hooks at a 600s timeout with a graceful no-decision
 degrade), and the failure-taxonomy item missed a partial seam that already exists.
-Corrected below; anchors re-verified 2026-09-21.
+Corrected below; anchors re-verified 2026-09-21. Round 3 (2026-09-21, cold re-review
+against HEAD f81883d + harness 1ef9c1fa): **CONFIRM, no blocking findings** — all
+reachable anchors retraced; five wording/anchor fixes baked in (`approval/policy`
+acknowledged alongside asked/decided, firehose/merge line anchors re-pinned, the
+watchdog's arming signal made explicit as `tool/call`, and the ZCode anchor block
+relabeled secondhand). None of the items are already shipped at HEAD. Round 4
+(2026-09-21, ZCode checkout at 872ad96): all ZCode anchors verified against source —
+one BLOCKING mis-attribution fixed (the "hooks narrow, never widen" rule actually
+belongs to `prepareApproval` only; PreToolUse hook `allow` can auto-approve an
+ordinary ask — `hook-flow.ts:209-218`), one package path corrected
+(`workflow-model-failure-policy.ts` lives in `adapters/src/model/`, not
+`dynamic-workflow`), and the secondhand label retired.
 
 ## 1. Problem
 
@@ -35,11 +46,13 @@ Three integrity properties are currently held by convention rather than structur
   `resolveInput`/`prepareApproval` anywhere in the tree (exhaustive grep, both
   checkouts). Consequence for item 1: the proposal must say where validation moves (see
   §3), or the seam is unanchorable.
-- Approval/approval observability for bridges is exactly two session events:
+- Approval observability for bridges is exactly two decision-observability events:
   `approval/asked` (appended at broker request time,
-  `packages/interaction/user-approval/src/index.ts:217`) and `approval/decided`; the
+  `packages/interaction/user-approval/src/index.ts:217`) and `approval/decided` (:224)
+  (`approval/policy` also exists at :96 but carries mode changes only); the
   dsh-cc bridge consumes them in a detached observe-only firehose
-  (dsh-cc `packages/hooks/hooks-claude-code/src/register-events.ts:250-262`).
+  (dsh-cc `packages/hooks/hooks-claude-code/src/register-events.ts:253-266`; the
+  approval/request handler sits at :242-251).
   Broker-side outcomes at `packages/core/tools/src/index.ts:1698-1714` are terminal
   only if the broker itself returns — a hung broker is the real residual gap, not a
   hung hook.
@@ -56,7 +69,7 @@ Three integrity properties are currently held by convention rather than structur
   `DEFAULT_HOOK_TIMEOUT_MS = 600_000` with per-hook `timeoutSec` override
   (`packages/hooks/hook-protocol/src/runner.ts:20, :74`), infrastructure faults return a
   non-blocking no-decision (`runner.ts:98-106`), and the merge folds that to
-  `decision:'none'` → `next()` → broker (`hook-protocol/src/merge.ts:96`,
+  `decision:'none'` → `next()` → broker (`hook-protocol/src/merge.ts:104`,
   `register-events.ts:242-251`). The "hook infra failure = abstain" rule ZCode was
   credited with **already exists here**.
 - The PR #117/#123 classifier circuit breaker guards classifier availability/failure
@@ -64,12 +77,16 @@ Three integrity properties are currently held by convention rather than structur
   (`packages/interaction/permission-rules/src/llm-classifier.ts:23-25, 54-57`). Different
   failure domain from decision-transport liveness: complementary, never merge them.
 
-**ZCode anchors (verified, cited in the first draft):** `tool/types.ts:300-370`
-(resolveInput / prepareApproval; hooks narrow, never widen; approval may resolve ask→
-proceed, never allow→ask), `tool/executor/approval-gate.ts`,
-`tool/executor/permission-responder-race.ts`,
-`adapters/src/model/failure-provider-business-codes.ts`,
-`dynamic-workflow workflow-model-failure-policy.ts`.
+**ZCode anchors (re-verified against zai-org/ZCode @ 872ad960; paths relative to
+`apps/zcode-cli/packages/`):** `core/src/tool/types.ts:300-370` (`resolveInput` :322,
+`prepareApproval` :349; approval may resolve ask→proceed, never allow→ask),
+`core/src/tool/executor/approval-gate.ts`,
+`core/src/tool/executor/permission-responder-race.ts` (hook-vs-broker race, first
+valid decision wins, loser aborted; a hook *infrastructure* failure abstains rather
+than deciding), `adapters/src/model/failure-provider-business-codes.ts`
+(retryable-vs-terminal business-code tables), `adapters/src/model/workflow-model-failure-policy.ts`
+(the workflow runner's stop-policy table). PreToolUse hook bounds enforced at
+`core/src/tool/executor/hook-flow.ts:195-226`.
 
 ## 3. Design
 
@@ -78,15 +95,19 @@ proceed, never allow→ask), `tool/executor/approval-gate.ts`,
    section: schema validation moves (or is duplicated) to pre-execute, and a
    tool-declared `resolveInput` produces the execution-fact input consumed identically
    by hooks, permission matching, approval rendering, and the handler. Includes ZCode's
-   two structural rules unchanged: hooks narrow but never widen (`alwaysAsk` survives
-   hook `allow`; `deny` is never flipped); approval-side preparation may attach previews
-   or resolve ask→proceed, never widen.
+   structural rules, restated to match the code: PreToolUse hooks are bounded by two
+   invariants — `deny` is never flipped, and a tool-declared `alwaysAsk` confirmation
+   survives hook `allow` — but an ordinary `ask` **can** be auto-allowed by a hook
+   (`hook-flow.ts:209-218`); single-direction narrowing applies to the approval side
+   only: `prepareApproval` runs after the permission service has already decided `ask`
+   and may only resolve ask→proceed or attach a preview, never turn allow into ask.
 2. **Upstream proposal — decision liveness, not hook races.** Rescoped per review: the
    hook side is already bounded (§2). The proposal asks the broker for a **liveness
    signal** (heartbeat/ack appended while a dialog is open and owned) so that
    "asked-no-decided with no liveness" (ownerless) becomes distinguishable from
    "asked-no-decided with liveness" (slow human). A PermissionRequest hook answering
-   concurrently with the broker — first valid decision wins, loser aborted — rides the
+   concurrently with the broker — first valid decision wins, loser aborted, and a hook
+   infra failure abstains rather than deciding — rides the
    same proposal as the mechanism for hook-answer delivery.
 3. **Upstream proposal — extend the taxonomy seam.** Generalize the existing
    per-route `retryableCodes` into two explicit tables (retryable vs terminal business
@@ -98,7 +119,12 @@ proceed, never allow→ask), `tool/executor/approval-gate.ts`,
    but **no `approval/asked` event appears within a window** (stuck-before-broker, e.g.
    the ask path wedged upstream of the broker). It cannot and does not fire on
    asked-without-decided (that's the slow-human shape until the §2 liveness signal
-   exists). Window: `maxConfiguredHookTimeoutMs + slack`, phase-dependent (pre-asked vs
+   exists). Arming signal: the watchdog arms on `tool/call` (harness
+   `packages/core/session/src/known-event-types.ts:71`) whenever the effective
+   permission mode makes an ask possible — pre-asked, "needs approval" is not directly
+   observable (the ask decision is internal to the pre-execute waterfall), and a wedged
+   PreToolUse hook or a slow classifier delays `asked` from inside that window, which is
+   exactly the stuck class this watchdog exists to name. Window: `maxConfiguredHookTimeoutMs + slack`, phase-dependent (pre-asked vs
    asked), default dominated by the 600s hook bound — the watchdog never preempts the
    hook runner's own contract, and nested timeouts are layered
    (watchdog > classifier `timeoutMs` + hook timeout) rather than racing them. On fire:
