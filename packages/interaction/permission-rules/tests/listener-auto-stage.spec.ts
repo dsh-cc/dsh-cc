@@ -31,6 +31,8 @@ class MemorySettings extends SettingsProvider {
 class FakeLlm extends Service {
   calls: GenerateOptions[] = []
   scripted: string[] = []
+  /** Optional catalog face consumed by the classifier effort adapter. */
+  reasoning?: { efforts: readonly { id: string }[] }
 
   constructor(ctx: Context) {
     super(ctx, 'llm')
@@ -41,16 +43,30 @@ class FakeLlm extends Service {
     yield { type: 'text-delta', index: 0, text: this.scripted.shift() ?? '{"verdict":"allow","reason":"ok"}' }
     yield { type: 'finish', reason: { kind: 'stop' } }
   }
+
+  infoCalls = 0
+
+  async resolveModelInfo(): Promise<{ reasoning?: { efforts: readonly { id: string }[] } }> {
+    this.infoCalls += 1
+    return this.reasoning === undefined ? {} : { reasoning: this.reasoning }
+  }
 }
 
 /** Fake `ccModelRoutes` service: resolves every alias to a deterministic fake route. */
 class FakeRoutes extends Service {
+  /** Configurable resolved route (may carry an explicit reasoningEffort). */
+  route: { provider: string; model: string; reasoningEffort?: string } = { provider: 'fake', model: 'classifier-model' }
+
   constructor(ctx: Context) {
     super(ctx, 'ccModelRoutes')
   }
 
-  resolve(): { provider: string; model: string } {
-    return { provider: 'fake', model: 'classifier-model' }
+  resolve(): { provider: string; model: string; reasoningEffort?: string } {
+    return this.route
+  }
+
+  resolveDetailed(): { selector: string; via: 'alias'; route: { provider: string; model: string } } {
+    return { selector: 'classifier-model', via: 'alias', route: this.resolve() }
   }
 }
 
@@ -247,5 +263,71 @@ describe('listener × LLM classifier stage (integration)', () => {
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     expect(llm.calls).toHaveLength(1)
+  })
+})
+
+describe('listener × classifier effort adapter (integration)', () => {
+  async function armedMount() {
+    const mounted = await mount()
+    const { ctx, llm } = mounted
+    const routes = ctx.get('ccModelRoutes') as FakeRoutes
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { ask: ['Bash'], autoMode: { classifier: { enabled: true } } })
+    const agent = agentOf('int-effort')
+    ctx.permissionRules.setMode(agent, 'auto')
+    return { ctx, llm, routes, warn, agent, run: (cmd = 'ls') => ctx.tools.execute(exec('Bash', { command: cmd }, agent)) }
+  }
+
+  it('catalog with levels and no explicit route effort: the FIRST declared level is passed', async () => {
+    const { llm, run } = await armedMount()
+    llm.reasoning = { efforts: [{ id: 'low' }, { id: 'high' }] }
+    console.log('RES', typeof (llm as any).resolveModelInfo, llm.infoCalls)
+    await run()
+    console.log('INFOCALLS', llm.infoCalls)
+    console.log('CALLS', JSON.stringify(llm.calls))
+    expect(llm.calls).toHaveLength(1)
+    expect(llm.calls[0]?.reasoningEffort).toBe('low')
+  })
+
+  it('route explicit member effort: passed through', async () => {
+    const { llm, routes, run } = await armedMount()
+    routes.route = { provider: 'fake', model: 'classifier-model', reasoningEffort: 'high' }
+    llm.reasoning = { efforts: [{ id: 'low' }, { id: 'high' }] }
+    await run()
+    expect(llm.calls[0]?.reasoningEffort).toBe('high')
+  })
+
+  it('route explicit NON-member effort: warn once + omitted (never throws, never silent)', async () => {
+    const { llm, routes, warn, run } = await armedMount()
+    routes.route = { provider: 'fake', model: 'classifier-model', reasoningEffort: 'ultra' }
+    llm.reasoning = { efforts: [{ id: 'low' }] }
+    await run()
+    expect(llm.calls[0]?.reasoningEffort).toBeUndefined()
+    expect(warn.mock.calls.some(call => String(call[0]).includes('ultra'))).toBe(true)
+  })
+
+  it('catalog with no efforts: omitted', async () => {
+    const { llm, run } = await armedMount()
+    llm.reasoning = { efforts: [] }
+    await run()
+    expect(llm.calls[0]?.reasoningEffort).toBeUndefined()
+  })
+
+  it('resolveModelInfo throws: omitted, one warn, classification still runs', async () => {
+    const { llm, warn, run } = await armedMount()
+    llm.resolveModelInfo = async () => { throw new Error('catalog down') }
+    await run()
+    expect(llm.calls).toHaveLength(1)
+    expect(llm.calls[0]?.reasoningEffort).toBeUndefined()
+    expect(warn.mock.calls.some(call => String(call[0]).includes('route info'))).toBe(true)
+  })
+
+  it('memoized per route key: resolveModelInfo hit once across two calls', async () => {
+    const { llm, run } = await armedMount()
+    llm.reasoning = { efforts: [{ id: 'low' }] }
+    await run()
+    await run('git push')
+    expect(llm.calls).toHaveLength(2)
+    expect(llm.infoCalls).toBe(1)
   })
 })

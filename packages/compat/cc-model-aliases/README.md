@@ -117,6 +117,32 @@ Changing the opus target to a model with a different effort vocabulary is a
 single settings edit (`"reasoningEffort": "xhigh"`); the agent markdown is
 untouched.
 
+### `model$level` suffix syntax
+
+A model reference — frontmatter `model:`, an alias target's `model` id, or the
+auto-mode classifier's `route` — may carry a `` `$<level>` `` suffix
+(`opus$high`, `glm-5.3$xhigh`). The suffix is stripped before the id leaves
+the resolver (pricing, breakers, and pins key on bare model ids); the level
+rides `reasoningEffort` on the resolved route and **overrides** an alias
+target's declared `reasoningEffort`. Unknown level spellings are never
+stripped or dropped here: they are carried to the harness boundary, which
+fails the request with `UNSUPPORTED_REASONING_EFFORT`. Malformed suffixes
+(trailing `$`, empty or bad-charset level, a `$` inside a provider segment)
+pass the reference through verbatim — existing ids without `$` resolve
+byte-identically.
+
+### Effort precedence
+
+| rung | source | applied at |
+|---|---|---|
+| 1 | explicit `` `$level` `` suffix > alias-target `reasoningEffort` | inside the resolver (both collapse to `ResolvedRoute.reasoningEffort`) |
+| 2 | agent frontmatter `effort` (`def.effort`) | spawn — `resolveSpawnEffort` (Task tool + plugin-loader) |
+| 3 | `/effort` session selection (main agent) | TUI/session machinery; a stamped alias effort deliberately wins over a restored fork parent header (the alias contract) |
+| 4 | catalog/harness route default | llm adapter |
+
+Higher rungs never mutate lower ones; the resume-pin gate keeps comparing the
+full resolved tuple unchanged.
+
 ### Null deletion
 
 Only the **settings** layer may set an entry to `null`; that deletes a
