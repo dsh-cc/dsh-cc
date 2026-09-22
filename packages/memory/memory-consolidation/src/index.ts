@@ -28,6 +28,7 @@ import { timeGatePasses, sessionGatePasses } from './gates.ts'
 import { gateWindow, scanSessions, type SessionScanResult } from './session-scan.ts'
 import { readLastConsolidatedAt, rollbackLock, tryAcquireLock, LOCK_STALE_MS } from './lock.ts'
 import { startMemoryJob } from './memory-job.ts'
+import { recordDreamDiagnostic } from './diagnostics.ts'
 export { applyEntrypointFallback } from './memory-job.ts'
 import {
   memoryWritePolicy,
@@ -41,6 +42,8 @@ export { LOCK_FILE, LOCK_STALE_MS, readLastConsolidatedAt, rollbackLock, tryAcqu
 export { gatesPass, timeGatePasses, sessionGatePasses } from './gates.ts'
 export type { ConsolidationGateInput } from './gates.ts'
 export { MEMORY_AGENT_TOOLS, MEMORY_TOOL_FILTER } from './tools.ts'
+export { DREAM_DIAGNOSTIC_FILE, recordDreamDiagnostic } from './diagnostics.ts'
+export type { DreamDiagnosticEntry, DreamDiagnosticPhase } from './diagnostics.ts'
 export { buildConsolidationPrompt, buildExtractionPrompt } from './prompts.ts'
 // The write-back lives in @dsh-cc/memory (the memory directory owner);
 // re-exported here for consumers of the pre-move surface.
@@ -339,17 +342,35 @@ async function runDream(
     ctx.logger.warn(`memory-consolidation: consolidation lock held by a live holder in ${dir}`)
     return
   }
-  const prompt = buildConsolidationPrompt(dir, sessionsRoot, hints)
-  const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
-  void job.done.then((outcome) => {
-    ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
-    if (outcome.status !== 'completed') {
-      void rollbackLock(fs, dir, priorAt, policy)
-      return
-    }
-    // Success tombs the marker in BOTH modes: a successful periodic dream
-    // rebuilds the index, so a stale pending marker is obsolete by definition.
-    void clearPressure(fs, dir, now, policy)
-  })
+  // Diagnostics + lock hygiene from here on: everything after the acquire can
+  // strand the lock (a startMemoryJob throw, an earlier silent death), so the
+  // whole spawn is wrapped and every failure leaves a durable breadcrumb
+  // before the rollback (plan §2.2, review Major-1/Major-2).
+  const sessionId = agent.session.header.id
+  try {
+    await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-started', detail: '' })
+    const prompt = buildConsolidationPrompt(dir, sessionsRoot, hints)
+    const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
+    void job.done.then(async (outcome) => {
+      ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
+      if (outcome.status !== 'completed') {
+        await recordDreamDiagnostic(ctx, fs, dir, policy, {
+          sessionId,
+          phase: 'outcome-failed',
+          detail: outcome.status === 'failed' ? outcome.detail : outcome.status,
+        })
+        void rollbackLock(fs, dir, priorAt, policy)
+        return
+      }
+      // Success tombs the marker in BOTH modes: a successful periodic dream
+      // rebuilds the index, so a stale pending marker is obsolete by definition.
+      void clearPressure(fs, dir, now, policy)
+    })
+  } catch (err) {
+    const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
+    await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-throw', detail })
+    await rollbackLock(fs, dir, priorAt, policy)
+    ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${detail}`)
+  }
 }
 
