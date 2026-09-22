@@ -214,6 +214,12 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('post-edit-verify')
     expect(topIds).not.toContain('post-edit-verify')
     expect(configIds.indexOf('post-edit-verify')).toBeGreaterThan(configIds.indexOf('tool-use-summary'))
+    // The edit-recovery-hint row (plan docs/plans/2026-09-21-edit-fuzzy-matching-and-read-state.md,
+    // Track B) publishes no Service (plain plugin) and sits inside the group
+    // IMMEDIATELY after post-edit-verify, with NO new isolate key.
+    expect(configIds).toContain('edit-recovery-hint')
+    expect(topIds).not.toContain('edit-recovery-hint')
+    expect(configIds.indexOf('edit-recovery-hint')).toBe(configIds.indexOf('post-edit-verify') + 1)
     expect(configIds).toContain('command-plugin')
     expect(configIds).toContain('command-mcp')
     // The serena-first steering row consumes the isolated `mcpConnections`

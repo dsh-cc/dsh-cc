@@ -1569,6 +1569,34 @@ importers:
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
 
+  packages/interaction/edit-recovery-hint:
+    dependencies:
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../../../deepseek-harness/packages/settings/settings
+        version: link:../../../../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/interaction/permission-rules:
     dependencies:
       '@dsh-cc/settings-ns':
@@ -2048,6 +2076,9 @@ importers:
       '@dsh-cc/coordinator':
         specifier: workspace:^
         version: link:../../subagent/coordinator
+      '@dsh-cc/edit-recovery-hint':
+        specifier: workspace:^
+        version: link:../../interaction/edit-recovery-hint
       '@dsh-cc/handoff-store':
         specifier: workspace:^
         version: link:../../subagent/handoff-store

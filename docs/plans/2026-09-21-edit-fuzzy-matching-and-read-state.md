@@ -15,7 +15,11 @@ trigger (no `isError` flag in the hook payload), and the ZCode reference label
 source — every behavioral claim holds exactly; anchor precision fixed
 (`edit-matchers.ts:1-10,51-59`, `edit.ts:421-441` with `hasReadStateChanged` at :444,
 bash parsing at `bash-read-file-sources.ts:50-63` incl. the single-command `grep`
-nuance); the secondhand label is retired.
+nuance); the secondhand label is retired. Round 5 (2026-09-21, implementation): Track B
+shipped as an in-process tools/post-execute listener that appends additionalContexts
+onto the accept decision — the identical deferContext delivery surface the doc's
+PostToolUse-hook wording named (same model-visible behavior; zero subprocess per edit;
+live flag read per event). CCR check result recorded below.
 
 ## 1. Problem
 
@@ -108,7 +112,9 @@ greenfield; Track B (dsh-cc mitigation) is re-anchored on PostToolUse.
 ### Track B — dsh-cc-side mitigation (ships regardless of Track A)
 
 A `PostToolUse` hook (not PostToolUse-Failure: that point is detached and invisible to
-the model) that fires when: tool is edit/write and the `tool_response` matches the
+the model) — *(amended at implementation: delivered in-process on the post-execute
+seam; the PostToolUse hook point named the delivery position, not the transport — see
+Round 5)* — that fires when: tool is edit/write and the `tool_response` matches the
 not-found shape on a multi-line `old_string` — the hook payload (`payloads.ts:72`)
 exposes only `tool_name`, `tool_input`, `tool_response` with no `isError` flag, so
 error status is inferred from the not-found shape (which is distinctive; only the
@@ -155,12 +161,40 @@ memory). Hard rules:
 
 ## Acceptance (DoD)
 
-- [ ] Upstream proposal document (harness-bound) with the ladder (incl.
-      `replaceAll`-BROAD exclusion and the locations-extension note) and the
-      read-state delta against `fs-observation-policy`; linked from here.
-- [ ] Track B shipped as a PostToolUse hook behind `cc-edit-recovery-hint.enabled`
-      (kebab namespace rule per settings-cascade README), unit tests over fabricated
-      not-found results proving static-only advice and no `updatedToolOutput`; the CCR
-      error-result check recorded in the commit.
+- [x] Upstream proposal document — filed as the appendix below (harness repo
+      untouched per directive; the harness-bound filing itself is pending).
+- [x] Track B shipped as an in-process `tools/post-execute` listener behind
+      `cc-edit-recovery-hint.enabled` (kebab namespace rule per settings-cascade
+      README), unit tests over fabricated not-found results proving static-only
+      advice and no `updatedToolOutput`; the CCR error-result check recorded:
+      context-crusher only rewrites tool-result decision content
+      (index.ts/router.ts); additionalContexts ride sideband and are never crushed
+      (ptc.ts:567 forwards them post-finalize) — hint delivery cannot be eaten by
+      CCR; the index.ts:198 small-error exemption is unrelated. (PR pending.)
 - [ ] Capability manifest + `docs:parity` in the same commit; forensics one-pager after
       a dogfood week (edit not-found rate, recovery-path distribution).
+
+## Track A upstream filing draft (harness-bound proposal)
+
+Target: deepseek-harness `packages/fs/tool-fs/src/edit.ts` +
+`packages/fs/fs-observation-policy`. dsh-cc repo untouched; this is the filing draft.
+
+1. **Match ladder** (vs current literal-only edit.ts): adopt the eight-strategy
+   ZCode order (`edit-matchers.ts:1-10,51-59`), exact-first, each tier returning a
+   tri-state count (`unique(n) | ambiguous(count=k) | not-found`) with deliberate
+   **locations** (line numbers) reported on ambiguity — a deliberate extension beyond
+   ZCode, stated as such. `replaceAll` skips the BROAD tier
+   (`edit.ts:421-441`, `hasReadStateChanged` at :444 precedent).
+2. **Read-state delta** (against the existing `FsObservation` gate):
+   - extent on the observation: `full | partial { offset, limit }`; edit refuses on
+     partial-only observation with a targeted message; fallback if upstream rejects
+     gate semantics change: record extent on the observation without changing gate
+     semantics;
+   - bash read-backfill per `bash-read-file-sources.ts:50-63` semantics: parse
+     single-invocation `cat/head/tail/sed -n` (and single-command `grep`) into the
+     same observation records; bails on pipes/redirects; non-truncated ≤10 MB only;
+   - per-result freshness suffix via `formatEditOutput` (edit.ts:64-67): "file state
+     is current — no need to Read it back".
+3. **Measurable deltas**: edit not-found event rate (before/after), Read-call rate
+   per session; forensics counts, not quality adjectives.
+
