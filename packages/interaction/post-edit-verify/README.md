@@ -28,3 +28,7 @@ Rules run in a **POSIX shell** (`sh` semantics) — no Windows-native syntax. Th
 ## Shape
 
 Plain cordis plugin with `inject = ['shell']` (tool-use-summary / prompt-suggest idiom). Mounted by `packages/preset/cc` in the cc-services group. Fail-soft: every fault degrades to a passthrough — the user's tool result is never turned into an error.
+
+## Dogfood (dsh-cc contributors)
+
+Opt-in only — see [docs/dogfood/post-edit-verify.md](../../../docs/dogfood/post-edit-verify.md) for user-layer settings, intentional-fail reproduction, and the package tests that lock `[auto-verify]` observability.
