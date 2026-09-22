@@ -65,6 +65,8 @@ export {
   writeMemoryFiles,
 } from './writeback.ts'
 export type { MemoryWrite, MemoryWritePolicy } from './writeback.ts'
+export { PRESSURE_FILE, readPressure, armPressure, markPressureForced, clearPressure } from './pressure.ts'
+export type { PressureState } from './pressure.ts'
 
 export const name = 'memory'
 /** Core services required for section registration and event listeners. */

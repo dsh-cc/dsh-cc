@@ -19,7 +19,8 @@ import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import { defineTool } from '@dsh-cc/tools'
 import { MEMORY_TYPES } from './types.ts'
 import { ENTRYPOINT_NAME, MAX_ENTRYPOINT_BYTES, MAX_ENTRYPOINT_LINES } from './truncate.ts'
-import { validateMemoryWrites, writeMemoryFiles } from './writeback.ts'
+import { validateMemoryWrites, writeMemoryFiles, memoryWritePolicy } from './writeback.ts'
+import { armPressure } from './pressure.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 import type { MemorySection } from './section.ts'
 
@@ -30,6 +31,14 @@ export const MEMORY_SAVE_TOOL = 'memory_save'
 const NAME_RULE = /^[a-z0-9][a-z0-9-]*$/
 /** One-line relevance description cap. */
 const MAX_DESCRIPTION_CHARS = 200
+
+/**
+ * Appended to the model-visible rejection/warning text when the pressure
+ * marker was actually armed. Gated on the arm's success: a swallowed write
+ * failure must leave the original text — a false promise is the exact
+ * model-trust failure this sentence exists to close.
+ */
+const QUEUED_SENTENCE = ' A forced consolidation has been queued; the next turn-end will run it, bypassing the usual periodic gates.'
 
 /** Where a saved memory lands. */
 export const MEMORY_SAVE_SCOPES = ['workspace', 'global'] as const
@@ -201,15 +210,32 @@ export function registerMemorySaveTool(
       // index that was ALREADY over-limit fail-opens: the save did not cause
       // the overflow, and rejecting would brick every save with no repair
       // path (a consolidation run compacts it instead).
-      const validated = validateMemoryWrites(
-        {
-          writes: [
-            { path: filename, content: renderTopicFile(args) },
-            { path: ENTRYPOINT_NAME, content: upsertPointer(entrypoint, args) },
-          ],
-        },
-        { allowOverLimitEntrypoint: preExistingOverLimit },
-      )
+      const validated = await (async () => {
+        try {
+          return validateMemoryWrites(
+            {
+              writes: [
+                { path: filename, content: renderTopicFile(args) },
+                { path: ENTRYPOINT_NAME, content: upsertPointer(entrypoint, args) },
+              ],
+            },
+            { allowOverLimitEntrypoint: preExistingOverLimit },
+          )
+        } catch (error) {
+          // Push-over rejection: arm the forced-dream marker. WORKSPACE scope
+          // only on purpose — the global directory has no dream coverage, so
+          // a marker there would be orphan state and the queued sentence a
+          // lie. A swallowed arm failure rethrows the original error.
+          if (
+            error instanceof Error && error.message.includes('would exceed its cap')
+            && args.scope !== 'global'
+            && await armPressure(fs, dir, Date.now(), memoryWritePolicy(dir))
+          ) {
+            throw new MemorySaveError(`${error.message}${QUEUED_SENTENCE}`)
+          }
+          throw error
+        }
+      })()
       await writeMemoryFiles(fs, dir, validated)
       await section.refresh(exec.agent)
       let message = `Saved memory "${args.name}" (${args.type}) to ${filename} and updated ${ENTRYPOINT_NAME}.`
@@ -217,6 +243,15 @@ export function registerMemorySaveTool(
         message += ` WARNING: ${ENTRYPOINT_NAME} was already over its ${MAX_ENTRYPOINT_LINES}-line/`
           + `${MAX_ENTRYPOINT_BYTES}-byte cap before this save; tail entries are invisible until `
           + 'consolidation compacts it.'
+        // Legacy fail-open over-limit: queue the repair here too. Again
+        // workspace-scope only (see the rejection arm point above), and the
+        // sentence is appended only when the marker write actually landed.
+        if (
+          args.scope !== 'global'
+          && await armPressure(fs, dir, Date.now(), memoryWritePolicy(dir))
+        ) {
+          message += QUEUED_SENTENCE
+        }
       }
       return {
         path: join(dir, filename),

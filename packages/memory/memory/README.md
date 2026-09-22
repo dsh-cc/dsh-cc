@@ -129,6 +129,10 @@ entrypoint truncation caps and the five-file recall ceiling.
 - `validateMemoryWrites(input)` / `writeMemoryFiles(fs, dir, writes)` /
   `memoryWritePolicy(dir)` / `MEMORY_WRITES_SCHEMA` — the host-side write-back
   shared with `dsh-memory-consolidation`.
+- `readPressure(fs, dir)` / `armPressure(fs, dir, now, policy?)` /
+  `markPressureForced(...)` / `clearPressure(...)` / `PRESSURE_FILE` — the
+  consolidation-pressure marker (`.consolidation-needed`) that queues a forced
+  dream when the index gate signals pressure.
 - `MemoryRecall` — the pre-step recall coordinator.
 - `truncateEntrypointContent(raw)` — apply the line/byte caps.
 - `resolveMemoryHome`, `resolveWorkspaceMemoryDir`, `canonicalMemoryRoot`,

@@ -226,5 +226,115 @@ describe('memory_save tool', () => {
       expect(after.trim().split('\n').length).toBe(200)
       expect(after).toContain('principal engineer, Chinese communication')
     })
+
+    it('passes at exactly the caps (200 lines / 25000 bytes) and rejects one over, CJK-safe', async () => {
+      // Byte-exact index built from CJK pointer lines (3 UTF-8 bytes per char,
+      // the UTF-8-vs-UTF-16 trap from truncate.spec.ts), ASCII-topped off to
+      // exact byte counts. The user-profile pointer is line 200 so a
+      // user-profile save REPLACES a line (line count stable) while a fresh
+      // topic appends one (push-over).
+      const prefix = '- [user-profile](user-profile.md) — '
+      const cjkBase = (i: number) => `- [主题-${i}](主题-${i}.md) — `
+      const padded = (base: string, bytes: number) => {
+        const budget = bytes - Buffer.byteLength(base, 'utf8')
+        return base + '记'.repeat(Math.floor(budget / 3)) + 'a'.repeat(budget % 3)
+      }
+      const cjkLines = Array.from({ length: 199 }, (_, i) => padded(cjkBase(i), 124))
+      const seed = (descLen: number) =>
+        [...cjkLines, `${prefix}${'a'.repeat(descLen)}`].join('\n')
+      const bytesOf = (descLen: number) =>
+        199 * 124 + 199 + Buffer.byteLength(prefix, 'utf8') + descLen
+      // 199 separators between 200 lines; description is pure ASCII.
+      // byteLength(prefix) = 38 ('—' is 3 UTF-8 bytes), so desc 87 → 25000.
+      expect(bytesOf(87)).toBe(25000)
+      expect(bytesOf(88)).toBe(25001)
+
+      // Exactly 200 lines under the byte cap: a plain replace passes.
+      const lines = await setup({ [`${WS_DIR}/MEMORY.md`]: seed(86) })
+      await expect(call(lines.ctx, VALID, agentAt(WORKSPACE))).resolves.toMatchObject({ isError: false })
+
+      // Resulting index of EXACTLY 25000 bytes passes; 25001 rejects and arms.
+      const fit = await setup({ [`${WS_DIR}/MEMORY.md`]: seed(86) })
+      await expect(call(fit.ctx, { ...VALID, description: 'a'.repeat(87) }, agentAt(WORKSPACE)))
+        .resolves.toMatchObject({ isError: false })
+      const big = await setup({ [`${WS_DIR}/MEMORY.md`]: seed(86) })
+      const bigResult = await call(big.ctx, { ...VALID, description: 'a'.repeat(88) }, agentAt(WORKSPACE))
+      expect(bigResult.isError).toBe(true)
+      expect(big.fs.backingText(`${WS_DIR}/.consolidation-needed`)).toBeDefined()
+
+      // 201 CJK lines pushes a within-cap index over the LINE cap: rejects
+      // and arms (the appended topic is what overflows, not the seed).
+      const appended = `${seed(86)}\n${padded('- [新话题](新话题.md) — ', 120)}`
+      expect(appended.split('\n').length).toBe(201)
+      const over = await setup({ [`${WS_DIR}/MEMORY.md`]: seed(86) })
+      const overResult = await call(over.ctx, { name: 'cjk-topic', type: 'project', description: 'CJK push-over', body: 'x\n' }, agentAt(WORKSPACE))
+      expect(overResult.isError).toBe(true)
+      expect(over.fs.backingText(`${WS_DIR}/.consolidation-needed`)).toBeDefined()
+    })
+
+    describe('pressure arming', () => {
+      it('arms the marker and appends the queued sentence on a push-over rejection', async () => {
+        const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex() })
+
+        const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+        expect(result.isError).toBe(true)
+        const message = String((result.error as { message?: string })?.message ?? '')
+        expect(message).toContain('would exceed its cap')
+        expect(message).toContain('A forced consolidation has been queued; the next turn-end will run it, bypassing the usual periodic gates.')
+        const marker = fs.backingText(`${WS_DIR}/.consolidation-needed`)
+        expect(marker).toBeDefined()
+        expect(Number(marker!.split('\n')[0])).toBeGreaterThan(0)
+      })
+
+      it('leaves the message unchanged when the marker write fails', async () => {
+        const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex() })
+        vi.spyOn(fs, 'writeText').mockRejectedValue(new Error('disk gone'))
+
+        const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+        expect(result.isError).toBe(true)
+        const message = String((result.error as { message?: string })?.message ?? '')
+        expect(message).toContain('would exceed its cap')
+        expect(message).not.toContain('forced consolidation')
+      })
+
+      it('global-scope rejection arms nothing and leaves the message untouched', async () => {
+        const { ctx, fs } = await setup({ [`${HOME}/MEMORY.md`]: fullIndex() })
+
+        const result = await call(ctx, { ...VALID, scope: 'global' }, agentAt(WORKSPACE))
+
+        expect(result.isError).toBe(true)
+        const message = String((result.error as { message?: string })?.message ?? '')
+        expect(message).toContain('would exceed its cap')
+        expect(message).not.toContain('forced consolidation')
+        expect(fs.backingText(`${HOME}/.consolidation-needed`)).toBeUndefined()
+        expect(fs.backingText(`${WS_DIR}/.consolidation-needed`)).toBeUndefined()
+      })
+
+      it('fail-open over-limit workspace save arms and extends the WARNING on arm success', async () => {
+        const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex(300) })
+
+        const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+        expect(result.isError).toBeFalsy()
+        const text = (result.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')
+        expect(text).toContain('already over its 200-line/25000-byte cap')
+        expect(text).toContain('A forced consolidation has been queued; the next turn-end will run it, bypassing the usual periodic gates.')
+        expect(fs.backingText(`${WS_DIR}/.consolidation-needed`)).toBeDefined()
+      })
+
+      it('fail-open over-limit save does NOT append the sentence when the arm fails', async () => {
+        const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex(300) })
+        vi.spyOn(fs, 'writeText').mockRejectedValue(new Error('disk gone'))
+
+        const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+        // The save itself fails too when the fs is down; the point is that no
+        // queued sentence ever leaked into any model-visible text.
+        expect(result.isError).toBe(true)
+        expect(String((result.error as { message?: string })?.message ?? '')).not.toContain('forced consolidation')
+      })
+    })
   })
 })

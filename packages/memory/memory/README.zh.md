@@ -102,6 +102,9 @@ await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
 - `validateMemoryWrites(input)` / `writeMemoryFiles(fs, dir, writes)` /
   `memoryWritePolicy(dir)` / `MEMORY_WRITES_SCHEMA` —— 与
   `dsh-memory-consolidation` 共用的 host 侧写回。
+- `readPressure(fs, dir)` / `armPressure(fs, dir, now, policy?)` /
+  `markPressureForced(...)` / `clearPressure(...)` / `PRESSURE_FILE` ——
+  整合压力标记（`.consolidation-needed`）：索引门产生压力时排队一次强制 dream。
 - `MemoryRecall` —— pre-step 召回协调器。
 - `truncateEntrypointContent(raw)` —— 施加行/字节上限。
 - `resolveMemoryHome`、`resolveWorkspaceMemoryDir`、`canonicalMemoryRoot`、
