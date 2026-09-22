@@ -104,6 +104,9 @@
       "path": "./packages/interaction/post-edit-verify"
     },
     {
+      "path": "./packages/interaction/edit-recovery-hint"
+    },
+    {
       "path": "./packages/settings/settings-ns"
     },
     {
