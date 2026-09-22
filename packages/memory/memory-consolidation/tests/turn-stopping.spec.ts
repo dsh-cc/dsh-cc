@@ -421,14 +421,24 @@ describe('dream sessions gate (scanned session store)', () => {
   })
 
   it('scan is memoized within the window; a second repo reuses the raw list with its own filter', async () => {
-    await seedFresh(tmpRoot, 5)
-    const { ctx, jobs, subagents } = mount({ memoryHome: '/mem', sessionsRoot: tmpRoot })
+    // Repo A has no lock (lastAt = 0): all six sessions qualify. Repo B
+    // consolidated at 1000: only the five fresh ones do. If the memo cached a
+    // pre-filtered result (cold-review major #3), ONE of these prompts would
+    // carry the other repo's window.
+    await seedSession(tmpRoot, 'old', 100)
+    await seedFresh(tmpRoot, 5, NOW)
+    const { ctx, jobs, subagents } = mount({
+      memoryHome: '/mem',
+      sessionsRoot: tmpRoot,
+      fs: makeFsMock({ ['/mem/projects/mem2/.consolidation-lock']: '1\n1000\n' }),
+    })
     const debugSpy = vi.spyOn(ctx.logger, 'debug')
     subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1), { timeout: 2000 })
-    // Let the first dream settle, then a second repo's turn reuses the memo.
+    // Let the first dream settle (dream single-flight), then repo B's own
+    // turn-end reuses the memoized raw list for its own lastAt window.
     await vi.waitFor(() => expect(controlsOf(jobs, 'memory-consolidation').length).toBe(1), { timeout: 2000 })
     await expect(controlsOf(jobs, 'memory-consolidation')[0].done).resolves.toEqual({ status: 'completed' })
     await stopTurn(ctx, fakeAgent('/mem2'))
@@ -438,6 +448,14 @@ describe('dream sessions gate (scanned session store)', () => {
     const memoHits = debugSpy.mock.calls.filter((c) => (c[0] as { event?: string })?.event === 'memory:scan-memo-hit')
     expect(scans.length).toBe(1)
     expect(memoHits.length).toBe(1)
+
+    const dreamPrompts = subagents.start.mock.calls
+      .filter((c) => c[1]?.label === 'memory-consolidation')
+      .map((c) => c[1].prompt[0].text as string)
+    expect(dreamPrompts.length).toBe(2)
+    expect(dreamPrompts[0]).toContain('- old')
+    for (let i = 1; i <= 5; i++) expect(dreamPrompts[1]).toContain(`s${i}`)
+    expect(dreamPrompts[1]).not.toContain('- old')
   })
 })
 

@@ -19,7 +19,8 @@
 import { createReadStream } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { createZstdDecompress } from "node:zlib";
+import * as zlib from "node:zlib";
+import { StringDecoder } from "node:string_decoder";
 
 /** One session directory's classification, unfiltered by any gate window. */
 export interface ScannedSession {
@@ -57,7 +58,7 @@ function isSafeInt(value: unknown): value is number {
 function readHeader(streamPath: string): Promise<Record<string, any> | undefined> {
   // Capability check (plan §3.1): undated/nonstandard Node without in-process
   // zstd fails closed here.
-  if (typeof createZstdDecompress !== "function") return Promise.resolve(undefined);
+  if (typeof zlib.createZstdDecompress !== "function") return Promise.resolve(undefined);
   return new Promise((resolve) => {
     let text = "";
     let settled = false;
@@ -80,17 +81,20 @@ function readHeader(streamPath: string): Promise<Record<string, any> | undefined
       }
       return undefined;
     };
+    // StringDecoder (not chunk.toString) so a multibyte char split across
+    // streams can't inject U+FFFD and silently break the header JSON.parse.
+    const decoder = new StringDecoder("utf8");
     const onChunk = (chunk: Buffer) => {
-      text += chunk.toString("utf8");
+      text += decoder.write(chunk);
       if (text.length >= TEXT_BUDGET) finish(findHeader());
     };
     const source = createReadStream(streamPath, { start: 0, end: READ_WINDOW - 1 });
-    const zstd = createZstdDecompress();
+    const zstd = zlib.createZstdDecompress();
     source.pipe(zstd);
     zstd.on("data", onChunk);
     source.on("error", () => finish(undefined));
     zstd.on("error", () => finish(undefined));
-    zstd.on("end", () => finish(findHeader()));
+    zstd.on("end", () => { text += decoder.end(); finish(findHeader()); });
   });
 }
 
@@ -121,7 +125,7 @@ export async function scanSessions(sessionsRoot: string): Promise<SessionScanRes
   const zeroed: SessionScanResult = { sessions: [], scanned: 0, unreadable: 0 };
   // Capability check (plan §3.1): undated/nonstandard Node without in-process
   // zstd fails closed to a zeroed result.
-  if (typeof createZstdDecompress !== "function") return zeroed;
+  if (typeof zlib.createZstdDecompress !== "function") return zeroed;
   try {
     const projects = await readdir(sessionsRoot, { withFileTypes: true });
     const sessions: ScannedSession[] = [];

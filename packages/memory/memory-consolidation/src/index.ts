@@ -17,7 +17,7 @@
  */
 
 import { join } from 'node:path'
-import { createZstdDecompress } from 'node:zlib'
+import * as zlib from 'node:zlib'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -131,13 +131,13 @@ export function apply(ctx: Context, config: Config = {}): void {
       ctx.logger.debug({ event: 'memory:scan-memo-hit' })
       return memo.result
     }
-    if (typeof createZstdDecompress !== 'function' && !warnedZstd) {
+    if (typeof zlib.createZstdDecompress !== 'function' && !warnedZstd) {
       warnedZstd = true
       ctx.logger.warn('memory-consolidation: node:zlib zstd capability missing; dream gates fail closed')
     }
     const t0 = Date.now()
     const result = await scanSessions(sessionsRoot)
-    ctx.logger.debug({ event: 'memory:scan', scanned: result.scanned, unreadable: result.unreadable, ms: Date.now() - t0 })
+    ctx.logger.debug({ event: 'memory:scan', scanned: result.scanned, unreadable: result.unreadable, count: result.sessions.length, ms: Date.now() - t0 })
     if (result.scanned === 0 && !warnedRoot) {
       warnedRoot = true
       ctx.logger.warn(`memory-consolidation: sessions root unreadable or empty at ${sessionsRoot}`)
