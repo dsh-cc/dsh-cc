@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "serena-hooks remind --client claude-code",
+            "command": "SERENA_HOME=\"${CLAUDE_PROJECT_DIR}/.serena\" serena-hooks remind --client claude-code",
             "timeout": 10
           }
         ]

@@ -314,6 +314,8 @@ pnpm test
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
+该 hook 通过 `SERENA_HOME="${CLAUDE_PROJECT_DIR}/.serena"` 把状态钉在项目内：serena 默认状态目录（`~/.serena/hook_data`）在会话沙箱可写面之外，不重定向时提醒计数器永远无法持久化（serena 的 `save()` 会吞掉失败），每次 hook 进程都从全新计数器开始，deny 阈值永远达不到——hook 静默空转。状态按会话 id 存放在 `.serena/hook_data/`（已 gitignore）。
+
 更多离线开发、依赖和测试说明见 **[docs/dev.md](docs/dev.md)**。
 
 ## Packages 与版本发布
