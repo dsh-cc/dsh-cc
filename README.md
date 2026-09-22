@@ -179,7 +179,7 @@ Avoid launching it via `uvx --from git+…`: every server start would write `~/.
 
 Claude Code-style hooks can react to session, prompt, tool, permission, compaction, task, and subagent lifecycle events. Command and HTTP executors are supported, with additional prompt/agent executors available behind configuration gates.
 
-This repository ships a tracked `hooks.json` (the CC preset loads it from the launch cwd). The PreToolUse remind hook requires `serena-hooks` on `PATH` — see [Local development](#local-development).
+This repository ships a tracked `hooks.json` (the CC preset loads it from the launch cwd) carrying the repo-development hooks. The serena code-intelligence hooks ship with the official `dsh-cc-agents` plugin (gated; they fire here because this repo is serena-onboarded) and require `serena-hooks` on `PATH` — see [Local development](#local-development).
 
 See the [parity matrix](docs/cc-parity-matrix.md) for the currently bridged event set.
 
@@ -366,19 +366,15 @@ pnpm test
 
 ### Serena (`serena-hooks` on PATH)
 
-Dogfooding this repo loads the tracked `hooks.json`. Its PreToolUse remind hook runs `serena-hooks remind --client claude-code` on every Read/Grep, so the binary must already be on `PATH`:
+The serena code-intelligence hooks — a PreToolUse remind nudge after a burst of raw reads/greps, plus SessionEnd cleanup of the per-session hook state — ship with the official `dsh-cc-agents` plugin (see its README's *Serena hooks* section for the gating contract). They fire in this repo because it is serena-onboarded (`.serena/project.yml` is tracked) once the plugin is enabled and the binary is on `PATH`:
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-That pin provides `serena`, `serena-agent`, and `serena-hooks`. Do **not** invoke `uvx --from git+…` from the hook: that writes `~/.cache/uv` on every call, the session sandbox denies it, and Read hangs behind PreToolUse.
+That pin provides `serena`, `serena-agent`, and `serena-hooks`. The plugin's gate wrappers pin hook state into the project (`SERENA_HOME=<repo>/.serena`): serena's default state dir (`~/.serena/hook_data`) is outside the session sandbox's writable surface, and serena swallows the failure — without the pin the remind counter never persists and the hooks silently no-op. State lands in `.serena/hook_data/` (gitignored), per session id, and is removed when the session is disposed.
 
-The hook pins its state to the project via `SERENA_HOME="${CLAUDE_PROJECT_DIR}/.serena"`. Serena's default state dir (`~/.serena/hook_data`) is outside the sandbox's writable surface: without the redirect the remind counter never persists (serena's `save()` swallows the failure), each hook process starts from a fresh counter, and the deny threshold is never reached — the hook no-ops silently. State lands in `.serena/hook_data/` (gitignored), per session id.
-
-A matcherless `SessionEnd` entry runs `serena-hooks cleanup` when a session is disposed, deleting that session's `.serena/hook_data/<session-id>/` so per-session state does not accumulate. The bridge dispatches SessionEnd hooks detached, so cleanup never blocks the interactive session.
-
-The portable pair (remind + cleanup) is also moving into the official `dsh-cc-agents` plugin (see its README's *Serena hooks* section): with the plugin enabled, the nudge applies to every serena-onboarded repository without a per-repo `hooks.json` copy. During the transition this repo's `hooks.json` keeps its own serena entries; they are removed once a release ships the plugin hooks.
+The repo's own tracked `hooks.json` keeps only repo-development hooks that reference `scripts/hooks/` (post-edit diagnostics nudge, serena failure watchdog).
 
 Health-check and index remain one-shot `uvx` commands; see [docs/code-intelligence-health.md](docs/code-intelligence-health.md).
 

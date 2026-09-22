@@ -1,10 +1,11 @@
 # Serena code-intelligence hooks via the dsh-cc-agents plugin
 
-Status: **PR-A implemented in this PR** — PR-B (repo hooks.json serena-entry
-removal) is pending a release that includes this PR. Approved design — cold
-Staff-Engineer review (dsh-cc-agents:critic, 2026-09-22) returned
-GO-WITH-AMENDMENTS; all amendments folded in below (rollout split into two
-PRs; git-toplevel gate walk; timeouts; guard-spec pluginRoot).
+Status: **Implemented** — PR-A #103 (merged 2026-09-22, first shipped in
+v0.8.0-rc.1); PR-B (repo hooks.json serena-entry removal + guard-spec
+handover) in this PR. Approved design — cold Staff-Engineer review
+(dsh-cc-agents:critic, 2026-09-22) returned GO-WITH-AMENDMENTS; all
+amendments folded in below (rollout split into two PRs; git-toplevel gate
+walk; timeouts; guard-spec pluginRoot).
 Date: 2026-09-22
 Scope: `packages/plugin/dsh-cc-agents` (new `hooks/` component), repo-root
 `hooks.json` (serena entries removed in a follow-up PR only),

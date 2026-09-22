@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "^(read|grep)$|^mcp__serena__",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "SERENA_HOME=\"${CLAUDE_PROJECT_DIR}/.serena\" serena-hooks remind --client claude-code",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "^(edit|write)$|^mcp__serena__(replace_symbol_body|replace_content|replace_in_files|insert_before_symbol|insert_after_symbol|rename_symbol|safe_delete_symbol)$",
@@ -42,17 +30,6 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/serena-failure-watchdog.mjs\" record",
             "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "SERENA_HOME=\"${CLAUDE_PROJECT_DIR}/.serena\" serena-hooks cleanup --client claude-code",
-            "timeout": 10
           }
         ]
       }

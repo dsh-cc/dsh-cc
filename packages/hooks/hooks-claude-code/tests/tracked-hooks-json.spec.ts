@@ -5,19 +5,18 @@ import { parseClaudeCodeConfig } from '@dsh-cc/hooks-claude-code/src/config.ts'
 import type { MatcherGroup } from '@dsh-cc/hook-protocol'
 
 /**
- * Tracked-hooks.json guard: the repo-root hooks.json is the dogfooding config
- * the preset loads by launch cwd. The bridge logs-and-skips unsupported
- * entries at load time, so without this spec an invalid edit silently disables
- * a hook with zero user-visible signal. The serena pin half locks the sandbox
- * contract behind the 2026-09 incident fix: serena's remind counter persists
- * under SERENA_HOME, whose default (`~/.serena`) sits outside the session
- * sandbox's writable surface — serena swallows that failure, so the hook
- * no-ops forever unless every serena-hooks invocation pins SERENA_HOME into
- * the project.
+ * Tracked-hooks.json guard: the bridge logs-and-skips unsupported entries at
+ * load time, so without this spec an invalid edit silently disables a hook
+ * with zero user-visible signal. It watches both hook config files this repo
+ * ships: the repo-root hooks.json (dogfooding config the preset loads by
+ * launch cwd — watchdog/nudge scripts only since PR-B) and the dsh-cc-agents
+ * plugin's hooks/hooks.json (the portable serena pair since PR-A). The
+ * sandbox contract behind the 2026-09 incident fix is pinned on the plugin
+ * side: serena's `~/.serena` default sits outside the session sandbox's
+ * writable surface, so the gate wrappers pin SERENA_HOME into the project.
  */
 
 const REPO_ROOT = join(import.meta.dirname, '../../../..')
-const SERENA_HOME_PIN = 'SERENA_HOME="${CLAUDE_PROJECT_DIR}/.serena"'
 
 function commandsOf(groups: MatcherGroup[]): string[] {
   return groups.flatMap(group =>
@@ -34,15 +33,12 @@ describe('tracked repo-root hooks.json', () => {
     expect(parsed.warnings).toEqual([])
   })
 
-  it('pins SERENA_HOME into the project on every serena-hooks command', () => {
-    const serena = commandsOf(Object.values(parsed.config).flat()).filter(c => c.includes('serena-hooks'))
-    expect(serena.length).toBeGreaterThan(0)
-    for (const command of serena) expect(command).toContain(SERENA_HOME_PIN)
-  })
-
-  it('runs serena cleanup on SessionEnd so per-session hook state does not accumulate', () => {
-    const commands = commandsOf(parsed.config.SessionEnd ?? [])
-    expect(commands.some(c => c.includes(`${SERENA_HOME_PIN} serena-hooks cleanup`))).toBe(true)
+  it('carries NO serena-hooks command (single-channel rule: they live in the dsh-cc-agents plugin)', () => {
+    // Regression lock for the PR-A → PR-B handover: plugin hook groups append
+    // after launch-cwd groups and both fire, so a repo-side serena entry
+    // double-counts the plugin's shared burst counter.
+    const all = commandsOf(Object.values(parsed.config).flat())
+    expect(all.filter(c => c.includes('serena-hooks'))).toEqual([])
   })
 })
 

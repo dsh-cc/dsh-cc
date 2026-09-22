@@ -162,7 +162,7 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 
 Claude Code 风格 hooks 可以响应会话、用户输入、工具、权限、压缩、任务和子代理生命周期事件。当前支持 command 和 HTTP executor，部分 prompt/agent executor 需要通过配置开关启用。
 
-仓库跟踪了一个 `hooks.json`，CC preset 会从启动目录加载它。PreToolUse remind hook 需要在 `PATH` 中安装 `serena-hooks`，详见[本地开发](#本地开发)。
+仓库跟踪了一个 `hooks.json`，CC preset 会从启动目录加载它，承载本仓开发用 hook。serena 代码智能 hook 随官方 `dsh-cc-agents` 插件分发（带门控；本仓已完成 serena 初始化故会生效），需要在 `PATH` 中安装 `serena-hooks`，详见[本地开发](#本地开发)。
 
 ## 斜杠命令
 
@@ -308,17 +308,15 @@ pnpm test
 同步后 `dsh-cc --version` 会显示 `-dev+<commit>[.dirty]` 标签标识源码树；通过 npm 更新启动器会自动
 让 profile 回退到商店发布的 bundle。
 
-当前 dogfooding 配置使用 `serena-hooks`：
+serena 代码智能 hook——裸读/裸搜爆发后的 PreToolUse 提醒，以及会话结束时按会话清理 hook 状态——随官方 `dsh-cc-agents` 插件分发（门控契约见插件 README 的 *Serena hooks* 一节）。本仓已完成 serena 初始化（跟踪了 `.serena/project.yml`），启用插件且 `serena-hooks` 在 `PATH` 上即生效：
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-该 hook 通过 `SERENA_HOME="${CLAUDE_PROJECT_DIR}/.serena"` 把状态钉在项目内：serena 默认状态目录（`~/.serena/hook_data`）在会话沙箱可写面之外，不重定向时提醒计数器永远无法持久化（serena 的 `save()` 会吞掉失败），每次 hook 进程都从全新计数器开始，deny 阈值永远达不到——hook 静默空转。状态按会话 id 存放在 `.serena/hook_data/`（已 gitignore）。
+插件的门控 wrapper 把 hook 状态钉在项目内（`SERENA_HOME=<repo>/.serena`）：serena 默认状态目录（`~/.serena/hook_data`）在会话沙箱可写面之外，且 serena 会吞掉失败——不钉住则提醒计数器永不持久化、hook 静默空转。状态按会话 id 落在 `.serena/hook_data/`（已 gitignore），会话销毁时删除。
 
-hooks.json 还挂了一个无 matcher 的 `SessionEnd` 项：会话销毁时跑 `serena-hooks cleanup`，删除本会话的 `.serena/hook_data/<session-id>/`，避免状态跨会话堆积。bridge 以 detached 方式跑 SessionEnd hook，清理不会阻塞交互会话。
-
-可移植的提醒 + 清理这对 hook 同时正在迁进官方 `dsh-cc-agents` 插件（见其 README 的 *Serena hooks* 一节）：启用插件后，任何完成 serena 初始化的仓库都自动获得提醒，无需逐仓拷贝 `hooks.json`。过渡期内本仓 `hooks.json` 保留自己的 serena 条目；待包含插件 hook 的版本发布后移除。
+本仓自己跟踪的 `hooks.json` 只保留引用 `scripts/hooks/` 的仓库开发用 hook（编辑后诊断提醒、serena 失败看门狗）。
 
 更多离线开发、依赖和测试说明见 **[docs/dev.md](docs/dev.md)**。
 
