@@ -30,3 +30,7 @@ English | [中文](README.zh.md)
 ## 形态
 
 普通 cordis 插件，`inject = ['shell']`（tool-use-summary / prompt-suggest 惯例）。由 `packages/preset/cc` 挂载在 cc-services 组。全程 fail-soft：任何故障都退化为透传——用户的工具结果绝不会变成错误结果。
+
+## Dogfood（dsh-cc 贡献者）
+
+仅个人 opt-in —— 用户层开启方式、故意失败复现与锁定 `[auto-verify]` 可观测性的单测见 [docs/dogfood/post-edit-verify.md](../../../docs/dogfood/post-edit-verify.md)。

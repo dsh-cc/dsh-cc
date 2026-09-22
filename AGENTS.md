@@ -164,6 +164,14 @@ Changes to AGENTS.md or agent contracts are prompt changes: state the
 expected observable behavior change in the commit message and verify it
 in a later real session. No observation, no claim.
 
+### Post-edit auto-verify (opt-in dogfood)
+
+Personal productivity only — **default OFF**. To observe `[auto-verify]`
+tails after `edit`/`write` during dsh-cc development, enable
+`cc-post-edit-verify` in **user-layer** harness-home `settings.json` and
+follow [docs/dogfood/post-edit-verify.md](docs/dogfood/post-edit-verify.md).
+Do not flip the product default to forced ON.
+
 ### Capability manifest (parity docs)
 
 `docs/claude-code-capabilities.yaml` is the authored source of truth for Claude
