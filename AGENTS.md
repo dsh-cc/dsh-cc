@@ -71,10 +71,56 @@ another fork's result is the ONLY legal reason to serialize.
   wired.
 - One task, one instance: every new delegation is a fresh `subagent_fork`
   (a plain spawn — never `subagent_type: "fork"`, which inherits your
-  context), even when an idle child of the same type exists. A
-  `send_message` continues an existing child's CURRENT assignment only
-  (steer in flight, same-task follow-ups); handing it a new task runs it
-  inside stale history with a stale definition snapshot.
+  context), even when an idle child of the same type exists. `send_message`
+  continues an existing child's CURRENT assignment only (steer in flight,
+  same-task follow-ups); handing it a new task runs it inside stale history
+  with a stale definition snapshot.
+
+### Verification is planned too
+Before verifying, specify: what behavior, how driven (script/browser/
+CLI), what observable result counts as pass. dsh-cc-agents:executor executes;
+ambiguous results → dsh-cc-agents:critic judges — don't re-litigate inline.
+
+### Modification policy: dev branch or worktree, never main
+Never edit/commit directly on `main`. Which isolation you use depends
+on where the session started, because session cwd is fixed at startup
+and cwd-derived bindings follow it: serena runs `--project-from-cwd`,
+pinning its project root and symbol index to the launch directory.
+Never create or enter a new worktree mid-session (`EnterWorktree`, or
+`git worktree add` + `cd`) — serena stays bound to the startup cwd and
+its symbol tools silently miss everything in the new tree.
+- Started inside a worktree (preferred for repo changes): keep the
+  previous flow — work on `worktree-<slug>`, commit, push, open a PR.
+  Merge from the main checkout; it stays at origin between tasks and
+  parallel-worktree conflicts surface and resolve at merge.
+- Started in the main checkout: before the first edit, create a dev
+  branch in place (`git switch -c dev-<slug>`), then edit and commit
+  on it. To finish: push `dev-<slug>` and open a PR; after merge,
+  `git switch main && git pull` to return the main checkout to origin.
+- Need a worktree but the session didn't start in one? Exit and
+  relaunch: from the main checkout run
+  `git worktree add .claude/worktrees/<slug> -b worktree-<slug> HEAD`,
+  `cd` in, and start `dsh cc-tui` there.
+- Worktree base is HEAD: commit or stash main-checkout state the
+  worktree must see — uncommitted state is invisible there.
+- Worktrees lack gitignored files: run `pnpm install --frozen-lockfile`
+  inside the worktree before the first pnpm command. `.claude/settings.local.json` is the
+  exception — settings-cascade and plugin-loader read the main checkout's
+  copy (Claude Code parity). Other repo-wide behavior must live in
+  tracked files.
+
+### Worktree environment
+Worktrees contain only tracked files, so node_modules is absent. Run
+`pnpm install --frozen-lockfile` inside the worktree before the first
+pnpm command: pnpm hard-links packages from its shared global
+content-addressable store, so it is fast (seconds), needs no network,
+and yields a real self-contained node_modules — `.bin` shims included.
+Never symlink node_modules from the main checkout (the removed
+`link-worktree-deps.sh` approach): it pollutes sibling worktrees,
+misses per-package node_modules, and breaks `.bin`. dist is NOT
+needed: tsconfig `paths` and vite-tsconfig-paths resolve
+@dsh-cc/* to source. A mid-work "Cannot find module" means:
+install first, then re-run.
 
 ### MCP routing
 - Library/framework docs or API usage: context7 first
@@ -101,8 +147,15 @@ another fork's result is the ONLY legal reason to serialize.
       file, or `get_diagnostics_for_file`) before concluding "no symbols".
     - After 2 Serena tool errors within 5 minutes: stop retrying Serena,
       use built-in Read/Grep/Edit, and note the degradation to the user.
+      Recovery ladder before falling back: `get_diagnostics_for_file` →
+      `get_current_config` → `mcp__serena__restart_language_server` if
+      available → built-ins.
     - Experimental languages (Deno, Erlang, LaTeX, Nextflow, Wolfram)
       degrade to built-ins by default.
+    - Where these rules conflict with Serena's injected
+      initial_instructions, these rules win.
+    - The pinned v1.7.0 already carries the v1.6.0 Svelte↔TypeScript
+      routing fixes; these rules target the general class.
 - sequential_thinking: orchestrator never uses it — route reasoning to
   dsh-cc-agents:critic (who may use it for multi-branch explorations).
 
