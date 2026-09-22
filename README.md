@@ -8,7 +8,7 @@
 
 - **Reuse familiar workflows:** `.claude/agents`, `SKILL.md`, `CLAUDE.md`, hooks, permissions, slash commands, and resumable sessions.
 - **Bring your own model strategy:** route aliases such as `sketch`, `draft`, `blueprint`, and `masterplan` to any provider/model pair supported by your dsh deployment.
-- **Run a complete coding loop:** TUI, MCP, memory, subagents, background tasks, worktrees, structured output, and deferred tool discovery.
+- **Run a complete coding loop:** TUI, MCP, memory, subagents, background tasks, worktrees, structured output, deferred tool discovery, reversible tool-output compression (`context-crusher` + `context_retrieve`), and cost-gated compaction.
 - **Stay composable:** install the experience through native dsh profiles and plugins instead of maintaining a permanent DeepSeek Harness fork.
 
 > `dsh-cc` is not Claude Code and is not a wrapper around Claude Code. It implements familiar Claude Code-style workflows on the open, composable DeepSeek Harness runtime.
@@ -63,7 +63,7 @@ dsh web
 
 The bundles above are the whole quick start. Two optional official plugins — shipped through the repo's `dsh-cc` marketplace — add preconfigured subagent lanes:
 
-- **`dsh-cc-agents`** — the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias) and `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias) subagents, plus an orchestration routing skill.
+- **`dsh-cc-agents`** — the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias) and `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias) subagents, plus an orchestration routing skill (`data-analysis`) and optional serena code-intelligence hooks (gated on serena-onboarded repos).
 - **`dsh-cc-shunt`** — PreToolUse gates that redirect bulk file reads and boilerplate generation to cheap-lane worker subagents, keeping large file corpora out of the main context (configure a `haiku` alias for real token savings).
 
 Install them inside a session:
@@ -135,7 +135,7 @@ Agent frontmatter can continue using familiar model aliases while dsh decides wh
 
 ### Memory
 
-The memory layer supports `CLAUDE.md`-style context plus a dedicated write channel for durable memories. Memory is isolated by workspace, with optional shared team memory.
+The memory layer supports `CLAUDE.md`-style context plus a dedicated write channel for durable memories. Memory is isolated by workspace, with optional shared team memory, and background dream consolidation kicks in automatically when memory-index pressure builds up.
 
 ### MCP
 
@@ -199,6 +199,8 @@ The CC preset exposes a growing command surface, including:
 /tasks             inspect current tasks/jobs
 /resume            resume an interrupted session
 /branch            worktree branch management
+/learn             distill recurring corrections into workspace memory
+/compact           compact the session context
 /diff              inspect CLAUDE.md / settings differences
 /init               scan a project and scaffold CLAUDE.md
 /plugin             manage plugins
