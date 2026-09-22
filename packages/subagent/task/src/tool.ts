@@ -44,7 +44,7 @@ import { cwdOf } from '@dsh-cc/memory'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
 import { applyActorContract } from '@dsh-cc/claude-code-agents'
 import { actorContractPatterns, gateCandidates } from './actor-contract-gate.ts'
-import { toAgentOptions } from '@dsh-cc/model-aliases'
+import { resolveSpawnEffort, toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex } from './plugin-agents.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
@@ -302,7 +302,14 @@ export function registerTaskTool(
         Awaited<ReturnType<typeof collectForeground>> | Awaited<ReturnType<typeof startBackground>>
       > => {
         const routes = ctx.get('ccModelRoutes') as ModelRoutes | undefined
-        const agentOptions = toAgentOptions(routes?.resolve(definition.model))
+        const route = routes?.resolve(definition.model)
+        // Precedence: resolver-resolved effort ($level suffix / alias target)
+        // wins over frontmatter def.effort; def.effort applies when the route
+        // carries none (resolveSpawnEffort, shared with cc-plugin-loader).
+        const spawnEffort = resolveSpawnEffort(route, definition.effort)
+        const agentOptions = spawnEffort === undefined
+          ? toAgentOptions(route)
+          : { ...toAgentOptions(route), reasoningEffort: spawnEffort }
         // Actor-contract gate (§3.1): strip/keep the marked block per the
         // configured model patterns, read live at spawn time. Inherit model
         // → no candidates → fail-closed strip.

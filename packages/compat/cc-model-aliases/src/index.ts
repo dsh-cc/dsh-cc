@@ -13,8 +13,8 @@
  * @module @dsh-cc/model-aliases
  */
 
-export { BUILTIN_ALIASES, CC_ALIASES, LANE_ALIASES, LANE_PEERS, mergeAliasMaps, createModelResolver, createModelInspector, type ModelResolver } from './resolver.ts'
-export { toAgentOptions, toOneShotRoute, type OneShotParentRoute } from './agentOptions.ts'
+export { BUILTIN_ALIASES, CC_ALIASES, LANE_ALIASES, LANE_PEERS, mergeAliasMaps, createModelResolver, createModelInspector, splitLevelSuffix, type ModelResolver } from './resolver.ts'
+export { toAgentOptions, toOneShotRoute, resolveSpawnEffort, type OneShotParentRoute } from './agentOptions.ts'
 export { overlayStampedEffort, stampedEffortOf } from './effort.ts'
 export {
   ConfigAliasSchema,

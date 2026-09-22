@@ -356,3 +356,17 @@ describe('DEFAULT_SOFT_DENY / expandSoftDeny', () => {
     expect(expandSoftDeny(['x', 'x'])).toEqual(['x', 'x'])
   })
 })
+
+describe('route effort forwarding', () => {
+  it('route with reasoningEffort: forwarded onto the stream opts', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: { ...ROUTE, reasoningEffort: 'low' } })
+    expect(calls[0]?.reasoningEffort).toBe('low')
+  })
+
+  it('route without reasoningEffort: the field is absent (absence-preserving)', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    expect(calls[0]).not.toHaveProperty('reasoningEffort')
+  })
+})

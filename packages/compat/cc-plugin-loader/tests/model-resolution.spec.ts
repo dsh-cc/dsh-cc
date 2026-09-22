@@ -26,12 +26,13 @@ function fakeSeam(): FakeSeam {
 }
 
 /** Mount one agent whose frontmatter carries the given `model`, over a seam. */
-async function mountOne(model: string | undefined, resolveModel?: ResolveModel): Promise<FakeSeam> {
+async function mountOne(model: string | undefined, resolveModel?: ResolveModel, effort?: string): Promise<FakeSeam> {
   const { root, dispose } = await tempPluginRoot()
   const fm = [
     '---',
     'description: test agent',
     ...(model !== undefined ? [`model: ${JSON.stringify(model)}`] : []),
+    ...(effort !== undefined ? [`effort: ${effort}`] : []),
     '---',
     'You are a test agent.',
   ].join('\n')
@@ -113,5 +114,29 @@ describe('AgentProvider model resolution', () => {
     )
     const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
     expect(delegationOf(result)['agentOptions']).toEqual({ provider: 'parent' })
+  })
+})
+
+describe('AgentProvider def.effort fold', () => {
+  it('no resolver: frontmatter effort is stamped onto agentOptions', async () => {
+    const seam = await mountOne('deepseek-chat', undefined, 'low')
+    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(result)['agentOptions']).toMatchObject({ model: 'deepseek-chat', reasoningEffort: 'low' })
+  })
+
+  it('route effort wins over frontmatter def.effort', async () => {
+    const seam = await mountOne(
+      'opus',
+      (model) => model === 'opus' ? { model: 'glm-5.3', reasoningEffort: 'high' } : undefined,
+      'low',
+    )
+    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(result)['agentOptions']).toMatchObject({ reasoningEffort: 'high' })
+  })
+
+  it('resolver route without effort + no frontmatter effort: no reasoningEffort key', async () => {
+    const seam = await mountOne('sonnet', (model) => model === 'sonnet' ? { model: 'glm-5.3' } : undefined)
+    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(result)['agentOptions']).toEqual({ provider: 'parent', model: 'glm-5.3' })
   })
 })

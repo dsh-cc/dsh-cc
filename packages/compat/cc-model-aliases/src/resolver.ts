@@ -169,6 +169,35 @@ export function createModelResolver(
   return Object.assign(resolve, { resolveDetailed })
 }
 
+/** Legal `$level` suffix spelling after the `$`. */
+const LEVEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/
+
+/**
+ * Split an optional `$<level>` reasoning-effort suffix off a model reference
+ * (`opus$high`, `glm-5.3$xhigh`). The suffix must sit on the trailing path
+ * segment — a `$` inside a provider segment (`open$high/glm`) is NOT treated.
+ * Malformed forms (trailing `$`, empty level, bad charset, `$` outside the
+ * trailing segment) pass the whole ref through verbatim, so existing ids that
+ * contain no `$` resolve byte-identically.
+ * @param ref - the model reference as authored.
+ * @returns the bare reference and the level when a format-valid suffix was
+ *   present. Format validity only: unknown level spellings are rejected at
+ *   the harness boundary, never here.
+ */
+export function splitLevelSuffix(ref: string): { bare: string; level: string | undefined } {
+  const i = ref.lastIndexOf('$')
+  if (i <= 0 || i === ref.length - 1) return { bare: ref, level: undefined }
+  // A `$` before the last `/` lives in a non-trailing segment — literal.
+  const slash = ref.lastIndexOf('/')
+  if (slash !== -1 && slash > i) return { bare: ref, level: undefined }
+  const level = ref.slice(i + 1)
+  if (!LEVEL_PATTERN.test(level)) return { bare: ref, level: undefined }
+  // Leading `$` on the model segment (`pkg/$high`) leaves an empty model
+  // segment — malformed, literal passthrough.
+  if (ref.slice(0, i).endsWith('/')) return { bare: ref, level: undefined }
+  return { bare: ref.slice(0, i), level }
+}
+
 /**
  * Build an inspector that classifies one frontmatter `model` the same way
  * {@link createModelResolver} resolves it, additionally reporting provenance
@@ -184,8 +213,7 @@ export function createModelInspector(
   options?: { warn?: (message: string) => void },
 ): (model: string | undefined) => AliasInspection {
   const warn = options?.warn ?? ((message: string) => console.warn(message))
-  return (model) => {
-    if (model === undefined || model.trim().length === 0) return { kind: 'inherit' }
+  const inspectBare = (model: string): AliasInspection => {
     const trimmed = model.trim()
     const folded = trimmed.toLowerCase()
     if (folded === 'inherit') return { kind: 'inherit' }
@@ -237,6 +265,25 @@ export function createModelInspector(
       warn(`cc-model-aliases: model "${trimmed}" is not a configured alias and is not builtin; passing through verbatim as a literal model id`)
     }
     return { kind: 'literal', route: { model: trimmed } }
+  }
+  return (model) => {
+    if (model === undefined || model.trim().length === 0) return { kind: 'inherit' }
+    // `$level` suffix parsing happens here so BOTH `resolve()` and
+    // `resolveDetailed()` see the same strip-before-emit route: a format-valid
+    // suffix is carried as `reasoningEffort` (overriding an alias-target
+    // effort — the two provenances are only co-visible here) and the emitted
+    // provider/model ids never contain `$`. Unknown level spellings are NOT
+    // stripped or validated here: they ride `reasoningEffort` to the harness
+    // boundary (`resolveCallWithInfo` throws UNSUPPORTED_REASONING_EFFORT).
+    const { bare, level } = splitLevelSuffix(model.trim())
+    const verdict = inspectBare(bare)
+    if (level !== undefined && verdict.route !== undefined) {
+      return {
+        ...verdict,
+        route: { ...verdict.route, reasoningEffort: level },
+      }
+    }
+    return verdict
   }
 }
 

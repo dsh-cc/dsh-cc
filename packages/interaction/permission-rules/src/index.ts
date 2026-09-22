@@ -15,19 +15,18 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
-import { resolveAlias, toOneShotRoute } from '@dsh-cc/model-aliases'
+import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { installSectionSafe } from '@dsh-cc/settings-ns'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value
 // dependency on the seam.
 import type {} from '@deepseek-ai/dsh-shell'
+import { createClassifierStreamAdapter, type ClassifierStream } from './classifier-lane.ts'
 import { parseRule, ruleString } from './parser.ts'
 import { mergeRuleSets } from './evaluate.ts'
 import { decideCallVerbose, type DecideDeps } from './decide.ts'
@@ -222,36 +221,9 @@ export class PermissionRulesService extends Service {
     // design). The llm stream seam is wired via ctx.inject so a missing llm
     // service is a silent no-op rather than a required dependency (same
     // optional-availability pattern as the systemPrompt injection below).
-    let llmStream: ((options: {
-      provider: string
-      model: string
-      system: string
-      prompt: string
-      maxTokens: number
-      signal?: AbortSignal
-    }) => Promise<string>) | undefined
+    let llmStream: ClassifierStream | undefined
     ctx.inject(['llm'], (scope) => {
-      llmStream = async (opts) => {
-        const assembler = new BlockAssembler()
-        for await (const chunk of scope.llm.stream({
-          provider: opts.provider,
-          model: opts.model,
-          system: opts.system,
-          messages: [createUserMessage({
-            content: [{ type: 'text', text: opts.prompt }],
-            source: { kind: 'plugin', plugin: 'permission-rules' },
-          })],
-          maxTokens: opts.maxTokens,
-          ...(opts.signal === undefined ? {} : { signal: opts.signal }),
-        }) as AsyncIterable<StreamChunk>) {
-          assembler.push(chunk)
-        }
-        return assembler.blocks()
-          .filter(block => block.type === 'text')
-          .map(block => block.text)
-          .join(' ')
-          .trim()
-      }
+      llmStream = createClassifierStreamAdapter(scope.llm, message => this.ctx.logger.warn(message))
     })
 
     const autoStage: AutoStage = createAutoStage({
@@ -261,13 +233,26 @@ export class PermissionRulesService extends Service {
       },
       resolveRoute: (exec) => {
         const route = this.settingsSection().autoMode?.classifier?.route ?? 'haiku'
+        // Detail-preserving path (resolveDetailedAlias, NOT toOneShotRoute —
+        // that helper drops reasoningEffort by design for the other one-shot
+        // lanes): the classifier needs the route's effort ($level suffix or
+        // alias target) so the lane can ride the cheapest declared level.
         // The calling agent's logged request header fills the provider for a
         // string-form (model-only) alias; a complete {provider, model} alias
-        // needs no parent (toOneShotRoute flow, session-title-provider precedent).
+        // needs no parent (session-title-provider precedent).
         const parent = exec.agent?.session.requestHeader()?.config as
           | { provider?: string; model?: string }
           | undefined
-        return toOneShotRoute(resolveAlias(this.ctx, route), parent)
+        const resolved = resolveDetailedAlias(this.ctx, route).route
+        if (resolved === undefined) return undefined
+        const provider = resolved.provider ?? parent?.provider
+        const model = resolved.model ?? parent?.model
+        if (provider === undefined || provider.length === 0 || model === undefined || model.length === 0) return undefined
+        return {
+          provider,
+          model,
+          ...(resolved.reasoningEffort === undefined ? {} : { reasoningEffort: resolved.reasoningEffort }),
+        }
       },
       warn: (message) => this.ctx.logger.warn(message),
       // R5 debug channel: opt-in via DSH_PERMISSION_CLASSIFIER_DEBUG=1, from

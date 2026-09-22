@@ -958,6 +958,58 @@
         "summary": "dsh-cc extension, DEFAULT OFF (cc-prompt-suggest.enabled: false — disabled sessions make zero adapter calls and zero suggestion items). Surface is prefix-match-only: the vendored pi-tui Editor consults the autocomplete provider only on trigger characters ('/' and '@') or forced Tab, never on empty input, so the prediction completes after the user types a leading fragment (probed at implementation; see packages/ui/tui/src/components/completion.ts). behavioral/ux partial accordingly: the capability exists and is wired end to end, but only for opted-in sessions and only via typed-prefix completion."
       }
     },
+    "engine.reasoning-effort-surface": {
+      "title": "Reasoning-effort reference surface ($level suffix + classifier lane)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. Model references accept an optional `$<level>` suffix (`opus$high`) — parsed and stripped before the id leaves the resolver (packages/compat/cc-model-aliases splitLevelSuffix), with the level riding ResolvedRoute.reasoningEffort and overriding an alias-target effort; agent frontmatter `effort` is now applied at spawn via the shared resolveSpawnEffort helper (Task tool + plugin-loader); and the auto-mode permission classifier's stream seam carries a catalog-validated effort — route-explicit when a member of the route's declared levels, else the first-declared (lowest) level, warn + omit otherwise (packages/interaction/permission-rules adapter).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/compat/cc-model-aliases/src/resolver.ts",
+          "anchor": "splitLevelSuffix"
+        },
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: cc-model-routes"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/permission-rules/src/classifier-lane.ts",
+          "anchor": "createClassifierStreamAdapter"
+        },
+        {
+          "type": "test",
+          "path": "packages/compat/cc-model-aliases/tests/level-suffix.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: non-interactive tier reference at the model reference plus a tuned classifier lane; unknown levels fail loud at the harness boundary (UNSUPPORTED_REASONING_EFFORT), malformed suffixes pass through verbatim. ux partial: no interactive picker for the `$level` spelling."
+      }
+    },
     "engine.reasoning-fold-probe": {
       "title": "Reasoning-fold probe (Stage 0, ledger only)",
       "category": "engine",

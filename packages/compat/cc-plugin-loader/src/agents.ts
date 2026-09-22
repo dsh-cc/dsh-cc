@@ -16,7 +16,7 @@ import { readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { loadAgentsDir, applyActorContract } from '@dsh-cc/claude-code-agents'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
-import { toAgentOptions } from '@dsh-cc/model-aliases'
+import { resolveSpawnEffort, toAgentOptions } from '@dsh-cc/model-aliases'
 import { gateCandidates, DEFAULT_ACTOR_CONTRACT_MODELS } from './actor-contract-gate.ts'
 import type { CcPluginManifest } from './types.ts'
 import { ComponentTally } from './seams.ts'
@@ -156,11 +156,12 @@ export class AgentProvider implements SubagentBackend {
   private resolveModelOverride(): Record<string, string> | undefined {
     const model = this.agentDefinition.model
     const resolver = this.resolveModel
-    if (resolver === undefined) {
-      return model !== undefined ? { model } : undefined
-    }
-    if (model === undefined) return undefined
-    return toAgentOptions(resolver(model))
+    // Precedence: resolver-resolved effort ($level suffix / alias target) wins
+    // over frontmatter def.effort (resolveSpawnEffort, shared with task tool).
+    const route = resolver === undefined || model === undefined ? undefined : resolver(model)
+    const effort = resolveSpawnEffort(route, this.agentDefinition.effort)
+    const override = resolver === undefined ? (model !== undefined ? { model } : undefined) : toAgentOptions(route)
+    return effort === undefined ? override : { ...override, reasoningEffort: effort }
   }
 }
 

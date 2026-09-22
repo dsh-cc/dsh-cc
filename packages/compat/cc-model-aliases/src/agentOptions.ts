@@ -27,6 +27,23 @@ export function toAgentOptions(route: ResolvedRoute | undefined): Record<string,
   return out
 }
 
+/**
+ * Effective reasoning effort for one spawn: the resolver-resolved route
+ * effort (a `$level` suffix or alias-target stamp) wins over the agent
+ * frontmatter `effort`; neither present → undefined. Shared by the Task-tool
+ * and plugin-loader dispatch sites so the precedence cannot drift.
+ * @param route - the resolved route, or undefined (inherit).
+ * @param defEffort - the frontmatter `effort` (named level or integer), if any.
+ */
+export function resolveSpawnEffort(
+  route: ResolvedRoute | undefined,
+  defEffort: string | number | undefined,
+): string | undefined {
+  if (route?.reasoningEffort !== undefined) return route.reasoningEffort
+  if (defEffort === undefined) return undefined
+  return typeof defEffort === 'number' ? String(defEffort) : defEffort
+}
+
 export interface OneShotParentRoute {
   readonly provider?: string
   readonly model?: string

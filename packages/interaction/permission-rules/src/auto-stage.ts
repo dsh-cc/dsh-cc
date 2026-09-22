@@ -111,9 +111,9 @@ export type AutoStageDeps = {
    * One-shot text completion over the auxiliary lane; `undefined` when no llm
    * service is mounted (the stage then disarms).
    */
-  stream: ((opts: { provider: string; model: string; system: string; prompt: string; maxTokens: number; signal?: AbortSignal }) => Promise<string>) | undefined
+  stream: ((opts: { provider: string; model: string; system: string; prompt: string; maxTokens: number; reasoningEffort?: string; signal?: AbortSignal }) => Promise<string>) | undefined
   /** Resolve the configured classifier route for this call's session. */
-  resolveRoute(exec: ToolExecution): { provider: string; model: string } | undefined
+  resolveRoute(exec: ToolExecution): { provider: string; model: string; reasoningEffort?: string } | undefined
   /** Process logger for the one-time disarm warning. */
   warn(message: string): void
   /** Durable audit sink (session append face, listener-owned). */

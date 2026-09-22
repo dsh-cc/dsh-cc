@@ -1246,3 +1246,44 @@ describe('Task tool', () => {
     })
   })
 })
+
+describe('def.effort spawn fold', () => {
+  const writeEffortAgent = (ws: string, name: string, model: string, effort?: string): void => {
+    writeAgent(ws, name, `---\nname: ${name}\ndescription: x\nmodel: ${model}\n${effort === undefined ? '' : `effort: ${effort}\n`}---\nBody.\n`)
+  }
+
+  it('frontmatter def.effort applies when the route carries no effort', async () => {
+    const ws = freshWorkspace()
+    writeEffortAgent(ws, 'deep-reasoner', 'opus', 'low')
+    const routes = { resolve: (m: string | undefined) => m === 'opus' ? { provider: 'o', model: 'glm-5.3' } : undefined }
+    const { ctx, continuableStarts } = await mount({ routes })
+    await call(ctx, { subagent_type: 'deep-reasoner', description: 'x', prompt: 't' }, agentAt(ws))
+    expect(continuableStarts[0]!.request['agentOptions']).toEqual({
+      provider: 'o',
+      model: 'glm-5.3',
+      reasoningEffort: 'low',
+    })
+  })
+
+  it('route effort wins over frontmatter def.effort', async () => {
+    const ws = freshWorkspace()
+    writeEffortAgent(ws, 'deep-reasoner', 'opus', 'low')
+    const routes = {
+      resolve: (m: string | undefined) => m === 'opus'
+        ? { provider: 'o', model: 'glm-5.3', reasoningEffort: 'high' }
+        : undefined,
+    }
+    const { ctx, continuableStarts } = await mount({ routes })
+    await call(ctx, { subagent_type: 'deep-reasoner', description: 'x', prompt: 't' }, agentAt(ws))
+    expect(continuableStarts[0]!.request['agentOptions']).toMatchObject({ reasoningEffort: 'high' })
+  })
+
+  it('neither route nor def effort: no reasoningEffort key', async () => {
+    const ws = freshWorkspace()
+    writeEffortAgent(ws, 'fast-worker', 'sonnet')
+    const routes = { resolve: (m: string | undefined) => m === 'sonnet' ? { model: 'glm-5.3' } : undefined }
+    const { ctx, continuableStarts } = await mount({ routes })
+    await call(ctx, { subagent_type: 'fast-worker', description: 'x', prompt: 't' }, agentAt(ws))
+    expect(continuableStarts[0]!.request['agentOptions']).toEqual({ model: 'glm-5.3' })
+  })
+})

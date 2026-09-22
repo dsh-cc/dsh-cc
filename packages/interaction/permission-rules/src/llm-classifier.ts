@@ -28,7 +28,7 @@ export type LlmVerdict = { verdict: 'allow'; reason: string } | { verdict: 'ask'
 export type ClassifierFailure = 'timeout' | 'error' | 'malformed' | 'unarmed' | 'cancelled'
 
 /** The per-call route, passed as data instead of resolved from ambient state. */
-export type ClassifierRoute = { provider: string; model: string }
+export type ClassifierRoute = { provider: string; model: string; reasoningEffort?: string }
 
 /** Durable audit record for one classify call. The raw input NEVER appears — only its digest. */
 export type ClassifierAuditEvent = {
@@ -54,7 +54,7 @@ export type LlmClassification = ClassifierAuditEvent & LlmVerdict
 
 /** Structural face the listener injects. No dsh-llm imports in this module. */
 export type LlmClassifierDeps = {
-  stream(opts: { provider: string; model: string; system: string; prompt: string; maxTokens: number; signal?: AbortSignal }): Promise<string>
+  stream(opts: { provider: string; model: string; system: string; prompt: string; maxTokens: number; reasoningEffort?: string; signal?: AbortSignal }): Promise<string>
   /** Already $defaults-expanded prose rules. */
   softDeny: readonly string[]
   timeoutMs: number
@@ -262,6 +262,9 @@ export function createLlmClassifier(deps: LlmClassifierDeps): LlmClassifier {
           system,
           prompt: input,
           maxTokens: MAX_TOKENS,
+          // Absence-preserving: the classifier lane carries an effort only
+          // when the resolved route declares one (validated/omitted upstream).
+          ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
           signal,
         })
         deps.debug?.(`[dsh:classifier:raw] ${raw.slice(0, RAW_DEBUG_CAP)}`)

@@ -76,6 +76,21 @@ alias 的查找顺序:**settings overlay → config 默认 → builtin fallback*
 
 把 opus 的目标换成 effort 词表不同的模型,只需改这一条 settings(`"reasoningEffort": "xhigh"`);agent markdown 无需改动。
 
+### `model$level` 后缀语法
+
+模型引用——frontmatter 的 `model:`、alias target 的 `model` id、或 auto-mode classifier 的 `route`——可以携带 `` `$<level>` `` 后缀(`opus$high`、`glm-5.3$xhigh`)。后缀在 id 离开解析器之前被剥离(定价、断路器、pin 都以裸 model id 为键);level 以 `reasoningEffort` 搭载在解析出的路由上,并**覆盖** alias target 声明的 `reasoningEffort`。未知 level 拼写既不剥离也不丢弃:原样携带到 harness 边界,由其以 `UNSUPPORTED_REASONING_EFFORT` 报错。畸形后缀(结尾 `$`、空或非法字符集的 level、provider 段中的 `$`)让引用原样透传——不含 `$` 的既有 id 解析字节级不变。
+
+### Effort 优先级
+
+| 层级 | 来源 | 应用点 |
+|---|---|---|
+| 1 | 显式 `` `$level` `` 后缀 > alias target 的 `reasoningEffort` | 解析器内部(二者折叠为 `ResolvedRoute.reasoningEffort`) |
+| 2 | agent frontmatter `effort`(`def.effort`) | 派发时——`resolveSpawnEffort`(Task 工具 + plugin-loader) |
+| 3 | `/effort` 会话选择(主 agent) | TUI/会话机制;alias 印章的 effort 刻意压过 fork 父头部恢复的 effort(alias 契约) |
+| 4 | catalog/harness 路由默认 | llm adapter |
+
+高层级从不改写低层级;resume-pin 门保持比较完整解析元组,未改动。
+
 ### 空删除
 
 只有 **settings** 层可把条目置为 `null`;这会**整条删除同名 config-default 条目**(entry-shallow)。删除 *builtin* alias 仍落到 builtin fallback——`null` 无法让 `sonnet` 变成错误,因为 builtin fallback 是**继承父路由**。config 层永不允许 `null`(被 config schema 拒绝)。
