@@ -17,26 +17,21 @@
  */
 
 import { join } from 'node:path'
+import { createZstdDecompress } from 'node:zlib'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import { delegationDepthOf } from '@deepseek-ai/dsh-subagent'
 import { defaultDshHome } from '@deepseek-ai/dsh-home-paths'
-import { MEMORY_TOOL_FILTER } from './tools.ts'
 import { buildConsolidationPrompt, buildExtractionPrompt } from './prompts.ts'
-import { gatesPass } from './gates.ts'
+import { timeGatePasses, sessionGatePasses } from './gates.ts'
+import { gateWindow, scanSessions, type SessionScanResult } from './session-scan.ts'
 import { readLastConsolidatedAt, rollbackLock, tryAcquireLock, LOCK_STALE_MS } from './lock.ts'
+import { startMemoryJob } from './memory-job.ts'
+export { applyEntrypointFallback } from './memory-job.ts'
 import {
-  MEMORY_WRITES_SCHEMA,
   memoryWritePolicy,
   resolveWorkspaceMemoryDir,
-  validateMemoryWrites,
-  writeMemoryFiles,
-  ENTRYPOINT_NAME,
-  MAX_ENTRYPOINT_LINES,
-  MAX_ENTRYPOINT_BYTES,
-  truncateEntrypointContent,
   readPressure,
   markPressureForced,
   clearPressure,
@@ -82,6 +77,8 @@ export interface Config {
   pressureCooldownMinutes?: number
   /** One-shot subagent provider for forks (default `fork`). */
   subagentProviderName?: string
+  /** Session store root the gates scan (default `<DSH_HOME>/sessions`). */
+  sessionsRoot?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -93,164 +90,10 @@ export const Config: z<Config> = z.object({
   lockStaleMs: z.number().default(LOCK_STALE_MS),
   pressureCooldownMinutes: z.number().default(60),
   subagentProviderName: z.string().default('fork'),
+  sessionsRoot: z.string(),
 })
 
-/** Structural subset of the jobs seam used here. */
-interface JobService {
-  start(spec: {
-    kind: 'subagent'
-    label: string
-    owner: Agent
-    run(): { cancel(reason?: string): void; done: Promise<unknown> }
-  }): unknown
-}
 
-/** Structural subset of the subagent seam used here. */
-interface SubagentService {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
-    signal: AbortSignal
-    toolFilter?: { allow: readonly string[] }
-    maxDepth?: number
-    outputSchema?: Record<string, unknown>
-  }): Promise<{ result: Promise<SubagentResultLike> }>
-}
-
-/**
- * The settled shape of a one-shot subagent run. The promise rejects only on
- * infrastructure faults; child-level failures (including "outputSchema was
- * requested but never reported", which upstream downgrades to `error`) arrive
- * as a resolved value and MUST be inspected here.
- */
-interface SubagentResultLike {
-  readonly structured?: unknown
-  readonly stopReason?: string
-}
-
-/** Structural subset of the sessions seam used here. */
-interface SessionsService {
-  list(): Array<{ id: string; header?: { createdAt?: unknown; delegationDepth?: unknown } }>
-}
-
-/** The job-done outcome: resolves only, per the JobHooks contract. */
-type JobOutcome = { status: 'completed' } | { status: 'killed' } | { status: 'failed'; detail: string }
-
-/**
- * Over-limit measurement for the entrypoint, identical to the write-side gate
- * semantics (trim → split('\n') → count; byteLength of the trimmed content).
- * @param content - a reported `MEMORY.md` body.
- */
-function entrypointOverLimit(content: string): boolean {
-  const trimmed = content.trim()
-  return trimmed.split('\n').length > MAX_ENTRYPOINT_LINES
-    || Buffer.byteLength(trimmed, 'utf8') > MAX_ENTRYPOINT_BYTES
-}
-
-/**
- * Design §2.4 fallback: if the reported payload carries an over-limit
- * `MEMORY.md`, replace its content with the deterministic truncation output
- * (capped body + visible in-file warning banner) instead of failing the job.
- * Plain rejection would fail the dream, roll back the lock, and retry every
- * turn-end forever with zero durable output. Topic-file writes pass through
- * untouched; a compliant entrypoint is returned byte-identical. Takes the raw
- * structured payload (the entrypoint gate inside `validateMemoryWrites`
- * throws during validation, so the replacement must happen before it) and
- * returns a payload of the same shape; malformed payloads pass through and
- * are rejected by validation as usual.
- */
-export function applyEntrypointFallback(payload: unknown): unknown {
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return payload
-  const raw = (payload as { writes?: unknown }).writes
-  if (!Array.isArray(raw)) return payload
-  const writes: unknown[] = raw.map((entry) => {
-    if (typeof entry !== 'object' || entry === null) return entry
-    const { path, content } = entry as { path?: unknown; content?: unknown }
-    if (path !== ENTRYPOINT_NAME || typeof content !== 'string' || !entrypointOverLimit(content)) {
-      return entry
-    }
-    return { ...entry, content: truncateEntrypointContent(content).content }
-  })
-  return { ...(payload as object), writes }
-}
-
-/**
- * Start a memory-scoped forked subagent as a background job. The fork reports
- * its file set via `outputSchema`; on settlement the plugin validates the
- * batch and writes it host-side under a policy confined to `dir`. Resolves to
- * a control object with an abort hook and a settle promise (true only when
- * the reported writes were validated and persisted).
- */
-async function startMemoryJob(
-  ctx: Context,
-  agent: Agent,
-  dir: string,
-  provider: string,
-  label: string,
-  prompt: string,
-): Promise<{ abort(reason?: string): void; settled: Promise<boolean> }> {
-  const jobs = ctx.get('jobs') as JobService | undefined
-  const subagents = ctx.get('subagents') as SubagentService | undefined
-  if (jobs === undefined || subagents === undefined) {
-    return { abort: () => {}, settled: Promise.resolve(false) }
-  }
-  const fs = ctx.get('fs') as FileSystem | undefined
-  const controller = new AbortController()
-  // `subagents.start` is async upstream — awaiting it is what exposes the run's
-  // `result` promise. Reading `run.result` on the un-awaited Promise throws
-  // "Cannot read properties of undefined (reading 'then')" and poisons the
-  // turn-stopping dispatch.
-  const run = await subagents.start(provider, {
-    label,
-    signal: controller.signal,
-    prompt: [{ type: 'text', text: prompt }],
-    parent: agent,
-    toolFilter: MEMORY_TOOL_FILTER,
-    // Defense-in-depth recursion cap: the top-level listener already gates on
-    // depth zero, so this fork's child never delegates. maxDepth is compared
-    // against the CHILD's resolved depth (parent + 1); a top-level parent's
-    // child resolves to 1 and passes, a grandchild to 2 is rejected.
-    maxDepth: 1,
-    outputSchema: MEMORY_WRITES_SCHEMA,
-  })
-  // Real job-done wiring: `done` maps the subagent outcome onto the JobHooks
-  // contract (must never reject). Aborted → killed (rolls back the dream
-  // lock); a non-completed stopReason, a missing/invalid payload, or a
-  // write-back failure → failed with detail; a validated, persisted batch →
-  // completed. All branches resolve.
-  const done: Promise<JobOutcome> = run.result.then(
-    async (res): Promise<JobOutcome> => {
-      if (controller.signal.aborted) return { status: 'killed' }
-      if (res?.stopReason !== 'completed') {
-        return { status: 'failed', detail: `memory fork ended with stopReason ${String(res?.stopReason)}` }
-      }
-      if (fs === undefined) {
-        return { status: 'failed', detail: 'fs seam unavailable for memory write-back' }
-      }
-      try {
-        const writes = validateMemoryWrites(applyEntrypointFallback(res.structured))
-        await writeMemoryFiles(fs, dir, writes)
-        return { status: 'completed' }
-      } catch (err) {
-        return { status: 'failed', detail: String(err) }
-      }
-    },
-    (err): JobOutcome =>
-      controller.signal.aborted ? { status: 'killed' } : { status: 'failed', detail: String(err) },
-  )
-  const settled = done.then(o => o.status === 'completed')
-  jobs.start({
-    kind: 'subagent',
-    label,
-    owner: agent,
-    run: () => ({
-      cancel: (reason?: string) => { controller.abort(reason) },
-      done,
-    }),
-  })
-  return { abort: (reason?: string) => { controller.abort(reason) }, settled }
-}
 
 /**
  * Register the consolidation plugin.
@@ -266,12 +109,43 @@ export function apply(ctx: Context, config: Config = {}): void {
   const minHours = config.minHours ?? 24
   const minSessions = config.minSessions ?? 5
   const pressureCooldownMinutes = config.pressureCooldownMinutes ?? 60
+  const sessionsRoot = config.sessionsRoot ?? join(defaultDshHome(), 'sessions')
 
   // Per-session extraction single-flight. Keyed by session id so each top-level
   // agent's in-flight flag and last-spawned event count are isolated.
   const flight = new Map<string, { extracting: boolean; lastEvents: number }>()
   // One dream in flight across the whole plugin instance (per memory dir).
   let dreamInFlight = false
+
+  // Scan memo (plan §3.4): caches the RAW unfiltered SessionScanResult for
+  // SCAN_MEMO_MS; the lastAt filter/count/hints are recomputed per call. It
+  // bounds the failure-path scan storm (lock rolled back → time gate keeps
+  // passing → every turn-end would otherwise rescan the store).
+  let memo: { at: number; result: SessionScanResult } | null = null
+  // Once-per-process warn state (plan §3.5).
+  let warnedRoot = false
+  let warnedZstd = false
+  const scan = async (): Promise<SessionScanResult> => {
+    const now = Date.now()
+    if (memo !== null && now - memo.at < SCAN_MEMO_MS) {
+      ctx.logger.debug({ event: 'memory:scan-memo-hit' })
+      return memo.result
+    }
+    if (typeof createZstdDecompress !== 'function' && !warnedZstd) {
+      warnedZstd = true
+      ctx.logger.warn('memory-consolidation: node:zlib zstd capability missing; dream gates fail closed')
+    }
+    const t0 = Date.now()
+    const result = await scanSessions(sessionsRoot)
+    ctx.logger.debug({ event: 'memory:scan', scanned: result.scanned, unreadable: result.unreadable, ms: Date.now() - t0 })
+    if (result.scanned === 0 && !warnedRoot) {
+      warnedRoot = true
+      ctx.logger.warn(`memory-consolidation: sessions root unreadable or empty at ${sessionsRoot}`)
+    }
+    memo = { at: Date.now(), result }
+    return result
+  }
+
   // Reset the flight state when this plugin fiber is disposed (hygiene / test
   // isolation). cordis `ctx.on` is typed strictly to `keyof Events`, so cleanup
   // is registered as a fiber effect rather than a 'dispose' listener.
@@ -302,12 +176,20 @@ export function apply(ctx: Context, config: Config = {}): void {
     if (config.dreamEnabled ?? true) {
       if (!dreamInFlight) {
         dreamInFlight = true
-        void runDream(ctx, agent, home, provider, minHours, minSessions, pressureCooldownMinutes)
-          .catch(() => {})
+        void runDream(ctx, agent, home, provider, minHours, minSessions, pressureCooldownMinutes, sessionsRoot, scan)
+          .catch((err) => { ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${String(err)}`) })
           .finally(() => { dreamInFlight = false })
       }
     }
   })
+}
+
+/** Memo TTL for the raw session-scan result (plan §3.4). */
+const SCAN_MEMO_MS = 30 * 60_000
+
+/** The agent's workspace cwd: where its memory directory is resolved from. */
+function agentCwd(agent: Agent): string {
+  return agent.session.header.cwd ?? process.cwd()
 }
 
 /**
@@ -334,7 +216,7 @@ const INDEX_TRUNCATED_MARKER = '(index truncated; rely on MEMORY.md in-dir for t
 async function runExtraction(ctx: Context, agent: Agent, home: string, provider: string): Promise<void> {
   // The extraction writes into the turning agent's repository directory —
   // the shared home root holds only explicitly-global memories.
-  const dir = resolveWorkspaceMemoryDir(home, sessionTranscriptDir(agent))
+  const dir = resolveWorkspaceMemoryDir(home, agentCwd(agent))
   // Only model-visible surface events count toward the batch size.
   const surfaceCount = agent.session.snapshotEvents().filter((e) => SURFACE_EVENT_TYPES.has(e.type)).length
   // The index read happens AFTER the in-flight/content gates (runExtraction is
@@ -405,41 +287,63 @@ async function runDream(
   minHours: number,
   minSessions: number,
   pressureCooldownMinutes: number,
+  sessionsRoot: string,
+  scan: () => Promise<SessionScanResult>,
 ): Promise<void> {
   const fs = ctx.get('fs')
   if (fs === undefined) return
-  const dir = resolveWorkspaceMemoryDir(home, sessionTranscriptDir(agent))
+  const dir = resolveWorkspaceMemoryDir(home, agentCwd(agent))
   const now = Date.now()
   const policy = memoryWritePolicy(dir)
   const pressure = await readPressure(fs, dir)
   const lastAt = await readLastConsolidatedAt(fs, dir)
-  const sessionIds = listNewSessions(ctx, lastAt)
+  let hints: readonly string[]
   if (pressure.armedAt > 0) {
     // Pressure mode: an armed marker bypasses the time/session gates. The
     // cooldown is measured from `lastForcedAt` (not `armedAt`) so a tight arm
     // loop of rejecting saves cannot spin dreams faster than the knob;
     // backwards clock skew (negative delta) counts as within-cooldown.
-    if (now - pressure.lastForcedAt < pressureCooldownMinutes * 60_000) return
+    if (now - pressure.lastForcedAt < pressureCooldownMinutes * 60_000) {
+      ctx.logger.debug({ event: 'memory:dream-gates', mode: 'pressure', lastAt, count: 0, minSessions, pass: false, reason: 'cooldown' })
+      return
+    }
     // Stamp BEFORE acquiring the lock: consumes the cooldown slot even if the
     // lock is held or the spawn never happens, making the crash-window spawn
     // storm structurally impossible. Failure keeps the marker with this stamp
     // so the next window retries.
     await markPressureForced(fs, dir, pressure.armedAt, now, policy)
-  } else if (!gatesPass({
-    lastConsolidatedAt: lastAt,
-    now,
-    minHours,
-    sessionCount: sessionIds.length,
-    minSessions,
-  })) {
-    return
+    // Scan AFTER the stamp (plan §3.2/§3.3): a zero scan skips the spawn with
+    // the marker still armed — the lock was never acquired, so there is
+    // nothing to roll back and the next cooldown window retries.
+    const scanResult = await scan()
+    const window = gateWindow(scanResult.sessions, lastAt)
+    ctx.logger.debug({ event: 'memory:dream-gates', mode: 'pressure', lastAt, count: window.count, minSessions, pass: true })
+    if (scanResult.scanned === 0) return
+    hints = window.hints
+  } else {
+    // Periodic: the pure-arithmetic time gate runs FIRST, before any scan I/O;
+    // the session-count gate runs only on the scanned result.
+    if (!timeGatePasses(lastAt, now, minHours)) {
+      ctx.logger.debug({ event: 'memory:dream-gates', mode: 'periodic', lastAt, count: 0, minSessions, pass: false, reason: 'time' })
+      return
+    }
+    const scanResult = await scan()
+    const window = gateWindow(scanResult.sessions, lastAt)
+    const pass = sessionGatePasses(window.count, minSessions)
+    ctx.logger.debug({ event: 'memory:dream-gates', mode: 'periodic', lastAt, count: window.count, minSessions, pass })
+    if (!pass) return
+    hints = window.hints
   }
   const priorAt = await tryAcquireLock(fs, dir, process.pid, now, policy)
-  if (priorAt === null) return
-  const prompt = buildConsolidationPrompt(dir, sessionTranscriptDir(agent), sessionIds)
+  if (priorAt === null) {
+    ctx.logger.warn(`memory-consolidation: consolidation lock held by a live holder in ${dir}`)
+    return
+  }
+  const prompt = buildConsolidationPrompt(dir, sessionsRoot, hints)
   const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
-  void job.settled.then((ok) => {
-    if (!ok) {
+  void job.done.then((outcome) => {
+    ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
+    if (outcome.status !== 'completed') {
       void rollbackLock(fs, dir, priorAt, policy)
       return
     }
@@ -449,40 +353,3 @@ async function runDream(
   })
 }
 
-/** Live sessions are the transcripts available to review; absent sessions skip. */
-function listNewSessions(ctx: Context, lastAt: number): string[] {
-  const sessions = ctx.get('sessions') as SessionsService | undefined
-  if (sessions === undefined) return []
-  return sessions
-    .list()
-    // Subagent sessions (validated delegationDepth > 0) are excluded from both
-    // the min-sessions count and the dream input: their content is already
-    // covered by turn-end extraction. Absent/invalid depth is treated as 0.
-    .filter(session => {
-      const d = session.header?.delegationDepth
-      return !(Number.isSafeInteger(d) && (d as number) > 0)
-    })
-    .map(session => ({ id: session.id, at: sessionStartOf(session) }))
-    .filter(session => session.at > lastAt)
-    .sort((a, b) => a.at - b.at)
-    .map(session => session.id)
-}
-
-/**
- * Session start epoch, defensively read from the header. The dream gate is
- * skip-oriented, so an unreadable or absent timestamp conservatively counts as
- * NEW (over-inclusion only costs a re-read). Accepted limitation: a session
- * created before `lastAt` but still active after it is excluded from the dream
- * input — turn-end extraction covers recent content; dream is a coarse
- * periodic pass.
- */
-function sessionStartOf(session: { header?: { createdAt?: unknown } }): number {
-  const at = session.header?.createdAt
-  return Number.isSafeInteger(at) && (at as number) > 0 ? (at as number) : Number.MAX_SAFE_INTEGER
-}
-
-
-/** The transcript directory is the agent's cwd. */
-function sessionTranscriptDir(agent: Agent): string {
-  return agent.session.header.cwd ?? process.cwd()
-}

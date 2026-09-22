@@ -263,10 +263,12 @@ evidence, not suspicion. (Cold-review minor #10 concurred.)
 | File | Change |
 | --- | --- |
 | `packages/memory/memory-consolidation/src/session-scan.ts` | New module: §3.1 scanner on `node:fs`/`node:zlib`, pure, no cordis. |
+| `packages/memory/memory-consolidation/src/memory-job.ts` | Extracted spawn helper (`startMemoryJob`, job/subagent structural seams, `JobOutcome`, entrypoint fallback) — the 500-line size budget on `index.ts` forced the split; public re-exports preserved. |
 | `packages/memory/memory-consolidation/src/index.ts` | Delete `listNewSessions`/`sessionStartOf`/`sessionTranscriptDir`/`SessionsService`; rewire `runDream` per §3.2–3.4; add `sessionsRoot` config + `SCAN_MEMO_MS`; add §3.5 logging. |
 | `packages/memory/memory-consolidation/src/prompts.ts` | §3.6 prompt revision; parameter renamed `transcriptDir → sessionsRoot`. |
 | `packages/memory/memory-consolidation/tests/session-scan.spec.ts` | New: scanner tests against real tmp dirs and real zstd frames (`zstdCompressSync`) — no fs fake (§5). |
 | `packages/memory/memory-consolidation/tests/turn-stopping.spec.ts` | Replace the `sessions` service mocks with a tmp-dir sessions root; update gate assertions; re-record the prompt golden. The existing in-memory fs fake stays for marker/lock/dir machinery; the sessions root is on real disk (cold-review minor #8: the fake never grows byte-stream support). |
+| `packages/memory/memory-consolidation/tests/prompts.spec.ts` | Phase-4 invariant assertion follows the new no-transcript text. |
 | `docs/plans/2026-09-22-auto-dream-session-scan.md` | This document (status flipped to Implemented at merge). |
 
 No capability-manifest surface change: preset composition, commands, hook

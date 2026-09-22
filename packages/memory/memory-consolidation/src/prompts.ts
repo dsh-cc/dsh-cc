@@ -48,28 +48,29 @@ export function buildExtractionPrompt(
  * Build the <system-reminder> user prompt that reviews past sessions and
  * consolidates them into the memory directory, returned as structured writes.
  * @param memoryDir - the memory directory being rewritten.
- * @param transcriptDir - the directory holding past session transcripts.
- * @param sessionHints - a list of session ids to review.
+ * @param sessionsRoot - the real session store root the hint ids live under.
+ * @param sessionHints - session ids marking the consolidation window (provenance
+ *   hints only; transcripts are zstd-compressed and not readable by the fork).
  * @returns the prompt text.
  */
 export function buildConsolidationPrompt(
   memoryDir: string,
-  transcriptDir: string,
+  sessionsRoot: string,
   sessionHints: readonly string[],
 ): string {
   return [
-    `You are consolidating persistent memory from past sessions. Review the sessions listed below (transcripts in \`${transcriptDir}\`), distill durable facts, and rewrite the memory directory \`${memoryDir}\`.`,
+    `You are consolidating persistent memory from past sessions. Distill durable facts and rewrite the memory directory \`${memoryDir}\`.`,
     'The memory directory contains MEMORY.md (an index of topic files) and topic `.md` files with YAML frontmatter (name, description, type).',
     'Return the complete rewritten file set via the `structured_output` tool as `{ "writes": [{ "path", "content" }] }` — flat `.md` filenames with complete bodies. Only the files you return are written; omitted files stay unchanged on disk.',
     'Work in this order:',
     `1. Orient: list \`${memoryDir}\`, then read ${ENTRYPOINT_NAME} and the topic files it points at — that is your primary review material.`,
     '2. Verify against reality: the fork\'s working directory IS the session\'s workspace. Before keeping any load-bearing fact, check it against the current codebase (paths, commands, behavior) with read/grep/glob. On a contradiction between two memories, fix the wrong side. Delete facts referencing things that no longer exist.',
     '3. Normalize dates: convert every relative date ("yesterday", "last week") to the absolute date it referred to.',
-    `4. Search transcripts narrowly: do NOT exhaustively read the session transcripts in \`${transcriptDir}\` — grep them only for things already suspected important (symbols, paths, error strings surfaced by the memory files).`,
+    `4. Treat the session hints below as provenance only: they mark which sessions the consolidation window covers. The fork cannot read transcripts (zstd) — never attempt to open or grep them.`,
     `5. Prune and index: rewrite ${ENTRYPOINT_NAME} as one line per topic, targeting under 140 lines (an index over 200 lines / 25 KB is rejected host-side, so stay well under). Move detail into topic files, organized by semantic topic, and keep still-true load-bearing facts.`,
     `You may use only: ${MEMORY_AGENT_TOOLS.join(', ')}.`,
     '',
-    'Sessions since the last consolidation:',
+    `Session provenance hints (ids under \`${sessionsRoot}\`):`,
     ...sessionHints.map(id => `- ${id}`),
   ].join('\n')
 }
