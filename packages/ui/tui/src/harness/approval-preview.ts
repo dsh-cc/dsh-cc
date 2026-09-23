@@ -7,7 +7,13 @@
  */
 
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import { canonicalizeHostname, isWebFetchRuleTool, ruleString } from '@dsh-cc/permission-rules'
+import {
+  canonicalizeHostname,
+  contentMatches,
+  isWebFetchRuleTool,
+  parseRuleString,
+  ruleString,
+} from '@dsh-cc/permission-rules'
 import type { ApprovalPreview } from '../store.ts'
 
 /**
@@ -105,75 +111,122 @@ function diffsOf(name: string, args: Record<string, unknown>): readonly { path: 
 }
 
 /**
+ * Result of allow-rule derivation: a persisted rule string, a deliberate
+ * never-persist tool (EnterWorktree — CC v2.1.206 parity, the outside-path ask
+ * must always fire), or a call no safe rule could be derived for.
+ */
+export type AllowRuleResult =
+  | { kind: 'rule'; rule: string }
+  | { kind: 'never-persist' }
+  | { kind: 'underivable' }
+
+/**
+ * The restored call arguments when they parsed as a JSON object (the shape
+ * rule synthesis reads `url` etc. from), else undefined. Attached to the
+ * approval entry at push time so synthesis sees untruncated args while the
+ * display preview stays capped.
+ */
+export function restoredArgsOf(req: ApprovalRequest): Record<string, unknown> | undefined {
+  const restored = argsOf(req)
+  return restored !== undefined && 'args' in restored ? restored.args : undefined
+}
+
+/**
  * Derive the permission rule an "always" answer persists for the approved
  * call. Shell commands get a trailing-space first-word prefix rule
  * (`Bash(npm )` matches `npm install …` but not `npmx …` — the deliberate
- * trailing space replaces the colon-carrying `:*` legacy form, which would
- * otherwise embed the colon in the prefix and never match). Environment
- * variable prefixes (e.g., `FOO=bar`) are stripped before extracting the
- * first word, so `FOO=bar npm install` derives a rule for `npm`, not `FOO=bar`.
- * A WebFetch call derives a `WebFetch(domain:<host>)` rule on the exact host
- * from its `url` argument; every other tool gets a whole-tool rule. Undefined
- * (stay once-only) when nothing usable remains, e.g. a blank command.
+ * trailing space replaces the colon-carrying `:*` legacy form). The stripped
+ * first-word rule is verified to content-match the RAW command; on mismatch
+ * (env prefixes, stripped wrappers) it falls back to a raw prefix — the
+ * original command from offset 0 through the end of the stripped first word
+ * plus a trailing space (`sudo FOO=bar npm x` → `Bash(sudo FOO=bar npm )`) —
+ * which matches by construction. A WebFetch call derives a
+ * `WebFetch(domain:<host>)` rule on the exact host from its UNTRUNCATED `url`
+ * argument (underivable — never a whole-tool persistent fallback — when the
+ * URL is missing or unparseable); every other tool gets a whole-tool rule.
  */
-export function allowRuleOf(toolName: string, preview: ApprovalPreview | undefined): string | undefined {
+export function allowRuleOf(
+  toolName: string,
+  preview: ApprovalPreview | undefined,
+  args?: Record<string, unknown>,
+): AllowRuleResult {
   const name = toolName.trim()
-  if (name === '') return undefined
+  if (name === '') return { kind: 'underivable' }
   // WS-6: EnterWorktree's outside-worktrees-dir ask must ALWAYS fire (CC
   // v2.1.206 parity) — never persist a rule for it, so "don't ask again"
   // cannot suppress later prompts (bypassPermissions is the only bypass).
-  if (name === 'EnterWorktree') return undefined
+  if (name === 'EnterWorktree') return { kind: 'never-persist' }
   if (preview?.kind === 'command') {
     const command = preview.command.trim()
-    if (command === '') return undefined
-    
-    // Strip environment variable prefixes (FOO=bar, FOO=bar BAZ=qux, etc.)
-    // These are assignments that appear before the actual command.
+    if (command === '') return { kind: 'underivable' }
+
+    // Strip leading env assignments (FOO=bar …) and common wrapper prefixes
+    // (sudo/npx/yarn) repeatedly, so the first word of the fully stripped
+    // remainder is the underlying command.
+    const prefixesToStrip = ['sudo ', 'npx ', 'yarn ']
     let remaining = command
     while (true) {
-      const match = remaining.match(/^[A-Z_][A-Z0-9_]*=\S*\s+/)
-      if (!match) break
-      remaining = remaining.slice(match[0].length)
-    }
-    
-    // Handle common command prefixes that should be stripped
-    // sudo: run as root, but rule should match the actual command
-    // npx/yarn: package runners, but rule should match the underlying tool
-    const prefixesToStrip = ['sudo ', 'npx ', 'yarn ']
-    for (const prefix of prefixesToStrip) {
-      if (remaining.startsWith(prefix)) {
-        remaining = remaining.slice(prefix.length)
-        break // Only strip one prefix
+      const env = remaining.match(/^[A-Z_][A-Z0-9_]*=\S*\s+/)
+      if (env !== null) {
+        remaining = remaining.slice(env[0].length)
+        continue
       }
+      const wrapper = prefixesToStrip.find(prefix => remaining.startsWith(prefix))
+      if (wrapper === undefined) break
+      remaining = remaining.slice(wrapper.length)
     }
-    
+
     // For compound commands (&&, ||, ;), only consider the first segment
     // This is a simplification - the rule will match any command starting
     // with the first segment's command, which is the desired behavior.
     const firstSegment = remaining.split(/&&|\|\||;/)[0]?.trim() ?? ''
-    
+
     const firstWord = firstSegment.split(/\s+/)[0] ?? ''
-    if (firstWord === '') return undefined
+    if (firstWord === '') return { kind: 'underivable' }
     // ruleString escapes parens/backslashes so a subshell-opening first word
     // round-trips through parseRuleString.
-    return ruleString(name, `${firstWord} `)
-  }
-  // WebFetch persists a domain rule on the exact host (not `*.host`): the
-  // args preview carries the URL, whose hostname is canonicalized here. An
-  // unparsable payload keeps today's whole-tool rule.
-  if (isWebFetchRuleTool(name) && preview?.kind === 'args') {
+    const strippedRule = ruleString(name, `${firstWord} `)
+    // Verify the stripped rule content-matches the RAW command; the raw
+    // subject is what evaluation matches, so a stripped derivation that no
+    // longer covers the raw command would persist a dead rule.
     try {
-      const parsed: unknown = JSON.parse(preview.json)
-      const url = (parsed as Record<string, unknown>).url
-      if (typeof url === 'string') {
-        const hostname = canonicalizeHostname(url)
-        if (hostname !== undefined) return ruleString('WebFetch', `domain:${hostname}`)
+      const parsed = parseRuleString(strippedRule)
+      if (parsed.matcher !== undefined && contentMatches(parsed.matcher, command)) {
+        return { kind: 'rule', rule: strippedRule }
       }
     } catch {
-      // Malformed JSON or missing url — fall through to the whole-tool rule.
+      // Not parseable — fall through to the raw-prefix fallback.
     }
+    // Raw-prefix fallback: slice the original command from 0 through the end
+    // of the stripped first word (its offset inside the raw command) plus a
+    // trailing space, so the prefix matches the raw command by construction.
+    const stripOffset = command.length - remaining.length
+    const leading = remaining.length - remaining.trimStart().length
+    const end = Math.min(command.length, stripOffset + leading + firstWord.length)
+    // Trailing space only when something follows the first word — a bare
+    // `yarn build` must still match its own prefix rule.
+    const tail = command.slice(end)
+    return { kind: 'rule', rule: ruleString(name, tail === '' ? command.slice(0, end) : `${command.slice(0, end)} `) }
   }
-  return name
+  // WebFetch persists a domain rule on the exact host (not `*.host`) derived
+  // from the untruncated restored args (display args previews are truncated).
+  // An unparsable/missing URL is underivable — no silent whole-tool
+  // broadening of a narrow intent.
+  if (isWebFetchRuleTool(name)) {
+    let url = typeof args?.url === 'string' ? args.url : undefined
+    if (url === undefined && preview?.kind === 'args') {
+      try {
+        const parsed: unknown = JSON.parse(preview.json)
+        const candidate = (parsed as Record<string, unknown>).url
+        if (typeof candidate === 'string') url = candidate
+      } catch {
+        // Malformed JSON — stays underivable.
+      }
+    }
+    const hostname = url === undefined ? undefined : canonicalizeHostname(url)
+    return hostname === undefined ? { kind: 'underivable' } : { kind: 'rule', rule: ruleString('WebFetch', `domain:${hostname}`) }
+  }
+  return { kind: 'rule', rule: name }
 }
 
 /** Whether an error is the settings provider's revision-conflict rejection. */

@@ -482,4 +482,10 @@ export type SettingsProviderLike = {
     user?: unknown
   }[]
   replace(ns: unknown, section: object, expectedRevision?: number): Promise<void>
+  /**
+   * Edit the RAW user file's own section for a namespace (never the merged
+   * section — no higher-layer smearing); `undefined` edit = no write. The
+   * implementation owns optimistic-conflict retry.
+   */
+  editUserSection(ns: unknown, edit: (rawSection: Record<string, unknown>) => Record<string, unknown> | undefined): Promise<void>
 }

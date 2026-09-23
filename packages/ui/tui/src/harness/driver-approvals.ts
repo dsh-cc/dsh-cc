@@ -20,14 +20,14 @@ import {
   typeQuestionText,
 } from '../store.ts'
 import type { ApprovalAnswerKind, SettingsProviderLike } from '../state/driver-types.ts'
-import { PERMISSION_SETTINGS_NAMESPACE } from '@dsh-cc/permission-rules'
+import { PERMISSION_SETTINGS_NAMESPACE, parseRuleSafe, ruleSubsumes } from '@dsh-cc/permission-rules'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import {
   UserQuestionError,
   type AskUserQuestionAnswer,
   type AskUserQuestionRequest,
 } from '@deepseek-ai/dsh-user-questions'
-import { allowRuleOf, isSettingsConflict, payloadOf } from './approval-preview.ts'
+import { allowRuleOf, payloadOf, restoredArgsOf } from './approval-preview.ts'
 import { createModalQueue, type ModalEntry } from './driver-modal.ts'
 import type { DriverApprovalsCtx } from './driver-ctx.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -70,6 +70,7 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
     ownSessions.add(String(rt.current.agent.session.id))
     if (!ownSessions.has(String(req.agent.session.id))) return next()
     const preview = payloadOf(req)
+    const args = restoredArgsOf(req)
     const view: ApprovalView = {
       toolName: req.toolName,
       ...req.reason === undefined ? {} : { reason: req.reason },
@@ -81,6 +82,7 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
         view,
         resolve,
         agent: req.agent,
+        ...args === undefined ? {} : { args },
         ...req.signal === undefined ? {} : { signal: req.signal },
       }
       modal.push(entry)
@@ -93,46 +95,67 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
   })
 
   /**
-   * Persist the allow rule an "always" answer grants: read the `permissions`
-   * namespace descriptor, merge the rule into the raw user section's allow
-   * list (re-attaching every passthrough field — `replace` overwrites the
-   * whole section), and write it back at the observed revision. One retry on
-   * a revision conflict (re-describe, re-merge, replace). Degradations
-   * (provider missing, namespace unregistered, write failure) leave the call
-   * allowed once and say so in a notice — never a crash after the fact.
+   * Persist the allow rule an "always" answer grants by editing the RAW user
+   * `allow` list through the settings provider's `editUserSection` seam (never
+   * a merged describe+replace, which would smear higher-layer rules into the
+   * user file). Write-time hygiene: narrower allow rules the new rule subsumes
+   * are dropped; if an existing entry already subsumes the new rule, nothing
+   * is written. Degradations (rule underivable, provider/seam missing, write
+   * failure) leave the call allowed once and say so in a notice — never a
+   * crash after the fact. The seam owns optimistic-conflict retry internally.
    */
-  async function writeAllowRule(toolName: string, preview: ApprovalPreview | undefined): Promise<void> {
-    const rule = allowRuleOf(toolName, preview)
-    if (rule === undefined) return
+  async function writeAllowRule(
+    toolName: string,
+    preview: ApprovalPreview | undefined,
+    args?: Record<string, unknown>,
+  ): Promise<void> {
+    const derived = allowRuleOf(toolName, preview, args)
+    if (derived.kind === 'never-persist') return
+    if (derived.kind === 'underivable') {
+      rt.showNotice('Could not derive a safe persistent rule — allowed once.')
+      return
+    }
+    const rule = derived.rule
     const settings = rt.ctx.get('settings') as SettingsProviderLike | undefined
-    if (settings === undefined || settings.writable === false || typeof settings.describe !== 'function') {
+    if (settings === undefined || settings.writable === false || typeof settings.editUserSection !== 'function') {
       rt.showNotice('Allowed once only — no writable settings provider is mounted.')
       return
     }
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const descriptor = settings.describe().find(
-        entry => String(entry.ns) === String(PERMISSION_SETTINGS_NAMESPACE),
-      )
-      if (descriptor === undefined) {
-        rt.showNotice('Allowed once only — the "permissions" settings namespace is not mounted.')
-        return
-      }
-      const user = descriptor.user !== null && typeof descriptor.user === 'object'
-        ? descriptor.user as Record<string, unknown>
-        : {}
-      const current = Array.isArray(user.allow) ? [...user.allow as unknown[]] : []
-      const allow = current.includes(rule) ? current : [...current, rule]
-      try {
-        await settings.replace(PERMISSION_SETTINGS_NAMESPACE, { ...user, allow }, descriptor.revision)
-        rt.showNotice(`Always allow: ${rule}`)
-        return
-      } catch (error) {
-        if (attempt === 0 && isSettingsConflict(error)) continue
-        const message = error instanceof Error ? error.message : String(error)
-        rt.showNotice(`Allowed once only — saving the allow rule failed: ${message}`)
-        return
-      }
+    let coveredBy: string | undefined
+    let replaced = 0
+    try {
+      await settings.editUserSection(PERMISSION_SETTINGS_NAMESPACE, rawSection => {
+        coveredBy = undefined
+        replaced = 0
+        const current = Array.isArray(rawSection.allow) ? [...rawSection.allow as unknown[]] : []
+        const newRule = parseRuleSafe(rule, 'allow', 'userSettings')
+        if (newRule === undefined) return undefined
+        for (const entry of current) {
+          if (typeof entry !== 'string') continue
+          const parsed = parseRuleSafe(entry, 'allow', 'userSettings')
+          if (parsed !== undefined && ruleSubsumes(parsed, newRule)) {
+            coveredBy = entry
+            return undefined
+          }
+        }
+        const kept = current.filter(entry => {
+          if (typeof entry !== 'string') return true
+          const parsed = parseRuleSafe(entry, 'allow', 'userSettings')
+          return parsed === undefined || !ruleSubsumes(newRule, parsed)
+        })
+        replaced = current.length - kept.length
+        return { ...rawSection, allow: [...kept, rule] }
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      rt.showNotice(`Allowed once only — saving the allow rule failed: ${message}`)
+      return
     }
+    if (coveredBy !== undefined) {
+      rt.showNotice(`Already covered by ${coveredBy}`)
+      return
+    }
+    rt.showNotice(`Always allow: ${rule}${replaced > 0 ? ` — replaced ${replaced} narrower rules` : ''}`)
   }
 
   /**
@@ -143,9 +166,18 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
    * underivable, permission engine absent) leave the call allowed once and
    * say so in a notice.
    */
-  function addSessionRule(agent: unknown, toolName: string, preview: ApprovalPreview | undefined): void {
-    const rule = allowRuleOf(toolName, preview)
-    if (rule === undefined) return
+  function addSessionRule(
+    agent: unknown,
+    toolName: string,
+    preview: ApprovalPreview | undefined,
+    args?: Record<string, unknown>,
+  ): void {
+    const derived = allowRuleOf(toolName, preview, args)
+    if (derived.kind === 'never-persist') return
+    if (derived.kind === 'underivable') {
+      rt.showNotice('Could not derive a safe persistent rule — allowed once.')
+      return
+    }
     const engine = rt.ctx.get('permissionRules') as
       | { addSessionAllow(agent: Agent, rule: string): void }
       | undefined
@@ -153,8 +185,8 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
       rt.showNotice('Allowed once only — the permission engine is not mounted.')
       return
     }
-    engine.addSessionAllow(agent as Agent, rule)
-    rt.showNotice(`Allowed for this session: ${rule}`)
+    engine.addSessionAllow(agent as Agent, derived.rule)
+    rt.showNotice(`Allowed for this session: ${derived.rule}`)
   }
 
   // --- User questions -------------------------------------------------------
