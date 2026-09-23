@@ -2236,6 +2236,9 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: memory-consolidation" }
       - { type: test, path: packages/memory/memory/tests/save.spec.ts }
       - { type: test, path: packages/memory/memory/tests/team.spec.ts }
+      - { type: test, path: packages/memory/memory/tests/restrict-resilience.spec.ts }
+      - { type: test, path: packages/memory/memory-consolidation/tests/dispatch-resilience.spec.ts }
+      - { type: test, path: packages/memory/memory-consolidation/tests/dream-fork-surface.spec.ts }
     deviation:
       kind: downgrade
       summary: >-
