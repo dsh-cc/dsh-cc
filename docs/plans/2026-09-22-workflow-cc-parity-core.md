@@ -13,7 +13,18 @@ path (the base bundle mounts no invariant rows at all); the meta parser gained
 explicit trailing-comma/comment acceptance and a CC-key-set reconciliation; the
 DoD gained scripted idle-one-wake and receipt-shape assertions. Amendment
 compliance re-review (2026-09-22): all five items verified RESOLVED against the
-code; vacation clean.
+code; vacation clean. Contract re-verification (2026-09-23, against the
+code.claude.com Agent SDK workflow reference and the workflows overview page on
+that date, plus the pinned harness 0.1.5-rc.1 1ef9c1f): the §3.5 launch receipt
+and DoD 2 field list are corrected to CC's documented `WorkflowOutput` (adds
+`taskType: "local_workflow"` and a concrete use for `warning`; omits
+`transcriptDir`, per-run persisted `scriptPath`, and `sessionUrl` with recorded
+deviations; no-start receipts omit `taskId` despite the upstream type declaring
+it required); CC's monorepo `.claude/workflows/` chain loading (v2.1.178),
+built-in workflows, the `wf_` run-id prefix, and the ultracode effort-level side
+effect join the manifest deviation list; §3.4's name-disagreement notice moves
+onto the receipt's `warning` field; stale harness line anchors freshened
+(`:54-74`, `:112-122`, `meta.ts:13-81`, `discovery.ts:39,106`).
 
 ## 1. Problem
 
@@ -30,7 +41,7 @@ dynamic workflows and from what models trained on those docs will try:
   `export const meta = { name, description }`; the harness tool takes `meta` as a
   separate tool parameter and *rejects* a leading `export const meta` with a
   pointed parse error (deepseek-harness
-  `packages/workflow/workflow-worker-thread/src/index.ts:54-77`). A model
+  `packages/workflow/workflow-worker-thread/src/index.ts:54-74`). A model
   following CC documentation fails its first call deterministically.
 - **No saved-workflow sources.** CC resolves `name` against `.claude/workflows/`
   (project) and the per-user workflows directory, and `scriptPath` against the
@@ -44,8 +55,10 @@ dynamic workflows and from what models trained on those docs will try:
 
 ## 2. Current state and gap
 
-**What exists and is reusable without harness changes (all anchors verified
-2026-09-22; harness paths are repo-relative to the deepseek-harness checkout):**
+**What exists and is reusable without harness changes (anchors verified
+2026-09-22, re-verified 2026-09-23 against the CI-pinned harness
+0.1.5-rc.1 = 1ef9c1f; harness paths are repo-relative to the deepseek-harness
+checkout):**
 
 - The workflow engine is a public cordis service: `WorkflowEngine extends Service`
   registered as `ctx.workflowEngine`
@@ -70,7 +83,7 @@ dynamic workflows and from what models trained on those docs will try:
 - Engine configuration (concurrency `min(16, max(1, cores - 2))` auto-resolved,
   `maxTotalAgents` 1000, `maxItemsPerCall` 4096, `syncTimeoutMs` 5000,
   `disposeGraceMs` 5000) lives on the engine plugin row, not on the tool
-  (`workflow-worker-thread/src/index.ts:114-121`); the row is ours to configure.
+  (`workflow-worker-thread/src/index.ts:112-122`); the row is ours to configure.
 - In dsh-cc, both rows already sit inside the preset `delegation` group whose
   isolate map exposes `workflowEngine: true`
   (`packages/preset/cc/agent.cordis.yml` delegation group; engine row
@@ -81,6 +94,10 @@ dynamic workflows and from what models trained on those docs will try:
   PR #31 phantom-wake incident it records), and the background-subagent
   collection machinery (`packages/subagent/task/src/epoch-collector.ts`,
   `suppress-settled.ts`).
+- The `TOOL_WORKFLOW` prompt-section order key is registered once in the shared
+  system-prompt module (`packages/core/system-prompt/src/index.ts:143`,
+  `TOOL_WORKFLOW: 2600`), independent of which tool row mounts the section —
+  disabling the harness tool row cannot unregister the key.
 - Capability-manifest validator rules that constrain the true-up: I3 (`ux: full`
   requires `behavioral: full`), I4 (preset-plane rows need an anchored
   `agent.cordis.yml` evidence line), I7 (alphabetical placement within category).
@@ -136,7 +153,7 @@ structured errors):
 
 | Param | Type | Semantics |
 | --- | --- | --- |
-| `script` | string | Inline workflow script; must begin with a literal `export const meta = {...}` block (see 3.3), body in plain JS with top-level `await`, ending `return <json>`. |
+| `script` | string | Inline workflow script; must begin with a literal `export const meta = {...}` block (see 3.3) unless the transitional `meta` param supplies it, body in plain JS with top-level `await`, ending `return <json>`. |
 | `name` | string | A workflow saved in the project `.claude/workflows/` or the user workflows directory. Resolved to a script (3.4). |
 | `scriptPath` | string | Path to a script file on disk. **Takes precedence over `script` and `name`.** |
 | `args` | unknown | JSON value exposed to the script as the global `args`. |
@@ -144,9 +161,19 @@ structured errors):
 | `title`, `description` | string | Accepted and ignored, mirroring CC (`the script's meta block sets the title`). Present so CC-shaped calls do not hard-fail schema validation. |
 
 At least one of `script`/`name`/`scriptPath` is required; precedence `scriptPath >
-script > name` matches CC documentation verbatim. `resumeFromRunId` is **absent**
+script > name` matches CC documentation verbatim. The legal meta combinations are
+exactly: `script` + inline meta block; `script` + `meta` param and no inline
+block; `name`/`scriptPath` alone (the file carries its own inline meta). A
+`name`/`scriptPath` call with a `meta` param is the both-meta ambiguity error —
+the file's inline meta is always present (§3.4) and wins nothing by dispute.
+`resumeFromRunId` is **absent**
 in this slice — the model-facing description names the sibling slice's owner, and
-the parameter arrives with the journal slice.
+the parameter arrives with the journal slice. Two refusal rules keep off-slice
+calls loud rather than silently ignored: a supplied `resumeFromRunId` is refused
+with a targeted message naming the resume slice (CC documents the parameter, so
+CC-trained models will send it before that slice ships), and any other key
+outside the table is refused the same way the harness adapter refuses unknown
+tool options — a named error, not a schema failure.
 
 ### 3.3 Inline meta extraction
 
@@ -170,13 +197,13 @@ training prior; the engine rejects it, so extraction happens in our tool before
 3. The remaining body (meta statement stripped) is handed to `engine.start`,
    whose own `assertBodyParses` remains the authoritative syntax gate.
 4. Shape validation is delegated to the engine's `validateMeta`
-   (`workflow-worker-thread/src/meta.ts:16-68`): non-empty `name`/`description`,
+   (`workflow-worker-thread/src/meta.ts:13-81`): non-empty `name`/`description`,
    recognized keys only, `phases[]` entries with required `title` and optional
    `detail`/`provider`/`model`. Our extractor does not re-validate shape; it only
    locates and lifts the literal.
 5. Key-set reconciliation: CC documents meta as `{name, description, phases?}`;
    the engine's recognized set `{name, description, whenToUse, phases}`
-   (`meta.ts:19-24`) is a superset, so every CC-documented block that parses also
+   (`meta.ts:19`) is a superset, so every CC-documented block that parses also
    passes engine validation; a key outside the engine's set fails loudly as
    `META_INVALID` naming the key.
 
@@ -190,9 +217,13 @@ one step.
 - User level: the dsh-cc home, `resolveDshHome()` (`$DSH_HOME`, default `~/.dsh`)
   → `<dshHome>/workflows/<name>.js`. This maps CC's per-user location onto the
   established dsh-cc dual-home convention (precedent:
-  `packages/compat/cc-plugin-loader/src/discovery.ts:40,106`). CC's
+  `packages/compat/cc-plugin-loader/src/discovery.ts:39,106`). CC's
   `CLAUDE_CONFIG_DIR` mapping note is recorded in the manifest deviation rather
-  than implemented.
+  than implemented. CC's monorepo chain loading (project workflows load from
+  every `.claude/workflows/` between the working directory and the repository
+  root, closest shadows, since CC v2.1.178) is likewise a recorded deviation:
+  dsh-cc's `.claude` discovery convention is cwd-level, and the chain lookup
+  belongs with a future repo-root discovery seam, not this slice.
 - Resolution order: project shadows user. A miss on both is a structured error
   listing the directories probed.
 - `scriptPath` reads an arbitrary path relative to the session cwd; it is subject
@@ -201,7 +232,11 @@ one step.
 - Saved scripts carry their own inline meta; when `name`/`scriptPath` supplies
   the script, the same 3.3 extraction applies. A saved script whose meta `name`
   disagrees with its file name is accepted (file name governs lookup, meta name
-  governs display), with one `log`-grade warning line in the run start event.
+  governs display), with the disagreement surfaced as the launch receipt's
+  `warning` field — CC documents `warning?` as the non-blocking-heads-up channel
+  (its own example is remote-dispatch git drift); this slice extends it to
+  saved-name disagreement, recorded in the manifest deviation — plus a
+  `log`-grade note on the run-start event.
 - Scripts are plain `.js`; TypeScript syntax is rejected by the engine's parse
   gate, with our error prefix preserved so the model learns the constraint once.
 
@@ -212,12 +247,28 @@ The tool handler performs the synchronous prefix and returns immediately:
 1. Resolve source (3.2/3.4), extract meta (3.3), call `engine.start({script:
    body, meta, args, parent: exec.agent, signal: exec.signal})` — `start` throws
    synchronously on meta/parse failure; we catch and return CC's documented
-   shape `{status: "async_launched", error}` where the run did not start.
+   no-start receipt `{status: "async_launched", error}` (CC documents exactly
+   this contract: "check `error` before treating the run as started"). No
+   `taskId` exists on this path — upstream's `WorkflowOutput` type declares
+   `taskId` required, but no task was registered, so the absence is semantically
+   forced and recorded as a receipt deviation rather than faked with a synthetic
+   id.
 2. On success, register the run under its `runId` (`run.id`) in a session-scoped
    registry along with `{scriptText, meta, args, run, startedAt}`, and return
-   `{status: "async_launched", taskId, runId, workflowName, summary}` where
+   the documented receipt subset `{status: "async_launched", taskId, taskType:
+   "local_workflow", workflowName, runId, summary, warning?}` where
    `taskId === runId` (CC distinguishes the two; harness has a single id — the
-   alias is an honest mapping, recorded as a manifest note).
+   alias is an honest mapping, recorded as a manifest note along with the
+   run-id format delta: CC prefixes `wf_`, harness ids carry their own format),
+   `workflowName` is `meta.name`, `summary` is `meta.description` (CC's
+   "one-line description"), and `warning` is populated by the §3.4
+   name-disagreement path. Omitted with recorded manifest deviations:
+   `transcriptDir` (no per-run transcript-directory surface in this slice),
+   receipt-`scriptPath` (CC persists every run's script to disk and echoes the
+   path; this slice keeps the script in the in-memory registry's `scriptText`,
+   which the same-session resume slice consumes — persistence arrives with the
+   observability slice if a resume handle needs it), and `sessionUrl` (no
+   remote dispatch — `remote_launched` stays a non-goal).
 3. `run.result.then(settle)` is attached immediately. On settle, the registry
    composes the consolidated delivery: status line + returned JSON value
    (truncated at `maxResultChars`, default 50 000, mirroring the harness tool
@@ -238,20 +289,32 @@ The tool handler performs the synchronous prefix and returns immediately:
      construction.
    - **Session idle** — exactly-once wake: one pending completion message whose
      per-runId delivered latch is set *before* enqueue, whose source kind is
-     excluded from recall query construction (the `one-shot-notice.ts` deadlock
-     recipe: drain-on-read, never re-inject), and whose registry entry drops at
-     delivery so no second wake can be composed. This deliberately uses the
+     excluded from recall query construction, and whose registry entry drops at
+     delivery so no second wake can be composed. The shared never-inject rule is
+     the `one-shot-notice.ts` precedent; the latch + drain-on-read inbox WAKE
+     itself is novel mechanism with no repo precedent today, which is why DoD 3
+     gates it end-to-end. This deliberately uses the
      `hasPending` re-open once per run — the passive-notice mistake was the
      *content* (informational, ownerless), not the re-open primitive.
    - Candidate idle-vein APIs, ranked for the implementation spike: (i) the
-     harness background-task completion channel if a seam usable by
-     non-subagent tasks exists (jobs/task-notification surfaces are checked
-     first); (ii) the one-shot pending-inbox append above. If neither survives
-     the spike, the documented degradation (completion surfaces at the next
-     user interaction, never silently dropped) is recorded as a temporary
+     harness background-task completion channel — **checked 2026-09-23 and
+     rejected**: the channel exists (tool-jobs' notice machinery,
+     `tool-jobs/src/index.ts:269-298` — busy owner injected into the next-step
+     inbox, idle owner woken, dedupe counter reset by user input), but it feeds
+     off the jobs REGISTRY, which the cc preset deliberately leaves on the host
+     plane (`agent.cordis.yml` background-jobs comment), so a preset-owned tool
+     cannot depend on it; (ii) the one-shot pending-inbox append above —
+     **selected**, with the re-open primitive already mechanism-pinned by
+     `packages/subagent/task/tests/mechanism-pins.spec.ts` (T2: pending inject
+     re-opens an idle turn). If (ii)'s scripted test (DoD 3) fails in
+     implementation, the documented degradation (completion surfaces at the
+     next user interaction, never silently dropped) is recorded as a temporary
      deviation — the slice does not ship on it.
 5. Cancellation: the registry hooks context disposal to `run.cancel('session
-   ended')` + `run.dispose()` for every in-flight run. `exec.signal` abort is
+   ended')` + `run.dispose()` for every in-flight run. A settle racing disposal
+   composes nothing: once context disposal has begun, the settle handler
+   swallows delivery-composition failure instead of waking a torn-down loop
+   (the `mcpReadyNotice.ts` try/catch-drop precedent). `exec.signal` abort is
    bridged to `run.cancel('parent step aborted')` for the launch-window only
    (after async return, turn abort no longer owns the run — recorded as a
    known v1 gap; cancel-by-user arrives with the observability slice).
@@ -305,7 +368,11 @@ Our package registers the `tool:workflow` section with the same order key
    (concurrency `min(16, max(1, cores - 2))`, total 1000, items per call 4096).
 3. When to use: explicit user request ("use a workflow") or the `ultracode`
    keyword; otherwise ordinary tools. Mirrors CC's opt-in posture; we do not
-   implement input highlighting (see observability slice).
+   implement input highlighting (see observability slice). CC couples
+   `ultracode` to the session effort level ("without modifying the session
+   effort level"); dsh-cc has no session-effort surface coupled to this keyword,
+   so the keyword is honored as an opt-in trigger only, recorded as a manifest
+   deviation.
 4. Source semantics: precedence, save locations (project `.claude/workflows/`
    and the user workflows directory; the model saves with its `write` tool when
    the user asks — no dedicated tooling), and the "never re-paste; edit the file
@@ -324,10 +391,22 @@ Our package registers the `tool:workflow` section with the same order key
   (I3: divergent bars `full`), with the deviation list: execution-mode fixed to
   CC-async here but `resumeFromRunId` pending the resume slice;
   per-user directory mapped to `$DSH_HOME/workflows/` instead of
-  `~/.claude/workflows/`; `taskId === runId` aliasing; one-active-run constraint;
-  no `/workflows` TUI surface in this slice.
+  `~/.claude/workflows/`; monorepo chain loading of every `.claude/workflows/`
+  up to the repository root (CC v2.1.178) not implemented — cwd-level only;
+  CC's built-in workflows absent (`name` cannot resolve them);
+  `taskId === runId` aliasing with harness-format ids (CC prefix `wf_`);
+  receipt omits `transcriptDir`/`scriptPath`/`sessionUrl`, and no-start receipts
+  omit `taskId` though the upstream type declares it required;
+  receipt `warning?` extended to saved-script name disagreement (upstream's
+  documented example class is remote-dispatch git drift);
+  `ultracode`'s upstream session-effort side effect absent (opt-in trigger
+  only); one-active-run constraint; no `/workflows` TUI surface in this slice.
 - evidence: preset anchors `"- id: tool-workflow-cc"` and
   `"- id: workflow-worker-thread"` (I4) plus the new package source.
+- `engine.ralph` keeps its current dimensions unchanged (`recognized: true`,
+  `mounted: true`, `behavioral: full`, `ux: full`, `deviation: none`) and its
+  existing preset anchor `"- id: tool-ralph"` — the tool-ralph row is untouched
+  by this slice; the split only disentangles the conflated row.
 
 `pnpm docs:parity` regenerates matrix/README/json in the same commit; the
 pre-commit and presubmit gates (`check:capabilities`, `check:parity`) must pass.
@@ -373,9 +452,12 @@ a `/workflows` TUI panel with save dialog and cancel keys.
   run under `auto` mode multiplies classifier load, not prompts (classifier lane
   already dedupes); under `ask`-heavy modes the harness behavior is unchanged
   from the shipped tool. Dogfood records the observation either way.
-- *Section-order key.* `TOOL_WORKFLOW` must exist in the harness systemPrompt
-  order registry at runtime; if a future harness line removes it,
-  `getSectionOrder` behavior is verified in the smoke test rather than assumed.
+- *Section-order key.* `TOOL_WORKFLOW` is registered in the harness's shared
+  system-prompt module's order map (harness `system-prompt/src/index.ts:143`,
+  path in the deepseek-harness checkout — dsh-cc has no such package), not by
+  the harness tool row, so disabling that row cannot lose the key — verified
+  statically above. The smoke test remains the runtime belt if a future harness
+  line removes or renames the key.
 
 ## Acceptance (DoD)
 
@@ -385,11 +467,18 @@ a `/workflows` TUI panel with save dialog and cancel keys.
    source precedence matrix; meta extraction (accepted literal forms incl.
    trailing commas and comments, rejected construct classes, both-meta
    ambiguity error, absent-meta refusal text); name resolution shadowing and
-   miss diagnostics; `async_launched` receipt's field list asserted verbatim
-   against CC's documented output shape (`status`, `taskId`, `runId`,
-   `workflowName`, `summary`, `error`) incl. the error-populated no-start case;
-   busy-vein batch delivery never entering the pending inbox; single-active-run
-   refusal; registry dispose cancels in-flight runs; the four durable events
+   miss diagnostics; the `async_launched` success receipt asserted against the
+   §3.5 documented subset — `status`/`taskId`/`taskType`/`workflowName`/
+   `runId`/`summary` populated with the stated derivations (`taskType` constant
+   `"local_workflow"`, `workflowName` from `meta.name`, `summary` from
+   `meta.description`), `transcriptDir`/`scriptPath`/`sessionUrl` absent, and
+   `warning` populated on the saved-script name-disagreement path; the
+   error-populated no-start case (`status` + `error`, `taskId` absent);
+   `resumeFromRunId`/unknown-key targeted refusals;
+   busy-vein batch delivery never entering the pending inbox (asserted through
+   the harness `agent-loop-testkit`'s real AgentLoop with its claim-based
+   pending admission and inbox stub, not the hand-rolled fake session);
+   single-active-run refusal; registry dispose cancels in-flight runs; the four durable events
    with the dsh-cc extension field; prompt-section registration under the order
    key.
 3. Scripted session test (harness testkit): a script whose run outlives a turn
