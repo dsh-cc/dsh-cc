@@ -18,6 +18,8 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { resolveLocalSettingsDir, type LocalRootDeps } from './local-root.ts'
 import { mergeSettingsSection } from './merge.ts'
+import { reassembleTrustedAutoMode } from './trusted-scope.ts'
+import { isAccessDenied, isENOENT, isPlainObject, MAX_PERSIST_ATTEMPTS } from './shared-guards.ts'
 import { coerceEnv, type EnvSettings } from './env.ts'
 import { applyOpsToSection, diffSections, readUserText, writeJsonAtomic } from './persist.ts'
 import { resolveWatchPaths, resolveWatchTuning, startWatchers, type WatchTuning } from './watcher.ts'
@@ -98,27 +100,6 @@ export interface ResolvedSpec {
     remoteSettings: unknown
   }
 }
-
-/** Whether a value is a plain data object (not an array, null, or instance). */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const proto: unknown = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
-}
-
-/** Whether a filesystem error simply means the file is absent. */
-function isENOENT(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
-}
-
-/** Whether a filesystem error is a permission denial (EACCES/EPERM). */
-function isAccessDenied(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException | null)?.code
-  return code === 'EACCES' || code === 'EPERM'
-}
-
-/** Optimistic-retry bound for persist: how many read-check-write rounds before failing loud. */
-const MAX_PERSIST_ATTEMPTS = 5
 
 /**
  * Resolve the runtime spec from plugin config: explicit paths win, otherwise
@@ -427,27 +408,9 @@ export class SettingsCascadeProvider extends SettingsProvider {
         {},
       )
 
-    // D12 trusted scope: the `permissions.autoMode` key is assembled from
-    // TRUSTED layers ONLY — user, flag (--settings file + inline), and policy
-    // (managed: remote/system/user) — skipping project and local, the
-    // repo-carried layers, so a cloned repo can never teach the classifier
-    // its own trust boundary. The trusted subset replicates the normal
-    // in-subset merge order (user → flag → policy) with ordinary merge
-    // semantics; every other `permissions` key keeps the full merge.
-    const permissions = isPlainObject(merged['permissions'])
-      ? merged['permissions'] as Record<string, unknown>
-      : undefined
-    if (permissions !== undefined) {
-      const trusted = [user, flag, policy]
-        .map(layer => (isPlainObject(layer['permissions']) ? layer['permissions']['autoMode'] : undefined))
-        .filter((value): value is Record<string, unknown> => value !== undefined)
-        .reduce<Record<string, unknown>>(
-          (acc, layer) => mergeSettingsSection(acc, { autoMode: layer }),
-          {},
-        )
-      if (trusted['autoMode'] === undefined) delete permissions['autoMode']
-      else permissions['autoMode'] = trusted['autoMode']
-    }
+    // D12 trusted scope: reassemble permissions.autoMode from trusted layers
+    // (user/flag/policy) only — see ./trusted-scope.ts.
+    reassembleTrustedAutoMode(merged, [user, flag, policy])
 
     // CC camelCase top-level keys alias onto kebab namespaces before the env
     // split / publish, so the shadow mirrors exactly what the seam resolves.
