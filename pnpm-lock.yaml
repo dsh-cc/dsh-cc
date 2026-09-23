@@ -1340,6 +1340,9 @@ importers:
       '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../permission-rules
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis

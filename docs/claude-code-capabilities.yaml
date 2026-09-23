@@ -1864,11 +1864,21 @@ capabilities:
     dimensions:
       recognized: true
       mounted: true
-      behavioral: full
+      behavioral:
+        status: full
+        notes: >-
+          dsh-cc extension — `/permissions lint` reports rule-hygiene findings
+          (malformed rules, exact duplicates, prefix-subsumed rules within the
+          same source+behavior, bare whole-tool Bash allows, unknown tool
+          names) grouped by source with a proposed before/after diff;
+          `--apply` cleans the user settings layer only, via the
+          settings-cascade raw user-layer edit seam.
       ux: full
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-permissions" }
       - { type: test, path: packages/interaction/command-permissions/tests/command-permissions.spec.ts }
+      - { type: test, path: packages/interaction/command-permissions/tests/lint.spec.ts }
+      - { type: source, path: packages/interaction/command-permissions/src/lint.ts }
       - { type: test, path: packages/ui/tui/tests/driver-permissions.spec.ts }
     deviation: { kind: none }
 
@@ -2770,6 +2780,7 @@ capabilities:
     evidence:
       - { type: test, path: packages/settings/settings-cascade/tests/watcher.spec.ts, anchor: "hot-reloads an external edit" }
       - { type: test, path: packages/settings/settings-cascade/tests/watcher.spec.ts, anchor: "keeps the last good document" }
+      - { type: test, path: packages/settings/settings-cascade/tests/edit-user-section.spec.ts }
     deviation: { kind: none }
 
   settings.migrations:
@@ -2835,6 +2846,8 @@ capabilities:
       - { type: source, path: packages/interaction/permission-rules/src/auto-stage.ts, anchor: "createAutoStage" }
       - { type: test, path: packages/settings/settings-cascade/tests/auto-mode.spec.ts }
       - { type: test, path: packages/ui/tui/tests/approval-preview.spec.ts }
+      - { type: test, path: packages/interaction/permission-rules/tests/subsumption.spec.ts }
+      - { type: test, path: packages/settings/settings-cascade/tests/edit-user-section.spec.ts }
       - { type: test, path: packages/ui/tui/tests/driver-default-mode.spec.ts, anchor: "createDriver live defaultMode display (F1)" }
       - { type: test, path: packages/interaction/permission-rules/tests/permission-rules.spec.ts, anchor: "defaultMode getter (live merged settings default)" }
     deviation:
@@ -2883,7 +2896,15 @@ capabilities:
         top-level settings namespaces must be kebab-case upstream. Other
         documented CC auto-mode divergences (explicit ask rules still proxied
         to allow in auto; same-source allow-before-deny) remain recorded as
-        unfixed follow-ups — they are not addressed or masked here. Remaining
+        unfixed follow-ups — they are not addressed or masked here. Always-allow
+        grant synthesis is verified-matching: every persisted rule provably
+        matches the call that produced it (env/wrapper-stripped commands fall
+        back to a raw-prefix rule; WebFetch rules derive from untruncated args
+        and never silently broaden to whole-tool), and write-time subsumption
+        dedup plus `/permissions lint` keep the user allow list from
+        accumulating covered rules — all persisted edits go through the
+        settings-cascade raw user-layer seam, so higher-layer rules are never
+        smeared into the user file. Remaining
         vs CC: managed/enterprise remote settings, UI mode cycle; the upstream
         permission/mode catalog pin is an upstream polish.
 
