@@ -16,6 +16,7 @@ import { gitBranchOf } from './shell-output.ts'
 import { runShellCommand as runShellCommandModule } from './driver-bash.ts'
 import { createApprovalsSection } from './driver-approvals.ts'
 import { createCatalogSection } from './driver-catalog.ts'
+import { createWorkflowEventTap } from './workflow-row.ts'
 import type { DriverBashCtx, DriverQueueCtx, PermissionRulesLike } from './driver-ctx.ts'
 import { createModeSection } from './driver-mode.ts'
 import { liveModeWithDefault, liveSessionCwd } from './driver-live.ts'
@@ -236,8 +237,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   }
   emit(setPermissionMode(state, liveModeWithDefault(ctx)(current.agent)))
 
-  // Boot banner: art + status rows before the resume fold (row 0); the
-  // settled seed upserts the label + gated notice (driver-agent continuation).
+  // Boot banner before the resume fold; the settled seed upserts label + notice.
   const modelLabel = selection.current?.model ?? 'default model'
   for (const row of bootBannerRows(modelLabel, cwd)) emit(upsertRow(state, row))
 
@@ -297,11 +297,11 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     getRules: () => ctx.get('permissionRules') as PermissionRulesLike | undefined,
     liveMode: liveModeWithDefault(ctx),
   })
-  // Slash-command catalog + subagent lifecycle listeners.
+  // Slash-command catalog + subagent lifecycle listeners; workflow row tap (D2).
   const catalog = createCatalogSection({ emit, state: () => state, current, ctx })
+  const workflowEvents = createWorkflowEventTap(ctx)
 
-  // Model/effort/permission pickers; resolveEfforts/stalePair/loadCatalog come
-  // from the agent section (they read `llm` off the host ctx).
+  // Model/effort/permission pickers (the resolve* helpers read `llm` off the host ctx).
   const pickers = createPickersSection({
     emit,
     state: () => state,
@@ -486,8 +486,10 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     loadModelCatalog: () => pickers.loadModelCatalog(),
     loadModelEfforts: () => pickers.loadModelEfforts(),
     listCommands: () => catalog.listCommands(),
+    workflowEvents,
     async dispose() {
       statusline.dispose()
+      workflowEvents.dispose()
       runLocalSection.onboarding.dispose()
       if (noticeTimer !== undefined) { clearTimeout(noticeTimer); noticeTimer = undefined }
       approvals.dispose()

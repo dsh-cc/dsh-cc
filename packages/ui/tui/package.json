@@ -70,6 +70,7 @@
     "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
     "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
     "@deepseek-ai/dsh-user-questions": "link:../../../../deepseek-harness/packages/interaction/user-questions",
+    "@deepseek-ai/dsh-workflow": "link:../../../../deepseek-harness/packages/workflow/workflow",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@xterm/headless": "5.5.0"
   },
