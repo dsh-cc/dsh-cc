@@ -27,6 +27,14 @@ export interface AutoModeClassifier {
    * `ask` verdict earns ONE reconsider call; only ask→allow is possible.
    */
   secondPass?: boolean
+  /**
+   * D10/S5 full-text audit (default FALSE, absence-preserving): when true,
+   * `permission/classifier` and `permission/probe` audit events carry the
+   * raw rendered input (≤8192 chars by construction) in addition to the
+   * digest. Off by default: the input may contain command text, including
+   * secrets the agent was about to run.
+   */
+  auditFullText?: boolean
 }
 
 /**
@@ -110,6 +118,8 @@ export const AutoModeClassifierSchema: z<AutoModeClassifier> = z.object({
   // Union with `undefined` keeps an absent `secondPass` key absent (default
   // false at consumption — D13, absence-preserving).
   secondPass: z.union([z.boolean(), z.const(undefined)]),
+  // Same absence-preserving idiom (S5/D10 full-text audit — default false).
+  auditFullText: z.union([z.boolean(), z.const(undefined)]),
 }) as z<AutoModeClassifier>
 
 /**

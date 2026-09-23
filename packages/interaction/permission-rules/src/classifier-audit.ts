@@ -23,6 +23,12 @@ export interface ClassifierAuditEventData {
   tool: string
   /** sha256 of the rendered classifier input (absent on the arming `unarmed` record). */
   digest?: string
+  /**
+   * The full rendered classifier input (≤8192 chars by construction), present
+   * ONLY when `classifier.auditFullText` is on (S5/D10). May contain command
+   * text, including secrets the agent was about to run.
+   */
+  input?: string
   verdict: 'allow' | 'ask' | 'deny'
   /** On `deny`: the exact cited hard_deny rule text (S4/D4/D5). */
   rule?: string

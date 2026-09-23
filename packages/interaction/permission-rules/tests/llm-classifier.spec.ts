@@ -252,7 +252,10 @@ describe('createLlmClassifier', () => {
     expect(v.failure).toBe('malformed')
     expect(v.reason).toBe('classifier output unparseable')
     expect(v.reason).not.toContain('secret-command-xyz')
-    expect(JSON.stringify(v)).not.toContain('secret-command-xyz')
+    // S5: the classification now carries `input` in-process (audited only
+    // when classifier.auditFullText is on) — the model-FACING fields (reason,
+    // verdict) still never echo the input.
+    expect(`${v.verdict} ${v.reason}`).not.toContain('secret-command-xyz')
     expect(echoedPrompt[0]).toContain('secret-command-xyz')
   })
 
@@ -327,7 +330,7 @@ describe('createLlmClassifier', () => {
     expect(a).not.toBe(c)
   })
 
-  it('the returned classification carries the digest, failure, and latency; never the raw input', async () => {
+  it('the returned classification carries the digest, failure, latency, and the rendered input (S5: audited only when auditFullText is on)', async () => {
     const { cls } = make({
       stream: streamFake(['{"verdict":"ask","reason":"r"}']),
     })
@@ -335,7 +338,9 @@ describe('createLlmClassifier', () => {
     expect(v).toMatchObject({ tool: 'Bash', verdict: 'ask', cacheHit: false, latencyMs: expect.any(Number) })
     expect(v.failure).toBeUndefined()
     expect(v.digest).toMatch(/^[0-9a-f]{64}$/)
-    expect(JSON.stringify(v)).not.toContain('git push --force')
+    // S5: the input rides in-process; the audit EVENT stays digest-only
+    // unless classifier.auditFullText is on (pinned in auto-stage.spec.ts).
+    expect(v.input).toContain('git push --force')
   })
 })
 

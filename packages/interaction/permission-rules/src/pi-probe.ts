@@ -48,12 +48,18 @@ export const PROBE_EVENT = 'permission/probe'
 // (same pattern as `permission/classifier`).
 ;(KNOWN_SESSION_EVENT_TYPES as Set<string>).add(PROBE_EVENT)
 
-/** The `permission/probe` payload. The raw probe input NEVER appears — only its digest (D10). */
+/** The `permission/probe` payload. Digest-only unless `classifier.auditFullText` is on (S5/D10). */
 export interface ProbeAuditEventData {
   /** The tool whose result was scanned. */
   tool: string
   /** sha256 of the rendered probe input. */
   digest?: string
+  /**
+   * The windowed probe input, present ONLY when `classifier.auditFullText`
+   * is on (S5/D10). May carry tool-result text — potentially injected or
+   * secret-bearing content.
+   */
+  input?: string
   verdict: 'flag' | 'pass'
   failure?: 'timeout' | 'error' | 'malformed' | 'unarmed' | 'breaker' | 'cancelled' | 'stale-mode'
   /** Sanitized probe reason (≤120 chars, control chars stripped) — flag verdicts only (D8/D10). */
@@ -228,14 +234,19 @@ interface ProbeSlice {
   enabled: boolean
   timeoutMs: number
   toolPatterns: string[] | undefined
+  /** S5/D10: audit the raw probe input when `classifier.auditFullText` is on. */
+  auditFullText: boolean
 }
 
 function readProbeSlice(settings: { autoMode?: AutoModeSettings }): ProbeSlice {
-  const probe = settings.autoMode?.probe
+  const autoMode = settings.autoMode
+  const probe = autoMode?.probe
   return {
     enabled: probe?.enabled !== false,
     timeoutMs: probe?.timeoutMs ?? 5000,
     toolPatterns: probe?.toolPatterns,
+    // S5/D10: the flag lives under `classifier` but gates BOTH event types.
+    auditFullText: autoMode?.classifier?.auditFullText === true,
   }
 }
 
@@ -407,6 +418,9 @@ export function createPiProbe(deps: PiProbeDeps): PiProbe {
         deps.audit(session, {
           tool: exec.name,
           digest,
+          // S5/D10: raw input audited only when the flag is on — the slice is
+          // re-read every scan, so a settings toggle takes effect immediately.
+          ...(slice.auditFullText ? { input } : {}),
           verdict: outcome.injection ? 'flag' : 'pass',
           ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
           ...(outcome.injection ? { reason: sanitizeReason(outcome.reason) } : {}),

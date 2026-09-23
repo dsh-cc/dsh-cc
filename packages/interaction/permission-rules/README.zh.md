@@ -80,6 +80,14 @@ await ctx.plugin(PermissionRules, {
 
 规则解析与评估是浏览器安全的（纯字符串逻辑），因此类型/解析/评估模块可干净地导入 UI 预览。
 
+## 审计事件与隐私
+
+分类器与注入探测阶段会追加持久的 `permission/classifier` / `permission/probe` 会话审计事件。它们**默认只记录摘要**：被审计的输入仅以 sha256 摘要出现（外加 ≤120 字符且已清理的 reason、判定、rule、延迟、缓存/二次判定标记）。
+
+设置 `permissions.autoMode.classifier.auditFullText: true` 后，每个事件还会存储**原始渲染输入**（≤8192 字符）——其中可能包含命令文本，包括代理即将执行的秘密，或工具结果内容。审计日志会相应增长；除非正在排查分类器行为，否则请保持该开关关闭，并在开启期间将会话日志视为敏感数据。该开关可即时切换——下一个被审计的事件即生效，无需重启。
+
+使用 `/auto-mode review [full]`（位于 `@dsh-cc/command-auto-mode`）查看审计：以对齐表格展示最近 20 条分类器/探测判定；`full` 会在 `auditFullText` 开启时打印已存储的输入。
+
 ## Invariant 伴生插件
 
 `@dsh-cc/permission-rules/invariant` 在会话边界校验 `permission/mode` 会话事件：`mode` 必须是可切换的（绝不能是 `plan`），且 `resumeSandbox`——若存在——必须是已知沙箱模式（`read-only` | `workspace-write` | `danger-full-access`）。

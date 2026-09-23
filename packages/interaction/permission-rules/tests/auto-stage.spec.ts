@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@dsh-cc/tools'
 import type { RiskAssessment } from '../src/classifier.ts'
@@ -828,4 +829,51 @@ describe('S3 transcript-aware stage (context bundle, stale-mode, secondPass)', (
     expect(reason).not.toMatch(/[\x00-\x1f\x7f]/)
   })
 
+})
+
+describe('S5 full-text audit (classifier.auditFullText)', () => {
+  function lastAudit(h: Harness): ClassifierAuditEventData {
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, ClassifierAuditEventData]>
+    expect(calls.length).toBeGreaterThan(0)
+    return calls.at(-1)![1]
+  }
+
+  it('default (flag off): audit events stay digest-only — no `input` key', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    const stage = createAutoStage(h.deps)
+    await stage.maybeEscalate(decided(), exec({ session: sessionOf('s5-off') }))
+    const audit = lastAudit(h)
+    expect(audit.digest).toMatch(/^[0-9a-f]{64}$/)
+    expect('input' in audit).toBe(false)
+  })
+
+  it('flag on: the audit event gains the full rendered input; digest = sha256(input)', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true, auditFullText: true } } }
+    const stage = createAutoStage(h.deps)
+    await stage.maybeEscalate(decided(), exec({ session: sessionOf('s5-on'), args: { command: 'ls -la /work' } }))
+    const audit = lastAudit(h)
+    expect(typeof audit.input).toBe('string')
+    expect(audit.input).toContain('ls -la /work')
+    const expectedDigest = createHash('sha256').update(audit.input!).digest('hex')
+    expect(audit.digest).toBe(expectedDigest)
+  })
+
+  it('hot reload: toggling the setting takes effect on the NEXT event without a restart', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true, auditFullText: true } } }
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('s5-toggle')
+    await stage.maybeEscalate(decided(), exec({ session }))
+    expect(typeof lastAudit(h).input).toBe('string')
+    // Flip OFF: next event loses the input — same stage instance, no rebuild() needed.
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    await stage.maybeEscalate(decided(), exec({ session, args: { command: 'pwd' } }))
+    expect('input' in lastAudit(h)).toBe(false)
+    // Flip back ON.
+    h.settings.value = { autoMode: { classifier: { enabled: true, auditFullText: true } } }
+    await stage.maybeEscalate(decided(), exec({ session, args: { command: 'pwd' } }))
+    expect(typeof lastAudit(h).input).toBe('string')
+  })
 })
