@@ -62,7 +62,14 @@ fact + render-latest policy; WorkingLine teardown pinned on the driver
 dispose path in addition to `workflow/end`, and the root.ts slot pinned
 against the 500-line cap — wiring lives in a new
 `packages/ui/tui/src/harness/workflow-row.ts` module). **Design review
-closed — GO.**
+closed — GO.** Code-grounded implementation review (2026-09-23, over the
+landed diff): SHIP-WITH-FIXES — one structural finding applied (mount
+lifetime moved to a process-level, seam-keyed, refcounted adopt/remount
+scheme because the harness registry's layers are scoped by the service's
+construction ctx, not the caller's; see §3.1), two diagnostic fixes applied
+(registry TypeError distinguished from collisions; non-ENOENT directory
+read failures warn instead of vanishing), and the DoD gained the mount
+lifecycle assertions.
 
 ## 1. Problem
 
@@ -222,6 +229,24 @@ and skips the whole mount with one logger line when the seam is absent;
   server-side but are **silently shadowed** in the TUI, because locals never
   enter the harness registry — documented limitation, with the workflow still
   fully reachable via the tool's `name` param (the skip line says so).
+- Mount lifetime is process-level, not fiber-level (added in the
+  code-grounded review round): the harness `CommandRuntime` scopes its
+  layers by the SERVICE's construction ctx, so every registration through
+  the shared seam lands in the GLOBAL layer, while this plugin's apply runs
+  once per session fiber. Naive per-fiber registration would warn-spam on
+  every same-process session switch, and a torn-down fiber's disposers would
+  yank commands a surviving fiber still uses. The implementation therefore
+  keeps one mount per commands-seam instance (WeakMap-keyed): an identical
+  scan adopts the live mount silently, a changed scan remounts (the registry
+  is live — the TUI re-lists on `commands/change`), and teardown is
+  refcounted so only the last holder unregisters. The documented staleness
+  semantics are unchanged: a save mid-session is not listed THIS session,
+  and the next session — same process or not — picks it up. Scan-time
+  shadowing dedupe (project dir wins on a same-named user file) is silent,
+  matching `resolveScriptSource`; the registry-collision skip-warn path is
+  reserved for true external collisions (e.g. a plugin command), and a
+  registry TypeError (normalizeDefinition refusing a definition) warns as an
+  invalid definition, not a collision.
 - Skip/warn surfacing is logger-grade plus self-describing UI, and that is
   deliberate: the "boot tally channel" named in the first draft does not
   exist for this provider (the `ComponentTally` report is the plugin loader's
@@ -386,7 +411,11 @@ TUI.
    path; user free-text passes through verbatim to the composed instruction;
    the `tool:workflow` prompt section carries the new next-session `/<name>`
    clause; the whole mount skips with one logger line when the commands seam
-   is absent.
+   is absent; mount lifecycle: a second fiber with an identical scan adopts
+   silently (no re-registration, no warns), a changed scan remounts (new
+   save picked up), holder teardown is refcounted (first release keeps
+   commands live, last release unregisters, a stale holder cannot yank a
+   remount), and a registry TypeError warns as an invalid definition.
 2. cc-tui tests: event sequence drives row contents (phase transition,
    settle-ratio, end-clears-row); the row's WorkingLine instance is stopped
    (interval gone) after `workflow/end` AND after driver dispose mid-run; two

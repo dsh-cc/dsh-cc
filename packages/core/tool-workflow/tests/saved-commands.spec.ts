@@ -145,8 +145,38 @@ describe('mountSavedWorkflowCommands', () => {
     const names = registered.map(d => d.name).sort()
     expect(names).toEqual(['dup', 'only'])
     expect(registered.find(d => d.name === 'dup')!.description).toBe('project wins')
-    // The user-side `dup` hit the registry collision path: skip-warn, not abort.
-    expect(warns.some(w => w.includes('"/dup"') && w.includes('already registered'))).toBe(true)
+    // The user-side `dup` is silently shadowed at scan time (matching
+    // resolveScriptSource's project-first rule) — no collision warn.
+    expect(warns.some(w => w.includes('"/dup"'))).toBe(false)
+  })
+
+  it('same-process session fibers adopt an identical mount silently and refcount teardown', () => {
+    const root = workspace()
+    writeWorkflow(root, '.claude/workflows', 'audit.js', validBody('audit'))
+    const seam = seamStub()
+    const first = mountScan(root, seam)
+    const second = mountScan(root, seam)
+    // The second fiber registered nothing and warned about nothing.
+    expect(seam.registered.map(d => d.name)).toEqual(['audit'])
+    expect(second.warns).toEqual([])
+    // The first fiber's teardown leaves the command mounted for the second.
+    first.disposers.forEach(d => d())
+    expect(seam.registered.map(d => d.name)).toEqual(['audit'])
+    // The last holder out unregisters.
+    second.disposers.forEach(d => d())
+    expect(seam.registered).toEqual([])
+  })
+
+  it('a changed scan remounts (new save picked up by the next session in the same process)', () => {
+    const root = workspace()
+    writeWorkflow(root, '.claude/workflows', 'audit.js', validBody('audit'))
+    const seam = seamStub()
+    const first = mountScan(root, seam)
+    writeWorkflow(root, '.claude/workflows', 'review.js', validBody('review'))
+    mountScan(root, seam)
+    expect(seam.registered.map(d => d.name).sort()).toEqual(['audit', 'review'])
+    first.disposers.forEach(d => d()) // stale holder release must not yank the remount
+    expect(seam.registered.map(d => d.name).sort()).toEqual(['audit', 'review'])
   })
 
   it('ignores non-.js directory entries', () => {
@@ -200,6 +230,25 @@ describe('mountSavedWorkflowCommands', () => {
     const { registered, warns } = mountScan(root, seam)
     expect(registered.map(d => d.name)).toEqual(['after'])
     expect(warns.some(w => w.includes('"/collide"') && w.includes('already registered') && w.includes('existing registration wins'))).toBe(true)
+  })
+
+  it('a TypeError from the registry warns as an invalid definition, not a collision', () => {
+    const root = workspace()
+    writeWorkflow(root, '.claude/workflows', 'blank.js', validBody('blank'))
+    const base = seamStub()
+    const seam: typeof base = {
+      registered: base.registered,
+      register(definition) {
+        // The harness normalizeDefinition refuses a whitespace-only
+        // description with a TypeError — a definition problem, not a name
+        // collision; the warn must say so.
+        throw new TypeError(`command "${definition.name}" description must not be empty`)
+      },
+    }
+    const { registered, warns } = mountScan(root, seam)
+    expect(registered).toEqual([])
+    expect(warns.some(w => w.includes('"/blank"') && w.includes('invalid command definition'))).toBe(true)
+    expect(warns.some(w => w.includes('already registered'))).toBe(false)
   })
 
   it('disposers unmount the registered commands', () => {
