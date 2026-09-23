@@ -1,6 +1,6 @@
 # Auto-dream dispatch-throw fix: never allow-list the child-scoped structured-output tool
 
-**Status:** **Proposed** — critic cold review round 1 (2026-09-23) applied:
+**Status:** **Implemented** — PR #128 (2026-09-23, open). Review provenance: critic cold review round 1 (2026-09-23) applied:
 prompt vocabulary decoupled from the filter (blocking: the `You may use only:`
 line interpolates the const; spec pins handled deliberately), fail-soft now
 harvests all quoted unknown names, lock narrative corrected (rollback leaves
