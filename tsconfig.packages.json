@@ -116,6 +116,9 @@
       "path": "./packages/subagent/resume-pins"
     },
     {
+      "path": "./packages/subagent/workflow-journal"
+    },
+    {
       "path": "./packages/compaction/compaction-micro"
     },
     {

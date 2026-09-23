@@ -2663,6 +2663,39 @@ importers:
         specifier: workspace:*
         version: link:../../core/tool-search
 
+  packages/subagent/workflow-journal:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-home-paths':
+        specifier: link:../../../../deepseek-harness/packages/util/home-paths
+        version: link:../../../../deepseek-harness/packages/util/home-paths
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
+      '@deepseek-ai/dsh-subagent':
+        specifier: link:../../../../deepseek-harness/packages/subagent/subagent
+        version: link:../../../../deepseek-harness/packages/subagent/subagent
+      '@deepseek-ai/dsh-workflow':
+        specifier: link:../../../../deepseek-harness/packages/workflow/workflow
+        version: link:../../../../deepseek-harness/packages/workflow/workflow
+      '@deepseek-ai/dsh-workflow-worker-thread':
+        specifier: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
+        version: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/tool-workflow':
+        specifier: workspace:^
+        version: link:../../core/tool-workflow
+
   packages/test-support/agent-loop-mock:
     devDependencies:
       '@deepseek-ai/dsh-llm':
