@@ -17,6 +17,7 @@ import {
   MAX_ENTRYPOINT_BYTES,
   truncateEntrypointContent,
 } from '@dsh-cc/memory'
+import { startWithFilterResilience } from '@dsh-cc/memory'
 import { MEMORY_TOOL_FILTER } from './tools.ts'
 
 
@@ -117,12 +118,19 @@ export async function startMemoryJob(
     return { abort: () => {}, settled: Promise.resolve(false), done: Promise.resolve({ status: 'failed', detail: 'jobs/subagents seam unavailable' }) }
   }
   const fs = ctx.get('fs') as FileSystem | undefined
+  // Same logger fallback shape as recall.ts's warnOnce; called bound so the
+  // host logger method keeps its `this`.
+  const hostLogger = (ctx as { logger?: { warn?: (message: string) => void } }).logger
+  const logger = { warn: (message: string): void => {
+    if (typeof hostLogger?.warn === 'function') hostLogger.warn(message)
+    else console.warn(message)
+  } }
   const controller = new AbortController()
   // `subagents.start` is async upstream — awaiting it is what exposes the run's
   // `result` promise. Reading `run.result` on the un-awaited Promise throws
   // "Cannot read properties of undefined (reading 'then')" and poisons the
   // turn-stopping dispatch.
-  const run = await subagents.start(provider, {
+  const run = await startWithFilterResilience(subagents, provider, {
     label,
     signal: controller.signal,
     prompt: [{ type: 'text', text: prompt }],
@@ -134,8 +142,7 @@ export async function startMemoryJob(
     // child resolves to 1 and passes, a grandchild to 2 is rejected.
     maxDepth: 1,
     outputSchema: MEMORY_WRITES_SCHEMA,
-  })
-  // Real job-done wiring: `done` maps the subagent outcome onto the JobHooks
+  }, logger) as { result: Promise<SubagentResultLike> }  // Real job-done wiring: `done` maps the subagent outcome onto the JobHooks
   // contract (must never reject). Aborted → killed (rolls back the dream
   // lock); a non-completed stopReason, a missing/invalid payload, or a
   // write-back failure → failed with detail; a validated, persisted batch →

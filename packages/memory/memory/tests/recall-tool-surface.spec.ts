@@ -100,6 +100,8 @@ describe('memory-recall child tool surface (integration tripwire)', () => {
     })
     const settled = await run.result
     expect(settled.stopReason).toBe('completed')
+    // §5.5: the selector's request filter content is pinned, not just its effect.
+    expect(RECALL_TOOL_FILTER.allow).toEqual(['read'])
 
     expect(adapter.requests).toHaveLength(1)
     const tools = visibleTools(adapter.requests[0]!)

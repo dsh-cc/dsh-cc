@@ -4050,6 +4050,18 @@
         {
           "type": "test",
           "path": "packages/memory/memory/tests/team.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/memory/memory/tests/restrict-resilience.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/memory/memory-consolidation/tests/dispatch-resilience.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/memory/memory-consolidation/tests/dream-fork-surface.spec.ts"
         }
       ],
       "deviation": {

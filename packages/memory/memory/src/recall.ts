@@ -13,6 +13,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { startWithFilterResilience } from './restrict-resilience.ts'
 import { scanMemoryDirectory } from './scan.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 
@@ -128,18 +129,30 @@ export class SubagentMemorySelector implements MemorySelector {
       : ''
     let run
     try {
-      run = await subagents.start(this.providerName, {
-        label: 'memory-recall',
-        signal,
-        prompt: [{ type: 'text', text: `${system}\n\n<user_query>\n${query}\n</user_query>\n\nAvailable memories:\n${manifest}${toolsSection}` }],
-        parent: this.parent,
-        toolFilter: RECALL_TOOL_FILTER,
-        outputSchema: RECALL_FILES_SCHEMA,
-        // Defense-in-depth recursion cap: the pre-step listener already gates
-        // recall to depth-zero agents, so this child never needs to delegate.
-        maxDepth: 1,
-        ...(this.agentOptions !== undefined ? { agentOptions: this.agentOptions } : {}),
-      })
+      run = await startWithFilterResilience(
+        subagents,
+        this.providerName,
+        {
+          label: 'memory-recall',
+          signal,
+          prompt: [{ type: 'text', text: `${system}\n\n<user_query>\n${query}\n</user_query>\n\nAvailable memories:\n${manifest}${toolsSection}` }],
+          parent: this.parent,
+          toolFilter: RECALL_TOOL_FILTER,
+          outputSchema: RECALL_FILES_SCHEMA,
+          // Defense-in-depth recursion cap: the pre-step listener already gates
+          // recall to depth-zero agents, so this child never needs to delegate.
+          maxDepth: 1,
+          ...(this.agentOptions !== undefined ? { agentOptions: this.agentOptions } : {}),
+        },
+        // Same logger fallback shape as warnOnce above.
+        {
+          warn: (message: string): void => {
+            const logger = (this.ctx as { logger?: { warn?: (message: string) => void } }).logger
+            if (typeof logger?.warn === 'function') logger.warn(message)
+            else console.warn(message)
+          },
+        },
+      ) as Awaited<ReturnType<SubagentLike['start']>>
     } catch {
       // Provider absent or services unavailable: best-effort recall skips.
       return []

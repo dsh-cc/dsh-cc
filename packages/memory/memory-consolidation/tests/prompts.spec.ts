@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { MEMORY_AGENT_TOOLS, MEMORY_TOOL_FILTER } from '../src/tools.ts'
+import { MEMORY_AGENT_TOOLS, MEMORY_TOOL_FILTER, DRIVER_INJECTED_TOOL } from '../src/tools.ts'
 import { buildConsolidationPrompt, buildExtractionPrompt } from '../src/prompts.ts'
 
 describe('MEMORY_TOOL_FILTER', () => {
   it('allows only read/search plus the structured-output report tool', () => {
     expect([...MEMORY_AGENT_TOOLS].sort()).toEqual(['glob', 'grep', 'read', 'read_image', 'structured_output'])
-    expect(MEMORY_TOOL_FILTER.allow).toBe(MEMORY_AGENT_TOOLS)
+    // The filter is the prompt vocabulary minus the driver-injected
+    // child-scoped tool (tools.restrict() throws on non-global names).
+    expect(MEMORY_TOOL_FILTER.allow).toEqual(MEMORY_AGENT_TOOLS.filter(name => name !== DRIVER_INJECTED_TOOL))
+    expect(MEMORY_TOOL_FILTER.allow).not.toContain(DRIVER_INJECTED_TOOL)
     // The forks hold no write capability; the plugin writes host-side.
     expect(MEMORY_AGENT_TOOLS).not.toContain('write')
     expect(MEMORY_AGENT_TOOLS).not.toContain('edit')
