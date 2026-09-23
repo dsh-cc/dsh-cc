@@ -29,6 +29,24 @@ export interface AutoModeClassifier {
   secondPass?: boolean
 }
 
+/**
+ * `autoMode.probe` — the input-layer prompt-injection probe (S7). Only
+ * defaults apply when the object itself is present.
+ */
+export interface AutoModeProbe {
+  /** Master switch for the probe (default `true`). */
+  enabled?: boolean
+  /** Model route used for the probe (default `'haiku'`). */
+  route?: string
+  /** Per-call timeout in milliseconds (default `5000`). */
+  timeoutMs?: number
+  /**
+   * Scan-set override (S7/W3): exact tool names or trailing-`*` prefix
+   * patterns; REPLACES the default scan set entirely.
+   */
+  toolPatterns?: string[]
+}
+
 /** The `autoMode` section (delivered as `permissions.autoMode`). */
 export interface AutoMode {
   /**
@@ -56,7 +74,22 @@ export interface AutoMode {
   classifyAllShell?: boolean
   /** LLM risk classifier configuration; absent when the section omits it. */
   classifier?: AutoModeClassifier
+  /** Input-layer PI-probe configuration (S7); absent when the section omits it. */
+  probe?: AutoModeProbe
 }
+
+/**
+ * Schemastery schema for `autoMode.probe` (S7/W3). Same absence-preserving
+ * union idiom as the classifier sub-schema.
+ */
+export const AutoModeProbeSchema: z<AutoModeProbe> = z.object({
+  enabled: z.boolean().default(true),
+  route: z.string().default('haiku'),
+  timeoutMs: z.number().default(5000),
+  // Union with `undefined` keeps an absent `toolPatterns` key absent
+  // (permissive array, no default).
+  toolPatterns: z.union([z.array(z.string()), z.const(undefined)]),
+}) as z<AutoModeProbe>
 
 /**
  * Schemastery schema for `autoMode.classifier`. Defaults apply only when the
@@ -90,6 +123,8 @@ const AutoModeSectionSchema = z.object({
   // Union with `undefined` keeps an absent `classifier` key absent; a present
   // object resolves through AutoModeClassifierSchema (defaults apply there).
   classifier: z.union([AutoModeClassifierSchema, z.const(undefined)]),
+  // Union with `undefined` keeps an absent `probe` key absent (S7).
+  probe: z.union([AutoModeProbeSchema, z.const(undefined)]),
 })
 
 /**
