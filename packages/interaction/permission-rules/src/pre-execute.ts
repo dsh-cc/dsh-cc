@@ -47,6 +47,8 @@ export type PreExecuteHost = {
   onAutoStage(stage: AutoStage): void
   /** Hands the built PI probe back to the service (rebuilt on reload). */
   onPiProbe(probe: PiProbe): void
+  /** S4/D5 trip action: downgrade the session to default with the notice. */
+  pauseAuto(exec: ToolExecution, notice: string): void
 }
 
 /**
@@ -139,6 +141,9 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
         else resolve(stdout)
       })
     }),
+    // S4/D5 trip action: honest provenance notice + auto → default downgrade
+    // (host wires setMode; manual re-entry resets the counters).
+    pauseAuto: (exec, notice) => host.pauseAuto(exec, notice),
   })
   host.onAutoStage(autoStage)
 
@@ -198,7 +203,17 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     // the PRE-mapping DecidedCall, exactly as before.
     const escalated = await autoStage.maybeEscalate(decided, exec)
     if (escalated !== undefined) {
-      return escalated === 'allow' ? { kind: 'allow' } : { kind: 'ask', reason: escalated.reason }
+      if (escalated === 'allow') return { kind: 'allow' }
+      // S4/D6 deny-and-continue: a stage hard deny rides the existing
+      // deny→error-tool-result delivery (the turn continues) wrapped with a
+      // good-faith boundary instruction — nothing is halted.
+      if (escalated.kind === 'deny') {
+        return {
+          kind: 'deny',
+          reason: `Blocked by auto mode (hard rule: ${escalated.rule}): ${escalated.reason}. Treat this boundary in good faith: find a safer approach consistent with the user's actual request; do not try to route around this block.`,
+        }
+      }
+      return { kind: 'ask', reason: escalated.reason }
     }
     // The ONE shared post-waterfall mapping (D2/D3) — the decide.ts function,
     // not a duplicated inline proxy (the old LOW+ask→allow proxy is deleted).

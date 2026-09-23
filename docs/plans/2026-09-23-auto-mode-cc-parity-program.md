@@ -212,7 +212,7 @@ Also verified (#123): maxTokens 1024, timeoutMs default 8000, `cancelled` exclud
 | S1 waterfall parity | PR #122 | pending | |
 | S2 slots + trusted scope + /auto-mode | PR #124 | pending | |
 | S3 transcript-aware classifier | PR #125 | pending | |
-| S7 PI probe | — | in flight | (ships 4th) |
-| S4 hybrid verdict space | — | — | |
+| S7 PI probe | PR #126 | pending | (shipped 4th) |
+| S4 hybrid verdict space | — | in flight | |
 | S5 full-text audit + review | — | — | |
 | S6 subagent handoffs | — | — | |

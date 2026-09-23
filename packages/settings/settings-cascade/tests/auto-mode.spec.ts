@@ -22,6 +22,10 @@ describe('AutoModeSchema', () => {
     // classifyAllShell is absence-preserving: absent stays absent.
     expect(parse({ classifyAllShell: true })).toEqual({ classifyAllShell: true })
     expect(parse({ soft_deny: ['a'] })).toEqual({ soft_deny: ['a'] })
+    // S4: hard_deny is absence-preserving (permissive array, no default).
+    expect(parse({})).toEqual({})
+    expect(parse({ hard_deny: ['never do X'] })).toEqual({ hard_deny: ['never do X'] })
+    expect(() => parse({ hard_deny: 'never do X' })).toThrow()
     expect(parse({ classifier: {} })).toEqual({
       classifier: { enabled: false, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 },
     })

@@ -69,6 +69,7 @@ function harness(overrides: Partial<Harness> = {}): Harness {
     // A16 stale-mode: the harness pins mode at `auto` unless a test overrides modeOf.
     modeOf: () => 'auto',
     readOnlyTools: new Set<string>(),
+    pauseAuto: () => {},
   } as AutoStageDeps
   return h
 }
@@ -362,7 +363,8 @@ describe('F2 read-only exemption', () => {
     await stage.maybeEscalate(decided(), exec({ session, args: { command: 'secret-echo-token' } }))
     const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, Record<string, unknown>]>
     expect(calls).toHaveLength(1)
-    expect(Object.keys(calls[0]![1]).sort()).toEqual(['cacheHit', 'digest', 'latencyMs', 'model', 'provider', 'reason', 'route', 'tool', 'verdict'])
+    // S4/D5: `callId` (and `rule` on deny) join the digest-only shape.
+    expect(Object.keys(calls[0]![1]).sort()).toEqual(['cacheHit', 'callId', 'digest', 'latencyMs', 'model', 'provider', 'reason', 'route', 'tool', 'verdict'])
     expect(JSON.stringify(calls[0]![1])).not.toContain('secret-echo-token')
   })
 })

@@ -2896,6 +2896,11 @@ capabilities:
       - { type: source, path: packages/interaction/permission-rules/src/pi-probe.ts, anchor: "createPiProbe" }
       - { type: test, path: packages/interaction/permission-rules/tests/pi-probe.spec.ts }
       - { type: test, path: packages/interaction/permission-rules/tests/listener-pi-probe.spec.ts }
+      - { type: source, path: packages/interaction/permission-rules/src/slots.ts, anchor: "DEFAULT_HARD_DENY" }
+      - { type: test, path: packages/interaction/permission-rules/tests/hybrid-deny.spec.ts, anchor: "parseVerdict citation contract (D4)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/hybrid-deny.spec.ts, anchor: "foldDenyBackstop (D5/A2/A16)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/hybrid-deny.spec.ts, anchor: "auto-stage deny outcome + backstop trip (W4)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S4 hybrid verdict space (listener delivery + trip)" }
     deviation:
       kind: downgrade
       summary: >-
@@ -3050,7 +3055,41 @@ capabilities:
         session audit events
         (registered type) are digest-only (sha256 of the probe input); raw
         full-input auditing arrives with the S5 `auditFullText` flag for
-        both event types. Remaining
+        both event types. Hybrid verdict space slice (2026-09-23, S4/D4):
+        `permissions.autoMode` gains `hard_deny` (absence-preserving snake_case
+        slot, `$defaults`-expanded at consumption; the built-in list holds the
+        two UNCONDITIONAL rules — credential exfiltration and
+        permission-system tampering/audit falsification — while the
+        intent-dependent data-destruction rule stays a soft_deny, A10), and
+        the classifier verdict space gains `deny`: the system prompt teaches
+        evaluation order hard_deny → soft_deny → allow exceptions, with allow
+        exceptions NEVER softening a hard-deny match, and a `deny` verdict
+        REQUIRES a `rule` field citing the exact matched hard-deny rule text —
+        `parseVerdict` structurally enforces the citation (an uncited,
+        non-matching, or near-miss deny — trailing whitespace, unicode quotes,
+        case variance — DOWNGRADES to `ask` with the downgrade recorded in the
+        reason, never upgraded to `allow`), and the verdict cache key digests
+        the hard_deny list so a mutated slot set never replays a deny. A
+        `deny` never earns a reconsider pass (secondPass is ask-only). The
+        stage outcome `{kind:'deny', reason, rule}` rides the existing
+        deny→error-tool-result delivery wrapped with a good-faith boundary
+        instruction (D6 — the turn continues; nothing halts), and the audit
+        event carries the deny verdict, the cited `rule`, and the registry
+        `callId`. Backstop (D5/A2/A16): per-session consecutive (3) and total
+        (20) deny counters are folded seed-once from the durable
+        `permission/classifier` log plus in-process records — the consecutive
+        streak is reset ONLY by a REAL non-deny verdict
+        (`failure === undefined`); synthetic `unarmed`/`breaker`/`stale-mode`
+        records never reset it, and the fold window starts after the most
+        recent `failure: 'trip'` marker. Crossing a threshold trips ONCE per
+        window: one `trip` audit marker, then auto mode is PAUSED with a
+        parameterized notice carrying honest provenance ("Auto mode paused:
+        the permission classifier's denial threshold was reached…", never the
+        "changed by the user" template) and the session downgrades to
+        `default`. Recorded deviation vs CC: no automatic resume after
+        approval — re-entry is manual (`/permissions auto`), and the counters
+        restart from zero on re-entry (the fold re-windows past the trip
+        marker). Remaining
         vs CC: managed/enterprise remote settings, UI mode cycle; the upstream
         permission/mode catalog pin is an upstream polish.
 
