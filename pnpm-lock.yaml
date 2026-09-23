@@ -1053,6 +1053,34 @@ importers:
         specifier: workspace:^
         version: link:../../subagent/resume-pins
 
+  packages/interaction/command-auto-mode:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
+      '@dsh-cc/permission-rules':
+        specifier: workspace:^
+        version: link:../permission-rules
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: link:../../../../deepseek-harness/vendor/loader
+        version: link:../../../../deepseek-harness/vendor/loader
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+
   packages/interaction/command-branch:
     dependencies:
       '@dsh-cc/command-usage':
@@ -2067,6 +2095,9 @@ importers:
       '@dsh-cc/command-agents':
         specifier: workspace:^
         version: link:../../interaction/command-agents
+      '@dsh-cc/command-auto-mode':
+        specifier: workspace:^
+        version: link:../../interaction/command-auto-mode
       '@dsh-cc/command-branch':
         specifier: workspace:^
         version: link:../../interaction/command-branch

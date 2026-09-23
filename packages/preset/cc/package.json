@@ -21,6 +21,7 @@
   "dependencies": {
     "@dsh-cc/bundle-shell": "workspace:^",
     "@dsh-cc/command-agents": "workspace:^",
+    "@dsh-cc/command-auto-mode": "workspace:^",
     "@dsh-cc/command-branch": "workspace:^",
     "@dsh-cc/command-compact": "workspace:^",
     "@dsh-cc/command-config": "workspace:^",

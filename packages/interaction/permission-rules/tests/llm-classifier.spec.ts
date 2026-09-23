@@ -24,6 +24,8 @@ function make(overrides: Partial<Parameters<typeof createLlmClassifier>[0]> = {}
   const deps = {
     stream: streamFake(['{"verdict":"allow","reason":"benign"}'], calls),
     softDeny: DEFAULT_SOFT_DENY,
+    allowExceptions: [] as string[],
+    environment: [] as string[],
     timeoutMs: 5_000,
     cacheMaxEntries: 256,
     ...overrides,

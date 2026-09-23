@@ -209,8 +209,8 @@ Also verified (#123): maxTokens 1024, timeoutMs default 8000, `cancelled` exclud
 
 | Slice | PR | Merged | Notes |
 | --- | --- | --- | --- |
-| S1 waterfall parity | — | — | |
-| S2 slots + trusted scope + /auto-mode | — | — | |
+| S1 waterfall parity | PR #122 | pending | |
+| S2 slots + trusted scope + /auto-mode |  | in flight | |
 | S3 transcript-aware classifier | — | — | |
 | S7 PI probe | — | — | (ships 4th) |
 | S4 hybrid verdict space | — | — | |

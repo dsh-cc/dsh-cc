@@ -17,6 +17,7 @@ import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { createLlmClassifier, expandSoftDeny, type ClassifierRoute, type LlmClassifier } from './llm-classifier.ts'
+import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, expandSlot } from './slots.ts'
 import type { DecidedCall } from './decide.ts'
 
 /** `permissions.autoMode.classifier` — the plugin-local hand-mirror of the shared AutoModeClassifierSchema. */
@@ -39,6 +40,17 @@ export interface AutoModeSettings {
    * expands it.
    */
   soft_deny?: string[]
+  /**
+   * Allow-exception prose evaluated after the soft-deny rules (S2), in CC's
+   * snake_case spelling. `$defaults` expansion happens at consumption time —
+   * the schema never expands it.
+   */
+  allow?: string[]
+  /**
+   * Environment trust-boundary prose (S2): what the classifier treats as
+   * in-scope. `$defaults` expansion happens at consumption time.
+   */
+  environment?: string[]
   /**
    * Suspend EVERY bash and PowerShell allow rule (whole-tool and content)
    * in `auto` mode — the hard override on the otherwise best-effort
@@ -150,6 +162,8 @@ export type AutoStage = {
 /** The autoMode settings slice, normalized for comparison and consumption. */
 interface AutoModeSlice {
   softDeny: string[]
+  allowExceptions: string[]
+  environment: string[]
   route: string
   timeoutMs: number
   cacheMaxEntries: number
@@ -161,13 +175,17 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
   const autoMode = settings.autoMode
   const classifier = autoMode?.classifier
   const softDeny = expandSoftDeny(autoMode?.soft_deny ?? ['$defaults'])
+  const allowExceptions = expandSlot(autoMode?.allow ?? ['$defaults'], DEFAULT_ALLOW_EXCEPTIONS)
+  const environment = expandSlot(autoMode?.environment ?? ['$defaults'], DEFAULT_ENVIRONMENT)
   return {
     softDeny,
+    allowExceptions,
+    environment,
     route: classifier?.route ?? 'haiku',
     timeoutMs: classifier?.timeoutMs ?? 8000,
     cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
     enabled: classifier?.enabled === true,
-    raw: JSON.stringify([autoMode?.soft_deny, classifier]),
+    raw: JSON.stringify([autoMode?.soft_deny, autoMode?.allow, autoMode?.environment, classifier]),
   }
 }
 
@@ -233,6 +251,8 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
         return stream(opts)
       },
       softDeny: slice.softDeny,
+      allowExceptions: slice.allowExceptions,
+      environment: slice.environment,
       timeoutMs: slice.timeoutMs,
       cacheMaxEntries: slice.cacheMaxEntries,
       ...(deps.debug === undefined ? {} : { debug: deps.debug }),

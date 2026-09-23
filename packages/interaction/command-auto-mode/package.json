@@ -1,0 +1,51 @@
+{
+  "name": "@dsh-cc/command-auto-mode",
+  "description": "Human-facing /auto-mode command: show the built-in classifier slot defaults and the effective trusted-scoped autoMode configuration",
+  "version": "0.8.0-rc.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/interaction/command-auto-mode"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./sanitize": {
+      "types": "./lib/sanitize.d.ts",
+      "default": "./lib/sanitize.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "bundle": "tsdown"
+  },
+  "dependencies": {
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/permission-rules": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-commands": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.1.5-rc.1",
+    "@deepseek-ai/schemastery": ">=0.1.5-rc.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
