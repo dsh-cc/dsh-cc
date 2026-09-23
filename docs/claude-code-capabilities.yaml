@@ -1041,10 +1041,14 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-workflow-cc" }
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: workflow-worker-thread" }
       - { type: source, path: packages/core/tool-workflow/src/index.ts }
+      - { type: source, path: packages/subagent/workflow-journal/src/index.ts }
+      - { type: source, path: packages/subagent/workflow-journal/tests/spike.spec.ts }
     deviation:
       kind: divergent
       summary: >-
-        `resumeFromRunId` pending the resume slice; per-user directory mapped to
+        Same-session replay (`resumeFromRunId`) implemented via the
+        `cc-workflow-journal` provider — frozen-until-first-miss over the
+        per-run result journal. Residual: per-user directory mapped to
         `$DSH_HOME/workflows/` (not `~/.claude/workflows/`); monorepo chain
         loading of every `.claude/workflows/` up to the repo root (CC v2.1.178)
         not implemented — cwd-level only; CC built-in workflows absent;
@@ -1053,7 +1057,14 @@ capabilities:
         receipts omit `taskId`; receipt `warning?` extended to saved-script
         name disagreement; `ultracode`'s upstream session-effort side effect
         absent (opt-in trigger only); one-active-run constraint; no
-        `/workflows` TUI surface in this slice.
+        `/workflows` TUI surface in this slice. Residual footnotes:
+        cross-session (and `claude --resume`-class) replay remains
+        unimplemented; the cache key is the request triple
+        (prompt + outputSchema + agentOptions), intentionally stricter than
+        CC's prompt-only keying; durable descriptors and the subagent
+        lifecycle identity name the provider `cc-workflow-journal`; the
+        durable agent-start/agent-end records gain an additive
+        `cached: boolean` field.
 
   # ── hooks ───────────────────────────────────────────────────────────────
   # One row per upstream event (spec §6; Context7 hooks baseline 2026-09-03).

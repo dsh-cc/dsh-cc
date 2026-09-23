@@ -2193,6 +2193,9 @@ importers:
       '@dsh-cc/tool-workflow':
         specifier: workspace:^
         version: link:../../core/tool-workflow
+      '@dsh-cc/workflow-journal':
+        specifier: workspace:^
+        version: link:../../subagent/workflow-journal
     devDependencies:
       '@deepseek-ai/cordis-plugin-include':
         specifier: link:../../../../deepseek-harness/vendor/include

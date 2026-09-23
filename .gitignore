@@ -164,3 +164,7 @@ packages/**/src/*.d.ts.map
 
 # scripts/lib/ contains source, not build output
 !scripts/lib/
+
+# Test-suite scratch dirs (workflow-journal/tool-workflow suites seed temp
+# journals here relative to the run cwd; regenerated on every run)
+.scratch/
