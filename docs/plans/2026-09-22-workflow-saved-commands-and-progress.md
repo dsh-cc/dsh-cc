@@ -306,8 +306,12 @@ Minimal, non-blocking, and strictly passive:
 - No interactivity in this slice: no cancel key, no expansion, no `/workflows`
   panel. Cancellation remains out of scope (core slice §3.5 records the gap);
   adding keys is a separate slice once pause/cancel semantics exist end-to-end.
-- Absence is total: profiles without the workflow engine enabled subscribe to
-  nothing and allocate no row.
+- Absence is total in observable behavior: profiles without the workflow
+  engine enabled allocate no row and no interval. The subscription itself is
+  unconditional (the driver-catalog posture — subscribing does not require
+  the service to exist, and a presence gate would miss late-mounted engines,
+  the documented ccPlugins race); without the engine no `workflow/*` event
+  ever fires, so the row never starts.
 
 ### 3.3 Manifest and gates
 
