@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../tools"
+    },
+    {
+      "path": "../../interaction/command-usage"
     }
   ]
 }

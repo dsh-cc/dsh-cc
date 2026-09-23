@@ -18,6 +18,7 @@ import type { WorkflowEngine } from '@deepseek-ai/dsh-workflow'
 import { startWorkflowRun, unknownKeyRefusal, BOTH_META_REFUSAL, META_FORM_PLACEHOLDER } from './launch.ts'
 import type { WorkflowLaunchReceipt, WorkflowToolParams } from './launch.ts'
 import { mountCcWorkflowRunRegistry } from './registry.ts'
+import { mountSavedWorkflowCommands } from './commands.ts'
 
 export const name = 'tool-workflow'
 export const inject = ['tools', 'workflowEngine', 'systemPrompt']
@@ -26,6 +27,8 @@ export { CcWorkflowRunRegistry, mountCcWorkflowRunRegistry } from './registry.ts
 export { startWorkflowRun, resolveScriptSource, unknownKeyRefusal, BOTH_META_REFUSAL } from './launch.ts'
 export type { WorkflowLaunchReceipt, WorkflowToolParams } from './launch.ts'
 export { extractInlineMeta, META_FORM } from './meta-extract.ts'
+export { mountSavedWorkflowCommands, metaShapeViolations } from './commands.ts'
+export type { CommandsSeamLike, SavedWorkflowCommandDefinition, SavedWorkflowCommandInvocation, SavedCommandResult } from './commands.ts'
 export { parseJournal, serializeJournalLine } from './journal-lines.ts'
 export type { JournalLine } from './journal-lines.ts'
 export type { PendingWorkflowClaim, WorkflowJournalHandle } from './registry.ts'
@@ -68,7 +71,7 @@ function promptSectionText(toolName: string): string {
 
 Use a workflow ONLY when the user explicitly asks for a workflow or for large multi-agent orchestration, or when the user says "ultracode" (an opt-in trigger only; it does not change any session effort level). Otherwise use ordinary tools: for one or two delegations, prefer plain subagent calls.
 
-Sources: pass \`script\` inline, or \`name\` for a workflow saved at \`.claude/workflows/<name>.js\` (project; shadows the user workflows directory), or \`scriptPath\` for any script path (highest precedence). When the user asks to save or iterate on a workflow, write the file with your write tool and call with \`name\`/\`scriptPath\` — never re-paste a large script into the call; edit the file and pass \`scriptPath\`.
+Sources: pass \`script\` inline, or \`name\` for a workflow saved at \`.claude/workflows/<name>.js\` (project; shadows the user workflows directory), or \`scriptPath\` for any script path (highest precedence). When the user asks to save or iterate on a workflow, write the file with your write tool and call with \`name\`/\`scriptPath\` — never re-paste a large script into the call; edit the file and pass \`scriptPath\`. A workflow you save on the user's behalf becomes invocable as \`/<name>\` in their NEXT session (in this session, run it by passing \`name\` to the tool).
 
 The call returns immediately with a launch receipt. The consolidated result arrives by itself as one message when the run completes: do not poll, do not re-invoke, just continue or wait. \`resumeFromRunId\` replays a same-session run: unchanged prefix returns saved results; the first changed or failed agent and everything after it re-runs.`
 }
@@ -102,6 +105,17 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   const toolName = resolved.toolName ?? 'workflow'
   const maxResultChars = resolved.maxResultChars ?? 50_000
   const disposeRegistry = mountCcWorkflowRunRegistry(ctx)
+  // Session-start scan mounting saved workflows as `/<name>` commands (plan
+  // §3.1). Scan cwd pinned to process.cwd(): no agent/session exists at apply
+  // time, and the only apply-time directory-scan precedent uses process.cwd()
+  // (ccPluginManager.ts:43). The tool's `name` resolution instead uses
+  // `exec.agent.session.header.cwd ?? process.cwd()` at launch (launch.ts), so
+  // in a session whose header cwd differs from the process cwd (API/headless
+  // compositions; a resumed session started elsewhere) the mounted `/<name>`
+  // set can diverge from what the tool resolves — a recorded deviation (plan
+  // §3.1); a miss surfaces the tool's "probed <dirs>" error, with `scriptPath`
+  // as the escape hatch.
+  const disposeCommands = mountSavedWorkflowCommands(ctx, process.cwd())
   const registry = ctx.ccWorkflowRunRegistry
   const logger = ctx.logger
 
@@ -167,6 +181,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     presentResult: (args, result) => presentWorkflowResult(args as WorkflowToolParams, result),
   }))
 
-  // Context disposal cancels in-flight runs and disarms settle delivery.
-  return disposeRegistry
+  // Context disposal cancels in-flight runs and disarms settle delivery, and
+  // unmounts the session-start `/<name>` command mounts (effect-scoped, plan §3.1).
+  return () => {
+    for (const disposeCommand of disposeCommands) disposeCommand()
+    disposeRegistry()
+  }
 }
