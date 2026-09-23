@@ -66,6 +66,7 @@
     "@dsh-cc/tool-sleep": "workspace:^",
     "@dsh-cc/tool-structured-output": "workspace:^",
     "@dsh-cc/tool-web-fetch": "workspace:^",
+    "@dsh-cc/tool-workflow": "workspace:^",
     "@dsh-cc/handoff-store": "workspace:^",
     "@dsh-cc/tool-use-summary": "workspace:^",
     "@dsh-cc/prompt-suggest": "workspace:^",

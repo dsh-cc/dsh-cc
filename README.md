@@ -94,7 +94,7 @@ Install them inside a session:
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 19 | 4 | 2 |
+| Engine subsystems | 11 | 20 | 4 | 2 |
 | Hook events | 12 | 5 | 4 | 0 |
 | Command surface | 21 | 7 | 1 | 2 |
 | Sessions and context | 0 | 1 | 1 | 0 |
@@ -109,7 +109,7 @@ Install them inside a session:
 | Workspace | 0 | 4 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
-Statuses were verified against upstream documentation retrieved as of 2026-09-15 (freshness threshold: 120 days).
+Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->

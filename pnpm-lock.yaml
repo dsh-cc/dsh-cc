@@ -2190,6 +2190,9 @@ importers:
       '@dsh-cc/tool-web-fetch':
         specifier: workspace:^
         version: link:../../core/tool-web-fetch
+      '@dsh-cc/tool-workflow':
+        specifier: workspace:^
+        version: link:../../core/tool-workflow
     devDependencies:
       '@deepseek-ai/cordis-plugin-include':
         specifier: link:../../../../deepseek-harness/vendor/include

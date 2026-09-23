@@ -208,6 +208,9 @@
   group: true
   isolate:
     workflowEngine: true
+    # @dsh-cc/tool-workflow publishes its run registry as a preset service; a
+    # preset service must sit behind this realm (smoke:profile-boot enforces).
+    ccWorkflowRunRegistry: true
   config:
     - id: tool-subagent-control
       name: '@deepseek-ai/dsh-tool-subagent-control'
@@ -258,8 +261,15 @@
       config:
         provider: spawn
 
-    - id: tool-workflow
+    # Harness adapter row superseded by @dsh-cc/tool-workflow: both register the
+    # `workflow` tool name, and the harness `tools` registry throws
+    # "already registered" on duplicates, so the harness row must stay disabled.
+    - id: tool-workflow          # harness adapter; superseded by @dsh-cc/tool-workflow
       name: '@deepseek-ai/dsh-tool-workflow'
+      disabled: true
+
+    - id: tool-workflow-cc
+      name: '@dsh-cc/tool-workflow'
 
     - id: tool-ralph
       name: '@deepseek-ai/dsh-tool-ralph'
