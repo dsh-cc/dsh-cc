@@ -6,9 +6,7 @@
  * resolution layers schema defaults, the registrant `base`, and this user
  * layer in turn. A top-level `env` section is split out and applied in two
  * stages, holding dangerous variables until trust. Writes are write-through
- * to the user layer: they arrive here as a complete merged section and are
- * diffed back onto the user settings file, so higher-layer contributions stay
- * read-side only.
+ * to the user layer, keeping higher-layer contributions read-side only.
  * @module @dsh-cc/settings-cascade
  */
 
@@ -24,8 +22,10 @@ import { coerceEnv, type EnvSettings } from './env.ts'
 import { applyOpsToSection, diffSections, readUserText, writeJsonAtomic } from './persist.ts'
 import { resolveWatchPaths, resolveWatchTuning, startWatchers, type WatchTuning } from './watcher.ts'
 import { applyCcKeyAliases } from './cc-key-aliases.ts'
+import { runUserSectionEdit, type UserSectionEdit } from './edit-user-section.ts'
 
 export { applyCcKeyAliases, CC_KEY_ALIASES } from './cc-key-aliases.ts'
+export { runUserSectionEdit, type UserSectionEdit } from './edit-user-section.ts'
 
 export { resolveLocalSettingsDir, type LocalRootDeps, type LocalRootExec, type LocalRootExecResult } from './local-root.ts'
 export { mergeValue, mergeSettingsSection, unionDenyPrecedence } from './merge.ts'
@@ -128,9 +128,6 @@ const MAX_PERSIST_ATTEMPTS = 5
  * worktree) or git toplevel (subdirectory start) via
  * {@link resolveLocalSettingsDir} — the session cwd and git operations are
  * untouched, and explicit `localSettingsPath` never hoists.
- * @param config - raw plugin config.
- * @param deps - injectable local-root environment (tests only).
- * @returns the resolved source locations, inline flag settings, and policy sources.
  */
 export function resolveSpec(config: Config, deps?: LocalRootDeps): ResolvedSpec {
   const launchDir = resolve(config.projectDir ?? process.cwd())
@@ -158,9 +155,8 @@ export function resolveSpec(config: Config, deps?: LocalRootDeps): ResolvedSpec 
  * them (permission arrays union with `deny` precedence), resolves policy by
  * first-source-wins, splits out the top-level `env` section, and publishes the
  * merged per-namespace document into `ctx.settings`. Writes are write-through
- * to the user layer: a merged section is persisted as a surgical leaf-delta
- * applied onto the user settings file, keeping project/local/flag/policy
- * contributions read-side only.
+ * to the user layer, keeping project/local/flag/policy contributions
+ * read-side only.
  */
 export class SettingsCascadeProvider extends SettingsProvider {
   static Config: z<Config> = z.object({
@@ -254,23 +250,18 @@ export class SettingsCascadeProvider extends SettingsProvider {
 
   /**
    * Durably persist one namespace's merged user section by editing the user
-   * layer. The section (the seam's complete merged section for the namespace)
-   * is diffed against the shadow of what we last published, the delta is
-   * applied onto the user settings file's own section for that namespace, and
-   * the file is rewritten atomically. The shadow advances only after the
-   * atomic rename resolves, so an interrupted persist never desyncs it.
+   * layer: the merged section is diffed against the shadow of what we last
+   * published, and the delta is applied onto the user settings file's own
+   * section, rewritten atomically. The shadow advances only after the atomic
+   * rename resolves, so an interrupted persist never desyncs it.
    * @param ns - the namespace being written.
    * @param section - the complete merged user section to store.
    */
   protected async persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
-    // Freeze the diff base NOW, at capture time: a watcher reload queued
-    // ahead of this persist may reset the live shadow before the queued
-    // persistSection executes, and diffing against the reset shadow would
-    // re-emit keys the harness's document already had. The clone is taken
-    // synchronously, before the operation is enqueued.
     // Freeze the diff base NOW, at capture time: a queued reload may reset the
     // live shadow before the queued persistSection executes, and diffing the
-    // reset shadow would re-emit keys the document already had.
+    // reset shadow would re-emit keys the document already had. Serialize with
+    // watcher-triggered reloads on the one operation chain.
     const current = this.shadow[ns]
     const base: Record<string, unknown> = structuredClone(isPlainObject(current) ? current : {})
     // Serialize with watcher-triggered reloads on the one operation chain, and
@@ -291,8 +282,7 @@ export class SettingsCascadeProvider extends SettingsProvider {
     return task
   }
 
-  /** Queue a reload; a failed reload keeps the last-good document and stays only a warning. */
-  private queueRefresh(): void {
+  /** Queue a reload; a failed reload keeps the last-good document and stays only a warning. */  private queueRefresh(): void {
     void this.enqueue(async () => {
       if (this.isClosed()) return
       try {
@@ -313,13 +303,11 @@ export class SettingsCascadeProvider extends SettingsProvider {
   }
 
   /**
-   * Persist one namespace with optimistic concurrency: the user-file bytes
-   * are re-read immediately before the atomic rename, and when an external
-   * writer changed them since the read the op built on, the whole round
-   * restarts from a fresh read (bounded, then loud). The diff base is the
-   * caller-frozen snapshot of the shadow at capture time (a queued reload may
-   * have reset the live shadow in between). The shadow still moves only after
-   * the write has durably succeeded.
+   * Persist one namespace with optimistic concurrency: re-read the user-file
+   * bytes immediately before the atomic rename; on concurrent change restart
+   * from a fresh read (bounded, then loud). The diff base is the caller-frozen
+   * shadow snapshot at capture time; the shadow moves only after the write
+   * has durably succeeded.
    */
   private async persistSection(
     ns: SettingsNamespace,
@@ -347,6 +335,23 @@ export class SettingsCascadeProvider extends SettingsProvider {
       return
     }
     throw lastError ?? new Error(`settings-cascade: persist at ${path} exhausted ${MAX_PERSIST_ATTEMPTS} optimistic-retry attempts`)
+  }
+
+  /**
+   * Edit the RAW user file's own section for a namespace (never the merged
+   * section, so higher-layer entries are not smeared in), atomically with
+   * optimistic re-read retry (re-applying `edit` to the fresh root — edits
+   * may be non-idempotent), then republish via `load()` so the merged view
+   * and shadow stay consistent. `undefined` edit = no-op. Throws without a
+   * userSettings source.
+   */
+  editUserSection(ns: SettingsNamespace, edit: UserSectionEdit): Promise<void> {
+    return this.enqueue(() => runUserSectionEdit({
+      path: this.documentPath,
+      parse: (path, text) => this.parse(path, text),
+      isClosed: () => this.isClosed(),
+      reload: async () => { this.publish(await this.load()) },
+    }, ns, edit))
   }
 
   /** Every concrete settings FILE path worth watching (see {@link resolveWatchPaths}). */

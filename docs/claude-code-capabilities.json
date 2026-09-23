@@ -3300,7 +3300,8 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "full",
+          "notes": "dsh-cc extension — `/permissions lint` reports rule-hygiene findings (malformed rules, exact duplicates, prefix-subsumed rules within the same source+behavior, bare whole-tool Bash allows, unknown tool names) grouped by source with a proposed before/after diff; `--apply` cleans the user settings layer only, via the settings-cascade raw user-layer edit seam."
         },
         "ux": {
           "status": "full"
@@ -3315,6 +3316,14 @@
         {
           "type": "test",
           "path": "packages/interaction/command-permissions/tests/command-permissions.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/command-permissions/tests/lint.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/command-permissions/src/lint.ts"
         },
         {
           "type": "test",
@@ -4774,6 +4783,10 @@
           "type": "test",
           "path": "packages/settings/settings-cascade/tests/watcher.spec.ts",
           "anchor": "keeps the last good document"
+        },
+        {
+          "type": "test",
+          "path": "packages/settings/settings-cascade/tests/edit-user-section.spec.ts"
         }
       ],
       "deviation": {
@@ -4932,6 +4945,14 @@
         },
         {
           "type": "test",
+          "path": "packages/interaction/permission-rules/tests/subsumption.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/settings/settings-cascade/tests/edit-user-section.spec.ts"
+        },
+        {
+          "type": "test",
           "path": "packages/ui/tui/tests/driver-default-mode.spec.ts",
           "anchor": "createDriver live defaultMode display (F1)"
         },
@@ -4943,7 +4964,7 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Rule engine + dangerous-command/path risk classifier, durable modes (default/acceptEdits/plan/auto/bypassPermissions via /permissions), plan deny with exit_plan_mode guidance, bypassPermissions pinning danger-full-access with resumeSandbox restore, and the always-allow derived-rule persistence all work. `auto` mode additionally gains an opt-in, escalate-only LLM risk-classifier stage: a one-shot auxiliary model verdict over tool name + rendered parameters (never tool results, input wrapped as an explicit DATA block the model is instructed never to repeat, quote, or follow), fail-to-ask on every classifier failure, `$defaults` soft-deny prose expansion, a verdict LRU cache, and durable `permission/classifier` session audit events (armed only when enabled, an llm service is mounted, and the alias route resolves). Read-only tool calls are exempt: they never invoke the classifier (the legacy auto path applies). Verdict parsing stays strict and fail-closed — a malformed output yields the constant reason \"classifier output unparseable\" (model output never reaches the modal; the audit record is digest-only). A per-route consecutive-failure circuit breaker (threshold 3, keyed provider/model) opens the stage for a failing lane: no further classifier calls on that route, one warn per process, one `breaker` audit event per session, reset by a settings change (rebuild). The breaker is restart-durable within a session: the first call of a session seeds the per-route streak from the durable log (attributed events only; a restored streak ≥ threshold opens at seed time). An open breaker surfaces one visible TUI fallback notice per session (live-appended `breaker` events only — never replayed logs), and caller-cancelled classifications are tagged `cancelled`, never breaker-counted. Raw model output is debuggable via the opt-in `DSH_PERMISSION_CLASSIFIER_DEBUG=1` process-log channel (`[dsh:classifier:raw]`, truncated to 2 KiB — never session events). Defaults: `timeoutMs` 8000, verdict budget 1024 tokens. The UI honors `permissions.defaultMode`: statusline, session switch, Shift+Tab cycle start, and the /permissions picker all fall back to the live merged settings default (fold precedence — a recorded session mode still wins), with the cycle clamped to its members. Settings-surface deviation: the auto-mode section is delivered as `permissions.autoMode` — an `autoMode` key inside the existing `permissions` namespace (camelCase key in a kebab namespace, like `defaultMode`), NOT Claude Code's root-level `autoMode` key, because top-level settings namespaces must be kebab-case upstream. Other documented CC auto-mode divergences (explicit ask rules still proxied to allow in auto; same-source allow-before-deny) remain recorded as unfixed follow-ups — they are not addressed or masked here. Remaining vs CC: managed/enterprise remote settings, UI mode cycle; the upstream permission/mode catalog pin is an upstream polish."
+        "summary": "Rule engine + dangerous-command/path risk classifier, durable modes (default/acceptEdits/plan/auto/bypassPermissions via /permissions), plan deny with exit_plan_mode guidance, bypassPermissions pinning danger-full-access with resumeSandbox restore, and the always-allow derived-rule persistence all work. `auto` mode additionally gains an opt-in, escalate-only LLM risk-classifier stage: a one-shot auxiliary model verdict over tool name + rendered parameters (never tool results, input wrapped as an explicit DATA block the model is instructed never to repeat, quote, or follow), fail-to-ask on every classifier failure, `$defaults` soft-deny prose expansion, a verdict LRU cache, and durable `permission/classifier` session audit events (armed only when enabled, an llm service is mounted, and the alias route resolves). Read-only tool calls are exempt: they never invoke the classifier (the legacy auto path applies). Verdict parsing stays strict and fail-closed — a malformed output yields the constant reason \"classifier output unparseable\" (model output never reaches the modal; the audit record is digest-only). A per-route consecutive-failure circuit breaker (threshold 3, keyed provider/model) opens the stage for a failing lane: no further classifier calls on that route, one warn per process, one `breaker` audit event per session, reset by a settings change (rebuild). The breaker is restart-durable within a session: the first call of a session seeds the per-route streak from the durable log (attributed events only; a restored streak ≥ threshold opens at seed time). An open breaker surfaces one visible TUI fallback notice per session (live-appended `breaker` events only — never replayed logs), and caller-cancelled classifications are tagged `cancelled`, never breaker-counted. Raw model output is debuggable via the opt-in `DSH_PERMISSION_CLASSIFIER_DEBUG=1` process-log channel (`[dsh:classifier:raw]`, truncated to 2 KiB — never session events). Defaults: `timeoutMs` 8000, verdict budget 1024 tokens. The UI honors `permissions.defaultMode`: statusline, session switch, Shift+Tab cycle start, and the /permissions picker all fall back to the live merged settings default (fold precedence — a recorded session mode still wins), with the cycle clamped to its members. Settings-surface deviation: the auto-mode section is delivered as `permissions.autoMode` — an `autoMode` key inside the existing `permissions` namespace (camelCase key in a kebab namespace, like `defaultMode`), NOT Claude Code's root-level `autoMode` key, because top-level settings namespaces must be kebab-case upstream. Other documented CC auto-mode divergences (explicit ask rules still proxied to allow in auto; same-source allow-before-deny) remain recorded as unfixed follow-ups — they are not addressed or masked here. Always-allow grant synthesis is verified-matching: every persisted rule provably matches the call that produced it (env/wrapper-stripped commands fall back to a raw-prefix rule; WebFetch rules derive from untruncated args and never silently broaden to whole-tool), and write-time subsumption dedup plus `/permissions lint` keep the user allow list from accumulating covered rules — all persisted edits go through the settings-cascade raw user-layer seam, so higher-layer rules are never smeared into the user file. Remaining vs CC: managed/enterprise remote settings, UI mode cycle; the upstream permission/mode catalog pin is an upstream polish."
       }
     },
     "models.aliases": {

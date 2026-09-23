@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { allowRuleOf, createDriver, payloadOf } from '@dsh-cc/tui/harness/driver.ts'
-import { PERMISSION_SETTINGS_NAMESPACE, contentMatches, parseRuleString, ruleString } from '@dsh-cc/permission-rules'
+import { PERMISSION_SETTINGS_NAMESPACE, canonicalizeHostname, contentMatches, parseRuleString, ruleString } from '@dsh-cc/permission-rules'
 
 /**
  * Approval-as-preview + always-allow contract: the approval prompt carries a
@@ -119,18 +119,18 @@ describe('payloadOf dispatch', () => {
 
 describe('allowRuleOf rule generation', () => {
   it('never derives a persisted rule for EnterWorktree (the outside-path ask always fires)', () => {
-    expect(allowRuleOf('EnterWorktree', { kind: 'args', json: '{"path":"/tmp/x"}' })).toBeUndefined()
-    expect(allowRuleOf('EnterWorktree', undefined)).toBeUndefined()
+    expect(allowRuleOf('EnterWorktree', { kind: 'args', json: '{"path":"/tmp/x"}' })).toEqual({ kind: 'never-persist' })
+    expect(allowRuleOf('EnterWorktree', undefined)).toEqual({ kind: 'never-persist' })
   })
 
   it('writes a trailing-space first-word prefix rule for shell commands', () => {
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'npm install foo' })).toBe('Bash(npm )')
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'npm install foo' })).toEqual({ kind: 'rule', rule: 'Bash(npm )' })
   })
 
   it('round-trips the Bash rule through the real parser and matches the approved command', () => {
-    const rule = allowRuleOf('Bash', { kind: 'command', command: 'npm install foo' })!
-    expect(rule).toBe('Bash(npm )')
-    const parsed = parseRuleString(rule)
+    const derived = allowRuleOf('Bash', { kind: 'command', command: 'npm install foo' })
+    expect(derived).toEqual({ kind: 'rule', rule: 'Bash(npm )' })
+    const parsed = parseRuleString(derived.kind === 'rule' ? derived.rule : '')
     expect(parsed.matcher).toEqual({ kind: 'prefix', prefix: 'npm ' })
     expect(contentMatches(parsed.matcher!, 'npm install foo')).toBe(true)
     // The trailing space keeps sibling prefixes out: `npmx …` never matches.
@@ -139,59 +139,115 @@ describe('allowRuleOf rule generation', () => {
 
   it('escapes and round-trips a first word that opens a subshell', () => {
     const command = '(cd /tmp && ls)'
-    const rule = allowRuleOf('Bash', { kind: 'command', command })!
-    const parsed = parseRuleString(rule)
+    const derived = allowRuleOf('Bash', { kind: 'command', command })
+    const parsed = parseRuleString(derived.kind === 'rule' ? derived.rule : '')
     expect(parsed.matcher).toEqual({ kind: 'prefix', prefix: '(cd ' })
     expect(contentMatches(parsed.matcher!, command)).toBe(true)
   })
 
   it('writes a domain rule on the exact WebFetch host', () => {
     expect(allowRuleOf('WebFetch', { kind: 'args', json: '{"url":"https://docs.example.com/a"}' }))
-      .toBe('WebFetch(domain:docs.example.com)')
+      .toEqual({ kind: 'rule', rule: 'WebFetch(domain:docs.example.com)' })
     // Harness spelling gets the same treatment; lowercased, port dropped.
     expect(allowRuleOf('web_fetch', { kind: 'args', json: '{"url":"https://Example.COM.:8443/x"}' }))
-      .toBe('WebFetch(domain:example.com)')
+      .toEqual({ kind: 'rule', rule: 'WebFetch(domain:example.com)' })
   })
 
-  it('keeps the whole-tool WebFetch rule when the args carry no parsable URL', () => {
-    expect(allowRuleOf('WebFetch', { kind: 'args', json: 'not-json{' })).toBe('WebFetch')
-    expect(allowRuleOf('WebFetch', { kind: 'args', json: '{"url":"not a url"}' })).toBe('WebFetch')
-    expect(allowRuleOf('WebFetch', { kind: 'args', json: '{}' })).toBe('WebFetch')
+  it('derives the WebFetch host from the untruncated restored args', () => {
+    // A truncated display preview still yields the host when the restored
+    // args carry the URL.
+    const truncated = { kind: 'args' as const, json: '{"url":"https://docs.example.com/x","blob":"' + 'y'.repeat(600) }
+    expect(allowRuleOf('WebFetch', truncated, { url: 'https://docs.example.com/deep', blob: 'x'.repeat(5000) }))
+      .toEqual({ kind: 'rule', rule: 'WebFetch(domain:docs.example.com)' })
   })
 
-  it('writes a whole-tool rule for non-shell tools', () => {    expect(allowRuleOf('Write', { kind: 'diff', diffs: [] })).toBe('Write')
-    expect(allowRuleOf('WebFetch', { kind: 'args', json: '{}' })).toBe('WebFetch')
-    expect(allowRuleOf('Read', undefined)).toBe('Read')
-    expect(allowRuleOf('Read', { kind: 'none' })).toBe('Read')
-    const parsed = parseRuleString(allowRuleOf('Write', { kind: 'diff', diffs: [] })!)
+  it('is underivable — never whole-tool — when the WebFetch URL is missing or unparseable', () => {
+    expect(allowRuleOf('WebFetch', { kind: 'args', json: 'not-json{' })).toEqual({ kind: 'underivable' })
+    expect(allowRuleOf('WebFetch', { kind: 'args', json: '{"url":"not a url"}' })).toEqual({ kind: 'underivable' })
+    expect(allowRuleOf('WebFetch', { kind: 'args', json: '{}' })).toEqual({ kind: 'underivable' })
+    expect(allowRuleOf('WebFetch', undefined)).toEqual({ kind: 'underivable' })
+  })
+
+  it('writes a whole-tool rule for non-shell tools', () => {
+    expect(allowRuleOf('Write', { kind: 'diff', diffs: [] })).toEqual({ kind: 'rule', rule: 'Write' })
+    expect(allowRuleOf('Read', undefined)).toEqual({ kind: 'rule', rule: 'Read' })
+    expect(allowRuleOf('Read', { kind: 'none' })).toEqual({ kind: 'rule', rule: 'Read' })
+    const parsed = parseRuleString(allowRuleOf('Write', { kind: 'diff', diffs: [] })!.kind === 'rule'
+      ? (allowRuleOf('Write', { kind: 'diff', diffs: [] }) as { kind: 'rule'; rule: string }).rule
+      : '')
     expect(parsed.toolName).toBe('Write')
     expect(parsed.content).toBeUndefined()
   })
 
-  it('returns undefined for a blank command or tool name (once-only fallback)', () => {
-    expect(allowRuleOf('Bash', { kind: 'command', command: '   ' })).toBeUndefined()
-    expect(allowRuleOf('  ', undefined)).toBeUndefined()
+  it('is underivable for a blank command or tool name (once-only fallback)', () => {
+    expect(allowRuleOf('Bash', { kind: 'command', command: '   ' })).toEqual({ kind: 'underivable' })
+    expect(allowRuleOf('  ', undefined)).toEqual({ kind: 'underivable' })
   })
 
   it('keeps ruleString escaping symmetric for a plain prefix', () => {
     expect(ruleString('Bash', 'npm ')).toBe('Bash(npm )')
   })
 
-  it('strips environment variable prefixes when deriving rules', () => {
-    // FOO=bar npm install → should derive rule for npm, not FOO=bar
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar npm install' })).toBe('Bash(npm )')
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar BAZ=qux npm install' })).toBe('Bash(npm )')
-    // With sudo
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'sudo npm install' })).toBe('Bash(npm )')
-    // With npx
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'npx npm install' })).toBe('Bash(npm )')
+  it('falls back to a raw-prefix rule when the stripped first word cannot match the raw command', () => {
+    // FOO=bar npm install → the raw prefix covers the producing call.
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar npm install' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(FOO=bar npm )' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar BAZ=qux npm install' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(FOO=bar BAZ=qux npm )' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'sudo npm install' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(sudo npm )' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'npx npm install' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(npx npm )' })
+    // The plan example: raw prefix through the end of the stripped first word.
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'sudo FOO=bar npm x' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(sudo FOO=bar npm )' })
   })
 
-  it('handles compound commands by deriving from the first segment', () => {
-    // git add . && git commit → should derive from git add
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'git add . && git commit' })).toBe('Bash(git )')
-    // With env prefix in first segment
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar git add . && git commit' })).toBe('Bash(git )')
+  it('handles compound commands by deriving from the first segment (raw prefix when prefixed)', () => {
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'git add . && git commit' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(git )' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar git add . && git commit' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(FOO=bar git )' })
+  })
+
+  it('every derived rule matches its producing call (invariant corpus)', () => {
+    const subjectOf = (toolName: string, args: Record<string, unknown>): string | undefined => {
+      if (typeof args.command === 'string') return args.command
+      if (typeof args.url === 'string') return canonicalizeHostname(args.url)
+      if (typeof args.file_path === 'string') return args.file_path
+      return undefined
+    }
+    const corpus: [string, Record<string, unknown>][] = [
+      ['Bash', { command: 'npm install foo' }],
+      ['Bash', { command: 'FOO=bar npm install' }],
+      ['Bash', { command: 'FOO=bar BAZ=qux npm run build' }],
+      ['Bash', { command: 'sudo npm install' }],
+      ['Bash', { command: 'npx npm install' }],
+      ['Bash', { command: 'yarn build' }],
+      ['Bash', { command: 'sudo FOO=bar npm x' }],
+      ['Bash', { command: 'git add . && git commit -m x' }],
+      ['Bash', { command: 'FOO=bar git add . && git commit' }],
+      ['Bash', { command: 'ls -la' }],
+      ['Bash', { command: '(cd /tmp && ls)' }],
+      ['WebFetch', { url: 'https://docs.example.com/a' }],
+      ['WebFetch', { url: 'https://Example.COM.:8443/x' }],
+      ['Write', { file_path: '/tmp/new.ts', content: 'export {}\n' }],
+      ['Edit', { file_path: '/tmp/a.ts', old_string: 'a', new_string: 'b' }],
+      ['Read', { file_path: '/tmp/a.ts' }],
+    ]
+    for (const [toolName, args] of corpus) {
+      const preview = payloadOf(previewReq(toolName, 'c', [callEvent('c', args)]))
+      const derived = allowRuleOf(toolName, preview, args)
+      expect(derived.kind, `${toolName} ${JSON.stringify(args)}`).toBe('rule')
+      if (derived.kind !== 'rule') continue
+      const parsed = parseRuleString(derived.rule)
+      expect(parsed.toolName, derived.rule).toBe(toolName)
+      if (parsed.content === undefined) continue
+      // Whole-tool rules match trivially; content rules must match the
+      // producing call's subject (subjectOf semantics).
+      const subject = subjectOf(toolName, args)
+      expect(contentMatches(parsed.matcher!, subject!), `${derived.rule} vs ${subject}`).toBe(true)
+    }
   })
 })
 
@@ -204,45 +260,42 @@ interface FakeApprovalRequest {
   signal?: AbortSignal
 }
 
-interface ReplaceCall {
+interface EditCall {
   ns: unknown
-  section: Record<string, unknown>
-  revision?: number
 }
 
-/** Fake settings provider capturing replace() payloads; can conflict once. */
+/**
+ * Fake settings provider standing in for the cascade's `editUserSection` seam:
+ * the edit callback runs against the raw user section (as the real seam does),
+ * `undefined` results are no-ops. `editUserSection` failure can be armed.
+ */
 function makeSettingsProvider(user: Record<string, unknown> = {}): {
   writable: boolean
-  describe(): { ns: unknown; revision: number; user: Record<string, unknown> }[]
-  replace(ns: unknown, section: object, expectedRevision?: number): Promise<void>
-  replaceCalls: ReplaceCall[]
-  conflictOnce: boolean
+  editCalls: EditCall[]
+  currentUser: Record<string, unknown>
+  failOnce: boolean
+  editUserSection(
+    ns: unknown,
+    edit: (rawSection: Record<string, unknown>) => Record<string, unknown> | undefined,
+  ): Promise<void>
 } {
   const provider = {
     writable: true,
-    replaceCalls: [] as ReplaceCall[],
-    conflictOnce: false,
-    revision: 0,
+    editCalls: [] as EditCall[],
     currentUser: structuredClone(user),
-    describe() {
-      return [{
-        ns: PERMISSION_SETTINGS_NAMESPACE,
-        revision: provider.revision,
-        user: structuredClone(provider.currentUser),
-      }]
-    },
-    async replace(ns: unknown, section: object, expectedRevision?: number) {
-      provider.replaceCalls.push({ ns, section, revision: expectedRevision })
-      if (provider.conflictOnce) {
-        provider.conflictOnce = false
-        provider.revision += 1
-        const conflict = new Error('conflict')
-        conflict.name = 'SettingsConflictError'
-        ;(conflict as { code?: string }).code = 'SETTINGS_CONFLICT'
-        throw conflict
+    failOnce: false,
+    async editUserSection(
+      ns: unknown,
+      edit: (rawSection: Record<string, unknown>) => Record<string, unknown> | undefined,
+    ) {
+      provider.editCalls.push({ ns })
+      if (provider.failOnce) {
+        provider.failOnce = false
+        throw new Error('disk on fire')
       }
-      provider.currentUser = structuredClone(section)
-      provider.revision += 1
+      const next = edit(structuredClone(provider.currentUser))
+      if (next === undefined) return
+      provider.currentUser = next
     },
   }
   return provider
@@ -312,7 +365,7 @@ describe('always-allow write path', () => {
     else process.env.DSH_HOME = prevHome
   })
 
-  it('always resolves allowed-once and merges the first-word rule into permissions.allow', async () => {
+  it('always resolves allowed-once and merges the first-word rule into the raw user allow list', async () => {
     const settings = makeSettingsProvider({
       allow: ['Read'],
       deny: ['Bash(rm)'],
@@ -337,22 +390,20 @@ describe('always-allow write path', () => {
     await expect(pending).resolves.toBe('allowed-once')
     // The rule write settles asynchronously; flush before asserting it.
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(settings.replaceCalls).toHaveLength(1)
-    // The write re-attaches every passthrough field around the merged allow
-    // list — replace() overwrites the whole user section.
-    expect(settings.replaceCalls[0]!.section).toEqual({
+    // The write edits the RAW user section through the editUserSection seam;
+    // passthrough fields survive untouched.
+    expect(settings.currentUser).toEqual({
       allow: ['Read', 'Bash(npm )'],
       deny: ['Bash(rm)'],
       ask: ['Write'],
       defaultMode: 'plan',
       protectedFiles: ['.env'],
     })
-    expect(settings.replaceCalls[0]!.revision).toBe(0)
     // The rule text is echoed back to the user.
     expect(driver.state.notice).toContain('Bash(npm )')
   })
 
-  it('does not duplicate a rule that is already present', async () => {
+  it('skips the write and notifies when an existing rule already covers the new one', async () => {
     const settings = makeSettingsProvider({ allow: ['Bash(npm )'] })
     const { ctx, agent, request } = makeApprovalCtx(
       [callEvent('c1', { command: 'npm install foo' })],
@@ -362,12 +413,13 @@ describe('always-allow write path', () => {
     const pending = request({ agent, toolName: 'Bash', callId: 'c1' })
     driver.answerApproval('always')
     await pending
-    expect(settings.replaceCalls[0]!.section).toEqual({ allow: ['Bash(npm )'] })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(settings.currentUser).toEqual({ allow: ['Bash(npm )'] })
+    expect(driver.state.notice).toContain('Already covered by Bash(npm )')
   })
 
-  it('retries once on a settings revision conflict and succeeds with the fresh snapshot', async () => {
-    const settings = makeSettingsProvider({ allow: ['Read'], deny: ['Bash(rm)'] })
-    settings.conflictOnce = true
+  it('drops narrower allow rules the new rule subsumes and reports the replacement', async () => {
+    const settings = makeSettingsProvider({ allow: ['Bash(npm install foo )', 'Bash(npm install )', 'Read'] })
     const { ctx, agent, request } = makeApprovalCtx(
       [callEvent('c1', { command: 'npm install foo' })],
       settings,
@@ -376,15 +428,55 @@ describe('always-allow write path', () => {
     const pending = request({ agent, toolName: 'Bash', callId: 'c1' })
     driver.answerApproval('always')
     await pending
-    // The write path settles asynchronously (conflict retry re-describes and
-    // re-replaces); flush the microtask queue before asserting the outcome.
     await new Promise(resolve => setTimeout(resolve, 0))
+    expect(settings.currentUser).toEqual({ allow: ['Read', 'Bash(npm )'] })
+    expect(driver.state.notice).toContain('Always allow: Bash(npm )')
+    expect(driver.state.notice).toContain('replaced 2 narrower rules')
+  })
 
-    expect(settings.replaceCalls).toHaveLength(2)
-    // Second attempt merges against the moved revision and carries it forward.
-    expect(settings.replaceCalls[1]!.revision).toBe(1)
-    expect(settings.replaceCalls[1]!.section).toEqual({ allow: ['Read', 'Bash(npm )'], deny: ['Bash(rm)'] })
-    expect(driver.state.notice).toContain('Bash(npm )')
+  it('notifies once-only when the rule is underivable', async () => {
+    const settings = makeSettingsProvider()
+    const { ctx, agent, request } = makeApprovalCtx(
+      [callEvent('c1', { command: '   ' })],
+      settings,
+    )
+    const driver = await createDriver(ctx as never, {})
+    const pending = request({ agent, toolName: 'Bash', callId: 'c1' })
+    driver.answerApproval('always')
+    await pending
+    expect(settings.editCalls).toHaveLength(0)
+    expect(driver.state.notice).toContain('Could not derive a safe persistent rule')
+  })
+
+  it('stays silent for a never-persist tool (EnterWorktree)', async () => {
+    const settings = makeSettingsProvider()
+    const { ctx, agent, request } = makeApprovalCtx(
+      [callEvent('c1', { path: '/tmp/wt' })],
+      settings,
+    )
+    const driver = await createDriver(ctx as never, {})
+    const pending = request({ agent, toolName: 'EnterWorktree', callId: 'c1' })
+    driver.answerApproval('always')
+    await pending
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(settings.editCalls).toHaveLength(0)
+    expect(driver.state.notice).toBeUndefined()
+  })
+
+  it('surfaces a seam write failure as an allowed-once notice', async () => {
+    const settings = makeSettingsProvider({ allow: [] })
+    settings.failOnce = true
+    const { ctx, agent, request } = makeApprovalCtx(
+      [callEvent('c1', { command: 'npm install foo' })],
+      settings,
+    )
+    const driver = await createDriver(ctx as never, {})
+    const pending = request({ agent, toolName: 'Bash', callId: 'c1' })
+    driver.answerApproval('always')
+    await pending
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(driver.state.notice).toContain('Allowed once only')
+    expect(driver.state.notice).toContain('disk on fire')
   })
 
   it('still allows once (with an explanatory notice) when no settings provider is mounted', async () => {
@@ -399,18 +491,19 @@ describe('always-allow write path', () => {
     expect(driver.state.notice).toContain('once')
   })
 
-  it('notifies without writing when the permissions namespace is not registered', async () => {
+  it('notifies without writing when the settings provider lacks the editUserSection seam', async () => {
     const settings = makeSettingsProvider()
-    settings.describe = () => []
+    const seamless = { writable: true, describe: () => [] }
     const { ctx, agent, request } = makeApprovalCtx(
       [callEvent('c1', { command: 'npm install foo' })],
-      settings,
+      seamless,
     )
+    void settings
     const driver = await createDriver(ctx as never, {})
     const pending = request({ agent, toolName: 'Bash', callId: 'c1' })
     driver.answerApproval('always')
     await pending
-    expect(settings.replaceCalls).toHaveLength(0)
+    expect(settings.editCalls).toHaveLength(0)
     expect(driver.state.notice).toContain('once')
   })
 
@@ -424,7 +517,7 @@ describe('always-allow write path', () => {
     const pending = request({ agent, toolName: 'Bash', callId: 'c1' })
     driver.answerApproval('once')
     await expect(pending).resolves.toBe('allowed-once')
-    expect(settings.replaceCalls).toHaveLength(0)
+    expect(settings.editCalls).toHaveLength(0)
   })
 
   it('does not touch settings on a reject answer', async () => {
@@ -437,6 +530,6 @@ describe('always-allow write path', () => {
     const pending = request({ agent, toolName: 'Bash', callId: 'c1' })
     driver.answerApproval('reject')
     await expect(pending).resolves.toBe('rejected')
-    expect(settings.replaceCalls).toHaveLength(0)
+    expect(settings.editCalls).toHaveLength(0)
   })
 })

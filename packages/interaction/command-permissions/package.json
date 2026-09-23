@@ -42,7 +42,8 @@
   },
   "dependencies": {
     "@dsh-cc/command-usage": "workspace:^",
-    "@dsh-cc/permission-rules": "workspace:^"
+    "@dsh-cc/permission-rules": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.5-rc.1",

@@ -24,6 +24,8 @@ export type ApprovalEntry = {
   resolve: (outcome: ApprovalOutcome) => void
   /** The requesting agent — carries the session a 'session' grant scopes to. */
   agent?: unknown
+  /** Restored (untruncated) call arguments for rule synthesis, when parsed. */
+  args?: Record<string, unknown>
   signal?: AbortSignal
 }
 export type QuestionEntry = {
@@ -38,12 +40,17 @@ export type ModalEntry = ApprovalEntry | QuestionEntry
 
 /** Deps `answerApproval` threads through to createDriver's persistence layer. */
 export interface ModalAnswerDeps {
-  writeAllowRule(toolName: string, preview: ApprovalPreview | undefined): Promise<void>
+  writeAllowRule(
+    toolName: string,
+    preview: ApprovalPreview | undefined,
+    args?: Record<string, unknown>,
+  ): Promise<void>
   /** Grant the derived rule to the requesting session's allowlist (WS4-PR-B). */
   addSessionRule(
     agent: unknown,
     toolName: string,
     preview: ApprovalPreview | undefined,
+    args?: Record<string, unknown>,
   ): void
   showNotice(text: string): void
 }
@@ -104,7 +111,7 @@ export function createModalQueue(rt: DriverModalCtx): {
     if (kind === 'always') {
       // Fire-and-forget: the call proceeds while the rule persists; a write
       // failure surfaces as a notice, never as an answer error.
-      void deps.writeAllowRule(head.view.toolName, head.view.preview).catch((error: unknown) => {
+      void deps.writeAllowRule(head.view.toolName, head.view.preview, head.args).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
         deps.showNotice(`Allowed once only — saving the allow rule failed: ${message}`)
       })
@@ -114,7 +121,7 @@ export function createModalQueue(rt: DriverModalCtx): {
       // rule is granted to the requesting session's allowlist (WS4-PR-B,
       // never global settings); a failure surfaces as a notice.
       try {
-        deps.addSessionRule(head.agent, head.view.toolName, head.view.preview)
+        deps.addSessionRule(head.agent, head.view.toolName, head.view.preview, head.args)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         deps.showNotice(`Allowed once only — adding the session rule failed: ${message}`)

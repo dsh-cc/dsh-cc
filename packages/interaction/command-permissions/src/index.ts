@@ -33,6 +33,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@dsh-cc/permission-rules'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { PERMISSION_COMMAND_MODES } from './modes.ts'
+import { applyUserLint, lintRuleSet, lintUserSection, renderLint } from './lint.ts'
+import { PERMISSION_SETTINGS_NAMESPACE } from '@dsh-cc/permission-rules'
 import { planPhaseOf, type PlanPhase, type PlanUnitStateLike } from './plan-phase.ts'
 import { renderPermissions } from './permissions.ts'
 import { helpable } from '@dsh-cc/command-usage'
@@ -100,6 +102,7 @@ async function executePermissions(ctx: Context, invocation: CommandInvocation): 
   if (service === undefined) {
     return { kind: 'error', text: 'The permission-rules engine is not mounted in this composition.' }
   }
+  if (raw === 'lint' || raw.startsWith('lint ')) return executeLint(ctx, raw)
   const [mode = ''] = raw.split(/\s+/)
   if (!(MODES as readonly string[]).includes(mode)) {
     return { kind: 'error', text: `unknown permission mode "${mode}"; available: ${MODES.join(', ')}` }
@@ -137,8 +140,37 @@ async function executePermissions(ctx: Context, invocation: CommandInvocation): 
   }
 }
 
-/** Whether this session selected the CC agent preset (last `agent-preset/selected` wins, else the creation header). */
-function isCcSession(agent: Agent): boolean {
+/**
+ * Read the raw user-layer `permissions` section from the settings provider's
+ * `describe()` descriptors (the raw user file section, never the merged one).
+ */
+function userSectionOf(settings: unknown): Record<string, unknown> {
+  const descriptor = (settings as { describe?: () => Array<{ ns: unknown; user?: unknown }> })
+    .describe?.()
+    ?.find(entry => String(entry.ns) === String(PERMISSION_SETTINGS_NAMESPACE))
+  return descriptor !== undefined && descriptor.user !== null && typeof descriptor.user === 'object'
+    ? descriptor.user as Record<string, unknown>
+    : {}
+}
+
+/**
+ * Execute `/permissions lint [--apply]`. Read-only by default; `--apply`
+ * performs only the user-layer cleanup through `editUserSection`.
+ */
+async function executeLint(ctx: Context, raw: string): Promise<CommandResult> {
+  const service = ctx.get('permissionRules') as PermissionRulesLike | undefined
+  if (service === undefined) {
+    return { kind: 'error', text: 'The permission-rules engine is not mounted in this composition.' }
+  }
+  const settings = ctx.get('settings') as unknown
+  const userLint = settings === undefined ? undefined : lintUserSection(userSectionOf(settings))
+  const report = renderLint(lintRuleSet(service.ruleSet as never), userLint)
+  if (!raw.includes('--apply')) return { kind: 'success', text: report }
+  const result = await applyUserLint(settings)
+  return { kind: 'success', text: `${report}\n${result}` }
+}
+
+/** Whether this session selected the CC agent preset (last `agent-preset/selected` wins, else the creation header). */function isCcSession(agent: Agent): boolean {
   const events = agent.session.snapshotEvents()
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]! as { type: string; data?: { agentPreset?: string } }
@@ -185,10 +217,13 @@ export function apply(ctx: Context): void {
   ctx.commands.register(helpable({
     name: 'permissions',
     description: 'show or switch the permission mode (default|acceptEdits|plan|auto|bypassPermissions)',
-    input: { hint: '[mode]' },
+    input: { hint: '[mode|lint [--apply]]' },
     handler: (invocation: CommandInvocation) => executePermissions(ctx, invocation),
   }, {
-    subcommands: PERMISSION_MODE_OPTIONS.map(option => ({ word: option.id, summary: option.detail })),
+    subcommands: [
+      ...PERMISSION_MODE_OPTIONS.map(option => ({ word: option.id, summary: option.detail })),
+      { word: 'lint', summary: 'report rule-hygiene findings; --apply cleans the user layer' },
+    ],
   }))
   if (ctx.get('agent') === undefined) installCatalogWrap(ctx)
 }
