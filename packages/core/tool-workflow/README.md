@@ -49,5 +49,6 @@ Per-user workflows directory maps to `$DSH_HOME/workflows/` (not
 built-in workflows are not implemented; `taskId` aliases the harness run id
 (no `wf_` prefix); the receipt omits `transcriptDir`/`scriptPath`/`sessionUrl`;
 `ultracode` is an opt-in trigger only (no session-effort side effect);
-`resumeFromRunId` arrives with the resume-journal slice and is refused with a
-targeted message until then.
+same-session resume (`resumeFromRunId`) is implemented by the
+`@dsh-cc/workflow-journal` provider (frozen-until-first-miss); cross-session
+replay remains unimplemented.

@@ -122,6 +122,9 @@
       "@dsh-cc/tool-workflow": [
         "./packages/core/tool-workflow/src/index.ts"
       ],
+      "@dsh-cc/workflow-journal": [
+        "./packages/subagent/workflow-journal/src/index.ts"
+      ],
       "@dsh-cc/output-styles": [
         "./packages/compat/cc-output-styles/src/index.ts"
       ],

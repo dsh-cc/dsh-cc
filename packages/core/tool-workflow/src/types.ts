@@ -24,6 +24,8 @@ export interface ToolWorkflowRunStartData {
   readonly name: string
   /** dsh-cc extension: the resolved script source class. */
   readonly source: ToolWorkflowRunSource
+  /** dsh-cc extension (resume slice): the prior run this run resumes, when launched with `resumeFromRunId`. */
+  readonly resumeOf?: WorkflowRunId
 }
 
 /** Records one workflow member after its child Session is published. */
@@ -33,6 +35,8 @@ export interface ToolWorkflowAgentStartData {
   readonly label: string
   readonly phase?: string
   readonly childId: SessionId
+  /** dsh-cc extension (resume slice): replayed from the source journal, not run live. */
+  readonly cached?: boolean
 }
 
 /** Settles one previously started workflow member. */
@@ -40,6 +44,8 @@ export interface ToolWorkflowAgentEndData {
   readonly runId: WorkflowRunId
   readonly seq: number
   readonly outcome: WorkflowAgentOutcome
+  /** dsh-cc extension (resume slice): replayed from the source journal, not run live. */
+  readonly cached?: boolean
 }
 
 /** Settles one workflow run after its live resources reach quiescence. */

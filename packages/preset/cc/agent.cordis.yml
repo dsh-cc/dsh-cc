@@ -256,10 +256,15 @@
         backgroundMode: one-shot
         maxDepth: provider-managed
 
+    # The journal provider wraps spawn and journals workflow children for
+    # same-session resume replay (frozen-until-first-miss).
+    - id: subagent-workflow-journal
+      name: '@dsh-cc/workflow-journal'
+
     - id: workflow-worker-thread
       name: '@deepseek-ai/dsh-workflow-worker-thread'
       config:
-        provider: spawn
+        provider: cc-workflow-journal
 
     # Harness adapter row superseded by @dsh-cc/tool-workflow: both register the
     # `workflow` tool name, and the harness `tools` registry throws

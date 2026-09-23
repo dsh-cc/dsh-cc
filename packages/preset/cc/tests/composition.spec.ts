@@ -275,6 +275,16 @@ describe('agent.cordis.yml composition', () => {
       .toBeGreaterThan(configIds.indexOf('tool-workflow'))
     expect(configIds.indexOf('tool-workflow-cc'))
       .toBeLessThan(configIds.indexOf('tool-ralph'))
+    // The journal provider row mounts before the engine row; the engine's
+    // provider flips from `spawn` to the wrapping journal provider (resume
+    // slice: frozen-until-first-miss same-session replay).
+    const journal = group.config.find((r: any) => r.id === 'subagent-workflow-journal')!
+    expect(journal.name).toBe('@dsh-cc/workflow-journal')
+    expect(journal.disabled).toBeUndefined()
+    expect(configIds.indexOf('subagent-workflow-journal'))
+      .toBeLessThan(configIds.indexOf('workflow-worker-thread'))
+    const engine = group.config.find((r: any) => r.id === 'workflow-worker-thread')!
+    expect(engine.config).toMatchObject({ provider: 'cc-workflow-journal' })
   })
 
   it('declares every @dsh-cc row name as a dependency (top level and group-nested)', () => {

@@ -40,5 +40,6 @@ CC 对齐的动态 `workflow` 工具。它替换 cc 预设中的 harness 薄适�
 用户级工作流目录映射为 `$DSH_HOME/workflows/`（非 `~/.claude/workflows/`）；
 未实现 monorepo 链式加载与内置工作流；`taskId` 复用 harness 运行 id（无
 `wf_` 前缀）；回执省略 `transcriptDir`/`scriptPath`/`sessionUrl`；
-`ultracode` 仅作为选择加入触发词（无会话 effort 副作用）；`resumeFromRunId`
-随 resume-journal 切片交付，在此之前以定向提示拒绝。
+`ultracode` 仅作为选择加入触发词（无会话 effort 副作用）；同会话恢复
+（`resumeFromRunId`）由 `@dsh-cc/workflow-journal` provider 实现
+（frozen-until-first-miss）；跨会话重放仍未实现。
