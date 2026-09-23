@@ -74,6 +74,9 @@
       "path": "./packages/core/tool-web-fetch"
     },
     {
+      "path": "./packages/core/tool-workflow"
+    },
+    {
       "path": "./packages/core/tool-structured-output"
     },
     {

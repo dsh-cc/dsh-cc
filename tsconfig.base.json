@@ -119,6 +119,9 @@
       "@dsh-cc/tool-web-fetch": [
         "./packages/core/tool-web-fetch/src/index.ts"
       ],
+      "@dsh-cc/tool-workflow": [
+        "./packages/core/tool-workflow/src/index.ts"
+      ],
       "@dsh-cc/output-styles": [
         "./packages/compat/cc-output-styles/src/index.ts"
       ],
