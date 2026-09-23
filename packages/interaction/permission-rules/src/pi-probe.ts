@@ -137,6 +137,14 @@ export type PiProbe = {
    * contexts are preserved.
    */
   scan(exec: ToolExecution, result: Readonly<ToolExecutionResult>, downstream: ProbeFoldDecision): Promise<ProbeFoldDecision>
+  /**
+   * S6: the shared screening core used by BOTH the tool-result listener
+   * (`scan`, which adds the scan-set gate + text extraction) and the
+   * subagent return-check arm (b), which hands the returned report text in
+   * directly. Mode-gated + enabled-gated; same breaker, audit, and sideband
+   * delivery. Never throws, never mutates its inputs.
+   */
+  screen(exec: ToolExecution, input: string, downstream: ProbeFoldDecision): Promise<ProbeFoldDecision>
   /** Reset breaker state (settings change — the operator's "I fixed the lane"). */
   rebuild(): void
 }
@@ -354,26 +362,19 @@ export function createPiProbe(deps: PiProbeDeps): PiProbe {
       breaker.reset()
     },
 
-    async scan(exec, result, downstream) {
+    /**
+     * S6 shared screen core (arm (b)): mode-gated + enabled-gated, NO scan-set
+     * gate — the tool-result listener (scan) and the subagent return-check
+     * both route through here so the breaker/audit/stale-mode/warning
+     * machinery stays in ONE place. `input` is already windowed.
+     */
+    async screen(exec, input, downstream) {
       const d = downstream
       // A8 mode gate, folded at LISTENER time — the probe NEVER runs outside
       // `auto`, and the fold is never cached.
       if (deps.modeOf(exec) !== 'auto') return d
-      // Ask-related plumbing never reaches here (post-execute only sees
-      // executed results), and the scan set is a whitelist — plumbing tools
-      // never match.
       const slice = readProbeSlice(deps.settingsRead())
-      if (!matchesScanSet(exec.name, slice.toolPatterns)) return d
       if (!slice.enabled) return d
-      // DEVIATION NOTE (A1 redesign): the probe deliberately keeps a
-      // DEFAULT-order listener and scans the PRE-REWRITE ORIGINAL result
-      // content (`result`, not the downstream fold's post-crusher content) —
-      // the crusher composes AROUND this listener (prepend = outermost), so
-      // scanning the original is the only CCR-independent vantage point. The
-      // warning is delivered via additionalContexts, which no content
-      // rewriter can clobber.
-      const input = probeInputText(result.content)
-      if (input === undefined) return d
       const digest = sha256(input)
       const session = exec.agent?.session
       if (deps.stream === undefined) {
@@ -441,6 +442,24 @@ export function createPiProbe(deps: PiProbeDeps): PiProbe {
         source: { kind: 'plugin', plugin: 'permission-rules' },
       })
       return { ...d, additionalContexts: [...(d.additionalContexts ?? []), warning] }
+    },
+
+    async scan(exec, result, downstream) {
+      const d = downstream
+      // Ask-related plumbing never reaches here (post-execute only sees
+      // executed results), and the scan set is a whitelist — plumbing tools
+      // never match.
+      if (!matchesScanSet(exec.name, readProbeSlice(deps.settingsRead()).toolPatterns)) return d
+      // DEVIATION NOTE (A1 redesign): the probe deliberately keeps a
+      // DEFAULT-order listener and scans the PRE-REWRITE ORIGINAL result
+      // content (`result`, not the downstream fold's post-crusher content) —
+      // the crusher composes AROUND this listener (prepend = outermost), so
+      // scanning the original is the only CCR-independent vantage point. The
+      // warning is delivered via additionalContexts, which no content
+      // rewriter can clobber.
+      const input = probeInputText(result.content)
+      if (input === undefined) return d
+      return this.screen(exec, input, d)
     },
   }
 }

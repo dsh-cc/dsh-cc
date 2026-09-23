@@ -17,7 +17,7 @@
  */
 
 import { createHash, type BinaryLike } from 'node:crypto'
-import type { ToolExecution } from '@dsh-cc/tools'
+import { ccToolAliases, type ToolExecution } from '@dsh-cc/tools'
 
 // Soft-deny defaults + `$defaults` expansion moved to ./slots.ts (S2); the
 // exports keep their historical home here for existing importers.
@@ -222,7 +222,19 @@ function renderInput(exec: ToolExecution): string {
   const args = (exec.arguments ?? {}) as Record<string, unknown>
   const command = args.command
   let payload: string
-  if (typeof command === 'string') payload = cap(`${exec.name}\ncommand: ${command}`)
+  // S6 spawn special case (D9): harness subagent tools (`subagent` /
+  // `subagent_fork`, resolved via the CC `Task` alias) render the delegation
+  // `prompt` field FIRST (512-char cap) — the delegation text is the
+  // risk signal; the label and remaining args follow as capped JSON. Field
+  // names verified against the Task tool schema
+  // (packages/subagent/task/src/tool.ts: required `prompt` + `description`).
+  if (ccToolAliases(exec.name).includes('Task')) {
+    const prompt = typeof args.prompt === 'string' ? args.prompt : ''
+    const rest = { ...args }
+    delete rest.prompt
+    payload = `delegation prompt: ${capWithEllipsis(prompt, 512)}`
+    if (Object.keys(rest).length > 0) payload += `\narguments: ${JSON.stringify(rest)}`
+  } else if (typeof command === 'string') payload = cap(`${exec.name}\ncommand: ${command}`)
   else {
     const filePath = args.file_path
     if (typeof filePath === 'string') {
