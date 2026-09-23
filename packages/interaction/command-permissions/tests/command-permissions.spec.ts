@@ -43,7 +43,15 @@ async function harness(withService: boolean): Promise<{
     calls.push(`setMode:${mode}`)
   })
   if (withService) {
-    ctx.reflect.provide('permissionRules', { ruleSet: RULESET(), setMode })
+    ctx.reflect.provide('permissionRules', {
+      ruleSet: RULESET(),
+      defaultMode: 'default',
+      // D1 seam stub: in auto, whole-tool Bash allow is "suspended".
+      effectiveRuleSet: (mode: string) => mode === 'auto'
+        ? { ...RULESET(), allow: RULESET().allow.filter(r => (r as { toolName: string }).toolName !== 'Bash') }
+        : RULESET(),
+      setMode,
+    })
   }
   const plugin = await ctx.plugin(commandPermissions)
   const session = ctx.sessions.create(SessionId(`command-permissions-${Math.random()}`))
@@ -104,6 +112,18 @@ describe('/permissions rendering', () => {
     expect(text).toContain('userSettings: allow=1 deny=0 ask=1')
     expect(text).toContain('Total: allow=3 deny=1 ask=1 (bypassImmune=1)')
   })
+  it('annotates suspended allow rules in auto mode (D1)', () => {
+    const full = RULESET()
+    const suspended = { ...full, allow: full.allow.filter(r => r.toolName !== 'Bash') }
+    const text = renderPermissions(suspended as never, 1, { suspendedAllow: 1 })
+    expect(text).toContain('1 allow rule(s) suspended in auto mode')
+  })
+
+  it('omits the suspension annotation outside auto mode', () => {
+    const text = renderPermissions(RULESET(), 1)
+    expect(text).not.toContain('suspended in auto mode')
+  })
+
   it('handles an empty rule set', () => {
     const text = renderPermissions({ allow: [], deny: [], ask: [], bypassImmune: [] }, 0)
     expect(text).toContain('(no rules configured)')

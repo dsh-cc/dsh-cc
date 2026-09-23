@@ -35,6 +35,7 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 import { PERMISSION_COMMAND_MODES } from './modes.ts'
 import { applyUserLint, lintRuleSet, lintUserSection, renderLint } from './lint.ts'
 import { PERMISSION_SETTINGS_NAMESPACE } from '@dsh-cc/permission-rules'
+import { foldPlanMode, foldPermissionMode } from '@dsh-cc/permission-rules'
 import { planPhaseOf, type PlanPhase, type PlanUnitStateLike } from './plan-phase.ts'
 import { renderPermissions } from './permissions.ts'
 import { helpable } from '@dsh-cc/command-usage'
@@ -62,6 +63,9 @@ export const inject = ['commands']
 /** Structural face of the permission-rules engine the command drives. */
 type PermissionRulesLike = {
   readonly ruleSet: { readonly allow: readonly unknown[]; readonly deny: readonly unknown[]; readonly ask: readonly unknown[]; readonly bypassImmune: readonly unknown[] }
+  readonly defaultMode: string
+  /** The D1 seam: the rule set `mode` evaluates against (auto suspends rules). */
+  effectiveRuleSet(mode: string): PermissionRulesLike['ruleSet']
   setMode(agent: Agent, mode: string): void
 }
 
@@ -69,10 +73,17 @@ type PermissionRulesLike = {
 const MODES = PERMISSION_COMMAND_MODES
 
 /** Render the current rule state from a mounted engine. */
-function renderState(service: PermissionRulesLike): CommandResult {
+function renderState(service: PermissionRulesLike, agent?: Agent): CommandResult {
+  const merged = service.ruleSet as never as { readonly allow: readonly unknown[] }
+  const mode = foldPlanMode(agent?.session.snapshotEvents() ?? [])
+    ? 'plan'
+    : foldPermissionMode(agent?.session.snapshotEvents() ?? []) ?? service.defaultMode
+  const effective = service.effectiveRuleSet(mode)
   return {
     kind: 'success',
-    text: renderPermissions(service.ruleSet as never, service.ruleSet.bypassImmune.length),
+    text: renderPermissions(effective as never, service.ruleSet.bypassImmune.length, {
+      suspendedAllow: merged.allow.length - effective.allow.length,
+    }),
   }
 }
 
@@ -97,7 +108,7 @@ async function executePermissions(ctx: Context, invocation: CommandInvocation): 
     if (service === undefined) {
       return { kind: 'success', text: 'The permission-rules engine is not mounted in this composition.' }
     }
-    return renderState(service)
+    return renderState(service, invocation.agent)
   }
   if (service === undefined) {
     return { kind: 'error', text: 'The permission-rules engine is not mounted in this composition.' }

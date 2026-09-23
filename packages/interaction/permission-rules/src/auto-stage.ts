@@ -39,6 +39,12 @@ export interface AutoModeSettings {
    * expands it.
    */
   soft_deny?: string[]
+  /**
+   * Suspend EVERY bash and PowerShell allow rule (whole-tool and content)
+   * in `auto` mode — the hard override on the otherwise best-effort
+   * suspension list (design doc D1/R5). Absent ⇒ `false`.
+   */
+  classifyAllShell?: boolean
   /** LLM risk classifier configuration; absent when the section omits it. */
   classifier?: AutoModeClassifierSettings
 }
@@ -133,9 +139,10 @@ export type AutoStage = {
   rebuild(): void
   /**
    * Maybe escalate one verbose decision. Returns a final decision only for
-   * the armed + `auto` + LOW + `ask`/`passthrough` slice (§4.1); every other
-   * shape returns undefined and the listener applies the legacy mapping
-   * unchanged — the LLM is then never invoked (I1–I3, I5).
+   * the armed + `auto` + LOW + `passthrough` slice (§4.1 as amended by D3 —
+   * rule-derived asks are never arbitrated by the LLM); every other
+   * shape returns undefined and the listener applies the shared post-waterfall
+   * mapping unchanged — the LLM is then never invoked (I1–I3, I5).
    */
   maybeEscalate(decided: DecidedCall, exec: ToolExecution): Promise<StageOutcome | undefined>
 }
@@ -316,10 +323,12 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
         disarmUnarmed(exec)
         return undefined
       }
-      // Eligibility (§4.1): only auto + LOW + ask/passthrough reaches the LLM.
-      // These gates precede the read-only exemption and the breaker gate.
+      // Eligibility (§4.1, D3-amended): only auto + LOW + passthrough
+      // reaches the LLM (post-S1 every waterfall `ask` is rule-derived, and
+      // the stage never arbitrates those). These gates precede the
+      // read-only exemption and the breaker gate.
       if (decided.mode !== 'auto' || decided.risk.level !== 'LOW') return undefined
-      if (decided.decision.kind !== 'ask' && decided.decision.kind !== 'passthrough') return undefined
+      if (decided.decision.kind !== 'passthrough') return undefined
       // F2 read-only exemption: read-only calls cannot mutate, so the LLM
       // round-trip adds latency with zero safety — the legacy path applies.
       if (decided.isReadOnly) return undefined

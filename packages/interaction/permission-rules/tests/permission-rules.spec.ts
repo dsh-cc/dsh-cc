@@ -205,13 +205,15 @@ describe('settings config and hot reload', () => {
       parameters: { command: { type: 'string' } },
       async execute(args) { return [{ type: 'text', text: `ran:${(args as { command: string }).command}` }] },
     }))
-    // config denies the prefix; settings (higher priority) allows it.
+    // config denies the prefix; settings (higher priority) allows it — but
+    // D2 deny-first ordering means the deny wins (behavior-outer ordering
+    // outranks source priority; design doc D2, flipped expectation).
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
       allow: ['Bash(npm install)'],
     })
     const result = await ctx.tools.execute(exec('Bash', { command: 'npm install --save x' }))
-    expect(result.isError).toBe(false)
-    expect(text(result)).toBe('ran:npm install --save x')
+    expect(result.isError).toBe(true)
+    expect(text(result)).toMatch(/denied by permission rule/)
   })
 
   it('hot-reloads on settings change (old listener re-reads merged state)', async () => {
@@ -227,15 +229,15 @@ describe('settings config and hot reload', () => {
       parameters: { command: { type: 'string' } },
       async execute(args) { return [{ type: 'text', text: `ran:${(args as { command: string }).command}` }] },
     }))
-    const before = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /tmp/x' }))
+    const before = await ctx.tools.execute(exec('Bash', { command: 'npm install left-pad' }))
     expect(before.isError).toBe(false)
 
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
-      deny: ['Bash(rm -rf)'],
+      deny: ['Bash(npm install)'],
     })
-    const after = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /tmp/x' }))
+    const after = await ctx.tools.execute(exec('Bash', { command: 'npm install left-pad' }))
     expect(after.isError).toBe(true)
-    expect(text(after)).toMatch(/Bash\(rm -rf\)/)
+    expect(text(after)).toMatch(/Bash\(npm install\)/)
   })
 
   it('fails loud when settings carry a malformed rule', async () => {
@@ -315,7 +317,7 @@ describe('session mode overrides (durable)', () => {
     expect(foldSandboxMode(agent.session.snapshotEvents())).toBe('workspace-write')
   })
 
-  it('auto mode auto-allows a classifier-LOW ask without hitting approval', async () => {
+  it('auto mode prompts on a classifier-LOW rule ask (F1 proxy removed — design doc D3; strict-rule auto)', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
@@ -336,7 +338,7 @@ describe('session mode overrides (durable)', () => {
     const agent = openTurnAgent('auto-low')
     ctx.permissionRules.setMode(agent, 'auto')
     const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
-    expect(asked).toHaveLength(0)
+    expect(asked).toHaveLength(1)
     expect(result.isError).toBe(false)
   })
 

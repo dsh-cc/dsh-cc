@@ -31,7 +31,9 @@ function sessionOf(id: string): Session {
 }
 
 function decided(overrides: Partial<DecidedCall> = {}): DecidedCall {
-  const decision: PermissionDecision = overrides.decision ?? { kind: 'ask', reason: 'rule ask' }
+  // D3: stage eligibility is passthrough-only at LOW, so the default decided
+  // shape is a passthrough (a rule-derived ask never reaches the stage).
+  const decision: PermissionDecision = overrides.decision ?? { kind: 'passthrough' }
   const risk: RiskAssessment = overrides.risk ?? { level: 'LOW', reasons: [] }
   const mode: PermissionMode = overrides.mode ?? 'auto'
   const isReadOnly: boolean = overrides.isReadOnly ?? false
@@ -88,7 +90,7 @@ describe('auto-stage arming (per call)', () => {
     expect(h.warnings).toHaveLength(0)
   })
 
-  it('armed: consults the classifier only for auto + LOW + ask/passthrough (verdict allow ⇒ allow)', async () => {
+  it('armed: consults the classifier only for auto + LOW + passthrough (verdict allow ⇒ allow; D3 eligibility)', async () => {
     const h = harness()
     h.settings.value = { autoMode: { classifier: { enabled: true } } }
     const stage = createAutoStage(h.deps)

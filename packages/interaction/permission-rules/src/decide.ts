@@ -3,12 +3,14 @@
  * engine core stays modular. Pure functions over a structural dependency face
  * (`DecideDeps`) that `PermissionRulesService` supplies in its constructor.
  *
- * Stage order: the risk-classifier escalation runs first (a hard-deny HIGH in
- * every mode; an ask MEDIUM outside bypassPermissions, with session-scoped
- * grants overriding the ask), then the normal mode-aware waterfall proceeds.
- * Under `auto`, a classifier-LOW call whose waterfall decision is `ask` is
- * auto-allowed (the classifier proxies the prompt); MEDIUM/HIGH already
- * returned above.
+ * Stage order: the risk-classifier HIGH deny runs first (in every mode),
+ * then the normal mode-aware waterfall, then ONE shared post-waterfall
+ * mapping (`mapPostWaterfall`, D2/D3): rule deny/mode allow stand, rule asks
+ * honor a session grant (non-plan), MEDIUM passthrough honors a session
+ * grant, else asks with the risk reason, LOW passthrough flows downstream.
+ * There is no LOW+ask→allow proxy: in `auto` mode explicit ask rules prompt
+ * (strict-rule auto, D11). Under `auto`, the merged rule set flows through
+ * `filterAutoAllowRules` before evaluation (D1 rule suspension).
  *
  * @module @dsh-cc/permission-rules/decide
  */
@@ -17,6 +19,7 @@ import type { ToolExecution } from '@dsh-cc/tools'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { evaluatePermission } from './evaluate.ts'
 import { assessBashCommand, assessFilePath, type RiskAssessment } from './classifier.ts'
+import { filterAutoAllowRules } from './auto-rule-filter.ts'
 import { isBashToolName, subjectOf } from './matchers.ts'
 import { foldPlanMode } from './mode.ts'
 import { foldPermissionMode } from './mode.ts'
@@ -40,7 +43,13 @@ export type DecideDeps = {
   /** Read-only tool names auto-allowed under `plan` mode. */
   readOnlyTools: ReadonlySet<string>
   /** The classifier-relevant slice of the current settings section. */
-  settings(): { dangerousPatterns?: string[]; additionalDirectories?: string[]; protectedFiles?: string[] }
+  settings(): {
+    dangerousPatterns?: string[]
+    mediumPatterns?: string[]
+    additionalDirectories?: string[]
+    protectedFiles?: string[]
+    autoMode?: { classifyAllShell?: boolean }
+  }
   /** The fallback (deployment-default) permission mode. */
   defaultMode(): PermissionMode
   /** The live merged rule set. */
@@ -81,7 +90,7 @@ function classify(deps: DecideDeps, exec: ToolExecution): RiskAssessment {
   const args = exec.arguments as Record<string, unknown>
   const session = exec.agent?.session
   if (isBashToolName(exec.name, deps.bashToolName) && typeof args.command === 'string') {
-    return assessBashCommand(args.command, deps.settings().dangerousPatterns)
+    return assessBashCommand(args.command, deps.settings().dangerousPatterns, deps.settings().mediumPatterns)
   }
   if (deps.fileEditTools.has(exec.name) && typeof args.file_path === 'string') {
     const settings = deps.settings()
@@ -118,28 +127,23 @@ export function decideCallVerbose(deps: DecideDeps, exec: ToolExecution): Decide
       isReadOnly,
     }
   }
+  // MEDIUM no longer short-circuits before the waterfall (D2/A1): the
+  // waterfall runs for LOW and MEDIUM alike; grants and the MEDIUM ask are
+  // applied post-waterfall in mapPostWaterfall.
   const mode = effectiveMode(deps, exec)
-  if (risk.level === 'MEDIUM') {
-    if (mode === 'bypassPermissions') return { decision: { kind: 'allow' }, risk, mode, isReadOnly }
-    // Session-scoped approval memory (WS4-PR-B): a rule the user granted via
-    // "Allow for this session" overrides the MEDIUM early-return ask. Checked
-    // after the HIGH safety deny, before the MEDIUM ask. `plan` still asks —
-    // read-only confinement outranks a session grant.
-    if (mode !== 'plan' && deps.sessionAllowMatches(exec)) return { decision: { kind: 'allow' }, risk, mode, isReadOnly }
-    return {
-      decision: { kind: 'ask', reason: `requires approval by risk classifier: ${risk.reasons.join('; ')}` },
-      risk,
-      mode,
-      isReadOnly,
-    }
-  }
   const subject = subjectOf(exec, deps.bashToolName)
   const decision = evaluatePermission({
     toolName: exec.name,
     ...subject === undefined ? {} : { subject },
     // Bypass-immune rules are enforced by the monotonic guard layer, not the
     // waterfall — pass an empty bypassImmune so the guard is authoritative.
-    rules: { ...deps.rules(), bypassImmune: [] },
+    // Under `auto`, broad allow rules are suspended at evaluation time (D1).
+    rules: {
+      ...mode === 'auto'
+        ? filterAutoAllowRules(deps.rules(), { classifyAllShell: deps.settings().autoMode?.classifyAllShell === true })
+        : deps.rules(),
+      bypassImmune: [],
+    },
     mode,
     ...deps.bypassDisabled() ? { bypassDisabled: true } : {},
     isFileEdit: deps.fileEditTools.has(exec.name),
@@ -150,19 +154,43 @@ export function decideCallVerbose(deps: DecideDeps, exec: ToolExecution): Decide
 }
 
 /**
- * Fold the engine decision for one call. Bypass-immune matches fall to the
- * guard layer, not here. The risk-classifier escalation runs first (a
- * hard-deny HIGH in every mode; an ask MEDIUM outside bypassPermissions),
- * then the normal waterfall proceeds unchanged. Under `auto`, a classifier-LOW
- * call whose waterfall decision is `ask` is auto-allowed (the classifier
- * proxies the prompt); MEDIUM/HIGH already returned above.
+ * The ONE shared post-waterfall mapping (D2/D3), consumed by BOTH `decideCall`
+ * and the index.ts listener — no duplicated proxy survives. Given the raw
+ * waterfall decision:
+ * - rule deny ⇒ stands; rule/mode allow ⇒ stands (a MEDIUM risk no longer
+ *   outranks a matched allow — deliberate, CC-faithful);
+ * - rule ask ⇒ stands, except a session grant (mode !== 'plan') allows —
+ *   grant-on-ask, which also applies at LOW risk;
+ * - passthrough at MEDIUM ⇒ a session grant (mode !== 'plan') allows, else
+ *   bypassPermissions allows, else ask with the risk reason (in `plan` this
+ *   leftover ask/passthrough already hit the evaluate plan wrap ⇒ deny);
+ * - passthrough at LOW ⇒ unchanged (downstream, e.g. the LLM stage).
  */
-export function decideCall(deps: DecideDeps, exec: ToolExecution): PermissionDecision {
-  const { decision, risk, mode } = decideCallVerbose(deps, exec)
-  // auto proxies every LOW-risk ask: at this point the call is classifier-LOW
-  // (MEDIUM and HIGH returned above), so low-risk asks auto-allow.
-  if (mode === 'auto' && risk.level === 'LOW' && decision.kind === 'ask') {
-    return { kind: 'allow' }
+export function mapPostWaterfall(
+  deps: DecideDeps,
+  exec: ToolExecution,
+  decided: DecidedCall,
+): PermissionDecision {
+  const { decision, risk, mode } = decided
+  if (decision.kind === 'allow' || decision.kind === 'deny') return decision
+  if (decision.kind === 'ask') {
+    if (mode !== 'plan' && deps.sessionAllowMatches(exec)) return { kind: 'allow' }
+    return decision
+  }
+  // passthrough:
+  if (risk.level === 'MEDIUM') {
+    if (mode !== 'plan' && deps.sessionAllowMatches(exec)) return { kind: 'allow' }
+    if (mode === 'bypassPermissions') return { kind: 'allow' }
+    return { kind: 'ask', reason: `requires approval by risk classifier: ${risk.reasons.join('; ')}` }
   }
   return decision
+}
+
+/**
+ * Fold the engine decision for one call: HIGH deny first, then the waterfall,
+ * then the shared post-waterfall mapping. There is NO LOW+ask→allow auto
+ * proxy (D3 — removed; auto mode is strict-rule: matched ask rules prompt).
+ */
+export function decideCall(deps: DecideDeps, exec: ToolExecution): PermissionDecision {
+  return mapPostWaterfall(deps, exec, decideCallVerbose(deps, exec))
 }

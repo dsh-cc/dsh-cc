@@ -109,8 +109,9 @@ describe('bypass-immune rules', () => {
 })
 
 describe('content-level rules by source priority', () => {
-  it('lets a higher-priority source decide first', () => {
-    // userSettings (higher) disallows the prefix; config (lower) allows it.
+  it('higher-priority source decides first — but deny-first: a config deny beats a userSettings allow (D2 flip)', () => {
+    // userSettings (higher) allows the prefix; config (lower) denies it.
+    // Behavior-outer ordering (deny before allow) outranks source priority.
     const decision = evaluatePermission(input({
       rules: rules({
         deny: [parseRule('Bash(npm install)', 'deny', 'config')],
@@ -118,7 +119,51 @@ describe('content-level rules by source priority', () => {
       }),
       subject: 'npm install --save x',
     }))
-    expect(decision).toMatchObject({ kind: 'allow' })
+    expect(decision).toMatchObject({ kind: 'deny' })
+  })
+
+  it('content-deny beats a same-source allow (D2)', () => {
+    const decision = evaluatePermission(input({
+      rules: rules({
+        allow: [parseRule('Bash(npm install)', 'allow', 'userSettings')],
+        deny: [parseRule('Bash(npm install)', 'deny', 'userSettings')],
+      }),
+      subject: 'npm install --save x',
+    }))
+    expect(decision).toMatchObject({ kind: 'deny' })
+  })
+
+  it('content-deny beats a whole-tool ask (D2)', () => {
+    const decision = evaluatePermission(input({
+      rules: rules({
+        ask: [parseRule('Bash', 'ask', 'config')],
+        deny: [parseRule('Bash(npm install)', 'deny', 'userSettings')],
+      }),
+      subject: 'npm install --save x',
+    }))
+    expect(decision).toMatchObject({ kind: 'deny' })
+  })
+
+  it('sandbox-exempt bash + content deny ⇒ deny (exemption only lifts asks, D2)', () => {
+    const decision = evaluatePermission(input({
+      rules: rules({
+        deny: [parseRule('Bash(npm install)', 'deny', 'config')],
+      }),
+      subject: 'npm install --save x',
+      sandboxedBashExempt: true,
+    }))
+    expect(decision).toMatchObject({ kind: 'deny' })
+  })
+
+  it('content-ask beats a lower-priority content-allow across sources (D2)', () => {
+    const decision = evaluatePermission(input({
+      rules: rules({
+        ask: [parseRule('Bash(npm install)', 'ask', 'userSettings')],
+        allow: [parseRule('Bash(npm install)', 'allow', 'config')],
+      }),
+      subject: 'npm install --save x',
+    }))
+    expect(decision).toMatchObject({ kind: 'ask' })
   })
 
   it('falls to a lower-priority source when the higher one does not match', () => {

@@ -49,9 +49,11 @@ function addTotals(total: Totals, counts: SourceCounts): void {
  * Render the effective permission rule state from a rule set.
  * @param rules - the merged rule set (the engine's `ruleSet`).
  * @param bypassImmune - bypass-immune rule count (deny, guard-enforced).
+ * @param opts - when `suspendedAllow` > 0 (auto mode only), annotate the
+ *   count of allow rules suspended at evaluation time (design doc D1).
  * @returns a read-only report of rule counts per source and in total.
  */
-export function renderPermissions(rules: PermissionRuleSet, bypassImmune: number): string {
+export function renderPermissions(rules: PermissionRuleSet, bypassImmune: number, opts: { suspendedAllow?: number } = {}): string {
   const lines = ['Permission rules (read-only)']
   const total: Totals = { allow: 0, deny: 0, ask: 0, bypassImmune }
   let any = false
@@ -64,5 +66,7 @@ export function renderPermissions(rules: PermissionRuleSet, bypassImmune: number
   }
   if (!any) lines.push('  (no rules configured)')
   lines.push(`Total: allow=${total.allow} deny=${total.deny} ask=${total.ask} (bypassImmune=${bypassImmune})`)
+  const suspended = opts.suspendedAllow ?? 0
+  if (suspended > 0) lines.push(`Total: ${suspended} allow rule(s) suspended in auto mode`)
   return lines.join('\n')
 }

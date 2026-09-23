@@ -30,6 +30,8 @@ export interface PermissionSettings {
   protectedFiles?: string[]
   /** Raw dangerous-command regex sources replacing the curated defaults. */
   dangerousPatterns?: string[]
+  /** Raw medium-risk regex sources replacing the curated MEDIUM tier. */
+  mediumPatterns?: string[]
   /**
    * Optional LLM risk-classifier configuration for `auto` mode (hand-mirrors
    * the shared `AutoModeSchema`): `soft_deny` prose list plus a `classifier`
@@ -118,12 +120,14 @@ export function permissionSettingsSchema(): z<PermissionSettings> {
     additionalDirectories: z.array(z.string()),
     protectedFiles: z.array(z.string()),
     dangerousPatterns: z.array(z.string()),
+    mediumPatterns: z.array(z.string()),
     // Union with `undefined` keeps an absent `autoMode` key absent — no
     // defaults materialized, the classifier stays disarmed (mirrors the
     // shared AutoModeSchema union-with-undefined idiom).
     autoMode: z.union([
       z.object({
         soft_deny: z.union([z.array(z.string()), z.const(undefined)]),
+        classifyAllShell: z.union([z.boolean(), z.const(undefined)]),
         classifier: z.union([autoModeClassifierSchema, z.const(undefined)]),
       }),
       z.const(undefined),

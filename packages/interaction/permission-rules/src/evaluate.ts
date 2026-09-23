@@ -1,11 +1,14 @@
 /**
  * Pure permission evaluation: given a tool call, a source-labelled rule set,
  * and a mode, fold the decision. The same function backs the plugin's
- * `tools/pre-execute` listener and the host UI's rule preview. Browser-safe.
+ * `tools/pre-execute` listener. Browser-safe.
  *
- * Order (spec): tool-wide deny → tool-wide ask (sandboxed-bash exempt) →
- * source-priority content rules → mode rules (acceptEdits/plan/bypass) →
- * whole-tool allow → passthrough. A final plan-mode wrap converts leftover
+ * Order (D2, deny-first): bypass-immune deny → tool-wide deny → bypass
+ * short-circuit → content deny (all sources) → tool-wide ask (sandboxed-bash
+ * exempt) → content ask → content allow → mode rules (acceptEdits/plan/
+ * bypass) → tool-wide allow → passthrough. Within the content phases,
+ * behavior is outer (deny → ask → allow) and sources inner by priority, with
+ * declaration order preserved within behavior+source. A final plan-mode wrap converts leftover
  * `ask`/`passthrough` on a non-read-only call into a deny (allow and deny
  * decisions stand). Bypass-immune rules are evaluated first and always deny;
  * the plugin additionally enforces them through the monotonic guard layer.
@@ -102,6 +105,12 @@ function foldDecision(
     return { kind: 'allow' }
   }
 
+  // (c) content deny, all sources: deny wins over any ask/allow (D2).
+  for (const source of SOURCE_PRIORITY) {
+    const matched = firstContentMatch(rules.deny, toolName, subject, source)
+    if (matched !== undefined) return denyOf(matched)
+  }
+
   // (b) whole-tool ask, except an exempted sandboxed bash (which allows instead).
   const toolAsk = firstToolLevel(rules.ask, toolName)
   if (toolAsk !== undefined) {
@@ -111,13 +120,15 @@ function foldDecision(
     return askOf(toolAsk)
   }
 
-  // (c) content-level allow/deny/ask by source priority. The first matching
-  // rule across all three behaviors (in source-priority order) decides.
+  // (d) content ask, then content allow — behavior outer (ask before allow),
+  // sources inner by priority (D2).
   for (const source of SOURCE_PRIORITY) {
-    for (const behavior of ['allow', 'deny', 'ask'] as const) {
-      const matched = firstContentMatch(rules[behavior], toolName, subject, source)
-      if (matched !== undefined) return decisionOf(behavior, matched)
-    }
+    const matched = firstContentMatch(rules.ask, toolName, subject, source)
+    if (matched !== undefined) return askOf(matched)
+  }
+  for (const source of SOURCE_PRIORITY) {
+    const matched = firstContentMatch(rules.allow, toolName, subject, source)
+    if (matched !== undefined) return { kind: 'allow' }
   }
 
   // (e) acceptEdits auto-allows file-edit calls; plan auto-allows read-only calls.
@@ -183,13 +194,6 @@ function firstBypassImmune(
     if (contentMatches(rule.matcher, subject)) return rule
   }
   return undefined
-}
-
-/** Map a matched rule's behavior to a decision. */
-function decisionOf(behavior: 'allow' | 'deny' | 'ask', match: PermissionRule): PermissionDecision {
-  if (behavior === 'allow') return { kind: 'allow' }
-  if (behavior === 'deny') return denyOf(match)
-  return askOf(match)
 }
 
 /** Deny decision for a matched rule. */

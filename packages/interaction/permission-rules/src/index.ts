@@ -29,7 +29,8 @@ import type {} from '@deepseek-ai/dsh-shell'
 import { createClassifierStreamAdapter, type ClassifierStream } from './classifier-lane.ts'
 import { parseRule, ruleString } from './parser.ts'
 import { mergeRuleSets } from './evaluate.ts'
-import { decideCallVerbose, type DecideDeps } from './decide.ts'
+import { decideCallVerbose, mapPostWaterfall, type DecideDeps } from './decide.ts'
+import { filterAutoAllowRules } from './auto-rule-filter.ts'
 import { createAutoStage, appendSessionClassifier, type AutoStage } from './auto-stage.ts'
 import {
   PERMISSION_MODES,
@@ -101,6 +102,8 @@ export {
   contentMatches,
 } from './parser.ts'
 export { canonicalizeHostname, isWebFetchRuleTool } from './domain.ts'
+export { filterAutoAllowRules } from './auto-rule-filter.ts'
+export { DEFAULT_MEDIUM_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -272,22 +275,20 @@ export class PermissionRulesService extends Service {
 
     ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
       const decided = decideCallVerbose(decideDeps, exec)
-      // Armed + auto + LOW + ask/passthrough ⇒ the LLM stage decides (§4.1):
-      // verdict allow ⇒ allow, verdict ask/failure ⇒ ask(reason). Every other
-      // path falls through to today's exact mapping (disarmed ⇒ bit-for-bit).
+      // Armed + auto + LOW + passthrough-only ⇒ the LLM stage decides (§4.1;
+      // D3: rule-derived asks are NOT arbitrated by the LLM): verdict allow
+      // ⇒ allow, verdict ask/failure ⇒ ask(reason). The stage consult reads
+      // the PRE-mapping DecidedCall, exactly as before.
       const escalated = await autoStage.maybeEscalate(decided, exec)
       if (escalated !== undefined) {
         return escalated === 'allow' ? { kind: 'allow' } : { kind: 'ask', reason: escalated.reason }
       }
-      const { decision, risk, mode } = decided
+      // The ONE shared post-waterfall mapping (D2/D3) — the decide.ts function,
+      // not a duplicated inline proxy (the old LOW+ask→allow proxy is deleted).
+      const decision = mapPostWaterfall(decideDeps, exec, decided)
       if (decision.kind === 'allow') return { kind: 'allow' }
       if (decision.kind === 'deny') return { kind: 'deny', reason: decision.reason }
-      if (decision.kind === 'ask') {
-        // auto proxies every LOW-risk ask (MEDIUM/HIGH returned above):
-        // identical to the previous decideCall post-processing.
-        if (mode === 'auto' && risk.level === 'LOW') return { kind: 'allow' }
-        return { kind: 'ask', ...decision.reason === undefined ? {} : { reason: decision.reason } }
-      }
+      if (decision.kind === 'ask') return { kind: 'ask', ...decision.reason === undefined ? {} : { reason: decision.reason } }
       return next()
     })
 
@@ -480,6 +481,20 @@ export class PermissionRulesService extends Service {
   /** The currently merged rule set (for introspection and host preview). */
   get ruleSet(): PermissionRuleSet {
     return this.state.rules
+  }
+
+  /**
+   * The rule set a call in `mode` is evaluated against (D1 seam): in `auto`
+   * mode the merged set with suspended allow rules filtered out
+   * (`classifyAllShell` from the live autoMode section); every other mode
+   * returns the merged set unchanged. The single seam for `/permissions` and
+   * any future preview consumer.
+   */
+  effectiveRuleSet(mode: PermissionMode): PermissionRuleSet {
+    if (mode !== 'auto') return this.state.rules
+    return filterAutoAllowRules(this.state.rules, {
+      classifyAllShell: this.settingsSection().autoMode?.classifyAllShell === true,
+    })
   }
 }
 

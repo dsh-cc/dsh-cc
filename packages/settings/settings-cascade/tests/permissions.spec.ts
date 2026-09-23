@@ -18,6 +18,7 @@ describe('PermissionsSchema', () => {
       additionalDirectories: ['/workspace/other'],
       protectedFiles: ['.bashrc', '.msh/**'],
       dangerousPatterns: ['drop database'],
+      mediumPatterns: [],
     }
     expect(parse(value)).toEqual(value)
   })
@@ -31,6 +32,7 @@ describe('PermissionsSchema', () => {
       additionalDirectories: [],
       protectedFiles: ['.ssh/**'],
       dangerousPatterns: ['sudo'],
+      mediumPatterns: [],
     })
   })
 
@@ -42,6 +44,7 @@ describe('PermissionsSchema', () => {
       additionalDirectories: [],
       protectedFiles: [],
       dangerousPatterns: [],
+      mediumPatterns: [],
     })
   })
 
