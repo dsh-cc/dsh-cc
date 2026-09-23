@@ -23,7 +23,10 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { Service } from '@deepseek-ai/cordis'
+import { existsSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { WorkflowResult, WorkflowRun, WorkflowRunId, WorkflowStopReason } from '@deepseek-ai/dsh-workflow'
@@ -58,6 +61,10 @@ export interface CcWorkflowRunEntry {
   readonly maxResultChars: number
   /** Durable-event recording flag: top-level calls only (§3.6, harness precedent `exec.parent === undefined`). */
   readonly record: boolean
+  /** Resume slice: the prior run this run resumes, when launched with `resumeFromRunId`. */
+  readonly resumeOf?: WorkflowRunId
+  /** Resume slice: full source journal text read in the launch prefix (TOCTOU-free). */
+  readonly journalText?: string
 }
 
 /** Render any thrown value without trusting it. */
@@ -96,6 +103,33 @@ function stopReasonOf(result: WorkflowResult): WorkflowStopReason {
   return result.stopReason
 }
 
+/** Journal path for one run: `<dshHome>/workflows/runs/<parentSessionId>/<runId>.jsonl` (design §3.3). */
+function journalPathFor(entry: Pick<CcWorkflowRunEntry, 'session' | 'run'>): string {
+  return join(resolveDshHome(), 'workflows', 'runs', String(entry.session.header.id), `${entry.run.id}.jsonl`)
+}
+
+/** The structured "journal gone" refusal (settled id whose journal no longer exists). */
+export function resumeJournalGoneError(runId: string): Error {
+  return new Error(`workflow: run "${runId}" settled but its journal is gone (evicted or garbage-collected) — relaunch without resumeFromRunId`)
+}
+
+/** The journal provider's one-shot claim on a freshly registered run (design §3.2). */
+export interface PendingWorkflowClaim {
+  readonly runId: WorkflowRunId
+  readonly journalPath: string
+  readonly resumeOf?: WorkflowRunId
+  /** Full source journal text read in the launch prefix (TOCTOU-free). */
+  readonly journalText?: string
+}
+
+/** Handle the journal provider binds to a registered run's journal. */
+export interface WorkflowJournalHandle {
+  /** Resolves when every queued append for this run has hit disk. */
+  drain(): Promise<void>
+  /** Records one replayed member's provider arrival index (== seq). */
+  markCached(arrivalIndex: number): void
+}
+
 /**
  * Package-internal cordis service. Unpublished to the model; the sibling
  * resume-journal package consumes the same run table through this service
@@ -105,7 +139,18 @@ export class CcWorkflowRunRegistry extends Service {
   private readonly runs = new Map<WorkflowRunId, CcWorkflowRunEntry>()
   /** Busy-vein queue: consolidated payloads awaiting the next enter decision. */
   private readonly pending = new Map<string, ReturnType<typeof createUserMessage>[]>()
+  /** Resume slice: the unclaimed journal-provider deposit (one-shot; deposit-overwrite, settle-clear). */
+  private pendingClaim: PendingWorkflowClaim | undefined
+  /** Resume slice: bound journal handles per run; settled publication waits for their drain(). */
+  private readonly journals = new Map<WorkflowRunId, WorkflowJournalHandle>()
+  /** Resume slice: FIFO-capped settled-run projections (cap 128; eviction deletes the journal file). */
+  private readonly settled = new Map<WorkflowRunId, { journalPath: string; stopReason: WorkflowStopReason; resumeOf?: WorkflowRunId }>()
+  /** Resume slice: per-run replayed member indices (drives `cached: true` on the agent records). */
+  private readonly cachedIndices = new Map<WorkflowRunId, Set<number>>()
   private disposed = false
+
+  /** Cap on the settled-projection map; the oldest entry's journal file is deleted on eviction. */
+  private static readonly SETTLED_CAP = 128
 
   /** Typed Context accessor (augmented below). */
   declare ctx: Context
@@ -121,6 +166,7 @@ export class CcWorkflowRunRegistry extends Service {
         label: agent.label,
         ...agent.phase === undefined ? {} : { phase: agent.phase },
         childId: agent.childId,
+        ...this.cachedIndices.get(info.id)?.has(agent.seq) === true ? { cached: true } : {},
       })
     })
     ctx.on('workflow/agent-end', (info, agent) => {
@@ -130,6 +176,7 @@ export class CcWorkflowRunRegistry extends Service {
         runId: info.id,
         seq: agent.seq,
         outcome: agent.outcome,
+        ...this.cachedIndices.get(info.id)?.has(agent.seq) === true ? { cached: true } : {},
       })
     })
     // Busy vein: on each enter decision, claim every pending completion for
@@ -189,14 +236,72 @@ export class CcWorkflowRunRegistry extends Service {
       throw new Error(`workflow: run ${inFlight} is already active in this session; only one workflow run may be in flight at a time (cancel it or wait for its completion delivery before launching another)`)
     }
     this.runs.set(entry.run.id, entry)
+    // Deposit the journal-provider claim BEFORE the run-start record so the
+    // synchronous launch prefix guarantees deposit-before-first-child
+    // (design §3.2). A new deposit overwrites any unclaimed prior one.
+    const journalPath = journalPathFor(entry)
+    if (this.pendingClaim !== undefined) {
+      this.ctx.logger.warn(`tool-workflow: unclaimed resume deposit for run "${this.pendingClaim.runId}" replaced by run "${entry.run.id}"`)
+    }
+    this.pendingClaim = {
+      runId: entry.run.id,
+      journalPath,
+      ...entry.resumeOf !== undefined ? { resumeOf: entry.resumeOf } : {},
+      ...entry.journalText !== undefined ? { journalText: entry.journalText } : {},
+    }
     if (entry.record) {
       this.appendRecord(entry.session, 'tool-workflow/run-start', {
         runId: entry.run.id,
         name: entry.meta.name,
         source: entry.source,
+        ...entry.resumeOf !== undefined ? { resumeOf: entry.resumeOf } : {},
       })
     }
     void entry.run.result.then((result) => { this.settle(entry.run.id, result) })
+  }
+
+  /** One-shot read-and-clear of the pending claim (the journal provider's first child start). */
+  takePendingClaim(): PendingWorkflowClaim | undefined {
+    const claim = this.pendingClaim
+    this.pendingClaim = undefined
+    return claim
+  }
+
+  /** Store the journal handle for one run; returns the unbind disposer. */
+  bindJournal(runId: WorkflowRunId, handle: WorkflowJournalHandle): () => void {
+    this.journals.set(runId, handle)
+    return () => {
+      if (this.journals.get(runId) === handle) this.journals.delete(runId)
+    }
+  }
+
+  /** Records one replayed member's arrival index (== seq) for `cached: true` provenance. */
+  markCached(runId: WorkflowRunId, arrivalIndex: number): void {
+    let indices = this.cachedIndices.get(runId)
+    if (indices === undefined) {
+      indices = new Set<number>()
+      this.cachedIndices.set(runId, indices)
+    }
+    indices.add(arrivalIndex)
+  }
+
+  /** Resume validation: returns the settled projection's journal path or raises a structured refusal. */
+  validateResume(runId: string): { journalPath: string } {
+    const id = runId as WorkflowRunId
+    if (this.runs.has(id)) {
+      throw new Error(`workflow: run "${runId}" is still in flight — resume is only possible after its completion delivery`)
+    }
+    const projection = this.settled.get(id)
+    if (projection === undefined) {
+      const settledIds = [...this.settled.keys()].join(', ')
+      const inFlight = this.inFlightRunId()
+      throw new Error(
+        `workflow: unknown resumeFromRunId "${runId}" — settled runs this session: ${settledIds.length > 0 ? settledIds : '(none)'}; `
+        + `in-flight: ${inFlight ?? '(none)'}`,
+      )
+    }
+    if (!existsSync(projection.journalPath)) throw resumeJournalGoneError(runId)
+    return { journalPath: projection.journalPath }
   }
 
   /**
@@ -210,6 +315,31 @@ export class CcWorkflowRunRegistry extends Service {
     this.runs.delete(runId)
     if (entry.record) {
       this.appendRecord(entry.session, 'tool-workflow/run-end', { runId, stopReason: stopReasonOf(result) })
+    }
+    // Claim expiry: settle clears the deposit when the provider never claimed it.
+    if (this.pendingClaim?.runId === runId) this.pendingClaim = undefined
+    // Settled publication waits for the bound journal's drain(), but the
+    // completion delivery below stays synchronous/immediate (today's
+    // behavior). A drain failure publishes anyway — journal truth is
+    // re-checked at resume read time.
+    const projection = {
+      journalPath: journalPathFor(entry),
+      stopReason: stopReasonOf(result),
+      ...entry.resumeOf !== undefined ? { resumeOf: entry.resumeOf } : {},
+    }
+    const publish = (): void => {
+      if (this.disposed) return
+      this.publishSettled(runId, projection)
+    }
+    const handle = this.journals.get(runId)
+    if (handle === undefined) publish()
+    else {
+      void handle.drain()
+        .then(publish)
+        .catch((error: unknown) => {
+          this.ctx.logger.warn(`tool-workflow: journal drain for run "${runId}" failed (${renderError(error)}); publishing the settled projection anyway`)
+          publish()
+        })
     }
     if (this.disposed) return
     const text = composeDeliveryText(entry, result)
@@ -239,6 +369,26 @@ export class CcWorkflowRunRegistry extends Service {
     else queued.push(message)
   }
 
+  /** Insert the settled projection (FIFO-capped; eviction deletes the journal file) and clear the cached set. */
+  private publishSettled(
+    runId: WorkflowRunId,
+    projection: { journalPath: string; stopReason: WorkflowStopReason; resumeOf?: WorkflowRunId },
+  ): void {
+    this.settled.set(runId, projection)
+    while (this.settled.size > CcWorkflowRunRegistry.SETTLED_CAP) {
+      const oldest = this.settled.keys().next().value
+      if (oldest === undefined) break
+      const evicted = this.settled.get(oldest)!
+      this.settled.delete(oldest)
+      try {
+        rmSync(evicted.journalPath, { force: true })
+      } catch (error) {
+        this.ctx.logger.warn(`tool-workflow: could not delete the evicted journal for run "${oldest}": ${renderError(error)}`)
+      }
+    }
+    this.cachedIndices.delete(runId)
+  }
+
   /**
    * Cancel and dispose every in-flight run and disarm delivery. Called from
    * context disposal; safe to call directly.
@@ -255,6 +405,10 @@ export class CcWorkflowRunRegistry extends Service {
       void Promise.resolve(entry.run.dispose()).catch(() => {})
     }
     this.pending.clear()
+    this.settled.clear()
+    this.journals.clear()
+    this.cachedIndices.clear()
+    this.pendingClaim = undefined
   }
 }
 

@@ -15,7 +15,7 @@ import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@dsh-cc/tools'
 import type { ToolCallView, ToolResultView } from '@dsh-cc/tools'
 import type { WorkflowEngine } from '@deepseek-ai/dsh-workflow'
-import { startWorkflowRun, unknownKeyRefusal, RESUME_REFUSAL, BOTH_META_REFUSAL, META_FORM_PLACEHOLDER } from './launch.ts'
+import { startWorkflowRun, unknownKeyRefusal, BOTH_META_REFUSAL, META_FORM_PLACEHOLDER } from './launch.ts'
 import type { WorkflowLaunchReceipt, WorkflowToolParams } from './launch.ts'
 import { mountCcWorkflowRunRegistry } from './registry.ts'
 
@@ -23,9 +23,12 @@ export const name = 'tool-workflow'
 export const inject = ['tools', 'workflowEngine', 'systemPrompt']
 
 export { CcWorkflowRunRegistry, mountCcWorkflowRunRegistry } from './registry.ts'
-export { startWorkflowRun, resolveScriptSource, unknownKeyRefusal, RESUME_REFUSAL, BOTH_META_REFUSAL } from './launch.ts'
+export { startWorkflowRun, resolveScriptSource, unknownKeyRefusal, BOTH_META_REFUSAL } from './launch.ts'
 export type { WorkflowLaunchReceipt, WorkflowToolParams } from './launch.ts'
 export { extractInlineMeta, META_FORM } from './meta-extract.ts'
+export { parseJournal, serializeJournalLine } from './journal-lines.ts'
+export type { JournalLine } from './journal-lines.ts'
+export type { PendingWorkflowClaim, WorkflowJournalHandle } from './registry.ts'
 export type { ToolWorkflowRunSource } from './types.ts'
 
 /** Config: the model-facing tool name plus the delivery render cap. */
@@ -55,7 +58,7 @@ Parameters (precedence scriptPath > script > name):
 - \`args\`: JSON value exposed to the script as the global \`args\`.
 - \`title\`/\`description\`: accepted and ignored (the script's meta block sets the title).
 - \`meta\`: transitional parameter accepted only with an inline \`script\` that has NO meta block; supplying both is an error.
-- \`resumeFromRunId\`: not available in this release (resume/replay ships with the resume-journal slice).
+- \`resumeFromRunId\`: resume an earlier run of this session (same-session replay): every agent whose request is unchanged returns its saved result instantly, in start order; the first agent whose prompt/schema/route differs — or that failed or was still running last time — runs again, and so does every agent after it.
 
 Async contract: the call returns a launch receipt immediately. The consolidated result arrives BY ITSELF as one completion message — do not poll or re-invoke. On launch failure the receipt carries \`error\` (check it before treating the run as started).`
 
@@ -67,7 +70,7 @@ Use a workflow ONLY when the user explicitly asks for a workflow or for large mu
 
 Sources: pass \`script\` inline, or \`name\` for a workflow saved at \`.claude/workflows/<name>.js\` (project; shadows the user workflows directory), or \`scriptPath\` for any script path (highest precedence). When the user asks to save or iterate on a workflow, write the file with your write tool and call with \`name\`/\`scriptPath\` — never re-paste a large script into the call; edit the file and pass \`scriptPath\`.
 
-The call returns immediately with a launch receipt. The consolidated result arrives by itself as one message when the run completes: do not poll, do not re-invoke, just continue or wait. \`resumeFromRunId\` is delivered by the resume slice's release.`
+The call returns immediately with a launch receipt. The consolidated result arrives by itself as one message when the run completes: do not poll, do not re-invoke, just continue or wait. \`resumeFromRunId\` replays a same-session run: unchanged prefix returns saved results; the first changed or failed agent and everything after it re-runs.`
 }
 
 /** The pending-state card: a generic card titled by the workflow's identity. */
@@ -119,6 +122,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       meta: { type: 'json', description: `Transitional harness-form meta block; only legal with an inline script that has no ${META_FORM_PLACEHOLDER} block.` },
       title: { type: 'string', description: 'Accepted and ignored (the meta block sets the title).' },
       description: { type: 'string', description: 'Accepted and ignored.' },
+      resumeFromRunId: { type: 'string', description: 'Resume one of this session\'s earlier workflow runs by runId: settled agents return their saved results until the first mismatch (hash of prompt/schema/route); that agent and everything after it runs again.' },
     },
     output: {
       schema: {
@@ -142,11 +146,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         throw new Error('workflow tool requires a calling agent (exec.agent was undefined)')
       }
       const params = rawArgs as WorkflowToolParams
-      // Targeted refusal first so a CC-trained model sees the owner, not a
-      // generic unknown-key line.
-      if ('resumeFromRunId' in params) throw new Error(RESUME_REFUSAL)
       for (const key of Object.keys(params)) {
-        if (!['script', 'name', 'scriptPath', 'args', 'meta', 'title', 'description'].includes(key)) {
+        if (!['script', 'name', 'scriptPath', 'args', 'meta', 'title', 'description', 'resumeFromRunId'].includes(key)) {
           throw new Error(unknownKeyRefusal(key))
         }
       }

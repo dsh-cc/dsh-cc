@@ -10,10 +10,11 @@
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { WorkflowEngine, WorkflowRun } from '@deepseek-ai/dsh-workflow'
+import type { WorkflowEngine, WorkflowRun, WorkflowRunId } from '@deepseek-ai/dsh-workflow'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { extractInlineMeta } from './meta-extract.ts'
 import type { CcWorkflowRunRegistry } from './registry.ts'
+import { resumeJournalGoneError } from './registry.ts'
 import type { ToolWorkflowRunSource } from './types.ts'
 
 /** Model-facing parameters (all optional at the schema level; validated here). */
@@ -28,6 +29,8 @@ export interface WorkflowToolParams {
   title?: string
   /** Accepted and ignored, mirroring CC. */
   description?: string
+  /** Resume one of this session's earlier runs by runId (same-session replay; see the tool description). */
+  resumeFromRunId?: string
   [key: string]: unknown
 }
 
@@ -46,12 +49,7 @@ export interface WorkflowLaunchReceipt {
 /** The leading meta-block contract quoted in refusals (see `meta-extract.ts`). */
 export const META_FORM_PLACEHOLDER = 'export const meta = { name, description }'
 
-const ALLOWED_KEYS = ['script', 'name', 'scriptPath', 'args', 'meta', 'title', 'description'] as const
-
-/** Targeted refusal text for the sibling-slice-owned `resumeFromRunId`. */
-export const RESUME_REFUSAL =
-  'workflow: resumeFromRunId is not available in this release — resume/replay is delivered by the resume-journal slice. ' +
-  'The consolidated result of every launched run is delivered automatically when it completes; do not poll.'
+const ALLOWED_KEYS = ['script', 'name', 'scriptPath', 'args', 'meta', 'title', 'description', 'resumeFromRunId'] as const
 
 /** Refusal text for any key outside the documented table. */
 export function unknownKeyRefusal(key: string): string {
@@ -119,8 +117,24 @@ export interface LaunchExec {
  */
 export function startWorkflowRun(deps: LaunchDeps, params: WorkflowToolParams, exec: LaunchExec): WorkflowLaunchReceipt {
   for (const key of Object.keys(params)) {
-    if (key === 'resumeFromRunId') throw new Error(RESUME_REFUSAL)
     if (!(ALLOWED_KEYS as readonly string[]).includes(key)) throw new Error(unknownKeyRefusal(key))
+  }
+  // Resume seam: validate synchronously and read the journal text in the SAME
+  // tick (TOCTOU absorption, design §3.2); a vanished file surfaces as the
+  // structured "journal gone" refusal, never a raw fs error.
+  let resumeOf: WorkflowRunId | undefined
+  let journalText: string | undefined
+  if (params.resumeFromRunId !== undefined) {
+    if (typeof params.resumeFromRunId !== 'string' || params.resumeFromRunId.length === 0) {
+      throw new Error('workflow: resumeFromRunId must be a non-empty runId string')
+    }
+    const projection = deps.registry.validateResume(params.resumeFromRunId)
+    try {
+      journalText = readFileSync(projection.journalPath, 'utf8')
+    } catch {
+      throw resumeJournalGoneError(params.resumeFromRunId)
+    }
+    resumeOf = params.resumeFromRunId as WorkflowRunId
   }
   const cwd = exec.agent.session.header.cwd ?? process.cwd()
   const { script, source, fileName } = resolveScriptSource(params, cwd)
@@ -186,6 +200,7 @@ export function startWorkflowRun(deps: LaunchDeps, params: WorkflowToolParams, e
     agent: exec.agent,
     maxResultChars: deps.maxResultChars,
     record: exec.parent === undefined,
+    ...resumeOf !== undefined ? { resumeOf, journalText: journalText! } : {},
   })
 
   return {

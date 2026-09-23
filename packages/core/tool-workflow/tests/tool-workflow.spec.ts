@@ -287,7 +287,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     expect('taskId' in value).toBe(false)
   })
 
-  it('refuses resumeFromRunId and unknown keys with targeted errors', async () => {
+  it('refuses resumeFromRunId with the validateResume-unknown-id refusal and rejects unknown keys', async () => {
     const { ctx } = await setup()
     const resume = await ctx.tools.execute({
       signal: testToolSignal,
@@ -297,7 +297,8 @@ describe('workflow tool (fake engine + fake session)', () => {
       agent: fakeAgent(vi.fn()),
     })
     expect(resume.isError).toBe(true)
-    expect(textOf(resume as never)).toContain('resume-journal slice')
+    expect(textOf(resume as never)).toContain('unknown resumeFromRunId "run-0"')
+    expect(textOf(resume as never)).toContain('settled runs this session: (none)')
 
     const unknown = await ctx.tools.execute({
       signal: testToolSignal,
