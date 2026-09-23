@@ -34,6 +34,19 @@ export type ClassifierFailure = 'timeout' | 'error' | 'malformed' | 'unarmed' | 
 /** The per-call route, passed as data instead of resolved from ambient state. */
 export type ClassifierRoute = { provider: string; model: string; reasoningEffort?: string }
 
+/**
+ * The per-call transcript context (S3/D7): the bounded user-intent and
+ * tool-history folds, the project instructions, and an optional enrichment
+ * snapshot. Every field is optional-friendly — empty sections are omitted
+ * from the rendered input.
+ */
+export type ClassifierContext = {
+  userIntent?: string
+  projectInstructions?: string
+  toolHistory?: string
+  siteContext?: string
+}
+
 /** Durable audit record for one classify call. The raw input NEVER appears — only its digest. */
 export type ClassifierAuditEvent = {
   tool: string
@@ -47,6 +60,8 @@ export type ClassifierAuditEvent = {
   model?: string
   latencyMs: number
   cacheHit: boolean
+  /** Present (true) when the D13 reconsider pass ran for this verdict. */
+  secondPass?: boolean
 }
 
 /**
@@ -68,6 +83,12 @@ export type LlmClassifierDeps = {
   timeoutMs: number
   cacheMaxEntries: number
   /**
+   * D13 reconsider pass (default FALSE): when true, a non-failure `ask`
+   * verdict earns ONE extra call (same system + input + a reconsider
+   * instruction); only an ask→allow flip is possible, never the reverse.
+   */
+  secondPass?: boolean
+  /**
    * Optional env-gated debug sink (process log — NEVER session events).
    * When present, every raw model output is logged with the
    * `[dsh:classifier:raw]` prefix, truncated to 2 KiB. Raw output may echo
@@ -81,13 +102,18 @@ export type LlmClassifier = {
   /**
    * Never throws. Any failure ⇒ {verdict:'ask', reason} tagged with the
    * failure kind. An undefined route ⇒ the 'unarmed' classification (the
-   * stream is never called).
+   * stream is never called). The optional per-call `context` adds the D7
+   * transcript sections ahead of the tool call.
    */
-  classify(exec: ToolExecution, opts?: { route?: ClassifierRoute }): Promise<LlmClassification>
+  classify(exec: ToolExecution, opts?: { route?: ClassifierRoute; context?: ClassifierContext }): Promise<LlmClassification>
 }
 
 /** The hard cap on the rendered classifier payload (applied before the DATA fence wrap). */
 const INPUT_CAP = 4096
+/** The hard cap on the FINAL assembled input (all sections joined; A12). */
+const ASSEMBLED_CAP = 8192
+/** Per-section caps (D7). */
+const SECTION_CAPS = { userIntent: 1536, projectInstructions: 1024, toolHistory: 1536, siteContext: 512 } as const
 /** Failsafe reason when the model output does not parse — never echoes model output. */
 const UNPARSEABLE_REASON = 'classifier output unparseable'
 /** Reason tagged when the caller aborted mid-flight (host noise, not a lane fault). */
@@ -118,7 +144,9 @@ function listDigest(list: readonly string[]): string {
 /**
  * The session-scope cache key: tool, rendered input, and ALL THREE slot lists
  * bust it — any slot change (soft-deny, allow exceptions, environment)
- * invalidates previously cached verdicts.
+ * invalidates previously cached verdicts. The optional context digest (S3)
+ * participates too: a changed userIntent/toolHistory/instruction/snapshot
+ * busts previously cached verdicts.
  */
 export function classificationKey(
   toolName: string,
@@ -126,12 +154,46 @@ export function classificationKey(
   softDeny: readonly string[],
   allowExceptions: readonly string[] = [],
   environment: readonly string[] = [],
+  contextDigest?: string,
 ): string {
-  return sha256(`${toolName}|${renderedInput}|${listDigest(softDeny)}|${listDigest(allowExceptions)}|${listDigest(environment)}`)
+  const parts = [toolName, renderedInput, listDigest(softDeny), listDigest(allowExceptions), listDigest(environment)]
+  if (contextDigest !== undefined) parts.push(contextDigest)
+  return sha256(parts.join('|'))
 }
 
 function cap(value: string): string {
   return value.length <= INPUT_CAP ? value : value.slice(0, INPUT_CAP)
+}
+
+/** Cap one string to `max` chars, appending an ellipsis on truncation. */
+function capWithEllipsis(value: string, max: number): string {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`
+}
+
+/**
+ * Render one `<section>` wrapper; empty content yields '' (no empty fences).
+ */
+function section(name: string, body: string): string {
+  return body.length === 0 ? '' : `<${name}>\n${body}\n</${name}>`
+}
+
+/**
+ * Assemble the full classifier input: the D7 transcript sections in
+ * evaluation order (user_intent → project_instructions → tool_history →
+ * context, empty ones omitted) ahead of the fenced tool call, the whole
+ * string hard-capped at {@link ASSEMBLED_CAP}.
+ */
+function assembleInput(exec: ToolExecution, context?: ClassifierContext): string {
+  const toolCall = renderInput(exec)
+  if (context === undefined) return toolCall
+  const parts = [
+    section('user_intent', capWithEllipsis(context.userIntent ?? '', SECTION_CAPS.userIntent)),
+    section('project_instructions', capWithEllipsis(context.projectInstructions ?? '', SECTION_CAPS.projectInstructions)),
+    section('tool_history', capWithEllipsis(context.toolHistory ?? '', SECTION_CAPS.toolHistory)),
+    section('context', capWithEllipsis(context.siteContext ?? '', SECTION_CAPS.siteContext)),
+    toolCall,
+  ]
+  return capWithEllipsis(parts.filter(part => part.length > 0).join('\n'), ASSEMBLED_CAP)
 }
 
 /**
@@ -177,9 +239,21 @@ function systemPrompt(softDeny: readonly string[], allowExceptions: readonly str
     exceptions,
     'Environment (the trust boundary): treat only what this list trusts as in-scope; everything else is external:',
     env,
+    'Intent rules:',
+    '- Judge whether the action is authorized by what the user actually asked for — not merely whether it relates to their request.',
+    '- A question from the user is not a directive to act.',
+    '- One earlier approval of a similar action is not a pattern; judge every call on its own merits.',
+    '- When the user intent section is absent or empty, be conservative and prefer "ask".',
     'Respond with a single JSON object and nothing else: {"verdict":"allow"|"ask","reason":"<short reason>"}',
   ].join('\n')
 }
+
+/** The D13 reconsider instruction appended to the system prompt on the second pass. */
+const RECONSIDER_INSTRUCTION = [
+  'RECONSIDER: your previous verdict was "ask". Re-examine the call against the rules and the user intent above.',
+  'If the action is genuinely authorized and safe under those rules, return {"verdict":"allow", ...}.',
+  'Otherwise return "ask" again with the reason. Never reverse an "allow" verdict to "ask".',
+].join(' ')
 
 /** Parse the model output; anything that is not exactly an allow/ask verdict is malformed. */
 function parseVerdict(raw: string): LlmVerdict | undefined {
@@ -228,10 +302,10 @@ export function createLlmClassifier(deps: LlmClassifierDeps): LlmClassifier {
   const cache = new LruCache(Math.max(0, deps.cacheMaxEntries))
   const system = systemPrompt(deps.softDeny, deps.allowExceptions, deps.environment)
   return {
-    async classify(exec: ToolExecution, opts?: { route?: ClassifierRoute }): Promise<LlmClassification> {
+    async classify(exec: ToolExecution, opts?: { route?: ClassifierRoute; context?: ClassifierContext }): Promise<LlmClassification> {
       const startedAt = Date.now()
       const tool = exec.name
-      const input = renderInput(exec)
+      const input = assembleInput(exec, opts?.context)
       const digest = sha256(input)
       const identity = (result: LlmVerdict, cacheHit: boolean, failure?: ClassifierFailure): LlmClassification => {
         const route = opts?.route
@@ -255,7 +329,10 @@ export function createLlmClassifier(deps: LlmClassifierDeps): LlmClassifier {
         )
       }
 
-      const key = classificationKey(tool, input, deps.softDeny, deps.allowExceptions, deps.environment)
+      const contextDigest = opts?.context === undefined
+        ? undefined
+        : sha256([opts.context.userIntent ?? '', opts.context.projectInstructions ?? '', opts.context.toolHistory ?? '', opts.context.siteContext ?? ''].join('|'))
+      const key = classificationKey(tool, input, deps.softDeny, deps.allowExceptions, deps.environment, contextDigest)
       const cached = cache.get(key)
       if (cached !== undefined) return identity(cached, true)
 
@@ -306,6 +383,28 @@ export function createLlmClassifier(deps: LlmClassifierDeps): LlmClassifier {
             false,
             'malformed',
           )
+        }
+        // D13 reconsider pass (default OFF): a non-failure ask earns ONE
+        // extra call; only an ask→allow flip is possible, never the reverse.
+        if (parsed.verdict === 'ask' && deps.secondPass === true) {
+          try {
+            const second = parseVerdict(await deps.stream({
+              provider: route.provider,
+              model: route.model,
+              system: `${system}\n${RECONSIDER_INSTRUCTION}`,
+              prompt: input,
+              maxTokens: MAX_TOKENS,
+              ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
+              signal,
+            }))
+            const final = second?.verdict === 'allow' ? { verdict: 'allow' as const, reason: second.reason } : parsed
+            cache.set(key, final)
+            return { ...identity(final, false), secondPass: true }
+          } catch {
+            // Reconsider-pass failure keeps the first (non-failure) verdict.
+            cache.set(key, parsed)
+            return { ...identity(parsed, false), secondPass: true }
+          }
         }
         cache.set(key, parsed)
         return identity(parsed, false)

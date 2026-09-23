@@ -64,8 +64,10 @@ export type DecideDeps = {
 
 /**
  * The effective mode for one call: plan overlays, else the session override.
+ * Exported so the auto stage can consume the SAME resolution (including the
+ * `defaultMode` fallback) as its `modeOf` dep (A16 stale-mode revalidation).
  */
-function effectiveMode(deps: DecideDeps, exec: ToolExecution): PermissionMode {
+export function effectiveMode(deps: DecideDeps, exec: ToolExecution): PermissionMode {
   const agent = exec.agent
   if (agent !== undefined && foldPlanMode(agent.session.snapshotEvents())) return 'plan'
   const recorded = agent === undefined ? undefined : foldPermissionMode(agent.session.snapshotEvents())

@@ -26,8 +26,8 @@ function exec(opts: { name?: string; args?: unknown; session?: Session; signal?:
   } as unknown as ToolExecution
 }
 
-function sessionOf(id: string): Session {
-  return Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
+function sessionOf(id: string, cwd = '/work'): Session {
+  return Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
 }
 
 function decided(overrides: Partial<DecidedCall> = {}): DecidedCall {
@@ -66,6 +66,9 @@ function harness(overrides: Partial<Harness> = {}): Harness {
     resolveRoute: () => h.route,
     warn: (message: string) => { h.warnings.push(message) },
     audit: vi.fn(),
+    // A16 stale-mode: the harness pins mode at `auto` unless a test overrides modeOf.
+    modeOf: () => 'auto',
+    readOnlyTools: new Set<string>(),
   } as AutoStageDeps
   return h
 }
@@ -145,13 +148,12 @@ describe('auto-stage eligibility gates (invariants I1–I3, I5)', () => {
     expect(h.streams).toBe(0)
   })
 
-  it('I5: MEDIUM risk ⇒ no escalation regardless of stage state', async () => {
+  it('I5 (S3 flip): MEDIUM + passthrough + armed ⇒ the LLM arbitrates', async () => {
     const h = harness()
     h.settings.value = { autoMode: { classifier: { enabled: true } } }
     const stage = createAutoStage(h.deps)
-    const out = await stage.maybeEscalate(decided({ risk: { level: 'MEDIUM', reasons: ['outside cwd'] } }), exec())
-    expect(out).toBeUndefined()
-    expect(h.streams).toBe(0)
+    expect(await stage.maybeEscalate(decided({ risk: { level: 'MEDIUM', reasons: ['outside cwd'] } }), exec())).toBe('allow')
+    expect(h.streams).toBe(1)
   })
 
   it('armed but mode=default ⇒ no escalation (N1: only auto is vetted)', async () => {
@@ -173,31 +175,39 @@ describe('auto-stage eligibility gates (invariants I1–I3, I5)', () => {
 })
 
 describe('enabled-but-unarmable ⇒ disarm + warn ONCE + unarmed audit', () => {
-  it('no resolvable route: warns once per process, appends one unarmed audit event, falls back to legacy', async () => {
+  it('no resolvable route: warns once per process, appends one unarmed audit event, and D11-fails to PROMPT (ask with availability reason)', async () => {
     const h = harness()
     h.route = undefined
     h.settings.value = { autoMode: { classifier: { enabled: true } } }
     const session = sessionOf('unarmed-1')
     const stage = createAutoStage(h.deps)
     const execWithSession = exec({ session })
-    expect(await stage.maybeEscalate(decided(), execWithSession)).toBeUndefined()
-    expect(await stage.maybeEscalate(decided(), execWithSession)).toBeUndefined()
+    const unavailable = { kind: 'ask', reason: expect.stringMatching(/unavailable/i) }
+    expect(await stage.maybeEscalate(decided(), execWithSession)).toEqual(unavailable)
+    expect(await stage.maybeEscalate(decided(), execWithSession)).toEqual(unavailable)
     expect(h.warnings).toHaveLength(1)
     expect(h.warnings[0]).toMatch(/classifier|route|unarm/i)
-    // The unarmed audit event is per call (each fell back to the legacy path);
-    // the warning is the once-per-process half.
+    // The unarmed audit event is per call; the warning is the once-per-process half.
     expect(h.deps.audit).toHaveBeenCalledTimes(2)
     expect(h.deps.audit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ failure: 'unarmed' }))
   })
 
-  it('no llm stream capability mounted: disarmed with one warning', async () => {
+  it('no llm stream capability mounted: D11 fail-to-prompt (ask with availability reason) + one warning', async () => {
     const h = harness()
     h.settings.value = { autoMode: { classifier: { enabled: true } } }
     h.deps.stream = undefined
     const stage = createAutoStage(h.deps)
-    expect(await stage.maybeEscalate(decided(), exec())).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec())).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.warnings).toHaveLength(1)
     expect(h.warnings[0]).toMatch(/classifier|route|unarm/i)
+  })
+
+  it('enabled===false ⇒ undefined even for an eligible call (D11 disabled row: strict-rule auto)', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: false } } }
+    const stage = createAutoStage(h.deps)
+    expect(await stage.maybeEscalate(decided(), exec())).toBeUndefined()
+    expect(h.deps.audit).not.toHaveBeenCalled()
   })
 })
 
@@ -252,6 +262,9 @@ describe('concurrent maybeEscalate audit attribution', () => {
     const stage = createAutoStage(h.deps)
     const pA = stage.maybeEscalate(decided(), eA)
     const pB = stage.maybeEscalate(decided(), eB)
+    // S3: the context bundle (enrichment) adds a microtask before the stream
+    // call — flush it so both in-flight gates are registered.
+    await new Promise(resolve => setImmediate(resolve))
     // B's stream settles first, then A's — the interleaving that scrambled the old ambient fields.
     gates[1]!('{"verdict":"ask","reason":"from-b"}')
     gates[0]!('{"verdict":"allow","reason":"from-a"}')
@@ -349,7 +362,7 @@ describe('F2 read-only exemption', () => {
     await stage.maybeEscalate(decided(), exec({ session, args: { command: 'secret-echo-token' } }))
     const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, Record<string, unknown>]>
     expect(calls).toHaveLength(1)
-    expect(Object.keys(calls[0]![1]).sort()).toEqual(['cacheHit', 'digest', 'latencyMs', 'model', 'provider', 'route', 'tool', 'verdict'])
+    expect(Object.keys(calls[0]![1]).sort()).toEqual(['cacheHit', 'digest', 'latencyMs', 'model', 'provider', 'reason', 'route', 'tool', 'verdict'])
     expect(JSON.stringify(calls[0]![1])).not.toContain('secret-echo-token')
   })
 })
@@ -391,12 +404,12 @@ describe('F4 per-route failure breaker', () => {
     expect(await stage.maybeEscalate(decided(), exec({ session: sessionA, args: { command: 'c3' } }))).toMatchObject({ kind: 'ask' })
     expect(h.streams).toBe(3)
     // 4th call on the same session: open breaker, legacy path, exactly one warn, one breaker audit.
-    expect(await stage.maybeEscalate(decided(), exec({ session: sessionA, args: { command: 'c4' } }))).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec({ session: sessionA, args: { command: 'c4' } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.streams).toBe(3)
     expect(h.warnings).toHaveLength(1)
     // 5th call in a NEW session: still no stream, still one warn, its own breaker audit.
     const sessionB = sessionOf('brk-b')
-    expect(await stage.maybeEscalate(decided(), exec({ session: sessionB, args: { command: 'c5' } }))).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec({ session: sessionB, args: { command: 'c5' } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.streams).toBe(3)
     expect(h.warnings).toHaveLength(1)
     const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { failure?: string; tool: string; route?: string }]>
@@ -431,7 +444,7 @@ describe('F4 per-route failure breaker', () => {
     await stage.maybeEscalate(decided(), exec({ name: 'Y', args: { command: 'y3' } }))
     // Y is now open (3 consecutive Y failures): no more Y stream calls…
     const streamsAtTrip = h.streams
-    expect(await stage.maybeEscalate(decided(), exec({ name: 'Y', args: { command: 'y4' } }))).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec({ name: 'Y', args: { command: 'y4' } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.streams).toBe(streamsAtTrip)
     expect(h.warnings).toHaveLength(1)
     // …but X has only 2 failures and still consults the classifier.
@@ -445,7 +458,7 @@ describe('F4 per-route failure breaker', () => {
     const stage = createAutoStage(h.deps)
     for (let i = 0; i < 3; i += 1) {
       // Unarmed disarm path: stream never consulted, undefined (legacy).
-      expect(await stage.maybeEscalate(decided(), exec({ args: { command: `u${i}` } }))).toBeUndefined()
+      expect(await stage.maybeEscalate(decided(), exec({ args: { command: `u${i}` } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     }
     expect(h.streams).toBe(0)
     h.route = { provider: 'p1', model: 'm1' }
@@ -469,7 +482,7 @@ describe('F4 per-route failure breaker', () => {
     expect(await stage.maybeEscalate(decided(), exec({ session: sessionA, args: { command: 'fixed' } }))).toBe('allow')
     // Re-trips with a fresh warn and a fresh breaker audit for the same session.
     for (const c of ['c4', 'c5', 'c6']) await stage.maybeEscalate(decided(), exec({ session: sessionA, args: { command: c } }))
-    expect(await stage.maybeEscalate(decided(), exec({ session: sessionA, args: { command: 'c7' } }))).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec({ session: sessionA, args: { command: 'c7' } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.warnings).toHaveLength(2)
     const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { failure?: string }]>
     expect(calls.filter(([s, e]) => s === sessionA && e.failure === 'breaker')).toHaveLength(2)
@@ -586,7 +599,7 @@ describe('R3 restart-durable breaker seeding (session-log)', () => {
     expect(h.streams).toBe(1)
     expect(h.warnings).toHaveLength(1)
     expect(h.warnings[0]).toMatch(/breaker|restored|consecutive/i)
-    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'two' } }))).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'two' } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.streams).toBe(1)
     const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { failure?: string }]>
     expect(calls.filter(([, e]) => e.failure === 'breaker')).toHaveLength(1)
@@ -623,6 +636,8 @@ describe('R3 restart-durable breaker seeding (session-log)', () => {
     const stage = createAutoStage(h.deps)
     const pA = stage.maybeEscalate(decided(), exec({ session, args: { command: 'a' } }))
     const pB = stage.maybeEscalate(decided(), exec({ session, args: { command: 'b' } }))
+    // S3 context-bundle microtask flush before the stream calls register.
+    await new Promise(resolve => setImmediate(resolve))
     gates[1]!('not json at all')
     gates[0]!('not json at all')
     // Both calls classify (seeded streak 2 + one live failure each ⇒ trip);
@@ -639,7 +654,7 @@ describe('R3 restart-durable breaker seeding (session-log)', () => {
     const session = sessionOf('seed-prejoin')
     seedLog(session, [fail({ provider: 'p1', model: 'm1' }), fail({ provider: 'p1', model: 'm1' }), fail({ provider: 'p1', model: 'm1' }), { provider: 'p1', model: 'm1', failure: 'breaker' }])
     const stage = createAutoStage(h.deps)
-    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'one' } }))).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'one' } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.streams).toBe(0)
     const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { failure?: string }]>
     expect(calls.filter(([, e]) => e.failure === 'breaker')).toHaveLength(0)
@@ -650,10 +665,165 @@ describe('R3 restart-durable breaker seeding (session-log)', () => {
     const session = sessionOf('seed-open')
     seedLog(session, [fail({ provider: 'p1', model: 'm1' }), fail({ provider: 'p1', model: 'm1' }), fail({ provider: 'p1', model: 'm1' })])
     const stage = createAutoStage(h.deps)
-    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'one' } }))).toBeUndefined()
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'one' } }))).toEqual({ kind: 'ask', reason: expect.stringMatching(/unavailable/i) })
     expect(h.streams).toBe(0)
     expect(h.warnings).toHaveLength(1)
     const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { failure?: string }]>
     expect(calls.filter(([, e]) => e.failure === 'breaker')).toHaveLength(1)
   })
+})
+
+describe('S3 transcript-aware stage (context bundle, stale-mode, secondPass)', () => {
+  /** Stream fake that captures the full stream opts per call. */
+  function capturingHarness(outputs: string[], modes: PermissionMode[] = []) {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    const opts: Array<{ system: string; prompt: string }> = []
+    let i = 0
+    h.deps.stream = async (o: { system: string; prompt: string }) => {
+      h.streams += 1
+      opts.push(o)
+      return outputs[i++] ?? '{"verdict":"allow","reason":"ok"}'
+    }
+    let m = 0
+    h.deps.modeOf = () => modes.shift() ?? 'auto'
+    return { h, opts }
+  }
+
+  it('LOW rule-ask NEVER reaches the LLM (pinned; the stage never arbitrates rule-derived asks)', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    const stage = createAutoStage(h.deps)
+    expect(await stage.maybeEscalate(decided({ decision: { kind: 'ask', reason: 'by rule' } }), exec())).toBeUndefined()
+    expect(h.streams).toBe(0)
+    expect(h.deps.audit).not.toHaveBeenCalled()
+  })
+
+  it('LOW + MEDIUM passthrough reach the LLM; read-only never does (eligibility matrix)', async () => {
+    for (const level of ['LOW', 'MEDIUM'] as const) {
+      const h = harness()
+      h.settings.value = { autoMode: { classifier: { enabled: true } } }
+      const stage = createAutoStage(h.deps)
+      expect(await stage.maybeEscalate(decided({ risk: { level, reasons: [] } }), exec())).toBe('allow')
+      expect(h.streams).toBe(1)
+    }
+  })
+
+  it('the context bundle rides the classify call: user_intent/tool_history/project_instructions sections', async () => {
+    const { h, opts } = capturingHarness(['{"verdict":"ask","reason":"no"}'])
+    // Session cwd = a temp dir carrying an AGENTS.md (instructions loader target).
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const cwd = mkdtempSync(join(tmpdir(), 's3-stage-'))
+    writeFileSync(join(cwd, 'AGENTS.md'), 'Keep the workspace tidy.')
+    const session = sessionOf('ctx-bundle', cwd)
+    // Human intent message + a read-only tool call (filtered) + a mutating one.
+    session.append('user/message', { role: 'user', content: [{ type: 'text', text: 'please clean up the build dir' }], source: { kind: 'user' } } as never, { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 1, callId: 'c1' as never, name: 'Read', arguments: '{}' })
+    session.append('tool/call', { turn: 1, step: 2, callId: 'c2' as never, name: 'Bash', arguments: '{"command":"rm -rf build"}' })
+    h.deps.readOnlyTools = new Set(['Read'])
+    const stage = createAutoStage(h.deps)
+    await stage.maybeEscalate(decided(), exec({ session, args: { command: 'rm -rf build' } }))
+    expect(opts[0]!.prompt).toContain('<user_intent>\nplease clean up the build dir\n</user_intent>')
+    expect(opts[0]!.prompt).toContain('Bash: rm -rf build')
+    expect(opts[0]!.prompt).not.toContain('Read: /w/a.ts')
+    expect(opts[0]!.prompt).toContain('<project_instructions>')
+  })
+
+  it('enrichment: a work-discarding command with runCommand injects <context>; no runner ⇒ omitted', async () => {
+    const runner = vi.fn(async () => ' M build/out.txt\n')
+    const { h, opts } = capturingHarness(['{"verdict":"allow","reason":"ok"}'])
+    const session = sessionOf('ctx-enrich')
+    h.deps.runCommand = runner
+    const stage = createAutoStage(h.deps)
+    await stage.maybeEscalate(decided(), exec({ session, args: { command: 'git reset --hard' } }))
+    expect(opts[0]!.prompt).toContain('<context>')
+    expect(opts[0]!.prompt).toContain('M build/out.txt')
+    expect(runner).toHaveBeenCalledWith(expect.stringContaining('git'), expect.objectContaining({ timeoutMs: 1000, cwd: '/work' }))
+    // Non-matching command ⇒ no runner call, no section.
+    const { h: h2, opts: opts2 } = capturingHarness(['{"verdict":"allow","reason":"ok"}'])
+    h2.deps.runCommand = vi.fn(async () => '')
+    const stage2 = createAutoStage(h2.deps)
+    await stage2.maybeEscalate(decided(), exec({ session, args: { command: 'ls' } }))
+    expect(opts2[0]!.prompt).not.toContain('<context>')
+  })
+
+  it('A8 stale-mode: mode left auto mid-flight ⇒ discarded + audit failure stale-mode, NOT breaker-counted', async () => {
+    const { h, opts } = capturingHarness(['{"verdict":"allow","reason":"ok"}'], ['auto', 'default'])
+    const session = sessionOf('stale-1')
+    const stage = createAutoStage(h.deps)
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'c1' } }))).toBeUndefined()
+    expect(opts).toHaveLength(1) // the classify ran…
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { failure?: string; verdict?: string }]>
+    expect(calls).toHaveLength(1)
+    expect(calls[0]![1]).toMatchObject({ failure: 'stale-mode', verdict: 'ask' })
+    expect(h.warnings).toHaveLength(0) // not a breaker event
+    // …and the failure did NOT accrue: one malformed call later cannot trip (streak starts at 0).
+    h.deps.stream = async () => 'garbage }}'
+    const out = await stage.maybeEscalate(decided(), exec({ session, args: { command: 'c2' } }))
+    expect(out).toMatchObject({ kind: 'ask' })
+    expect(h.warnings).toHaveLength(0)
+  })
+
+  it('A8: same mode re-folded (deployment-default auto, no mode events) ⇒ the verdict applies', async () => {
+    const { h, opts } = capturingHarness(['{"verdict":"allow","reason":"ok"}'], ['auto', 'auto'])
+    const stage = createAutoStage(h.deps)
+    expect(await stage.maybeEscalate(decided(), exec({ session: sessionOf('stale-ok') }))).toBe('allow')
+    expect(opts).toHaveLength(1)
+  })
+
+  it('D13 secondPass at the stage: settings flag ⇒ one reconsider call, ask→allow flip, audit secondPass:true', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true, secondPass: true } } }
+    const session = sessionOf('sp-flip')
+    const opts: Array<{ system: string; prompt: string }> = []
+    h.deps.stream = async (o: { system: string; prompt: string }) => {
+      h.streams += 1
+      opts.push(o)
+      return h.streams === 1 ? '{"verdict":"ask","reason":"unsure"}' : '{"verdict":"allow","reason":"authorized"}'
+    }
+    const stage = createAutoStage(h.deps)
+    const out = await stage.maybeEscalate(decided(), exec({ session, args: { command: 'c1' } }))
+    expect(out).toBe('allow')
+    expect(h.streams).toBe(2)
+    expect(opts[1]!.system).toMatch(/RECONSIDER/)
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { secondPass?: boolean; verdict: string }]>
+    expect(calls[0]![1]).toMatchObject({ verdict: 'allow', secondPass: true })
+    // The memoization raw string includes secondPass: flipping the flag and
+    // rebuilding drops the memoized classifier (a fresh ask is reconsidered again).
+    h.deps.stream = async (o: { system: string; prompt: string }) => {
+      h.streams += 1
+      return '{"verdict":"ask","reason":"still unsure"}'
+    }
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    stage.rebuild()
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'c1' } }))).toEqual({ kind: 'ask', reason: 'still unsure' })
+    expect(h.streams).toBe(3) // rebuilt classifier consulted (raw-string change), no second pass
+  })
+
+  it('D13 secondPass default OFF: an ask verdict stays ask with ONE stream call', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    h.scripted = ['{"verdict":"ask","reason":"unsure"}']
+    const stage = createAutoStage(h.deps)
+    expect(await stage.maybeEscalate(decided(), exec({ session: sessionOf('sp-off') }))).toEqual({ kind: 'ask', reason: 'unsure' })
+    expect(h.streams).toBe(1)
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { secondPass?: boolean }]>
+    expect(calls[0]![1].secondPass).toBeUndefined()
+  })
+
+  it('D10: the audit reason is control-char-stripped and capped at 120 chars', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    const dirty = `x\x00y\x1f${'q'.repeat(200)}`
+    h.scripted = [JSON.stringify({ verdict: 'ask', reason: dirty })]
+    const stage = createAutoStage(h.deps)
+    await stage.maybeEscalate(decided(), exec({ session: sessionOf('reason-cap') }))
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, { reason?: string }]>
+    const reason = calls[0]![1].reason ?? ''
+    expect(reason.length).toBeLessThanOrEqual(120)
+    expect(reason).not.toMatch(/[\x00-\x1f\x7f]/)
+  })
+
 })
