@@ -119,4 +119,9 @@ describe('autoMode cascade layering (permissions.autoMode delivery route)', () =
     expect(permissions['deny']).toEqual(['Bash(rm -rf)'])
     expect(parse(permissions['autoMode'])).toEqual({ classifier: { enabled: false, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 } })
   })
+
+  it('D13 secondPass is absence-preserving: absent stays absent; present round-trips', () => {
+    expect(parse({ classifier: { enabled: true } })).toEqual({ classifier: { enabled: true, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 } })
+    expect(parse({ classifier: { enabled: true, secondPass: true } })).toEqual({ classifier: { enabled: true, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256, secondPass: true } })
+  })
 })

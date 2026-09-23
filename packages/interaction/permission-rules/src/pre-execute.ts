@@ -18,7 +18,8 @@ import {
   createAutoStage,
   type AutoStage,
 } from './auto-stage.ts'
-import { decideCallVerbose, mapPostWaterfall, type DecideDeps } from './decide.ts'
+import { exec as nodeExec } from 'node:child_process'
+import { decideCallVerbose, effectiveMode, mapPostWaterfall, type DecideDeps } from './decide.ts'
 import type { Config, PermissionSettings } from './settings-schema.ts'
 import type { PermissionMode, PermissionRuleSet } from './types.ts'
 
@@ -114,6 +115,21 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     audit: (session, event) => {
       appendSessionClassifier(session, event)
     },
+    // A8 stale-mode revalidation: the SAME effective-mode resolution the
+    // waterfall uses (plan overlay → session fold → defaultMode fallback).
+    modeOf: (exec) => effectiveMode(decideDeps, exec),
+    // D7 tool-history fold filter — the same set the waterfall's read-only
+    // exemption consults.
+    readOnlyTools: host.readOnlyTools,
+    // S3 enrichment runner: bounded child process (cwd passed per call by
+    // the stage — the session cwd); a failure rejects and the `<context>`
+    // section is omitted (fail-open).
+    runCommand: (cmd, opts) => new Promise<string>((resolve, reject) => {
+      nodeExec(cmd, { ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }), timeout: opts.timeoutMs }, (error, stdout) => {
+        if (error !== null) reject(error)
+        else resolve(stdout)
+      })
+    }),
   })
   host.onAutoStage(autoStage)
 

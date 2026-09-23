@@ -22,6 +22,11 @@ export interface AutoModeClassifier {
   timeoutMs?: number
   /** Verdict cache size in entries (default `256`). */
   cacheMaxEntries?: number
+  /**
+   * D13 reconsider pass (default FALSE, absence-preserving): a non-failure
+   * `ask` verdict earns ONE reconsider call; only ask→allow is possible.
+   */
+  secondPass?: boolean
 }
 
 /** The `autoMode` section (delivered as `permissions.autoMode`). */
@@ -63,7 +68,10 @@ export const AutoModeClassifierSchema: z<AutoModeClassifier> = z.object({
   route: z.string().default('haiku'),
   timeoutMs: z.number().default(8000),
   cacheMaxEntries: z.number().default(256),
-})
+  // Union with `undefined` keeps an absent `secondPass` key absent (default
+  // false at consumption — D13, absence-preserving).
+  secondPass: z.union([z.boolean(), z.const(undefined)]),
+}) as z<AutoModeClassifier>
 
 /**
  * Schemastery schema for the `autoMode` section body. Unknown fields pass

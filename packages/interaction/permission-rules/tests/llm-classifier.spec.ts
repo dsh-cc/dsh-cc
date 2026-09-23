@@ -372,3 +372,125 @@ describe('route effort forwarding', () => {
     expect(calls[0]).not.toHaveProperty('reasoningEffort')
   })
 })
+
+describe('S3/D7 transcript input assembly', () => {
+  it('sections render in evaluation order, empty sections omitted, tool_call last', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), {
+      route: ROUTE,
+      context: { userIntent: 'deploy the app', projectInstructions: '', toolHistory: 'edit: /a.ts', siteContext: '' },
+    })
+    const prompt = calls[0]!.prompt
+    expect(prompt.indexOf('<user_intent>')).toBeLessThan(prompt.indexOf('<tool_history>'))
+    expect(prompt.indexOf('<tool_history>')).toBeLessThan(prompt.indexOf('<tool_call>'))
+    expect(prompt).not.toContain('<project_instructions>')
+    expect(prompt).not.toContain('<context>')
+    expect(prompt).toContain('<user_intent>\ndeploy the app\n</user_intent>')
+  })
+
+  it('each section is capped with an ellipsis; the FINAL assembled string is hard-capped at 8192', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), {
+      route: ROUTE,
+      context: {
+        userIntent: 'x'.repeat(2000),
+        projectInstructions: 'y'.repeat(2000),
+        toolHistory: 'z'.repeat(2000),
+        siteContext: 'w'.repeat(2000),
+      },
+    })
+    const prompt = calls[0]!.prompt
+    expect(prompt.length).toBeLessThanOrEqual(8192)
+    expect(prompt).toContain('…')
+    // Per-section caps: a capped section shows the ellipsis before its section closes.
+    const intent = prompt.slice(prompt.indexOf('<user_intent>'), prompt.indexOf('</user_intent>'))
+    expect(intent.length).toBeLessThanOrEqual(1536 + '<user_intent>\n'.length + 1)
+  })
+
+  it('tool_call payload keeps its 4096 cap inside the assembled string', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'r'.repeat(5000) }), { route: ROUTE })
+    expect(calls[0]!.prompt.length).toBeLessThanOrEqual(4096 + 40) // payload + fence + name
+    expect(calls[0]!.prompt.length).toBeGreaterThan(4096)
+  })
+
+  it('a changed context field busts the cache key (userIntent pinned; each field independently)', async () => {
+    const ctx = { userIntent: 'intent-a', projectInstructions: 'p', toolHistory: 'h', siteContext: 's' }
+    const { cls, calls, deps } = make()
+    // An endless stream: cache accounting must come from keying, not output exhaustion.
+    deps.stream = vi.fn(async (opts: StreamOpts) => { calls.push(opts); return '{"verdict":"allow","reason":"ok"}' })
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE, context: ctx })
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE, context: ctx })
+    expect(calls).toHaveLength(1) // unchanged context ⇒ cache hit
+    for (const field of ['userIntent', 'projectInstructions', 'toolHistory', 'siteContext'] as const) {
+      const before = calls.length
+      const mutated = { ...ctx, [field]: `${ctx[field]}!` }
+      await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE, context: mutated })
+      expect(calls).toHaveLength(before + 1) // the mutation busts the key ⇒ one more stream call
+      await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE, context: mutated })
+      expect(calls).toHaveLength(before + 1) // …and is itself cached
+      await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE, context: ctx })
+      expect(calls).toHaveLength(before + 1) // back to the original context ⇒ the ORIGINAL key still caches (hit)
+      await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE, context: ctx })
+      expect(calls).toHaveLength(before + 1)
+    }
+    // 1 (initial) + 4 fields × 1 miss (the mutation; restores hit the original key) = 5.
+    expect(calls).toHaveLength(5)
+  })
+
+  it('a no-context call does not share the cache key with a context call', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE, context: { userIntent: 'x' } })
+    expect(calls).toHaveLength(2)
+  })
+
+  it('the system prompt carries the intent rules (never CC-verbatim)', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    const system = calls[0]!.system
+    expect(system).toMatch(/authorized by what the user actually asked/i)
+    expect(system).toMatch(/a question .* is not a directive/i)
+    expect(system).toMatch(/one earlier approval .* is not a pattern/i)
+    expect(system).toMatch(/conservative/i)
+  })
+
+  it('D13 secondPass: default OFF; ON flips ask→allow with secondPass:true', async () => {
+    const on = make({ secondPass: true })
+    on.calls.length = 0
+    on.deps.stream = streamFake(['{"verdict":"ask","reason":"unsure"}', '{"verdict":"allow","reason":"authorized"}'], on.calls)
+    const flipped = await on.cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    expect(flipped).toMatchObject({ verdict: 'allow', reason: 'authorized', secondPass: true })
+    expect(on.calls[1]!.system).toMatch(/RECONSIDER/)
+    // Default OFF: a plain ask stays ask with NO second call.
+    const off = make()
+    off.deps.stream = streamFake(['{"verdict":"ask","reason":"unsure"}'], off.calls)
+    const plain = await off.cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    expect(plain).toMatchObject({ verdict: 'ask' })
+    expect(plain).not.toHaveProperty('secondPass')
+    expect(off.calls).toHaveLength(1)
+  })
+
+  it('D13 secondPass: never reverses allow→ask; a second-pass failure keeps the first verdict', async () => {
+    // First verdict allow ⇒ no reconsider call even with secondPass on.
+    const a = make({ secondPass: true })
+    await a.cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    expect(a.calls).toHaveLength(1)
+    // Second pass throws ⇒ the first (ask) verdict stands.
+    const b = make({ secondPass: true })
+    // First call resolves an ask; the reconsider call throws.
+    b.deps.stream = streamFake(['{"verdict":"ask","reason":"unsure"}'], b.calls)
+      .mockImplementationOnce(async () => '{"verdict":"ask","reason":"unsure"}')
+      .mockImplementationOnce(async () => { throw new Error('lane down on reconsider') })
+    const out = await b.cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    expect(out).toMatchObject({ verdict: 'ask', reason: 'unsure', secondPass: true })
+    expect((b.deps.stream as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2) // both passes ran
+  })
+
+  it('classificationKey: context digest participates independently of the rendered input', () => {
+    const base = classificationKey('Bash', 'ls', DEFAULT_SOFT_DENY, [], [], 'digest-1')
+    expect(classificationKey('Bash', 'ls', DEFAULT_SOFT_DENY, [], [], 'digest-1')).toBe(base)
+    expect(classificationKey('Bash', 'ls', DEFAULT_SOFT_DENY, [], [], 'digest-2')).not.toBe(base)
+    expect(classificationKey('Bash', 'ls', DEFAULT_SOFT_DENY, [], [])).not.toBe(base)
+  })
+})

@@ -224,31 +224,33 @@ describe('listener × LLM classifier stage (integration)', () => {
     const high = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /' }, agent2))
     expect(high.isError).toBe(true)
     expect(llm.calls).toHaveLength(0)
-    // I5: MEDIUM (out-of-scope write) asks via the shared post-waterfall mapping — LLM not consulted.
+    // I5 (S3 flip): MEDIUM (out-of-scope write) + passthrough + armed ⇒ the
+    // LLM arbitrates (one call); the ask verdict prompts via the approval seam.
     const mediumAgent = agentOf('int-medium')
     ctx.permissionRules.setMode(mediumAgent, 'auto')
     const medium = await ctx.tools.execute(exec('edit', { file_path: '/outside/x.txt' }, mediumAgent))
     expect(medium.isError).toBe(false) // approval listener allowed-once path
-    expect(llm.calls).toHaveLength(0)
+    expect(llm.calls).toHaveLength(1)
   })
 
-  it('enabled but route unresolvable: warns once, legacy path, unarmed audit event', async () => {
+  it('enabled but route unresolvable: warns once, D11 fail-to-PROMPT (ask with availability reason), unarmed audit event', async () => {
     // No model route service and no settings overlay ⇒ haiku unresolvable.
     const { ctx } = await mount({}, { routes: false })
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
-    const asked: unknown[] = []
-    ctx.on('approval/request', async (req) => { asked.push(req); return 'allowed-once' })
+    const reasons: string[] = []
+    ctx.on('approval/request', async (req) => { reasons.push(String((req as { reason?: string }).reason ?? '')); return 'allowed-once' })
     // No model-aliases overlay ⇒ haiku unresolvable.
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifier: { enabled: true } } })
     const agent = agentOf('int-unarmed')
     ctx.permissionRules.setMode(agent, 'auto')
     const first = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     const second = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
-    // D11 fail-to-prompt is NOT in force for unarmed (enabled-but-unarmable
-    // is still the legacy path in S1; the passthrough call flows downstream).
+    // D11 (S3): an ELIGIBLE (auto+passthrough+LOW) call fails to PROMPT with
+    // an availability reason — never a silent downstream allow.
     expect(first.isError).toBe(false)
     expect(second.isError).toBe(false)
-    expect(asked).toHaveLength(0)
+    expect(reasons).toHaveLength(2)
+    expect(reasons.every(reason => /unavailable/i.test(reason))).toBe(true)
     const warns = warn.mock.calls.filter(call => String(call[0]).match(/classifier/i))
     expect(warns).toHaveLength(1)
     const folded = foldClassifiers(agent.session.snapshotEvents())

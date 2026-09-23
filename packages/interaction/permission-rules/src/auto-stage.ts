@@ -18,7 +18,9 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { createLlmClassifier, expandSoftDeny, type ClassifierRoute, type LlmClassifier } from './llm-classifier.ts'
 import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, expandSlot } from './slots.ts'
+import { createContextBundler } from './context-bundle.ts'
 import type { DecidedCall } from './decide.ts'
+import type { PermissionMode } from './types.ts'
 
 /** `permissions.autoMode.classifier` — the plugin-local hand-mirror of the shared AutoModeClassifierSchema. */
 export interface AutoModeClassifierSettings {
@@ -30,6 +32,11 @@ export interface AutoModeClassifierSettings {
   timeoutMs?: number
   /** Verdict cache size in entries (default `256`). */
   cacheMaxEntries?: number
+  /**
+   * D13 reconsider pass (default FALSE, absence-preserving): a non-failure
+   * `ask` verdict earns ONE reconsider call; only ask→allow is possible.
+   */
+  secondPass?: boolean
 }
 
 /** `permissions.autoMode` — the plugin-local hand-mirror of the shared AutoModeSchema. */
@@ -78,12 +85,27 @@ export interface ClassifierAuditEventData {
   /** sha256 of the rendered classifier input (absent on the arming `unarmed` record). */
   digest?: string
   verdict: 'allow' | 'ask'
-  failure?: 'timeout' | 'error' | 'malformed' | 'unarmed' | 'breaker' | 'cancelled'
+  failure?: 'timeout' | 'error' | 'malformed' | 'unarmed' | 'breaker' | 'cancelled' | 'stale-mode'
+  /** Short model/availability reason (D10): ≤120 chars, control chars stripped at write. */
+  reason?: string
+  /** Present (true) when the D13 reconsider pass ran for this verdict. */
+  secondPass?: boolean
   route?: string
   provider?: string
   model?: string
   latencyMs: number
   cacheHit: boolean
+}
+
+/** D10: audit `reason` cap. */
+const REASON_CAP = 120
+
+/**
+ * Strip control characters and cap an audit reason at {@link REASON_CAP}
+ * chars. Local helper — no cross-package import (D10).
+ */
+function sanitizeReason(reason: string): string {
+  return reason.replace(/[\x00-\x1f\x7f]/g, '').slice(0, REASON_CAP)
 }
 
 /** Wire face of one log event that may or may not be a `permission/classifier`. */
@@ -141,6 +163,19 @@ export type AutoStageDeps = {
    * never session events; wired only when DSH_PERMISSION_CLASSIFIER_DEBUG=1.
    */
   debug?: (message: string) => void
+  /**
+   * The effective permission mode for one call (A8/A16): MUST resolve the
+   * fold INCLUDING the `defaultMode` fallback (the stage itself has no
+   * defaultMode). Wired from decide.ts's `effectiveMode`.
+   */
+  modeOf(exec: ToolExecution): PermissionMode
+  /** Read-only tool names (same set DecideDeps uses) — filters the tool-history fold. */
+  readOnlyTools: ReadonlySet<string>
+  /**
+   * One shell runner for the S3 enrichment snapshot (`undefined` ⇒ enrichment
+   * skipped). `cwd` is the session cwd; `timeoutMs` bounds the child.
+   */
+  runCommand?: (cmd: string, opts: { cwd?: string; timeoutMs: number }) => Promise<string>
 }
 
 /** The stage's contribution to one pre-execute decision: allow, an escalated ask, or nothing (legacy path). */
@@ -151,10 +186,13 @@ export type AutoStage = {
   rebuild(): void
   /**
    * Maybe escalate one verbose decision. Returns a final decision only for
-   * the armed + `auto` + LOW + `passthrough` slice (§4.1 as amended by D3 —
+   * the armed + `auto` + LOW-or-MEDIUM + `passthrough` slice (S3/A13 —
    * rule-derived asks are never arbitrated by the LLM); every other
    * shape returns undefined and the listener applies the shared post-waterfall
-   * mapping unchanged — the LLM is then never invoked (I1–I3, I5).
+   * mapping unchanged — the LLM is then never invoked (I1–I3, I5). Within the
+   * eligible slice, enabled-but-unavailable ⇒ `ask` with an availability
+   * reason (D11 fail-to-prompt); a mid-flight mode change away from `auto`
+   * discards the verdict (A8, audit `stale-mode`, never breaker-counted).
    */
   maybeEscalate(decided: DecidedCall, exec: ToolExecution): Promise<StageOutcome | undefined>
 }
@@ -167,6 +205,7 @@ interface AutoModeSlice {
   route: string
   timeoutMs: number
   cacheMaxEntries: number
+  secondPass: boolean
   enabled: boolean
   raw: string
 }
@@ -184,6 +223,7 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
     route: classifier?.route ?? 'haiku',
     timeoutMs: classifier?.timeoutMs ?? 8000,
     cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
+    secondPass: classifier?.secondPass === true,
     enabled: classifier?.enabled === true,
     raw: JSON.stringify([autoMode?.soft_deny, autoMode?.allow, autoMode?.environment, classifier]),
   }
@@ -237,6 +277,11 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
   let warnedBreaker = false
   /** Session ids whose durable log already seeded this process's breaker state (R3). */
   const seededSessions = new Set<string>()
+  /** S3/D7 context-bundle assembly (./context-bundle.ts, extracted for size). */
+  const bundler = createContextBundler({
+    readOnlyTools: deps.readOnlyTools,
+    ...(deps.runCommand === undefined ? {} : { runCommand: deps.runCommand }),
+  })
 
   const ensureClassifier = (): LlmClassifier => {
     if (classifier !== undefined && builtRaw === slice.raw) return classifier
@@ -255,13 +300,14 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       environment: slice.environment,
       timeoutMs: slice.timeoutMs,
       cacheMaxEntries: slice.cacheMaxEntries,
+      ...(slice.secondPass ? { secondPass: true } : {}),
       ...(deps.debug === undefined ? {} : { debug: deps.debug }),
     })
     builtRaw = slice.raw
     return classifier
   }
 
-  const disarmUnarmed = (exec: ToolExecution): void => {
+  const disarmUnarmed = (exec: ToolExecution): string => {
     if (!warnedUnarmed) {
       warnedUnarmed = true
       deps.warn('permission classifier: enabled but unarmable (llm service or model route unavailable); stage disarmed, auto mode uses the legacy path')
@@ -276,6 +322,7 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
         cacheHit: false,
       })
     }
+    return 'auto-mode classifier unavailable: llm service or model route not armed'
   }
 
   /**
@@ -322,7 +369,9 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       }
       // A settings change is the operator's "I fixed the lane": reset ALL
       // breaker state — route counters, open routes, the per-session audit
-      // de-dup set, and the per-process warn-once flag.
+      // de-dup set, the per-process warn-once flag, and the per-cwd
+      // project-instruction cache (a rebuild picks up instruction edits).
+      bundler.reset()
       routeFailures.clear()
       breakerOpen.clear()
       breakerAudited.clear()
@@ -332,37 +381,55 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
     async maybeEscalate(decided: DecidedCall, exec: ToolExecution): Promise<StageOutcome | undefined> {
       slice = readSlice(deps.settingsRead())
       if (!slice.enabled) return undefined
-      if (deps.stream === undefined) {
-        disarmUnarmed(exec)
-        return undefined
-      }
+      // Eligibility (S3/A13): passthrough-only at LOW or MEDIUM risk in
+      // `auto` mode, never read-only, and NEVER a waterfall `ask` — every
+      // post-S1 ask is rule-derived and the stage never arbitrates those.
+      if (decided.mode !== 'auto') return undefined
+      if (decided.decision.kind !== 'passthrough') return undefined
+      if (decided.risk.level !== 'LOW' && decided.risk.level !== 'MEDIUM') return undefined
+      if (decided.isReadOnly) return undefined
+      // D11: enabled-but-unavailable (unarmable / route-missing / breaker
+      // open) ⇒ a stage-ELIGIBLE call fails to PROMPT with an availability
+      // reason — never a silent fall-through to the downstream allow.
+      const unavailable = (reason: string): StageOutcome => ({ kind: 'ask', reason })
+      if (deps.stream === undefined) return unavailable(disarmUnarmed(exec))
       // The route for this call is passed to classify as data; the audit event
       // is appended from this call's own exec session — no ambient fields.
       const route: ClassifierRoute | undefined = deps.resolveRoute(exec)
-      if (route === undefined) {
-        disarmUnarmed(exec)
-        return undefined
-      }
-      // Eligibility (§4.1, D3-amended): only auto + LOW + passthrough
-      // reaches the LLM (post-S1 every waterfall `ask` is rule-derived, and
-      // the stage never arbitrates those). These gates precede the
-      // read-only exemption and the breaker gate.
-      if (decided.mode !== 'auto' || decided.risk.level !== 'LOW') return undefined
-      if (decided.decision.kind !== 'passthrough') return undefined
-      // F2 read-only exemption: read-only calls cannot mutate, so the LLM
-      // round-trip adds latency with zero safety — the legacy path applies.
-      if (decided.isReadOnly) return undefined
+      if (route === undefined) return unavailable(disarmUnarmed(exec))
       const routeKey = `${route.provider}/${route.model}`
       seedBreakerFromLog(exec, routeKey, route)
       if (breakerOpen.has(routeKey)) {
         auditBreakerOnce(exec, routeKey, route)
+        return unavailable(`auto-mode classifier unavailable: route ${routeKey} breaker open`)
+      }
+      // S3 context bundle (D7): transcript fold + project instructions +
+      // work-discarding git-status enrichment (./context-bundle.ts).
+      const session = exec.agent?.session
+      const context = await bundler.build(exec)
+      // A8 stale-mode epoch: capture the effective mode BEFORE the classify
+      // await; re-fold after. If it left `auto`, the verdict is discarded and
+      // audited `stale-mode` (never breaker-counted).
+      const modeBefore = deps.modeOf(exec)
+      const verdict = await ensureClassifier().classify(exec, { route, context })
+      if (deps.modeOf(exec) !== modeBefore) {
+        if (session !== undefined) {
+          deps.audit(session, {
+            tool: verdict.tool,
+            ...(verdict.digest === undefined ? {} : { digest: verdict.digest }),
+            verdict: 'ask',
+            failure: 'stale-mode',
+            latencyMs: verdict.latencyMs,
+            cacheHit: false,
+          })
+        }
         return undefined
       }
-      const verdict = await ensureClassifier().classify(exec, { route })
       // F4 per-route breaker bookkeeping, attributed to THIS call's route:
       // any success (parsed verdict, cache hit included) resets the streak;
       // malformed/error/timeout increment it; `cancelled` is caller noise and
-      // `unarmed` is a disarm outcome — neither is counted (nor resets).
+      // `unarmed` is a disarm outcome — neither is counted (nor resets), and
+      // neither is `stale-mode` (returned above before this fold).
       if (verdict.failure === undefined) {
         routeFailures.set(routeKey, 0)
       } else if (BREAKER_FAILURE_TAGS.includes(verdict.failure)) {
@@ -377,7 +444,6 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
           auditBreakerOnce(exec, routeKey, route)
         }
       }
-      const session = exec.agent?.session
       if (session !== undefined) {
         deps.audit(session, {
           tool: verdict.tool,
@@ -385,6 +451,8 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
           verdict: verdict.verdict,
           ...(verdict.failure === undefined ? {} : { failure: verdict.failure }),
           ...(verdict.routeAlias === undefined ? {} : { route: verdict.routeAlias, provider: verdict.provider, model: verdict.model }),
+          reason: sanitizeReason(verdict.reason),
+          ...(verdict.secondPass === true ? { secondPass: true } : {}),
           latencyMs: verdict.latencyMs,
           cacheHit: verdict.cacheHit,
         })
