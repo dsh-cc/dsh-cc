@@ -1028,7 +1028,9 @@ capabilities:
       summary: >-
         CC workflows: async multi-agent workflow scripts (inline, saved file, or
         `.claude/workflows/` name) launched through the `workflow` tool with a
-        single consolidated completion delivery.
+        single consolidated completion delivery; saved workflows are invocable
+        as `/<name>` slash commands, and runs render in a phase-grouped
+        progress view.
       refs:
         - { source: cc-docs, path: /docs/en/agent-sdk/typescript, retrieved: '2026-09-23' }
         - { source: cc-docs, path: /docs/en/workflows, retrieved: '2026-09-23' }
@@ -1041,6 +1043,8 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-workflow-cc" }
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: workflow-worker-thread" }
       - { type: source, path: packages/core/tool-workflow/src/index.ts }
+      - { type: source, path: packages/core/tool-workflow/src/commands.ts }
+      - { type: source, path: packages/ui/tui/src/harness/workflow-row.ts }
       - { type: source, path: packages/subagent/workflow-journal/src/index.ts }
       - { type: source, path: packages/subagent/workflow-journal/tests/spike.spec.ts }
     deviation:
@@ -1048,7 +1052,10 @@ capabilities:
       summary: >-
         Same-session replay (`resumeFromRunId`) implemented via the
         `cc-workflow-journal` provider — frozen-until-first-miss over the
-        per-run result journal. Residual: per-user directory mapped to
+        per-run result journal. Saved workflows mount as `/<name>` slash
+        commands at session start (project dir shadows user dir), and a
+        passive cc-tui progress row echoes phase/elapsed/agent counts from
+        the `workflow/*` cordis events. Residual: per-user directory mapped to
         `$DSH_HOME/workflows/` (not `~/.claude/workflows/`); monorepo chain
         loading of every `.claude/workflows/` up to the repo root (CC v2.1.178)
         not implemented — cwd-level only; CC built-in workflows absent;
@@ -1057,7 +1064,14 @@ capabilities:
         receipts omit `taskId`; receipt `warning?` extended to saved-script
         name disagreement; `ultracode`'s upstream session-effort side effect
         absent (opt-in trigger only); one-active-run constraint; no
-        `/workflows` TUI surface in this slice. Residual footnotes:
+        `/workflows` runs panel, save dialog, or pause/cancel keys; no
+        `/reload-skills`-style mid-session re-read (new saves mount next
+        session, runnable immediately by `name`); the command scan roots at
+        `process.cwd()` while the tool resolves `name` against the session
+        header cwd (divergence only when they differ); the progress row is
+        process-scoped without session attribution (the payloads carry none);
+        TUI-local command names silently shadow same-named saved workflows;
+        command-mount skip surfacing is logger-grade. Residual footnotes:
         cross-session (and `claude --resume`-class) replay remains
         unimplemented; the cache key is the request triple
         (prompt + outputSchema + agentOptions), intentionally stricter than

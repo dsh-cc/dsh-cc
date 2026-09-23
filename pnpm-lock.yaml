@@ -870,12 +870,18 @@ importers:
       '@deepseek-ai/dsh-workflow':
         specifier: link:../../../../deepseek-harness/packages/workflow/workflow
         version: link:../../../../deepseek-harness/packages/workflow/workflow
+      '@deepseek-ai/dsh-workflow-worker-thread':
+        specifier: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
+        version: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../../interaction/command-usage
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
@@ -2894,6 +2900,9 @@ importers:
       '@deepseek-ai/dsh-user-questions':
         specifier: link:../../../../deepseek-harness/packages/interaction/user-questions
         version: link:../../../../deepseek-harness/packages/interaction/user-questions
+      '@deepseek-ai/dsh-workflow':
+        specifier: link:../../../../deepseek-harness/packages/workflow/workflow
+        version: link:../../../../deepseek-harness/packages/workflow/workflow
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery

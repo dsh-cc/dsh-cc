@@ -34,9 +34,12 @@
     "@deepseek-ai/dsh-system-prompt": ">=0.1.5-rc.1",
     "@deepseek-ai/dsh-workflow": ">=0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@dsh-cc/tools": "workspace:^"
+    "@dsh-cc/tools": "workspace:^",
+    "@dsh-cc/command-usage": "workspace:^"
   },
   "devDependencies": {
+    "@dsh-cc/command-usage": "workspace:^",
+    "@deepseek-ai/dsh-workflow-worker-thread": "link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",

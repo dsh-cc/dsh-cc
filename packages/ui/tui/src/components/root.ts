@@ -33,6 +33,7 @@ import { TuiAutocompleteProvider } from './completion.ts'
 import { DOUBLE_PRESS_WINDOW_MS, openSystemUrl, sanitizeWindowTitle, truncateActive } from './root-utils.ts'
 import { createEditorTheme, createTheme } from './theme.ts'
 import { TranscriptView } from './transcript.ts'
+import { attachWorkflowRow } from '../harness/workflow-row.ts'
 import { WorkingLine } from './working-line.ts'
 
 import type { BuildRootOptions, RootHandle } from './root-types.ts'
@@ -68,12 +69,10 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 	const title = new Text(theme.bold('dsh cc-mode'), 0, 0)
 	const transcript = new TranscriptView(theme)
 
-	// Pending-steer chip line. Collapses to zero lines when the queue is empty
-	// (Text.render returns [] for blank content), so it takes no vertical space.
+	// Pending-steer chip line (blank content collapses to zero lines).
 	const queueLine = new Text('', 0, 0)
 
-	// Session todo strip (`☐ done/total · active task`), same persistent-Text
-	// pattern: blank content collapses it to zero lines when no todos exist.
+	// Session todo strip (`☐ done/total · active task`), same collapse pattern.
 	const todoLine = new Text('', 0, 0)
 
 	// Transient notice line (e.g. the "Press Ctrl+C again to exit" hint), same
@@ -81,11 +80,8 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 	// notice is parked.
 	const noticeLine = new Text('', 0, 0)
 
-	// Live working line (claude-code style spinner row). Visibility is driven
-	// purely by the `state.turn` anchor (the subscribe below starts/stops it
-	// on undefined→set jumps); the message re-evaluates on every spinner tick,
-	// so elapsed time and token deltas keep moving with no driver events.
-	// stop() blanks it, and an empty Text collapses to zero lines.
+	// Live working line (spinner row): started/stopped by the `state.turn`
+	// anchor jumps; stop() blanks it (an empty Text collapses to zero lines).
 	const workingLine = new WorkingLine(
 		theme.accent,
 		theme.muted,
@@ -95,6 +91,10 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 		},
 		() => tui.requestRender(),
 	)
+
+	// D2 workflow progress row (second WorkingLine; lifecycle fully inside
+	// harness/workflow-row.ts — start on first workflow/* event, stop on end).
+	const workflowRow = attachWorkflowRow(driver, theme.accent, theme.muted, () => tui.requestRender())
 
 	// Dynamic overlay slot (approval/question boxes). Cleared and rebuilt on
 	// every state change so they appear and disappear with the driver state.
@@ -138,7 +138,7 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 	}(driver.statusLineIn(terminal.columns), 0, 0)
 
 	// Ordered chrome shared by the inline mount and the fullscreen exit replay.
-	const chrome: Component[] = [title, transcript, queueLine, todoLine, noticeLine, overlays, workingLine, editor, statusline]
+	const chrome: Component[] = [title, transcript, queueLine, todoLine, noticeLine, overlays, workingLine, workflowRow.line, editor, statusline]
 
 	if (tui instanceof TuiAltScreen) {
 		// Fullscreen (alternate screen): transcript scrolls inside the primary
@@ -158,6 +158,7 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 		dock.addChild(noticeLine, { shrink: 1, minSize: 0 })
 		dock.addChild(overlays, { shrink: 1, minSize: 0 })
 		dock.addChild(workingLine, { shrink: 1, minSize: 0 })
+		dock.addChild(workflowRow.line, { shrink: 1, minSize: 0 })
 		dock.addChild(editor, { shrink: 1, minSize: 1 })
 		dock.addChild(statusline, { shrink: 1, minSize: 1 })
 		const layoutRoot = new VStack()
@@ -391,10 +392,9 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 		editor,
 		destroy() {
 			// Stop the working line first: it must not tick after teardown —
-			// this covers the quit-mid-turn path (the stopForExit chrome replay
-			// would otherwise bake a live spinner frame into scrollback) and the
-			// no-polling suite's no-dangling-interval invariant.
+			// quit-mid-turn scrollback and the no-polling no-dangling invariant.
 			workingLine.stop()
+			workflowRow.dispose()
 			removeInputListener()
 			unsubscribe()
 		},

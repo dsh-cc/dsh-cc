@@ -9,6 +9,7 @@ import type { CatalogEntry } from '../model-catalog.ts'
 import type { TuiState } from '../store.ts'
 import type { ToolCallView, ToolResultView } from '../tool-card.ts'
 import type { WorktreeExitHooks } from '../harness/worktree-exit.ts'
+import type { WorkflowEventTap } from '../harness/workflow-row.ts'
 
 /**
  * The approval answers: grant once, grant persistently, grant for this
@@ -286,6 +287,12 @@ export interface Driver {
    * changes (so callers can detect a refresh by reference equality).
    */
   listCommands(): readonly { name: string; description?: string; argumentHint?: string }[]
+  /**
+   * Passive `workflow/*` cordis event tap (harness driver only; undefined in
+   * compositions without the seam — no row, no subscription). Consumed by the
+   * D2 progress row (harness/workflow-row.ts).
+   */
+  readonly workflowEvents?: WorkflowEventTap
   dispose(): Promise<void>
 }
 

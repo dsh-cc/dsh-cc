@@ -60,6 +60,17 @@ export function unknownKeyRefusal(key: string): string {
 export const BOTH_META_REFUSAL =
   'workflow: both an inline `export const meta` block and the transitional `meta` parameter were supplied — they are mutually exclusive; keep exactly one'
 
+/**
+ * The two saved-workflow directories in lookup order — project first, so
+ * `<cwd>/.claude/workflows` shadows the user workflows directory on a name
+ * collision. The one rule for saved-workflow lookup, shared by the tool's
+ * `name` resolution (`resolveScriptSource`) and the session-start `/<name>`
+ * command scan (`commands.ts`), per plan §3.1's structural one-rule.
+ */
+export function savedWorkflowDirs(cwd: string): string[] {
+  return [join(cwd, '.claude', 'workflows'), join(resolveDshHome(), 'workflows')]
+}
+
 /** Resolve the script source by precedence; a miss on `name` lists the probed directories. */
 export function resolveScriptSource(params: WorkflowToolParams, cwd: string):
   { script: string; source: ToolWorkflowRunSource; fileName?: string } {
@@ -75,9 +86,12 @@ export function resolveScriptSource(params: WorkflowToolParams, cwd: string):
   }
   if (typeof params.name === 'string' && params.name.length > 0) {
     const safeName = params.name.replaceAll('..', '').replaceAll('/', '')
-    const project = join(cwd, '.claude', 'workflows', `${safeName}.js`)
-    const user = join(resolveDshHome(), 'workflows', `${safeName}.js`)
-    for (const [candidate, source] of [[project, 'project-saved'], [user, 'user-saved']] as const) {
+    const dirs = savedWorkflowDirs(cwd)
+    const probed = dirs.map(dir => join(dir, `${safeName}.js`))
+    for (const [candidate, source] of [
+      [probed[0]!, 'project-saved'],
+      [probed[1]!, 'user-saved'],
+    ] as const) {
       try {
         return { script: readFileSync(candidate, 'utf8'), source, fileName: safeName }
       } catch (error) {
@@ -85,7 +99,7 @@ export function resolveScriptSource(params: WorkflowToolParams, cwd: string):
       }
     }
     throw new Error(
-      `workflow: no saved workflow named "${params.name}" — probed ${project} and ${user} ` +
+      `workflow: no saved workflow named "${params.name}" — probed ${probed[0]} and ${probed[1]} ` +
       '(save it first with the write tool: project `.claude/workflows/<name>.js` or the user workflows directory)',
     )
   }
