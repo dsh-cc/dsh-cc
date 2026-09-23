@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/side-query",
   "description": "First-class auxiliary-LLM primitive: one-shot, non-streaming, fail-soft side query over a cheap-lane alias route with timeout/tool-call rejection/unrouted semantics",
-  "version": "0.8.0-rc.2",
+  "version": "0.8.0-rc.3",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
