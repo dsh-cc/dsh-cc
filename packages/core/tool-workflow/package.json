@@ -1,0 +1,58 @@
+{
+  "name": "@dsh-cc/tool-workflow",
+  "description": "CC-parity dynamic workflow tool: inline meta extraction, saved-source resolution, async launch with a session-scoped run registry and exactly-once completion delivery",
+  "version": "0.8.0-rc.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/core/tool-workflow"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-agent": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-home-paths": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-workflow": ">=0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/tools": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
+    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-workflow": "link:../../../../deepseek-harness/packages/workflow/workflow",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/agent-loop-mock": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

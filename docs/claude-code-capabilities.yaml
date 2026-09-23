@@ -648,6 +648,22 @@ capabilities:
         accordingly: the capability exists and is wired end to end, but only
         for opted-in sessions and only via typed-prefix completion.
 
+  engine.ralph:
+    title: Ralph loop
+    category: engine
+    plane: preset
+    upstream:
+      summary: Fresh-agent iterative execution loops.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-ralph" }
+    deviation: { kind: none }
+
   engine.reasoning-effort-surface:
     title: Reasoning-effort reference surface ($level suffix + classifier lane)
     category: engine
@@ -1004,22 +1020,40 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-web" }
     deviation: { kind: none }
 
-  engine.workflow-ralph:
-    title: Workflow / Ralph loop
+  engine.workflow:
+    title: Workflow engine
     category: engine
     plane: preset
     upstream:
-      summary: Multi-agent workflow orchestration and fresh-agent iterative loops.
-      refs: []
+      summary: >-
+        CC workflows: async multi-agent workflow scripts (inline, saved file, or
+        `.claude/workflows/` name) launched through the `workflow` tool with a
+        single consolidated completion delivery.
+      refs:
+        - { source: cc-docs, path: /docs/en/agent-sdk/typescript, retrieved: '2026-09-23' }
+        - { source: cc-docs, path: /docs/en/workflows, retrieved: '2026-09-23' }
     dimensions:
       recognized: true
       mounted: true
-      behavioral: full
-      ux: full
+      behavioral: divergent
+      ux: partial
     evidence:
-      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-workflow" }
-      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-ralph" }
-    deviation: { kind: none }
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-workflow-cc" }
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: workflow-worker-thread" }
+      - { type: source, path: packages/core/tool-workflow/src/index.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        `resumeFromRunId` pending the resume slice; per-user directory mapped to
+        `$DSH_HOME/workflows/` (not `~/.claude/workflows/`); monorepo chain
+        loading of every `.claude/workflows/` up to the repo root (CC v2.1.178)
+        not implemented — cwd-level only; CC built-in workflows absent;
+        `taskId === runId` aliasing with harness-format ids (CC prefix `wf_`);
+        receipt omits `transcriptDir`/`scriptPath`/`sessionUrl`, no-start
+        receipts omit `taskId`; receipt `warning?` extended to saved-script
+        name disagreement; `ultracode`'s upstream session-effort side effect
+        absent (opt-in trigger only); one-active-run constraint; no
+        `/workflows` TUI surface in this slice.
 
   # ── hooks ───────────────────────────────────────────────────────────────
   # One row per upstream event (spec §6; Context7 hooks baseline 2026-09-03).

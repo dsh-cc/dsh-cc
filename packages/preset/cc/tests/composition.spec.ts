@@ -253,6 +253,30 @@ describe('agent.cordis.yml composition', () => {
     expect(toolWeb.config).toMatchObject({ fetch: false })
   })
 
+  it('swaps the harness tool-workflow row for @dsh-cc/tool-workflow in the delegation group', () => {
+    // (plan docs/plans/2026-09-22-workflow-cc-parity-core.md §3.1) Both tools
+    // register the `workflow` tool name and the harness tools registry throws
+    // "already registered" on duplicates, so the harness adapter row is
+    // disabled and our @dsh-cc/tool-workflow row mounts in its place, between
+    // the disabled harness row and tool-ralph. The tool publishes the
+    // ccWorkflowRunRegistry preset service, so the group's isolate map must
+    // carry it alongside workflowEngine (smoke:profile-boot refuses a preset
+    // service outside an isolate realm — verified first-hand on this swap).
+    const group = doc.find((r) => r.id === 'delegation')!
+    expect(group.isolate).toEqual({ workflowEngine: true, ccWorkflowRunRegistry: true })
+    const configIds = (group.config as any[]).map((r) => r.id)
+    const harness = group.config.find((r: any) => r.id === 'tool-workflow')!
+    expect(harness.name).toBe('@deepseek-ai/dsh-tool-workflow')
+    expect(harness.disabled).toBe(true)
+    const ours = group.config.find((r: any) => r.id === 'tool-workflow-cc')!
+    expect(ours.name).toBe('@dsh-cc/tool-workflow')
+    expect(ours.disabled).toBeUndefined()
+    expect(configIds.indexOf('tool-workflow-cc'))
+      .toBeGreaterThan(configIds.indexOf('tool-workflow'))
+    expect(configIds.indexOf('tool-workflow-cc'))
+      .toBeLessThan(configIds.indexOf('tool-ralph'))
+  })
+
   it('declares every @dsh-cc row name as a dependency (top level and group-nested)', () => {
     const deps = Object.keys(pkgJson.dependencies ?? {})
     const rows: any[] = []

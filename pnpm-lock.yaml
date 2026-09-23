@@ -835,6 +835,51 @@ importers:
         specifier: workspace:^
         version: link:../tools
 
+  packages/core/tool-workflow:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: link:../../../../deepseek-harness/packages/core/agent-loop
+        version: link:../../../../deepseek-harness/packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-home-paths':
+        specifier: link:../../../../deepseek-harness/packages/util/home-paths
+        version: link:../../../../deepseek-harness/packages/util/home-paths
+      '@deepseek-ai/dsh-invariants':
+        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
+        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-persistence-jsonl':
+        specifier: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
+        version: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: link:../../../../deepseek-harness/packages/core/system-prompt
+        version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-workflow':
+        specifier: link:../../../../deepseek-harness/packages/workflow/workflow
+        version: link:../../../../deepseek-harness/packages/workflow/workflow
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/agent-loop-mock':
+        specifier: workspace:^
+        version: link:../../test-support/agent-loop-mock
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../tools
+
   packages/core/tools:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -2145,6 +2190,9 @@ importers:
       '@dsh-cc/tool-web-fetch':
         specifier: workspace:^
         version: link:../../core/tool-web-fetch
+      '@dsh-cc/tool-workflow':
+        specifier: workspace:^
+        version: link:../../core/tool-workflow
     devDependencies:
       '@deepseek-ai/cordis-plugin-include':
         specifier: link:../../../../deepseek-harness/vendor/include
