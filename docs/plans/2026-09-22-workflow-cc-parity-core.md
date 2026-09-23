@@ -226,9 +226,12 @@ one step.
   belongs with a future repo-root discovery seam, not this slice.
 - Resolution order: project shadows user. A miss on both is a structured error
   listing the directories probed.
-- `scriptPath` reads an arbitrary path relative to the session cwd; it is subject
-  to the session file-policy sandbox like any other read, and a policy denial is
-  surfaced verbatim to the model (same posture as the `read` tool).
+- `scriptPath` reads an arbitrary path relative to the session cwd. The read
+  runs in the host process with no per-read file-policy admission — the
+  `workflow` tool call itself is permission-gated at the tool layer, the same
+  posture that already governs `bash`/`read`-class access between
+  prescriptions; a filesystem error (missing file, EACCES) is surfaced verbatim
+  to the model (same error posture as the `read` tool).
 - Saved scripts carry their own inline meta; when `name`/`scriptPath` supplies
   the script, the same 3.3 extraction applies. A saved script whose meta `name`
   disagrees with its file name is accepted (file name governs lookup, meta name
