@@ -427,6 +427,28 @@ export class SettingsCascadeProvider extends SettingsProvider {
         {},
       )
 
+    // D12 trusted scope: the `permissions.autoMode` key is assembled from
+    // TRUSTED layers ONLY — user, flag (--settings file + inline), and policy
+    // (managed: remote/system/user) — skipping project and local, the
+    // repo-carried layers, so a cloned repo can never teach the classifier
+    // its own trust boundary. The trusted subset replicates the normal
+    // in-subset merge order (user → flag → policy) with ordinary merge
+    // semantics; every other `permissions` key keeps the full merge.
+    const permissions = isPlainObject(merged['permissions'])
+      ? merged['permissions'] as Record<string, unknown>
+      : undefined
+    if (permissions !== undefined) {
+      const trusted = [user, flag, policy]
+        .map(layer => (isPlainObject(layer['permissions']) ? layer['permissions']['autoMode'] : undefined))
+        .filter((value): value is Record<string, unknown> => value !== undefined)
+        .reduce<Record<string, unknown>>(
+          (acc, layer) => mergeSettingsSection(acc, { autoMode: layer }),
+          {},
+        )
+      if (trusted['autoMode'] === undefined) delete permissions['autoMode']
+      else permissions['autoMode'] = trusted['autoMode']
+    }
+
     // CC camelCase top-level keys alias onto kebab namespaces before the env
     // split / publish, so the shadow mirrors exactly what the seam resolves.
     const { env, ...document } = applyCcKeyAliases(merged)

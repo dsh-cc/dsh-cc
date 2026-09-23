@@ -167,6 +167,9 @@
       "path": "./packages/interaction/command-help"
     },
     {
+      "path": "./packages/interaction/command-auto-mode"
+    },
+    {
       "path": "./packages/interaction/command-init"
     },
     {

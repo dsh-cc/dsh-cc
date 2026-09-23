@@ -33,6 +33,17 @@ export interface AutoMode {
    */
   soft_deny?: string[]
   /**
+   * Allow-exception prose evaluated after the soft-deny rules (S2), in CC's
+   * snake_case spelling. `$defaults` expansion happens at consumption time —
+   * the schema never expands it, so merging never sees the expansion.
+   */
+  allow?: string[]
+  /**
+   * Environment trust-boundary prose (S2): what the classifier treats as
+   * in-scope. `$defaults` expansion happens at consumption time.
+   */
+  environment?: string[]
+  /**
    * Suspend EVERY bash and PowerShell allow rule (whole-tool and content)
    * in `auto` mode — the hard override on the otherwise best-effort
    * suspension list. Absent ⇒ `false` (absence-preserving).
@@ -63,6 +74,9 @@ const AutoModeSectionSchema = z.object({
   // Union with `undefined` keeps an absent `soft_deny` key absent — no empty
   // array is materialized (permissive array, no default).
   soft_deny: z.union([z.array(z.string()), z.const(undefined)]),
+  // Same absence-preserving idiom as `soft_deny` (S2 slots).
+  allow: z.union([z.array(z.string()), z.const(undefined)]),
+  environment: z.union([z.array(z.string()), z.const(undefined)]),
   // Union with `undefined` keeps an absent `classifyAllShell` key absent.
   classifyAllShell: z.union([z.boolean(), z.const(undefined)]),
   // Union with `undefined` keeps an absent `classifier` key absent; a present

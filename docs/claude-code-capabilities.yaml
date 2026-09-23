@@ -1552,6 +1552,30 @@ capabilities:
         decorated TUI surface is a deliberate divergence, never different
         ids or ordering.
 
+  commands.auto-mode:
+    title: /auto-mode
+    category: commands
+    plane: preset
+    upstream:
+      summary: Show auto-mode classifier defaults and the effective auto-mode configuration.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-auto-mode" }
+      - { type: test, path: packages/interaction/command-auto-mode/tests/command-auto-mode.spec.ts }
+    deviation:
+      kind: downgrade
+      summary: >-
+        /auto-mode prints the built-in classifier slot defaults and the
+        effective trusted-scoped `permissions.autoMode` slice (expanded slot
+        lists + classifier sub-config). Claude Code's auto-mode config command
+        is a config FILE editor; ours is read-only introspection by deliberate
+        scope (S5 adds /auto-mode review).
+
   commands.branch:
     title: /branch
     category: commands
@@ -2860,6 +2884,9 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/decide-verbose.spec.ts, anchor: "MEDIUM + matched allow rule" }
       - { type: test, path: packages/interaction/permission-rules/tests/session-allow-integration.spec.ts, anchor: "grant-on-rule-ask (D2b)" }
       - { type: test, path: packages/interaction/command-permissions/tests/command-permissions.spec.ts, anchor: "annotates suspended allow rules in auto mode (D1)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/slots.spec.ts }
+      - { type: test, path: packages/settings/settings-cascade/tests/trusted-scope.spec.ts }
+      - { type: source, path: packages/interaction/permission-rules/src/slots.ts, anchor: "expandSlot" }
     deviation:
       kind: downgrade
       summary: >-
@@ -2933,7 +2960,19 @@ capabilities:
         rule-derived asks in every non-plan mode); the LLM stage arbitrates
         passthrough-class LOW calls only (never rule-derived asks); MEDIUM
         is never arbitrated by the LLM in this slice — it asks with the risk
-        reason when the waterfall passed it through. Remaining
+        reason when the waterfall passed it through. Config-slot parity slice
+        (2026-09-23): `permissions.autoMode` gains `allow` and `environment`
+        slot lists (absence-preserving unions, `$defaults` position-preserving
+        expansion via `expandSlot`); the classifier system prompt teaches
+        evaluation order soft-deny rules → allow exceptions → environment
+        trust boundary (the hard_deny section arrives with the action-level
+        deny slice); the verdict cache key digests ALL THREE slot lists; and
+        the cascade assembles `permissions.autoMode` from TRUSTED sources ONLY
+        (user, --settings flag, managed policy — project and local, the
+        repo-carried layers, are skipped for this key alone, D12), so a
+        cloned repository cannot teach the classifier its own trust boundary;
+        /auto-mode (commands.auto-mode) exposes the defaults and the
+        effective trusted-scoped slice. Remaining
         vs CC: managed/enterprise remote settings, UI mode cycle; the upstream
         permission/mode catalog pin is an upstream polish.
 

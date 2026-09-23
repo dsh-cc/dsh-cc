@@ -2658,6 +2658,44 @@
         "summary": "Slice 0 MVP: thin snapshot (list/detail/stop) over listChildren + agents + resumePinStore; groups are residency-only (Working / Idle / Ready — no Blocked/Done); /agents attach is a reserved, unimplemented namespace. The TUI local-slash surface consumes the same ccAgents snapshot and ADDS fold-derived decorations (provider, prompt excerpt, last stopReason) to the detail view; the thin preset surface vs the decorated TUI surface is a deliberate divergence, never different ids or ordering."
       }
     },
+    "commands.auto-mode": {
+      "title": "/auto-mode",
+      "category": "commands",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Show auto-mode classifier defaults and the effective auto-mode configuration.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: command-auto-mode"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/command-auto-mode/tests/command-auto-mode.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "/auto-mode prints the built-in classifier slot defaults and the effective trusted-scoped `permissions.autoMode` slice (expanded slot lists + classifier sub-config). Claude Code's auto-mode config command is a config FILE editor; ours is read-only introspection by deliberate scope (S5 adds /auto-mode review)."
+      }
+    },
     "commands.branch": {
       "title": "/branch",
       "category": "commands",
@@ -5007,11 +5045,24 @@
           "type": "test",
           "path": "packages/interaction/command-permissions/tests/command-permissions.spec.ts",
           "anchor": "annotates suspended allow rules in auto mode (D1)"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/slots.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/settings/settings-cascade/tests/trusted-scope.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/permission-rules/src/slots.ts",
+          "anchor": "expandSlot"
         }
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Rule engine + dangerous-command/path risk classifier, durable modes (default/acceptEdits/plan/auto/bypassPermissions via /permissions), plan deny with exit_plan_mode guidance, bypassPermissions pinning danger-full-access with resumeSandbox restore, and the always-allow derived-rule persistence all work. `auto` mode additionally gains an opt-in, escalate-only LLM risk-classifier stage: a one-shot auxiliary model verdict over tool name + rendered parameters (never tool results, input wrapped as an explicit DATA block the model is instructed never to repeat, quote, or follow), fail-to-ask on every classifier failure, `$defaults` soft-deny prose expansion, a verdict LRU cache, and durable `permission/classifier` session audit events (armed only when enabled, an llm service is mounted, and the alias route resolves). Read-only tool calls are exempt: they never invoke the classifier (the legacy auto path applies). Verdict parsing stays strict and fail-closed — a malformed output yields the constant reason \"classifier output unparseable\" (model output never reaches the modal; the audit record is digest-only). A per-route consecutive-failure circuit breaker (threshold 3, keyed provider/model) opens the stage for a failing lane: no further classifier calls on that route, one warn per process, one `breaker` audit event per session, reset by a settings change (rebuild). The breaker is restart-durable within a session: the first call of a session seeds the per-route streak from the durable log (attributed events only; a restored streak ≥ threshold opens at seed time). An open breaker surfaces one visible TUI fallback notice per session (live-appended `breaker` events only — never replayed logs), and caller-cancelled classifications are tagged `cancelled`, never breaker-counted. Raw model output is debuggable via the opt-in `DSH_PERMISSION_CLASSIFIER_DEBUG=1` process-log channel (`[dsh:classifier:raw]`, truncated to 2 KiB — never session events). Defaults: `timeoutMs` 8000, verdict budget 1024 tokens. The UI honors `permissions.defaultMode`: statusline, session switch, Shift+Tab cycle start, and the /permissions picker all fall back to the live merged settings default (fold precedence — a recorded session mode still wins), with the cycle clamped to its members. Settings-surface deviation: the auto-mode section is delivered as `permissions.autoMode` — an `autoMode` key inside the existing `permissions` namespace (camelCase key in a kebab namespace, like `defaultMode`), NOT Claude Code's root-level `autoMode` key, because top-level settings namespaces must be kebab-case upstream. Other documented CC auto-mode divergences are RESOLVED (2026-09-23 waterfall-parity slice): explicit ask rules are no longer proxied to allow in auto (strict-rule auto — matched ask rules prompt at any risk level), and content evaluation is deny-first (behavior outer deny→ask→allow, sources inner), in every mode. Always-allow grant synthesis is verified-matching: every persisted rule provably matches the call that produced it (env/wrapper-stripped commands fall back to a raw-prefix rule; WebFetch rules derive from untruncated args and never silently broaden to whole-tool), and write-time subsumption dedup plus `/permissions lint` keep the user allow list from accumulating covered rules — all persisted edits go through the settings-cascade raw user-layer seam, so higher-layer rules are never smeared into the user file. Remaining Waterfall-parity slice (2026-09-23): rule SUSPENSION in auto mode (`filterAutoAllowRules` — whole-tool bash/PowerShell allows, effectively-blanket bash content allows, interpreter and package-runner prefixes, Task/Agent/subagent/subagent_fork allows; hard override via `permissions.autoMode.classifyAllShell`, consumed through the single `effectiveRuleSet(mode)` service seam and annotated in `/permissions` as \"suspended in auto mode\"); a three-tier bash risk classifier (new MEDIUM tier: force-push, hard reset, force-recursive remove of ordinary targets, package publish, resource deletion — configurable via `permissions.mediumPatterns`, replace semantics); DENY-FIRST content ordering (content deny beats content allow and whole-tool ask in every mode); grant-on-ask (\"Allow for this session\" now applies to rule-derived asks in every non-plan mode); the LLM stage arbitrates passthrough-class LOW calls only (never rule-derived asks); MEDIUM is never arbitrated by the LLM in this slice — it asks with the risk reason when the waterfall passed it through. Remaining vs CC: managed/enterprise remote settings, UI mode cycle; the upstream permission/mode catalog pin is an upstream polish."
+        "summary": "Rule engine + dangerous-command/path risk classifier, durable modes (default/acceptEdits/plan/auto/bypassPermissions via /permissions), plan deny with exit_plan_mode guidance, bypassPermissions pinning danger-full-access with resumeSandbox restore, and the always-allow derived-rule persistence all work. `auto` mode additionally gains an opt-in, escalate-only LLM risk-classifier stage: a one-shot auxiliary model verdict over tool name + rendered parameters (never tool results, input wrapped as an explicit DATA block the model is instructed never to repeat, quote, or follow), fail-to-ask on every classifier failure, `$defaults` soft-deny prose expansion, a verdict LRU cache, and durable `permission/classifier` session audit events (armed only when enabled, an llm service is mounted, and the alias route resolves). Read-only tool calls are exempt: they never invoke the classifier (the legacy auto path applies). Verdict parsing stays strict and fail-closed — a malformed output yields the constant reason \"classifier output unparseable\" (model output never reaches the modal; the audit record is digest-only). A per-route consecutive-failure circuit breaker (threshold 3, keyed provider/model) opens the stage for a failing lane: no further classifier calls on that route, one warn per process, one `breaker` audit event per session, reset by a settings change (rebuild). The breaker is restart-durable within a session: the first call of a session seeds the per-route streak from the durable log (attributed events only; a restored streak ≥ threshold opens at seed time). An open breaker surfaces one visible TUI fallback notice per session (live-appended `breaker` events only — never replayed logs), and caller-cancelled classifications are tagged `cancelled`, never breaker-counted. Raw model output is debuggable via the opt-in `DSH_PERMISSION_CLASSIFIER_DEBUG=1` process-log channel (`[dsh:classifier:raw]`, truncated to 2 KiB — never session events). Defaults: `timeoutMs` 8000, verdict budget 1024 tokens. The UI honors `permissions.defaultMode`: statusline, session switch, Shift+Tab cycle start, and the /permissions picker all fall back to the live merged settings default (fold precedence — a recorded session mode still wins), with the cycle clamped to its members. Settings-surface deviation: the auto-mode section is delivered as `permissions.autoMode` — an `autoMode` key inside the existing `permissions` namespace (camelCase key in a kebab namespace, like `defaultMode`), NOT Claude Code's root-level `autoMode` key, because top-level settings namespaces must be kebab-case upstream. Other documented CC auto-mode divergences are RESOLVED (2026-09-23 waterfall-parity slice): explicit ask rules are no longer proxied to allow in auto (strict-rule auto — matched ask rules prompt at any risk level), and content evaluation is deny-first (behavior outer deny→ask→allow, sources inner), in every mode. Always-allow grant synthesis is verified-matching: every persisted rule provably matches the call that produced it (env/wrapper-stripped commands fall back to a raw-prefix rule; WebFetch rules derive from untruncated args and never silently broaden to whole-tool), and write-time subsumption dedup plus `/permissions lint` keep the user allow list from accumulating covered rules — all persisted edits go through the settings-cascade raw user-layer seam, so higher-layer rules are never smeared into the user file. Remaining Waterfall-parity slice (2026-09-23): rule SUSPENSION in auto mode (`filterAutoAllowRules` — whole-tool bash/PowerShell allows, effectively-blanket bash content allows, interpreter and package-runner prefixes, Task/Agent/subagent/subagent_fork allows; hard override via `permissions.autoMode.classifyAllShell`, consumed through the single `effectiveRuleSet(mode)` service seam and annotated in `/permissions` as \"suspended in auto mode\"); a three-tier bash risk classifier (new MEDIUM tier: force-push, hard reset, force-recursive remove of ordinary targets, package publish, resource deletion — configurable via `permissions.mediumPatterns`, replace semantics); DENY-FIRST content ordering (content deny beats content allow and whole-tool ask in every mode); grant-on-ask (\"Allow for this session\" now applies to rule-derived asks in every non-plan mode); the LLM stage arbitrates passthrough-class LOW calls only (never rule-derived asks); MEDIUM is never arbitrated by the LLM in this slice — it asks with the risk reason when the waterfall passed it through. Config-slot parity slice (2026-09-23): `permissions.autoMode` gains `allow` and `environment` slot lists (absence-preserving unions, `$defaults` position-preserving expansion via `expandSlot`); the classifier system prompt teaches evaluation order soft-deny rules → allow exceptions → environment trust boundary (the hard_deny section arrives with the action-level deny slice); the verdict cache key digests ALL THREE slot lists; and the cascade assembles `permissions.autoMode` from TRUSTED sources ONLY (user, --settings flag, managed policy — project and local, the repo-carried layers, are skipped for this key alone, D12), so a cloned repository cannot teach the classifier its own trust boundary; /auto-mode (commands.auto-mode) exposes the defaults and the effective trusted-scoped slice. Remaining vs CC: managed/enterprise remote settings, UI mode cycle; the upstream permission/mode catalog pin is an upstream polish."
       }
     },
     "models.aliases": {

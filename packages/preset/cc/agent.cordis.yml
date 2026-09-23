@@ -595,6 +595,11 @@
 - id: cache-health
   name: '@dsh-cc/cache-health'
 
+# AutoModeConfig: /auto-mode introspection for the LLM risk-classifier slots
+# (defaults + effective trusted-scoped slice); no model call, no session write.
+- id: command-auto-mode
+  name: '@dsh-cc/command-auto-mode'
+
 - id: command-cost
   name: '@dsh-cc/command-cost'
   config:

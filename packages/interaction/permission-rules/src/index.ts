@@ -88,6 +88,11 @@ export {
   type ClassifierFailure,
 } from './llm-classifier.ts'
 export {
+  DEFAULT_ALLOW_EXCEPTIONS,
+  DEFAULT_ENVIRONMENT,
+  expandSlot,
+} from './slots.ts'
+export {
   PERMISSION_MODES,
   SWITCHABLE_PERMISSION_MODES,
   PLAN_READONLY_REASON,

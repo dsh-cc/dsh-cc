@@ -127,6 +127,8 @@ export function permissionSettingsSchema(): z<PermissionSettings> {
     autoMode: z.union([
       z.object({
         soft_deny: z.union([z.array(z.string()), z.const(undefined)]),
+        allow: z.union([z.array(z.string()), z.const(undefined)]),
+        environment: z.union([z.array(z.string()), z.const(undefined)]),
         classifyAllShell: z.union([z.boolean(), z.const(undefined)]),
         classifier: z.union([autoModeClassifierSchema, z.const(undefined)]),
       }),
