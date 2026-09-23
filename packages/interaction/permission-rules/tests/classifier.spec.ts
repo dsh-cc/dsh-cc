@@ -23,7 +23,6 @@ describe('assessBashCommand', () => {
     ['ls -la'],
     ['git status'],
     ['cat file.txt'],
-    ['rm -rf /tmp/cache/x'],
     ['npm install'],
     ['chmod +x script.sh'],
     ['dd if=/dev/urandom of=/tmp/rand bs=1 count=16'],
@@ -31,11 +30,50 @@ describe('assessBashCommand', () => {
     expect(assessBashCommand(command).level).toBe('LOW')
   })
 
+  it.each([
+    ['rm -rf /tmp/cache/x'],
+    ['rm -fr /tmp/cache/x'],
+    ['rm -r -f /tmp/cache/x'],
+    ['rm -f -r /tmp/cache/x'],
+    ['git push --force origin main'],
+    ['git push -f origin main'],
+    ['git reset --hard HEAD~1'],
+    ['git clean -fd'],
+    ['npm publish'],
+    ['pnpm publish'],
+    ['yarn publish'],
+    ['gh repo delete owner/name'],
+    ['gh release delete v1'],
+    ['docker rm -f web'],
+    ['docker system prune -a'],
+    ['docker volume rm data'],
+    ['docker volume prune'],
+    ['kubectl delete pod x'],
+    ['helm uninstall release'],
+    ['terraform apply'],
+    ['terraform destroy'],
+  ])('raises MEDIUM for a destructive command: %s', command => {
+    expect(assessBashCommand(command).level).toBe('MEDIUM')
+  })
+
+  it('raises HIGH over MEDIUM when a catastrophic pattern also matches', () => {
+    // Root/home removal is HIGH; the MEDIUM rm tier must not downgrade it.
+    expect(assessBashCommand('rm -rf /').level).toBe('HIGH')
+    expect(assessBashCommand('rm -rf ~').level).toBe('HIGH')
+  })
+
   it('uses configured patterns instead of the curated defaults', () => {
-    const safe = assessBashCommand('rm -rf /', ['only-cat'])
+    // Not matched by the custom HIGH list, nor by the curated MEDIUM tier.
+    const safe = assessBashCommand('echo only-cat says hi', ['cat password'])
     expect(safe.level).toBe('LOW')
     const hit = assessBashCommand('cat password.txt', ['cat password'])
     expect(hit).toMatchObject({ level: 'HIGH', reasons: expect.arrayContaining([expect.any(String)]) })
+  })
+
+  it('uses configured medium patterns instead of the curated MEDIUM tier (replace semantics)', () => {
+    // Curated MEDIUM no longer applies once mediumPatterns is set (replace).
+    expect(assessBashCommand('terraform apply', undefined, ['rm -fr secrets'])).toEqual({ level: 'LOW', reasons: [] })
+    expect(assessBashCommand('rm -fr secrets', undefined, ['rm -fr secrets']).level).toBe('MEDIUM')
   })
 
   it('ignores an invalid configured pattern without crashing', () => {

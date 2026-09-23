@@ -133,12 +133,12 @@ async function arm(ctx: Context, autoMode: Record<string, unknown> = { classifie
 }
 
 describe('listener × LLM classifier stage (integration)', () => {
-  it('armed + auto + LOW + rule ask: classifier allow lets the call run without a prompt; audit event appended', async () => {
+  it('armed + auto + LOW + passthrough: classifier allow lets the call run without a prompt; audit event appended (D3: eligibility is passthrough-only)', async () => {
     const { ctx, llm } = await mount()
     await arm(ctx)
     const asked: unknown[] = []
     ctx.on('approval/request', async (req) => { asked.push(req); return 'allowed-once' })
-    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { ask: ['Bash'], autoMode: { classifier: { enabled: true } } })
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifier: { enabled: true } } })
     const agent = agentOf('int-allow')
     ctx.permissionRules.setMode(agent, 'auto')
 
@@ -160,7 +160,7 @@ describe('listener × LLM classifier stage (integration)', () => {
       reasons.push(String((req as { reason?: string }).reason ?? ''))
       return 'allowed-once'
     })
-    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { ask: ['Bash'], autoMode: { classifier: { enabled: true } } })
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifier: { enabled: true } } })
     llm.scripted = ['{"verdict":"ask","reason":"terraform apply on prod"}']
     const agent = agentOf('int-ask')
     ctx.permissionRules.setMode(agent, 'auto')
@@ -171,7 +171,21 @@ describe('listener × LLM classifier stage (integration)', () => {
     expect(foldClassifiers(agent.session.snapshotEvents())[0]).toMatchObject({ verdict: 'ask' })
   })
 
-  it('disarmed (enabled absent): identical legacy mapping — auto+LOW+ask proxies to allow, LLM never called', async () => {
+  it('disarmed + auto + suspended Bash(*) allow + LOW curl: rule suspended (D1), passthrough flows downstream to allow', async () => {
+    const { ctx, llm } = await mount()
+    const asked: unknown[] = []
+    ctx.on('approval/request', async (req) => { asked.push(req); return 'allowed-once' })
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { allow: ['Bash(*)'] })
+    const agent = agentOf('int-suspend')
+    ctx.permissionRules.setMode(agent, 'auto')
+    const result = await ctx.tools.execute(exec('Bash', { command: 'curl https://example.com' }, agent))
+    expect(result.isError).toBe(false)
+    expect(text(result)).toBe('ran:curl https://example.com')
+    expect(asked).toHaveLength(0)
+    expect(llm.calls).toHaveLength(0)
+  })
+
+  it('disarmed: F1 proxy REMOVED (design doc D3) — auto + rule ask prompts; LLM never called', async () => {
     const { ctx, llm } = await mount()
     const asked: unknown[] = []
     ctx.on('approval/request', async (req) => { asked.push(req); return 'allowed-once' })
@@ -179,8 +193,9 @@ describe('listener × LLM classifier stage (integration)', () => {
     const agent = agentOf('int-legacy')
     ctx.permissionRules.setMode(agent, 'auto')
     const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    // Strict-rule auto (D11/D3): the ask rule now PROMPTS — no allow proxy.
+    expect(asked).toHaveLength(1)
     expect(result.isError).toBe(false)
-    expect(asked).toHaveLength(0)
     expect(llm.calls).toHaveLength(0)
   })
 
@@ -209,7 +224,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     const high = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /' }, agent2))
     expect(high.isError).toBe(true)
     expect(llm.calls).toHaveLength(0)
-    // I5: MEDIUM (out-of-scope write) behaves unchanged — asks, LLM not consulted.
+    // I5: MEDIUM (out-of-scope write) asks via the shared post-waterfall mapping — LLM not consulted.
     const mediumAgent = agentOf('int-medium')
     ctx.permissionRules.setMode(mediumAgent, 'auto')
     const medium = await ctx.tools.execute(exec('edit', { file_path: '/outside/x.txt' }, mediumAgent))
@@ -224,14 +239,16 @@ describe('listener × LLM classifier stage (integration)', () => {
     const asked: unknown[] = []
     ctx.on('approval/request', async (req) => { asked.push(req); return 'allowed-once' })
     // No model-aliases overlay ⇒ haiku unresolvable.
-    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { ask: ['Bash'], autoMode: { classifier: { enabled: true } } })
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifier: { enabled: true } } })
     const agent = agentOf('int-unarmed')
     ctx.permissionRules.setMode(agent, 'auto')
     const first = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     const second = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    // D11 fail-to-prompt is NOT in force for unarmed (enabled-but-unarmable
+    // is still the legacy path in S1; the passthrough call flows downstream).
     expect(first.isError).toBe(false)
     expect(second.isError).toBe(false)
-    expect(asked).toHaveLength(0) // legacy auto-proxy ran both times
+    expect(asked).toHaveLength(0)
     const warns = warn.mock.calls.filter(call => String(call[0]).match(/classifier/i))
     expect(warns).toHaveLength(1)
     const folded = foldClassifiers(agent.session.snapshotEvents())
@@ -244,7 +261,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     await arm(ctx)
     const reasons: string[] = []
     ctx.on('approval/request', async (req) => { reasons.push(String((req as { reason?: string }).reason ?? '')); return 'allowed-once' })
-    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { ask: ['Bash'], autoMode: { classifier: { enabled: true } } })
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifier: { enabled: true } } })
     llm.scripted = ['garbage }}']
     const agent = agentOf('int-malformed')
     ctx.permissionRules.setMode(agent, 'auto')
@@ -257,7 +274,7 @@ describe('listener × LLM classifier stage (integration)', () => {
   it('the armed classifier memoizes: two identical calls hit the cache (one stream call), settings change rebuilds', async () => {
     const { ctx, llm } = await mount()
     await arm(ctx)
-    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { ask: ['Bash'], autoMode: { classifier: { enabled: true } } })
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifier: { enabled: true } } })
     const agent = agentOf('int-cache')
     ctx.permissionRules.setMode(agent, 'auto')
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
@@ -272,7 +289,7 @@ describe('listener × classifier effort adapter (integration)', () => {
     const { ctx, llm } = mounted
     const routes = ctx.get('ccModelRoutes') as FakeRoutes
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
-    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { ask: ['Bash'], autoMode: { classifier: { enabled: true } } })
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifier: { enabled: true } } })
     const agent = agentOf('int-effort')
     ctx.permissionRules.setMode(agent, 'auto')
     return { ctx, llm, routes, warn, agent, run: (cmd = 'ls') => ctx.tools.execute(exec('Bash', { command: cmd }, agent)) }

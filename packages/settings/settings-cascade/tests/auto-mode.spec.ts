@@ -19,6 +19,8 @@ describe('AutoModeSchema', () => {
 
   it('keeps absent keys absent — no defaults materialized (classifier stays disarmed)', () => {
     expect(parse({})).toEqual({})
+    // classifyAllShell is absence-preserving: absent stays absent.
+    expect(parse({ classifyAllShell: true })).toEqual({ classifyAllShell: true })
     expect(parse({ soft_deny: ['a'] })).toEqual({ soft_deny: ['a'] })
     expect(parse({ classifier: {} })).toEqual({
       classifier: { enabled: false, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 },

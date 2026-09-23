@@ -41,17 +41,81 @@ function deps(overrides: Partial<DecideDeps> = {}): DecideDeps {
 }
 
 describe('decideCallVerbose (verbose core split)', () => {
-  it('LOW + auto + rule ask: verbose returns the raw ask, decideCall still proxies to allow', () => {
+  it('auto + rule ask (content rule): BOTH return the ask — no LOW+ask proxy (D3, design doc)', () => {
     const d = deps({
       defaultMode: () => 'auto',
-      rules: () => rules({ ask: [parseRule('Bash', 'ask', 'config')] }),
+      rules: () => rules({ ask: [parseRule('Bash(ls)', 'ask', 'config')] }),
     })
     const exec = fakeExec('Bash', { command: 'ls' })
     const verbose = decideCallVerbose(d, exec)
     expect(verbose.decision).toMatchObject({ kind: 'ask' })
     expect(verbose.risk.level).toBe('LOW')
     expect(verbose.mode).toBe('auto')
+    expect(decideCall(d, exec)).toMatchObject({ kind: 'ask' })
+  })
+
+  it('auto + whole-tool ask rule ⇒ ask, never proxied (D3)', () => {
+    const d = deps({
+      defaultMode: () => 'auto',
+      rules: () => rules({ ask: [parseRule('Bash', 'ask', 'config')] }),
+    })
+    expect(decideCall(d, fakeExec('Bash', { command: 'ls' }))).toMatchObject({ kind: 'ask' })
+  })
+
+  it('MEDIUM + matched allow rule ⇒ allow (MEDIUM no longer outranks a matched allow — D2 behavior change)', () => {
+    const d = deps({
+      defaultMode: () => 'auto',
+      rules: () => rules({ allow: [parseRule('edit', 'allow', 'config')] }),
+    })
+    const exec = fakeExec('edit', { file_path: '/outside-cwd/x.ts' }, { cwd: '/work' })
     expect(decideCall(d, exec)).toEqual({ kind: 'allow' })
+  })
+
+  it('MEDIUM + passthrough + session grant ⇒ allow outside plan (status-quo grant placement)', () => {
+    const d = deps({ defaultMode: () => 'auto', sessionAllowMatches: () => true })
+    const exec = fakeExec('edit', { file_path: '/outside-cwd/x.ts' }, { cwd: '/work' })
+    expect(decideCall(d, exec)).toEqual({ kind: 'allow' })
+  })
+
+  it('plan + MEDIUM + passthrough ⇒ deny via the plan wrap', () => {
+    const d = deps({ defaultMode: () => 'default' })
+    const agentSession = { snapshotEvents: () => [{ type: 'plan/mode', data: { active: true } }], header: { cwd: '/work' } }
+    const exec = fakeExec('edit', { file_path: '/outside-cwd/x.ts' }, { cwd: '/work' })
+    exec.agent = { session: agentSession } as never
+    expect(decideCall(d, exec)).toMatchObject({ kind: 'deny', reason: /plan mode is read-only/ })
+  })
+
+  it('auto + Bash(*) allow + LOW curl: rule suspended ⇒ passthrough (reaches stage eligibility)', () => {
+    const d = deps({
+      defaultMode: () => 'auto',
+      rules: () => rules({ allow: [parseRule('Bash', 'allow', 'config')] }),
+    })
+    const exec = fakeExec('Bash', { command: 'curl https://example.com' })
+    const verbose = decideCallVerbose(d, exec)
+    expect(verbose.decision).toEqual({ kind: 'passthrough' })
+    expect(verbose.risk.level).toBe('LOW')
+    expect(decideCall(d, exec)).toEqual({ kind: 'passthrough' })
+  })
+
+  it('MEDIUM + passthrough + auto (no grant) ⇒ ask with the risk reason', () => {
+    const d = deps({ defaultMode: () => 'auto' })
+    const exec = fakeExec('edit', { file_path: '/outside-cwd/x.ts' }, { cwd: '/work' })
+    const out = decideCall(d, exec)
+    expect(out).toMatchObject({ kind: 'ask' })
+    expect((out as { reason?: string }).reason).toMatch(/risk classifier/)
+  })
+
+  it('grant-on-rule-ask: LOW rule-ask + session grant ⇒ allow (default mode)', () => {
+    const d = deps({ sessionAllowMatches: () => true, rules: () => rules({ ask: [parseRule('Bash', 'ask', 'config')] }) })
+    expect(decideCall(d, fakeExec('Bash', { command: 'ls' }))).toEqual({ kind: 'allow' })
+  })
+
+  it('deny rule survives a session grant (D2 precedence)', () => {
+    const d = deps({
+      sessionAllowMatches: () => true,
+      rules: () => rules({ deny: [parseRule('Bash', 'deny', 'config')] }),
+    })
+    expect(decideCall(d, fakeExec('Bash', { command: 'ls' }))).toMatchObject({ kind: 'deny' })
   })
 
   it('LOW + auto + no rules (waterfall passthrough): both return passthrough unchanged', () => {
@@ -60,6 +124,14 @@ describe('decideCallVerbose (verbose core split)', () => {
     const verbose = decideCallVerbose(d, exec)
     expect(verbose.decision.kind).toBe('passthrough')
     expect(decideCall(d, exec)).toEqual(verbose.decision)
+  })
+
+  it('auto + Bash content allow survives if narrow enough (npm publish) — suspension is targeted', () => {
+    const d = deps({
+      defaultMode: () => 'auto',
+      rules: () => rules({ allow: [parseRule('Bash(npm publish:*)', 'allow', 'config')] }),
+    })
+    expect(decideCall(d, fakeExec('Bash', { command: 'npm publish:foo' }))).toEqual({ kind: 'allow' })
   })
 
   it('LOW + default mode + rule ask: both return the same ask', () => {
@@ -80,14 +152,14 @@ describe('decideCallVerbose (verbose core split)', () => {
     expect(decideCall(d, exec).kind).toBe('deny')
   })
 
-  it('MEDIUM + auto: ask survives in BOTH functions (never proxied to allow)', () => {
+  it('MEDIUM + auto + no rules: verbose passthrough, decideCall maps to ask (D2/A1 — no early return)', () => {
     const d = deps({ defaultMode: () => 'auto' })
     const exec = fakeExec('edit', { file_path: '/outside-cwd/x.ts' }, { cwd: '/work' })
     const verbose = decideCallVerbose(d, exec)
     expect(verbose.risk.level).toBe('MEDIUM')
-    expect(verbose.decision.kind).toBe('ask')
+    expect(verbose.decision.kind).toBe('passthrough')
     expect(verbose.mode).toBe('auto')
-    expect(decideCall(d, exec)).toEqual(verbose.decision)
+    expect(decideCall(d, exec)).toMatchObject({ kind: 'ask' })
   })
 
   it('MEDIUM + bypassPermissions: both allow', () => {
@@ -97,10 +169,10 @@ describe('decideCallVerbose (verbose core split)', () => {
     expect(decideCall(d, exec)).toEqual({ kind: 'allow' })
   })
 
-  it('MEDIUM + session grant: both allow (grant overrides the MEDIUM ask)', () => {
+  it('MEDIUM + session grant: verbose passthrough, mapping allows (grant placed post-waterfall)', () => {
     const d = deps({ sessionAllowMatches: () => true })
     const exec = fakeExec('edit', { file_path: '/outside-cwd/x.ts' }, { cwd: '/work' })
-    expect(decideCallVerbose(d, exec).decision).toEqual({ kind: 'allow' })
+    expect(decideCallVerbose(d, exec).decision).toEqual({ kind: 'passthrough' })
     expect(decideCall(d, exec)).toEqual({ kind: 'allow' })
   })
 

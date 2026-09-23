@@ -134,6 +134,26 @@ describe('session allowlist × decide() integration', () => {
     expect(asked).toHaveLength(1)
   })
 
+  it('grant-on-rule-ask (D2b): a session grant lets a LOW rule-ask run without prompting', async () => {
+    const ctx = await mount({ rules: { ask: ['Bash(ls)'] } })
+    const agent = agentWithCwd('session-allow-rule-ask', '/work')
+    const asked: unknown[] = []
+    ctx.on('approval/request', async req => { asked.push(req); return 'allowed-once' })
+
+    // Without the grant, the rule ask prompts (this also pins the F1-removal
+    // behavior at LOW risk — design doc D3).
+    const first = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    expect(asked).toHaveLength(1)
+    expect(first.isError).toBe(false)
+
+    // Grant the rule: the next rule-ask is allowed WITHOUT prompting (D2b).
+    ctx.permissionRules.addSessionAllow(agent, 'Bash(ls)')
+    const second = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    expect(second.isError).toBe(false)
+    expect(text(second)).toBe('ran:ls')
+    expect(asked).toHaveLength(1)
+  })
+
   it('another session gains nothing from a grant made elsewhere', async () => {
     const ctx = await mount()
     const granted = agentWithCwd('session-allow-5', '/work')

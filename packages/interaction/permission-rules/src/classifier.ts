@@ -63,24 +63,59 @@ export const DEFAULT_PROTECTED_FILES: readonly string[] = [
 ]
 
 /**
- * Classify a shell command by its riskiness. HIGH when any dangerous pattern
- * matches, otherwise LOW. When `patterns` is given (raw regex sources, e.g.
- * from `permissions.dangerousPatterns`), they replace the curated defaults.
- * @param command - the shell command string to classify.
- * @param patterns - optional raw regex sources to use instead of the defaults.
- * @returns the assessment — HIGH with the matching reasons, else LOW.
+ * The curated MEDIUM tier: destructive-but-not-catastrophic shell commands
+ * (force-pushes, hard resets, force-recursive removes of ordinary targets,
+ * package publishing, resource deletion). Matched only when no HIGH pattern
+ * matched; any match raises the command to `MEDIUM`. When `mediumPatterns`
+ * is given (raw regex sources, e.g. from `permissions.mediumPatterns`), they
+ * replace the curated defaults.
  */
-export function assessBashCommand(command: string, patterns?: string[]): RiskAssessment {
-  const source = patterns ?? []
-  const list: readonly DangerousPattern[] = source.length > 0
-    ? source.map(pattern => ({ regex: compileSafe(pattern), reason: `command matches configured pattern ${JSON.stringify(pattern)}` }))
-    : DEFAULT_DANGEROUS_PATTERNS
+export const DEFAULT_MEDIUM_PATTERNS: readonly DangerousPattern[] = [
+  { regex: /\bgit\s+push\b[^\n]*(?:--force\b|\s-f\b)/, reason: 'force-push history overwrite' },
+  { regex: /\bgit\s+reset\b[^\n]*--hard\b/, reason: 'git reset --hard discards working-tree changes' },
+  { regex: /\bgit\s+clean\b[^\n]*\s-[a-z]*f/i, reason: 'git clean -f removes untracked files' },
+  { regex: /\brm\s+(?=(?:\S+\s+){0,4}-\w*r\w*)(?=(?:\S+\s+){0,4}-\w*f\w*)/, reason: 'force/recursive remove of a target (non-root/home)' },
+  { regex: /\b(?:npm|pnpm|yarn)\s+publish\b/, reason: 'publishes a package to a registry' },
+  { regex: /\bgh\s+(?:repo|release)\s+delete\b/, reason: 'deletes a GitHub repo or release' },
+  { regex: /\bdocker\s+rm\b[^\n]*-\w*f/, reason: 'force-removes a container' },
+  { regex: /\bdocker\s+system\s+prune\b/, reason: 'prunes docker system data' },
+  { regex: /\bdocker\s+volume\s+(?:rm|prune)\b/, reason: 'removes or prunes docker volumes' },
+  { regex: /\bkubectl\s+delete\b/, reason: 'deletes kubernetes resources' },
+  { regex: /\bhelm\s+uninstall\b/, reason: 'uninstalls a helm release' },
+  { regex: /\bterraform\s+(?:apply|destroy)\b/, reason: 'applies or destroys terraform infrastructure' },
+]
+
+/**
+ * Classify a shell command by its riskiness, three levels: HIGH when any
+ * dangerous pattern matches; otherwise MEDIUM when any medium pattern
+ * matches; otherwise LOW. When `patterns` is given (raw regex sources, e.g.
+ * from `permissions.dangerousPatterns`), they replace the curated HIGH
+ * defaults; `mediumPatterns` (from `permissions.mediumPatterns`) likewise
+ * replaces the curated MEDIUM tier.
+ * @param command - the shell command string to classify.
+ * @param patterns - optional raw regex sources to use instead of the HIGH defaults.
+ * @param mediumPatterns - optional raw regex sources to use instead of the MEDIUM defaults.
+ * @returns the assessment — HIGH/MEDIUM with the matching reasons, else LOW.
+ */
+export function assessBashCommand(command: string, patterns?: string[], mediumPatterns?: string[]): RiskAssessment {
+  const highReasons = matchReasons(command, patterns ?? [], DEFAULT_DANGEROUS_PATTERNS)
+  if (highReasons.length > 0) return { level: 'HIGH', reasons: highReasons }
+  const mediumReasons = matchReasons(command, mediumPatterns ?? [], DEFAULT_MEDIUM_PATTERNS)
+  if (mediumReasons.length > 0) return { level: 'MEDIUM', reasons: mediumReasons }
+  return { level: 'LOW', reasons: [] }
+}
+
+/** Collect the reasons of every pattern (raw sources, falling back to curated) matching `command`. */
+function matchReasons(command: string, sources: readonly string[], defaults: readonly DangerousPattern[]): string[] {
+  const list: readonly DangerousPattern[] = sources.length > 0
+    ? sources.map(pattern => ({ regex: compileSafe(pattern), reason: `command matches configured pattern ${JSON.stringify(pattern)}` }))
+    : defaults
   const reasons: string[] = []
   for (const { regex, reason } of list) {
     regex.lastIndex = 0
     if (regex.test(command)) reasons.push(reason)
   }
-  return reasons.length > 0 ? { level: 'HIGH', reasons } : { level: 'LOW', reasons: [] }
+  return reasons
 }
 
 /**

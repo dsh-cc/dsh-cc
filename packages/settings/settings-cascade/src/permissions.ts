@@ -32,6 +32,8 @@ export interface Permissions {
   protectedFiles?: string[]
   /** Raw dangerous-command regex sources for the risk classifier. */
   dangerousPatterns?: string[]
+  /** Raw medium-risk regex sources replacing the curated MEDIUM tier. */
+  mediumPatterns?: string[]
 }
 
 /**
@@ -47,4 +49,5 @@ export const PermissionsSchema: z<Permissions> = z.object({
   additionalDirectories: z.array(z.string()),
   protectedFiles: z.array(z.string()),
   dangerousPatterns: z.array(z.string()),
+  mediumPatterns: z.array(z.string()),
 })

@@ -32,6 +32,12 @@ export interface AutoMode {
    * module — the schema never expands it, so merging never sees the expansion.
    */
   soft_deny?: string[]
+  /**
+   * Suspend EVERY bash and PowerShell allow rule (whole-tool and content)
+   * in `auto` mode — the hard override on the otherwise best-effort
+   * suspension list. Absent ⇒ `false` (absence-preserving).
+   */
+  classifyAllShell?: boolean
   /** LLM risk classifier configuration; absent when the section omits it. */
   classifier?: AutoModeClassifier
 }
@@ -57,6 +63,8 @@ const AutoModeSectionSchema = z.object({
   // Union with `undefined` keeps an absent `soft_deny` key absent — no empty
   // array is materialized (permissive array, no default).
   soft_deny: z.union([z.array(z.string()), z.const(undefined)]),
+  // Union with `undefined` keeps an absent `classifyAllShell` key absent.
+  classifyAllShell: z.union([z.boolean(), z.const(undefined)]),
   // Union with `undefined` keeps an absent `classifier` key absent; a present
   // object resolves through AutoModeClassifierSchema (defaults apply there).
   classifier: z.union([AutoModeClassifierSchema, z.const(undefined)]),

@@ -17,20 +17,19 @@ import type z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
-import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
+import type { ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
-import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { installSectionSafe } from '@dsh-cc/settings-ns'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value
 // dependency on the seam.
 import type {} from '@deepseek-ai/dsh-shell'
-import { createClassifierStreamAdapter, type ClassifierStream } from './classifier-lane.ts'
 import { parseRule, ruleString } from './parser.ts'
 import { mergeRuleSets } from './evaluate.ts'
-import { decideCallVerbose, type DecideDeps } from './decide.ts'
-import { createAutoStage, appendSessionClassifier, type AutoStage } from './auto-stage.ts'
+import { filterAutoAllowRules } from './auto-rule-filter.ts'
+import { registerPreExecute } from './pre-execute.ts'
+import type { AutoStage } from './auto-stage.ts'
 import {
   PERMISSION_MODES,
   type PermissionMode,
@@ -101,6 +100,8 @@ export {
   contentMatches,
 } from './parser.ts'
 export { canonicalizeHostname, isWebFetchRuleTool } from './domain.ts'
+export { filterAutoAllowRules } from './auto-rule-filter.ts'
+export { DEFAULT_MEDIUM_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -201,94 +202,20 @@ export class PermissionRulesService extends Service {
       })
     })
 
-    // The decision waterfall lives in ./decide.ts as pure functions over this
-    // structural dependency face; the closures read live fields so a settings
-    // reload is observed on the next call.
-    const decideDeps: DecideDeps = {
-      classifierEnabled: config.classifierEnabled !== false,
-      exemptSandboxedBashFromToolAsk: config.exemptSandboxedBashFromToolAsk === true,
+    // The decision waterfall + optional LLM classifier stage wiring lives in
+    // ./pre-execute.ts (extracted for the file-size budget; ordering with the
+    // registrations above is preserved by this call's constructor position).
+    registerPreExecute(ctx, {
+      config,
       bashToolName: this.bashToolName,
       fileEditTools: this.fileEditTools,
       readOnlyTools: this.readOnlyTools,
-      settings: () => this.settingsSection(),
+      settingsSection: () => this.settingsSection(),
       defaultMode: () => this.state.defaultMode,
       rules: () => this.state.rules,
       bypassDisabled: () => this.bypassDisabled(),
       sessionAllowMatches: (exec) => this.sessionAllowMatches(exec),
-      shellMode: () => this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined,
-    }
-
-    // The optional LLM classifier stage (§4.1/§4.4 of the LLM risk-classifier
-    // design). The llm stream seam is wired via ctx.inject so a missing llm
-    // service is a silent no-op rather than a required dependency (same
-    // optional-availability pattern as the systemPrompt injection below).
-    let llmStream: ClassifierStream | undefined
-    ctx.inject(['llm'], (scope) => {
-      llmStream = createClassifierStreamAdapter(scope.llm, message => this.ctx.logger.warn(message))
-    })
-
-    const autoStage: AutoStage = createAutoStage({
-      settingsRead: () => this.settingsSection(),
-      get stream() {
-        return llmStream
-      },
-      resolveRoute: (exec) => {
-        const route = this.settingsSection().autoMode?.classifier?.route ?? 'haiku'
-        // Detail-preserving path (resolveDetailedAlias, NOT toOneShotRoute —
-        // that helper drops reasoningEffort by design for the other one-shot
-        // lanes): the classifier needs the route's effort ($level suffix or
-        // alias target) so the lane can ride the cheapest declared level.
-        // The calling agent's logged request header fills the provider for a
-        // string-form (model-only) alias; a complete {provider, model} alias
-        // needs no parent (session-title-provider precedent).
-        const parent = exec.agent?.session.requestHeader()?.config as
-          | { provider?: string; model?: string }
-          | undefined
-        const resolved = resolveDetailedAlias(this.ctx, route).route
-        if (resolved === undefined) return undefined
-        const provider = resolved.provider ?? parent?.provider
-        const model = resolved.model ?? parent?.model
-        if (provider === undefined || provider.length === 0 || model === undefined || model.length === 0) return undefined
-        return {
-          provider,
-          model,
-          ...(resolved.reasoningEffort === undefined ? {} : { reasoningEffort: resolved.reasoningEffort }),
-        }
-      },
-      warn: (message) => this.ctx.logger.warn(message),
-      // R5 debug channel: opt-in via DSH_PERMISSION_CLASSIFIER_DEBUG=1, from
-      // the plugin's scoped process logger — raw classifier output NEVER
-      // enters session events (the digest-only audit contract stands). Raw
-      // output may echo tool input (including secrets), so this stays an
-      // explicitly opt-in channel with no redaction machinery.
-      ...(process.env.DSH_PERMISSION_CLASSIFIER_DEBUG === '1'
-        ? { debug: (message) => (this.ctx.logger as { debug?: (msg: string) => void }).debug?.(`[permission-rules] ${message}`) }
-        : {}),
-      audit: (session, event) => {
-        appendSessionClassifier(session, event)
-      },
-    })
-    this.autoStage = autoStage
-
-    ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
-      const decided = decideCallVerbose(decideDeps, exec)
-      // Armed + auto + LOW + ask/passthrough ⇒ the LLM stage decides (§4.1):
-      // verdict allow ⇒ allow, verdict ask/failure ⇒ ask(reason). Every other
-      // path falls through to today's exact mapping (disarmed ⇒ bit-for-bit).
-      const escalated = await autoStage.maybeEscalate(decided, exec)
-      if (escalated !== undefined) {
-        return escalated === 'allow' ? { kind: 'allow' } : { kind: 'ask', reason: escalated.reason }
-      }
-      const { decision, risk, mode } = decided
-      if (decision.kind === 'allow') return { kind: 'allow' }
-      if (decision.kind === 'deny') return { kind: 'deny', reason: decision.reason }
-      if (decision.kind === 'ask') {
-        // auto proxies every LOW-risk ask (MEDIUM/HIGH returned above):
-        // identical to the previous decideCall post-processing.
-        if (mode === 'auto' && risk.level === 'LOW') return { kind: 'allow' }
-        return { kind: 'ask', ...decision.reason === undefined ? {} : { reason: decision.reason } }
-      }
-      return next()
+      onAutoStage: (stage) => { this.autoStage = stage },
     })
 
     // WS3 sandbox integration: the approval-seam listener auto-approves
@@ -480,6 +407,20 @@ export class PermissionRulesService extends Service {
   /** The currently merged rule set (for introspection and host preview). */
   get ruleSet(): PermissionRuleSet {
     return this.state.rules
+  }
+
+  /**
+   * The rule set a call in `mode` is evaluated against (D1 seam): in `auto`
+   * mode the merged set with suspended allow rules filtered out
+   * (`classifyAllShell` from the live autoMode section); every other mode
+   * returns the merged set unchanged. The single seam for `/permissions` and
+   * any future preview consumer.
+   */
+  effectiveRuleSet(mode: PermissionMode): PermissionRuleSet {
+    if (mode !== 'auto') return this.state.rules
+    return filterAutoAllowRules(this.state.rules, {
+      classifyAllShell: this.settingsSection().autoMode?.classifyAllShell === true,
+    })
   }
 }
 

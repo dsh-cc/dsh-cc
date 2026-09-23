@@ -2853,6 +2853,13 @@ capabilities:
       - { type: test, path: packages/settings/settings-cascade/tests/edit-user-section.spec.ts }
       - { type: test, path: packages/ui/tui/tests/driver-default-mode.spec.ts, anchor: "createDriver live defaultMode display (F1)" }
       - { type: test, path: packages/interaction/permission-rules/tests/permission-rules.spec.ts, anchor: "defaultMode getter (live merged settings default)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/auto-rule-filter.spec.ts, anchor: "filterAutoAllowRules" }
+      - { type: source, path: packages/interaction/permission-rules/src/auto-rule-filter.ts, anchor: "filterAutoAllowRules" }
+      - { type: test, path: packages/interaction/permission-rules/tests/evaluate.spec.ts, anchor: "content-deny beats a same-source allow (D2)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/classifier.spec.ts, anchor: "raises MEDIUM for a destructive command" }
+      - { type: test, path: packages/interaction/permission-rules/tests/decide-verbose.spec.ts, anchor: "MEDIUM + matched allow rule" }
+      - { type: test, path: packages/interaction/permission-rules/tests/session-allow-integration.spec.ts, anchor: "grant-on-rule-ask (D2b)" }
+      - { type: test, path: packages/interaction/command-permissions/tests/command-permissions.spec.ts, anchor: "annotates suspended allow rules in auto mode (D1)" }
     deviation:
       kind: downgrade
       summary: >-
@@ -2897,9 +2904,11 @@ capabilities:
         `permissions` namespace (camelCase key in a kebab namespace, like
         `defaultMode`), NOT Claude Code's root-level `autoMode` key, because
         top-level settings namespaces must be kebab-case upstream. Other
-        documented CC auto-mode divergences (explicit ask rules still proxied
-        to allow in auto; same-source allow-before-deny) remain recorded as
-        unfixed follow-ups — they are not addressed or masked here. Always-allow
+        documented CC auto-mode divergences are RESOLVED (2026-09-23
+        waterfall-parity slice): explicit ask rules are no longer proxied to
+        allow in auto (strict-rule auto — matched ask rules prompt at any
+        risk level), and content evaluation is deny-first (behavior outer
+        deny→ask→allow, sources inner), in every mode. Always-allow
         grant synthesis is verified-matching: every persisted rule provably
         matches the call that produced it (env/wrapper-stripped commands fall
         back to a raw-prefix rule; WebFetch rules derive from untruncated args
@@ -2908,6 +2917,23 @@ capabilities:
         accumulating covered rules — all persisted edits go through the
         settings-cascade raw user-layer seam, so higher-layer rules are never
         smeared into the user file. Remaining
+        Waterfall-parity slice (2026-09-23): rule SUSPENSION in auto mode
+        (`filterAutoAllowRules` — whole-tool bash/PowerShell allows,
+        effectively-blanket bash content allows, interpreter and
+        package-runner prefixes, Task/Agent/subagent/subagent_fork allows;
+        hard override via `permissions.autoMode.classifyAllShell`, consumed
+        through the single `effectiveRuleSet(mode)` service seam and
+        annotated in `/permissions` as "suspended in auto mode"); a
+        three-tier bash risk classifier (new MEDIUM tier:
+        force-push, hard reset, force-recursive remove of ordinary targets,
+        package publish, resource deletion — configurable via
+        `permissions.mediumPatterns`, replace semantics); DENY-FIRST content
+        ordering (content deny beats content allow and whole-tool ask in
+        every mode); grant-on-ask ("Allow for this session" now applies to
+        rule-derived asks in every non-plan mode); the LLM stage arbitrates
+        passthrough-class LOW calls only (never rule-derived asks); MEDIUM
+        is never arbitrated by the LLM in this slice — it asks with the risk
+        reason when the waterfall passed it through. Remaining
         vs CC: managed/enterprise remote settings, UI mode cycle; the upstream
         permission/mode catalog pin is an upstream polish.
 
