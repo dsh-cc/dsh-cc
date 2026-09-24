@@ -1,6 +1,6 @@
 # Small picks from oh-my-pi: seven mini-designs
 
-**Status:** **Proposed** — critic cold review round 1 (2026-09-23)
+**Status:** **Implemented** — PR #139 (opened 2026-09-24). Review provenance: critic cold review round 1 (2026-09-23)
 incorporated: C1 rescoped to the TUI /resume listing with per-file read-time
 preference and safe caps; C2 gains store-hash coherence + boot-time env
 capture + concrete floors; C3 rewritten onto the existing bypassImmune
