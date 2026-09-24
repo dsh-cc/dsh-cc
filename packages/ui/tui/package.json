@@ -48,6 +48,7 @@
     "@dsh-cc/command-agents": "workspace:^",
     "@dsh-cc/command-permissions": "workspace:^",
     "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/permission-rules": "workspace:^",
     "@dsh-cc/pi-tui": "workspace:^",
     "@dsh-cc/preset-cc": "workspace:^",

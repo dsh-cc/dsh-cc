@@ -3664,6 +3664,14 @@
         {
           "type": "test",
           "path": "packages/interaction/command-resume/tests/command-resume.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/memory/memory/tests/title-sidecar.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/driver-session.spec.ts"
         }
       ],
       "deviation": {

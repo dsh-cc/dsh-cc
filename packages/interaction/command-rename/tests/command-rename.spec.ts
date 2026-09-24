@@ -1,11 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import { titleSidecarPath } from '@dsh-cc/memory'
 import * as commandRename from '@dsh-cc/command-rename'
+
+/**
+ * `defaultDshHome()` reads `os.homedir()` and has no env override, so the
+ * sidecar home is redirected by mocking `os.homedir()` (the real one stays as
+ * fallback for tests that do not set `sidecarHome.root`).
+ */
+const sidecarHome = vi.hoisted(() => ({ root: undefined as string | undefined }))
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return { ...actual, homedir: () => sidecarHome.root ?? actual.homedir() }
+})
 
 type RenameFn = (session: unknown, title: string) => { title: string }
 
@@ -81,6 +96,45 @@ describe('/rename human command', () => {
     const execution = await ctx.commands.execute(agent, '/rename ???', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('error')
     expect((execution?.result as { text: string }).text).toBe('session title must contain visible characters')
+  })
+
+  it('writes a title sidecar carrying the accepted title', async () => {
+    sidecarHome.root = mkdtempSync(join(tmpdir(), 'command-rename-'))
+    try {
+      const ctx = new Context()
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(CommandRuntime)
+      await ctx.plugin(AgentRegistry)
+      ctx.provide('sessionTitle', {
+        rename: (): { title: string } => ({ title: 'Accepted Title' }),
+      })
+      await ctx.plugin(commandRename)
+      const cwd = join(sidecarHome.root, 'workspace')
+      const session = ctx.sessions.create(SessionId('command-rename-sidecar'), { meta: { cwd } })
+      const agent: Agent = {
+        id: session.id,
+        options: {},
+        session,
+        inbox: null as never,
+        ctx: new Context(),
+        get status(): 'idle' { return 'idle' },
+        send: () => {},
+        followup: () => {},
+        steer: () => {},
+        inject: () => {},
+        cancel: () => {},
+        runMaintenance: task => task(new AbortController().signal),
+        whenIdle: () => Promise.resolve(),
+      }
+      ctx.agents.register(agent)
+
+      const execution = await ctx.commands.execute(agent, '/rename Whatever I Typed', [], new AbortController().signal)
+      expect(execution?.result.kind).toBe('success')
+      // The sidecar carries the ACCEPTED title, not the raw invocation input.
+      expect(readFileSync(titleSidecarPath(cwd, String(session.id)), 'utf8')).toBe('Accepted Title')
+    } finally {
+      sidecarHome.root = undefined
+    }
   })
 })
 

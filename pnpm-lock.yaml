@@ -580,6 +580,10 @@ importers:
         version: link:../../../../deepseek-harness/vendor/schemastery
 
   packages/compat/session-title-provider:
+    dependencies:
+      '@dsh-cc/memory':
+        specifier: workspace:^
+        version: link:../../memory/memory
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1501,6 +1505,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/memory':
+        specifier: workspace:^
+        version: link:../../memory/memory
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -3042,6 +3049,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../../interaction/command-usage
+      '@dsh-cc/memory':
+        specifier: workspace:^
+        version: link:../../memory/memory
       '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../../interaction/permission-rules

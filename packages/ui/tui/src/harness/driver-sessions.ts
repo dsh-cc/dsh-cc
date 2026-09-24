@@ -11,6 +11,7 @@
 
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { UserQuestionError } from '@deepseek-ai/dsh-user-questions'
+import { readTitleSidecar } from '@dsh-cc/memory'
 import { randomUUID } from 'node:crypto'
 import type { AgentHandle } from '@deepseek-ai/dsh-agent'
 import { join } from 'node:path'
@@ -121,14 +122,27 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
     const generation = switcherGeneration
     const sessionQuery = ctx.get('sessionQuery') as SessionQueryLike | undefined
     if (sessionQuery === undefined || ids.length === 0) return
+    // Sidecars first: a fresh colocated title.txt skips the host's expensive
+    // cold log read for that id. Only the leftovers flow to the snapshot call.
+    const titles = new Map<string, string>()
+    const remaining: string[] = []
+    for (const id of ids) {
+      const cwd = allSessions.find(entry => entry.id === id)?.cwd
+      const sidecar = cwd === undefined ? undefined : readTitleSidecar(cwd, id)
+      if (sidecar !== undefined) titles.set(id, sidecar)
+      else remaining.push(id)
+    }
     let results: readonly SessionTitleResultLike[]
-    try {
-      results = await sessionQuery.readTitleSnapshots(ids)
-    } catch {
-      return
+    if (remaining.length === 0) {
+      results = []
+    } else {
+      try {
+        results = await sessionQuery.readTitleSnapshots(remaining)
+      } catch {
+        return
+      }
     }
     if (generation !== switcherGeneration || rt.state().sessionSwitcher === undefined) return
-    const titles = new Map<string, string>()
     for (const result of results) {
       if (result.status !== 'fulfilled') continue
       const title = result.value.title?.title

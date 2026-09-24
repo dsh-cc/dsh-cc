@@ -25,6 +25,9 @@
       "path": "../pi-tui"
     },
     {
+      "path": "../../memory/memory"
+    },
+    {
       "path": "../../subagent/task"
     },
     {

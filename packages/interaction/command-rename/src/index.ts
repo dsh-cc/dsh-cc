@@ -9,6 +9,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { helpable } from '@dsh-cc/command-usage'
+import { writeTitleSidecar } from '@dsh-cc/memory'
 
 export const name = 'command-rename'
 export const inject = ['commands']
@@ -33,6 +34,11 @@ function executeRename(ctx: Context, invocation: CommandInvocation): CommandResu
   }
   try {
     const accepted = titles.rename(invocation.agent.session, raw)
+    // Best-effort sidecar after acceptance — the host may rewrite/reject, so
+    // only the accepted value is persisted. header.cwd is optional; an absent
+    // one falls back to the host process cwd.
+    const session = invocation.agent.session as { id: unknown; header?: { cwd?: string } }
+    writeTitleSidecar(session.header?.cwd ?? process.cwd(), String(session.id), accepted.title)
     return { kind: 'success', text: `Renamed to: ${accepted.title}` }
   } catch (error) {
     return { kind: 'error', text: error instanceof Error ? error.message : String(error) }

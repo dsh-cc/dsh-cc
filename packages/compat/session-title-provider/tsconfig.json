@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
-    { "path": "../cc-model-aliases" }
+    { "path": "../cc-model-aliases" },
+    { "path": "../../memory/memory" }
   ]
 }

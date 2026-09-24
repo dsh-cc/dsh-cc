@@ -2060,6 +2060,8 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-resume" }
       - { type: test, path: packages/interaction/command-resume/tests/command-resume.spec.ts }
+      - { type: test, path: packages/memory/memory/tests/title-sidecar.spec.ts }
+      - { type: test, path: packages/ui/tui/tests/driver-session.spec.ts }
     deviation:
       kind: downgrade
       summary: Lists sessions; switching is host-owned (dsh --resume <id>).

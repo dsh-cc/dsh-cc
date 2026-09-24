@@ -24,6 +24,9 @@
     "lib"
   ],
   "license": "Apache-2.0",
+  "dependencies": {
+    "@dsh-cc/memory": "workspace:^"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.5-rc.1",
     "@deepseek-ai/dsh-invariants": ">=0.1.5-rc.1",

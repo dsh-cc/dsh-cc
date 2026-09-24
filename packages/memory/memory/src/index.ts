@@ -40,6 +40,13 @@ export {
   GIT_PROBE_TIMEOUT_MS,
 } from './paths.ts'
 export type { MemoryGitExec, MemoryGitExecResult } from './paths.ts'
+export {
+  titleSidecarPath,
+  writeTitleSidecar,
+  readTitleSidecar,
+  TITLE_SIDECAR_MAX_CODE_POINTS,
+} from './title-sidecar.ts'
+export type { TitleSidecarOptions } from './title-sidecar.ts'
 export { MemorySection, renderMemorySection, renderTeamMemorySection, renderLayers, saveGuidance, MEMORY_SECTION_NAME, MEMORY_SECTION_ORDER } from './section.ts'
 export type { MemoryLayer } from './section.ts'
 export { MemoryRecall, SubagentMemorySelector, MAX_RECALL_MEMORIES, RECALL_FILES_SCHEMA } from './recall.ts'

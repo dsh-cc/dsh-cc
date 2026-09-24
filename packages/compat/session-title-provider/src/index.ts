@@ -18,6 +18,7 @@ import {
 } from '@deepseek-ai/dsh-session-title-llm'
 import type { SessionTitleLlmConfig } from '@deepseek-ai/dsh-session-title-llm'
 import { resolveAlias, toOneShotRoute } from '@dsh-cc/model-aliases'
+import { writeTitleSidecar } from '@dsh-cc/memory'
 
 export const name = 'cc-session-title-provider'
 export const inject = ['sessionTitle', 'llm', 'sessions']
@@ -63,13 +64,18 @@ export function apply(ctx: Context, config: Config): void {
     async generate(request) {
       const first = request.messages[0]
       if (first === undefined) throw new Error('first-prompt title provider requires one human message')
-      return generateSessionTitleWithLlm(
+      const result = await generateSessionTitleWithLlm(
         ctx,
         resolveSessionTitleLlmConfig(stampRoute(ctx, config, request.route)),
         request,
         [first],
         titleProvider,
       )
+      // Best-effort sidecar so the /resume listing skips the expensive cold
+      // title read. `header.cwd` is optional in the harness Session type; an
+      // absent one falls back to the host process cwd.
+      writeTitleSidecar(request.session.header.cwd ?? process.cwd(), String(request.session.id), result.title)
+      return result
     },
   })
 }
