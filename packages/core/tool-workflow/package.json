@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/tool-workflow",
   "description": "CC-parity dynamic workflow tool: inline meta extraction, saved-source resolution, async launch with a session-scoped run registry and exactly-once completion delivery",
-  "version": "0.8.0-rc.3",
+  "version": "0.8.1-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

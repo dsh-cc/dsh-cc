@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/settings-ns",
   "description": "Idempotent settings-namespace registration: duplicate-tolerant, self-healing readers and installSection wrappers for per-session preset mounts",
-  "version": "0.8.0-rc.3",
+  "version": "0.8.1-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
