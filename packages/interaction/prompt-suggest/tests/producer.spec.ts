@@ -97,6 +97,16 @@ afterEach(() => {
 })
 
 describe('@dsh-cc/prompt-suggest producer', () => {
+  it('declares cordis inject for the llm service (runtime side-query access)', async () => {
+    // Same regression class as advisor-watchdog (2026-09-24 live dogfood):
+    // without the declaration, runSideQuery's ctx.llm access throws
+    // "cannot get property 'llm' without inject" and every suggestion call
+    // silently fails. Hand-built test contexts mount llm on the root ctx, so
+    // only this pin guards the plugin definition.
+    const mod = await import('../src/index.ts')
+    expect(mod.inject).toContain('llm')
+  })
+
   it('turn-stop → scripted adapter → registry holds the suggestion (fire-and-forget)', async () => {
     const { ctx, calls } = await boot()
     let release!: () => void
