@@ -1,6 +1,6 @@
 # Auto-mode Claude-Code parity program
 
-**Status**: **Reviewed** — two blind-review rounds completed 2026-09-23 (round 1: critic + Codex in parallel; round 2: critic delta review closed 8 residual findings — A13–A16 folded into D2/D5/D11 + S1/S2/S3 below). Implementation proceeds in slices S1–S7, one PR per slice; ledger at the bottom.
+**Status**: **Implemented** — merged 2026-09-23 via the stacked PR stream #121 (this doc) → #122 (S1) → #124 (S2) → #125 (S3) → #126 (S7) → #127 (S4) → #129 (S5) → #130 (S6); presubmit green on every step including the final main-push run. Two blind-review rounds (critic + Codex parallel, then critic delta) — amendments A1–A16 below. Per-slice rebase conflicts with the S1 file-size extractions were resolved while preserving behavior (579/614/644/657/674-test green at each landing).
 
 **Date**: 2026-09-23
 
@@ -209,10 +209,10 @@ Also verified (#123): maxTokens 1024, timeoutMs default 8000, `cancelled` exclud
 
 | Slice | PR | Merged | Notes |
 | --- | --- | --- | --- |
-| S1 waterfall parity | PR #122 | pending | |
-| S2 slots + trusted scope + /auto-mode | PR #124 | pending | |
-| S3 transcript-aware classifier | PR #125 | pending | |
-| S7 PI probe | PR #126 | pending | (shipped 4th) |
-| S4 hybrid verdict space | PR #127 | pending | |
-| S5 full-text audit + review | PR #129 | pending | |
-| S6 subagent handoffs | — | in flight | HARD GATE PASSED — child resolution via `result.value.agentId` + `ctx.agents.get(id)` (one-shot-ledger face, one-shot-ledger.ts:77-80); both arms ship enabled |
+| S1 waterfall parity | PR #122 | merged 2026-09-23 | plus follow-up extraction of pre-execute.ts for the size gate |
+| S2 slots + trusted scope + /auto-mode | PR #124 | merged 2026-09-23 | trusted-scope + shared-guards extracted from cascade index.ts (size gate) |
+| S3 transcript-aware classifier | PR #125 | merged 2026-09-23 | context-bundle.ts extracted (size gate) |
+| S7 PI probe | PR #126 | merged 2026-09-23 | shipped 4th; sideband delivery per A4 during rebase resolution |
+| S4 hybrid verdict space | PR #127 | merged 2026-09-23 | classifier-audit.ts extracted (size gate) |
+| S5 full-text audit + review | PR #129 | merged 2026-09-23 | |
+| S6 subagent handoffs | PR #130 | merged 2026-09-23 | HARD GATE PASSED — child resolution via `result.value.agentId` + `ctx.agents.get(id)` (one-shot-ledger face); both arms ship enabled |
