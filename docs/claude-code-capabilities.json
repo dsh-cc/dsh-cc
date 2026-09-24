@@ -612,7 +612,7 @@
           "status": true
         },
         "mounted": {
-          "status": false
+          "status": true
         },
         "behavioral": {
           "status": "partial"
@@ -625,11 +625,21 @@
         {
           "type": "test",
           "path": "packages/bundle/cc-shell/tests/lsp-bundle.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: lsp-on-write"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/lsp-on-write/src/wiring.ts",
+          "anchor": "registerListener"
         }
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Two paths. Production: Serena MCP via user-scope ~/.claude.json (v1.7.0 pin) — symbol-level retrieval/editing/diagnostics, ~30 tools deferred through ToolSearch; gaps: no hover tool, no call hierarchy, no push diagnostics. Native dsh-lsp/dsh-lsp-stdio/dsh-tool-lsp exist with a closed 4-operation read-only seam but are NOT mounted by any shipped composition (no lsp rows in cordis.patch.yml/agent.cordis.yml). cc-plugin-loader does not parse lspServers/.lsp.json manifests; PreToolUse hooks ignore additionalContext. /ide and editor pods remain host-shell scope; headless does not apply."
+        "summary": "Two paths. Production: Serena MCP via user-scope ~/.claude.json (v1.7.0 pin) — symbol-level retrieval/editing/diagnostics, ~30 tools deferred through ToolSearch; gaps: no hover tool, no call hierarchy, no push diagnostics. Native dsh-lsp/dsh-lsp-stdio/dsh-tool-lsp exist with a closed 4-operation read-only seam but are NOT mounted by any shipped composition (no lsp rows in cordis.patch.yml/agent.cordis.yml). cc-plugin-loader does not parse lspServers/.lsp.json manifests; PreToolUse hooks ignore additionalContext. /ide and editor pods remain host-shell scope; headless does not apply. Diagnostics-on-write is now mounted (lsp-on-write preset row) but depends on the user's serena MCP mount, is settings-gated and dark by default (`cc-lsp-on-write.enabled`, user layer), and is diagnostics-only — no navigation surface."
       }
     },
     "engine.microcompact": {

@@ -228,6 +228,14 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('turn-rules')
     expect(topIds).not.toContain('turn-rules')
     expect(configIds.indexOf('turn-rules')).toBeGreaterThan(configIds.indexOf('context-crusher'))
+    // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
+    // publishes no Service (plain plugin) and sits inside the group directly
+    // after edit-recovery-hint, with NO new isolate key. Its post-execute
+    // listener is registered WITHOUT prepend so it composes inside the
+    // context-crusher's outermost listener (same family as post-edit-verify).
+    expect(configIds).toContain('lsp-on-write')
+    expect(topIds).not.toContain('lsp-on-write')
+    expect(configIds.indexOf('lsp-on-write')).toBe(configIds.indexOf('edit-recovery-hint') + 1)
     expect(configIds).toContain('command-plugin')
     expect(configIds).toContain('command-mcp')
     // The serena-first steering row consumes the isolated `mcpConnections`

@@ -153,19 +153,19 @@ function listToolsUncached(client: Client, cursor?: string) {
 }
 
 /** Call without the SDK pre-validating an output schema the bridge may not support. */
-function callToolUncached(
+export function callToolUncached(
   client: Client,
   rawName: string,
   args: Record<string, unknown>,
-  exec: ToolExecution,
-  opts: ToolBridgeOptions,
+  signal: AbortSignal,
+  timeoutMs: number | undefined,
 ) {
   return client.request(
     { method: 'tools/call', params: { name: rawName, arguments: args } },
     RawCallToolResultSchema,
     {
-      signal: exec.signal,
-      timeout: opts.toolCallTimeoutMs,
+      signal,
+      ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
     },
   )
 }
@@ -407,7 +407,7 @@ function createExecutor(
     // specific "missing required param" error the model can learn from.
     const argsObj = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
     const result = await retryUnauthorizedOnce(
-      () => callToolUncached(client, rawName, argsObj, exec, opts),
+      () => callToolUncached(client, rawName, argsObj, exec.signal, opts.toolCallTimeoutMs),
       opts.onUnauthorized,
     )
 
