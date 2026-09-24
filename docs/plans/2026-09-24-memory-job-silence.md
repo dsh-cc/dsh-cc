@@ -1,6 +1,6 @@
 # Silence internal memory jobs: stop registering them on the jobs seam
 
-**Status:** **Proposed** — critic cold review round 1 (2026-09-24) returned
+**Status:** **Implemented** — PR #133 (2026-09-24, open). Critic cold review round 1 (2026-09-24) returned
 NO-GO on the original ownerless-registration mechanism (blocking:
 `LocalJobRegistry.start` preflights `servesOwner(undefined)` against the
 global controller layer only; tool-jobs' controller is scoped inside the CC
