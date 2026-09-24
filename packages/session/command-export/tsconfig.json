@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../../interaction/command-usage"
+    },
+    {
+      "path": "../../interaction/transcript-secrets"
     }
   ]
 }

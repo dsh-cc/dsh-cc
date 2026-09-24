@@ -1,11 +1,22 @@
 import { createHash } from 'node:crypto'
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 import { recordProjectSessionId } from '@dsh-cc/tui/project-sessions.ts'
 import { readResumeTarget } from '@dsh-cc/tui/resume-target.ts'
+
+/**
+ * `defaultDshHome()` reads `os.homedir()` and has no env override, so the
+ * sidecar home is redirected by mocking `os.homedir()` (the real one stays as
+ * fallback for tests that do not set `sidecarHome.root`).
+ */
+const sidecarHome = vi.hoisted(() => ({ root: undefined as string | undefined }))
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return { ...actual, homedir: () => sidecarHome.root ?? actual.homedir() }
+})
 
 /**
  * Fake session shape — one entry per persisted session the harness knows.
@@ -802,6 +813,83 @@ describe('createDriver /resume session switcher overlay', () => {
     await driver.submit('/resume')
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(driver.state.sessionSwitcher?.sessions[0]!.title).toBeUndefined()
+  })
+
+  it('serves fresh title sidecars directly and spares those ids the host snapshot call', async () => {
+    const requested: string[][] = []
+    const sessionQuery = {
+      readTitleSnapshots: async (ids: readonly string[]) => {
+        requested.push([...ids])
+        return []
+      },
+    }
+    // Real on-disk sidecar layout under a temp DSH home: the sidecar is newer
+    // than the (empty) session log next to it, so it counts as fresh.
+    const home = mkdtempSync(join(tmpdir(), 'dsh-sidecar-titles-'))
+    const dir = join(home, '.dsh', 'sessions', '--proj--', 's-beta')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'session.v3.jsonl.zstd'), 'frame')
+    writeFileSync(join(dir, 'title.txt'), 'Sidecar title')
+    sidecarHome.root = home
+    try {
+      const { ctx } = makeSwitchableCtx({
+        createSession: { id: 's-alpha', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+        sessionList: [
+          { id: 's-alpha', createdAt: 2000 },
+          { id: 's-beta', createdAt: 3000 },
+        ],
+        sessionQuery,
+      })
+      const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
+      await driver.submit('/resume')
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      // The sidecar-titled id never reaches readTitleSnapshots; the one
+      // without a sidecar still flows to the host call unchanged.
+      expect(driver.state.sessionSwitcher?.sessions.find(s => s.id === 's-beta')?.title).toBe('Sidecar title')
+      expect(driver.state.sessionSwitcher?.sessions.find(s => s.id === 's-alpha')?.title).toBeUndefined()
+      expect(requested).toEqual([['s-alpha']])
+    } finally {
+      sidecarHome.root = undefined
+    }
+  })
+
+  it('falls back to the host snapshot call for stale sidecars', async () => {
+    const snapshotIds: string[][] = []
+    const sessionQuery = {
+      readTitleSnapshots: async (ids: readonly string[]) => {
+        snapshotIds.push([...ids])
+        return ids.map(id => ({
+          status: 'fulfilled' as const,
+          sessionId: id,
+          value: { session: { id }, title: { title: `Host ${id}` } },
+        }))
+      },
+    }
+    const home = mkdtempSync(join(tmpdir(), 'dsh-sidecar-titles-'))
+    // The session log is touched after the sidecar below, making the sidecar
+    // stale; it must be ignored.
+    const dir = join(home, '.dsh', 'sessions', '--proj--', 's-beta')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'title.txt'), 'Stale sidecar title')
+    utimesSync(join(dir, 'title.txt'), new Date(1_000_000), new Date(1_000_000))
+    writeFileSync(join(dir, 'session.v3.jsonl.zstd'), 'frame')
+    sidecarHome.root = home
+    try {
+      const { ctx } = makeSwitchableCtx({
+        createSession: { id: 's-alpha', events: [], snapshotEvents() { return this.events }, status: 'idle' },
+        sessionList: [{ id: 's-beta', createdAt: 3000 }],
+        sessionQuery,
+      })
+      const driver = await createDriver(ctx as never, { cwd: PROJ_CWD })
+      await driver.submit('/resume')
+      await new Promise(resolve => setTimeout(resolve, 0))
+
+      expect(driver.state.sessionSwitcher?.sessions.find(s => s.id === 's-beta')?.title).toBe('Host s-beta')
+      expect(snapshotIds).toEqual([['s-beta']])
+    } finally {
+      sidecarHome.root = undefined
+    }
   })
 })
 

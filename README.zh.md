@@ -174,6 +174,7 @@ CC preset 提供的命令包括：
 /status            环境和会话状态
 /memory            查看记忆
 /skills            查看已安装技能
+/commit-split      提交拆分建议（仅预演，不提交）
 /config            查看或修改配置
 /permissions       查看或修改权限模式/规则
 /mcp               管理 MCP 连接

@@ -10,6 +10,7 @@ import z from '@deepseek-ai/schemastery'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { renderTranscript, type ExportFormat } from './transcript.ts'
 import { helpable } from '@dsh-cc/command-usage'
+import { readSecretsSettings } from '@dsh-cc/transcript-secrets'
 
 export const name = 'command-export'
 export const inject = ['commands', 'fs']
@@ -92,7 +93,10 @@ async function executeExport(
   const sessionId = invocation.agent.session.id
   const { dir, name } = resolveOutput(config, request, sessionId)
   const target = await ctx.fs.resolve(joinPath(dir, name))
-  const content = renderTranscript(events, request.format, sessionId)
+  const readSecrets = readSecretsSettings(ctx)
+  const content = renderTranscript(events, request.format, sessionId, {
+    extraPatterns: readSecrets().extraPatterns,
+  })
   await ctx.fs.writeText(target, content)
   return {
     kind: 'success',

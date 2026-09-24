@@ -16,7 +16,6 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
@@ -26,6 +25,8 @@ import { installSectionSafe } from '@dsh-cc/settings-ns'
 // dependency on the seam.
 import type {} from '@deepseek-ai/dsh-shell'
 import { parseRule, ruleString } from './parser.ts'
+import { criticalDenyRules } from './critical-deny.ts'
+import { pinDefaultMode } from './default-mode-pin.ts'
 import { mergeRuleSets } from './evaluate.ts'
 import { filterAutoAllowRules } from './auto-rule-filter.ts'
 import { registerPreExecute } from './pre-execute.ts'
@@ -41,8 +42,6 @@ import {
 import {
   foldPlanMode,
   foldPermissionMode,
-  foldSandboxMode,
-  setPermissionMode,
   switchSessionPermissionMode,
 } from './mode.ts'
 import { ruleMatches, subjectOf } from './matchers.ts'
@@ -133,7 +132,7 @@ export {
 export { canonicalizeHostname, isWebFetchRuleTool } from './domain.ts'
 export { summarizeChildHandoff, handoffWarningText, HANDOFF_ASK_STORM, type ChildHandoffSummary } from './return-check.ts'
 export { filterAutoAllowRules } from './auto-rule-filter.ts'
-export { DEFAULT_MEDIUM_PATTERNS, DEFAULT_DANGEROUS_PATTERNS } from './classifier.ts'
+export { DEFAULT_MEDIUM_PATTERNS, DEFAULT_DANGEROUS_PATTERNS, CRITICAL_BASH_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -182,7 +181,9 @@ const MODE_SENTENCE: Record<PermissionMode, string> = {
   bypassPermissions: 'Permission mode: bypassPermissions. Permission prompts are skipped and the sandbox is full access, except bypass-immune and catastrophic commands which remain denied.',
 }
 
-/** The engine's Service Definition plus the mode/rule write and read surface. */
+/**
+ * The engine's Service Definition plus the mode/rule write and read surface.
+ */
 export class PermissionRulesService extends Service {
   static Config: z<Config> = ConfigSchema
 
@@ -193,7 +194,10 @@ export class PermissionRulesService extends Service {
   private readonly readOnlyTools: ReadonlySet<string>
   private readonly settingsSource: PermissionRuleSource
   private readonly rulesConfig: ConfigRules
-  private readonly bypassImmuneRules: readonly PermissionRule[]
+  /** Config-`bypassImmune` rules; {@link bypassImmuneRules} adds the curated critical tier on top. */
+  private readonly configBypassImmuneRules: readonly PermissionRule[]
+  /** Rebuilt on mount and settings change (curated tier depends on `criticalDeny` settings). */
+  private bypassImmuneRules: readonly PermissionRule[]
   /** Reads the currently authoritative settings section (swapped by the settings hook). */
   private settingsRead: () => PermissionSettings = () => ({})
   /** Live merged state; rebuilt on settings change so listeners read a fresh snapshot. */
@@ -218,7 +222,8 @@ export class PermissionRulesService extends Service {
     this.readOnlyTools = new Set(config.readOnlyTools)
     this.settingsSource = config.settingsSource as PermissionRuleSource
     this.rulesConfig = config.rules as ConfigRules | undefined ?? {}
-    this.bypassImmuneRules = (this.rulesConfig.bypassImmune ?? []).map(raw => parseRule(raw, 'deny', 'config'))
+    this.configBypassImmuneRules = (this.rulesConfig.bypassImmune ?? []).map(raw => parseRule(raw, 'deny', 'config'))
+    this.bypassImmuneRules = [...this.configBypassImmuneRules, ...this.criticalRules()]
     this.state = { rules: this.configRuleSet(), defaultMode: config.defaultMode as PermissionMode }
 
     // Monotonic guard layer for bypass-immune rules: never overridable.
@@ -277,22 +282,8 @@ export class PermissionRulesService extends Service {
     // Pin sessions created while the deployment default is a sandbox-affecting or
     // plan mode so a fresh session inherits the default durably.
     ctx.on('session/created', (session) => {
-      if (foldPermissionMode(session.snapshotEvents()) !== undefined) return
-      if (foldPlanMode(session.snapshotEvents())) return
-      const mode = this.state.defaultMode
-      if (mode === 'bypassPermissions') {
-        if (this.bypassDisabled()) return
-        const resume = foldSandboxMode(session.snapshotEvents())
-          ?? (this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)
-        setPermissionMode(session, 'bypassPermissions', resume)
-        if ((foldSandboxMode(session.snapshotEvents()) ?? (this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)) !== 'danger-full-access') {
-          setSandboxMode(session, 'danger-full-access')
-        }
-        return
-      }
-      if (mode === 'plan') {
-        ;(session.append as (type: string, payload: { active: boolean }) => unknown)('plan/mode', { active: true })
-      }
+      pinDefaultMode(session, this.state.defaultMode, this.bypassDisabled(), () =>
+        this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)
     })
 
     // Optional model-facing mode sentence. Injected via ctx.inject so a missing
@@ -350,6 +341,9 @@ export class PermissionRulesService extends Service {
   /** Rebuild merged state and re-register guards (mount and settings change). */
   private reload(): void {
     const settings = this.settingsSection()
+    // The curated critical tier may gain settings `criticalDeny` entries —
+    // rebuild the bypass-immune list, then the merged state and guards.
+    this.bypassImmuneRules = [...this.configBypassImmuneRules, ...this.criticalRules()]
     this.state = {
       rules: mergeRuleSets(settingsRuleSet(settings, this.settingsSource), this.configRuleSet()),
       defaultMode: settings.defaultMode ?? this.config.defaultMode ?? 'default',
@@ -360,6 +354,16 @@ export class PermissionRulesService extends Service {
     this.autoStage?.rebuild()
     // S7: reset the probe's breaker state (the operator's "I fixed the lane").
     this.piProbe?.rebuild()
+  }
+
+  /** Curated critical-bash deny rules (built-ins + settings `criticalDeny`; mounting in ./critical-deny.ts). */
+  private criticalRules(): readonly PermissionRule[] {
+    return criticalDenyRules(this.settingsRead().criticalDeny, message => this.debug(message))
+  }
+
+  /** Debug log (best-effort; the process logger's debug may be absent). */
+  private debug(message: string): void {
+    ;(this.ctx.logger as { debug?: (msg: string) => void }).debug?.(`[permission-rules] ${message}`)
   }
 
   /** Parse the Configource-`config` rule set. */

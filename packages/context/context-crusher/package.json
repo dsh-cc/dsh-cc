@@ -36,6 +36,7 @@
     "@deepseek-ai/schemastery": "^3.18.1",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/transcript-secrets": "workspace:^",
     "@dsh-cc/side-query": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/dsh-compaction": ">=0.1.5-rc.1"
@@ -64,6 +65,7 @@
     "@dsh-cc/hooks-claude-code": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/transcript-secrets": "workspace:^",
     "@dsh-cc/settings-ns": "workspace:^",
     "@dsh-cc/side-query": "workspace:^",
     "@dsh-cc/tool-use-summary": "workspace:^",

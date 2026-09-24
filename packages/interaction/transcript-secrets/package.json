@@ -1,0 +1,39 @@
+{
+  "name": "@dsh-cc/transcript-secrets",
+  "description": "One-way transcript secret redaction: built-in credential regexes, env-name patterns, and the cc-secrets settings reader",
+  "version": "0.8.1-rc.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/interaction/transcript-secrets"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@dsh-cc/settings-ns": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -33,6 +33,7 @@ import {
   type McpConfigFile,
   type ResolvedMcpPaths,
 } from '@dsh-cc/mcp-config'
+import { mountForeignRulesSection } from './foreign-rules.ts'
 import { mountMcpReadyNotice } from './mcpReadyNotice.ts'
 import * as CcMcpClient from '@dsh-cc/mcp-client'
 import { CcPluginManagerService } from './ccPluginManager.ts'
@@ -149,6 +150,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       },
     })
   }
+  // Foreign rules import (plan docs/plans/2026-09-23-small-picks-batch.md
+  // §C7): cline/windsurf/copilot rule files from the session cwd render into
+  // a `cc:foreign-rules` section (order 107); lazily discovered per spawn.
+  mountForeignRulesSection(ctx)
   const plugins = new CcPluginsService(ctx, {
     ...config.pluginDirs !== undefined ? { pluginDirs: config.pluginDirs } : {},
     resolveModel,

@@ -226,6 +226,15 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 			driver.toggleTodoPanel()
 			return { consume: true }
 		}
+		// Ctrl+P / Shift+Ctrl+P model-alias cycling (plan C6): the cycle method
+		// returns false when no `cc-model-cycling.cycleOrder` is configured, and
+		// the key falls through to the editor unchanged.
+		if (matchesKey(data, Key.ctrl('p')) && driver.cycleModel(1)) {
+			return { consume: true }
+		}
+		if (matchesKey(data, Key.shiftCtrl('p')) && driver.cycleModel(-1)) {
+			return { consume: true }
+		}
 		if (matchesKey(data, Key.ctrl('s'))) {
 			// Queue-jump: inject the outbox into the running turn now.
 			driver.steerQueued()

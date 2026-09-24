@@ -1658,6 +1658,23 @@ capabilities:
       - { type: test, path: packages/observability/cache-health/tests/composition.spec.ts }
     deviation: { kind: none }
 
+  commands.commit-split:
+    title: /commit-split
+    category: commands
+    plane: preset
+    upstream:
+      summary: Advisory dry-run atomic-commit split advisor.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-commit-split" }
+      - { type: test, path: packages/interaction/command-commit-split/tests/commit-split.spec.ts }
+    deviation: { kind: none }
+
   commands.compact:
     title: /compact
     category: commands
@@ -1782,12 +1799,18 @@ capabilities:
     dimensions:
       recognized: true
       mounted: true
-      behavioral: full
-      ux: full
+      behavioral: divergent
+      ux: partial
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-export" }
       - { type: test, path: packages/session/command-export/tests/command-export.spec.ts }
-    deviation: { kind: none }
+      - { type: test, path: packages/session/command-export/tests/export-secrets.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        always-on one-way secret redaction of exported transcripts
+        (dsh-cc extension; CC exports the transcript verbatim). Known gap: on
+        web profiles the native CC /export bypasses this redaction.
 
   commands.help:
     title: /help
@@ -1899,17 +1922,23 @@ capabilities:
       recognized: true
       mounted: false
       behavioral: divergent
-      ux: missing
+      ux: partial
     evidence:
       - { type: source, path: packages/ui/tui/src/slash.ts, anchor: "name: 'model'" }
       - { type: test, path: packages/ui/tui/tests/driver-model.spec.ts }
+      - { type: source, path: packages/ui/tui/src/model-cycling.ts, anchor: "createModelCyclingSection" }
+      - { type: test, path: packages/ui/tui/tests/model-cycling.spec.ts }
     deviation:
-      kind: non-goal
+      kind: divergent
       summary: >-
         Host-owned by design; the dsh-native equivalents are the TUI-local
         /model and /effort commands (packages/ui/tui/src/slash.ts, model-catalog)
         plus the ccModelRoutes alias service, so a preset-side port is out of
-        parity scope.
+        parity scope. dsh-cc extension (plan 2026-09-23-small-picks C6):
+        Ctrl+P / Shift+Ctrl+P cycles the cc-model-cycling.cycleOrder alias
+        list through the cc-model-aliases resolver — skip-with-toast on
+        unresolvable/unadvertised entries, applied in-memory via
+        applyModelSwitch (no settings persist); no host-side /model port.
 
   commands.output-style:
     title: /output-style
@@ -2091,6 +2120,8 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-resume" }
       - { type: test, path: packages/interaction/command-resume/tests/command-resume.spec.ts }
+      - { type: test, path: packages/memory/memory/tests/title-sidecar.spec.ts }
+      - { type: test, path: packages/ui/tui/tests/driver-session.spec.ts }
     deviation:
       kind: downgrade
       summary: Lists sessions; switching is host-owned (dsh --resume <id>).
@@ -2660,6 +2691,38 @@ capabilities:
     deviation: { kind: none }
 
   # ── plugins ─────────────────────────────────────────────────────────────
+  plugins.foreign-rules:
+    title: Foreign rules import (cline/windsurf/copilot)
+    category: plugins
+    plane: preset
+    upstream:
+      summary: >-
+        Rule files of other agent tools under the session cwd (cline
+        `.clinerules`, windsurf `.windsurfrules` + `.windsurf/rules/*.md`,
+        copilot `.github/copilot-instructions.md` +
+        `.github/instructions/*.instructions.md`) render into the system
+        prompt as verbatim rule blocks.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-shell-glue" }
+      - { type: source, path: packages/bundle/cc-shell/src/foreign-rules.ts }
+      - { type: source, path: packages/bundle/cc-shell/src/index.ts, anchor: "cc:foreign-rules" }
+      - { type: test, path: packages/bundle/cc-shell/tests/foreign-rules.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension with no Claude Code analog: other agents' rule files
+        are harvested from the session cwd only (no parent walk, no symlink
+        traversal, literal ignore list) into a `cc:foreign-rules` section
+        (order 107, after `cc:plugin-rules`), capped at 4000 chars per file /
+        8 files per provider / 12000 chars per section, opt-out via the
+        `cc-foreign-rules.disabled` settings namespace. No format conversion.
+
   plugins.loader:
     title: Plugin system
     category: plugins
@@ -2998,6 +3061,11 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S6/D9 outbound" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "pipeline: structured_output in auto mode (design §5.2)" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "config caveat (design §4.1)" }
+      - { type: source, path: packages/interaction/permission-rules/src/classifier.ts, anchor: "CRITICAL_BASH_PATTERNS" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "holds exactly the two pinned patterns" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "critical deny matrix: patterns × modes × sandbox grants" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "skips an invalid criticalDeny regex instead of throwing" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "a wildcard/prefix bypassImmune rule still parses and denies under bypass" }
     deviation:
       kind: downgrade
       summary: >-
@@ -3220,7 +3288,19 @@ capabilities:
         dsh-cc extension: structured_output report channel classified
         read-only by default (both registrars are validate-and-echo report
         channels), so memory-lane structured reports never reach the
-        classifier and never ask in headless children.
+        classifier and never ask in headless children. Critical-bash
+        denylist slice (2026-09-23, C3): a curated critical tier — force/recursive
+        remove of root or home, and the fork-bomb define-form — plus an
+        APPEND-ONLY `permissions.criticalDeny` settings list (invalid regex
+        sources skipped with a debug log, never thrown) are mounted as
+        bypass-immune deny rules labelled `[curated]`, so these two denies
+        survive every permission mode (including bypassPermissions over
+        danger-full-access), `classifierEnabled: false`, and a
+        `permissions.dangerousPatterns` replacement; entries also stay in the
+        classifier table (double-deny is harmless). CC has NO such tier —
+        this is a deliberate dsh-cc security extension, not parity drift;
+        `sudo` and `curl | sh` are deliberately NOT reclassified so
+        bypassPermissions keeps its escape value.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

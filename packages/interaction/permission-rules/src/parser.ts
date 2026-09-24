@@ -154,7 +154,31 @@ export function parseRuleString(rule: string): { toolName: string; content?: str
  * @returns the round-trippable rule string.
  */
 export function ruleString(toolName: string, content?: string): string {
+  // Regex-literal matcher content (`/<source>/`): render verbatim — its
+  // backslashes and parens are regex syntax, not rule escapes.
+  if (content !== undefined && content.length > 1 && content.startsWith('/') && content.endsWith('/')) {
+    return `${toolName}(${content})`
+  }
   return content === undefined || content === '' ? toolName : `${toolName}(${escapeRuleContent(content)})`
+}
+
+/**
+ * Compiled-regex cache keyed by source string. Patterns are few, so a plain
+ * Map is enough; an invalid source caches `null` (never matches).
+ */
+const regexCache = new Map<string, RegExp | null>()
+
+function compileRegex(source: string): RegExp | null {
+  let compiled = regexCache.get(source)
+  if (compiled === undefined) {
+    try {
+      compiled = new RegExp(source)
+    } catch {
+      compiled = null
+    }
+    regexCache.set(source, compiled)
+  }
+  return compiled
 }
 
 /**
@@ -166,6 +190,10 @@ export function ruleString(toolName: string, content?: string): string {
 export function contentMatches(matcher: ContentMatcher, subject: string): boolean {
   if (matcher.kind === 'prefix') return subject.startsWith(matcher.prefix)
   if (matcher.kind === 'domain') return domainMatches(matcher.hostname, subject)
+  if (matcher.kind === 'regex') {
+    const regex = compileRegex(matcher.source)
+    return regex?.test(subject) ?? false
+  }
   return wildcardMatches(matcher.pattern, subject)
 }
 

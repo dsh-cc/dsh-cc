@@ -209,6 +209,9 @@
       "path": "./packages/interaction/command-skills"
     },
     {
+      "path": "./packages/interaction/command-commit-split"
+    },
+    {
       "path": "./packages/interaction/command-status"
     },
     {
@@ -219,6 +222,9 @@
     },
     {
       "path": "./packages/interaction/command-usage"
+    },
+    {
+      "path": "./packages/interaction/transcript-secrets"
     },
     {
       "path": "./packages/interaction/command-version"

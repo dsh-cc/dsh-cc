@@ -30,6 +30,7 @@ import { createQueueSection } from './driver-queue.ts'
 import { createRunLocalSection } from './driver-run-local.ts'
 import { createAgentSection, attachSessionEvents } from './driver-agent.ts'
 import { createPromoteSection } from './driver-promote.ts'
+import { bindModelCycling } from './model-cycling-binding.ts'
 import type { ProviderRuntime } from '../provider-command.ts'
 
 import type { Driver } from '../state/driver-types.ts'
@@ -315,6 +316,9 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   })
   const { openModelPicker, applyModelSwitch, openEffortPicker, openPermissionPicker } = pickers
 
+  // --- Ctrl+P alias cycling (plan C6): see src/model-cycling.ts -------------
+  const modelCycling = bindModelCycling(ctx, { selection, applyModelSwitch, loadCatalog: agent.loadCatalog, emit, state: () => state })
+
   // --- Session switching: /resume overlay + driver.switchSession ----------
   const sessions = createSessionsSection({
     emit,
@@ -377,14 +381,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const { runLocal, runHarness } = runLocalSection
   actions.runHarness = runHarness
 
-  // --- `!` bash mode: local shell commands -----------------------------------
-  const bashCtx: DriverBashCtx = {
-    state: () => state,
-    emit,
-    cwd,
-    shell: agent.shell,
-    appendBashHistory: agent.appendBashHistory,
-  }
+  // --- `!` bash mode: local shell commands (ctx built inline for the queue) --
+  const bashCtx: DriverBashCtx = { state: () => state, emit, cwd, shell: agent.shell, appendBashHistory: agent.appendBashHistory }
   const runShellCommand = (raw: string): Promise<void> => runShellCommandModule(bashCtx, raw)
 
   // Outbox queue + submit/interrupt pipeline; history rebinds through the agent
@@ -438,6 +436,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     recallQueued: queue.recallQueued,
     promoteForegroundCollects,
     cyclePermissionMode: () => modeSection.cyclePermissionMode(),
+    cycleModel: (delta) => modelCycling.cycleModel(delta),
     toggleGlobalCollapse() { emit(toggleGlobalCollapse(state)) },
     toggleThinking() { emit(toggleThinking(state)) },
     answerApproval: (kind: ApprovalAnswerKind) => approvals.answerApproval(kind),

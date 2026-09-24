@@ -35,11 +35,20 @@ interface Envelope {
   v: 1
   ts: number
   text: string
+  /** Set when the stored text passed through the injected redactor (C2). */
+  r?: 1
 }
 
 export type RetrieveResult =
-  | { ok: true; text: string }
+  | { ok: true; text: string; redacted: boolean }
   | { ok: false; error: RetrieveError }
+
+/**
+ * Injectable one-way redaction applied inside {@link CrusherStore.put} before
+ * hashing (C2): hash, file name, and stored text all derive from the redacted
+ * string. Returns the text to store.
+ */
+export type RedactFn = (text: string) => string
 
 /**
  * The crusher store. One instance per mounted plugin; `root` is
@@ -51,18 +60,25 @@ export class CrusherStore {
   private readonly now: NowFn
 
   readonly root: string
+  private readonly redact: RedactFn | undefined
 
-  constructor(root: string, now: NowFn = Date.now) {
+  constructor(root: string, now: NowFn = Date.now, redact?: RedactFn) {
     this.root = root
     this.now = now
+    this.redact = redact
   }
 
   /** Persist one original atomically; returns its content hash. */
   async put(projectKey: string, text: string): Promise<string> {
+    // C2: redact-before-hash. A redaction that changes the text marks the
+    // envelope so retrieve can label the content as scrubbed.
+    const effective = this.redact !== undefined ? this.redact(text) : text
+    const redacted = effective !== text
+    text = effective
     const hash = shortHash(text)
     const key = `${projectKey}/${hash}`
     const file = join(this.root, projectKey, hash)
-    const envelope: Envelope = { v: 1, ts: this.now(), text }
+    const envelope: Envelope = redacted ? { v: 1, ts: this.now(), text, r: 1 } : { v: 1, ts: this.now(), text }
     const body = JSON.stringify(envelope)
     await mkdir(join(this.root, projectKey), { recursive: true })
     // Atomic write: same-directory temp file + rename, so a reader never
@@ -99,7 +115,7 @@ export class CrusherStore {
     }
     if (this.now() - envelope.ts > STORE_TTL_MS) return { ok: false, error: 'expired' }
     this.touch(key)
-    return { ok: true, text: envelope.text }
+    return { ok: true, text: envelope.text, redacted: envelope.r === 1 }
   }
 
   /**

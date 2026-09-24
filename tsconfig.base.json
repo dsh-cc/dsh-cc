@@ -287,6 +287,12 @@
       "@dsh-cc/command-skills/skills": [
         "./packages/interaction/command-skills/src/skills.ts"
       ],
+      "@dsh-cc/command-commit-split": [
+        "./packages/interaction/command-commit-split/src/index.ts"
+      ],
+      "@dsh-cc/command-commit-split/plan": [
+        "./packages/interaction/command-commit-split/src/plan.ts"
+      ],
       "@dsh-cc/command-help": [
         "./packages/interaction/command-help/src/index.ts"
       ],
@@ -295,6 +301,9 @@
       ],
       "@dsh-cc/command-usage": [
         "./packages/interaction/command-usage/src/index.ts"
+      ],
+      "@dsh-cc/transcript-secrets": [
+        "./packages/interaction/transcript-secrets/src/index.ts"
       ],
       "@dsh-cc/command-config": [
         "./packages/interaction/command-config/src/index.ts"

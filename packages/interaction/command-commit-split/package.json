@@ -1,0 +1,49 @@
+{
+  "name": "@dsh-cc/command-commit-split",
+  "description": "Advisory dry-run /commit-split command: collects the working-tree diff and asks the deep-reasoning lane for an ordered atomic-commit split plan; never commits",
+  "version": "0.8.1-rc.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/interaction/command-commit-split"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./plan": {
+      "types": "./lib/plan.d.ts",
+      "default": "./lib/plan.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/side-query": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-agent": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-commands": ">=0.1.5-rc.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

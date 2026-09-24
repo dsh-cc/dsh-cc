@@ -96,13 +96,13 @@ Install them inside a session:
 | --- | --- | --- | --- | --- |
 | Engine subsystems | 11 | 21 | 4 | 2 |
 | Hook events | 12 | 5 | 4 | 0 |
-| Command surface | 21 | 8 | 1 | 2 |
+| Command surface | 21 | 10 | 1 | 1 |
 | Sessions and context | 0 | 1 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
 | Skills | 1 | 1 | 0 | 0 |
 | Subagents | 0 | 2 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
-| Plugins and marketplaces | 0 | 3 | 0 | 0 |
+| Plugins and marketplaces | 0 | 4 | 0 | 0 |
 | Settings | 2 | 2 | 0 | 0 |
 | Permissions | 0 | 1 | 0 | 0 |
 | Models | 0 | 1 | 0 | 0 |
@@ -193,6 +193,7 @@ The CC preset exposes a growing command surface, including:
 /status            environment and session status
 /memory            inspect memories
 /skills            list installed skills
+/commit-split      propose an atomic-commit split of the working tree (dry-run)
 /config            inspect or change settings
 /permissions       inspect or change permission mode/rules
 /mcp               manage MCP connections

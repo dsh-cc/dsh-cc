@@ -1,11 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { SessionTitleProviderId } from '@deepseek-ai/dsh-session-title'
 import type { SessionTitleProvider, SessionTitleProviderRequest } from '@deepseek-ai/dsh-session-title'
+import { titleSidecarPath } from '@dsh-cc/memory'
 import * as provider from '@dsh-cc/session-title-provider'
+
+/**
+ * `defaultDshHome()` reads `os.homedir()` and has no env override, so the
+ * sidecar home is redirected by mocking `os.homedir()` (the real one stays as
+ * fallback for tests that do not set `sidecarHome.root`).
+ */
+const sidecarHome = vi.hoisted(() => ({ root: undefined as string | undefined }))
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return { ...actual, homedir: () => sidecarHome.root ?? actual.homedir() }
+})
 
 const SCRIPT: StreamChunk[] = [
   { type: 'block-start', index: 0, blockType: 'text' },
@@ -171,5 +186,37 @@ describe('@dsh-cc/session-title-provider', () => {
     expect(provider.inject).toEqual(['sessionTitle', 'llm', 'sessions'])
     expect(typeof provider.apply).toBe('function')
     expect(SessionTitleProviderId(provider.name)).toBe(provider.name)
+  })
+
+  it('writes a title sidecar next to the session log on success', async () => {
+    sidecarHome.root = mkdtempSync(join(tmpdir(), 'title-provider-'))
+    try {
+      const { ctx, adapter, registrations } = await harness({
+        ccModelRoutes: {
+          resolve: model => model === 'haiku' ? { provider: 'haiku-p', model: 'haiku-m' } : undefined,
+        },
+      })
+      ctx.llm.registerAdapter(['haiku-p'], adapter)
+      const cwd = join(sidecarHome.root, 'workspace')
+      const session = ctx.sessions.create(SessionId('sidecar-title-call'), { meta: { cwd } })
+      session.append('turn/start', { turn: 1 })
+      const first = session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'first prompt' }],
+        source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+      const request: SessionTitleProviderRequest = {
+        session,
+        messages: [{ seq: first.seq, text: 'first prompt' }],
+        route: { provider: 'current-route', model: 'current-model' },
+        signal: new AbortController().signal,
+      }
+      const result = await registrations[0]!.generate(request)
+      expect(result.title).toBe('五个字标题')
+      const sidecar = titleSidecarPath(cwd, String(session.id))
+      expect(sidecar.startsWith(join(homedir(), '.dsh', 'sessions'))).toBe(true)
+      expect(readFileSync(sidecar, 'utf8')).toBe('五个字标题')
+    } finally {
+      sidecarHome.root = undefined
+    }
   })
 })

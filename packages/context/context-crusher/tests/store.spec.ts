@@ -22,7 +22,7 @@ describe('CrusherStore', () => {
     expect(h1).toBe(h2)
     expect(h1).toMatch(/^[0-9a-f]{16}$/)
     const out = await store.get(pk, h1)
-    expect(out).toEqual({ ok: true, text: 'hello 世界' })
+    expect(out).toEqual({ ok: true, text: 'hello 世界', redacted: false })
   })
 
   it('expires via the injectable clock without sleeping', async () => {
@@ -42,7 +42,7 @@ describe('CrusherStore', () => {
     await store.sweep()
     // The oldest entry was evicted.
     expect(await store.get(pk, hashes[0])).toEqual({ ok: false, error: 'unknown_hash' })
-    expect(await store.get(pk, hashes[STORE_MAX_ENTRIES])).toEqual({ ok: true, text: `value-${STORE_MAX_ENTRIES}` })
+    expect(await store.get(pk, hashes[STORE_MAX_ENTRIES])).toMatchObject({ ok: true, text: `value-${STORE_MAX_ENTRIES}`, redacted: false })
   })
 
   it('returns typed corrupt for a garbage file and unknown_hash for a missing one', async () => {

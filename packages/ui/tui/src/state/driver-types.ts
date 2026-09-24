@@ -86,6 +86,12 @@ export interface Driver {
    */
   cyclePermissionMode(): Promise<void>
   /**
+   * Cycle the `cc-model-cycling` alias order (plan C6): Ctrl+P forward,
+   * Shift+Ctrl+P backward. Returns false when no cycle order is configured —
+   * the key then falls through to the editor unchanged.
+   */
+  cycleModel(delta: -1 | 1): boolean
+  /**
    * Flip the global collapse state (Ctrl+O): thinking rows and tool output
    * collapse together, or both expand back. Supersedes {@link Driver.toggleThinking},
    * which is retained for compatibility.

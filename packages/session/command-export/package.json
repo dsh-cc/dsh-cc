@@ -25,7 +25,8 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "@dsh-cc/command-usage": "workspace:^"
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/transcript-secrets": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-commands": ">=0.1.5-rc.1",
