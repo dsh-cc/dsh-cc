@@ -74,6 +74,7 @@ describe('bounded unit build', () => {
         { content: [{ type: 'text', text: 'real user input' }] },
         { content: [{ type: 'text', text: 'reminder body' }], source: { kind: 'turn-rules' } },
         { content: [{ type: 'text', text: 'memory body' }], source: { kind: 'memory' } },
+        { content: [{ type: 'text', text: 'advisor body' }], source: { kind: 'advisor' } },
         { content: [{ type: 'text', text: 'attributed plugin' }], source: { kind: 'plugin' } },
       ],
       200_000,
@@ -82,6 +83,7 @@ describe('bounded unit build', () => {
     expect(candidate).toContain('attributed plugin') // non-denylisted source kind is user-visible text
     expect(candidate).not.toContain('reminder body')
     expect(candidate).not.toContain('memory body')
+    expect(candidate).not.toContain('advisor body')
  expect(buildPromptCandidate([{ content: [{ type: 'text', text: 'y'.repeat(40) }] }], 8).length).toBeLessThanOrEqual(8 + 2)
   })
 })

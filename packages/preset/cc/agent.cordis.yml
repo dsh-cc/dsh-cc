@@ -574,6 +574,19 @@
     - id: prompt-suggest
       name: '@dsh-cc/prompt-suggest'
 
+    # Advisor watchdog (plan docs/plans/2026-09-23-advisor-watchdog.md): an
+    # opt-in second model that keeps per-session snapshots of the newest
+    # qualifying llm/stream request and, at each agent/turn-stopping, reviews
+    # the window since its cursor via a one-shot runSideQuery on a cheap lane,
+    # injecting severity-tiered advisory notes at resolve time with source
+    # kind 'advisor'. Publishes no Service (plain plugin, turn-rules pattern),
+    # so it needs no isolate key. DEFAULT OFF (cc-advisor.enabled). ORDER:
+    # after turn-rules — turn-rules' prompt matcher must see the un-advised
+    # prompt (advisor text is denylisted from the matcher's candidate, but
+    # physical row order keeps the seam reviewable).
+    - id: advisor-watchdog
+      name: '@dsh-cc/advisor-watchdog'
+
 # ── parallel rows ──────────────────────────────────────────────────────────
 
 # Claude Code skills from user/project/additional roots.

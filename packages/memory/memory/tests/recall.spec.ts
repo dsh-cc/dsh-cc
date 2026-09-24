@@ -275,6 +275,7 @@ describe('MemoryRecall injected-source denylist and query dedupe (W3)', () => {
     drivePreStep(ctx, undefined, [
       { content: [{ type: 'text', text: '## Memory: Bash\nbody' }], source: { kind: 'memory' } },
       { content: [{ type: 'text', text: '[observe] +1 internal' }], source: { kind: 'cc-subagent-children' } },
+      { content: [{ type: 'text', text: '<advisory>note</advisory>' }], source: { kind: 'advisor' } },
     ])
     await new Promise(resolve => setTimeout(resolve, 10))
     expect(recorder.recentToolsSeen).toHaveLength(0)

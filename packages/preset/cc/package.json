@@ -75,6 +75,7 @@
     "@dsh-cc/edit-recovery-hint": "workspace:^",
     "@dsh-cc/lsp-on-write": "workspace:^",
     "@dsh-cc/turn-rules": "workspace:^",
+    "@dsh-cc/advisor-watchdog": "workspace:^",
     "@dsh-cc/post-edit-verify": "workspace:^",
     "@dsh-cc/reasoning-fold": "workspace:^"
   },

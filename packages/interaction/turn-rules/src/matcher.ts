@@ -12,6 +12,7 @@ export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'cc-subagent-children',
   'cc-workflow-completion',
   'turn-rules',
+  'advisor',
 ]
 
 /** This plugin's own injected source kind. */
