@@ -1,6 +1,7 @@
 /**
- * The jobs-seam spawn helper for memory forks (extraction and dream): starts
- * the one-shot subagent as a background job and maps the settled outcome onto
+ * The subagent spawn helper for memory forks (extraction and dream): starts
+ * the one-shot subagent (never registered on the jobs seam — internal memory
+ * work stays invisible to the model surface) and maps the settled outcome onto
  * the JobHooks contract.
  * @module @dsh-cc/memory-consolidation/memory-job
  */
@@ -19,17 +20,6 @@ import {
 } from '@dsh-cc/memory'
 import { startWithFilterResilience } from '@dsh-cc/memory'
 import { MEMORY_TOOL_FILTER } from './tools.ts'
-
-
-/** Structural subset of the jobs seam used here. */
-interface JobService {
-  start(spec: {
-    kind: 'subagent'
-    label: string
-    owner: Agent
-    run(): { cancel(reason?: string): void; done: Promise<unknown> }
-  }): unknown
-}
 
 /** Structural subset of the subagent seam used here. */
 interface SubagentService {
@@ -112,10 +102,9 @@ export async function startMemoryJob(
   label: string,
   prompt: string,
 ): Promise<{ abort(reason?: string): void; settled: Promise<boolean>; done: Promise<JobOutcome> }> {
-  const jobs = ctx.get('jobs') as JobService | undefined
   const subagents = ctx.get('subagents') as SubagentService | undefined
-  if (jobs === undefined || subagents === undefined) {
-    return { abort: () => {}, settled: Promise.resolve(false), done: Promise.resolve({ status: 'failed', detail: 'jobs/subagents seam unavailable' }) }
+  if (subagents === undefined) {
+    return { abort: () => {}, settled: Promise.resolve(false), done: Promise.resolve({ status: 'failed', detail: 'subagents seam unavailable' }) }
   }
   const fs = ctx.get('fs') as FileSystem | undefined
   // Same logger fallback shape as recall.ts's warnOnce; called bound so the
@@ -168,14 +157,18 @@ export async function startMemoryJob(
       controller.signal.aborted ? { status: 'killed' } : { status: 'failed', detail: String(err) },
   )
   const settled = done.then(o => o.status === 'completed')
-  jobs.start({
-    kind: 'subagent',
-    label,
-    owner: agent,
-    run: () => ({
-      cancel: (reason?: string) => { controller.abort(reason) },
-      done,
-    }),
-  })
+  // Per-agent disposal guarantee (replaces the old jobs-seam owner link):
+  // aborting the agent's fiber aborts this fork and awaits its settle, and a
+  // settled job detaches its own effect. Registered AFTER the dispatch (a
+  // dispatch throw must not leak an effect), wrapped so a disposing scope —
+  // which rejects new effects — is a no-op, never a new failure path.
+  let dispose: (() => void) | undefined
+  try {
+    dispose = agent.ctx.effect(() => async () => {
+      controller.abort('agent disposed')
+      await done.catch(() => {})
+    }, 'memory-consolidation: cancel the fork on agent disposal')
+  } catch { /* agent scope already disposing: the fork dies with it anyway */ }
+  void done.finally(() => { dispose?.() })
   return { abort: (reason?: string) => { controller.abort(reason) }, settled, done }
 }

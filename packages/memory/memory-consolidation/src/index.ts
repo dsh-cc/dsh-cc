@@ -2,8 +2,7 @@
  * Background memory consolidation: turn-end extraction and the three-gate
  * dream rewrite.
  *
- * `agent/turn-stopping` fires an extraction subagent (via `ctx.jobs` +
- * `ctx.subagents`, tools restricted to read/search) that reports durable facts
+ * `agent/turn-stopping` fires an extraction subagent (via `ctx.subagents`, tools restricted to read/search) that reports durable facts
  * as structured output, and evaluates the dream gates (time, session count,
  * lock) to schedule a read-only review whose structured output rewrites
  * MEMORY.md and the topic files. The forks hold no write tools — the memory
@@ -59,8 +58,8 @@ export {
 export type { MemoryWrite, MemoryWritePolicy } from '@dsh-cc/memory'
 
 export const name = 'memory-consolidation'
-/** Services required for background jobs and the subagent provider. */
-export const inject = ['jobs', 'subagents']
+/** Services required for the subagent provider (jobs seam intentionally unused). */
+export const inject = ['subagents']
 
 /** Memory consolidation configuration. */
 export interface Config {

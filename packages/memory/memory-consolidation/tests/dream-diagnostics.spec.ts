@@ -6,6 +6,16 @@ import { zstdCompressSync } from 'node:zlib'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { apply, rollbackLock, tryAcquireLock, memoryWritePolicy } from '../src/index.ts'
+import { startMemoryJob } from '../src/memory-job.ts'
+
+/**
+ * Observation capture-seam: the lanes no longer register on the jobs seam, so
+ * abort controls are captured through startMemoryJob's returned handles.
+ */
+vi.mock('../src/memory-job.ts', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../src/memory-job.ts')>()
+  return { ...mod, startMemoryJob: vi.fn(mod.startMemoryJob) }
+})
 
 /**
  * Coverage for the dream dispatch diagnostics (plan 2026-09-22 §2.4): every
@@ -57,20 +67,31 @@ function makeFsMock(seed: Record<string, string> = {}) {
 
 function mount(config: { fs?: unknown; sessionsRoot?: string; withSeams?: boolean } = {}) {
   const ctx = new Context()
-  const jobs = { start: vi.fn() }
   const subagents = { start: vi.fn() }
   const fs = config.fs ?? makeFsMock()
   if (config.withSeams !== false) {
-    ctx.provide('jobs' as never, jobs as never)
     ctx.provide('subagents' as never, subagents as never)
   }
   ctx.provide('fs' as never, fs as never)
+  vi.mocked(startMemoryJob).mockClear()
   apply(ctx, {
     memoryHome: '/mem',
     extractEnabled: false,
     sessionsRoot: config.sessionsRoot ?? tmpRoot,
   })
-  return { ctx, jobs, subagents, fs }
+  return { ctx, subagents, fs }
+}
+
+/** The settled startMemoryJob handles for one label, in call order. */
+async function controlsOf(label: string): Promise<Array<{ abort: (reason?: string) => void; done: Promise<{ status: string }> }>> {
+  const mock = startMemoryJob as unknown as ReturnType<typeof vi.fn>
+  const out: Array<{ abort: (reason?: string) => void; done: Promise<{ status: string }> }> = []
+  for (let i = 0; i < mock.mock.calls.length; i++) {
+    if (mock.mock.calls[i]![4] !== label) continue
+    const r = mock.mock.results[i]
+    if (r.type === 'return') out.push(await r.value)
+  }
+  return out
 }
 
 async function stopTurn(ctx: Context, agent: Agent): Promise<void> {
@@ -137,14 +158,14 @@ describe('dream dispatch diagnostics', () => {
     expect(String(entry.detail)).toContain('stopReason error')
   })
 
-  it('a missing jobs/subagents seam lands as outcome-failed with the seam-unavailable detail', async () => {
+  it('a missing subagents seam lands as outcome-failed with the seam-unavailable detail', async () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, fs } = mount({ withSeams: false })
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => {
       expect(diagnosticOf(fs).phase).toBe('outcome-failed')
-      expect(String(diagnosticOf(fs).detail)).toContain('jobs/subagents seam unavailable')
+      expect(String(diagnosticOf(fs).detail)).toContain('subagents seam unavailable')
       // The lock was never stranded: rolled back to the no-file encoding.
       expect(fs.backing.get(LOCK)).toBe('0\n0\n')
     })
@@ -211,7 +232,7 @@ describe('dream dispatch diagnostics', () => {
 describe('dream bounded retry (design §4.2)', () => {
   it('first attempt failed + retry completes: one lock acquire, two spawns, outcome-failed + success (marker cleared)', async () => {
     await seedFresh(tmpRoot, 5)
-    const { ctx, jobs, subagents, fs } = mount()
+    const { ctx, subagents, fs } = mount()
     const spawnCount = { n: 0 }
     subagents.start.mockImplementation(async () => {
       spawnCount.n += 1
@@ -233,7 +254,7 @@ describe('dream bounded retry (design §4.2)', () => {
     expect(fs.backing.get(`${DIR}/MEMORY.md`)).toBe('# index\n')
     expect(fs.backing.get(`${DIR}/topic-a.md`)).toBe('fact\n')
     expect(fs.backing.get(DIAG)).toBeDefined()
-    expect(jobs.start).toHaveBeenCalledTimes(2) // one dispatch window, two spawn calls (attempt + retry)
+    expect(subagents.start).toHaveBeenCalledTimes(2) // one dispatch window, two spawn calls (attempt + retry)
   })
 
   it('retry also fails: exactly two spawns, rollback, no third attempt', async () => {
@@ -272,15 +293,15 @@ describe('dream bounded retry (design §4.2)', () => {
 
   it('no retry on killed: exactly one spawn and a plain outcome-failed breadcrumb', async () => {
     await seedFresh(tmpRoot, 5)
-    const { ctx, jobs, subagents, fs } = mount()
+    const { ctx, subagents, fs } = mount()
     const pending = Promise.withResolvers<never>()
     subagents.start.mockImplementation(async () => ({ result: pending.promise }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => expect(fs.backing.get(LOCK)).toContain(String(process.pid)))
-    // Abort via the job control (controller.abort shape): outcome killed, no respawn.
-    const jobControl = (jobs.start.mock.calls[0]![0] as never as { run(): { cancel: (reason?: string) => void } }).run()
-    jobControl.cancel('disposed')
+    // Abort via the captured job handles: outcome killed, no respawn.
+    const [jobControl] = await controlsOf('memory-consolidation')
+    jobControl.abort('disposed')
     pending.reject(new Error('aborted'))
     await vi.waitFor(() => expect(fs.backing.get(LOCK)).toMatch(/^0\n/))
     expect(subagents.start).toHaveBeenCalledTimes(1)
