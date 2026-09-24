@@ -31,6 +31,13 @@ describe('buildExtractionPrompt', () => {
     expect(prompt).toContain('return an empty `writes` array')
     expect(prompt).not.toContain('write nothing at all')
   })
+
+  it('closes with the FINAL CONTRACT as the LAST content line (design 2026-09-24 §4.3)', () => {
+    const prompt = buildExtractionPrompt(3, '/mem', '')
+    expect(prompt).toContain('FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report.')
+    const lines = prompt.split('\n').filter(line => line.trim() !== '')
+    expect(lines[lines.length - 1]).toContain('FINAL CONTRACT')
+  })
 })
 
 describe('buildConsolidationPrompt', () => {
@@ -56,5 +63,13 @@ describe('buildConsolidationPrompt', () => {
     expect(prompt).toContain('never attempt to open or grep them')
     // Phase 5: index size target.
     expect(prompt).toContain('under 140 lines')
+  })
+
+  it('closes with the FINAL CONTRACT as the LAST content line, after the session-hints block (design 2026-09-24 §4.3)', () => {
+    const prompt = buildConsolidationPrompt('/mem', '/transcripts', ['s1'])
+    expect(prompt).toContain('FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report.')
+    expect(prompt.indexOf('Session provenance hints')).toBeLessThan(prompt.indexOf('FINAL CONTRACT'))
+    const lines = prompt.split('\n').filter(line => line.trim() !== '')
+    expect(lines[lines.length - 1]).toContain('FINAL CONTRACT')
   })
 })

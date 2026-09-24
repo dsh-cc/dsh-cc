@@ -201,3 +201,89 @@ describe('dream dispatch diagnostics', () => {
     expect(at).toBeGreaterThan(0)
   })
 })
+
+/**
+ * Bounded dream retry (design 2026-09-24 §4.2/§5.4): a FAILED dream outcome
+ * (the never-reported prose-stop shape) gets exactly ONE immediate retry with
+ * the same prompt and lock. A killed outcome never respawns; a second failure
+ * rolls the lock back with no third attempt.
+ */
+describe('dream bounded retry (design §4.2)', () => {
+  it('first attempt failed + retry completes: one lock acquire, two spawns, outcome-failed + success (marker cleared)', async () => {
+    await seedFresh(tmpRoot, 5)
+    const { ctx, jobs, subagents, fs } = mount()
+    const spawnCount = { n: 0 }
+    subagents.start.mockImplementation(async () => {
+      spawnCount.n += 1
+      if (spawnCount.n === 1) return { result: Promise.resolve({ stopReason: 'error' }) }
+      return {
+        result: Promise.resolve({
+          structured: { writes: [{ path: 'MEMORY.md', content: '# index\n' }, { path: 'topic-a.md', content: 'fact\n' }] },
+          stopReason: 'completed',
+        }),
+      }
+    })
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => {
+      expect(fs.backing.get(LOCK)).toContain(String(process.pid))
+      expect(diagnosticOf(fs).phase).toBe('outcome-failed')
+    })
+    // The write-back proves the retry completed the job (same lock, no re-acquire).
+    expect(fs.backing.get(`${DIR}/MEMORY.md`)).toBe('# index\n')
+    expect(fs.backing.get(`${DIR}/topic-a.md`)).toBe('fact\n')
+    expect(fs.backing.get(DIAG)).toBeDefined()
+    expect(jobs.start).toHaveBeenCalledTimes(2) // one dispatch window, two spawn calls (attempt + retry)
+  })
+
+  it('retry also fails: exactly two spawns, rollback, no third attempt', async () => {
+    await seedFresh(tmpRoot, 5)
+    const { ctx, subagents, fs } = mount()
+    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ stopReason: 'error' }) }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(fs.backing.get(LOCK)).toBe('0\n0\n'))
+
+    expect(subagents.start).toHaveBeenCalledTimes(2)
+    const entry = diagnosticOf(fs)
+    expect(entry.phase).toBe('outcome-failed')
+    expect(String(entry.detail)).toContain('retry')
+    expect(String(entry.detail)).toContain('stopReason error')
+  })
+
+  it('a retry-side dispatch throw is caught: outcome-failed (retry-tagged) + rollback, never a stranded lock', async () => {
+    await seedFresh(tmpRoot, 5)
+    const { ctx, subagents, fs } = mount()
+    let n = 0
+    subagents.start.mockImplementation(async () => {
+      n += 1
+      if (n === 1) return { result: Promise.resolve({ stopReason: 'error' }) }
+      throw new Error('retry dispatch exploded')
+    })
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(fs.backing.get(LOCK)).toBe('0\n0\n'))
+
+    const entry = diagnosticOf(fs)
+    expect(entry.phase).toBe('outcome-failed')
+    expect(String(entry.detail)).toContain('retry')
+    expect(String(entry.detail)).toContain('retry dispatch exploded')
+  })
+
+  it('no retry on killed: exactly one spawn and a plain outcome-failed breadcrumb', async () => {
+    await seedFresh(tmpRoot, 5)
+    const { ctx, jobs, subagents, fs } = mount()
+    const pending = Promise.withResolvers<never>()
+    subagents.start.mockImplementation(async () => ({ result: pending.promise }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(fs.backing.get(LOCK)).toContain(String(process.pid)))
+    // Abort via the job control (controller.abort shape): outcome killed, no respawn.
+    const jobControl = (jobs.start.mock.calls[0]![0] as never as { run(): { cancel: (reason?: string) => void } }).run()
+    jobControl.cancel('disposed')
+    pending.reject(new Error('aborted'))
+    await vi.waitFor(() => expect(fs.backing.get(LOCK)).toMatch(/^0\n/))
+    expect(subagents.start).toHaveBeenCalledTimes(1)
+    expect(String(diagnosticOf(fs).detail)).not.toContain('retry')
+  })
+})

@@ -98,8 +98,25 @@ export interface Config {
 /** The standard file-edit tool set, applied when {@link Config.fileEditTools} is omitted. */
 export const DEFAULT_FILE_EDIT_TOOLS = ['edit', 'write', 'multi_edit', 'notebook_edit', 'str_replace_editor']
 
-/** The standard read-only tool set, applied when {@link Config.readOnlyTools} is omitted. */
-export const DEFAULT_READ_ONLY_TOOLS = ['read', 'glob', 'grep', 'search', 'web_fetch', 'web_search']
+/**
+ * The standard read-only tool set, applied when {@link Config.readOnlyTools}
+ * is omitted.
+ *
+ * `structured_output` is classified read-only because both registrars of the
+ * name are validate-and-echo report channels with zero side effects: the
+ * in-process driver's child-scoped schema tool validates the arguments
+ * against the declared output schema and captures the value, and this repo's
+ * `tool-structured-output` global variant validates and echoes — every
+ * consequential use of the reported data carries its own validation and
+ * write path. Without the classification, auto mode routes these report
+ * calls to the LLM risk classifier, whose `ask` verdict rejects
+ * deterministically in headless children (`approvalPolicy: 'never'`).
+ *
+ * Caveat: a deployment that sets `permissions.readOnlyTools` explicitly
+ * REPLACES this default wholesale — it must re-list `structured_output`
+ * itself (same caveat class as {@link DEFAULT_FILE_EDIT_TOOLS}).
+ */
+export const DEFAULT_READ_ONLY_TOOLS = ['read', 'glob', 'grep', 'search', 'web_fetch', 'web_search', 'structured_output']
 
 /** The classifier sub-object schema: defaults apply only when the object is present. */
 const autoModeClassifierSchema = z.object({
