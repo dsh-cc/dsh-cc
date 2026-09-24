@@ -540,8 +540,10 @@ describe('risk-classifier escalation', () => {
     const ctx = await mount({ classifierEnabled: false })
     const agent = openTurnAgent('disabled')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    // The catastrophic command is no longer hard-denied once the stage is off.
-    const result = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /' }, agent))
+    // A catastrophic command that is NOT in the critical tier is no longer
+    // hard-denied once the stage is off (`rm -rf /` itself now stays denied
+    // by the curated critical tier — C3 bypass-immune denylist).
+    const result = await ctx.tools.execute(exec('Bash', { command: 'mkfs.ext4 /dev/sda' }, agent))
     expect(result.isError).toBe(false)
   })
 })

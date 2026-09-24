@@ -2961,6 +2961,11 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S6/D9 outbound" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "pipeline: structured_output in auto mode (design §5.2)" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "config caveat (design §4.1)" }
+      - { type: source, path: packages/interaction/permission-rules/src/classifier.ts, anchor: "CRITICAL_BASH_PATTERNS" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "holds exactly the two pinned patterns" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "critical deny matrix: patterns × modes × sandbox grants" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "skips an invalid criticalDeny regex instead of throwing" }
+      - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "a wildcard/prefix bypassImmune rule still parses and denies under bypass" }
     deviation:
       kind: downgrade
       summary: >-
@@ -3183,7 +3188,19 @@ capabilities:
         dsh-cc extension: structured_output report channel classified
         read-only by default (both registrars are validate-and-echo report
         channels), so memory-lane structured reports never reach the
-        classifier and never ask in headless children.
+        classifier and never ask in headless children. Critical-bash
+        denylist slice (2026-09-23, C3): a curated critical tier — force/recursive
+        remove of root or home, and the fork-bomb define-form — plus an
+        APPEND-ONLY `permissions.criticalDeny` settings list (invalid regex
+        sources skipped with a debug log, never thrown) are mounted as
+        bypass-immune deny rules labelled `[curated]`, so these two denies
+        survive every permission mode (including bypassPermissions over
+        danger-full-access), `classifierEnabled: false`, and a
+        `permissions.dangerousPatterns` replacement; entries also stay in the
+        classifier table (double-deny is harmless). CC has NO such tier —
+        this is a deliberate dsh-cc security extension, not parity drift;
+        `sudo` and `curl | sh` are deliberately NOT reclassified so
+        bypassPermissions keeps its escape value.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

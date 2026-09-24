@@ -23,6 +23,12 @@ export type PermissionRuleSource =
   | 'userSettings'
   /** Lowest priority — a rule from the plugin's composition `Config`. */
   | 'config'
+  /**
+   * Curated critical-bash denylist (built-in `CRITICAL_BASH_PATTERNS` plus
+   * settings `criticalDeny`), mounted as bypass-immune deny rules. Labels the
+   * deny reason only; all bypass-immune rules deny unconditionally.
+   */
+  | 'curated'
 
 /**
  * Every {@link PermissionRuleSource} ordered highest-priority first. Content
@@ -38,6 +44,7 @@ export const SOURCE_PRIORITY: readonly PermissionRuleSource[] = [
   'projectSettings',
   'userSettings',
   'config',
+  'curated',
 ]
 
 /** The behavior a rule prescribes when its tool (and content, when present) matches. */
@@ -88,12 +95,14 @@ export interface PermissionRule {
  * literal asterisk); a `prefix` rule matches any subject starting with the
  * string; a `domain` rule (WebFetch only) matches the call's canonicalized
  * URL hostname against a domain pattern (exact, `*.suffix` subdomain-tree, or
- * single-label `*` wildcards).
+ * single-label `*` wildcards); a `regex` rule tests the subject against a raw
+ * regex source (compiled and cached by source string).
  */
 export type ContentMatcher =
   | { kind: 'wildcard'; pattern: string }
   | { kind: 'prefix'; prefix: string }
   | { kind: 'domain'; hostname: string }
+  | { kind: 'regex'; source: string }
 
 /** A group of rules by behavior, used as the engine's rule input. */
 export interface PermissionRuleSet {

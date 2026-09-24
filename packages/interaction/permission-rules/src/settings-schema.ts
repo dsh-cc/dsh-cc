@@ -33,6 +33,12 @@ export interface PermissionSettings {
   /** Raw medium-risk regex sources replacing the curated MEDIUM tier. */
   mediumPatterns?: string[]
   /**
+   * Raw critical-bash regex sources APPENDED after the built-in curated
+   * critical tier (append-only, never replacing) and mounted as bypass-immune
+   * deny rules. Invalid regex sources are skipped with a debug log.
+   */
+  criticalDeny?: string[]
+  /**
    * Optional LLM risk-classifier configuration for `auto` mode (hand-mirrors
    * the shared `AutoModeSchema`): `soft_deny` prose list plus a `classifier`
    * sub-object. Absent ⇒ the stage stays disarmed (no defaults materialized).
@@ -138,6 +144,7 @@ export function permissionSettingsSchema(): z<PermissionSettings> {
     protectedFiles: z.array(z.string()),
     dangerousPatterns: z.array(z.string()),
     mediumPatterns: z.array(z.string()),
+    criticalDeny: z.array(z.string()).default([]),
     // Union with `undefined` keeps an absent `autoMode` key absent — no
     // defaults materialized, the classifier stays disarmed (mirrors the
     // shared AutoModeSchema union-with-undefined idiom).

@@ -44,6 +44,18 @@ export const DEFAULT_DANGEROUS_PATTERNS: readonly DangerousPattern[] = [
 ]
 
 /**
+ * The critical bash denylist, mounted as bypass-immune deny rules so these
+ * denies survive every permission mode, `classifierEnabled: false`, and a
+ * settings `dangerousPatterns` replacement. Entries also stay in
+ * {@link DEFAULT_DANGEROUS_PATTERNS} — double-deny is harmless (the guard
+ * fires first). Precision over recall: these can never be bypassed.
+ */
+export const CRITICAL_BASH_PATTERNS: readonly DangerousPattern[] = [
+  { regex: /\brm\s+-[a-z]*[rf][a-z]*\s+(?:\/(?:\s|$)|~(?:\s|$|\/))/, reason: 'force/recursive remove of root or home' },
+  { regex: /\(\s*\)\s*\{[^{}]*\|[^{}]*&[^{}]*\}/, reason: 'fork bomb' },
+]
+
+/**
  * The curated set of protected file paths — dotfiles, credential stores, and
  * sensitive config. Simple wildcard matching: `**` matches any depth, `*`
  * matches a single path segment. A match raises a file write to `HIGH`.
