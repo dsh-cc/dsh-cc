@@ -56,6 +56,12 @@ export interface AutoMode {
    */
   soft_deny?: string[]
   /**
+   * Unconditional hard-deny prose (S4/D4): a classifier `deny` must cite one
+   * of these EXACTLY or it downgrades to `ask`. In CC's snake_case spelling;
+   * `$defaults` expansion happens at consumption time.
+   */
+  hard_deny?: string[]
+  /**
    * Allow-exception prose evaluated after the soft-deny rules (S2), in CC's
    * snake_case spelling. `$defaults` expansion happens at consumption time —
    * the schema never expands it, so merging never sees the expansion.
@@ -115,6 +121,8 @@ const AutoModeSectionSchema = z.object({
   // Union with `undefined` keeps an absent `soft_deny` key absent — no empty
   // array is materialized (permissive array, no default).
   soft_deny: z.union([z.array(z.string()), z.const(undefined)]),
+  // Same absence-preserving idiom as `soft_deny` (S4 hard-deny slot).
+  hard_deny: z.union([z.array(z.string()), z.const(undefined)]),
   // Same absence-preserving idiom as `soft_deny` (S2 slots).
   allow: z.union([z.array(z.string()), z.const(undefined)]),
   environment: z.union([z.array(z.string()), z.const(undefined)]),

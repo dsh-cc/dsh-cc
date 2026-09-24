@@ -75,6 +75,10 @@ export {
   appendSessionClassifier,
   foldClassifiers,
   createAutoStage,
+  DENY_STREAK_THRESHOLD,
+  DENY_TOTAL_THRESHOLD,
+  TRIP_NOTICE,
+  foldDenyBackstop,
   type AutoModeSettings,
   type AutoModeClassifierSettings,
   type AutoModeProbeSettings,
@@ -111,6 +115,7 @@ export {
 export {
   DEFAULT_ALLOW_EXCEPTIONS,
   DEFAULT_ENVIRONMENT,
+  DEFAULT_HARD_DENY,
   expandSlot,
 } from './slots.ts'
 export {
@@ -245,6 +250,13 @@ export class PermissionRulesService extends Service {
       sessionAllowMatches: (exec) => this.sessionAllowMatches(exec),
       onAutoStage: (stage) => { this.autoStage = stage },
       onPiProbe: (probe) => { this.piProbe = probe },
+      pauseAuto: (exec, notice) => {
+        const agent = exec.agent
+        if (agent === undefined) return
+        // D5: honest provenance (S4's origin parameter), never the
+        // "changed by the user" template; manual re-entry resets counters.
+        this.setMode(agent, 'default', notice)
+      },
     })
 
     // WS3 sandbox integration: the approval-seam listener auto-approves
@@ -433,14 +445,17 @@ export class PermissionRulesService extends Service {
    * disabled modes throw.
    * @param agent - the live agent whose session mode is changing.
    * @param mode - the new permission mode.
+   * @param origin - optional provenance text for the injected announcement
+   *   (S4/D5): replaces the default "(changed by the user)" suffix.
    */
-  setMode(agent: Agent, mode: PermissionMode): void {
+  setMode(agent: Agent, mode: PermissionMode, origin?: string): void {
     switchSessionPermissionMode({
       agent,
       mode,
       defaultMode: this.state.defaultMode,
       bypassDisabled: this.bypassDisabled(),
       shellMode: this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined,
+      ...(origin === undefined ? {} : { origin }),
     })
   }
 

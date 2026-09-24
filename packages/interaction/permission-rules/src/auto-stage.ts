@@ -13,11 +13,33 @@
  * @module @dsh-cc/permission-rules/auto-stage
  */
 
-import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+// The audit-event surface moved to ./classifier-audit.ts (size budget);
+// re-exported here for the historical import sites.
+export {
+  CLASSIFIER_EVENT,
+  appendSessionClassifier,
+  foldClassifiers,
+  foldDenyBackstop,
+  sanitizeReason,
+  REASON_CAP,
+  DENY_STREAK_THRESHOLD,
+  DENY_TOTAL_THRESHOLD,
+  TRIP_NOTICE,
+  type ClassifierAuditEventData,
+} from './classifier-audit.ts'
+import {
+  DenyBackstop,
+  foldClassifiers,
+  sanitizeReason,
+  DENY_STREAK_THRESHOLD,
+  DENY_TOTAL_THRESHOLD,
+  TRIP_NOTICE,
+  type ClassifierAuditEventData,
+} from './classifier-audit.ts'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { createLlmClassifier, expandSoftDeny, type ClassifierRoute, type LlmClassifier } from './llm-classifier.ts'
-import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, expandSlot } from './slots.ts'
+import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, DEFAULT_HARD_DENY, expandSlot } from './slots.ts'
 import { createContextBundler } from './context-bundle.ts'
 import type { DecidedCall } from './decide.ts'
 import type { PermissionMode } from './types.ts'
@@ -69,6 +91,12 @@ export interface AutoModeSettings {
    */
   soft_deny?: string[]
   /**
+   * Unconditional hard-deny prose (S4/D4): a classifier `deny` must cite one
+   * of these EXACTLY or it downgrades to `ask`. In CC's snake_case spelling;
+   * `$defaults` expansion happens at consumption time.
+   */
+  hard_deny?: string[]
+  /**
    * Allow-exception prose evaluated after the soft-deny rules (S2), in CC's
    * snake_case spelling. `$defaults` expansion happens at consumption time —
    * the schema never expands it.
@@ -89,74 +117,6 @@ export interface AutoModeSettings {
   classifier?: AutoModeClassifierSettings
   /** Input-layer PI-probe configuration (S7); absent when the section omits it. */
   probe?: AutoModeProbeSettings
-}
-
-/** The session event type carrying one classifier verdict audit record. */
-export const CLASSIFIER_EVENT = 'permission/classifier'
-
-// Cross-repo event registration: postdates the upstream session catalog
-// (same pattern as `permission/mode` / `permission/session-allow`).
-;(KNOWN_SESSION_EVENT_TYPES as Set<string>).add(CLASSIFIER_EVENT)
-
-/** The `permission/classifier` payload. The raw classifier input NEVER appears — only its digest. */
-export interface ClassifierAuditEventData {
-  /** The tool the verdict is about. */
-  tool: string
-  /** sha256 of the rendered classifier input (absent on the arming `unarmed` record). */
-  digest?: string
-  verdict: 'allow' | 'ask'
-  failure?: 'timeout' | 'error' | 'malformed' | 'unarmed' | 'breaker' | 'cancelled' | 'stale-mode'
-  /** Short model/availability reason (D10): ≤120 chars, control chars stripped at write. */
-  reason?: string
-  /** Present (true) when the D13 reconsider pass ran for this verdict. */
-  secondPass?: boolean
-  route?: string
-  provider?: string
-  model?: string
-  latencyMs: number
-  cacheHit: boolean
-}
-
-/** D10: audit `reason` cap. */
-export const REASON_CAP = 120
-
-/**
- * Strip control characters and cap an audit reason at {@link REASON_CAP}
- * chars. Shared with the S7 PI probe (same package — D10).
- */
-export function sanitizeReason(reason: string): string {
-  return reason.replace(/[\x00-\x1f\x7f]/g, '').slice(0, REASON_CAP)
-}
-
-/** Wire face of one log event that may or may not be a `permission/classifier`. */
-interface ClassifierWire {
-  readonly type: string
-  readonly data: ClassifierAuditEventData
-}
-
-/**
- * Append one `permission/classifier` audit record through the widened session
- * append face (same cross-pin strategy as `./mode.ts` and
- * `./session-allowlist.ts`).
- */
-export function appendSessionClassifier(session: Session, data: ClassifierAuditEventData): void {
-  type AppendFace = { append(type: string, data: ClassifierAuditEventData): unknown }
-  ;(session as unknown as AppendFace).append(CLASSIFIER_EVENT, data)
-}
-
-/**
- * Fold a session log into the classifier verdict records it carries, in log
- * order. Foreign event types are skipped; resume/replay reconstructs why a
- * call did or did not prompt.
- */
-export function foldClassifiers(events: readonly SessionEvent[]): ClassifierAuditEventData[] {
-  const out: ClassifierAuditEventData[] = []
-  for (const event of events) {
-    const wire = event as unknown as ClassifierWire
-    if (wire.type !== CLASSIFIER_EVENT || typeof wire.data !== 'object' || wire.data === null) continue
-    out.push(wire.data)
-  }
-  return out
 }
 
 /**
@@ -192,14 +152,24 @@ export type AutoStageDeps = {
   /** Read-only tool names (same set DecideDeps uses) — filters the tool-history fold. */
   readOnlyTools: ReadonlySet<string>
   /**
+   * S4/D5 trip action: pause auto mode for this call's session — inject the
+   * notice (parameterized provenance) and switch the mode to `default`.
+   * Wired in index.ts over `setMode(agent, 'default', notice)`.
+   */
+  pauseAuto(exec: ToolExecution, notice: string): void
+  /**
    * One shell runner for the S3 enrichment snapshot (`undefined` ⇒ enrichment
    * skipped). `cwd` is the session cwd; `timeoutMs` bounds the child.
    */
   runCommand?: (cmd: string, opts: { cwd?: string; timeoutMs: number }) => Promise<string>
 }
 
-/** The stage's contribution to one pre-execute decision: allow, an escalated ask, or nothing (legacy path). */
-export type StageOutcome = 'allow' | { kind: 'ask'; reason: string }
+/**
+ * The stage's contribution to one pre-execute decision: allow, an escalated
+ * ask, a hard deny (S4/D4 — rides the existing deny→error-tool-result
+ * delivery), or nothing (legacy path).
+ */
+export type StageOutcome = 'allow' | { kind: 'ask'; reason: string } | { kind: 'deny'; reason: string; rule: string }
 
 export type AutoStage = {
   /** Drop the memoized classifier so the next armed call rebuilds it (settings onChange). */
@@ -220,6 +190,7 @@ export type AutoStage = {
 /** The autoMode settings slice, normalized for comparison and consumption. */
 interface AutoModeSlice {
   softDeny: string[]
+  hardDeny: string[]
   allowExceptions: string[]
   environment: string[]
   route: string
@@ -234,10 +205,12 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
   const autoMode = settings.autoMode
   const classifier = autoMode?.classifier
   const softDeny = expandSoftDeny(autoMode?.soft_deny ?? ['$defaults'])
+  const hardDeny = expandSlot(autoMode?.hard_deny ?? ['$defaults'], DEFAULT_HARD_DENY)
   const allowExceptions = expandSlot(autoMode?.allow ?? ['$defaults'], DEFAULT_ALLOW_EXCEPTIONS)
   const environment = expandSlot(autoMode?.environment ?? ['$defaults'], DEFAULT_ENVIRONMENT)
   return {
     softDeny,
+    hardDeny,
     allowExceptions,
     environment,
     route: classifier?.route ?? 'haiku',
@@ -245,7 +218,7 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
     cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
     secondPass: classifier?.secondPass === true,
     enabled: classifier?.enabled === true,
-    raw: JSON.stringify([autoMode?.soft_deny, autoMode?.allow, autoMode?.environment, classifier]),
+    raw: JSON.stringify([autoMode?.soft_deny, autoMode?.hard_deny, autoMode?.allow, autoMode?.environment, classifier]),
   }
 }
 
@@ -292,6 +265,8 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
     readOnlyTools: deps.readOnlyTools,
     ...(deps.runCommand === undefined ? {} : { runCommand: deps.runCommand }),
   })
+  /** S4/D5 per-session deny backstop (seed-once fold idiom). */
+  const backstop = new DenyBackstop()
 
   const ensureClassifier = (): LlmClassifier => {
     if (classifier !== undefined && builtRaw === slice.raw) return classifier
@@ -306,6 +281,7 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
         return stream(opts)
       },
       softDeny: slice.softDeny,
+      hardDeny: slice.hardDeny,
       allowExceptions: slice.allowExceptions,
       environment: slice.environment,
       timeoutMs: slice.timeoutMs,
@@ -416,19 +392,53 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       // neither is counted (nor resets), and neither is `stale-mode`
       // (returned above before this fold).
       breaker.record(sessionIdOf(exec), routeKey, verdict.failure, { exec, route })
+      const sessionId = sessionIdOf(exec)
       if (session !== undefined) {
-        deps.audit(session, {
+        const audit: ClassifierAuditEventData = {
           tool: verdict.tool,
           digest: verdict.digest,
           verdict: verdict.verdict,
+          ...(verdict.verdict === 'deny' ? { rule: verdict.rule } : {}),
+          ...(exec.callId === undefined ? {} : { callId: exec.callId }),
           ...(verdict.failure === undefined ? {} : { failure: verdict.failure }),
           ...(verdict.routeAlias === undefined ? {} : { route: verdict.routeAlias, provider: verdict.provider, model: verdict.model }),
           reason: sanitizeReason(verdict.reason),
           ...(verdict.secondPass === true ? { secondPass: true } : {}),
           latencyMs: verdict.latencyMs,
           cacheHit: verdict.cacheHit,
-        })
+        }
+        if (verdict.verdict === 'deny') {
+          // Seed BEFORE appending this call's audit event: the durable log is
+          // folded once (without it) and the current verdict folds in via
+          // record() — never double-counted.
+          backstop.seed(sessionId, () => foldClassifiers(session.snapshotEvents()))
+        }
+        deps.audit(session, audit)
+        // S4/D5 backstop: fold every audited verdict in-process. Crossing a
+        // threshold trips exactly once per window — the appended `trip` marker
+        // re-windows the fold to zero, so re-entry into auto restarts from a
+        // fresh 3/20 and a duplicate notice/marker needs a fresh crossing.
+        if (verdict.verdict === 'deny') {
+          backstop.record(sessionId, audit)
+          const { consecutive, total } = backstop.state(sessionId)
+          if (consecutive >= DENY_STREAK_THRESHOLD || total >= DENY_TOTAL_THRESHOLD) {
+            const marker: ClassifierAuditEventData = {
+              tool: exec.name,
+              verdict: 'ask',
+              failure: 'trip',
+              ...(exec.callId === undefined ? {} : { callId: exec.callId }),
+              latencyMs: 0,
+              cacheHit: false,
+            }
+            deps.audit(session, marker)
+            backstop.record(sessionId, marker)
+            deps.pauseAuto(exec, TRIP_NOTICE)
+          }
+        } else {
+          backstop.record(sessionId, audit)
+        }
       }
+      if (verdict.verdict === 'deny') return { kind: 'deny', reason: verdict.reason, rule: verdict.rule }
       return verdict.verdict === 'allow' ? 'allow' : { kind: 'ask', reason: verdict.reason }
     },
   }

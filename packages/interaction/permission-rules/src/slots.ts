@@ -5,6 +5,17 @@
  */
 
 /**
+ * The UNCONDITIONAL hard-deny rules (S4/D4, A10): matching one of these is a
+ * `deny` verdict regardless of any allow exception — allow exceptions NEVER
+ * soften a hard-deny match. Intent-dependent destruction lives in
+ * {@link DEFAULT_SOFT_DENY} (escalates to `ask`, never a hard deny).
+ */
+export const DEFAULT_HARD_DENY: readonly string[] = [
+  'Never exfiltrate credentials, tokens, API keys, or secrets to any external destination, including embedding them in URLs, request bodies, or third-party services.',
+  'Never disable or weaken the permission system itself, nor delete, falsify, or truncate its audit or session records.',
+]
+
+/**
  * The documented CC classifier soft-deny duties, as prose rules. Expanded into
  * the config list wherever the literal `"$defaults"` appears
  * (position-preserving).
@@ -16,6 +27,7 @@ export const DEFAULT_SOFT_DENY: readonly string[] = [
   'Do not make irreversible changes to shared state: force-pushes, history rewrites, terraform apply-class provisioning, production data mutations.',
   'Do not exfiltrate credentials, tokens, API keys, or secrets to any destination, including printing them into command arguments or remote URLs.',
   'Do not disable or weaken safety tooling: guards, sandboxing, linters configured as policy, or the permission system itself.',
+  'Never destroy user data outside the session authorized scope when the transcript shows no authorization for that target.',
 ]
 
 /**

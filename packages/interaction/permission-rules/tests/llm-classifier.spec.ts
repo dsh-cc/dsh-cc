@@ -23,6 +23,7 @@ function make(overrides: Partial<Parameters<typeof createLlmClassifier>[0]> = {}
   const calls: StreamOpts[] = []
   const deps = {
     stream: streamFake(['{"verdict":"allow","reason":"benign"}'], calls),
+    hardDeny: [] as string[],
     softDeny: DEFAULT_SOFT_DENY,
     allowExceptions: [] as string[],
     environment: [] as string[],
@@ -60,15 +61,22 @@ describe('createLlmClassifier', () => {
 
   it.each([
     ['not json at all'],
-    ['{"verdict":"deny","reason":"nope"}'],
     ['{"verdict":"maybe"}'],
     [''],
     ['{"verdict":"allow"'],
-  ])('malformed/deny output ⇒ ask + malformed: %j', async output => {
+  ])('malformed output ⇒ ask + malformed: %j', async output => {
     const { cls } = make({ stream: streamFake([output]) })
     const v = await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
     expect(v.verdict).toBe('ask')
     expect(v.failure).toBe('malformed')
+  })
+
+  it('S4/D4: an uncited deny downgrades to ask (never malformed, never allow)', async () => {
+    const { cls } = make({ stream: streamFake(['{"verdict":"deny","reason":"nope"}']) })
+    const v = await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
+    expect(v.verdict).toBe('ask')
+    expect(v.reason).toMatch(/downgrad/)
+    expect(v.failure).toBeUndefined()
   })
 
   it('thrown stream ⇒ ask + error, never rejects', async () => {

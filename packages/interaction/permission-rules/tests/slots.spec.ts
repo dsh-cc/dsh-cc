@@ -59,6 +59,7 @@ function make(overrides: Partial<Parameters<typeof createLlmClassifier>[0]> = {}
       calls.push(opts)
       return '{"verdict":"allow","reason":"ok"}'
     }),
+    hardDeny: ['h1'],
     softDeny: ['s1'],
     allowExceptions: ['a1'],
     environment: ['e1'],
@@ -85,11 +86,18 @@ describe('prompt composition (S2 slots)', () => {
     expect(envAt).toBeGreaterThan(allowAt)
   })
 
-  it('no hard-deny section yet (S4 slot)', async () => {
+  it('S4: the hard-deny section leads the evaluation order (hard before soft before allow)', async () => {
     const calls: StreamOpts[] = []
     const cls = make({ stream: vi.fn(async (opts: StreamOpts) => { calls.push(opts); return '{"verdict":"allow","reason":"ok"}' }) })
     await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
-    expect(calls[0]!.system.toLowerCase()).not.toContain('hard-deny')
+    const system = calls[0]!.system
+    const hardAt = system.indexOf('- h1')
+    const softAt = system.indexOf('- s1')
+    const allowAt = system.indexOf('- a1')
+    expect(hardAt).toBeGreaterThanOrEqual(0)
+    expect(softAt).toBeGreaterThan(hardAt)
+    expect(allowAt).toBeGreaterThan(softAt)
+    expect(system.toLowerCase()).toMatch(/never soften a hard-deny match/)
   })
 })
 
@@ -115,7 +123,7 @@ describe('classificationKey slot busting', () => {
       calls.push(opts)
       return '{"verdict":"allow","reason":"ok"}'
     })
-    const deps = { stream, softDeny: ['s'], allowExceptions: ['a'], environment: ['e'], timeoutMs: 5_000, cacheMaxEntries: 256 }
+    const deps = { stream, hardDeny: ['h'], softDeny: ['s'], allowExceptions: ['a'], environment: ['e'], timeoutMs: 5_000, cacheMaxEntries: 256 }
     const cls = createLlmClassifier(deps)
     await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })
     await cls.classify(fakeExec('Bash', { command: 'ls' }), { route: ROUTE })

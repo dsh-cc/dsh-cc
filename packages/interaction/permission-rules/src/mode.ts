@@ -167,6 +167,12 @@ export type SwitchSessionPermissionModeArgs = {
   bypassDisabled: boolean
   /** The host shell service's sandbox mode, when mounted. */
   shellMode: SandboxMode | undefined
+  /**
+   * Optional provenance text for the injected announcement (S4/D5): replaces
+   * the default "(changed by the user)" suffix so programmatic switches can
+   * carry honest origin wording. Absent ⇒ the default template, unchanged.
+   */
+  origin?: string
 }
 
 /**
@@ -180,7 +186,7 @@ export type SwitchSessionPermissionModeArgs = {
  * the mode is already durable).
  */
 export function switchSessionPermissionMode(args: SwitchSessionPermissionModeArgs): void {
-  const { agent, mode, defaultMode, bypassDisabled, shellMode } = args
+  const { agent, mode, defaultMode, bypassDisabled, shellMode, origin } = args
   if (mode === 'plan') {
     throw new TypeError('permission mode "plan" is owned by plan-mode; use /plan or /permissions plan')
   }
@@ -214,7 +220,7 @@ export function switchSessionPermissionMode(args: SwitchSessionPermissionModeArg
 
   try {
     agent.inject(createUserMessage({
-      content: [{ type: 'text', text: `The permission mode changed to "${mode}" (changed by the user).` }],
+      content: [{ type: 'text', text: `The permission mode changed to "${mode}" (${origin ?? 'changed by the user'}).` }],
       source: { kind: 'plugin', plugin: 'permission-rules' },
     }))
   } catch {

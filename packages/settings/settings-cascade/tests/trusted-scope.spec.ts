@@ -11,6 +11,7 @@ import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 // the trusted-scoped `autoMode` key exactly as a consumer resolves it.
 const AutoModeSchema = z.object({
   soft_deny: z.array(z.string()),
+  hard_deny: z.array(z.string()),
   allow: z.array(z.string()),
   environment: z.array(z.string()),
   classifyAllShell: z.union([z.boolean(), z.const(undefined)]),
