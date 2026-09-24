@@ -4731,17 +4731,29 @@
           "path": "packages/compat/cc-plugin-loader/src/rules.ts"
         },
         {
+          "type": "source",
+          "path": "packages/interaction/turn-rules/src/wiring.ts"
+        },
+        {
           "type": "test",
           "path": "packages/bundle/cc-shell/tests/rules-seam.spec.ts"
         },
         {
           "type": "test",
           "path": "packages/compat/cc-plugin-loader/tests/discovery.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/compat/cc-plugin-loader/tests/turn-rule-trigger.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/turn-rules/tests/composition.spec.ts"
         }
       ],
       "deviation": {
         "kind": "divergent",
-        "summary": "Rules render as static/conditional-instruction prompt segments via the `rules` guest seam (cc-shell bridge): per plugin, alwaysApply entries render verbatim under \"Rules from plugin <name>\", glob-scoped entries render as \"When editing files matching `<globs>`: <body>\", scopeless entries surface as general guidance with a warning, and each plugin's contribution is capped at a 4000-character prompt budget with explicit truncation. Runtime glob file-matching activation (Claude Code's per-turn rule activation against edited paths) is a documented build-time degradation and is not implemented, hence ux partial. The seam exists only in the cc preset plane; outside it the seam is unmounted and the rules tally reports skipped with a warning."
+        "summary": "Rules render as static/conditional-instruction prompt segments via the `rules` guest seam (cc-shell bridge): per plugin, alwaysApply entries render verbatim under \"Rules from plugin <name>\", glob-scoped entries render as \"When editing files matching `<globs>`: <body>\", scopeless entries surface as general guidance with a warning, and each plugin's contribution is capped at a 4000-character prompt budget with explicit truncation. Runtime glob file-matching activation (Claude Code's per-turn rule activation against edited paths) is a documented build-time degradation and is not implemented, hence ux partial. The seam exists only in the cc preset plane; outside it the seam is unmounted and the rules tally reports skipped with a warning. Deliberate dsh-cc extension on the same `.mdc` surface (no Claude Code analog): rules may declare optional trigger frontmatter (`trigger` regex source, `triggerOn` channel list, `repeat` once|after-gap, `repeatGap`). Trigger-bearing rules stay out of the rendered prompt entirely; instead the `@dsh-cc/turn-rules` plain plugin matches them — top-level sessions only — against a bounded unit (tool-call arguments plus the post-crusher accept text, UTF-8-capped at 200 KB) and against prompt-channel candidate text, injecting the rule body as an advisory reminder at that seam: an `additionalContexts` entry riding the same accept decision (content never rewritten) on the tool channel, or an attributed `agent.inject` message (source.kind turn-rules) on the prompt channel. Fired state persists per session in $DSH_HOME/turn-rules/<sessionId>.json (keyed by <plugin-root>/<rule-path>) so compaction and resume cannot re-fire a `once` rule; `after-gap` re-arms arithmetically off a turn-stopping-driven counter. Injections are advisory-only — the engine never blocks a tool call."
       }
     },
     "settings.actor-contract": {

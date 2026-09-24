@@ -15,7 +15,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { parseCcFrontmatterDocument } from '@dsh-cc/skill-loader'
-import type { CcPluginManifest, RuleEntry } from './types.ts'
+import type { CcPluginManifest, RuleEntry, TurnRuleChannel } from './types.ts'
 import { ComponentTally, type RulesSeam } from './seams.ts'
 import { globPathKind } from './manifest.ts'
 
@@ -74,7 +74,7 @@ export async function mountRules(options: MountRulesOptions): Promise<{ disposer
   if (files.length === 0) return { disposers, tally, warnings }
   const entries: RuleEntry[] = []
   for (const file of files) {
-    const entry = await loadRuleFile(file, tally, warnings)
+    const entry = await parseRuleFile(file, tally, warnings)
     if (entry !== undefined) {
       entries.push({
         ...entry,
@@ -115,8 +115,15 @@ async function walkMdc(dir: string, found: string[]): Promise<void> {
   }
 }
 
-/** Parse one `.mdc` file's typed frontmatter; malformed files skip with a reason. */
-async function loadRuleFile(
+/**
+ * Parse one `.mdc` file's typed frontmatter; malformed files skip with a
+ * reason. Trigger keys (turn-rules, plan docs/plans/2026-09-23-turn-rules.md
+ * §4.1) are read straight off the preserved frontmatter record; a malformed
+ * trigger value (non-string trigger, invalid regex source, unknown
+ * triggerOn/repeat enum, non-positive-integer repeatGap) skips the rule with
+ * a tally warning — never a load failure, never a throw.
+ */
+export async function parseRuleFile(
   file: string,
   tally: ComponentTally,
   warnings: string[],
@@ -145,13 +152,64 @@ async function loadRuleFile(
     warnings.push(reason)
     return undefined
   }
+  const triggered = triggerFields(path, document.data)
+  if (typeof triggered === 'string') {
+    const reason = `skipped rule "${path}": ${triggered}`
+    tally.addSkipped(reason)
+    warnings.push(reason)
+    return undefined
+  }
   return {
     path: file,
     description: typed.description,
     alwaysApply: typed.alwaysApply,
     globs: typed.globs,
     body: document.body,
+    ...triggered,
   }
+}
+
+/**
+ * Coerce the trigger fields off the raw frontmatter record; a string return
+ * is a skip reason. Absent keys stay `undefined` — rules without a trigger
+ * are byte-for-byte unaffected.
+ */
+function triggerFields(
+  path: string,
+  data: Record<string, unknown>,
+): { trigger?: string; triggerOn?: readonly TurnRuleChannel[]; repeat?: 'once' | 'after-gap'; repeatGap?: number } | string {
+  const out: { trigger?: string; triggerOn?: readonly TurnRuleChannel[]; repeat?: 'once' | 'after-gap'; repeatGap?: number } = {}
+  if (data.trigger !== undefined) {
+    if (typeof data.trigger !== 'string') return 'frontmatter field "trigger" must be a string'
+    try {
+      void new RegExp(data.trigger)
+    } catch {
+      return `frontmatter field "trigger" is not a valid regex source (rule "${path}")`
+    }
+    out.trigger = data.trigger
+  }
+  if (data.triggerOn !== undefined) {
+    const raw = data.triggerOn
+    const list = Array.isArray(raw) ? raw : [raw]
+    if (list.some(item => item !== 'tool-results' && item !== 'user-prompts')) {
+      return 'frontmatter field "triggerOn" must be "tool-results", "user-prompts", or a list of those'
+    }
+    out.triggerOn = list as TurnRuleChannel[]
+  }
+  if (data.repeat !== undefined) {
+    if (data.repeat !== 'once' && data.repeat !== 'after-gap') {
+      return 'frontmatter field "repeat" must be "once" or "after-gap"'
+    }
+    out.repeat = data.repeat
+  }
+  if (data.repeatGap !== undefined) {
+    const raw = data.repeatGap
+    if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 1) {
+      return 'frontmatter field "repeatGap" must be a positive integer'
+    }
+    out.repeatGap = raw
+  }
+  return out
 }
 
 /** Coerce the typed rule fields; a string return is a skip reason. */

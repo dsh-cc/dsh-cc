@@ -33,6 +33,9 @@ export interface CcAgentRef {
   readonly paths: readonly string[]
 }
 
+/** A channel a triggered rule can fire on (turn-rules, plan docs/plans/2026-09-23-turn-rules.md §4.1). */
+export type TurnRuleChannel = 'tool-results' | 'user-prompts'
+
 /** One Cursor `.mdc` rule mounted through the `rules` guest seam (plan §3.3). */
 export interface RuleEntry {
   /** The rule file path, relative to the plugin root. */
@@ -45,6 +48,18 @@ export interface RuleEntry {
   readonly globs: readonly string[]
   /** Markdown body after the frontmatter. */
   readonly body: string
+  /**
+   * Optional JS regex source: when present, turn-rules matches this rule
+   * against completed tool calls/results or user prompts and injects the body
+   * as an advisory reminder. Absent rules keep today's index behavior.
+   */
+  readonly trigger?: string
+  /** Channels the trigger matches; absent = both. */
+  readonly triggerOn?: readonly TurnRuleChannel[]
+  /** Repeat policy: `once` (default) or `after-gap: repeatGap` turns. */
+  readonly repeat?: 'once' | 'after-gap'
+  /** Completed turn_stops before re-arm under `after-gap` (default 10). */
+  readonly repeatGap?: number
 }
 
 /** A Claude Code skill entry, loaded from `skills/` or an inline path. */

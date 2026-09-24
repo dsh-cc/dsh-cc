@@ -43,7 +43,7 @@ export type { ActorContractSettings } from './actor-contract-gate.ts'
 
 export type { CcPluginManifest, CcCommand, CcSkillRef, CcAgentRef, CcMcpServer, ComponentKind, ComponentResult, PluginLoadReport, PluginFlavor } from './types.ts'
 export type { CcPluginCommandInfo, MountedPluginCommand } from './commands.ts'
-export { parsePluginManifest } from './manifest.ts'
+export { parsePluginManifest, globPathKind } from './manifest.ts'
 export {
   discoverCcPluginRoots,
   resolveClaudeHome,
@@ -60,8 +60,9 @@ export type { DiscoveredCcPlugin, DiscoverCcPluginRootsOptions } from './discove
 export { AgentProvider, STANDARD_AGENTS_DIR, PLUGIN_AGENT_PROVIDER_BRAND, isPluginAgentProvider } from './agents.ts'
 export type { ResolveModel } from './agents.ts'
 export type { McpSeam, HooksSeam, RulesSeam } from './seams.ts'
-export type { RuleEntry } from './types.ts'
-export { mountRules } from './rules.ts'
+export { ComponentTally } from './seams.ts'
+export type { RuleEntry, TurnRuleChannel } from './types.ts'
+export { mountRules, parseRuleFile } from './rules.ts'
 export {
   skillToolRestriction,
   resolveSkillExecution,

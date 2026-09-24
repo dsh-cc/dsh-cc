@@ -73,6 +73,7 @@
     "@dsh-cc/tool-use-summary": "workspace:^",
     "@dsh-cc/prompt-suggest": "workspace:^",
     "@dsh-cc/edit-recovery-hint": "workspace:^",
+    "@dsh-cc/turn-rules": "workspace:^",
     "@dsh-cc/post-edit-verify": "workspace:^",
     "@dsh-cc/reasoning-fold": "workspace:^"
   },
