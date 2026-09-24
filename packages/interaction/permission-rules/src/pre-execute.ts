@@ -10,7 +10,10 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { PostToolDecision, PreToolDecision, ToolExecution } from '@dsh-cc/tools'
+import type { PostToolDecision, PreToolDecision, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
+import { ccToolAliases } from '@dsh-cc/tools'
+import type { UserMessage } from '@deepseek-ai/dsh-session'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { createClassifierStreamAdapter, type ClassifierStream } from './classifier-lane.ts'
 import {
@@ -20,7 +23,9 @@ import {
 } from './auto-stage.ts'
 import { exec as nodeExec } from 'node:child_process'
 import { decideCallVerbose, effectiveMode, mapPostWaterfall, type DecideDeps } from './decide.ts'
-import { createPiProbe, appendSessionProbe, type PiProbe } from './pi-probe.ts'
+import { createPiProbe, appendSessionProbe, foldProbes, probeInputText, type PiProbe } from './pi-probe.ts'
+import { foldClassifiers } from './classifier-audit.ts'
+import { summarizeChildHandoff, handoffWarningText } from './return-check.ts'
 import type { Config, PermissionSettings } from './settings-schema.ts'
 import type { PermissionMode, PermissionRuleSet } from './types.ts'
 
@@ -77,6 +82,57 @@ function resolveDetailedRoute(
     ...(resolved.reasoningEffort === undefined ? {} : { reasoningEffort: resolved.reasoningEffort }),
   }
 }
+
+async function returnCheck(
+  ctx: Context,
+  decideDeps: DecideDeps,
+  piProbe: PiProbe,
+  exec: ToolExecution,
+  result: Readonly<ToolExecutionResult>,
+  decision: PostToolDecision & { kind: 'accept' },
+): Promise<PostToolDecision> {
+    if (!ccToolAliases(exec.name).includes('Task')) return decision
+    if (effectiveMode(decideDeps, exec) !== 'auto') return decision
+    let out: PostToolDecision & { kind: 'accept' } = decision
+    // ARM (b) — report-text screening through the shared probe core.
+    const input = probeInputText(result.content)
+    if (input !== undefined) out = await piProbe.screen(exec, input, out)
+    // ARM (a) — child audit fold (needs the structured value; failures and
+    // background launches without an agentId are silently unresolvable).
+    const value = result.isError ? undefined : (result as { value?: { agentId?: unknown } }).value
+    const agentId = typeof value?.agentId === 'string' && value.agentId.length > 0 ? value.agentId : undefined
+    if (agentId === undefined) return out
+    const args = (exec.arguments ?? {}) as Record<string, unknown>
+    const label = typeof args.description === 'string' ? args.description : 'unnamed'
+    type ChildSession = {
+      ownEvents?: () => readonly unknown[]
+      snapshotEvents?: () => readonly unknown[]
+      /** Legacy event array fallback (the one-shot-ledger probe order). */
+      events?: readonly unknown[]
+    }
+    let events: readonly unknown[] | undefined
+    try {
+      const child = (ctx.get('agents') as { get?(id: string): { session?: ChildSession } | undefined } | undefined)?.get?.(agentId)
+      const session = child?.session
+      if (typeof session?.ownEvents === 'function') events = session.ownEvents()
+      else if (typeof session?.snapshotEvents === 'function') events = session.snapshotEvents()
+      else events = session?.events
+    } catch (error: unknown) {
+      // Resolver threw: a debug note only — no fabricated warning.
+      ;(ctx.logger as { debug?: (message: string) => void }).debug?.(
+        `permission-rules: subagent return check could not resolve child ${agentId}: ${String(error)}`,
+      )
+      return out
+    }
+    if (events === undefined) return out
+    const summary = summarizeChildHandoff(foldClassifiers(events as never), foldProbes(events as never))
+    if (!summary.warn) return out
+    const warning: UserMessage = createUserMessage({
+      content: [{ type: 'text', text: handoffWarningText(label, summary.reason) }],
+      source: { kind: 'plugin', plugin: 'permission-rules' },
+    })
+    return { ...out, additionalContexts: [...(out.additionalContexts ?? []), warning] }
+  }
 
 /**
  * Build the DecideDeps face, the auto stage, and register the pre-execute
@@ -185,7 +241,10 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     const downstream = await next()
     if (downstream.kind !== 'accept') return downstream
     try {
-      return await piProbe.scan(exec, result, downstream)
+      let decision: PostToolDecision = await piProbe.scan(exec, result, downstream)
+      // S6/D9 subagent-handoff return checks: warn-only, fail-open, auto-only.
+      if (decision.kind === 'accept') decision = await returnCheck(ctx, decideDeps, piProbe, exec, result, decision)
+      return decision
     } catch (error: unknown) {
       // Fail-open (context-crusher D6 idiom): a probe fault must NEVER
       // throw into the waterfall — a throw turns the user's tool result

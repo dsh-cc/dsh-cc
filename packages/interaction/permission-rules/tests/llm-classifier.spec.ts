@@ -506,4 +506,37 @@ describe('S3/D7 transcript input assembly', () => {
     expect(classificationKey('Bash', 'ls', DEFAULT_SOFT_DENY, [], [], 'digest-2')).not.toBe(base)
     expect(classificationKey('Bash', 'ls', DEFAULT_SOFT_DENY, [], [])).not.toBe(base)
   })
+
+  it('S6 spawn rendering (subagent_fork): delegation prompt FIRST, capped at 512 chars; other args follow', async () => {
+    const longPrompt = 'a'.repeat(511) + 'TAIL'.repeat(40)
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('subagent_fork', {
+      prompt: longPrompt,
+      description: 'run the sweep',
+      subagent_type: 'explore',
+    }), { route: ROUTE })
+    const prompt = calls[0]!.prompt
+    expect(prompt).toContain('delegation prompt: aaa')
+    expect(prompt.indexOf('delegation prompt:')).toBeLessThan(prompt.indexOf('subagent_type'))
+    const line = prompt.split('\n').find(candidate => candidate.startsWith('delegation prompt:'))!
+    expect(line.length).toBeLessThanOrEqual('delegation prompt: '.length + 512)
+    expect(line.endsWith('…')).toBe(true)
+    expect(prompt).toContain('"subagent_type":"explore"')
+    expect(prompt).toContain('"description":"run the sweep"')
+    expect(prompt).not.toContain('TAIL')
+  })
+
+  it('S6 spawn rendering (subagent): harness spelling resolves via the Task alias; args order prompt-first', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('subagent', { prompt: 'short prompt', description: 'label' }), { route: ROUTE })
+    const prompt = calls[0]!.prompt
+    expect(prompt).toContain('delegation prompt: short prompt')
+    expect(prompt.indexOf('delegation prompt:')).toBeLessThan(prompt.indexOf('"description":"label"'))
+  })
+
+  it('S6: a non-spawn tool keeps the legacy rendering (no delegation field)', async () => {
+    const { cls, calls } = make()
+    await cls.classify(fakeExec('Bash', { command: 'echo hi' }), { route: ROUTE })
+    expect(calls[0]!.prompt).not.toContain('delegation prompt')
+  })
 })

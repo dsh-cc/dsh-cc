@@ -131,6 +131,7 @@ export {
   contentMatches,
 } from './parser.ts'
 export { canonicalizeHostname, isWebFetchRuleTool } from './domain.ts'
+export { summarizeChildHandoff, handoffWarningText, HANDOFF_ASK_STORM, type ChildHandoffSummary } from './return-check.ts'
 export { filterAutoAllowRules } from './auto-rule-filter.ts'
 export { DEFAULT_MEDIUM_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
@@ -207,6 +208,7 @@ export class PermissionRulesService extends Service {
   private autoStage: AutoStage | undefined
   /** The optional input-layer PI probe (S7); scans post-execute results in auto mode. */
   private piProbe: PiProbe | undefined
+  /** The waterfall dependency face (S6 return-check mode gate); assigned in `registerGuards`. */
 
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'permissionRules')
@@ -316,6 +318,25 @@ export class PermissionRulesService extends Service {
     return this.settingsRead()
   }
 
+  /**
+   * S6/D9 subagent-handoff return checks. Runs ONLY for spawn tools
+   * (`subagent`/`subagent_fork`, via the CC `Task` alias), ONLY in effective
+   * `auto` mode, warn-only, and never throws (the listener wraps this in the
+   * probe's fail-open catch).
+   *
+   * ARM (a): when the child session is resolvable — `result.value.agentId`
+   * (the Task tool's output schema, packages/subagent/task/src/tool.ts) +
+   * the `agents` registry (`ctx.agents.get(id)`, the one-shot-ledger face,
+   * packages/subagent/task/src/one-shot-ledger.ts:77-80) — fold the child's
+   * classifier/probe audit and warn on deny/breaker/trip/≥5-ask. An
+   * unresolvable child under a resolver that THREW logs a debug note only —
+   * never a fabricated warning.
+   *
+   * ARM (b) ALWAYS: screen the returned report text through the S7 probe
+   * machinery (`piProbe.screen` — same instance, lane, breaker, audit) and
+   * warn the parent to treat a flagged report as suspect.
+   */
+
   /** Reject a settings section the engine could not act on — fail loud at the settings boundary. */
   private validateSettings(value: PermissionSettings): void {
     for (const raw of [...value.allow ?? [], ...value.deny ?? [], ...value.ask ?? []]) {
@@ -341,16 +362,7 @@ export class PermissionRulesService extends Service {
     this.piProbe?.rebuild()
   }
 
-  /**
-   * The shared one-shot route resolution for the classifier stage AND the S7
-   * probe: detail-preserving (resolveDetailedAlias, NOT toOneShotRoute —
-   * that helper drops reasoningEffort by design for the other one-shot
-   * lanes), with the calling agent's logged request header filling the
-   * provider for a string-form (model-only) alias; a complete
-   * {provider, model} alias needs no parent (session-title-provider
-   * precedent).
-   */
-  /** Parse the Config `rules` block into a source-`config` rule set. */
+  /** Parse the Configource-`config` rule set. */
   private configRuleSet(): PermissionRuleSet {
     const { allow = [], deny = [], ask = [] } = this.rulesConfig
     return {

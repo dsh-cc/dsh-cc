@@ -214,5 +214,5 @@ Also verified (#123): maxTokens 1024, timeoutMs default 8000, `cancelled` exclud
 | S3 transcript-aware classifier | PR #125 | pending | |
 | S7 PI probe | PR #126 | pending | (shipped 4th) |
 | S4 hybrid verdict space | PR #127 | pending | |
-| S5 full-text audit + review | — | in flight | |
-| S6 subagent handoffs | — | — | |
+| S5 full-text audit + review | PR #129 | pending | |
+| S6 subagent handoffs | — | in flight | HARD GATE PASSED — child resolution via `result.value.agentId` + `ctx.agents.get(id)` (one-shot-ledger face, one-shot-ledger.ts:77-80); both arms ship enabled |

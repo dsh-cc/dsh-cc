@@ -411,4 +411,49 @@ describe('S4 hybrid verdict space (listener delivery + trip)', () => {
     // The trip downgraded the mode to default (durable).
     expect(foldPermissionMode(agent.session.snapshotEvents())).toBe('default')
   })
+
+  it('S6/D9 outbound: auto + `Task` allow rule ⇒ the rule is suspended and a subagent_fork call is CLASSIFIED (not blanket-allowed)', async () => {
+    const { ctx, llm } = await mount()
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
+      allow: ['Task'],
+      autoMode: { classifier: { enabled: true }, probe: { enabled: false } },
+    })
+    ctx.tools.register(defineContentToolFixture({
+      name: 'subagent_fork',
+      description: 'spawn a subagent',
+      parameters: { prompt: { type: 'string' }, description: { type: 'string' } },
+      async execute(args) { return [{ type: 'text', text: `child:${(args as { prompt: string }).prompt}` }] },
+    }))
+    llm.scripted = ['{"verdict":"allow","reason":"benign delegation"}']
+    const agent = agentOf('int-spawn')
+    ctx.permissionRules.setMode(agent, 'auto')
+
+    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep the repo', description: 'sweep' }, agent))
+    expect(result.isError).toBe(false)
+    // The classifier was consulted — the suspended Task allow did NOT
+    // blanket-allow the spawn.
+    expect(classifierCalls(llm)).toHaveLength(1)
+    expect(foldClassifiers(agent.session.snapshotEvents())).toHaveLength(1)
+    expect(text(result)).toBe('child:sweep the repo')
+  })
+
+  it('S6/D9 outbound control: the SAME spawn call in `default` mode is blanket-allowed by the Task rule — classifier never consulted', async () => {
+    const { ctx, llm } = await mount()
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
+      allow: ['Task'],
+      autoMode: { classifier: { enabled: true }, probe: { enabled: false } },
+    })
+    ctx.tools.register(defineContentToolFixture({
+      name: 'subagent_fork',
+      description: 'spawn a subagent',
+      parameters: { prompt: { type: 'string' }, description: { type: 'string' } },
+      async execute(args) { return [{ type: 'text', text: `child:${(args as { prompt: string }).prompt}` }] },
+    }))
+    const agent = agentOf('int-spawn-default')
+    ctx.permissionRules.setMode(agent, 'default')
+
+    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 's' }, agent))
+    expect(result.isError).toBe(false)
+    expect(classifierCalls(llm)).toHaveLength(0)
+  })
 })

@@ -2905,6 +2905,9 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/hybrid-deny.spec.ts, anchor: "foldDenyBackstop (D5/A2/A16)" }
       - { type: test, path: packages/interaction/permission-rules/tests/hybrid-deny.spec.ts, anchor: "auto-stage deny outcome + backstop trip (W4)" }
       - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S4 hybrid verdict space (listener delivery + trip)" }
+      - { type: source, path: packages/interaction/permission-rules/src/return-check.ts, anchor: "summarizeChildHandoff" }
+      - { type: test, path: packages/interaction/permission-rules/tests/subagent-return-check.spec.ts }
+      - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S6/D9 outbound" }
     deviation:
       kind: downgrade
       summary: >-
@@ -3099,7 +3102,31 @@ capabilities:
         restart from zero on re-entry (the fold re-windows past the trip
         marker). Remaining
         vs CC: managed/enterprise remote settings, UI mode cycle; the upstream
-        permission/mode catalog pin is an upstream polish.
+        permission/mode catalog pin is an upstream polish. Subagent-handoff
+        slice (2026-09-23, S6/D9): OUTBOUND — in `auto` mode every
+        Task/Agent/subagent/subagent_fork allow rule is suspended (D1), so a
+        spawn call at LOW risk passthrough reaches the armed classifier, whose
+        input now renders the delegation `prompt` field FIRST (512-char cap,
+        field names verified against the Task tool schema; the label and
+        remaining args follow) so the risk signal is prominent. RETURN — two
+        warn-only arms on the spawn tool's post-execute result, never
+        discarding or rewriting anything: (a) when the child session is
+        resolvable (`result.value.agentId` + the `agents` registry, the
+        one-shot-ledger face), the child's own `permission/classifier` +
+        `permission/probe` audit events are folded and the parent is warned
+        via `additionalContexts` when the child recorded any deny verdict,
+        any breaker/trip failure, or ≥5 escalated (ask) verdicts — the
+        warning names the child label and the counts; an unresolvable child
+        under a resolver that THREW logs a debug note only (never a
+        fabricated warning); (b) ALWAYS, the returned report text is screened
+        through the SAME S7 probe instance (`screen`, the shared
+        mode-gated/enabled-gated core under `scan` — same lane, breaker, and
+        audit) and a flag appends a security-notice warning telling the
+        parent to treat the report as suspect and re-anchor on the user's
+        actual request. Both arms run only in effective `auto` mode (A8
+        fold), fail open, never throw into the waterfall, and never mutate
+        frozen results; a hard-gated red test proved child-session
+        resolution BEFORE the listener shipped, so arm (a) ships enabled.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:
