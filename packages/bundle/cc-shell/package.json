@@ -46,6 +46,7 @@
     "@dsh-cc/plugin-manager": "workspace:^",
     "@dsh-cc/session-title-provider": "workspace:^",
     "@dsh-cc/settings-migrations": "workspace:^",
+    "@dsh-cc/settings-ns": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {

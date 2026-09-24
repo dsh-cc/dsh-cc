@@ -94,6 +94,9 @@ importers:
       '@dsh-cc/settings-migrations':
         specifier: workspace:^
         version: link:../../settings/settings-migrations
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
