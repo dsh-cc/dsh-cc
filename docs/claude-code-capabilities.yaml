@@ -2267,6 +2267,7 @@ capabilities:
       - { type: test, path: packages/memory/memory/tests/restrict-resilience.spec.ts }
       - { type: test, path: packages/memory/memory-consolidation/tests/dispatch-resilience.spec.ts }
       - { type: test, path: packages/memory/memory-consolidation/tests/dream-fork-surface.spec.ts }
+      - { type: test, path: packages/memory/memory-consolidation/tests/memory-job-silence.spec.ts }
     deviation:
       kind: downgrade
       summary: >-

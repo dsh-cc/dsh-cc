@@ -78,7 +78,6 @@ describe('startMemoryJob dispatch resilience (dream lane)', () => {
     const ctx = new Context()
     const subagents = restrictAwareSubagents(true)
     const fs = makeFsMock()
-    ctx.provide('jobs' as never, { start: vi.fn() } as never)
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, fs as never)
 
@@ -100,7 +99,6 @@ describe('startMemoryJob dispatch resilience (dream lane)', () => {
       subagents.calls.push(request)
       throw new Error(PROD_MESSAGE.replace('structured_output', 'read'))
     }
-    ctx.provide('jobs' as never, { start: vi.fn() } as never)
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, makeFsMock() as never)
 

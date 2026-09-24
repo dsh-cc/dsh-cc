@@ -4100,6 +4100,10 @@
         {
           "type": "test",
           "path": "packages/memory/memory-consolidation/tests/dream-fork-surface.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/memory/memory-consolidation/tests/memory-job-silence.spec.ts"
         }
       ],
       "deviation": {
