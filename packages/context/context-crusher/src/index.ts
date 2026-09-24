@@ -24,6 +24,7 @@ import { defineTool } from '@dsh-cc/tools'
 import { getSessionCwd } from '@dsh-cc/session-cwd'
 import { resolveConfig, overlaySettings, Config } from './config.ts'
 import { registerSettings } from './settings.ts'
+import { readSecretsSettings, redact, type SecretsSettings } from '@dsh-cc/transcript-secrets'
 import { route } from './router.ts'
 import { reduceToolOutput } from './reducer.ts'
 import { CrusherStore, shortHash } from './store.ts'
@@ -111,6 +112,8 @@ export class ContextCrusher extends Service {
   private readonly store: CrusherStore | undefined
   private readonly ledger: SavingsLedger | undefined
   private readonly home: HomeFn | undefined
+  /** Live `cc-secrets` reader (C2); used by store redaction and the retrieve note rule. */
+  private readonly readSecrets: () => SecretsSettings = () => ({ extraPatterns: [], redactCrusherStore: true })
   /** Deferred-mode orchestration (counting, swap pass, resume, ledger). */
   private readonly deferral: Deferral
 
@@ -124,7 +127,17 @@ export class ContextCrusher extends Service {
       // D6 fail-closed: without a durable home the store/ledger cannot exist.
       ctx.logger.warn('context-crusher: no dshHomePath on the host context; force-disabled')
     } else {
-      this.store = new CrusherStore(home('ccr'))
+      // C2: store redaction via constructor injection — redact-before-hash at
+      // every put path (deterministic route + reducer callback). The toggle is
+      // read live from `cc-secrets` settings on each put.
+      const readSecrets = readSecretsSettings(ctx)
+      this.readSecrets = readSecrets
+      this.store = new CrusherStore(home('ccr'), Date.now, (text) => {
+        const secrets = readSecrets()
+        return secrets.redactCrusherStore
+          ? redact(text, { extraPatterns: secrets.extraPatterns }).text
+          : text
+      })
       this.ledger = new SavingsLedger(home('ccr', 'savings.jsonl'))
     }
     this.deferral = new Deferral({
@@ -136,6 +149,11 @@ export class ContextCrusher extends Service {
     this.registerListener()
     this.deferral.registerListeners()
     this.registerRetrieveTool()
+  }
+
+  /** Live `cc-secrets` settings for the retrieve note rule (C2). */
+  readSecretsLive(): SecretsSettings {
+    return this.readSecrets()
   }
 
   /** Effective configuration for one use: config defaults overlaid by live settings. */
@@ -315,7 +333,7 @@ export class ContextCrusher extends Service {
 
   /** Typed retrieval through the store; fails closed (used by the tool body). */
   async retrieve(exec: ToolRunContext, hash: string): Promise<
-    { ok: true; text: string } | { ok: false; error: RetrieveError | 'unavailable' | 'invalid_hash' }
+    { ok: true; text: string; redacted: boolean } | { ok: false; error: RetrieveError | 'unavailable' | 'invalid_hash' }
   > {
     if (this.store === undefined) return { ok: false, error: 'unavailable' }
     if (!CCR_HASH_RE.test(hash)) return { ok: false, error: 'invalid_hash' }
@@ -357,7 +375,12 @@ function defineRetrieveTool(crusher: ContextCrusher) {
       if (!outcome.ok) {
         throw new Error(`context_retrieve failed: ${outcome.error}`)
       }
-      return { text: outcome.text }
+      // C2 note rule: label content that was scrubbed at store-write time,
+      // only while the store-redaction setting stays on.
+      const note = outcome.redacted && crusher.readSecretsLive().redactCrusherStore
+        ? '\n[secrets redacted before store write]'
+        : ''
+      return { text: `${outcome.text}${note}` }
     },
   })
 }

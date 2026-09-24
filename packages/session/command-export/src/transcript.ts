@@ -6,6 +6,7 @@
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { redact } from '@dsh-cc/transcript-secrets'
 
 /** The export file formats `/export` can render. */
 export type ExportFormat = 'markdown' | 'json'
@@ -86,12 +87,16 @@ export function renderJson(events: readonly SessionEvent[]): string {
  * @param events - the session's durable event log.
  * @param format - `'markdown'` or `'json'`.
  * @param title - session label used by the markdown renderer.
- * @returns the complete document text.
+ * @param opts - redaction options; `extraPatterns` come from live `cc-secrets` settings.
+ * @returns the complete document text with one-way secret redaction applied (C2).
  */
 export function renderTranscript(
   events: readonly SessionEvent[],
   format: ExportFormat,
   title: string,
+  opts: { extraPatterns?: readonly string[] } = {},
 ): string {
-  return format === 'markdown' ? renderMarkdown(events, title) : renderJson(events)
+  const raw = format === 'markdown' ? renderMarkdown(events, title) : renderJson(events)
+  // C2: one-way secret redaction, always on for /export.
+  return redact(raw, opts).text
 }

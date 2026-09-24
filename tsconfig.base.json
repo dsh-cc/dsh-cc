@@ -296,6 +296,9 @@
       "@dsh-cc/command-usage": [
         "./packages/interaction/command-usage/src/index.ts"
       ],
+      "@dsh-cc/transcript-secrets": [
+        "./packages/interaction/transcript-secrets/src/index.ts"
+      ],
       "@dsh-cc/command-config": [
         "./packages/interaction/command-config/src/index.ts"
       ],

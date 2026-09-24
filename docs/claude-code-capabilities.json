@@ -3022,10 +3022,10 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "divergent"
         },
         "ux": {
-          "status": "full"
+          "status": "partial"
         }
       },
       "evidence": [
@@ -3037,10 +3037,15 @@
         {
           "type": "test",
           "path": "packages/session/command-export/tests/command-export.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/session/command-export/tests/export-secrets.spec.ts"
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "divergent",
+        "summary": "always-on one-way secret redaction of exported transcripts (dsh-cc extension; CC exports the transcript verbatim). Known gap: on web profiles the native CC /export bypasses this redaction."
       }
     },
     "commands.help": {
