@@ -1621,6 +1621,23 @@ capabilities:
       - { type: test, path: packages/observability/cache-health/tests/composition.spec.ts }
     deviation: { kind: none }
 
+  commands.commit-split:
+    title: /commit-split
+    category: commands
+    plane: preset
+    upstream:
+      summary: Advisory dry-run atomic-commit split advisor.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-commit-split" }
+      - { type: test, path: packages/interaction/command-commit-split/tests/commit-split.spec.ts }
+    deviation: { kind: none }
+
   commands.compact:
     title: /compact
     category: commands

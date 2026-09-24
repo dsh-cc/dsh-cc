@@ -1141,6 +1141,40 @@ importers:
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
 
+  packages/interaction/command-commit-split:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
+      '@dsh-cc/side-query':
+        specifier: workspace:^
+        version: link:../../llm-tuning/side-query
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: link:../../../../deepseek-harness/vendor/loader
+        version: link:../../../../deepseek-harness/vendor/loader
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-scope':
+        specifier: link:../../../../deepseek-harness/packages/core/scope
+        version: link:../../../../deepseek-harness/packages/core/scope
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/interaction/command-compact:
     dependencies:
       '@dsh-cc/command-usage':
@@ -2244,6 +2278,9 @@ importers:
       '@dsh-cc/command-branch':
         specifier: workspace:^
         version: link:../../interaction/command-branch
+      '@dsh-cc/command-commit-split':
+        specifier: workspace:^
+        version: link:../../interaction/command-commit-split
       '@dsh-cc/command-compact':
         specifier: workspace:^
         version: link:../../interaction/command-compact

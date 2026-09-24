@@ -2781,6 +2781,43 @@
         "kind": "none"
       }
     },
+    "commands.commit-split": {
+      "title": "/commit-split",
+      "category": "commands",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Advisory dry-run atomic-commit split advisor.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: command-commit-split"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/command-commit-split/tests/commit-split.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "none"
+      }
+    },
     "commands.compact": {
       "title": "/compact",
       "category": "commands",

@@ -206,6 +206,9 @@
       "path": "./packages/interaction/command-skills"
     },
     {
+      "path": "./packages/interaction/command-commit-split"
+    },
+    {
       "path": "./packages/interaction/command-status"
     },
     {
