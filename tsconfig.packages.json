@@ -116,6 +116,9 @@
       "path": "./packages/interaction/turn-rules"
     },
     {
+      "path": "./packages/interaction/advisor-watchdog"
+    },
+    {
       "path": "./packages/interaction/lsp-on-write"
     },
     {
