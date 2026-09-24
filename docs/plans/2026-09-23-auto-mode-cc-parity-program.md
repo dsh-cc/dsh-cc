@@ -132,9 +132,9 @@ Also verified (#123): maxTokens 1024, timeoutMs default 8000, `cancelled` exclud
 1. `src/classifier-breaker.ts` (NEW): extract breaker/streak helpers from auto-stage (behavior-identical; existing tests protect).
 2. `src/pi-probe.ts` (NEW): deps mirror the classifier face (stream/resolveRoute/settingsRead/audit/debug). Verdict `{ injection: boolean; reason }` — reason ≤120 chars. One-shot, maxTokens 256, default timeout 5000. Input: text blocks only (non-text blocks skipped), first 3072 + last 1024 chars, elision marker.
 3. Settings (both sites): `autoMode.probe?: { enabled?: boolean /* default true */; route?: string /* 'haiku' */; timeoutMs?: number /* 5000 */; toolPatterns?: string[] }` — absence-preserving. Active only when effective mode is `auto` (re-folded in post-execute, with the same stale-mode guard). Default scan set per D8 (read/bash/web_fetch/web_search/mcp__*); `toolPatterns` replaces it (exact or trailing-`*` prefix).
-4. Listener: `tools/post-execute`, default order (after context-crusher's prepend). On flag: warning WITHOUT clobbering (A4): if the downstream fold carries content, APPEND a warning block to the content array; otherwise PREPEND to the original content; never drop existing blocks (compat with hooks-claude-code PostToolUse replacement — both-load-orders test). Warning text (prose): security notice + instruction to treat the content as untrusted data and re-anchor on the user's actual request. Audit `permission/probe` (registered type): digest-only by default, `input` under auditFullText (D10); reasons capped.
+4. Listener: `tools/post-execute`, DEFAULT order, post-next composition. The probe scans the PRE-REWRITE ORIGINAL result content (deliberate deviation: the cordis waterfall composes outermost-first and the context-crusher's prepend listener composes AROUND the probe, so scanning the original is the only CCR-independent vantage). On flag: the warning is delivered via `additionalContexts` SIDEBAND appended to the downstream fold decision (edit-recovery-hint idiom) — never into content. Rationale: a sideband cannot be clobbered by content rewriters (CCR-style content replacement) and survives listener-order races; CC adjacency of warning-to-content is approximated by the sideband. Value-replacing accepts carry additionalContexts too (verified: runtime-results.ts merges them onto replaced results). Warning text (prose): security notice + instruction to treat the content as untrusted data and re-anchor on the user's actual request. Audit `permission/probe` (registered type): digest-only by default, `input` under auditFullText (D10); reasons capped; a mid-flight mode change out of `auto` audits `failure: 'stale-mode'`, never breaker-counted (classifier A8 discipline).
 
-**Tests**: verdict parse, fail-open paths, breaker reuse, mode gating incl. stale-mode, non-text skip, append-vs-prepend in both listener orders, truncation windows, reason cap.
+**Tests**: verdict parse, fail-open paths, breaker reuse, mode gating incl. stale-mode audit, non-text skip, sideband delivery (warning via additionalContexts, downstream contexts preserved, clobber-proof vs content-replacing listeners in both load orders), truncation windows, reason cap.
 
 ## 8. Slice S4 — Hybrid verdict space
 
@@ -211,8 +211,8 @@ Also verified (#123): maxTokens 1024, timeoutMs default 8000, `cancelled` exclud
 | --- | --- | --- | --- |
 | S1 waterfall parity | PR #122 | pending | |
 | S2 slots + trusted scope + /auto-mode | PR #124 | pending | |
-| S3 transcript-aware classifier | — | in flight | |
-| S7 PI probe | — | — | (ships 4th) |
+| S3 transcript-aware classifier | PR #125 | pending | |
+| S7 PI probe | — | in flight | (ships 4th) |
 | S4 hybrid verdict space | — | — | |
 | S5 full-text audit + review | — | — | |
 | S6 subagent handoffs | — | — | |

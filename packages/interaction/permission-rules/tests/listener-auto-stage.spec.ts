@@ -117,6 +117,14 @@ function exec(name: string, args: unknown, agent?: Agent): ToolExecutionInput {
   }
 }
 
+/**
+ * Classifier-lane calls only: S7 adds an independent auto-mode probe lane
+ * (maxTokens 256) that shares the FakeLlm in integration tests.
+ */
+function classifierCalls(llm: FakeLlm): GenerateOptions[] {
+  return llm.calls.filter(call => call.maxTokens === 1024)
+}
+
 function text(result: ToolExecutionResult): string {
   const first = result.content[0]
   return first?.type === 'text' ? first.text : JSON.stringify(result.content)
@@ -146,7 +154,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     expect(result.isError).toBe(false)
     expect(text(result)).toBe('ran:ls -la')
     expect(asked).toHaveLength(0)
-    expect(llm.calls).toHaveLength(1)
+    expect(classifierCalls(llm)).toHaveLength(1)
     const folded = foldClassifiers(agent.session.snapshotEvents())
     expect(folded).toHaveLength(1)
     expect(folded[0]).toMatchObject({ tool: 'Bash', verdict: 'allow', provider: 'fake', model: 'classifier-model' })
@@ -167,7 +175,7 @@ describe('listener × LLM classifier stage (integration)', () => {
 
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     expect(reasons[0]).toContain('terraform apply on prod')
-    expect(llm.calls).toHaveLength(1)
+    expect(classifierCalls(llm)).toHaveLength(1)
     expect(foldClassifiers(agent.session.snapshotEvents())[0]).toMatchObject({ verdict: 'ask' })
   })
 
@@ -182,7 +190,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     expect(result.isError).toBe(false)
     expect(text(result)).toBe('ran:curl https://example.com')
     expect(asked).toHaveLength(0)
-    expect(llm.calls).toHaveLength(0)
+    expect(classifierCalls(llm)).toHaveLength(0)
   })
 
   it('disarmed: F1 proxy REMOVED (design doc D3) — auto + rule ask prompts; LLM never called', async () => {
@@ -196,7 +204,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     // Strict-rule auto (D11/D3): the ask rule now PROMPTS — no allow proxy.
     expect(asked).toHaveLength(1)
     expect(result.isError).toBe(false)
-    expect(llm.calls).toHaveLength(0)
+    expect(classifierCalls(llm)).toHaveLength(0)
   })
 
   it('I1/I2/I3: HIGH deny, rule deny, and plan mode never consult the LLM even when armed', async () => {
@@ -223,14 +231,14 @@ describe('listener × LLM classifier stage (integration)', () => {
     const agent2 = agentOf('int-high')
     const high = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /' }, agent2))
     expect(high.isError).toBe(true)
-    expect(llm.calls).toHaveLength(0)
+    expect(classifierCalls(llm)).toHaveLength(0)
     // I5 (S3 flip): MEDIUM (out-of-scope write) + passthrough + armed ⇒ the
     // LLM arbitrates (one call); the ask verdict prompts via the approval seam.
     const mediumAgent = agentOf('int-medium')
     ctx.permissionRules.setMode(mediumAgent, 'auto')
     const medium = await ctx.tools.execute(exec('edit', { file_path: '/outside/x.txt' }, mediumAgent))
     expect(medium.isError).toBe(false) // approval listener allowed-once path
-    expect(llm.calls).toHaveLength(1)
+    expect(classifierCalls(llm)).toHaveLength(1)
   })
 
   it('enabled but route unresolvable: warns once, D11 fail-to-PROMPT (ask with availability reason), unarmed audit event', async () => {
@@ -281,7 +289,7 @@ describe('listener × LLM classifier stage (integration)', () => {
     ctx.permissionRules.setMode(agent, 'auto')
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
     await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
-    expect(llm.calls).toHaveLength(1)
+    expect(classifierCalls(llm)).toHaveLength(1)
   })
 })
 
@@ -300,11 +308,8 @@ describe('listener × classifier effort adapter (integration)', () => {
   it('catalog with levels and no explicit route effort: the FIRST declared level is passed', async () => {
     const { llm, run } = await armedMount()
     llm.reasoning = { efforts: [{ id: 'low' }, { id: 'high' }] }
-    console.log('RES', typeof (llm as any).resolveModelInfo, llm.infoCalls)
     await run()
-    console.log('INFOCALLS', llm.infoCalls)
-    console.log('CALLS', JSON.stringify(llm.calls))
-    expect(llm.calls).toHaveLength(1)
+    expect(classifierCalls(llm)).toHaveLength(1)
     expect(llm.calls[0]?.reasoningEffort).toBe('low')
   })
 
@@ -336,8 +341,8 @@ describe('listener × classifier effort adapter (integration)', () => {
     const { llm, warn, run } = await armedMount()
     llm.resolveModelInfo = async () => { throw new Error('catalog down') }
     await run()
-    expect(llm.calls).toHaveLength(1)
-    expect(llm.calls[0]?.reasoningEffort).toBeUndefined()
+    expect(classifierCalls(llm)).toHaveLength(1)
+    expect(classifierCalls(llm)[0]?.reasoningEffort).toBeUndefined()
     expect(warn.mock.calls.some(call => String(call[0]).includes('route info'))).toBe(true)
   })
 
@@ -346,7 +351,7 @@ describe('listener × classifier effort adapter (integration)', () => {
     llm.reasoning = { efforts: [{ id: 'low' }] }
     await run()
     await run('git push')
-    expect(llm.calls).toHaveLength(2)
+    expect(classifierCalls(llm)).toHaveLength(2)
     expect(llm.infoCalls).toBe(1)
   })
 })

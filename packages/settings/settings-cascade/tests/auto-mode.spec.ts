@@ -47,6 +47,24 @@ describe('AutoModeSchema', () => {
     expect(() => parse({ classifier: { enabled: 'yes' } })).toThrow()
     expect(() => parse({ classifier: { route: 7 } })).toThrow()
   })
+
+  it('probe sub-section (S7): defaults apply when the object is present, absent key stays absent', () => {
+    // Absence-preserving: no probe key, no probe defaults.
+    expect(parse({})).toEqual({})
+    expect(parse({ probe: {} })).toEqual({
+      probe: { enabled: true, route: 'haiku', timeoutMs: 5000 },
+    })
+    expect(parse({ probe: { enabled: false } })).toEqual({
+      probe: { enabled: false, route: 'haiku', timeoutMs: 5000 },
+    })
+    // toolPatterns is absence-preserving (permissive array, no default).
+    expect(parse({ probe: { toolPatterns: ['grep*'] } })).toEqual({
+      probe: { enabled: true, route: 'haiku', timeoutMs: 5000, toolPatterns: ['grep*'] },
+    })
+    expect(() => parse({ probe: { enabled: 'yes' } })).toThrow()
+    expect(() => parse({ probe: { timeoutMs: 'slow' } })).toThrow()
+    expect(() => parse({ probe: { toolPatterns: 'grep' } })).toThrow()
+  })
 })
 
 describe('autoMode cascade layering (permissions.autoMode delivery route)', () => {

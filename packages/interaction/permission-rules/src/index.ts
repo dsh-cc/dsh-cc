@@ -30,6 +30,7 @@ import { mergeRuleSets } from './evaluate.ts'
 import { filterAutoAllowRules } from './auto-rule-filter.ts'
 import { registerPreExecute } from './pre-execute.ts'
 import type { AutoStage } from './auto-stage.ts'
+import type { PiProbe } from './pi-probe.ts'
 import {
   PERMISSION_MODES,
   type PermissionMode,
@@ -76,8 +77,28 @@ export {
   createAutoStage,
   type AutoModeSettings,
   type AutoModeClassifierSettings,
+  type AutoModeProbeSettings,
   type ClassifierAuditEventData,
 } from './auto-stage.ts'
+export {
+  PROBE_EVENT,
+  appendSessionProbe,
+  foldProbes,
+  createPiProbe,
+  matchesScanSet,
+  probeInputText,
+  probeWarningText,
+  type PiProbe,
+  type PiProbeDeps,
+  type ProbeAuditEventData,
+  type ProbeFoldDecision,
+} from './pi-probe.ts'
+export {
+  CLASSIFIER_BREAKER_THRESHOLD,
+  BREAKER_FAILURE_TAGS,
+  RouteBreaker,
+  trailingRouteFailureStreak,
+} from './classifier-breaker.ts'
 export {
   createLlmClassifier,
   expandSoftDeny,
@@ -179,6 +200,8 @@ export class PermissionRulesService extends Service {
   private readonly allowlistSeeded = new Set<string>()
   /** The optional LLM classifier stage (armed per call from the live settings slice). */
   private autoStage: AutoStage | undefined
+  /** The optional input-layer PI probe (S7); scans post-execute results in auto mode. */
+  private piProbe: PiProbe | undefined
 
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'permissionRules')
@@ -221,6 +244,7 @@ export class PermissionRulesService extends Service {
       bypassDisabled: () => this.bypassDisabled(),
       sessionAllowMatches: (exec) => this.sessionAllowMatches(exec),
       onAutoStage: (stage) => { this.autoStage = stage },
+      onPiProbe: (probe) => { this.piProbe = probe },
     })
 
     // WS3 sandbox integration: the approval-seam listener auto-approves
@@ -301,8 +325,19 @@ export class PermissionRulesService extends Service {
     // Drop the memoized LLM classifier when the autoMode slice changed, so
     // the next armed call rebuilds it from fresh settings.
     this.autoStage?.rebuild()
+    // S7: reset the probe's breaker state (the operator's "I fixed the lane").
+    this.piProbe?.rebuild()
   }
 
+  /**
+   * The shared one-shot route resolution for the classifier stage AND the S7
+   * probe: detail-preserving (resolveDetailedAlias, NOT toOneShotRoute —
+   * that helper drops reasoningEffort by design for the other one-shot
+   * lanes), with the calling agent's logged request header filling the
+   * provider for a string-form (model-only) alias; a complete
+   * {provider, model} alias needs no parent (session-title-provider
+   * precedent).
+   */
   /** Parse the Config `rules` block into a source-`config` rule set. */
   private configRuleSet(): PermissionRuleSet {
     const { allow = [], deny = [], ask = [] } = this.rulesConfig

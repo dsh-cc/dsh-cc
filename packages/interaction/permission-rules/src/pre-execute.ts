@@ -10,7 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
+import type { PostToolDecision, PreToolDecision, ToolExecution } from '@dsh-cc/tools'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { createClassifierStreamAdapter, type ClassifierStream } from './classifier-lane.ts'
 import {
@@ -20,6 +20,7 @@ import {
 } from './auto-stage.ts'
 import { exec as nodeExec } from 'node:child_process'
 import { decideCallVerbose, effectiveMode, mapPostWaterfall, type DecideDeps } from './decide.ts'
+import { createPiProbe, appendSessionProbe, type PiProbe } from './pi-probe.ts'
 import type { Config, PermissionSettings } from './settings-schema.ts'
 import type { PermissionMode, PermissionRuleSet } from './types.ts'
 
@@ -44,6 +45,35 @@ export type PreExecuteHost = {
   sessionAllowMatches(exec: ToolExecution): boolean
   /** Hands the built auto stage back to the service (rebuilt on reload). */
   onAutoStage(stage: AutoStage): void
+  /** Hands the built PI probe back to the service (rebuilt on reload). */
+  onPiProbe(probe: PiProbe): void
+}
+
+/**
+ * Detail-preserving alias resolution shared by the classifier stage and the
+ * PI probe (NOT toOneShotRoute — that helper drops reasoningEffort by design
+ * for the other one-shot lanes): the calling agent's logged request header
+ * fills the provider for a string-form (model-only) alias; a complete
+ * {provider, model} alias needs no parent (session-title-provider precedent).
+ */
+function resolveDetailedRoute(
+  ctx: Context,
+  exec: ToolExecution,
+  routeName: string,
+): { provider: string; model: string; reasoningEffort?: string } | undefined {
+  const parent = exec.agent?.session.requestHeader()?.config as
+    | { provider?: string; model?: string }
+    | undefined
+  const resolved = resolveDetailedAlias(ctx, routeName).route
+  if (resolved === undefined) return undefined
+  const provider = resolved.provider ?? parent?.provider
+  const model = resolved.model ?? parent?.model
+  if (provider === undefined || provider.length === 0 || model === undefined || model.length === 0) return undefined
+  return {
+    provider,
+    model,
+    ...(resolved.reasoningEffort === undefined ? {} : { reasoningEffort: resolved.reasoningEffort }),
+  }
 }
 
 /**
@@ -80,29 +110,8 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     get stream() {
       return llmStream
     },
-    resolveRoute: (exec) => {
-      const route = host.settingsSection().autoMode?.classifier?.route ?? 'haiku'
-      // Detail-preserving path (resolveDetailedAlias, NOT toOneShotRoute —
-      // that helper drops reasoningEffort by design for the other one-shot
-      // lanes): the classifier needs the route's effort ($level suffix or
-      // alias target) so the lane can ride the cheapest declared level.
-      // The calling agent's logged request header fills the provider for a
-      // string-form (model-only) alias; a complete {provider, model} alias
-      // needs no parent (session-title-provider precedent).
-      const parent = exec.agent?.session.requestHeader()?.config as
-        | { provider?: string; model?: string }
-        | undefined
-      const resolved = resolveDetailedAlias(ctx, route).route
-      if (resolved === undefined) return undefined
-      const provider = resolved.provider ?? parent?.provider
-      const model = resolved.model ?? parent?.model
-      if (provider === undefined || provider.length === 0 || model === undefined || model.length === 0) return undefined
-      return {
-        provider,
-        model,
-        ...(resolved.reasoningEffort === undefined ? {} : { reasoningEffort: resolved.reasoningEffort }),
-      }
-    },
+    resolveRoute: (exec) =>
+      resolveDetailedRoute(ctx, exec, host.settingsSection().autoMode?.classifier?.route ?? 'haiku'),
     warn: (message) => ctx.logger.warn(message),
     // R5 debug channel: opt-in via DSH_PERMISSION_CLASSIFIER_DEBUG=1, from
     // the plugin's scoped process logger — raw classifier output NEVER
@@ -132,6 +141,54 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     }),
   })
   host.onAutoStage(autoStage)
+
+  // S7 input-layer PI probe: deps mirror the classifier face. Same route
+  // seam (own `autoMode.probe.route`, default 'haiku') and the SAME
+  // env-gated debug channel (raw probe output, process log only).
+  const piProbe: PiProbe = createPiProbe({
+    settingsRead: () => host.settingsSection(),
+    get stream() {
+      return llmStream
+    },
+    resolveRoute: (exec) =>
+      resolveDetailedRoute(ctx, exec, host.settingsSection().autoMode?.probe?.route ?? 'haiku'),
+    warn: (message) => ctx.logger.warn(message),
+    audit: (session, event) => {
+      appendSessionProbe(session, event)
+    },
+    ...(process.env.DSH_PERMISSION_CLASSIFIER_DEBUG === '1'
+      ? { debug: (message: string) => (ctx.logger as { debug?: (msg: string) => void }).debug?.(`[permission-rules] ${message}`) }
+      : {}),
+    // A8: the SAME effective-mode resolution the stage and waterfall use
+    // (plan overlay → session fold → defaultMode fallback), folded fresh at
+    // every scan — never cached.
+    modeOf: (exec) => effectiveMode(decideDeps, exec),
+  })
+  host.onPiProbe(piProbe)
+
+  // S7 post-execute listener — DEFAULT order, post-next composition (A1
+  // sideband redesign). NOTE on waterfall semantics (cordis `waterfall`
+  // composes outermost-first; `{ prepend: true }` = outermost): the
+  // context-crusher's prepend-order listener composes AROUND this one, so
+  // `next()` here returns the crusher's (possibly content-rewritten) fold.
+  // The probe deliberately scans the PRE-REWRITE ORIGINAL result content
+  // (CCR-independent vantage) and delivers its warning via the
+  // `additionalContexts` SIDEBAND on the downstream decision — a content
+  // rewriter cannot clobber a sideband, so CC adjacency of
+  // warning-to-content is approximated rather than exact.
+  ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
+    const downstream = await next()
+    if (downstream.kind !== 'accept') return downstream
+    try {
+      return await piProbe.scan(exec, result, downstream)
+    } catch (error: unknown) {
+      // Fail-open (context-crusher D6 idiom): a probe fault must NEVER
+      // throw into the waterfall — a throw turns the user's tool result
+      // into an error result (data loss).
+      ctx.logger.warn(`permission-rules: pi-probe degraded to passthrough: ${String(error)}`)
+      return downstream
+    }
+  })
 
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     const decided = decideCallVerbose(decideDeps, exec)

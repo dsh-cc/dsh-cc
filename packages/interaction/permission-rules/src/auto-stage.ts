@@ -21,6 +21,15 @@ import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, expandSlot } from './slo
 import { createContextBundler } from './context-bundle.ts'
 import type { DecidedCall } from './decide.ts'
 import type { PermissionMode } from './types.ts'
+import {
+  BREAKER_FAILURE_TAGS,
+  CLASSIFIER_BREAKER_THRESHOLD,
+  RouteBreaker,
+} from './classifier-breaker.ts'
+
+// W1: the breaker machinery moved to ./classifier-breaker.ts (shared with the
+// S7 PI probe); re-exported here for the historical import sites.
+export { CLASSIFIER_BREAKER_THRESHOLD, BREAKER_FAILURE_TAGS, trailingRouteFailureStreak } from './classifier-breaker.ts'
 
 /** `permissions.autoMode.classifier` — the plugin-local hand-mirror of the shared AutoModeClassifierSchema. */
 export interface AutoModeClassifierSettings {
@@ -37,6 +46,18 @@ export interface AutoModeClassifierSettings {
    * `ask` verdict earns ONE reconsider call; only ask→allow is possible.
    */
   secondPass?: boolean
+}
+
+/** `permissions.autoMode.probe` — the plugin-local hand-mirror of the shared AutoModeProbe schema (S7/W3). */
+export interface AutoModeProbeSettings {
+  /** Master switch for the input-layer PI probe (default `true`). */
+  enabled?: boolean
+  /** Model route used for the probe (default `'haiku'`). */
+  route?: string
+  /** Per-call timeout in milliseconds (default `5000`). */
+  timeoutMs?: number
+  /** Scan-set override (exact tool names or trailing-`*` prefix patterns); replaces the default set entirely. */
+  toolPatterns?: string[]
 }
 
 /** `permissions.autoMode` — the plugin-local hand-mirror of the shared AutoModeSchema. */
@@ -66,13 +87,12 @@ export interface AutoModeSettings {
   classifyAllShell?: boolean
   /** LLM risk classifier configuration; absent when the section omits it. */
   classifier?: AutoModeClassifierSettings
+  /** Input-layer PI-probe configuration (S7); absent when the section omits it. */
+  probe?: AutoModeProbeSettings
 }
 
 /** The session event type carrying one classifier verdict audit record. */
 export const CLASSIFIER_EVENT = 'permission/classifier'
-
-/** Consecutive per-route classifier failures before that route's breaker opens (module constant — no settings knob by design). */
-export const CLASSIFIER_BREAKER_THRESHOLD = 3
 
 // Cross-repo event registration: postdates the upstream session catalog
 // (same pattern as `permission/mode` / `permission/session-allow`).
@@ -98,13 +118,13 @@ export interface ClassifierAuditEventData {
 }
 
 /** D10: audit `reason` cap. */
-const REASON_CAP = 120
+export const REASON_CAP = 120
 
 /**
  * Strip control characters and cap an audit reason at {@link REASON_CAP}
- * chars. Local helper — no cross-package import (D10).
+ * chars. Shared with the S7 PI probe (same package — D10).
  */
-function sanitizeReason(reason: string): string {
+export function sanitizeReason(reason: string): string {
   return reason.replace(/[\x00-\x1f\x7f]/g, '').slice(0, REASON_CAP)
 }
 
@@ -229,32 +249,6 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
   }
 }
 
-/** The failure tags the breaker counts; `cancelled`/`unarmed` are host noise and never count. */
-const BREAKER_FAILURE_TAGS: readonly NonNullable<ClassifierAuditEventData['failure']>[] = ['malformed', 'error', 'timeout']
-
-/**
- * Trailing consecutive per-route failure streak over attributed classifier
- * audit records (R3, pure fold — unit-testable). Only events carrying
- * `provider`/`model` attribution matching `routeKey` count (unattributed
- * legacy events predate route keying — skipped entirely); a parsed verdict or
- * cache hit resets the streak; malformed/error/timeout increment it; other
- * tags (`cancelled`, `breaker`, `unarmed`) are neutral. Capped at `threshold`.
- */
-export function trailingRouteFailureStreak(
-  events: readonly ClassifierAuditEventData[],
-  routeKey: string,
-  threshold: number,
-): number {
-  let streak = 0
-  for (const event of events) {
-    if (event.provider === undefined || event.model === undefined) continue
-    if (`${event.provider}/${event.model}` !== routeKey) continue
-    if (event.failure === undefined) streak = 0
-    else if (BREAKER_FAILURE_TAGS.includes(event.failure)) streak = Math.min(streak + 1, threshold)
-  }
-  return streak
-}
-
 /**
  * Build the stage. The classifier instance is memoized per autoMode slice:
  * `rebuild()` (wired to the plugin's settings onChange/reload) drops it, and
@@ -267,16 +261,32 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
   let classifier: LlmClassifier | undefined
   /** Warned-once flag for enabled-but-unarmable (per process). */
   let warnedUnarmed = false
-  /** Consecutive classifier failures per route (`${provider}/${model}`); any success resets the route to 0. */
-  const routeFailures = new Map<string, number>()
-  /** Routes whose breaker is open: maybeEscalate returns undefined without touching the stream. */
-  const breakerOpen = new Set<string>()
-  /** Session ids that already recorded one `breaker` audit event (one per session). */
-  const breakerAudited = new Set<string>()
-  /** Warned-once flag for an opened breaker (per process). */
-  let warnedBreaker = false
-  /** Session ids whose durable log already seeded this process's breaker state (R3). */
-  const seededSessions = new Set<string>()
+  /**
+   * W1: the shared per-route breaker (state + log seeding moved verbatim to
+   * ./classifier-breaker.ts). `ctx` carries this call's exec + route for the
+   * breaker audit payload.
+   */
+  const breaker = new RouteBreaker<{ exec: ToolExecution; route: ClassifierRoute }>({
+    threshold: CLASSIFIER_BREAKER_THRESHOLD,
+    failureTags: BREAKER_FAILURE_TAGS,
+    label: 'permission classifier',
+    outcomeNote: 'auto mode uses the legacy path',
+    warn: deps.warn,
+    auditBreakerOnce: ({ exec, route }, routeKey) => {
+      const session = exec.agent?.session
+      if (session === undefined) return
+      deps.audit(session, {
+        tool: exec.name,
+        verdict: 'ask',
+        failure: 'breaker',
+        route: routeKey,
+        provider: route.provider,
+        model: route.model,
+        latencyMs: 0,
+        cacheHit: false,
+      })
+    },
+  })
   /** S3/D7 context-bundle assembly (./context-bundle.ts, extracted for size). */
   const bundler = createContextBundler({
     readOnlyTools: deps.readOnlyTools,
@@ -326,36 +336,14 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
   }
 
   /**
-   * Seed the per-route breaker state from the session's durable log (R3) —
-   * lazily, once per session, on its first breaker-eligible call. Synchronous
-   * guard: the session id enters `seededSessions` BEFORE any suspension and
-   * the fold is over in-memory events, so concurrent first-calls cannot
-   * double-seed. A restored streak ≥ threshold opens the route at seed time
-   * (its first real call then audits/warns/notices exactly once); a log that
-   * already holds a `breaker` event pre-joins `breakerAudited` so replay never
-   * re-audits the same open. Never overwrites a live counter: seed only when
-   * the session is unseen AND the route counter is 0/absent — in-process
-   * accrual is fresher (fail-open undercounting is the accepted direction).
+   * Seed the per-route breaker from the session's durable log (R3) via the
+   * shared W1 machinery — lazily, once per session, on its first
+   * breaker-eligible call.
    */
   function seedBreakerFromLog(exec: ToolExecution, routeKey: string, route: ClassifierRoute): void {
     const session = exec.agent?.session
     if (session === undefined) return
-    const sessionId = String(session.header.id)
-    if (seededSessions.has(sessionId)) return
-    seededSessions.add(sessionId)
-    if ((routeFailures.get(routeKey) ?? 0) > 0) return
-    const events = foldClassifiers(session.snapshotEvents())
-    if (events.some(event => event.failure === 'breaker')) breakerAudited.add(sessionId)
-    const streak = trailingRouteFailureStreak(events, routeKey, CLASSIFIER_BREAKER_THRESHOLD)
-    if (streak <= 0) return
-    routeFailures.set(routeKey, streak)
-    if (streak < CLASSIFIER_BREAKER_THRESHOLD) return
-    breakerOpen.add(routeKey)
-    if (!warnedBreaker) {
-      warnedBreaker = true
-      deps.warn(`permission classifier: route ${routeKey} restored with ${streak} consecutive failures from the session log; breaker open for this route, auto mode uses the legacy path`)
-    }
-    auditBreakerOnce(exec, routeKey, route)
+    breaker.seed(String(session.header.id), () => foldClassifiers(session.snapshotEvents()), routeKey, { exec, route })
   }
 
   return {
@@ -368,14 +356,10 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
         classifier = undefined
       }
       // A settings change is the operator's "I fixed the lane": reset ALL
-      // breaker state — route counters, open routes, the per-session audit
-      // de-dup set, the per-process warn-once flag, and the per-cwd
+      // breaker state (the shared W1 machinery) plus the per-cwd
       // project-instruction cache (a rebuild picks up instruction edits).
       bundler.reset()
-      routeFailures.clear()
-      breakerOpen.clear()
-      breakerAudited.clear()
-      warnedBreaker = false
+      breaker.reset()
     },
 
     async maybeEscalate(decided: DecidedCall, exec: ToolExecution): Promise<StageOutcome | undefined> {
@@ -399,8 +383,8 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       if (route === undefined) return unavailable(disarmUnarmed(exec))
       const routeKey = `${route.provider}/${route.model}`
       seedBreakerFromLog(exec, routeKey, route)
-      if (breakerOpen.has(routeKey)) {
-        auditBreakerOnce(exec, routeKey, route)
+      if (breaker.isOpen(routeKey)) {
+        breaker.auditOnce(sessionIdOf(exec), routeKey, { exec, route })
         return unavailable(`auto-mode classifier unavailable: route ${routeKey} breaker open`)
       }
       // S3 context bundle (D7): transcript fold + project instructions +
@@ -425,25 +409,13 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
         }
         return undefined
       }
-      // F4 per-route breaker bookkeeping, attributed to THIS call's route:
-      // any success (parsed verdict, cache hit included) resets the streak;
-      // malformed/error/timeout increment it; `cancelled` is caller noise and
-      // `unarmed` is a disarm outcome — neither is counted (nor resets), and
-      // neither is `stale-mode` (returned above before this fold).
-      if (verdict.failure === undefined) {
-        routeFailures.set(routeKey, 0)
-      } else if (BREAKER_FAILURE_TAGS.includes(verdict.failure)) {
-        const count = (routeFailures.get(routeKey) ?? 0) + 1
-        routeFailures.set(routeKey, count)
-        if (count >= CLASSIFIER_BREAKER_THRESHOLD) {
-          breakerOpen.add(routeKey)
-          if (!warnedBreaker) {
-            warnedBreaker = true
-            deps.warn(`permission classifier: route ${routeKey} failed ${CLASSIFIER_BREAKER_THRESHOLD} consecutive classifications; breaker open for this route, auto mode uses the legacy path`)
-          }
-          auditBreakerOnce(exec, routeKey, route)
-        }
-      }
+      // F4 per-route breaker bookkeeping via the shared W1 machinery,
+      // attributed to THIS call's route: any success (parsed verdict, cache
+      // hit included) resets the streak; malformed/error/timeout increment
+      // it; `cancelled` is caller noise and `unarmed` is a disarm outcome —
+      // neither is counted (nor resets), and neither is `stale-mode`
+      // (returned above before this fold).
+      breaker.record(sessionIdOf(exec), routeKey, verdict.failure, { exec, route })
       if (session !== undefined) {
         deps.audit(session, {
           tool: verdict.tool,
@@ -460,23 +432,10 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       return verdict.verdict === 'allow' ? 'allow' : { kind: 'ask', reason: verdict.reason }
     },
   }
+}
 
-  /** One `breaker` audit event per session (de-dup by session id), no stream involved. */
-  function auditBreakerOnce(exec: ToolExecution, routeKey: string, route: ClassifierRoute): void {
-    const session = exec.agent?.session
-    if (session === undefined) return
-    const sessionId = String(session.header.id)
-    if (breakerAudited.has(sessionId)) return
-    breakerAudited.add(sessionId)
-    deps.audit(session, {
-      tool: exec.name,
-      verdict: 'ask',
-      failure: 'breaker',
-      route: routeKey,
-      provider: route.provider,
-      model: route.model,
-      latencyMs: 0,
-      cacheHit: false,
-    })
-  }
+/** '' when the call carries no session (the breaker audit then no-ops). */
+function sessionIdOf(exec: ToolExecution): string {
+  const session = exec.agent?.session
+  return session === undefined ? '' : String(session.header.id)
 }

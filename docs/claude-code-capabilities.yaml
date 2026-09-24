@@ -2893,6 +2893,9 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/enrichment.spec.ts }
       - { type: test, path: packages/interaction/permission-rules/tests/llm-classifier.spec.ts, anchor: "S3/D7 transcript input assembly" }
       - { type: test, path: packages/interaction/permission-rules/tests/auto-stage.spec.ts, anchor: "S3 transcript-aware stage" }
+      - { type: source, path: packages/interaction/permission-rules/src/pi-probe.ts, anchor: "createPiProbe" }
+      - { type: test, path: packages/interaction/permission-rules/tests/pi-probe.spec.ts }
+      - { type: test, path: packages/interaction/permission-rules/tests/listener-pi-probe.spec.ts }
     deviation:
       kind: downgrade
       summary: >-
@@ -3007,7 +3010,47 @@ capabilities:
         ≤120-char control-char-stripped `reason`. `classifier.secondPass`
         (default FALSE, absence-preserving, D13) enables ONE reconsider
         call on a non-failure ask verdict — only ask→allow is possible,
-        never the reverse; the audit marks `secondPass: true`. Remaining
+        never the reverse; the audit marks `secondPass: true`. Input-layer
+        prompt-injection probe slice (2026-09-23, S7/D8): `auto` mode gains a
+        one-shot auxiliary-model probe over the TEXT blocks of executed tool
+        RESULTS (the layer the pre-execute classifier is blind to) —
+        default scan scope `read`/`read_image`/`bash`/`web_fetch`/
+        `web_search` plus every `mcp__*` tool (CC parity; CC spellings
+        matched via ccToolAliases), fully replaceable via
+        `autoMode.probe.toolPatterns` (exact names or trailing-`*` prefix
+        patterns). Verdict contract `{injection, reason}`, parsed
+        defensively (fence-stripped JSON; malformed ⇒ fail-open pass),
+        probe `reason` capped at 120 chars with control chars stripped in
+        both the audit record and the warning (secret-echo mitigation);
+        probe input = text blocks only (non-text skipped), first 3072 +
+        last 1024 chars with an elision marker; 256-token verdict budget,
+        5000 ms default timeout (`probe.timeoutMs`), route
+        `probe.route` (default 'haiku'). The listener is DEFAULT order and
+        scans the PRE-REWRITE ORIGINAL result content (deliberate: the
+        context-crusher's prepend listener composes AROUND the probe, so the
+        original is the only CCR-independent vantage). Delivery is the
+        `additionalContexts` SIDEBAND (edit-recovery-hint idiom): a flag
+        appends a security-notice UserMessage to the downstream fold
+        decision's additionalContexts — never into content, so a sideband
+        cannot be clobbered by content rewriters and survives listener-order
+        races (CC adjacency of warning-to-content is approximated); existing
+        downstream contexts are preserved, frozen results are never mutated,
+        and value-replacing accepts carry the warning too (the runtime merges
+        additionalContexts onto replaced results). Fail-open everywhere
+        (advisory layer): timeout/error/malformed ⇒ pass-without-warning +
+        audit failure + per-route breaker accounting; unarmable (no llm
+        stream or route) ⇒ pass + warn-once per process + `unarmed` audit;
+        the per-route breaker (threshold 3, the classifier-breaker machinery
+        shared with the classifier stage, seeded once per session from the
+        durable log) passes results through with one `breaker` audit per
+        session + one process warn, reset by a settings change. The probe
+        NEVER runs outside effective `auto` mode (A8: the mode fold happens
+        at listener time, and a mid-flight mode change out of `auto` audits
+        `stale-mode` — never breaker-counted). Durable `permission/probe`
+        session audit events
+        (registered type) are digest-only (sha256 of the probe input); raw
+        full-input auditing arrives with the S5 `auditFullText` flag for
+        both event types. Remaining
         vs CC: managed/enterprise remote settings, UI mode cycle; the upstream
         permission/mode catalog pin is an upstream polish.
 
