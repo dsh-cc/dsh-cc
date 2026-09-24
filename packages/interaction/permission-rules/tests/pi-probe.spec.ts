@@ -390,3 +390,21 @@ describe('warning text (prose contract)', () => {
     expect(t).toContain('"read"')
   })
 })
+
+describe('S5 full-text audit (probe events honor classifier.auditFullText)', () => {
+  it('default (flag off): probe audit events stay digest-only — no `input` key', async () => {
+    const h = harness()
+    const probe = createPiProbe(h.deps)
+    await probe.scan(exec(), result([text('hello world')]), plainDownstream)
+    expect('input' in lastAudit(h)).toBe(false)
+    expect(lastAudit(h).digest).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('flag on: the probe audit event gains the windowed probe input', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { auditFullText: true } } }
+    const probe = createPiProbe(h.deps)
+    await probe.scan(exec(), result([text('hello world')]), plainDownstream)
+    expect(lastAudit(h).input).toBe('hello world')
+  })
+})

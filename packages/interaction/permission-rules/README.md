@@ -80,6 +80,14 @@ Modes are **durable** — `setMode(agent, mode)` appends a last-wins `permission
 
 Rule parsing and evaluation are browser-safe (pure string logic), so the type/parser/evaluate modules import cleanly into UI previews.
 
+## Audit events and privacy
+
+The classifier and PI-probe stages append durable `permission/classifier` / `permission/probe` session audit events. They are **digest-only by default**: the audited input appears only as a sha256 digest (plus a ≤120-char sanitized reason, verdict, rule, latency, cache/second-pass markers).
+
+Setting `permissions.autoMode.classifier.auditFullText: true` also stores the **raw rendered input** (≤8192 chars) on every event — which may contain command text, including secrets the agent was about to run, or tool-result content. Audit logs grow accordingly; keep the flag off unless you are actively reviewing classifier behavior, and treat the session log as sensitive while it is on. Toggle it live — the next audited event picks the change up without a restart.
+
+Review the audit with `/auto-mode review [full]` (in `@dsh-cc/command-auto-mode`): the last 20 classifier/probe verdicts as an aligned table; `full` prints the stored inputs when `auditFullText` is on.
+
 ## Invariant companion
 
 `@dsh-cc/permission-rules/invariant` validates `permission/mode` session events at the session boundary: `mode` must be switchable (never `plan`), and `resumeSandbox` — when present — must be a known sandbox mode (`read-only` | `workspace-write` | `danger-full-access`).

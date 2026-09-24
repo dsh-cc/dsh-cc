@@ -68,6 +68,12 @@ export interface AutoModeClassifierSettings {
    * `ask` verdict earns ONE reconsider call; only ask→allow is possible.
    */
   secondPass?: boolean
+  /**
+   * D10/S5 full-text audit (default FALSE, absence-preserving): when true,
+   * `permission/classifier` audit events carry the raw rendered input
+   * (≤8192 chars by construction) in addition to the digest.
+   */
+  auditFullText?: boolean
 }
 
 /** `permissions.autoMode.probe` — the plugin-local hand-mirror of the shared AutoModeProbe schema (S7/W3). */
@@ -197,6 +203,8 @@ interface AutoModeSlice {
   timeoutMs: number
   cacheMaxEntries: number
   secondPass: boolean
+  /** S5/D10: audit the raw classifier input when this flag is on. */
+  auditFullText: boolean
   enabled: boolean
   raw: string
 }
@@ -217,6 +225,7 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
     timeoutMs: classifier?.timeoutMs ?? 8000,
     cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
     secondPass: classifier?.secondPass === true,
+    auditFullText: classifier?.auditFullText === true,
     enabled: classifier?.enabled === true,
     raw: JSON.stringify([autoMode?.soft_deny, autoMode?.hard_deny, autoMode?.allow, autoMode?.environment, classifier]),
   }
@@ -397,6 +406,10 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
         const audit: ClassifierAuditEventData = {
           tool: verdict.tool,
           digest: verdict.digest,
+          // S5/D10: the raw input is audited only when the flag is on — read
+          // fresh from the slice every call, so a settings toggle takes
+          // effect on the very next event (no restart, no rebuild needed).
+          ...(slice.auditFullText === true ? { input: verdict.input } : {}),
           verdict: verdict.verdict,
           ...(verdict.verdict === 'deny' ? { rule: verdict.rule } : {}),
           ...(exec.callId === undefined ? {} : { callId: exec.callId }),

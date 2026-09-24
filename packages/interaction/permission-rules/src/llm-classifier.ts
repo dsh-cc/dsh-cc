@@ -55,11 +55,13 @@ export type ClassifierContext = {
   siteContext?: string
 }
 
-/** Durable audit record for one classify call. The raw input NEVER appears — only its digest. */
+/** Durable audit record for one classify call. The raw input is carried in-process only; the audit event is digest-only unless `classifier.auditFullText` is on (S5/D10). */
 export type ClassifierAuditEvent = {
   tool: string
   /** sha256 of the rendered classifier input. */
   digest: string
+  /** The full rendered classifier input (≤8192 chars by construction) — audited only when `classifier.auditFullText` is on (S5/D10). */
+  input: string
   verdict: 'allow' | 'ask' | 'deny'
   /** On `deny`: the exact cited hard_deny rule text (D4). */
   rule?: string
@@ -347,6 +349,7 @@ export function createLlmClassifier(deps: LlmClassifierDeps): LlmClassifier {
           ...result,
           tool,
           digest,
+          input,
           ...(failure === undefined ? {} : { failure }),
           ...(route === undefined ? {} : { routeAlias: `${route.provider}/${route.model}`, provider: route.provider, model: route.model }),
           latencyMs: Date.now() - startedAt,

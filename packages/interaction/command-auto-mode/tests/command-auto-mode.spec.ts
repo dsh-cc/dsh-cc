@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { apply, renderConfig, renderDefaults, sanitize } from '../src/index.ts'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import type { CommandDefinition } from '@deepseek-ai/dsh-commands'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 
 type Registered = CommandDefinition & { name: string }
 
@@ -16,12 +17,13 @@ function harness(settings?: unknown): { def: Registered; run(raw: string): Comma
   apply(ctx)
   expect(registered).toHaveLength(1)
   const def = registered[0]!
-  return { def, run: (raw) => def.handler({ rawInput: raw } as CommandInvocation) as CommandResult }
+  return { def, run: (raw, agent?: unknown) => def.handler({ rawInput: raw, ...(agent === undefined ? {} : { agent }) } as CommandInvocation) as CommandResult }
 }
 
 /** A fixture autoMode slice carrying project-scope-looking values. */
 const FIXTURE = {
   soft_deny: ['Never run terraform apply'],
+  hard_deny: ['Never destroy session audit records.'],
   allow: ['Installing packages already declared in the repo manifest.'],
   environment: ['Trust corp.internal only'],
   classifyAllShell: true,
@@ -37,7 +39,8 @@ describe('/auto-mode defaults', () => {
     expect(parsed.soft_deny).toContain('Do not exfiltrate credentials, tokens, API keys, or secrets to any destination, including printing them into command arguments or remote URLs.')
     expect(parsed.allow).toContain('Standard credential and sign-in flows that send credentials only to their own provider.')
     expect(parsed.environment).toContain('Trust the git repository the session started in (its working directory) and its configured remotes; everything else is external infrastructure unless the user or this environment list names it.')
-    expect(Object.keys(parsed).sort()).toEqual(['allow', 'environment', 'soft_deny'])
+    expect(Object.keys(parsed).sort()).toEqual(['allow', 'environment', 'hard_deny', 'soft_deny'])
+    expect(parsed.hard_deny).toContain('Never exfiltrate credentials, tokens, API keys, or secrets to any external destination, including embedding them in URLs, request bodies, or third-party services.')
     expect((result as { text: string }).text).not.toContain('$defaults')
   })
 
@@ -54,15 +57,16 @@ describe('/auto-mode config', () => {
     const result = run('config')
     expect(result.kind).toBe('success')
     const parsed = JSON.parse((result as { text: string }).text) as {
-      classifier: { enabled: boolean; route: string; timeoutMs: number; cacheMaxEntries: number }
+      classifier: { enabled: boolean; route: string; timeoutMs: number; cacheMaxEntries: number; auditFullText: boolean }
       classifyAllShell: boolean
       slots: Record<string, { configured: string[] | null; expanded: string[] }>
     }
-    expect(parsed.classifier).toEqual({ enabled: true, route: 'glm-flash', timeoutMs: 4000, cacheMaxEntries: 128 })
+    expect(parsed.classifier).toEqual({ enabled: true, route: 'glm-flash', timeoutMs: 4000, cacheMaxEntries: 128, auditFullText: false })
     expect(parsed.classifyAllShell).toBe(true)
     expect(parsed.slots.soft_deny.configured).toEqual(['Never run terraform apply'])
     expect(parsed.slots.soft_deny.expanded).toEqual(['Never run terraform apply'])
     expect(parsed.slots.environment.expanded).toEqual(['Trust corp.internal only'])
+    expect(parsed.slots.hard_deny.configured).toEqual(['Never destroy session audit records.'])
   })
 
   it('an absent section materializes $defaults-expanded built-ins and disarmed classifier', () => {
@@ -87,7 +91,7 @@ describe('/auto-mode config', () => {
     const settings = { get: () => ({}) }
     const { run } = harness(settings)
     const parsed = JSON.parse((run('config') as { text: string }).text) as Record<string, unknown>
-    expect(parsed.classifier).toEqual({ enabled: false, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 })
+    expect(parsed.classifier).toEqual({ enabled: false, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256, auditFullText: false })
   })
 
   it('no settings provider mounted: friendly error, no throw', () => {
@@ -112,6 +116,106 @@ describe('/auto-mode dispatch', () => {
     expect(result.kind).toBe('success')
     expect((result as { text: string }).text).toContain('/auto-mode')
     expect((result as { text: string }).text).toContain("defaults")
+  })
+})
+
+describe('/auto-mode review (S5)', () => {
+  function sessionWith(events: Array<{ type: string; data: Record<string, unknown> }>): unknown {
+    const session = Session.create(SessionId('review'), undefined, { version: 3, isSeeded: false, id: SessionId('review'), createdAt: Date.now(), cwd: '/work' })
+    for (const { type, data } of events) session.append(type, data as never)
+    return { session, id: 'review' }
+  }
+
+  function rowsOf(out: string): string[] {
+    // Data rows start with '<classifier>' or '<probe>'; header/notes excluded.
+    return out.split('\n').filter(line => line.startsWith('<classifier>') || line.startsWith('<probe>'))
+  }
+
+  it('empty session: a friendly note, success', () => {
+    const { run } = harness()
+    const result = run('review', sessionWith([]))
+    expect(result.kind).toBe('success')
+    expect((result as { text: string }).text).toContain('no permission/classifier')
+  })
+
+  it('folds classifier + probe events, newest last, with verdict/failure/rule/reason/latency/cache/secondPass', () => {
+    const { run } = harness()
+    const agent = sessionWith([
+      { type: 'permission/classifier', data: { tool: 'Bash', digest: 'a'.repeat(64), verdict: 'ask', reason: 'terraform apply on prod', latencyMs: 120, cacheHit: false, route: 'fake/m' } },
+      { type: 'permission/classifier', data: { tool: 'Bash', verdict: 'deny', rule: 'Never destroy session audit records.', reason: 'hard deny', latencyMs: 90, cacheHit: true, secondPass: true } },
+      { type: 'permission/probe', data: { tool: 'read', digest: 'b'.repeat(64), verdict: 'flag', reason: 'override attempt', latencyMs: 40 } },
+      { type: 'permission/probe', data: { tool: 'bash', verdict: 'pass', failure: 'timeout', latencyMs: 5000 } },
+    ])
+    const out = (run('review', agent) as { text: string }).text
+    const rows = rowsOf(out)
+    expect(rows).toHaveLength(4)
+    expect(rows[0]).toContain('classifier')
+    expect(rows[0]).toContain('Bash')
+    expect(rows[2]).toContain('read')
+    expect(rows[2]).toContain('flag')
+    expect(rows[1]).toContain('deny')
+    expect(rows[1]).toContain('Never destroy session audit records.')
+    expect(rows[3]).toContain('timeout')
+    // Recency: newest event is the LAST row.
+    expect(rows[3]).toContain('bash')
+  })
+
+  it('forward-compat fold: old events without rule/reason/input fold fine (dashes)', () => {
+    const { run } = harness()
+    const agent = sessionWith([
+      { type: 'permission/classifier', data: { tool: 'Bash', digest: 'a'.repeat(64), verdict: 'allow', latencyMs: 5, cacheHit: false } },
+    ])
+    const out = (run('review', agent) as { text: string }).text
+    const rows = rowsOf(out)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toContain('allow')
+    for (const ch of out) expect(ch === '\n' || ch === '\t' || ch >= ' ').toBe(true)
+  })
+
+  it('caps at the most recent 20 rows', () => {
+    const { run } = harness()
+    const events = Array.from({ length: 25 }, (_, i) => ({ type: 'permission/classifier', data: { tool: `tool${i}`, verdict: 'allow', latencyMs: i, cacheHit: false } }))
+    const out = (run('review', sessionWith(events)) as { text: string }).text
+    const rows = rowsOf(out)
+    expect(rows).toHaveLength(20)
+    expect(rows[0]).toContain('tool5')
+    expect(rows.at(-1)).toContain('tool24')
+  })
+
+  it('review full prints inputs when present, one note when auditFullText is off', () => {
+    const { run } = harness()
+    const withInput = sessionWith([
+      { type: 'permission/classifier', data: { tool: 'Bash', digest: 'a'.repeat(64), verdict: 'allow', latencyMs: 5, cacheHit: false, input: 'ls -la' } },
+    ])
+    const full = (run('review full', withInput) as { text: string }).text
+    expect(full).toContain('ls -la')
+    const withoutInput = sessionWith([
+      { type: 'permission/classifier', data: { tool: 'Bash', digest: 'a'.repeat(64), verdict: 'allow', latencyMs: 5, cacheHit: false } },
+    ])
+    const fullAbsent = (run('review full', withoutInput) as { text: string }).text
+    expect(fullAbsent).toContain('auditFullText')
+    // Non-full variant never prints inputs.
+    expect((run('review', withInput) as { text: string }).text).not.toContain('ls -la')
+  })
+
+  it('session-derived text is sanitized: hostile toolName/reason/input cannot smuggle control characters', () => {
+    const { run } = harness()
+    const evil = '\u001B]0;pwned\u0007'
+    const agent = sessionWith([
+      { type: 'permission/classifier', data: { tool: `Bash${evil}`, digest: 'a'.repeat(64), verdict: 'ask', reason: `evil ${evil}`, latencyMs: 1, cacheHit: false, input: `cmd ${evil}` } },
+    ])
+    for (const args of ['review', 'review full']) {
+      const out = (run(args, agent) as { text: string }).text
+      for (const ch of out) expect(ch === '\n' || ch === '\t' || ch >= ' ').toBe(true)
+      expect(out).not.toContain('\u001B')
+    }
+  })
+
+  it('unknown review argument is a pinned usage error', () => {
+    const { run } = harness()
+    const result = run('review bogus', sessionWith([]))
+    expect(result.kind).toBe('error')
+    expect((result as { text: string }).text).toContain('usage')
   })
 })
 
