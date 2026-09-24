@@ -30,7 +30,7 @@ import { createQueueSection } from './driver-queue.ts'
 import { createRunLocalSection } from './driver-run-local.ts'
 import { createAgentSection, attachSessionEvents } from './driver-agent.ts'
 import { createPromoteSection } from './driver-promote.ts'
-import { createModelCyclingSection } from '../model-cycling.ts'
+import { bindModelCycling } from './model-cycling-binding.ts'
 import type { ProviderRuntime } from '../provider-command.ts'
 
 import type { Driver } from '../state/driver-types.ts'
@@ -317,7 +317,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const { openModelPicker, applyModelSwitch, openEffortPicker, openPermissionPicker } = pickers
 
   // --- Ctrl+P alias cycling (plan C6): see src/model-cycling.ts -------------
-  const modelCycling = createModelCyclingSection({ ctx, selection, applyModelSwitch, loadCatalog: agent.loadCatalog, emit, state: () => state })
+  const modelCycling = bindModelCycling(ctx, { selection, applyModelSwitch, loadCatalog: agent.loadCatalog, emit, state: () => state })
 
   // --- Session switching: /resume overlay + driver.switchSession ----------
   const sessions = createSessionsSection({

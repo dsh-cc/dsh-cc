@@ -1,32 +1,18 @@
 /**
- * Ctrl+P / Shift+Ctrl+P model-alias cycling (plan C6). The configured
+ * Ctrl+P / Shift+Ctrl+P model-alias cycling (plan C6). PURE module: the
+ * cycle rules plus the section factory, with the settings namespace and the
+ * alias resolver injected as plain functions (the check:tui-boundary rule
+ * keeps @deepseek-ai imports in src/harness/ — the cordis/settings glue lives
+ * in harness/model-cycling-binding.ts). The configured
  * `cc-model-cycling.cycleOrder` alias list is cycled forward/backward with
- * wrap-around; each step resolves through the cc-model-aliases resolver and is
- * applied only when the resolved route is advertised by the model catalog.
- * Application goes through `applyModelSwitch` (in-memory selection only — no
- * settings persist). Settings are read LIVE per keypress, never cached.
+ * wrap-around; each step is applied only when the resolved route is
+ * advertised by the model catalog. Application goes through
+ * `applyModelSwitch` (in-memory selection only — no settings persist).
+ * Settings are read LIVE per keypress, never cached.
  * @module @dsh-cc/tui/model-cycling
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe, type SettingsReader } from '@dsh-cc/settings-ns'
-import { resolveAlias } from '@dsh-cc/model-aliases'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { upsertRow, type TuiState } from './store.ts'
-
-/** The `cc-model-cycling` settings shape. */
-export interface ModelCyclingSettings {
-  /** Aliases to cycle through, in order. Empty → cycling is inert. */
-  readonly cycleOrder: readonly string[]
-}
-
-/** Schema for the `cc-model-cycling` settings namespace. */
-export const ModelCyclingSettingsSchema = z.object({
-  cycleOrder: z.array(z.string()).default([]),
-})
-
-const SETTINGS_NAMESPACE = 'cc-model-cycling' as SettingsNamespace
 
 /** A fully resolved route (both halves concrete — required for advertisement). */
 export interface CycleRoute {
@@ -94,8 +80,14 @@ export function pickCycleTarget(
 }
 
 /** Collaborator seams for the cycling section (faked in specs). */
-export interface ModelCyclingCtx {
-  ctx: Context
+export interface ModelCyclingDeps {
+  /**
+   * Live cycle-order reader — read per keypress, never cached (settings hot
+   * reload rides the binding). Empty/absent → cycling is inert.
+   */
+  readCycleOrder(): readonly string[]
+  /** Alias resolver (cc-model-aliases), live per call. */
+  resolveAlias(alias: string): { readonly provider?: string | undefined; readonly model?: string | undefined } | undefined
   /** Live selection ref; `current` is the route Ctrl+P starts from. */
   selection: { readonly current?: { provider: string; model: string } | undefined }
   applyModelSwitch(provider: string, model: string): Promise<void>
@@ -105,11 +97,10 @@ export interface ModelCyclingCtx {
 }
 
 /**
- * Register the `cc-model-cycling` namespace (idempotent) and return the
- * InputSink cycle method. Returns a live per-use reader — settings hot reload
- * applies without re-boot; graceful without a settings provider (defaults).
+ * Return the InputSink cycle method. All collaboration is injected as plain
+ * functions, so this module stays harness-free (check:tui-boundary).
  */
-export function createModelCyclingSection(rt: ModelCyclingCtx): {
+export function createModelCyclingSection(rt: ModelCyclingDeps): {
   /** One cycle step; false = no cycle order configured (key falls through). */
   cycleModel(delta: 1 | -1): boolean
 } {
@@ -117,21 +108,8 @@ export function createModelCyclingSection(rt: ModelCyclingCtx): {
     rt.emit(upsertRow(rt.state(), { kind: 'status', text }))
   }
 
-  // Registered lazily on the first Ctrl+P, not at driver boot: the namespace
-  // is only needed when cycling is actually used (keypress-level settings
-  // read — live per call, never cached at boot).
-  let read: SettingsReader<ModelCyclingSettings> | undefined
-  const liveOrder = (): readonly string[] =>
-    (read ??= registerNamespaceSafe<ModelCyclingSettings>(
-      rt.ctx,
-      SETTINGS_NAMESPACE,
-      // The schema's structural type uses mutable arrays; the public surface
-      // is the readonly ModelCyclingSettings view. Cast through unknown once.
-      ModelCyclingSettingsSchema as unknown as z<ModelCyclingSettings>,
-    ))()?.cycleOrder ?? []
-
   const cycleModel = (delta: 1 | -1): boolean => {
-    const order = liveOrder()
+    const order = rt.readCycleOrder()
     if (order.length === 0) return false
     // Consume the key synchronously; resolution + catalog advertisement is an
     // async per-keypress continuation (the handler may await loadCatalog).
@@ -145,7 +123,7 @@ export function createModelCyclingSection(rt: ModelCyclingCtx): {
     // advertised and are skipped.
     const routes = new Map<string, CycleRoute>()
     for (const alias of order) {
-      const route = resolveAlias(rt.ctx, alias)
+      const route = rt.resolveAlias(alias)
       if (typeof route?.provider === 'string' && typeof route?.model === 'string') {
         routes.set(alias, { provider: route.provider, model: route.model })
       }

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import {
   createModelCyclingSection,
   nextCycleIndex,
@@ -72,7 +71,7 @@ describe('pickCycleTarget', () => {
   })
 })
 
-/** Fake driver seam: real cycling logic, fake ctx/selection/apply/catalog. */
+/** Fake driver seam: real cycling logic, fake order/resolver/apply/catalog. */
 function makeHarness(opts: {
   cycleOrder: string[]
   aliases: Record<string, CycleRoute | undefined>
@@ -80,17 +79,6 @@ function makeHarness(opts: {
   selection?: CycleRoute
 }) {
   const applied: { provider: string; model: string }[] = []
-  const settings = {
-    register: () => ({}),
-    get: (ns: string) => ns === 'cc-model-cycling' ? { cycleOrder: opts.cycleOrder } : undefined,
-  }
-  const ctx = {
-    get(key: string) {
-      if (key === 'settings') return settings
-      if (key === 'ccModelRoutes') return { resolve: (alias: string) => opts.aliases[alias] }
-      return undefined
-    },
-  } as unknown as Context
   // A real TuiState so the toast rows flow through the status-row idiom; each
   // new distinct status text is recorded in order.
   const state = createInitialState()
@@ -100,7 +88,8 @@ function makeHarness(opts: {
     if (status !== undefined && status.text !== rows.at(-1)) rows.push(status.text)
   }
   const section = createModelCyclingSection({
-    ctx,
+    readCycleOrder: () => opts.cycleOrder,
+    resolveAlias: (alias) => opts.aliases[alias],
     selection: { current: opts.selection },
     // Mirrors the real applyModelSwitch: writes the selection and emits the
     // status-row toast.
