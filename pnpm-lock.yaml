@@ -2303,6 +2303,9 @@ importers:
       '@dsh-cc/tool-workflow':
         specifier: workspace:^
         version: link:../../core/tool-workflow
+      '@dsh-cc/turn-rules':
+        specifier: workspace:^
+        version: link:../../interaction/turn-rules
       '@dsh-cc/workflow-journal':
         specifier: workspace:^
         version: link:../../subagent/workflow-journal
