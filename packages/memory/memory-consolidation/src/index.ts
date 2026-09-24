@@ -353,18 +353,48 @@ async function runDream(
     const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
     void job.done.then(async (outcome) => {
       ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
-      if (outcome.status !== 'completed') {
-        await recordDreamDiagnostic(ctx, fs, dir, policy, {
-          sessionId,
-          phase: 'outcome-failed',
-          detail: outcome.status === 'failed' ? outcome.detail : outcome.status,
-        })
+      if (outcome.status === 'completed') {
+        // Success tombs the marker in BOTH modes: a successful periodic dream
+        // rebuilds the index, so a stale pending marker is obsolete by definition.
+        void clearPressure(fs, dir, now, policy)
+        return
+      }
+      await recordDreamDiagnostic(ctx, fs, dir, policy, {
+        sessionId,
+        phase: 'outcome-failed',
+        detail: outcome.status === 'failed' ? outcome.detail : outcome.status,
+      })
+      // One bounded retry (design 2026-09-24 §4.2): only a FAILED outcome
+      // respawns — `killed` is an intentional abort (session teardown /
+      // controller.abort) and must never respawn. The retry reuses the held
+      // lock (no re-acquire) and does not restamp the pressure marker. The
+      // whole retry block gets its OWN try/catch mirroring the dispatch-throw
+      // branch: a throw inside the retry must never strand the lock.
+      if (outcome.status !== 'failed') {
         void rollbackLock(fs, dir, priorAt, policy)
         return
       }
-      // Success tombs the marker in BOTH modes: a successful periodic dream
-      // rebuilds the index, so a stale pending marker is obsolete by definition.
-      void clearPressure(fs, dir, now, policy)
+      try {
+        const retry = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
+        void retry.done.then(async (retryOutcome) => {
+          ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
+          if (retryOutcome.status === 'completed') {
+            void clearPressure(fs, dir, now, policy)
+            return
+          }
+          await recordDreamDiagnostic(ctx, fs, dir, policy, {
+            sessionId,
+            phase: 'outcome-failed',
+            detail: `retry ${retryOutcome.status === 'failed' ? retryOutcome.detail : retryOutcome.status}`,
+          })
+          void rollbackLock(fs, dir, priorAt, policy)
+        })
+      } catch (err) {
+        const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
+        await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'outcome-failed', detail: `retry ${detail}` })
+        await rollbackLock(fs, dir, priorAt, policy)
+        ctx.logger.warn(`memory-consolidation: dream retry failed: ${detail}`)
+      }
     })
   } catch (err) {
     const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)

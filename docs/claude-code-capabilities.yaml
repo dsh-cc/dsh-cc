@@ -2908,6 +2908,8 @@ capabilities:
       - { type: source, path: packages/interaction/permission-rules/src/return-check.ts, anchor: "summarizeChildHandoff" }
       - { type: test, path: packages/interaction/permission-rules/tests/subagent-return-check.spec.ts }
       - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S6/D9 outbound" }
+      - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "pipeline: structured_output in auto mode (design §5.2)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "config caveat (design §4.1)" }
     deviation:
       kind: downgrade
       summary: >-
@@ -3127,6 +3129,10 @@ capabilities:
         fold), fail open, never throw into the waterfall, and never mutate
         frozen results; a hard-gated red test proved child-session
         resolution BEFORE the listener shipped, so arm (a) ships enabled.
+        dsh-cc extension: structured_output report channel classified
+        read-only by default (both registrars are validate-and-echo report
+        channels), so memory-lane structured reports never reach the
+        classifier and never ask in headless children.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

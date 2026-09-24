@@ -41,6 +41,8 @@ export function buildExtractionPrompt(
     '',
     'Existing topics:',
     existingIndex.length > 0 ? existingIndex : '(none yet)',
+    '',
+    'FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report. Plans or findings narrated in prose without that call are discarded entirely — there is no partial credit, and no one will ask you twice.',
   ].join('\n')
 }
 
@@ -72,5 +74,7 @@ export function buildConsolidationPrompt(
     '',
     `Session provenance hints (ids under \`${sessionsRoot}\`):`,
     ...sessionHints.map(id => `- ${id}`),
+    '',
+    'FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report. Plans or findings narrated in prose without that call are discarded entirely — there is no partial credit, and no one will ask you twice.',
   ].join('\n')
 }

@@ -768,6 +768,8 @@ describe('extract-memories index injection', () => {
       'Session provenance hints (ids under `/sessions-root`):',
       '- s1',
       '- s2',
+      '',
+      'FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report. Plans or findings narrated in prose without that call are discarded entirely — there is no partial credit, and no one will ask you twice.',
     ].join('\n')
     const prompt = buildConsolidationPrompt('/mem', '/sessions-root', ['s1', 's2'])
     expect(prompt).toBe(expected)
