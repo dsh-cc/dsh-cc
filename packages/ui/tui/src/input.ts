@@ -52,6 +52,8 @@ export interface InputSink {
   worktreeExitSubmit(): Promise<void>
   /** Dismiss the `/quit` worktree-exit overlay without quitting. */
   worktreeExitCancel(): void
+  /** Cycle the cc-model-cycling alias order (plan C6); false = no order → key falls through. */
+  cycleModel(delta: -1 | 1): boolean
   dispose(): Promise<void>
 }
 
@@ -477,6 +479,10 @@ export function handleComposerInput(driver: InputSink, data: string): InputActio
     driver.toggleTodoPanel()
     return { kind: 'none' }
   }
+
+  // Plan C6: false = no cycle order configured → key falls through unchanged.
+  if (matchesKey(data, Key.ctrl('p')) && driver.cycleModel(1)) return { kind: 'none' }
+  if (matchesKey(data, Key.shiftCtrl('p')) && driver.cycleModel(-1)) return { kind: 'none' }
 
   if (matchesKey(data, Key.escape)) {
     if (live.busy) driver.interrupt()

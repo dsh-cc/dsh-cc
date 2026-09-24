@@ -28,6 +28,12 @@
       "path": "../../memory/memory"
     },
     {
+      "path": "../../compat/cc-model-aliases"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
       "path": "../../subagent/task"
     },
     {

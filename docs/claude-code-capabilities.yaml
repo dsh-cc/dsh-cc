@@ -1868,17 +1868,23 @@ capabilities:
       recognized: true
       mounted: false
       behavioral: divergent
-      ux: missing
+      ux: partial
     evidence:
       - { type: source, path: packages/ui/tui/src/slash.ts, anchor: "name: 'model'" }
       - { type: test, path: packages/ui/tui/tests/driver-model.spec.ts }
+      - { type: source, path: packages/ui/tui/src/model-cycling.ts, anchor: "createModelCyclingSection" }
+      - { type: test, path: packages/ui/tui/tests/model-cycling.spec.ts }
     deviation:
-      kind: non-goal
+      kind: divergent
       summary: >-
         Host-owned by design; the dsh-native equivalents are the TUI-local
         /model and /effort commands (packages/ui/tui/src/slash.ts, model-catalog)
         plus the ccModelRoutes alias service, so a preset-side port is out of
-        parity scope.
+        parity scope. dsh-cc extension (plan 2026-09-23-small-picks C6):
+        Ctrl+P / Shift+Ctrl+P cycles the cc-model-cycling.cycleOrder alias
+        list through the cc-model-aliases resolver — skip-with-toast on
+        unresolvable/unadvertised entries, applied in-memory via
+        applyModelSwitch (no settings persist); no host-side /model port.
 
   commands.output-style:
     title: /output-style

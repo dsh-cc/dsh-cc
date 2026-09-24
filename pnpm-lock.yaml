@@ -3052,6 +3052,9 @@ importers:
       '@dsh-cc/memory':
         specifier: workspace:^
         version: link:../../memory/memory
+      '@dsh-cc/model-aliases':
+        specifier: workspace:^
+        version: link:../../compat/cc-model-aliases
       '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../../interaction/permission-rules
@@ -3067,6 +3070,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
