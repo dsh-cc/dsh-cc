@@ -1,0 +1,8 @@
+---
+description: Forbids the smoke-test marker pattern in tool calls
+trigger: "TURN_RULES_FORBIDDEN_MARKER"
+triggerOn: [tool-results, user-prompts]
+repeat: once
+---
+
+Forbidden pattern advisory: do not use the TURN_RULES_FORBIDDEN_MARKER marker.

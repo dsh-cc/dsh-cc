@@ -110,6 +110,9 @@
       "path": "./packages/interaction/edit-recovery-hint"
     },
     {
+      "path": "./packages/interaction/turn-rules"
+    },
+    {
       "path": "./packages/settings/settings-ns"
     },
     {

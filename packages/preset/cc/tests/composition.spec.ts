@@ -220,6 +220,14 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('edit-recovery-hint')
     expect(topIds).not.toContain('edit-recovery-hint')
     expect(configIds.indexOf('edit-recovery-hint')).toBe(configIds.indexOf('post-edit-verify') + 1)
+    // The turn-rules row (plan docs/plans/2026-09-23-turn-rules.md) publishes
+    // no Service (plain plugin) and sits inside the group directly after
+    // edit-recovery-hint, with NO new isolate key. ORDER TRIPWIRE: it must
+    // sort after the context-crusher row — CCR outermost, turn-rules composed
+    // after it, so tool-result matching sees the post-crush text.
+    expect(configIds).toContain('turn-rules')
+    expect(topIds).not.toContain('turn-rules')
+    expect(configIds.indexOf('turn-rules')).toBeGreaterThan(configIds.indexOf('context-crusher'))
     expect(configIds).toContain('command-plugin')
     expect(configIds).toContain('command-mcp')
     // The serena-first steering row consumes the isolated `mcpConnections`
