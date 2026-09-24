@@ -1,6 +1,7 @@
 # Advisor watchdog: an opt-in second model reading every turn
 
-**Status:** **Ready for implementation** — critic cold review round 1
+**Status:** **Implemented** — PR #138 (opened 2026-09-24; merge pending at
+commit time). Design provenance: critic cold review round 1
 (2026-09-23), round-2 implementation-readiness delta audit (2026-09-24,
 after turn-rules #135 and lsp-on-write #136 merged), round-3 re-review
 (2026-09-24), and an implementation-verification respin (round 3b,
