@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/turn-rules",
   "description": "Turn rules: a non-interrupting rule engine that matches trigger-bearing cursor-plugin rules against completed tool calls/results and user prompts, injecting the rule body as an advisory reminder at that seam (additionalContexts / attributed inject)",
-  "version": "0.8.0-rc.3",
+  "version": "0.8.1-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

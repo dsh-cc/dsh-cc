@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/prompt-suggest",
   "description": "Next-prompt suggestion: fire-and-forget cheap-lane prediction of the user's next message at turn-stop, surfaced in the TUI autocomplete; default off",
-  "version": "0.8.0-rc.3",
+  "version": "0.8.1-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
