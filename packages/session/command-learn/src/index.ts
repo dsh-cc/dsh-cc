@@ -14,15 +14,17 @@ import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import { helpable } from '@dsh-cc/command-usage'
 import { projectSlug } from '@dsh-cc/memory'
+import { LearnedSkillStore, sanitizeLearnedDescription } from '@dsh-cc/skill-loader'
+import type {} from '@deepseek-ai/dsh-skill'
 import { runForensics, type ForensicsResult } from '@dsh-cc/session-forensics'
-import { renderBlock } from './render.ts'
+import { isoDate, renderBlock, renderFinding } from './render.ts'
 import { applyLearnings } from './write.ts'
 
 export { LEARNING_DESCRIPTION, TOPIC_NAME, TOPIC_TYPE, renderBlock } from './render.ts'
 export { applyLearnings } from './write.ts'
 
 export const name = 'command-learn'
-export const inject = ['commands', 'fs']
+export const inject = ['commands', 'fs', 'skills']
 
 /** Settings namespace carrying the `/learn` section (kebab-case). */
 export const LEARN_SETTINGS_NAMESPACE = 'cc-learn' as SettingsNamespace
@@ -58,12 +60,14 @@ export interface LearnRequest {
   readonly all: boolean
   /** `days=N` recency override. */
   readonly days: number | undefined
-  /** Non-empty when a token was unrecognized or `days=` malformed. */
+  /** `promote=<kebab-name>` — promote the single finding into a learned skill (implies `apply`). */
+  readonly promote: string | undefined
+  /** Non-empty when a token was unrecognized or `days=`/`promote=` malformed. */
   readonly invalid: string | undefined
 }
 
 /**
- * Parse `/learn` argument tokens: `apply`, `all`, `days=N`.
+ * Parse `/learn` argument tokens: `apply`, `all`, `days=N`, `promote=<kebab-name>`.
  * @param rawInput - exact text following the command name.
  */
 export function parseLearn(rawInput: string): LearnRequest {
@@ -71,14 +75,16 @@ export function parseLearn(rawInput: string): LearnRequest {
   let apply = false
   let all = false
   let days: number | undefined
+  let promote: string | undefined
   let invalid: string | undefined
   for (const token of tokens) {
     if (token === 'apply') apply = true
     else if (token === 'all') all = true
     else if (/^days=\d+$/u.test(token)) days = Number(token.slice(5))
+    else if (/^promote=([a-z0-9][a-z0-9-]{0,63})$/u.test(token)) promote = token.slice(8)
     else invalid = token
   }
-  return { apply, all, days, invalid }
+  return { apply, all, days, promote, invalid }
 }
 
 /**
@@ -139,7 +145,7 @@ async function executeLearn(ctx: Context, request: LearnRequest): Promise<Comman
     return { kind: 'success', text: '/learn is disabled (`cc-learn.enabled` is false in settings).' }
   }
   if (request.invalid !== undefined) {
-    return { kind: 'error', text: `Unknown argument "${request.invalid}". Usage: /learn [apply] [all] [days=N]` }
+    return { kind: 'error', text: `Unknown argument "${request.invalid}". Usage: /learn [apply] [all] [days=N] [promote=<name>]` }
   }
   const { days, minOccurrences } = resolveOptions(section, request)
   const home = resolveDshHome()
@@ -148,15 +154,64 @@ async function executeLearn(ctx: Context, request: LearnRequest): Promise<Comman
     minOccurrences,
     ...(request.all ? {} : { project: sessionsProjectKey(process.cwd()) }),
   })
-  if (!request.apply) return { kind: 'success', text: renderDryRun(result) }
+  const promote = request.promote
+  // promote implies apply: a promotion without the memory write is not a
+  // supported shape (§4.3).
+  if (!(request.apply || promote !== undefined)) return { kind: 'success', text: renderDryRun(result) }
   if (result.findings.length === 0) {
-    return { kind: 'success', text: 'no findings — existing session-learnings.md left untouched' }
+    const nothing = 'no findings — existing session-learnings.md left untouched'
+    return { kind: 'success', text: promote === undefined ? nothing : `${nothing} — nothing to promote` }
   }
   const outcome = await applyLearnings(ctx.fs, join(home, 'memory'), process.cwd(), result)
+  const memoryText = `Wrote ${outcome.findings} learning(s) to ${outcome.file} and updated MEMORY.md.`
+  if (promote === undefined) return { kind: 'success', text: memoryText }
+  // Promotion path: exactly one finding, promoted into a learned skill. The
+  // memory write above already happened and always stands (partial-outcome
+  // semantics) — failures here never roll it back.
+  if (result.findings.length > 1) {
+    const titles = result.findings.map(finding => finding.title).join('; ')
+    return {
+      kind: 'error',
+      text: `Promotion refused: /learn promotes exactly one finding, but this run found ${result.findings.length} (${titles}). Tighten days=/min-occurrences or promote later. The memory write to ${outcome.file} stands.`,
+    }
+  }
+  const finding = result.findings[0]!
+  const store = new LearnedSkillStore({
+    dshHome: home,
+    listClaimants: async () => {
+      const candidates = await ctx.skills.list({ cwd: process.cwd() })
+      // SkillSummary carries {name, provider, source}; map straight in —
+      // the store keys shadowed-vs-stale on `source`.
+      return candidates.map(candidate => ({ name: candidate.name, provider: candidate.provider, source: candidate.source }))
+    },
+    onChanged: () => { ctx.emit('skills/learned-changed') },
+  })
+  const created = await store.create({
+    name: promote,
+    description: sanitizeLearnedDescription(finding.title),
+    learnedFrom: `/learn ${isoDate()}`,
+    body: renderFinding(finding).join('\n'),
+  })
+  if (!created.ok) {
+    return {
+      kind: 'error',
+      text: `Promotion failed at the ${PROMOTION_STAGES[created.code]} stage: ${created.detail} The memory write to ${outcome.file} stands.`,
+    }
+  }
   return {
     kind: 'success',
-    text: `Wrote ${outcome.findings} learning(s) to ${outcome.file} and updated MEMORY.md.`,
+    text: `${memoryText} Promoted finding "${finding.title}" to learned skill at ${created.value.path}.`,
   }
+}
+
+/** Store refusal code → human stage name in the failure text. */
+const PROMOTION_STAGES: Record<string, string> = {
+  invalid_name: 'name',
+  invalid_params: 'content',
+  too_large: 'size',
+  shadowed: 'claim',
+  already_exists: 'collision',
+  not_found: 'write',
 }
 
 /**
@@ -181,16 +236,18 @@ export function apply(ctx: Context): void {
   ctx.commands.register(helpable({
     name: 'learn',
     description: 'distill recurring session failure patterns into memory (dry-run by default)',
-    input: { hint: '[apply] [all] [days=N]' },
+    input: { hint: '[apply] [all] [days=N] [promote=<name>]' },
     handler: (invocation: CommandInvocation) => executeLearn(ctx, parseLearn(invocation.rawInput)),
   }, {
     subcommands: [
       { word: 'apply', summary: 'write the session-learnings.md memory topic (default is a dry run)' },
       { word: 'all', summary: 'scan every project, not just the current workspace' },
       { word: 'days=N', summary: `recency window override (default ${DEFAULT_DAYS})` },
+      { word: 'promote=<name>', summary: 'promote the single finding into a learned skill (implies apply)' },
     ],
     notes: [
-      'Writes only with `apply`; empty findings never touch existing memory.',
+      'Writes only with `apply` (or `promote=`); empty findings never touch existing memory.',
+      '`promote=<name>` creates `<dshHome>/learned-skills/<name>/SKILL.md` and requires exactly one finding.',
       'Tuned via the `cc-learn` settings namespace (enabled, days, min-occurrences).',
     ],
   }))

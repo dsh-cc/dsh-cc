@@ -118,4 +118,26 @@ describe('dsh-skill-claude-code plugin', () => {
     const loaded = await ctx.skills.get('old-cmd', { cwd: project })
     expect(loaded?.metadata).toMatchObject({ deprecated: true })
   })
+
+  it('shows a learned skill only after the skills/learned-changed refresh (§4.5)', async () => {
+    const home = await tempDir('home')
+    const project = await tempDir('proj')
+    await mkdir(join(project, '.git'), { recursive: true })
+    const ctx = await setup({ dshHome: home })
+
+    // (1) populate the registry collectCache before any write.
+    await ctx.skills.list({ cwd: project })
+
+    // (2) write a learned SKILL.md without emitting → still absent.
+    await writeSkill(join(home, 'learned-skills'), 'fresh-learned', 'name: fresh-learned\ndescription: A fresh learned skill')
+    const stale = (await ctx.skills.list({ cwd: project })).map(s => s.name)
+    expect(stale).not.toContain('fresh-learned')
+
+    // (3) emit the refresh event → now visible with source `learned`.
+    ctx.emit('skills/learned-changed')
+    const fresh = await ctx.skills.list({ cwd: project })
+    const learned = fresh.find(s => s.name === 'fresh-learned')
+    expect(learned).toBeDefined()
+    expect(learned?.source).toBe('learned')
+  })
 })

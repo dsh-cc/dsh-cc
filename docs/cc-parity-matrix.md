@@ -133,6 +133,7 @@ derived from four orthogonal dimensions (`recognized` / `mounted` / `behavioral`
 
 | Status | Capability | Recognized | Mounted | Behavior | UX | Evidence | Deviation | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ✅ | <a id="cap-skills.manage-skill"></a>ManageSkill tool (learned-skill CRUD) | ✓ | ✓ | Full | Full | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/core/tool-manage-skill/tests/tools.spec.ts) | — | — |
 | 🔶 | <a id="cap-skills.system"></a>Skills system | ✓ | ✓ | Partial | Partial | [s1](packages/preset/cc/agent.cordis.yml) [t1](packages/skill/skill-claude-code/tests/conditional-bundled.spec.ts) [t2](packages/ui/tui/tests/driver-skill-slash.spec.ts) | downgrade — Loader + base tool-skill, CC paths conditional activation, bundled subset (debug/simplify/batch), and TUI /name routing all work; CC's verify/stuck skills are not ported (ant-only; verify companion files absent). | — |
 
 ## Subagents

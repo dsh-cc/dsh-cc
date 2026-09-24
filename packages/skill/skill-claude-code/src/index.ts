@@ -45,15 +45,38 @@ export { estimateFrontmatterTokens, renderSkillBody, substituteArguments, extrac
 export { ccRestriction, ccPathMatcher, registerPathActivator } from './translate.ts'
 export { discoverCcRoots, discoverCcSkills, type CcSkillFile, type CcRoot, type CcSkillSource } from './discovery.ts'
 export { discoverBundledSkills, type BundledSkillFile } from './bundled/index.ts'
+export {
+  LEARNED_SKILLS_DIRNAME,
+  MAX_LEARNED_SKILL_BYTES,
+  LEARNED_NAME_SOURCE,
+  isLearnedSkillName,
+  sanitizeLearnedDescription,
+  serializeLearnedSkill,
+  learnedSkillPath,
+  LearnedSkillStore,
+  type LearnedSkillInput,
+  type LearnedSkillEntry,
+  type LearnedClaimant,
+  type LearnedSkillStoreOptions,
+  type LearnedSkillResult,
+} from './learned-store.ts'
 
 export const name = 'skill-claude-code'
 export const inject = ['skills']
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /** dsh-cc-private: a learned skill was created/updated/deleted; registry must refetch. */
+    'skills/learned-changed'(): void
+  }
+}
 
 const DEFAULT_PROVIDER_NAME = 'claude-code'
 const MANAGED_SOURCE: SkillSource = 'managed'
 const PROJECT_SOURCE: SkillSource = 'project-dsh'
 const USER_SOURCE: SkillSource = 'user-dsh'
 const ADDITIONAL_SOURCE: SkillSource = 'custom'
+const LEARNED_SOURCE: SkillSource = 'learned'
 
 /** Mutating first-party fs tools that trigger conditional activation. */
 const TOUCH_TOOLS = new Set(['read', 'write', 'edit'])
@@ -108,6 +131,7 @@ export class ClaudeCodeSkillProvider implements SkillProvider {
   /** Set of skill names already activated per project root (idempotence guard). */
   private readonly activated = new Map<string, Set<string>>()
   private disposeFsObserver: (() => void) | undefined
+  private disposeLearnedListener: (() => void) | undefined
 
   constructor(
     private readonly ctx: Context,
@@ -121,7 +145,11 @@ export class ClaudeCodeSkillProvider implements SkillProvider {
     this.control = control
     this.bundled = discoverBundledSkills()
     this.wireConditionalActivation()
-    control.signal.addEventListener('abort', () => this.disposeFsObserver?.(), { once: true })
+    this.disposeLearnedListener = this.ctx.on('skills/learned-changed', () => this.control.invalidate())
+    control.signal.addEventListener('abort', () => {
+      this.disposeFsObserver?.()
+      this.disposeLearnedListener?.()
+    }, { once: true })
   }
 
   /**
@@ -285,6 +313,8 @@ export class ClaudeCodeSkillProvider implements SkillProvider {
         return PROJECT_SOURCE
       case 'additional':
         return ADDITIONAL_SOURCE
+      case 'learned':
+        return LEARNED_SOURCE
     }
   }
 

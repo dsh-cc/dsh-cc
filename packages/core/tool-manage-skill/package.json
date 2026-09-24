@@ -1,0 +1,44 @@
+{
+  "name": "@dsh-cc/tool-manage-skill",
+  "description": "CC-style manage_skill tool: create/update/delete/list learned skills under $DSH_HOME/learned-skills via the shared LearnedSkillStore, gated by the cc-learn.enabled setting",
+  "version": "0.8.1-rc.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/core/tool-manage-skill"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@dsh-cc/skill-loader": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-home-paths": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-skill": ">=0.1.5-rc.1",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.5-rc.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-skill": "link:../../../../deepseek-harness/packages/skill/skill",
+    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt"
+  }
+}

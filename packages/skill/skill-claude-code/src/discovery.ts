@@ -12,12 +12,13 @@
 
 import { access, readdir, realpath, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import { LEARNED_SKILLS_DIRNAME } from './learned-store.ts'
 
 /** Discovery source bucket for one Claude Code skill file. */
-export type CcSkillSource = 'managed' | 'user' | 'project' | 'additional'
+export type CcSkillSource = 'managed' | 'user' | 'project' | 'additional' | 'learned'
 
 /** Precedence rank (lower wins) for a discovery root within the provider. */
-export type CcRootRank = 100 | 200 | 300 | 400
+export type CcRootRank = 100 | 200 | 300 | 400 | 500
 
 /** A discovered Claude Code skill file locator. */
 export interface CcSkillFile {
@@ -63,6 +64,7 @@ const MANAGED_RANK = 100
 const PROJECT_RANK = 200
 const USER_RANK = 300
 const ADDITIONAL_RANK = 400
+const LEARNED_RANK = 500
 const LEGACY_COMMANDS = 'commands'
 
 /**
@@ -91,6 +93,11 @@ export async function discoverCcRoots(options: CcDiscoveryOptions): Promise<read
   for (const dir of options.additionalDirs) {
     roots.push({ path: resolve(dir), source: 'additional', rank: ADDITIONAL_RANK })
   }
+  roots.push({
+    path: join(resolve(options.dshHome), LEARNED_SKILLS_DIRNAME),
+    source: 'learned',
+    rank: LEARNED_RANK,
+  })
   return roots
 }
 

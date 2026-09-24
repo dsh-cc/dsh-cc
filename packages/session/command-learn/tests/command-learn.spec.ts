@@ -13,6 +13,7 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { canonicalMemoryRoot, projectSlug } from '@dsh-cc/memory'
 import * as commandLearn from '@dsh-cc/command-learn'
 import { LEARN_SETTINGS_NAMESPACE, parseLearn, renderBlock, resolveOptions, sessionsProjectKey } from '@dsh-cc/command-learn'
@@ -86,6 +87,7 @@ async function harness(withSettings = false): Promise<{ ctx: Context; agent: Age
   await ctx.plugin(LocalFileSystem)
   await ctx.plugin(CommandRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(SkillRegistry)
   if (withSettings) await ctx.plugin(MemorySettings)
   await ctx.plugin(commandLearn)
   const session = ctx.sessions.create(SessionId(`command-learn-${Math.random()}`))
@@ -116,6 +118,13 @@ async function run(test: Awaited<ReturnType<typeof harness>>, suffix = ''): Prom
   return result.text ?? ''
 }
 
+/** Like `run`, but returns the raw result so promotion failures are assertable. */
+async function runRaw(test: Awaited<ReturnType<typeof harness>>, suffix = ''): Promise<{ kind: string; text: string }> {
+  const execution = await test.ctx.commands.execute(test.agent, `/learn${suffix}`, [], new AbortController().signal)
+  if (execution === undefined) throw new Error('learn command was not registered')
+  return { kind: execution.result.kind, text: execution.result.text ?? '' }
+}
+
 // Two sessions in the current project, one elsewhere, all with the same
 // corrected-path pattern → 2 aggregate occurrences (meets default threshold).
 const PROJECT = sessionsProjectKey(process.cwd())
@@ -123,7 +132,7 @@ const PROJECT = sessionsProjectKey(process.cwd())
 describe('@dsh-cc/command-learn registration', () => {
   it('registers one global command with Loader-safe exports', async () => {
     expect(commandLearn.name).toBe('command-learn')
-    expect(commandLearn.inject).toEqual(['commands', 'fs'])
+    expect(commandLearn.inject).toEqual(['commands', 'fs', 'skills'])
     const loader = Object.create(Loader.prototype) as Loader
     expect(loader.unwrapExports(commandLearn)).toBe(commandLearn)
     const test = await harness()
@@ -149,6 +158,27 @@ describe('/learn argument parsing', () => {
   })
   it('derives the harness project key with the --slug-- wrapper', () => {
     expect(sessionsProjectKey('/a/b')).toMatch(/^--.+--$/)
+  })
+})
+
+describe('/learn promote parsing', () => {
+  it('parses a valid promote token', () => {
+    expect(parseLearn('promote=repo-release-dance')).toEqual({
+      apply: false, all: false, days: undefined, promote: 'repo-release-dance', invalid: undefined,
+    })
+    expect(parseLearn('apply promote=x9')).toEqual({
+      apply: true, all: false, days: undefined, promote: 'x9', invalid: undefined,
+    })
+  })
+  it('lands malformed promote tokens in invalid', () => {
+    expect(parseLearn('promote=').invalid).toBe('promote=')
+    expect(parseLearn('promote=Big').invalid).toBe('promote=Big')
+    expect(parseLearn('promote=-x').invalid).toBe('promote=-x')
+    expect(parseLearn(`promote=${'a'.repeat(65)}`).invalid).toBe(`promote=${'a'.repeat(65)}`)
+  })
+  it('last promote token wins (mirrors days=)', () => {
+    expect(parseLearn('promote=first promote=second').promote).toBe('second')
+    expect(parseLearn('days=1 days=2').days).toBe(2)
   })
 })
 
@@ -215,6 +245,145 @@ describe('/learn apply', () => {
     expect(await run(test, ' apply')).toContain('no findings')
     const text = await run(test, ' apply all')
     expect(text).toContain('Wrote 1 learning(s)')
+  })
+})
+
+/** Seed one bash env-fact pattern: failing command then succeeding variant (same first token). */
+function bashLines(failedCmd: string, failure: string, success: string, successCmd = `${failedCmd.split(/\s+/)[0]} --fix`): string {
+  const call = (callId: string, cmd: string) => JSON.stringify({
+    type: 'tool/call',
+    data: { turn: 1, step: 1, callId, name: 'bash', arguments: JSON.stringify({ command: cmd }) },
+  })
+  const result = (callId: string, text: string, isError: boolean) => JSON.stringify({
+    type: 'tool/result',
+    data: { message: { source: { callId }, content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text }], isError }] } },
+  })
+  return [
+    JSON.stringify({ type: 'session', ts: Date.now(), data: { origin: 'user', delegationDepth: 0 } }),
+    call('c1', failedCmd), result('c1', failure, true),
+    call('c2', successCmd), result('c2', success, false),
+  ].join('\n')
+}
+
+const TODAY = new Date().toISOString().slice(0, 10)
+
+describe('/learn promote', () => {
+  it('promote implies apply (memory written without the apply token)', async () => {
+    seedSession(PROJECT, 's1', findingLines())
+    seedSession(PROJECT, 's2', findingLines())
+    const test = await harness()
+    const text = await run(test, ' promote=prefer-b-config')
+    expect(text).toContain('Wrote 1 learning(s)')
+    expect(existsSync(join(homeDir, 'memory'))).toBe(true)
+  })
+
+  it('extends the zero-finding no-op text with "— nothing to promote"', async () => {
+    seedSession(PROJECT, 's1', findingLines()) // 1 occurrence < threshold 2
+    const test = await harness()
+    const text = await run(test, ' promote=x')
+    expect(text).toContain('no findings — existing session-learnings.md left untouched — nothing to promote')
+  })
+
+  it('refuses multi-finding promotion, naming every title, memory stands', async () => {
+    seedSession(PROJECT, 's1', findingLines())
+    seedSession(PROJECT, 's2', findingLines())
+    seedSession(PROJECT, 's3', bashLines('pnpm build', 'boom', 'built ok'))
+    seedSession(PROJECT, 's4', bashLines('pnpm build', 'boom', 'built ok'))
+    const test = await harness()
+    const outcome = await runRaw(test, ' promote=only-one')
+    expect(outcome.kind).toBe('error')
+    expect(outcome.text).toContain('Promotion refused')
+    expect(outcome.text).toContain('prefer /b/ over /a for config.json')
+    expect(outcome.text).toContain('use `pnpm --fix` instead of plain `pnpm`')
+    expect(outcome.text).toContain('memory write')
+    expect(existsSync(join(homeDir, 'learned-skills'))).toBe(false)
+  })
+
+  it('promotes the single finding with exact frontmatter and reports both paths', async () => {
+    seedSession(PROJECT, 's1', findingLines())
+    seedSession(PROJECT, 's2', findingLines())
+    const test = await harness()
+    const events: string[] = []
+    test.ctx.on('skills/learned-changed', () => { events.push('changed') })
+    const text = await run(test, ' promote=prefer-b-config')
+    const skillPath = join(homeDir, 'learned-skills', 'prefer-b-config', 'SKILL.md')
+    expect(text).toContain('Wrote 1 learning(s)')
+    expect(text).toContain(skillPath)
+    const skill = readFileSync(skillPath, 'utf8')
+    const lines = skill.split('\n')
+    expect(lines.slice(0, 6)).toEqual([
+      '---',
+      'name: prefer-b-config',
+      'description: prefer /b/ over /a for config.json',
+      `learnedFrom: /learn ${TODAY}`,
+      '---',
+      '',
+    ])
+    expect(skill).toContain('- **prefer /b/ over /a for config.json** (2 occurrences)')
+    expect(skill).toContain('  read failed on /a/config.json, succeeded on /b/config.json.')
+    expect(skill).toMatch(/  evidence: session:.+/)
+    expect(events).toEqual(['changed'])
+  })
+
+  it('refuses a shadowed name (authored claimant) without emitting the event', async () => {
+    seedSession(PROJECT, 's1', findingLines())
+    seedSession(PROJECT, 's2', findingLines())
+    const test = await harness()
+    test.ctx.skills.register({ name: 'taken-name', description: 'claimed', content: 'body', source: 'runtime' })
+    const events: string[] = []
+    test.ctx.on('skills/learned-changed', () => { events.push('changed') })
+    const outcome = await runRaw(test, ' promote=taken-name')
+    expect(outcome.kind).toBe('error')
+    expect(outcome.text).toContain('claim stage')
+    expect(outcome.text).toContain('authored skill provided by runtime (source runtime)')
+    expect(outcome.text).toContain('memory write')
+    expect(events).toEqual([])
+    expect(existsSync(join(homeDir, 'learned-skills'))).toBe(false)
+  })
+
+  it('refuses an already-existing learned file (already_exists) without emitting the event', async () => {
+    seedSession(PROJECT, 's1', findingLines())
+    seedSession(PROJECT, 's2', findingLines())
+    const test = await harness()
+    const skillDir = join(homeDir, 'learned-skills', 'prefer-b-config')
+    mkdirSync(skillDir, { recursive: true })
+    writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: prefer-b-config\ndescription: existing\n---\n\nbody\n')
+    const events: string[] = []
+    test.ctx.on('skills/learned-changed', () => { events.push('changed') })
+    const outcome = await runRaw(test, ' promote=prefer-b-config')
+    expect(outcome.kind).toBe('error')
+    expect(outcome.text).toContain('collision stage')
+    expect(outcome.text).toContain('already exists')
+    expect(outcome.text).toContain('memory write')
+    expect(events).toEqual([])
+  })
+
+  it('refuses at the size stage when the serialized skill exceeds the cap', async () => {
+    // Huge failure command → huge finding detail → skill body over the
+    // 64_000-byte cap, while the memory topic (huge text once, short title)
+    // stays under its 64KiB writeback cap.
+    const huge = `pnpm ${'x'.repeat(64_300)}`
+    seedSession(PROJECT, 's1', bashLines(huge, 'boom', 'built ok'))
+    seedSession(PROJECT, 's2', bashLines(huge, 'boom', 'built ok'))
+    const test = await harness()
+    const outcome = await runRaw(test, ' promote=huge-skill')
+    expect(outcome.kind).toBe('error')
+    expect(outcome.text).toContain('size stage')
+    expect(outcome.text).toContain('memory write')
+    expect(existsSync(join(homeDir, 'learned-skills'))).toBe(false)
+  })
+
+  it('memory write stands even when a later promotion stage fails', async () => {
+    seedSession(PROJECT, 's1', findingLines())
+    seedSession(PROJECT, 's2', findingLines())
+    const test = await harness()
+    await runRaw(test, ' promote=prefer-b-config')
+    const memoryDir = join(homeDir, 'memory', 'projects', projectSlug(canonicalMemoryRoot(process.cwd())))
+    expect(existsSync(join(memoryDir, 'session-learnings.md'))).toBe(true)
+    // Second promotion of the same name hits the collision stage; memory untouched.
+    const outcome = await runRaw(test, ' promote=prefer-b-config')
+    expect(outcome.kind).toBe('error')
+    expect(existsSync(join(memoryDir, 'session-learnings.md'))).toBe(true)
   })
 })
 

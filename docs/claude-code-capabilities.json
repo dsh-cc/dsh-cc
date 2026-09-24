@@ -3142,7 +3142,7 @@
       "category": "commands",
       "plane": "preset",
       "upstream": {
-        "summary": "dsh-cc extension — distill recurring failure→success corrections from session transcripts into memory.",
+        "summary": "dsh-cc extension — distill recurring failure→success corrections from session transcripts into memory, with an additional `promote=<name>` step that distills a finding into a learned skill under $DSH_HOME/skills/learned; CC has no equivalent for the promotion step.",
         "refs": []
       },
       "dimensions": {
@@ -3172,7 +3172,8 @@
         },
         {
           "type": "test",
-          "path": "packages/session/command-learn/tests/command-learn.spec.ts"
+          "path": "packages/session/command-learn/tests/command-learn.spec.ts",
+          "anchor": "promotes the single finding with exact frontmatter and reports both paths"
         },
         {
           "type": "test",
@@ -4119,6 +4120,43 @@
       "deviation": {
         "kind": "downgrade",
         "summary": "Per-repo isolation (worktrees/subdirs share one store), shared global layer, memory_save as the save channel, recall reference-doc suppression, and opt-in team memory all work; CC's mtime-threaded recall and memoryAge aging are deferred until the harness FsInfo seam grows an mtime field."
+      }
+    },
+    "skills.manage-skill": {
+      "title": "ManageSkill tool (learned-skill CRUD)",
+      "category": "skills",
+      "plane": "preset",
+      "upstream": {
+        "summary": "dsh-cc extension — model-callable `manage_skill` tool for the learned skills under $DSH_HOME/skills/learned (list/create/update/delete, learned→authored shadowing refusals, `skills/learned-changed` events); CC has no equivalent.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: tool-manage-skill"
+        },
+        {
+          "type": "test",
+          "path": "packages/core/tool-manage-skill/tests/tools.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "none"
       }
     },
     "skills.system": {

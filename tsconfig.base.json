@@ -116,6 +116,9 @@
       "@dsh-cc/tool-notebook-edit": [
         "./packages/core/tool-notebook-edit/src/index.ts"
       ],
+      "@dsh-cc/tool-manage-skill": [
+        "./packages/core/tool-manage-skill/src/index.ts"
+      ],
       "@dsh-cc/tool-web-fetch": [
         "./packages/core/tool-web-fetch/src/index.ts"
       ],
