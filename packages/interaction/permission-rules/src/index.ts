@@ -133,7 +133,7 @@ export {
 export { canonicalizeHostname, isWebFetchRuleTool } from './domain.ts'
 export { summarizeChildHandoff, handoffWarningText, HANDOFF_ASK_STORM, type ChildHandoffSummary } from './return-check.ts'
 export { filterAutoAllowRules } from './auto-rule-filter.ts'
-export { DEFAULT_MEDIUM_PATTERNS } from './classifier.ts'
+export { DEFAULT_MEDIUM_PATTERNS, DEFAULT_DANGEROUS_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
 
 declare module '@deepseek-ai/cordis' {

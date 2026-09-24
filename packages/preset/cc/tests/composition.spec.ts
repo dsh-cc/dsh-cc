@@ -228,6 +228,14 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('turn-rules')
     expect(topIds).not.toContain('turn-rules')
     expect(configIds.indexOf('turn-rules')).toBeGreaterThan(configIds.indexOf('context-crusher'))
+    // The advisor-watchdog row (plan docs/plans/2026-09-23-advisor-watchdog.md)
+    // publishes no Service (plain plugin) and sits inside the group at the
+    // cc-services tail, after prompt-suggest, with NO new isolate key.
+    // ORDER TRIPWIRE: it must sort after the turn-rules row — turn-rules'
+    // prompt matcher must see the un-advised prompt.
+    expect(configIds).toContain('advisor-watchdog')
+    expect(topIds).not.toContain('advisor-watchdog')
+    expect(configIds.indexOf('advisor-watchdog')).toBeGreaterThan(configIds.indexOf('turn-rules'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
     // after edit-recovery-hint, with NO new isolate key. Its post-execute

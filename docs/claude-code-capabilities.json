@@ -156,6 +156,56 @@
     }
   },
   "capabilities": {
+    "engine.advisor-watchdog": {
+      "title": "Advisor watchdog (opt-in second model reviewing every turn)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. An opt-in second model, on its own cheap lane (one-shot runSideQuery with onUnrouted 'skip' and rejectToolCalls), keeps per-session snapshots of the newest qualifying llm/stream request and, at each agent/turn-stopping, reviews the window since its cursor and emits severity-tiered notes (nit/concern/blocker) delivered by a resolve-time agent.inject() with source kind 'advisor'; emission guard (exact-set denylist, flat dedupe LRU, immune window, per-run budget, session cap), quarantine scan, and a per-session JSONL run journal. Ships dark (cc-advisor.enabled: false).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: advisor-watchdog"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/advisor-watchdog/src/wiring.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/advisor-watchdog/src/guard.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/advisor-watchdog/tests/smoke.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/advisor-watchdog/tests/guard.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: no CC counterpart exists. An opt-in second-model reviewer ported from oh-my-pi's advisor, re-mechanized on the passive llm/stream snapshot seam + the agent/turn-stopping trigger, a one-shot runSideQuery execution seam with a hard no-inherit rule, and resolve-time inject delivery."
+      }
+    },
     "engine.agent-loop": {
       "title": "Agent loop + tool pipeline",
       "category": "engine",

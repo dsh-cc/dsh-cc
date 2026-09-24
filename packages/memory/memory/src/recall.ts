@@ -201,7 +201,7 @@ function isFilesPayload(value: unknown): value is { files: readonly unknown[] } 
  * self-feeding phantom loop. KNOW YOUR INJECTOR: any new injected message
  * source kind must be added here.
  */
-const INJECTED_SOURCE_DENYLIST: readonly string[] = ['memory', 'cc-subagent-children', 'cc-workflow-completion']
+const INJECTED_SOURCE_DENYLIST: readonly string[] = ['memory', 'cc-subagent-children', 'cc-workflow-completion', 'advisor']
 
 /** Structural subset of the subagent seam used by the selector. */
 interface SubagentLike {
