@@ -1,6 +1,6 @@
 # Turn rules: a non-interrupting rule engine that fires only when the model goes off-script
 
-**Status:** **Proposed** — critic cold review round 1 (2026-09-23, design soundness) incorporated; critic cold review round 2 (2026-09-23, implementation-readiness audit, GO-WITH-AMENDMENTS) incorporated: rule-ingestion path pinned to the real loader surface, turn counter redefined on `agent/turn-stopping`, "hidden" wording replaced by attributed source-kind injection with a self-feed denylist, subagent stance fixed to top-level-only, ledger schema/layout committed, three wrong anchors corrected.
+**Status:** **Implemented** — PR #135 (branch `worktree-turn-rules`): critic cold review round 1 (2026-09-23, design soundness) incorporated; critic cold review round 2 (2026-09-23, implementation-readiness audit, GO-WITH-AMENDMENTS) incorporated: rule-ingestion path pinned to the real loader surface, turn counter redefined on `agent/turn-stopping`, "hidden" wording replaced by attributed source-kind injection with a self-feed denylist, subagent stance fixed to top-level-only, ledger schema/layout committed, three wrong anchors corrected; round-2 delta re-review fixes applied (ptc.ts labeled harness-repo read-only reference, trigger keys read off `document.data`, flavor filter after manifest parse, explicit-`pluginDirs` divergence recorded as a v0 limitation).
 **Date:** 2026-09-23
 **Worktree:** `.claude/worktrees/oh-my-pi` (branch `worktree-oh-my-pi`) — doc origin; implementation worktree `.claude/worktrees/turn-rules`.
 
