@@ -60,6 +60,16 @@ export { registerListeners } from './wiring.ts'
 export const name = 'cc-advisor-watchdog'
 
 /**
+ * Cordis lazy-injection declaration: the resolve-time side query reaches
+ * `ctx.llm` (runSideQuery → `ctx.llm.stream`) from THIS plugin's context —
+ * without `inject: ['llm']`, cordis throws "cannot get property 'llm' without
+ * inject" at call time (tool-web-fetch / session-title-provider precedent;
+ * verified live in the 2026-09-24 dogfood: every run journaled
+ * `reason: 'error'` in 1-2ms until this declaration landed).
+ */
+export const inject = ['llm']
+
+/**
  * Mount the plugin: register the settings namespace and the two listeners.
  * Plain plugin — no Service, no isolate key.
  * @param ctx - the plug context.

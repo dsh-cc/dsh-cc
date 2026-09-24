@@ -7,6 +7,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 describe('advisor output contract (§4.3)', () => {
+  it('declares cordis inject for the llm service (runtime side-query access)', async () => {
+    // Live-dogfood regression (2026-09-24): without this declaration every
+    // side query threw "cannot get property 'llm' without inject" and the
+    // journal recorded reason:'error' in ~1ms. Hand-built test contexts mount
+    // llm on the root ctx, so only this pin guards the plugin definition.
+    const mod = await import('../src/index.ts')
+    expect(mod.inject).toContain('llm')
+  })
+
   it('parses a bare JSON note list', () => {
     const out = parseAdvisorNotes('{"notes":[{"severity":"concern","text":"missing await"}]}')
     expect(out).toEqual({ ok: true, notes: [{ severity: 'concern', text: 'missing await' }] })

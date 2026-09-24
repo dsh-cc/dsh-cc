@@ -191,3 +191,13 @@ export function apply(ctx: Context): void {
 
 /** Cordis plugin id. */
 export const name = 'cc-prompt-suggest'
+
+/**
+ * Cordis lazy-injection declaration: the turn-stopping listener reaches
+ * `ctx.llm` (runSideQuery → `ctx.llm.stream`) from THIS plugin's context.
+ * Without it, cordis throws "cannot get property 'llm' without inject" at
+ * call time and every suggestion call silently fails (verified live on the
+ * advisor's identical shape, 2026-09-24; tool-web-fetch /
+ * session-title-provider precedent).
+ */
+export const inject = ['llm']
