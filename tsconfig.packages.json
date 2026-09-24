@@ -113,6 +113,9 @@
       "path": "./packages/interaction/turn-rules"
     },
     {
+      "path": "./packages/interaction/lsp-on-write"
+    },
+    {
       "path": "./packages/settings/settings-ns"
     },
     {

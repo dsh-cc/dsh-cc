@@ -33,7 +33,7 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { createTransport, buildAuthProvider } from './transport.ts'
 import type { TransportContext } from './transport.ts'
 import { formatStdioStderrForWarn, stdioStderrTail } from './stdio-stderr.ts'
-import { DEFAULT_DEFER_TOOL_THRESHOLD, emptyToolGeneration, syncTools } from './tools.ts'
+import { callToolUncached, DEFAULT_DEFER_TOOL_THRESHOLD, emptyToolGeneration, syncTools } from './tools.ts'
 import type { ToolBridgeOptions, ToolGeneration } from './tools.ts'
 import { syncResources } from './resources.ts'
 import type { ResourceDisposers } from './resources.ts'
@@ -139,6 +139,8 @@ export interface ConnectionHandle {
    * counts listed tools hidden behind ToolSearch. `eager + deferred === toolCount()`.
    */
   toolBreakdown(): { eager: number; deferred: number }
+  /** One UNCACHED `tools/call` on the live client, bypassing the tools waterfall (read-only inspection tools only); throws when disconnected or on MCP `isError`. */
+  callTool(rawName: string, args: Record<string, unknown>, options: { timeoutMs?: number; signal?: AbortSignal }): Promise<Record<string, unknown>>
 }
 
 /** All registrations owned by one server generation, keyed by swap target. */
@@ -448,6 +450,25 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         eager: registrations.tools.eagerCount + registrations.resources.size,
         deferred: registrations.tools.deferredCount,
       }
+    },
+    async callTool(rawName, args, options) {
+      const generation = client
+      if (generation === undefined) {
+        throw new Error(`${label}: no established connection — callTool unavailable`)
+      }
+      const result = await callToolUncached(
+        generation, rawName, args,
+        options.signal ?? new AbortController().signal,
+        options.timeoutMs ?? opts.toolCallTimeoutMs,
+      )
+      // MCP isError → throw, preserved from the executor path (tools.ts).
+      if (result.isError === true) {
+        const text = (Array.isArray(result.content) ? result.content : [])
+          .map((block) => (typeof block === 'object' && block !== null && (block as { type?: string }).type === 'text' ? String((block as { text?: unknown }).text ?? '') : ''))
+          .filter((t) => t.length > 0).join('\n')
+        throw new Error(text || `mcp tool "${rawName}" failed`)
+      }
+      return result
     },
     async dispose(): Promise<void> {
       disposed = true

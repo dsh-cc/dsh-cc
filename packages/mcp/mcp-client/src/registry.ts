@@ -43,12 +43,27 @@ export interface McpConnectionEntry {
   authRequired?: boolean
 }
 
+/** Per-call options for {@link McpConnectionControl.callTool}. */
+export interface McpCallToolOptions {
+  /** Per-call timeout in milliseconds; defaults to the connection's `toolCallTimeoutMs`. */
+  timeoutMs?: number
+  /** Cancellation signal for the call. */
+  signal?: AbortSignal
+}
+
 /** Per-instance control surface the owning mcp-client plugin wires to its supervisor. */
 export interface McpConnectionControl {
   /** Stop the current connection and unregister its tools; the entry is marked `disconnected`. */
   disconnect(): Promise<void>
   /** Tear down the current connection and establish a fresh one; the entry is marked `connecting` then `ready`/`error`. */
   reconnect(): Promise<void>
+  /**
+   * Issue one uncached `tools/call` on the live client, bypassing the tools
+   * waterfall (no permission gating, no audit — harness-internal read-only
+   * inspection tools only). Throws when disconnected; MCP `isError: true`
+   * surfaces as a throw.
+   */
+  callTool(rawName: string, args: Record<string, unknown>, options?: McpCallToolOptions): Promise<Record<string, unknown>>
 }
 
 /** Live bookkeeping for one registered server instance. */
@@ -169,6 +184,28 @@ export class McpConnectionsService extends Service {
     const managed = this.require(name)
     this.report(name, 'connecting')
     await managed.control.reconnect()
+  }
+
+  /**
+   * Call one raw MCP tool on a registered server, uncached, straight through
+   * the connection supervisor (never the tools waterfall). Absent server or
+   * missing `callTool` control → throw; MCP `isError: true` → throw.
+   * @param name - the instance `serverName`.
+   * @param rawName - the MCP server's own tool name.
+   * @param args - tool arguments (losslessly JSON-serializable).
+   * @param options - per-call timeout and signal.
+   */
+  async callTool(
+    name: string,
+    rawName: string,
+    args: Record<string, unknown>,
+    options: McpCallToolOptions = {},
+  ): Promise<Record<string, unknown>> {
+    const { control } = this.require(name)
+    if (control.callTool === undefined) {
+      throw new Error(`mcpConnections: server "${name}" does not expose a callTool control`)
+    }
+    return control.callTool(rawName, args, options)
   }
 
   private require(name: string): Managed {

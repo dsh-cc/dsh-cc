@@ -1,0 +1,24 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../workspace/session-cwd"
+    },
+    {
+      "path": "../../mcp/mcp-client"
+    }
+  ]
+}

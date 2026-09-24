@@ -284,6 +284,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       const outcome = await connect()
       if (outcome.error !== undefined) throw outcome.error
     },
+    async callTool(rawName, args, options) {
+      const handle = current
+      if (handle === undefined) {
+        throw new Error(`mcp-client(${config.serverName}): no established connection — callTool unavailable`)
+      }
+      return handle.callTool(rawName, args, options ?? {})
+    },
   }
   registry.register(config.serverName, control, authRequired)
 

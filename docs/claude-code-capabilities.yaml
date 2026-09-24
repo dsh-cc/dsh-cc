@@ -417,11 +417,13 @@ capabilities:
       refs: []
     dimensions:
       recognized: true
-      mounted: false
+      mounted: true
       behavioral: partial
       ux: partial
     evidence:
       - { type: test, path: packages/bundle/cc-shell/tests/lsp-bundle.spec.ts }
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: lsp-on-write" }
+      - { type: source, path: packages/interaction/lsp-on-write/src/wiring.ts, anchor: "registerListener" }
     deviation:
       kind: downgrade
       summary: >-
@@ -433,7 +435,10 @@ capabilities:
         composition (no lsp rows in cordis.patch.yml/agent.cordis.yml).
         cc-plugin-loader does not parse lspServers/.lsp.json manifests; PreToolUse
         hooks ignore additionalContext. /ide and editor pods remain host-shell
-        scope; headless does not apply.
+        scope; headless does not apply. Diagnostics-on-write is now mounted
+        (lsp-on-write preset row) but depends on the user's serena MCP mount,
+        is settings-gated and dark by default (`cc-lsp-on-write.enabled`,
+        user layer), and is diagnostics-only — no navigation surface.
 
   engine.microcompact:
     title: Model-free tool-result microcompaction
