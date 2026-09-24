@@ -71,6 +71,9 @@
       "path": "./packages/core/tool-sleep"
     },
     {
+      "path": "./packages/core/tool-manage-skill"
+    },
+    {
       "path": "./packages/core/tool-web-fetch"
     },
     {

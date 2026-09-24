@@ -107,4 +107,32 @@ describe('discoverCcSkills', () => {
     expect(extra).toBeDefined()
     expect(extra?.source).toBe('additional')
   })
+
+  it('orders the learned root last, below user/project/additional', async () => {
+    const home = await tempDir('home')
+    const proj = await tempDir('proj')
+    await mkdir(join(proj, '.git'), { recursive: true })
+    const roots = await discoverCcRoots({
+      dshHome: home,
+      projectCwd: proj,
+      additionalDirs: [join(proj, '.claude-add')],
+    })
+    const sources = roots.map(r => r.source)
+    expect(sources[sources.length - 1]).toBe('learned')
+    expect(sources.indexOf('user')).toBeLessThan(sources.indexOf('additional'))
+    expect(sources.indexOf('additional')).toBeLessThan(sources.indexOf('learned'))
+    const learned = roots.find(r => r.source === 'learned')
+    expect(learned?.path).toBe(join(home, 'learned-skills'))
+    expect(learned?.rank).toBe(500)
+  })
+
+  it('discovers a learned skill with source learned and rank 500', async () => {
+    const home = await tempDir('home')
+    await writeSkill(join(home, 'learned-skills'), 'learned-skill', 'A learned skill')
+    const skills = await discoverCcSkills({ dshHome: home, additionalDirs: [] })
+    const learned = skills.find((s: CcSkillFile) => s.name === 'learned-skill')
+    expect(learned).toBeDefined()
+    expect(learned?.source).toBe('learned')
+    expect(learned?.rank).toBe(500)
+  })
 })

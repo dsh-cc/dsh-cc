@@ -62,6 +62,7 @@
     "@dsh-cc/subagent-task": "workspace:^",
     "@dsh-cc/tool-append-order": "workspace:^",
     "@dsh-cc/tool-git-worktree": "workspace:^",
+    "@dsh-cc/tool-manage-skill": "workspace:^",
     "@dsh-cc/tool-notebook-edit": "workspace:^",
     "@dsh-cc/tool-search": "workspace:^",
     "@dsh-cc/tool-sleep": "workspace:^",

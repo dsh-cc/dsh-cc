@@ -1794,7 +1794,11 @@ capabilities:
     category: commands
     plane: preset
     upstream:
-      summary: dsh-cc extension — distill recurring failure→success corrections from session transcripts into memory.
+      summary: >-
+        dsh-cc extension — distill recurring failure→success corrections from
+        session transcripts into memory, with an additional `promote=<name>`
+        step that distills a finding into a learned skill under
+        $DSH_HOME/skills/learned; CC has no equivalent for the promotion step.
       refs: []
     dimensions:
       recognized: true
@@ -1804,7 +1808,7 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-learn" }
       - { type: source, path: packages/session/session-forensics/src/analyze/error-retry.ts, anchor: "analyzeErrorRetry" }
-      - { type: test, path: packages/session/command-learn/tests/command-learn.spec.ts }
+      - { type: test, path: packages/session/command-learn/tests/command-learn.spec.ts, anchor: "promotes the single finding with exact frontmatter and reports both paths" }
       - { type: test, path: packages/session/session-forensics/tests/error-retry.spec.ts }
     deviation: { kind: none }
 
@@ -2278,6 +2282,27 @@ capabilities:
         grows an mtime field.
 
   # ── skills ──────────────────────────────────────────────────────────────
+  skills.manage-skill:
+    title: ManageSkill tool (learned-skill CRUD)
+    category: skills
+    plane: preset
+    upstream:
+      summary: >-
+        dsh-cc extension — model-callable `manage_skill` tool for the learned
+        skills under $DSH_HOME/skills/learned (list/create/update/delete,
+        learned→authored shadowing refusals, `skills/learned-changed` events);
+        CC has no equivalent.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-manage-skill" }
+      - { type: test, path: packages/core/tool-manage-skill/tests/tools.spec.ts }
+    deviation: { kind: none }
+
   skills.system:
     title: Skills system
     category: skills

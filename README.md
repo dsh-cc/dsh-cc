@@ -99,7 +99,7 @@ Install them inside a session:
 | Command surface | 21 | 8 | 1 | 2 |
 | Sessions and context | 0 | 1 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
-| Skills | 0 | 1 | 0 | 0 |
+| Skills | 1 | 1 | 0 | 0 |
 | Subagents | 0 | 2 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 3 | 0 | 0 |
