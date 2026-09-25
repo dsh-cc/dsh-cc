@@ -24,7 +24,7 @@ export const SYSTEMONE_PROTOCOL: ModelProtocol = 'systemone'
  * explicit `protocol` field (same heuristic as the permission-rules route
  * policy's arming check).
  */
-export const SYSTEMONE_MODEL_FAMILY_PREFIX = 'llmbox_systemone/'
+const SYSTEMONE_MODEL_FAMILY_PREFIX = 'llmbox_systemone/'
 
 /** Stable machine-readable code carried by {@link SystemOneChatModelError}. */
 export const SYSTEMONE_CHAT_MODEL_ERROR_CODE = 'SYSTEMONE_NOT_CHAT_MODEL'

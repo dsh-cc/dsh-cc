@@ -5,14 +5,18 @@
  * chat classifier; `backend: 'auto'` picks the `gauge` System One lane only
  * when gauge is ARMED — configured (inspector verdict `route` via
  * `configured`/`one-hop`) AND its merged alias entry carries the systemone
- * protocol (explicit `protocol` field or the `llmbox_systemone/` model-id
- * family prefix). Every other shape falls back to `'haiku'` silently.
+ * protocol (explicit `protocol: 'systemone'` field, or a model id that
+ * contains the `llmbox_systemone/` segment). Every other shape falls back to
+ * `'haiku'` silently.
  *
  * The gauge probe uses the inspector face (warning-free by construction);
  * when the `ccModelRoutes` service is unmounted it mirrors the overlay
- * fallback over `createModelInspector`. The protocol bit is never read from
- * the route — inspector results cannot carry it — but from the merged alias
- * map entry (settings overlay; the blessed arming form lives in settings).
+ * fallback over `createModelInspector`. The protocol bit is read from the
+ * merged alias map entry (settings overlay; the blessed arming form lives in
+ * settings) via the shared `isSystemOneTarget`, not from the route: since
+ * #151 resolved/inspected routes do carry `protocol: 'systemone'` (so chat
+ * paths can reject them), but a string-form `llmbox_systemone/…` entry is
+ * marked System One on the route and still must never arm.
  * The helper NEVER calls `resolveDetailed('gauge')` merely to test
  * inheritance (spurious inherit warning).
  *
@@ -24,6 +28,7 @@ import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import {
   MODEL_ALIASES_NAMESPACE,
   createModelInspector,
+  isSystemOneTarget,
   mergeAliasMaps,
   type AliasInspection,
   type AliasTarget,
@@ -65,14 +70,15 @@ export function resetPolicyWarned(): void {
 }
 
 /**
- * Protocol arming check on the merged alias entry for `gauge`: object form
- * with `protocol: 'systemone'`, or the model-id family prefix heuristic.
+ * Protocol arming check on the merged alias entry for `gauge`: an object-form
+ * System One target (the shared `isSystemOneTarget` rule — explicit
+ * `protocol: 'systemone'`, or a model id containing `llmbox_systemone/`).
  * A string entry NEVER arms (indistinguishable from a chat misconfig —
  * flagged with the gauge-string-pair warn-once instead).
  */
 function isSystemOneEntry(entry: AliasTarget | undefined): boolean {
   if (entry === undefined || entry === null || typeof entry === 'string') return false
-  return entry.protocol === 'systemone' || entry.model.includes('llmbox_systemone/')
+  return isSystemOneTarget(entry)
 }
 
 /** Read the merged `model-aliases` overlay map from the settings provider. */

@@ -1142,6 +1142,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/model-aliases':
+        specifier: workspace:^
+        version: link:../../compat/cc-model-aliases
       '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../permission-rules

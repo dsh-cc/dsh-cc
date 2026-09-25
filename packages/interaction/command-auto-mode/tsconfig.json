@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../compat/cc-model-aliases"
+    },
+    {
       "path": "../../interaction/command-usage"
     },
     {
