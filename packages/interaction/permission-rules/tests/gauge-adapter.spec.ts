@@ -77,8 +77,19 @@ describe('gateVerdict', () => {
     expect(gateVerdict(T1_ANSWER, opts)).toEqual({ verdict: 'allow', reason: '' })
   })
 
-  it('ask choice => ask with empty reason', () => {
-    expect(gateVerdict({ type: 'choice', choice: 'ask', probabilities: { allow: 0.28 } }, opts)).toEqual({ verdict: 'ask', reason: '' })
+  it('ask choice => ask with the annotated judged-ask reason', () => {
+    expect(gateVerdict({ type: 'choice', choice: 'ask', probabilities: { allow: 0.28, ask: 0.51, deny: 0.21 } }, opts)).toEqual({
+      verdict: 'ask',
+      reason: 'gauge judged ask (P(ask)=0.510)',
+    })
+  })
+
+  it('ask choice without an ask probability => bare judged-ask reason', () => {
+    expect(gateVerdict({ type: 'choice', choice: 'ask', probabilities: { allow: 0.28 } }, opts)).toEqual({ verdict: 'ask', reason: 'gauge judged ask' })
+  })
+
+  it('unrecognized choice label => fail-closed ask with the drift-forensics reason', () => {
+    expect(gateVerdict({ type: 'choice', choice: 'maybe', probabilities: { allow: 0.28 } }, opts)).toEqual({ verdict: 'ask', reason: 'unrecognized gauge choice' })
   })
 })
 

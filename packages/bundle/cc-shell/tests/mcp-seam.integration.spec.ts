@@ -75,12 +75,15 @@ describe('cc-shell plugin MCP seam — real mcp-client integration', () => {
     expect(entry).toBeDefined()
     expect(entry!.state).toBe('ready')
 
-    // Dispose: the tool unregisters and the registry entry goes away.
+    // Dispose: the tool unregisters and the registry entry goes away. Both
+    // removals are awaited inside ONE waitFor: they complete on independent
+    // async paths, so asserting the registry entry synchronously after the
+    // tools disappear flakes under load.
     dispose()
     await vi.waitFor(() => {
       expect(toolNames().some(n => n.startsWith('mcp__probe__'))).toBe(false)
+      expect(registry().entries().find(e => e.name === 'probe')).toBeUndefined()
     })
-    expect(registry().entries().find(e => e.name === 'probe')).toBeUndefined()
 
     // Same-name re-register after dispose: the pending-release ledger path —
     // clean remount, no duplicate-namespace rejection.

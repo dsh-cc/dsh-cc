@@ -118,7 +118,15 @@ export function gateVerdict(answer: SystemOneAnswer, opts: { allowThreshold: num
     }
     return { verdict: 'allow', reason: '' }
   }
-  return { verdict: 'ask', reason: '' }
+  if (answer.choice === 'ask') {
+    const probability = answer.probabilities.ask
+    const annotation = typeof probability === 'number' ? ` (P(ask)=${probability.toFixed(3)})` : ''
+    return { verdict: 'ask', reason: `gauge judged ask${annotation}` }
+  }
+  // The structural guard above validated the envelope, but the label is
+  // outside the verdict taxonomy (gateway-side drift) — fail closed with its
+  // own constant so drift is never confusable with a genuine ask judgment.
+  return { verdict: 'ask', reason: 'unrecognized gauge choice' }
 }
 
 /** Probe-pinned truncation sentinel: state was silently truncated at the window. */
