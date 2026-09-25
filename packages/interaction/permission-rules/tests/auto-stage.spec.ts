@@ -939,7 +939,7 @@ describe('auto-stage × System One gauge lane (B2b)', () => {
       verdict: 'allow',
       provider: 'deepseek',
       model: 'llmbox_systemone/laya',
-      route: 'systemone/llmbox_systemone/laya',
+      route: 'deepseek/llmbox_systemone/laya',
       probabilities: T1_ENVELOPE.answers.verdict.probabilities,
       confidence: 0.0555,
       cacheHit: false,
@@ -977,9 +977,9 @@ describe('auto-stage × System One gauge lane (B2b)', () => {
       expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: `cmd-${i}` } }))).toMatchObject({ kind: 'ask' })
       expect(lastAudit(h).failure).toBe('error')
     }
-    // 4th call: the breaker for `systemone/<model>` is open.
+    // 4th call: the breaker for `${provider}/${model}` is open.
     expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'cmd-3' } })))
-      .toEqual({ kind: 'ask', reason: 'auto-mode classifier unavailable: route systemone/llmbox_systemone/laya breaker open' })
+      .toEqual({ kind: 'ask', reason: 'auto-mode classifier unavailable: route deepseek/llmbox_systemone/laya breaker open' })
     expect(fetchImpl).toHaveBeenCalledTimes(3)
   })
 
@@ -991,5 +991,49 @@ describe('auto-stage × System One gauge lane (B2b)', () => {
     expect(await stage.maybeEscalate(decided(), exec({ session }))).toBe('allow')
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(lastAudit(h).cacheHit).toBe(true)
+  })
+
+  it('cross-restart attribution: log with 3 provider/model-attributed systemone failures opens the breaker on the first call (no classify)', async () => {
+    const { h, fetchImpl } = gaugeHarness([])
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('g6-restart-seed')
+    // The durable log attributes by `${provider}/${model}` (classifier-breaker fold);
+    // the breaker key must match or a restored streak never seeds.
+    for (let i = 0; i < 3; i += 1) {
+      appendSessionClassifier(session, {
+        tool: 'Bash',
+        verdict: 'ask',
+        provider: 'deepseek',
+        model: 'llmbox_systemone/laya',
+        failure: 'error',
+        latencyMs: 10,
+        cacheHit: false,
+      } as ClassifierAuditEventData)
+    }
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'cmd-0' } })))
+      .toEqual({ kind: 'ask', reason: 'auto-mode classifier unavailable: route deepseek/llmbox_systemone/laya breaker open' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, ClassifierAuditEventData]>
+    expect(calls.filter(([, e]) => e.failure === 'breaker')).toHaveLength(1)
+  })
+
+  it('legacy unattributed (route-only) events never seed the systemone breaker', async () => {
+    const { h, fetchImpl } = gaugeHarness([structuredClone(T1_ENVELOPE)])
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('g7-legacy-key')
+    for (let i = 0; i < 3; i += 1) {
+      appendSessionClassifier(session, {
+        tool: 'Bash',
+        verdict: 'ask',
+        route: 'systemone/llmbox_systemone/laya',
+        failure: 'malformed',
+        latencyMs: 10,
+        cacheHit: false,
+      } as ClassifierAuditEventData)
+    }
+    // Old key shape (`systemone/<model>`) carried no provider/model attribution,
+    // so the fold skips those events and the first call still classifies.
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'cmd-0' } }))).toBe('allow')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 })
