@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/lsp-on-write",
   "description": "LSP diagnostics-on-write: after a successful edit/write/NotebookEdit, pull the touched file's diagnostics from the running serena language servers via the mcpConnections registry and append them into the same tool result; settings-gated, dark by default",
-  "version": "0.8.1-rc.1",
+  "version": "0.8.0-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

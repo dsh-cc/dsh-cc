@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/edit-recovery-hint",
   "description": "Edit recovery hint: on an edit-tool not-found failure of a multi-line old_string, append a fixed static recovery-advice message to the same tool result as additionalContexts; user-layer-only setting",
-  "version": "0.8.1-rc.1",
+  "version": "0.8.0-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

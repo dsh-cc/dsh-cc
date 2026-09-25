@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/tool-manage-skill",
   "description": "CC-style manage_skill tool: create/update/delete/list learned skills under $DSH_HOME/learned-skills via the shared LearnedSkillStore, gated by the cc-learn.enabled setting",
-  "version": "0.8.1-rc.1",
+  "version": "0.8.0-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

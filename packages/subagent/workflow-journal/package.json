@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/workflow-journal",
   "description": "CC-parity workflow resume journal: a wrapping subagent provider (`cc-workflow-journal`) with frozen-until-first-miss replay over a per-run result journal",
-  "version": "0.8.1-rc.1",
+  "version": "0.8.0-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

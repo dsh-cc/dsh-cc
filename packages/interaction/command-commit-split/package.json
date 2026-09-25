@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/command-commit-split",
   "description": "Advisory dry-run /commit-split command: collects the working-tree diff and asks the deep-reasoning lane for an ordered atomic-commit split plan; never commits",
-  "version": "0.8.1-rc.1",
+  "version": "0.8.0-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

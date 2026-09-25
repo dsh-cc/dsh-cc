@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/pi-tui",
-  "version": "0.8.1-rc.1",
+  "version": "0.8.0-rc.4",
   "description": "Vendored upstream pi-tui renderer (earendil-works/pi packages/tui) — see PORTING.md",
   "type": "module",
   "module": "lib/index.js",

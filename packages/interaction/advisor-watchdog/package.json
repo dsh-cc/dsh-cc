@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/advisor-watchdog",
   "description": "Advisor watchdog: an opt-in second model (cheap lane via runSideQuery) reading every completed turn's delta and injecting severity-tiered advisory notes at the next step; default off",
-  "version": "0.8.1-rc.1",
+  "version": "0.8.0-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
