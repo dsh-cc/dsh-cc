@@ -15,6 +15,10 @@ const {
   sameSingaporeWeek,
   nextLineVersion,
   parseRc,
+  parseVersion,
+  cmpVersion,
+  selectLine,
+  assertMonotonic,
 } = await import(pathToFileURL(join(__dirname, "daily-release-decide.mjs")).href);
 
 let failures = 0;
@@ -215,6 +219,184 @@ check("parseRc extracts line + n", () => {
   const p = parseRc("v0.8.0-rc.2");
   assert.equal(p.line, "0.8.0");
   assert.equal(p.n, 2);
+});
+
+/* ---- #144 regression: never propose an rc below npm `next` (plan §6.2/§6.6) ---- */
+
+// Real tag set on main at 043787a (2026-09-25); npm: latest=0.7.1, next=0.8.1-rc.1.
+const TAGS_144 = [
+  { name: "v0.7.0", date: sgt("2026-08-20") },
+  { name: "v0.7.1-rc.1", date: sgt("2026-08-28") },
+  { name: "v0.7.1-rc.2", date: sgt("2026-08-29") },
+  { name: "v0.7.1-rc.3", date: sgt("2026-08-30") },
+  { name: "v0.7.1", date: sgt("2026-09-07") },
+  { name: "v0.8.0-rc.1", date: sgt("2026-09-15") },
+  { name: "v0.8.0-rc.2", date: sgt("2026-09-16") },
+  { name: "v0.8.0-rc.3", date: sgt("2026-09-17") },
+  { name: "v0.8.1-rc.1", date: sgt("2026-09-24") },
+];
+const MON_0928 = sgt("2026-09-28"); // next Monday cron
+
+/** Mirror of gatherInputFromGit's rc lookup, on the selected line. */
+function gatherLike(over) {
+  const inp = { ...base, ...over };
+  const line = selectLine(inp);
+  let best = null;
+  for (const t of inp.tags) {
+    const p = parseRc(t.name);
+    if (p && p.line === line && (!best || p.n > best.n)) best = { ...p, name: t.name };
+  }
+  return { ...inp, latestRcOnLine: best ? best.name : null };
+}
+
+check("selectLine: base 0.8.0 but v0.8.1-rc.1 tagged → 0.8.1", () => {
+  assert.equal(selectLine({ lastStable: "v0.7.1", bump: "auto", hasFeatSinceStable: true, tags: TAGS_144 }), "0.8.1");
+});
+
+check("selectLine: rc tags at/below lastStable are ignored", () => {
+  assert.equal(
+    selectLine({
+      lastStable: "v0.7.1",
+      bump: "auto",
+      hasFeatSinceStable: true,
+      tags: [{ name: "v0.7.1-rc.3", date: sgt("2026-08-30") }],
+      npmNext: "0.7.1",
+    }),
+    "0.8.0",
+  );
+});
+
+check("selectLine: npm next line with no git tag wins over base", () => {
+  assert.equal(
+    selectLine({ lastStable: "v0.7.1", bump: "auto", hasFeatSinceStable: false, tags: [], npmNext: "0.8.1-rc.1" }),
+    "0.8.1",
+  );
+});
+
+check("#144 repro: latest=0.7.1 next=0.8.1-rc.1, tags ..v0.8.0-rc.3 + v0.8.1-rc.1, new commits → 0.8.1-rc.2", () => {
+  const r = decide(
+    gatherLike({
+      now: MON_0928,
+      tags: TAGS_144,
+      headAheadOfStable: true,
+      headAheadOfLatestRc: true,
+      hasFeatSinceStable: true,
+      npmNext: "0.8.1-rc.1",
+    }),
+  );
+  assert.equal(r.action, "propose");
+  assert.equal(r.version, "0.8.1-rc.2");
+  assert.equal(r.reason, "rc_bump");
+  assert.equal(r.line, "0.8.1");
+});
+
+check("#144 repro: stale caller latestRcOnLine=v0.8.0-rc.3 is ignored → 0.8.1-rc.2 (never 0.8.0-rc.4)", () => {
+  const r = decide({
+    ...base,
+    now: MON_0928,
+    tags: TAGS_144,
+    latestRcOnLine: "v0.8.0-rc.3", // what the pre-fix gather passed
+    headAheadOfStable: true,
+    headAheadOfLatestRc: true,
+    npmNext: "0.8.1-rc.1",
+  });
+  assert.equal(r.version, "0.8.1-rc.2");
+});
+
+check("#144 repro without npm (registry down) → still 0.8.1-rc.2 from git tags", () => {
+  const r = decide(
+    gatherLike({ now: MON_0928, tags: TAGS_144, headAheadOfLatestRc: true, npmNext: null }),
+  );
+  assert.equal(r.version, "0.8.1-rc.2");
+});
+
+check("#144 shape, no commits since v0.8.1-rc.1 → stabilize 0.8.1 (never 0.8.0*)", () => {
+  const r = decide(
+    gatherLike({ now: MON_0928, tags: TAGS_144, headAheadOfLatestRc: false, npmNext: "0.8.1-rc.1" }),
+  );
+  assert.equal(r.action, "propose");
+  assert.equal(r.reason, "stabilize");
+  assert.equal(r.version, "0.8.1");
+});
+
+check("next above stable's rc line with NO matching git tag → rc past next", () => {
+  for (const hasFeatSinceStable of [true, false]) {
+    const r = decide(
+      gatherLike({
+        now: MON_0928,
+        tags: TAGS_144.filter((t) => t.name !== "v0.8.1-rc.1"),
+        headAheadOfLatestRc: false, // no tag on 0.8.1 → gather reports false
+        hasFeatSinceStable,
+        npmNext: "0.8.1-rc.1",
+      }),
+    );
+    assert.equal(r.action, "propose");
+    assert.equal(r.line, "0.8.1", `hasFeat=${hasFeatSinceStable}`);
+    assert.equal(r.version, "0.8.1-rc.2", `hasFeat=${hasFeatSinceStable}`);
+  }
+});
+
+check("npm next ahead of the highest tag on the same line → skip past next", () => {
+  const r = decide(
+    gatherLike({
+      now: MON_0928,
+      tags: TAGS_144, // highest merged tag on 0.8.1 is rc.1
+      headAheadOfLatestRc: false,
+      npmNext: "0.8.1-rc.3", // rc.2/rc.3 published without a merged tag
+    }),
+  );
+  assert.equal(r.version, "0.8.1-rc.4");
+});
+
+check("invalid npmNext throws", () => {
+  assert.throws(() => decide({ ...base, now: MON_0928, npmNext: "latest" }), /invalid npmNext/);
+});
+
+check("assertMonotonic: 0.8.0-rc.4 vs v0.8.1-rc.1 tag → monotonic_violation", () => {
+  assert.throws(() => assertMonotonic("0.8.0-rc.4", TAGS_144), /monotonic_violation: 0\.8\.0-rc\.4 <= v0\.8\.1-rc\.1/);
+});
+
+check("assertMonotonic: rc below npm next (no tags) → monotonic_violation", () => {
+  assert.throws(() => assertMonotonic("0.8.0-rc.4", [], parseVersion("0.8.1-rc.1")), /monotonic_violation/);
+  assertMonotonic("0.8.1-rc.2", TAGS_144, parseVersion("0.8.1-rc.1"));
+  assertMonotonic("0.8.1", TAGS_144, parseVersion("0.8.1-rc.1")); // stable vs stable tags only
+});
+
+check("invariant: every proposed rc >= npm next and > every rc tag; stable > every stable tag", () => {
+  const tagSets = [
+    [],
+    TAGS_144,
+    TAGS_144.filter((t) => t.name !== "v0.8.1-rc.1"),
+    TAGS_144.filter((t) => !t.name.startsWith("v0.8.0")),
+  ];
+  const nexts = [null, "0.7.1", "0.8.0-rc.3", "0.8.1-rc.1", "0.8.1-rc.5", "0.9.0-rc.1", "0.7.2-rc.1"];
+  let n = 0;
+  for (const tags of tagSets)
+    for (const npmNext of nexts)
+      for (const bump of ["auto", "patch", "minor"])
+        for (const hasFeatSinceStable of [true, false])
+          for (const headAheadOfLatestRc of [true, false]) {
+            const inp = gatherLike({
+              now: MON_0928,
+              tags: [{ name: "v0.7.1", date: sgt("2026-09-07") }, ...tags],
+              bump,
+              hasFeatSinceStable,
+              headAheadOfLatestRc,
+              npmNext,
+            });
+            const r = decide(inp);
+            const v = parseVersion(r.version);
+            const ctx = JSON.stringify({ tags: tags.length, npmNext, bump, hasFeatSinceStable, headAheadOfLatestRc, r: r.version });
+            if (v.rc !== null && npmNext) {
+              assert.ok(cmpVersion(v, parseVersion(npmNext)) >= 0, `below next: ${ctx}`);
+            }
+            for (const t of inp.tags) {
+              const p = parseVersion(t.name);
+              if ((p.rc === null) === (v.rc === null)) assert.ok(cmpVersion(v, p) > 0, `not above ${t.name}: ${ctx}`);
+            }
+            n++;
+          }
+  assert.equal(n, 4 * 7 * 3 * 2 * 2);
 });
 
 if (failures > 0) {
