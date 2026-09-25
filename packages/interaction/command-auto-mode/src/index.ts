@@ -31,6 +31,7 @@ import {
   type ClassifierBackend,
 } from '@dsh-cc/permission-rules'
 import { helpable } from '@dsh-cc/command-usage'
+import { isSystemOneTarget, type AliasTarget } from '@dsh-cc/model-aliases'
 import { sanitize } from './sanitize.ts'
 
 export { sanitize } from './sanitize.ts'
@@ -248,9 +249,11 @@ type GaugeEntry = { provider?: unknown; model?: unknown; protocol?: unknown }
 
 /**
  * The armed gauge alias from the merged `model-aliases` overlay (§4.3):
- * object form `{provider, model}` + the protocol bit (explicit
- * `protocol: 'systemone'` or the `llmbox_systemone/` family-prefix
- * heuristic). `null` when the entry is unresolvable as a System One lane.
+ * object form `{provider, model}` + the protocol bit (an explicit `protocol`
+ * string is reported verbatim; otherwise the shared `isSystemOneTarget` rule
+ * from `@dsh-cc/model-aliases` — a model id containing `llmbox_systemone/` —
+ * yields `systemone`). `null` when the entry is unresolvable as a System One
+ * lane.
  */
 function gaugeInfo(settings: SettingsLike): { route: string; protocol: string } | null {
   const overlay = settings.get('model-aliases') as Record<string, unknown> | undefined
@@ -260,7 +263,7 @@ function gaugeInfo(settings: SettingsLike): { route: string; protocol: string } 
   if (typeof provider !== 'string' || typeof model !== 'string') return null
   const resolved =
     typeof protocol === 'string' ? protocol
-      : model.includes('llmbox_systemone/') ? 'systemone'
+      : isSystemOneTarget({ provider, model } satisfies AliasTarget) ? 'systemone'
         : undefined
   return resolved === undefined ? null : { route: `${provider}/${model}`, protocol: resolved }
 }

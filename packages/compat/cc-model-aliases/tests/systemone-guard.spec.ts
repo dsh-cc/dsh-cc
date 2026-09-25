@@ -20,17 +20,15 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import {
-  SYSTEMONE_CHAT_MODEL_ERROR_CODE,
   SystemOneChatModelError,
   apply as applyModelAliases,
   createModelInspector,
   createModelResolver,
-  findSystemOneTarget,
-  isSystemOneRoute,
   mergeAliasMaps,
   toAgentOptions,
   toOneShotRoute,
 } from '../src/index.ts'
+import { SYSTEMONE_CHAT_MODEL_ERROR_CODE, findSystemOneTarget, isSystemOneRoute } from '../src/systemone-guard.ts'
 
 /** The blessed arming form (settings overlay) for the System One gauge lane. */
 const BLESSED = {

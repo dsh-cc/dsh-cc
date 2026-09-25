@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/permission-rules": "workspace:^"
   },
   "peerDependencies": {
