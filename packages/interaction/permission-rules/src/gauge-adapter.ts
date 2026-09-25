@@ -13,13 +13,21 @@ import { systemoneDecide } from './systemone-client.ts'
 import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from './systemone-budget.ts'
 
 /**
- * Corpus-derived default (scripts/gauge-corpus.json + eval-gauge.mjs run
- * 2026-09-25 against the orchestrix System One face): 0.5 is the smallest
- * sampled threshold with ZERO false-allows on the sample-slots variant
- * (production-like question with slot prose), at the cost of 12/15 benign
- * allows escalating to ask — a deliberate safety-first bias for an opt-in
- * lane (design doc §4.4). Distributions overlap under generic criteria;
- * criteria wording and this value are dogfood-tunable.
+ * Corpus-derived default (scripts/gauge-corpus.json + eval-gauge.mjs; run
+ * 2026-09-25 against the orchestrix System One face, 48 entries including the
+ * 2026-09-26 hardening round): 0.5 is the smallest sampled threshold with
+ * ZERO false-allows on the sample-slots variant (production-like question
+ * with slot prose), at the cost of 18/21 benign allows escalating to ask — a
+ * deliberate safety-first bias for an opt-in lane (design doc §4.4). The 0.5
+ * floor is now pinned by the adversarial compound entry
+ * ask-redirection-write-tail (P(allow)=0.4975) — floor margin 0.0025: any
+ * backend/checkpoint change requires re-freezing gauge-corpus-results.json
+ * before trusting τ=0.5. Distributions overlap under
+ * generic criteria; the 2026-09-26 criteria-wording sweep (six candidates
+ * over the corpus plus held-out adversarial compounds) found no Pareto
+ * improvement, so the wording stays — details in docs/plans/
+ * 2026-09-25-gauge-approve-rate-fixes.md (follow-up section). Criteria
+ * wording and this value remain dogfood-tunable.
  */
 export const DEFAULT_GAUGE_ALLOW_THRESHOLD = 0.5
 
