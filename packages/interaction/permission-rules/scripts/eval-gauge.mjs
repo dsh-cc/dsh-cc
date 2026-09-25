@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { buildVerdictQuestion, renderSystemOneState, gateVerdict, isTruncated, DEFAULT_GAUGE_CONTEXT_WINDOW } from '../src/gauge-adapter.ts'
+import { prepareSystemOneInput, gateVerdict, isTruncated, DEFAULT_GAUGE_CONTEXT_WINDOW } from '../src/gauge-adapter.ts'
 import { systemoneDecide } from '../src/systemone-client.ts'
 
 const baseURL = process.argv[2] ?? 'http://127.0.0.1:8080'
@@ -33,10 +33,19 @@ for (let t = 0.3; t <= 0.7 + 1e-9; t += 0.025) TAUS.push(Number(t.toFixed(3)))
 
 const out = {}
 for (const [variantName, slots] of variants) {
-  const question = buildVerdictQuestion(slots)
   const rows = []
   for (const entry of corpus) {
-    const state = renderSystemOneState({ name: entry.tool, arguments: entry.arguments }, DEFAULT_GAUGE_CONTEXT_WINDOW)
+    // Production path (2026-09-25 Fix A): the single render site owns the
+    // token-budgeted state and the questions pair; budget exhaustion is an
+    // honest row, never a wire call.
+    const prepared = prepareSystemOneInput({ name: entry.tool, arguments: entry.arguments }, slots, DEFAULT_GAUGE_CONTEXT_WINDOW)
+    if (prepared.budgetExhausted) {
+      rows.push({ id: entry.id, expect: entry.expect, failure: 'budget', reason: 'state budget exhausted (question too large for window)' })
+      console.log(`${variantName} ${entry.id} [${entry.expect}] BUDGET-EXHAUSTED`)
+      continue
+    }
+    const state = prepared.state
+    const question = prepared.questions.verdict
     const t0 = Date.now()
     // Paced + 429-retrying call: the gateway shares an upstream qpm budget,
     // so sequential calls must be spaced and transient rate-limit errors

@@ -46,7 +46,7 @@ import type { AutoModeSettings } from './settings-schema.ts'
 import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, DEFAULT_HARD_DENY, expandSlot } from './slots.ts'
 import { createContextBundler } from './context-bundle.ts'
 import type { DecidedCall } from './decide.ts'
-import type { PermissionMode } from './types.ts'
+import type { PermissionMode, PermissionRule } from './types.ts'
 import {
   BREAKER_FAILURE_TAGS,
   CLASSIFIER_BREAKER_THRESHOLD,
@@ -97,6 +97,11 @@ export type AutoStageDeps = {
    * defaultMode). Wired from decide.ts's `effectiveMode`.
    */
   modeOf(exec: ToolExecution): PermissionMode
+  /**
+   * Fix B: the merged allow rules (pre-filtered view for the gauge evidence
+   * fold — `decideDeps.rules().allow`; optional so older wirings omit it).
+   */
+  allowEvidenceRules?(): readonly PermissionRule[]
   /** Read-only tool names (same set DecideDeps uses) — filters the tool-history fold. */
   readOnlyTools: ReadonlySet<string>
   /**
@@ -152,6 +157,8 @@ interface AutoModeSlice {
   backend: 'haiku' | 'auto'
   /** Raw configured gauge allow-gate threshold (no default here). */
   gaugeAllowThreshold: number | undefined
+  /** Fix B opt-out (absence-preserving; the gauge stage consumes default ON). */
+  gaugeAllowEvidence: boolean | undefined
   secondPass: boolean
   /** S5/D10: audit the raw classifier input when this flag is on. */
   auditFullText: boolean
@@ -175,6 +182,7 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
     cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
     backend: classifier?.backend ?? 'haiku',
     gaugeAllowThreshold: classifier?.gaugeAllowThreshold,
+    gaugeAllowEvidence: classifier?.gaugeAllowEvidence,
     secondPass: classifier?.secondPass === true,
     auditFullText: classifier?.auditFullText === true,
     enabled: classifier?.enabled === true,
@@ -347,6 +355,8 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
             environment: slice.environment,
           },
           gaugeAllowThreshold: slice.gaugeAllowThreshold ?? DEFAULT_GAUGE_ALLOW_THRESHOLD,
+          gaugeAllowEvidence: slice.gaugeAllowEvidence,
+          ...(deps.allowEvidenceRules === undefined ? {} : { allowEvidenceRules: deps.allowEvidenceRules() }),
           timeoutMs: slice.timeoutMs,
           auditFullText: slice.auditFullText,
         })

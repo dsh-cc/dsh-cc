@@ -199,6 +199,9 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     // A8 stale-mode revalidation: the SAME effective-mode resolution the
     // waterfall uses (plan overlay → session fold → defaultMode fallback).
     modeOf: (exec) => effectiveMode(decideDeps, exec),
+    // Fix B evidence source: the merged allow rules (settings + grants +
+    // config — the collector applies the user-originated source filter).
+    allowEvidenceRules: () => decideDeps.rules().allow,
     // D7 tool-history fold filter — the same set the waterfall's read-only
     // exemption consults.
     readOnlyTools: host.readOnlyTools,

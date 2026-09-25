@@ -6,11 +6,11 @@ import {
   classifyViaSystemOne,
   gateVerdict,
   isTruncated,
-  renderSystemOneState,
-  stateCapChars,
+  prepareSystemOneInput,
 } from '../src/gauge-adapter.ts'
 import type { GaugeSlots } from '../src/gauge-adapter.ts'
 import type { SystemOneAnswer } from '../src/systemone-client.ts'
+import { estimateSystemOneTokens } from '../src/systemone-budget.ts'
 
 const SLOTS: GaugeSlots = {
   hardDeny: ['rm -rf on home', 'chmod 777 /'],
@@ -93,36 +93,60 @@ describe('gateVerdict', () => {
   })
 })
 
-describe('isTruncated / renderSystemOneState', () => {
+describe('isTruncated', () => {
   it('sentinel fires at and over the window, not under', () => {
     expect(isTruncated({ input_tokens: 1024, output_tokens: 0 }, 1024)).toBe(true)
     expect(isTruncated({ input_tokens: 1025, output_tokens: 0 }, 1024)).toBe(true)
     expect(isTruncated({ input_tokens: 83, output_tokens: 0 }, 1024)).toBe(false)
   })
+})
 
-  it('stateCapChars is window * 3', () => {
-    expect(stateCapChars(1024)).toBe(3072)
+describe('prepareSystemOneInput', () => {
+  it('renders bash state as {tool, command} and file tools as {tool, file_path}', () => {
+    expect(prepareSystemOneInput({ name: 'Bash', arguments: { command: 'git status', timeout: 1 } }, SLOTS).state)
+      .toBe('{"tool":"Bash","command":"git status"}')
+    expect(prepareSystemOneInput({ name: 'Read', arguments: { file_path: '/a/b.ts' } }, SLOTS).state)
+      .toBe('{"tool":"Read","file_path":"/a/b.ts"}')
+    expect(prepareSystemOneInput({ name: 'Grep', arguments: { pattern: 'x' } }, SLOTS).state)
+      .toBe('{"tool":"Grep","arguments":{"pattern":"x"}}')
   })
 
-  it('renders bash state as {tool, command}', () => {
-    expect(renderSystemOneState({ name: 'Bash', arguments: { command: 'git status', timeout: 1 } })).toBe('{"tool":"Bash","command":"git status"}')
+  it('token-budgets the state at the default window', () => {
+    const prepared = prepareSystemOneInput({ name: 'Bash', arguments: { command: 'y'.repeat(10_000) } }, SLOTS)
+    // question + state + envelope − margin must fit the window (estimator math).
+    expect(4 - 16 + estimateSystemOneTokens(JSON.stringify(prepared.questions)) + estimateSystemOneTokens(prepared.state))
+      .toBeLessThanOrEqual(DEFAULT_GAUGE_CONTEXT_WINDOW)
+    expect(prepared.state.startsWith('{"tool":"Bash","command":"yy')).toBe(true)
+    expect(prepared.budgetExhausted).toBe(false)
   })
 
-  it('renders file tools as {tool, file_path} and others as {tool, arguments}', () => {
-    expect(renderSystemOneState({ name: 'Read', arguments: { file_path: '/a/b.ts' } })).toBe('{"tool":"Read","file_path":"/a/b.ts"}')
-    expect(renderSystemOneState({ name: 'Grep', arguments: { pattern: 'x' } })).toBe('{"tool":"Grep","arguments":{"pattern":"x"}}')
+  it('middle-elides the command payload, never head-only', () => {
+    // Risky suffix must survive the cut (M1/F3): head 2/3 + tail 1/3.
+    const prepared = prepareSystemOneInput(
+      { name: 'Bash', arguments: { command: `echo safe; ${'y'.repeat(6000)}; rm -rf /dangerous` } },
+      SLOTS,
+    )
+    expect(prepared.state).toContain('…')
+    expect(prepared.state.startsWith('{"tool":"Bash","command":"echo safe; yy')).toBe(true)
+    expect(prepared.state.endsWith('rm -rf /dangerous"}')).toBe(true)
   })
 
-  it('caps at window*3 chars with ellipsis suffix', () => {
-    const state = renderSystemOneState({ name: 'Bash', arguments: { command: 'y'.repeat(10_000) } }, 1024)
-    expect(state.length).toBe(stateCapChars(1024))
-    expect(state.endsWith('…')).toBe(true)
-    expect(state.startsWith('{"tool":"Bash","command":"yy')).toBe(true)
+  it('budgetExhausted when the question alone fills the window', () => {
+    const tiny: GaugeSlots = {
+      hardDeny: [`x${'长'.repeat(900)}`],
+      softDeny: [],
+      allowExceptions: [`y${'长'.repeat(900)}`],
+      environment: [`z${'长'.repeat(900)}`],
+    }
+    const prepared = prepareSystemOneInput({ name: 'Bash', arguments: { command: 'git status' } }, tiny)
+    expect(prepared.budgetExhausted).toBe(true)
+    expect(prepared.state).toBe('')
   })
 })
 
 describe('classifyViaSystemOne', () => {
   const slots = { hardDeny: [], softDeny: [], allowExceptions: [], environment: [] }
+  const prepared = () => prepareSystemOneInput({ name: 'Bash', arguments: { command: 'git status' } }, slots)
 
   function fetchWith(answers: Record<string, unknown>, inputTokens = 83) {
     return vi.fn(async () => Response.json({
@@ -134,18 +158,18 @@ describe('classifyViaSystemOne', () => {
 
   it('allow path attaches probabilities and confidence', async () => {
     const verdict = await classifyViaSystemOne(
-      { name: 'Bash', arguments: { command: 'git status' } },
+      prepared(),
       { baseURL: 'http://127.0.0.1:8080', model: 'llmbox_systemone/laya' },
-      { slots, timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T1_ANSWER }) },
+      { timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T1_ANSWER }) },
     )
     expect(verdict).toEqual({ verdict: 'allow', reason: '', probabilities: T1_ANSWER.probabilities, confidence: 0.0555 })
   })
 
   it('deny answer post-gates to ask with failure unset', async () => {
     const verdict = await classifyViaSystemOne(
-      { name: 'Bash', arguments: { command: 'rm -rf ~' } },
+      prepared(),
       { baseURL: 'http://x', model: 'laya' },
-      { slots, timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T2_ANSWER }) },
+      { timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T2_ANSWER }) },
     )
     expect(verdict.verdict).toBe('ask')
     expect(verdict.reason).toContain('deny downgraded')
@@ -154,9 +178,9 @@ describe('classifyViaSystemOne', () => {
 
   it('error path passes the failure tag through', async () => {
     const verdict = await classifyViaSystemOne(
-      { name: 'Bash' },
+      prepared(),
       { baseURL: 'http://x', model: 'bogus/not-a-model' },
-      { slots, timeoutMs: 1000, fetchImpl: vi.fn(async () => Response.json({ error: { type: 'invalid_request_error', message: 'model must be "laya"' } }, { status: 400 })) as unknown as typeof fetch },
+      { timeoutMs: 1000, fetchImpl: vi.fn(async () => Response.json({ error: { type: 'invalid_request_error', message: 'model must be "laya"' } }, { status: 400 })) as unknown as typeof fetch },
     )
     expect(verdict.verdict).toBe('ask')
     expect(verdict.failure).toBe('error')
@@ -165,10 +189,21 @@ describe('classifyViaSystemOne', () => {
 
   it('truncation sentinel (input_tokens pinned at window) forces ask', async () => {
     const verdict = await classifyViaSystemOne(
-      { name: 'Bash', arguments: { command: 'git status' } },
+      prepared(),
       { baseURL: 'http://x', model: 'laya' },
-      { slots, timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T1_ANSWER }, 1024) },
+      { timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T1_ANSWER }, 1024) },
     )
     expect(verdict).toEqual({ verdict: 'ask', reason: 'state truncated by gateway', probabilities: T1_ANSWER.probabilities, confidence: 0.0555 })
+  })
+
+  it('budgetExhausted short-circuits to an honest ask, no failure tag, no wire call', async () => {
+    const fetchImpl = vi.fn()
+    const verdict = await classifyViaSystemOne(
+      { ...prepared(), budgetExhausted: true },
+      { baseURL: 'http://x', model: 'laya' },
+      { timeoutMs: 1000, fetchImpl: fetchImpl as unknown as typeof fetch },
+    )
+    expect(verdict).toEqual({ verdict: 'ask', reason: 'state budget exhausted (question too large for window)' })
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 })

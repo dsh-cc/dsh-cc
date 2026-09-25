@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { systemoneDecide } from '../src/systemone-client.ts'
 import { isTruncated, DEFAULT_GAUGE_CONTEXT_WINDOW } from '../src/gauge-adapter.ts'
+import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from '../src/systemone-budget.ts'
 
 const baseURL = process.argv[2] ?? 'http://127.0.0.1:8080'
 const model = 'llmbox_systemone/laya'
@@ -28,7 +29,19 @@ for (let t = 0.4; t <= 0.95 + 1e-9; t += 0.025) TAUS.push(Number(t.toFixed(3)))
 
 const rows = []
 for (const entry of corpus) {
-  const state = JSON.stringify({ tool: 'read', text: entry.text })
+  // Production windowing (2026-09-25 Fix A): token-budgeted head 2/3 + tail
+  // 1/3 — mirrors probe-systemone.ts probeNoulOnce; budget exhaustion is an
+  // honest failure row, never a wire call.
+  const questionJson = JSON.stringify({ verdict: QUESTION })
+  const budget = DEFAULT_GAUGE_CONTEXT_WINDOW - S1_ENVELOPE_TOKENS - estimateSystemOneTokens(questionJson) - S1_MARGIN_TOKENS
+  if (budget < MIN_STATE_TOKENS) {
+    rows.push({ id: entry.id, expect: entry.expect, failure: 'budget', reason: 'state budget exhausted' })
+    console.log(`${entry.id} [${entry.expect}] BUDGET-EXHAUSTED`)
+    continue
+  }
+  const wrapperTokens = estimateSystemOneTokens(JSON.stringify({ tool: 'read', text: '' }))
+  const text = capMiddleToTokenBudget(entry.text, budget - wrapperTokens, '\n[… probe input truncated …]\n', 2 / 3)
+  const state = JSON.stringify({ tool: 'read', text })
   const t0 = Date.now()
   let result
   for (let attempt = 0; ; attempt++) {

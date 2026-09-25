@@ -21,14 +21,15 @@ import {
   sanitizeReason,
   type ClassifierAuditEventData,
 } from './classifier-audit.ts'
-import type { PermissionMode } from './types.ts'
+import type { PermissionMode, PermissionRule } from './types.ts'
 import {
   DEFAULT_GAUGE_ALLOW_THRESHOLD,
   createVerdictCache,
-  renderSystemOneState,
+  prepareSystemOneInput,
   type GaugeSlots,
 } from './gauge-adapter.ts'
 import { classifyViaSystemOne } from './gauge-adapter.ts'
+import { collectGaugeAllowEvidence } from './gauge-allow-evidence.ts'
 
 /** The System One backend info the gauge-backend resolver assembled. */
 export type SystemOneBackendInfo = {
@@ -71,6 +72,10 @@ export type SystemOneSliceOpts = {
   gaugeAllowThreshold: number | undefined
   timeoutMs: number
   auditFullText: boolean
+  /** Fix B opt-out (absence-preserving; consumption default ON). */
+  gaugeAllowEvidence: boolean | undefined
+  /** The merged allow rules the evidence collector pre-filters (waterfall's view). */
+  allowEvidenceRules?: readonly PermissionRule[]
 }
 
 /** The gauge lane: memoized verdict LRU + wire call, per-stage (rebuild drops it). */
@@ -91,10 +96,11 @@ export function createSystemOneLane(
     async classify(exec, backend, opts): Promise<SystemOneClassification> {
       const startedAt = Date.now()
       const tool = exec.name
-      // The rendered state IS this lane's classifier input: compact, capped
-      // by the context window, and distinct from the chat renderer — the
-      // chat verdict LRU can never collide with these keys.
-      const input = renderSystemOneState(exec, backend.contextWindow)
+      // F1 single render site: prepareSystemOneInput IS the render — the
+      // token-budgeted state doubles as this lane's classifier input and
+      // the verdict-LRU key. Chat lanes can never collide with these keys.
+      const prepared = prepareSystemOneInput(exec, opts.slots, backend.contextWindow)
+      const input = prepared.state
       const digest = createHash('sha256').update(input).digest('hex')
       const key = classificationKey(
         tool,
@@ -119,8 +125,7 @@ export function createSystemOneLane(
           cacheHit: true,
         }
       }
-      const outcome = await classifyViaSystemOne(exec, backend, {
-        slots: opts.slots,
+      const outcome = await classifyViaSystemOne(prepared, backend, {
         allowThreshold: opts.allowThreshold,
         timeoutMs: opts.timeoutMs,
         ...(opts.signal === undefined ? {} : { signal: opts.signal }),
@@ -193,11 +198,20 @@ export async function systemOneEscalate(
     return { kind: 'ask', reason: `auto-mode classifier unavailable: route ${routeKey} breaker open` }
   }
   const session = exec.agent?.session
+  // Fix B: fold user-originated allow evidence into the slots BEFORE the
+  // single render site — the evidence rides the state, so the verdict-LRU
+  // keys (derived from it) rotate automatically when rules/grants change.
+  const evidence = opts.gaugeAllowEvidence !== false
+    ? collectGaugeAllowEvidence({ exec, rules: opts.allowEvidenceRules ?? [], session })
+    : []
+  const slots: GaugeSlots = evidence.length === 0
+    ? opts.slots
+    : { ...opts.slots, allowExceptions: [...opts.slots.allowExceptions, ...evidence] }
   // A8 stale-mode epoch, same as the chat path: capture before the await,
   // re-fold after; a mid-flight mode change discards the verdict.
   const modeBefore = faces.modeOf(exec)
   const verdict = await lane.classify(exec, backend, {
-    slots: opts.slots,
+    slots,
     allowThreshold: opts.gaugeAllowThreshold ?? DEFAULT_GAUGE_ALLOW_THRESHOLD,
     timeoutMs: opts.timeoutMs,
     ...(exec.signal === undefined ? {} : { signal: exec.signal }),
