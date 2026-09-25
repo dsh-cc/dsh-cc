@@ -519,7 +519,7 @@ describe('listener × System One gauge lane (B2b integration)', () => {
       verdict: 'allow',
       provider: 'deepseek',
       model: 'llmbox_systemone/laya',
-      route: 'systemone/llmbox_systemone/laya',
+      route: 'deepseek/llmbox_systemone/laya',
       probabilities: GAUGE_T1.answers.verdict.probabilities,
       confidence: 0.0555,
     })

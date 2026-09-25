@@ -27,7 +27,7 @@ import {
   DEFAULT_SOFT_DENY,
   PROBE_EVENT,
   expandSlot,
-  pickClassifierRouteName,
+  pickGaugeRouteName,
   type ClassifierBackend,
 } from '@dsh-cc/permission-rules'
 import { helpable } from '@dsh-cc/command-usage'
@@ -54,6 +54,13 @@ interface AutoModeSection {
     cacheMaxEntries?: number
     auditFullText?: boolean
   }
+  probe?: {
+    enabled?: boolean
+    route?: string
+    backend?: 'haiku' | 'auto'
+    timeoutMs?: number
+    toolPatterns?: string[]
+  }
 }
 
 /** Structural face of the settings provider: resolved (merged) section read. */
@@ -77,11 +84,7 @@ export function renderDefaults(): string {
   }, null, 2))
 }
 
-/**
- * The effective classifier backend, computed by the caller from live state
- * (design doc §4.6). Omitted on the render ⇒ byte-identical legacy output
- * (the gauge-less compat contract).
- */
+/** The effective backend for one section (classifier or probe), computed by the caller from live state (design doc §4.6). Omitted on the render ⇒ byte-identical legacy output (the gauge-less compat contract). */
 export interface EffectiveClassifier {
   /** The effective route NAME (explicit value | 'gauge' armed-auto | 'haiku'). */
   routeName: string
@@ -95,7 +98,7 @@ export interface EffectiveClassifier {
 const ROUTE_POLICY = 'explicit route > backend auto (gauge when armed) > haiku'
 
 /** `/auto-mode config` — the effective trusted-scoped autoMode slice. */
-export function renderConfig(autoMode: AutoModeSection | undefined, effective?: EffectiveClassifier): string {
+export function renderConfig(autoMode: AutoModeSection | undefined, effective?: EffectiveClassifier, effectiveProbe?: EffectiveClassifier): string {
   const classifier = autoMode?.classifier
   const classifierView: Record<string, unknown> = {
     enabled: classifier?.enabled === true,
@@ -103,6 +106,16 @@ export function renderConfig(autoMode: AutoModeSection | undefined, effective?: 
     timeoutMs: classifier?.timeoutMs ?? 8000,
     cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
     auditFullText: classifier?.auditFullText === true,
+  }
+  const payload: Record<string, unknown> = {
+    classifier: classifierView,
+    classifyAllShell: autoMode?.classifyAllShell === true,
+    slots: {
+      soft_deny: slotView(autoMode?.soft_deny, DEFAULT_SOFT_DENY),
+      hard_deny: slotView(autoMode?.hard_deny, DEFAULT_HARD_DENY),
+      allow: slotView(autoMode?.allow, DEFAULT_ALLOW_EXCEPTIONS),
+      environment: slotView(autoMode?.environment, DEFAULT_ENVIRONMENT),
+    },
   }
   if (effective !== undefined) {
     // Honest backend report (§4.6): the gauge-less fields stay as computed
@@ -119,15 +132,21 @@ export function renderConfig(autoMode: AutoModeSection | undefined, effective?: 
     classifierView.gaugeRoute = gauge?.route ?? null
     classifierView.gaugeProtocol = gauge?.protocol ?? null
   }
-  const payload = {
-    classifier: classifierView,
-    classifyAllShell: autoMode?.classifyAllShell === true,
-    slots: {
-      soft_deny: slotView(autoMode?.soft_deny, DEFAULT_SOFT_DENY),
-      hard_deny: slotView(autoMode?.hard_deny, DEFAULT_HARD_DENY),
-      allow: slotView(autoMode?.allow, DEFAULT_ALLOW_EXCEPTIONS),
-      environment: slotView(autoMode?.environment, DEFAULT_ENVIRONMENT),
-    },
+  if (effectiveProbe !== undefined) {
+    // PR-C: the probe's own backend discrimination, mirroring the
+    // classifier's shape (no gaugeAllowThreshold — the noul gate is a
+    // corpus-frozen constant, not a setting).
+    const probe = autoMode?.probe
+    const gauge = effectiveProbe.gauge ?? null
+    payload.probe = {
+      enabled: probe?.enabled !== false,
+      backend: probe?.backend ?? 'haiku',
+      route: effectiveProbe.routeName,
+      routeSource: effectiveProbe.source,
+      routePolicy: ROUTE_POLICY,
+      gaugeRoute: gauge?.route ?? null,
+      gaugeProtocol: gauge?.protocol ?? null,
+    }
   }
   return sanitize(JSON.stringify(payload, null, 2))
 }
@@ -264,7 +283,32 @@ function effectiveClassifier(
     }
   }
   const backend = (autoMode?.classifier?.backend ?? 'haiku') as ClassifierBackend
-  const routeName = pickClassifierRouteName(ctx, undefined, backend)
+  const routeName = pickGaugeRouteName(ctx, undefined, backend)
+  if (routeName === 'gauge') {
+    return { routeName: 'gauge', source: 'auto-gauge', gauge: gaugeInfo(settings) }
+  }
+  return { routeName: 'haiku', source: 'default', gauge: null }
+}
+
+/**
+ * PR-C: compute the effective PROBE backend from live state — the same §4.6
+ * policy as the classifier, over the `probe` section.
+ */
+function effectiveProbe(
+  ctx: Context,
+  autoMode: AutoModeSection | undefined,
+  settings: SettingsLike,
+): EffectiveClassifier {
+  const explicit = autoMode?.probe?.route
+  if (explicit !== undefined) {
+    return {
+      routeName: explicit,
+      source: 'explicit',
+      gauge: explicit === 'gauge' ? gaugeInfo(settings) : null,
+    }
+  }
+  const backend = (autoMode?.probe?.backend ?? 'haiku') as ClassifierBackend
+  const routeName = pickGaugeRouteName(ctx, undefined, backend)
   if (routeName === 'gauge') {
     return { routeName: 'gauge', source: 'auto-gauge', gauge: gaugeInfo(settings) }
   }
@@ -282,7 +326,11 @@ function executeAutoMode(ctx: Context, settings: SettingsLike | undefined, invoc
       return { kind: 'error', text: 'No settings provider is mounted in this composition.' }
     }
     const permissions = settings.get('permissions') as { autoMode?: AutoModeSection } | undefined
-    return { kind: 'success', text: renderConfig(permissions?.autoMode, effectiveClassifier(ctx, permissions?.autoMode, settings)) }
+    return { kind: 'success', text: renderConfig(
+      permissions?.autoMode,
+      effectiveClassifier(ctx, permissions?.autoMode, settings),
+      effectiveProbe(ctx, permissions?.autoMode, settings),
+    ) }
   }
   if (subcommand === 'review') {
     const arg = parts[1] ?? ''

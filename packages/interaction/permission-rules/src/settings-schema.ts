@@ -57,8 +57,21 @@ export interface AutoModeClassifierSettings {
 export interface AutoModeProbeSettings {
   /** Master switch for the input-layer PI probe (default `true`). */
   enabled?: boolean
-  /** Model route used for the probe (default `'haiku'`). */
+  /**
+   * Explicit model route used for the probe. When set, it WINS over
+   * `backend` verbatim (including `gauge`); when unset, the route policy
+   * picks `gauge` when armed (backend `'auto'` + a configured System One
+   * gauge alias) and `'haiku'` otherwise. No schema default — absence is
+   * preserved and the policy helper decides (default `'haiku'`).
+   */
   route?: string
+  /**
+   * Backend selection when `route` is unset (default `'haiku'` at
+   * consumption): `'haiku'` always uses the chat probe lane; `'auto'` arms
+   * the gauge System One lane when the gauge alias is configured with the
+   * systemone protocol.
+   */
+  backend?: 'haiku' | 'auto'
   /** Per-call timeout in milliseconds (default `5000`). */
   timeoutMs?: number
   /** Scan-set override (exact tool names or trailing-`*` prefix patterns); replaces the default set entirely. */
@@ -228,6 +241,19 @@ const autoModeClassifierSchema = z.object({
   cacheMaxEntries: z.number().default(256),
 })
 
+/** The probe sub-object schema: defaults apply only when the object is present. */
+const autoModeProbeSchema = z.object({
+  enabled: z.boolean().default(true),
+  // Absence-preserving: an unset `route` defers to `backend` at consumption
+  // (the `'haiku'` schema default was removed — pickGaugeRouteName).
+  route: z.union([z.string(), z.const(undefined)]),
+  // Absence-preserving enum union; consumption default `'haiku'`.
+  backend: z.union(['haiku', 'auto'] as const),
+  timeoutMs: z.number().default(5000),
+  // Union with `undefined` keeps an absent `toolPatterns` key absent.
+  toolPatterns: z.union([z.array(z.string()), z.const(undefined)]),
+})
+
 /** The shared settings schema (Config-facing and settings-provider-facing). */
 export function permissionSettingsSchema(): z<PermissionSettings> {
   return z.object({
@@ -251,6 +277,7 @@ export function permissionSettingsSchema(): z<PermissionSettings> {
         environment: z.union([z.array(z.string()), z.const(undefined)]),
         classifyAllShell: z.union([z.boolean(), z.const(undefined)]),
         classifier: z.union([autoModeClassifierSchema, z.const(undefined)]),
+        probe: z.union([autoModeProbeSchema, z.const(undefined)]),
       }),
       z.const(undefined),
     ]),

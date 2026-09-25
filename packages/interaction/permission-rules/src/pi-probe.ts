@@ -39,6 +39,8 @@ import type { UserMessage } from '@deepseek-ai/dsh-session'
 import { BREAKER_FAILURE_TAGS, CLASSIFIER_BREAKER_THRESHOLD, RouteBreaker } from './classifier-breaker.ts'
 import { sanitizeReason, type AutoModeSettings } from './auto-stage.ts'
 import type { ClassifierRoute } from './llm-classifier.ts'
+import type { ClassifierBackendRoute } from './gauge-backend.ts'
+import { probeNoulOnce } from './probe-systemone.ts'
 import type { PermissionMode } from './types.ts'
 
 /** The session event type carrying one probe verdict audit record. */
@@ -111,14 +113,23 @@ export type PiProbeDeps = {
    * classifier stage uses); `undefined` when no llm service is mounted.
    */
   stream: ((opts: { provider: string; model: string; system: string; prompt: string; maxTokens: number; reasoningEffort?: string; signal?: AbortSignal }) => Promise<string>) | undefined
-  /** Resolve the configured probe route for this call's session. */
-  resolveRoute(exec: ToolExecution): ClassifierRoute | undefined
+  /**
+   * Resolve the configured probe backend for this call's session (PR-C:
+   * async — the System One credential-ref chain resolves asynchronously).
+   * `undefined` ⇒ the probe is disarmed for this call.
+   */
+  resolveRoute(exec: ToolExecution): Promise<ClassifierBackendRoute | undefined>
   /** Process logger for the warn-once channels (unarmed, breaker). */
   warn(message: string): void
   /** Durable audit sink (session append face, listener-owned). */
   audit(session: Session, event: ProbeAuditEventData): void
   /** Optional env-gated process-log sink for raw probe output (never session events). */
   debug?: (message: string) => void
+  /**
+   * Injectable fetch for the System One lane (tests / constrained hosts).
+   * Absent ⇒ global `fetch`, same as the gauge adapter.
+   */
+  fetchImpl?: typeof fetch
   /**
    * The effective permission mode for one call (A8): MUST resolve the fold
    * INCLUDING the `defaultMode` fallback. Folded at LISTENER time, never cached.
@@ -237,8 +248,7 @@ export function matchesScanSet(toolName: string, toolPatterns?: readonly string[
   return ccToolAliases(toolName).some(name => DEFAULT_SCAN_TOOLS.has(name))
 }
 
-/** The normalized probe slice (per scan; never cached). */
-interface ProbeSlice {
+/** The normalized probe slice (per scan; never cached). */interface ProbeSlice {
   enabled: boolean
   timeoutMs: number
   toolPatterns: string[] | undefined
@@ -264,6 +274,11 @@ export function probeWarningText(toolName: string, reason: string): string {
   return reason === '' ? base : `${base} Probe reason: ${reason}`
 }
 
+/** Audit attribution fields for either lane (chat route or System One info). */
+function attributionOf(backend: ClassifierBackendRoute): { provider: string; model: string } {
+  return backend.backend === 'chat' ? backend.route : { provider: backend.provider, model: backend.model }
+}
+
 /**
  * Build the probe. Fail-open contract: `scan` never throws and never mutates
  * its inputs; every unarmable/failing path passes the result through and
@@ -272,22 +287,23 @@ export function probeWarningText(toolName: string, reason: string): string {
 export function createPiProbe(deps: PiProbeDeps): PiProbe {
   /** Warned-once flag for enabled-but-unarmable (per process). */
   let warnedUnarmed = false
-  const breaker = new RouteBreaker<{ exec: ToolExecution; route: ClassifierRoute }>({
+  const breaker = new RouteBreaker<{ exec: ToolExecution; backend: ClassifierBackendRoute }>({
     threshold: CLASSIFIER_BREAKER_THRESHOLD,
     failureTags: BREAKER_FAILURE_TAGS,
     label: 'permission pi-probe',
     outcomeNote: 'the probe passes results through unwarned until the settings change',
     warn: deps.warn,
-    auditBreakerOnce: ({ exec, route }, routeKey) => {
+    auditBreakerOnce: ({ exec, backend }, routeKey) => {
       const session = exec.agent?.session
       if (session === undefined) return
+      const { provider, model } = attributionOf(backend)
       deps.audit(session, {
         tool: exec.name,
         verdict: 'pass',
         failure: 'breaker',
         route: routeKey,
-        provider: route.provider,
-        model: route.model,
+        provider,
+        model,
         latencyMs: 0,
       })
     },
@@ -377,32 +393,42 @@ export function createPiProbe(deps: PiProbeDeps): PiProbe {
       if (!slice.enabled) return d
       const digest = sha256(input)
       const session = exec.agent?.session
-      if (deps.stream === undefined) {
+      // A8 stale-mode epoch: captured BEFORE the first await — route
+      // resolution is async since PR-C, so the epoch must span BOTH awaits
+      // (backend resolution and the probe call). Leaving `auto` mid-flight
+      // audits `stale-mode` and passes through unwarned, never breaker-counted.
+      const modeBefore = deps.modeOf(exec)
+      // PR-C backend resolution (async: the System One credential-ref chain).
+      const backend = await deps.resolveRoute(exec)
+      // Refined disarm rule per backend: a chat backend still requires the
+      // chat stream; the System One lane calls systemoneDecide directly and
+      // does NOT need the chat stream.
+      if (backend === undefined || (backend.backend === 'chat' && deps.stream === undefined)) {
         disarmUnarmed(exec)
         return d
       }
-      const route = deps.resolveRoute(exec)
-      if (route === undefined) {
-        disarmUnarmed(exec)
-        return d
-      }
-      const routeKey = `${route.provider}/${route.model}`
+      const { provider, model } = attributionOf(backend)
+      const routeKey = `${provider}/${model}`
       const sessionId = sessionIdOf(exec)
       breaker.seed(
         sessionId,
         () => (session === undefined ? [] : foldProbes(session.snapshotEvents())),
         routeKey,
-        { exec, route },
+        { exec, backend },
       )
       if (breaker.isOpen(routeKey)) {
-        breaker.auditOnce(sessionId, routeKey, { exec, route })
+        breaker.auditOnce(sessionId, routeKey, { exec, backend })
         return d
       }
-      // A8 stale-mode epoch: capture the mode before the await, re-fold after.
-      // Leaving `auto` audits `stale-mode` (aligned with the classifier's A8
-      // discipline) and passes through unwarned — never breaker-counted.
-      const modeBefore = deps.modeOf(exec)
-      const outcome = await probeOnce(exec, route, input, slice.timeoutMs)
+      // Unified outcome shape across both lanes: the chat verdict's
+      // `injection` maps onto the noul lane's `flag`.
+      let outcome: { flag: boolean; reason: string; latencyMs: number; failure?: 'timeout' | 'error' | 'malformed' | 'cancelled' }
+      if (backend.backend === 'chat') {
+        const chat = await probeOnce(exec, backend.route, input, slice.timeoutMs)
+        outcome = { flag: chat.injection, reason: chat.reason, latencyMs: chat.latencyMs, ...(chat.failure === undefined ? {} : { failure: chat.failure }) }
+      } else {
+        outcome = await probeNoulOnce(exec, backend, input, { timeoutMs: slice.timeoutMs, ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}) })
+      }
       if (deps.modeOf(exec) !== modeBefore) {
         if (session !== undefined) {
           deps.audit(session, {
@@ -414,7 +440,8 @@ export function createPiProbe(deps: PiProbeDeps): PiProbe {
         }
         return d
       }
-      breaker.record(sessionId, routeKey, outcome.failure, { exec, route })
+      const injection = outcome.flag
+      breaker.record(sessionId, routeKey, outcome.failure, { exec, backend })
       if (session !== undefined) {
         deps.audit(session, {
           tool: exec.name,
@@ -422,16 +449,16 @@ export function createPiProbe(deps: PiProbeDeps): PiProbe {
           // S5/D10: raw input audited only when the flag is on — the slice is
           // re-read every scan, so a settings toggle takes effect immediately.
           ...(slice.auditFullText ? { input } : {}),
-          verdict: outcome.injection ? 'flag' : 'pass',
+          verdict: injection ? 'flag' : 'pass',
           ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
-          ...(outcome.injection ? { reason: sanitizeReason(outcome.reason) } : {}),
+          ...(injection ? { reason: sanitizeReason(outcome.reason) } : {}),
           route: routeKey,
-          provider: route.provider,
-          model: route.model,
+          provider,
+          model,
           latencyMs: outcome.latencyMs,
         })
       }
-      if (!outcome.injection) return d
+      if (!injection) return d
       // Sideband delivery (edit-recovery-hint idiom): append the warning to
       // the downstream decision's additionalContexts — never to content, so
       // content rewriters cannot clobber it, and existing downstream contexts

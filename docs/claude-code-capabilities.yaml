@@ -3318,6 +3318,18 @@ capabilities:
         `ask`. Audit events gain optional `probabilities`/`confidence`
         scalars (digest-only contract intact). CC has no such backend —
         deliberate dsh-cc extension.
+        Gauge System One probe slice (2026-09-25, PR-C): the input-layer
+        prompt-injection probe gains the same backend discrimination —
+        `autoMode.probe.backend` ('haiku' default | 'auto'), explicit
+        `probe.route` always wins, gauge-armed ⇒ a native `noul` decision
+        (frozen question wording + corpus-frozen threshold
+        `DEFAULT_PROBE_NOUL_THRESHOLD = 0.625`; zero false-flags on the
+        16-case corpus, recall 3/8 documented as dogfood-tunable). The
+        systemone branch re-windows evidence (head 1400 / tail 500), fails
+        OPEN on every failure incl. silent truncation, and shares the
+        breaker/audit machinery keyed `${provider}/${model}` — the keying
+        convention that also fixes cross-restart breaker attribution for
+        the classifier's System One lane (PR-B follow-up F1).
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

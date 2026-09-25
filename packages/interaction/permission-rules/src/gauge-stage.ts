@@ -183,7 +183,9 @@ export async function systemOneEscalate(
   faces: SystemOneStageFaces,
   opts: SystemOneSliceOpts,
 ): Promise<'allow' | { kind: 'ask'; reason: string } | undefined> {
-  const routeKey = `systemone/${backend.model}`
+  // Breaker key must match the durable-log attribution (`${provider}/${model}`,
+  // classifier-breaker.ts) or a systemone failure streak never seeds after restart.
+  const routeKey = `${backend.provider}/${backend.model}`
   const route = { provider: backend.provider, model: backend.model }
   faces.seed(exec, routeKey, route)
   if (faces.breaker.isOpen(routeKey)) {

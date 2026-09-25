@@ -85,15 +85,16 @@ function readOverlayAliases(ctx: Context): ReadonlyMap<string, AliasTarget> {
 }
 
 /**
- * Pick the effective classifier route name (§4.5 policy):
+ * Pick the effective gauge-family route name (§4.5 policy, generalized in
+ * PR-C so the classifier and the PI probe share one rule):
  * explicit route > backend auto (gauge when armed) > haiku.
  * @param ctx - the host context.
- * @param explicit - the configured `classifier.route` (verbatim when set,
+ * @param explicit - the configured section `route` (verbatim when set,
  *   including `gauge` — resolution failure is the pre-execute layer's business).
- * @param backend - the configured `classifier.backend`.
+ * @param backend - the configured section `backend`.
  * @returns the route NAME (not a resolved route).
  */
-export function pickClassifierRouteName(
+export function pickGaugeRouteName(
   ctx: Context,
   explicit: string | undefined,
   backend: ClassifierBackend,
@@ -121,4 +122,13 @@ export function pickClassifierRouteName(
   const configured = verdict.kind === 'route' && (verdict.via === 'configured' || verdict.via === 'one-hop')
   const armed = configured && isSystemOneEntry(aliases.get('gauge'))
   return armed ? 'gauge' : 'haiku'
+}
+
+/** Classifier-section spelling of the shared policy (kept for existing imports). */
+export function pickClassifierRouteName(
+  ctx: Context,
+  explicit: string | undefined,
+  backend: ClassifierBackend,
+): string {
+  return pickGaugeRouteName(ctx, explicit, backend)
 }

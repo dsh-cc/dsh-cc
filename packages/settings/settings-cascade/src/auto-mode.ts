@@ -63,8 +63,21 @@ export interface AutoModeClassifier {
 export interface AutoModeProbe {
   /** Master switch for the probe (default `true`). */
   enabled?: boolean
-  /** Model route used for the probe (default `'haiku'`). */
+  /**
+   * Explicit model route used for the probe. When set, it WINS over
+   * `backend` verbatim (including `gauge`); when unset, the route policy
+   * picks `gauge` when armed (backend `'auto'` + a configured System One
+   * gauge alias) and `'haiku'` otherwise. No schema default — absence is
+   * preserved and the policy helper decides (default `'haiku'`).
+   */
   route?: string
+  /**
+   * Backend selection when `route` is unset (default `'haiku'` at
+   * consumption): `'haiku'` always uses the chat probe lane; `'auto'` arms
+   * the gauge System One lane when the gauge alias is configured with the
+   * systemone protocol.
+   */
+  backend?: 'haiku' | 'auto'
   /** Per-call timeout in milliseconds (default `5000`). */
   timeoutMs?: number
   /**
@@ -117,7 +130,11 @@ export interface AutoMode {
  */
 export const AutoModeProbeSchema: z<AutoModeProbe> = z.object({
   enabled: z.boolean().default(true),
-  route: z.string().default('haiku'),
+  // Absence-preserving: an unset `route` defers to `backend` at consumption
+  // (the `'haiku'` schema default was removed — pickGaugeRouteName).
+  route: z.union([z.string(), z.const(undefined)]),
+  // Absence-preserving enum union; consumption default `'haiku'` (PR-C).
+  backend: z.union(['haiku', 'auto'] as const),
   timeoutMs: z.number().default(5000),
   // Union with `undefined` keeps an absent `toolPatterns` key absent
   // (permissive array, no default).

@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolExecution } from '@dsh-cc/tools'
-import { resolveClassifierBackend, GAUGE_UNRESOLVABLE_KEY } from '../src/gauge-backend.ts'
+import { resolveClassifierBackend, resolveProbeBackend, GAUGE_UNRESOLVABLE_KEY } from '../src/gauge-backend.ts'
 import { createWarnOnce, resetPolicyWarned } from '../src/route-policy.ts'
 
 /** Minimal ctx face: only `settings` (and a logger) are consulted. */
@@ -141,5 +141,73 @@ describe('resolveClassifierBackend (B2b)', () => {
     const h = harness({})
     const out = await resolveClassifierBackend(ctx, h.exec, h.deps)
     expect(out).toMatchObject({ backend: 'systemone', apiKey: 'from-credentials' })
+  })
+})
+
+describe('resolveProbeBackend (PR-C matrix)', () => {
+  beforeEach(() => resetPolicyWarned())
+  afterEach(() => { delete process.env.GAUGE_TEST_KEY })
+
+  it('explicit chat route → chat lane, never gauge', async () => {
+    const h = harness({ route: 'fast-lane', backend: 'auto' })
+    expect(await resolveProbeBackend(h.ctx, h.exec, h.deps)).toEqual({
+      backend: 'chat',
+      route: { provider: 'fake', model: 'fast-lane' },
+    })
+  })
+
+  it("explicit route 'gauge' forces the native lane even with backend 'haiku'", async () => {
+    process.env.GAUGE_TEST_KEY = 'k'
+    const h = harness({
+      route: 'gauge',
+      backend: 'haiku',
+      namespaces: { 'model-aliases': gaugeAlias({ provider: 'deepseek' }), ...providerRecord() },
+    })
+    expect(await resolveProbeBackend(h.ctx, h.exec, h.deps)).toMatchObject({
+      backend: 'systemone',
+      model: 'llmbox_systemone/laya',
+    })
+  })
+
+  it("backend 'auto' + armed gauge → systemone", async () => {
+    process.env.GAUGE_TEST_KEY = 'k'
+    const h = harness({
+      backend: 'auto',
+      namespaces: { 'model-aliases': gaugeAlias({ provider: 'deepseek' }), ...providerRecord() },
+    })
+    expect(await resolveProbeBackend(h.ctx, h.exec, h.deps)).toMatchObject({ backend: 'systemone', provider: 'deepseek' })
+  })
+
+  it("backend 'auto' + unconfigured gauge → haiku silently (zero new warnings)", async () => {
+    const h = harness({ backend: 'auto' })
+    expect(await resolveProbeBackend(h.ctx, h.exec, h.deps)).toEqual({
+      backend: 'chat',
+      route: { provider: 'fake', model: 'haiku' },
+    })
+    expect(h.warnings).toHaveLength(0)
+  })
+
+  it('auto + armed but unresolvable → gauge-unresolvable warn-once + haiku chat fallback', async () => {
+    const h = harness({ backend: 'auto', namespaces: { 'model-aliases': gaugeAlias({ provider: 'deepseek' }) } })
+    expect(await resolveProbeBackend(h.ctx, h.exec, h.deps)).toEqual({
+      backend: 'chat',
+      route: { provider: 'fake', model: 'haiku' },
+    })
+    expect(h.warnings).toHaveLength(1)
+    // warn-once: a second unresolvable resolution stays silent.
+    await resolveProbeBackend(h.ctx, h.exec, h.deps)
+    expect(h.warnings).toHaveLength(1)
+  })
+
+  it("backend 'haiku' → haiku without consulting gauge", async () => {
+    process.env.GAUGE_TEST_KEY = 'k'
+    const h = harness({
+      backend: 'haiku',
+      namespaces: { 'model-aliases': gaugeAlias({ provider: 'deepseek' }), ...providerRecord() },
+    })
+    expect(await resolveProbeBackend(h.ctx, h.exec, h.deps)).toEqual({
+      backend: 'chat',
+      route: { provider: 'fake', model: 'haiku' },
+    })
   })
 })

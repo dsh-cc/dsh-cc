@@ -65,14 +65,23 @@ describe('AutoModeSchema', () => {
     // Absence-preserving: no probe key, no probe defaults.
     expect(parse({})).toEqual({})
     expect(parse({ probe: {} })).toEqual({
-      probe: { enabled: true, route: 'haiku', timeoutMs: 5000 },
+      probe: { enabled: true, timeoutMs: 5000 },
     })
     expect(parse({ probe: { enabled: false } })).toEqual({
-      probe: { enabled: false, route: 'haiku', timeoutMs: 5000 },
+      probe: { enabled: false, timeoutMs: 5000 },
     })
+    // `route` is absence-preserving (the policy helper decides when unset).
+    expect(parse({ probe: { route: 'fast-lane' } })).toEqual({
+      probe: { enabled: true, route: 'fast-lane', timeoutMs: 5000 },
+    })
+    // backend is accepted and absence-preserving (PR-C).
+    expect(parse({ probe: { backend: 'auto' } })).toEqual({
+      probe: { enabled: true, backend: 'auto', timeoutMs: 5000 },
+    })
+    expect(() => parse({ probe: { backend: 'gpt' } })).toThrow()
     // toolPatterns is absence-preserving (permissive array, no default).
     expect(parse({ probe: { toolPatterns: ['grep*'] } })).toEqual({
-      probe: { enabled: true, route: 'haiku', timeoutMs: 5000, toolPatterns: ['grep*'] },
+      probe: { enabled: true, timeoutMs: 5000, toolPatterns: ['grep*'] },
     })
     expect(() => parse({ probe: { enabled: 'yes' } })).toThrow()
     expect(() => parse({ probe: { timeoutMs: 'slow' } })).toThrow()
