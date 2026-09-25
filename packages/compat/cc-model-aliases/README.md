@@ -238,7 +238,14 @@ except `architect` follows its CC peer, so a deployment that already maps
 
 `gauge` is a typed-decision lane for System One models (e.g.
 `llmbox_systemone/laya`); **never use it as agent frontmatter `model:`** — it
-is selected by decision consumers, not generative callers.
+is selected by decision consumers, not generative callers. This is enforced:
+a System One target (`protocol: "systemone"` or an `llmbox_systemone/` model
+id) keeps `protocol: 'systemone'` on its resolved route, the chat projections
+(`toAgentOptions` / `toOneShotRoute`) refuse such a route, and the routes
+service's `llm/stream` guard rejects any chat request for a System One model
+with `SystemOneChatModelError` (code `SYSTEMONE_NOT_CHAT_MODEL`). The
+permission-rules classifier and probe reach System One over their own
+protocol client and are unaffected.
 
 A configured string-form target that names another alias is followed **one
 hop** (`sketch: haiku` shares haiku's object route, including

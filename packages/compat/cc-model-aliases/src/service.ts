@@ -25,6 +25,7 @@ import type {} from '@deepseek-ai/dsh-agent'
 import { ConfigAliasesSchema, SettingsAliasesSchema } from './schema.ts'
 import { createModelInspector, createModelResolver, mergeAliasMaps } from './resolver.ts'
 import { overlayStampedEffort, stampedEffortOf } from './effort.ts'
+import { assertChatModel } from './systemone-guard.ts'
 import type { AliasInspection, AliasTarget, DetailedRoute, ResolvedRoute } from './types.ts'
 
 /** Plugin configuration: deployment-default alias map. */
@@ -106,6 +107,27 @@ export function apply(ctx: Context, config: Config = {}): void {
     const resolved = await next()
     return overlayStampedEffort(resolved, stampedEffortOf(agent.options))
   })
+
+  // System One chat-path guard (the single boundary): every chat request —
+  // root and child agent loops, and hand-built one-shots (side queries,
+  // web-fetch, titles) — flows through the `llm/stream` waterfall, so a
+  // System One model (`gauge` configured with `protocol: 'systemone'`, or a
+  // `llmbox_systemone/` model id) is rejected here with a
+  // `SystemOneChatModelError` no matter which entry point supplied the model
+  // name. System One consumers use their own protocol client and never reach
+  // this waterfall. Global + prepend: runs ahead of every other listener and
+  // is never filtered out by the dispatching runtime's scope.
+  ctx.on('llm/stream', (options, next) => {
+    try {
+      assertChatModel(aliasSources(), options)
+    } catch (error) {
+      // Also log it: fail-soft callers (side queries, child agent loops)
+      // collapse a thrown request into a generic failure.
+      ctx.logger.warn(`cc-model-aliases: ${(error as Error).message}`)
+      throw error
+    }
+    return next()
+  }, { global: true, prepend: true })
 }
 
 /**

@@ -216,13 +216,12 @@ describe('createModelResolver inherit / builtin fallback / passthrough', () => {
     expect(resolve('gauge')).toBeUndefined()
   })
 
-  it('configured object-form gauge wins and protocol is NOT projected into the route', () => {
+  it('configured object-form gauge wins and keeps the System One protocol marker on the route', () => {
     const { resolve } = resolverFor(
       { haiku: 'flash' },
       { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } },
     )
-    expect(resolve('gauge')).toEqual({ provider: 'orchestrix', model: 'llmbox_systemone/laya' })
-    expect(resolve('gauge')).not.toHaveProperty('protocol')
+    expect(resolve('gauge')).toEqual({ provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' })
   })
 
   it('gauge$high strips the level suffix like other lane aliases', () => {

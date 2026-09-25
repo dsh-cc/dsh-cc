@@ -5,10 +5,22 @@
  * survives; one-shots fill missing fields from a parent route and return
  * `undefined` when the pair is still incomplete.
  *
+ * Both are the chat projections of a resolved route, so both refuse a System
+ * One route (`protocol: 'systemone'`) with `SystemOneChatModelError` — the
+ * entry point (Task, plugin agent, prompt hook, side query, …) fails fast with
+ * an actionable message instead of spawning a child whose first model request
+ * would be rejected at the `llm/stream` boundary as an opaque child failure.
+ *
  * @module @dsh-cc/model-aliases/agentOptions
  */
 
 import type { ResolvedRoute } from './types.ts'
+import { SystemOneChatModelError, isSystemOneRoute } from './systemone-guard.ts'
+
+/** Refuse a System One route on a chat projection. */
+function assertChatRoute(route: ResolvedRoute): void {
+  if (isSystemOneRoute(route)) throw new SystemOneChatModelError({ model: route.model ?? '', provider: route.provider })
+}
 
 /**
  * Drop `undefined` fields from a resolved route so per-field inheritance
@@ -16,9 +28,11 @@ import type { ResolvedRoute } from './types.ts'
  * `undefined` in → `undefined` out; an all-`undefined` route → `undefined`.
  * @param route - the resolved route (or `undefined` for no override).
  * @returns the `agentOptions` record, or `undefined` for no override.
+ * @throws SystemOneChatModelError when the route is a System One route.
  */
 export function toAgentOptions(route: ResolvedRoute | undefined): Record<string, string> | undefined {
   if (route === undefined) return undefined
+  assertChatRoute(route)
   const out: Record<string, string> = {}
   if (route.provider !== undefined) out['provider'] = route.provider
   if (route.model !== undefined) out['model'] = route.model
@@ -54,12 +68,14 @@ export interface OneShotParentRoute {
  * independent `ctx.llm.stream` one-shot. Alias fields win; missing fields
  * inherit from `parent`. Returns undefined when the resulting pair is
  * incomplete (no model after inherit) — callers treat that as "unconfigured".
+ * Throws `SystemOneChatModelError` for a System One route.
  */
 export function toOneShotRoute(
   route: ResolvedRoute | undefined,
   parent?: OneShotParentRoute,
 ): { provider: string; model: string } | undefined {
   if (route === undefined) return undefined
+  assertChatRoute(route)
   const provider = route.provider ?? parent?.provider
   const model = route.model ?? parent?.model
   if (provider === undefined || model === undefined) return undefined
