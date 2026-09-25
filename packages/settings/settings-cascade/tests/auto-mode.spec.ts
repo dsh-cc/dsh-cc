@@ -37,6 +37,15 @@ describe('AutoModeSchema', () => {
     expect(parse({ classifier: { backend: 'auto', gaugeAllowThreshold: 0.9 } })).toEqual({
       classifier: { enabled: false, backend: 'auto', gaugeAllowThreshold: 0.9, timeoutMs: 8000, cacheMaxEntries: 256 },
     })
+    // gaugeAllowEvidence (Fix B) is absence-preserving too; the consumption
+    // default is true (the gauge stage decides), false is the kill switch.
+    expect(parse({ classifier: {} })).toEqual({
+      classifier: { enabled: false, timeoutMs: 8000, cacheMaxEntries: 256 },
+    })
+    expect(parse({ classifier: { gaugeAllowEvidence: false } })).toEqual({
+      classifier: { enabled: false, gaugeAllowEvidence: false, timeoutMs: 8000, cacheMaxEntries: 256 },
+    })
+    expect(() => parse({ classifier: { gaugeAllowEvidence: 'yes' } })).toThrow()
     expect(() => parse({ classifier: { backend: 'gpt' } })).toThrow()
   })
 

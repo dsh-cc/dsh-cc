@@ -67,7 +67,7 @@ describe('/auto-mode config', () => {
     expect(parsed.classifier).toEqual({
       enabled: true, route: 'glm-flash', routeSource: 'explicit',
       routePolicy: 'explicit route > backend auto (gauge when armed) > haiku',
-      backend: 'haiku', gaugeAllowThreshold: null, gaugeRoute: null, gaugeProtocol: null,
+      backend: 'haiku', gaugeAllowThreshold: null, gaugeAllowEvidence: null, gaugeRoute: null, gaugeProtocol: null,
       timeoutMs: 4000, cacheMaxEntries: 128, auditFullText: false,
     })
     expect(parsed.classifyAllShell).toBe(true)
@@ -102,7 +102,7 @@ describe('/auto-mode config', () => {
     expect(parsed.classifier).toEqual({
       enabled: false, route: 'haiku', routeSource: 'default',
       routePolicy: 'explicit route > backend auto (gauge when armed) > haiku',
-      backend: 'haiku', gaugeAllowThreshold: null, gaugeRoute: null, gaugeProtocol: null,
+      backend: 'haiku', gaugeAllowThreshold: null, gaugeAllowEvidence: null, gaugeRoute: null, gaugeProtocol: null,
       timeoutMs: 8000, cacheMaxEntries: 256, auditFullText: false,
     })
   })
@@ -136,7 +136,7 @@ describe('/auto-mode config', () => {
   it('backend auto + armed object-form gauge alias: the gauge lane is reported honestly', () => {
     const settings = {
       get: (ns: string) => ns === 'permissions'
-        ? { autoMode: { classifier: { enabled: true, backend: 'auto' } } }
+        ? { autoMode: { classifier: { enabled: true, backend: 'auto', gaugeAllowEvidence: false } } }
         : ns === 'model-aliases'
           ? { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } }
           : {},
@@ -149,6 +149,7 @@ describe('/auto-mode config', () => {
     expect(parsed.classifier.routeSource).toBe('auto-gauge')
     expect(parsed.classifier.backend).toBe('auto')
     expect(parsed.classifier.gaugeAllowThreshold).toBeNull()
+    expect(parsed.classifier.gaugeAllowEvidence).toBe(false)
     expect(parsed.classifier.gaugeRoute).toBe('orchestrix/llmbox_systemone/laya')
     expect(parsed.classifier.gaugeProtocol).toBe('systemone')
   })

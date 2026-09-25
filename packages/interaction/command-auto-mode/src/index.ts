@@ -50,6 +50,7 @@ interface AutoModeSection {
     route?: string
     backend?: 'haiku' | 'auto'
     gaugeAllowThreshold?: number
+    gaugeAllowEvidence?: boolean
     timeoutMs?: number
     cacheMaxEntries?: number
     auditFullText?: boolean
@@ -129,6 +130,7 @@ export function renderConfig(autoMode: AutoModeSection | undefined, effective?: 
     classifierView.routePolicy = ROUTE_POLICY
     classifierView.backend = classifier?.backend ?? 'haiku'
     classifierView.gaugeAllowThreshold = classifier?.gaugeAllowThreshold ?? null
+    classifierView.gaugeAllowEvidence = classifier?.gaugeAllowEvidence ?? null
     classifierView.gaugeRoute = gauge?.route ?? null
     classifierView.gaugeProtocol = gauge?.protocol ?? null
   }

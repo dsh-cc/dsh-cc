@@ -10,6 +10,7 @@
 
 import type { SystemOneAnswer, SystemOneFailure, SystemOneQuestion, SystemOneUsage } from './systemone-client.ts'
 import { systemoneDecide } from './systemone-client.ts'
+import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from './systemone-budget.ts'
 
 /**
  * Corpus-derived default (scripts/gauge-corpus.json + eval-gauge.mjs run
@@ -24,16 +25,6 @@ export const DEFAULT_GAUGE_ALLOW_THRESHOLD = 0.5
 
 /** Checkpoint window of the probe-validated deployment (design doc §6.2). */
 export const DEFAULT_GAUGE_CONTEXT_WINDOW = 1024
-
-/** Hard client-side state cap in chars: `window × 3` (≈750 tokens at 1024). */
-export function stateCapChars(window: number): number {
-  return window * 3
-}
-
-/** Cap a string to `max` chars with an ellipsis suffix when truncated. */
-function capWithEllipsis(value: string, max: number): string {
-  return value.length <= max ? value : `${value.slice(0, max - 1)}…`
-}
 
 function appendSlot(base: string, lines: readonly string[], heading: string): string {
   if (lines.length === 0) return base
@@ -79,10 +70,10 @@ const BASH_TOOLS = new Set(['Bash', 'bash', 'Shell', 'shell'])
 /**
  * Compact structured state for the tool call: `{tool, command?}` for
  * bash-ish tools, `{tool, file_path?}` for file tools, else
- * `{tool, arguments}`. Capped at `window × 3` chars with an ellipsis suffix.
+ * `{tool, arguments}`. UNCAPPED — the token budget is applied by
+ * {@link prepareSystemOneInput}.
  */
-export function renderSystemOneState(exec: { name: string; arguments?: unknown }, window?: number): string {
-  const cap = stateCapChars(window ?? DEFAULT_GAUGE_CONTEXT_WINDOW)
+function renderSystemOneState(exec: { name: string; arguments?: unknown }): string {
   const args = (typeof exec.arguments === 'object' && exec.arguments !== null ? exec.arguments : {}) as Record<string, unknown>
   let state: Record<string, unknown>
   if (BASH_TOOLS.has(exec.name)) {
@@ -92,7 +83,50 @@ export function renderSystemOneState(exec: { name: string; arguments?: unknown }
   } else {
     state = { tool: exec.name, arguments: exec.arguments }
   }
-  return capWithEllipsis(JSON.stringify(state), cap)
+  return JSON.stringify(state)
+}
+
+/** The single render site's output: the wire pair plus the budget verdict. */
+export type PreparedSystemOneInput = {
+  state: string
+  questions: { verdict: SystemOneQuestion }
+  /** True ⇒ the question alone fills the window; the lane must not call. */
+  budgetExhausted: boolean
+}
+
+/**
+ * ONE render site for the gauge lane (review F1): builds the questions,
+ * sizes the state against the token budget, middle-elides the payload field
+ * to its share, then applies a final-wire estimator check. Never head-only
+ * cuts (review M1/F3) — the bash command string is middle-elided BEFORE
+ * serialization so a risky suffix can never hide under a benign head.
+ */
+export function prepareSystemOneInput(
+  exec: { name: string; arguments?: unknown },
+  slots: GaugeSlots,
+  window: number = DEFAULT_GAUGE_CONTEXT_WINDOW,
+): PreparedSystemOneInput {
+  const questions = { verdict: buildVerdictQuestion(slots) }
+  const budget = window - S1_ENVELOPE_TOKENS - estimateSystemOneTokens(JSON.stringify(questions)) - S1_MARGIN_TOKENS
+  if (budget < MIN_STATE_TOKENS) {
+    return { state: '', questions, budgetExhausted: true }
+  }
+  const rendered = renderSystemOneState(exec)
+  // Payload-field elision: elide the payload value middle-first, then a
+  // final-wire check cuts the whole serialized state if still over.
+  const skeleton = JSON.parse(rendered) as Record<string, unknown>
+  const payloadKey = 'command' in skeleton ? 'command' : 'file_path' in skeleton ? 'file_path' : 'arguments'
+  const original = skeleton[payloadKey]
+  if (typeof original === 'string') {
+    const overheadTokens = estimateSystemOneTokens(JSON.stringify({ ...skeleton, [payloadKey]: '' }))
+    skeleton[payloadKey] = capMiddleToTokenBudget(original, Math.max(0, budget - overheadTokens), '…')
+  }
+  const state = JSON.stringify(skeleton)
+  return {
+    state: estimateSystemOneTokens(state) <= budget ? state : capMiddleToTokenBudget(state, budget, '…'),
+    questions,
+    budgetExhausted: false,
+  }
 }
 
 /** Post-gating verdict for one raw gauge answer. */
@@ -181,24 +215,30 @@ export interface GaugeSlots {
   environment: readonly string[]
 }
 
+/**
+ * Classify over a PREPARED pair ({@link prepareSystemOneInput} output — one
+ * render site upstream). `budgetExhausted` short-circuits to an honest
+ * `ask` with NO failure tag (breaker-irrelevant): no doomed wire call.
+ */
 export async function classifyViaSystemOne(
-  exec: { name: string; arguments?: unknown },
+  prepared: PreparedSystemOneInput,
   backend: { baseURL: string; model: string; apiKey?: string; contextWindow?: number },
   opts: {
-    slots: GaugeSlots
     allowThreshold?: number
     timeoutMs: number
     signal?: AbortSignal
     fetchImpl?: typeof fetch
   },
 ): Promise<{ verdict: 'allow' | 'ask' | 'deny'; reason: string; failure?: SystemOneFailure; probabilities?: Record<string, number>; confidence?: number }> {
+  if (prepared.budgetExhausted) {
+    return { verdict: 'ask', reason: 'state budget exhausted (question too large for window)' }
+  }
   const window = backend.contextWindow ?? DEFAULT_GAUGE_CONTEXT_WINDOW
-  const state = renderSystemOneState(exec, window)
   const result = await systemoneDecide({
     baseURL: backend.baseURL,
     model: backend.model,
-    state,
-    questions: { verdict: buildVerdictQuestion(opts.slots) },
+    state: prepared.state,
+    questions: prepared.questions,
     timeoutMs: opts.timeoutMs,
     ...(backend.apiKey !== undefined ? { apiKey: backend.apiKey } : {}),
     ...(opts.signal !== undefined ? { signal: opts.signal } : {}),

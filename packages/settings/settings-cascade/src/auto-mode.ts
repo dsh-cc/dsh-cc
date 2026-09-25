@@ -37,6 +37,12 @@ export interface AutoModeClassifier {
    * constant). Absence-preserving.
    */
   gaugeAllowThreshold?: number
+  /**
+   * Fix B: fold user-originated allow evidence (settings rules + session
+   * grants) into the gauge verdict question. Absence-preserving; the gauge
+   * stage consumes a default of `true` (`false` is the kill switch).
+   */
+  gaugeAllowEvidence?: boolean
   /** Per-call timeout in milliseconds (default `8000`). */
   timeoutMs?: number
   /** Verdict cache size in entries (default `256`). */
@@ -155,6 +161,8 @@ export const AutoModeClassifierSchema: z<AutoModeClassifier> = z.object({
   backend: z.union(['haiku', 'auto'] as const),
   // Absence-preserving (gauge allow-gate; adapter owns the default).
   gaugeAllowThreshold: z.union([z.number(), z.const(undefined)]),
+  // Absence-preserving (gauge evidence fold; the stage owns the `true` default).
+  gaugeAllowEvidence: z.union([z.boolean(), z.const(undefined)]),
   timeoutMs: z.number().default(8000),
   cacheMaxEntries: z.number().default(256),
   // Union with `undefined` keeps an absent `secondPass` key absent (default
