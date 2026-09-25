@@ -1,7 +1,8 @@
 /**
  * Bounded HTTP 429 retry in the System One client: honors Retry-After
- * (delta-seconds and HTTP-date, clamped), falls back to jittered exponential
- * backoff, and caps attempts and total elapsed time — after which the last
+ * (delay-seconds and IMF-fixdate only, clamped), falls back to jittered
+ * exponential backoff, caps attempts and total elapsed time, and never sleeps
+ * into the per-call timeout — after which the last
  * 429 degrades exactly as before (`failure: 'error'`, `http 429: …`). Sleep,
  * clock and jitter are injected, so nothing here waits for real.
  */
@@ -44,9 +45,9 @@ function fakeClock(start = Date.parse('2026-09-26T00:00:00Z')) {
   }
 }
 
-function decide(fetchImpl: ReturnType<typeof scriptedFetch>, clock: ReturnType<typeof fakeClock>['clock'], signal?: AbortSignal) {
+function decide(fetchImpl: ReturnType<typeof scriptedFetch>, clock: ReturnType<typeof fakeClock>['clock'], signal?: AbortSignal, timeoutMs = 60_000) {
   return systemoneDecide({
-    baseURL: 'http://gw', model: 'llmbox_systemone/laya', state: {}, questions: QUESTIONS, timeoutMs: 60_000,
+    baseURL: 'http://gw', model: 'llmbox_systemone/laya', state: {}, questions: QUESTIONS, timeoutMs,
     fetchImpl: fetchImpl as unknown as typeof fetch, clock, ...(signal ? { signal } : {}),
   })
 }
@@ -127,13 +128,52 @@ describe('systemoneDecide 429 retry', () => {
     expect(waits).toEqual([])
   })
 
-  it('parseRetryAfterMs: seconds, HTTP-date, past date, garbage', () => {
+  it('a wait that would reach the per-call timeout is not attempted: timeoutMs 1000 + Retry-After 2 returns the http 429 error at once', async () => {
+    const fetchImpl = scriptedFetch([{ status: 429, retryAfter: '2' }, { status: 200 }])
+    const { clock, waits } = fakeClock()
+    const result = await decide(fetchImpl, clock, undefined, 1000)
+    expect(result).toEqual({ ok: false, failure: 'error', reason: `http 429: ${RATE_LIMITED}` })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(waits).toEqual([])
+  })
+
+  it('a wait that fits inside the per-call timeout is still attempted', async () => {
+    const fetchImpl = scriptedFetch([{ status: 429, retryAfter: '1' }, { status: 200 }])
+    const { clock, waits } = fakeClock()
+    const result = await decide(fetchImpl, clock, undefined, 1500)
+    expect(result.ok).toBe(true)
+    expect(waits).toEqual([1000])
+  })
+
+  it.each(['-1', '1.5', '+3', 'soon', '2026-09-26T00:00:03Z'])('an invalid Retry-After (%j) falls back to backoff instead of an immediate retry', async (retryAfter) => {
+    const fetchImpl = scriptedFetch([{ status: 429, retryAfter }, { status: 200 }])
+    const { clock, waits } = fakeClock()
+    const result = await decide(fetchImpl, clock)
+    expect(result.ok).toBe(true)
+    // random() = 0 → lower edge of the first backoff window, never 0ms.
+    expect(waits).toEqual([100])
+  })
+
+  it('parseRetryAfterMs accepts only delay-seconds and IMF-fixdate', () => {
     const now = Date.parse('2026-09-26T00:00:00Z')
+    // Valid forms.
     expect(parseRetryAfterMs('2', now)).toBe(2000)
+    expect(parseRetryAfterMs('0', now)).toBe(0)
+    expect(parseRetryAfterMs(' 2 ', now)).toBe(2000)
     expect(parseRetryAfterMs('Sat, 26 Sep 2026 00:00:03 GMT', now)).toBe(3000)
     expect(parseRetryAfterMs('Fri, 25 Sep 2026 00:00:00 GMT', now)).toBe(0)
+    // Shapes V8's Date.parse would happily read as dates in 2001 (→ 0ms waits).
+    expect(Number.isNaN(Date.parse('-1'))).toBe(false)
+    expect(parseRetryAfterMs('-1', now)).toBeUndefined()
+    expect(parseRetryAfterMs('1.5', now)).toBeUndefined()
+    expect(parseRetryAfterMs('+3', now)).toBeUndefined()
+    // Other date spellings and garbage.
+    expect(parseRetryAfterMs('2026-09-26T00:00:03Z', now)).toBeUndefined()
+    expect(parseRetryAfterMs('Saturday, 26-Sep-26 00:00:03 GMT', now)).toBeUndefined()
     expect(parseRetryAfterMs('soon', now)).toBeUndefined()
+    expect(parseRetryAfterMs('', now)).toBeUndefined()
     expect(parseRetryAfterMs(null, now)).toBeUndefined()
+    expect(parseRetryAfterMs(undefined, now)).toBeUndefined()
   })
 })
 

@@ -10,10 +10,11 @@
  * adapter's truncation sentinel, not here).
  *
  * HTTP 429 (rate limited) is retried a bounded number of times inside the
- * same per-call timeout: honor `Retry-After` (delta-seconds or HTTP-date,
+ * same per-call timeout: honor `Retry-After` (delay-seconds or IMF-fixdate,
  * clamped), otherwise exponential backoff with jitter. Attempts AND total
  * elapsed time are capped so a permission decision is never stalled for long;
- * once the budget is spent the last 429 falls through to the ordinary
+ * a wait that would reach the per-call `timeoutMs` is not attempted either.
+ * Once the budget is spent the last 429 falls through to the ordinary
  * `failure: 'error'` degradation, exactly as before retries existed.
  *
  * Never throws: every failure mode maps to a tagged `SystemOneResult`.
@@ -40,7 +41,7 @@ export const SYSTEMONE_429_RETRY_BUDGET_MS = 3000
  * usable `Retry-After`: attempt n waits within [base·2ⁿ/2, base·2ⁿ]
  * ("equal jitter"), i.e. 100–200ms then 200–400ms.
  */
-export const SYSTEMONE_429_BACKOFF_BASE_MS = 200
+const SYSTEMONE_429_BACKOFF_BASE_MS = 200
 
 /**
  * Upper clamp (ms) for a server-sent `Retry-After`: a huge or far-future value
@@ -58,16 +59,26 @@ export interface SystemOneRetryClock {
   random?: () => number
 }
 
+/** RFC 9110 `delay-seconds`: a non-negative integer, nothing else. */
+const RETRY_AFTER_SECONDS = /^\d+$/
+
+/** RFC 9110 IMF-fixdate shape, e.g. `Sun, 06 Nov 1994 08:49:37 GMT`. */
+const RETRY_AFTER_IMF_FIXDATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/
+
 /**
- * Parse a `Retry-After` header into a wait in ms: delta-seconds (`"2"`) or an
- * HTTP-date (relative to `now`, floored at 0). Returns `undefined` when the
- * header is absent or unparseable.
+ * Parse a `Retry-After` header into a wait in ms. Only two shapes are
+ * accepted: delay-seconds (a non-negative integer such as `"2"`) or an
+ * IMF-fixdate (relative to `now`, floored at 0). Everything else — `"-1"`,
+ * `"1.5"`, `"+3"`, other date spellings, garbage — returns `undefined` so the
+ * caller falls back to backoff. The shape check runs before `Date.parse`
+ * because V8's lenient parser reads strings like `"-1"` or `"1.5"` as dates
+ * in 2001, which would turn into an immediate (0ms) retry.
  */
 export function parseRetryAfterMs(header: string | null | undefined, now: number): number | undefined {
   if (header === null || header === undefined) return undefined
   const value = header.trim()
-  if (value.length === 0) return undefined
-  if (/^\d+$/.test(value)) return Number(value) * 1000
+  if (RETRY_AFTER_SECONDS.test(value)) return Number(value) * 1000
+  if (!RETRY_AFTER_IMF_FIXDATE.test(value)) return undefined
   const at = Date.parse(value)
   if (Number.isNaN(at)) return undefined
   return Math.max(0, at - now)
@@ -77,7 +88,7 @@ export function parseRetryAfterMs(header: string | null | undefined, now: number
  * The wait before 429 retry number `retry` (0-based): the clamped
  * `Retry-After` when present, else equal-jitter exponential backoff.
  */
-export function retryDelayMs(retry: number, retryAfterMs: number | undefined, random: () => number): number {
+function retryDelayMs(retry: number, retryAfterMs: number | undefined, random: () => number): number {
   if (retryAfterMs !== undefined) return Math.min(retryAfterMs, SYSTEMONE_429_RETRY_AFTER_CAP_MS)
   const ceiling = SYSTEMONE_429_BACKOFF_BASE_MS * 2 ** retry
   return Math.round(ceiling / 2 + random() * (ceiling / 2))
@@ -198,11 +209,15 @@ export async function systemoneDecide(opts: {
       const stopped = interrupted()
       if (stopped !== undefined) return stopped
       body = await response.text()
-      // Bounded 429 retry: stop when attempts are spent or the wait would
-      // overrun the total budget; the last 429 then degrades below as before.
+      // Bounded 429 retry: stop when attempts are spent, when the wait would
+      // overrun the retry budget, or when it would reach the per-call timeout
+      // (sleeping into the timeout would only turn this 429 into 'timeout').
+      // The last 429 then degrades below as before.
       if (response.status !== 429 || retry >= SYSTEMONE_429_MAX_RETRIES) break
       const delay = retryDelayMs(retry, parseRetryAfterMs(response.headers?.get?.('retry-after'), now()), random)
-      if (now() - startedAt + delay > SYSTEMONE_429_RETRY_BUDGET_MS) break
+      const elapsed = now() - startedAt
+      if (elapsed + delay > SYSTEMONE_429_RETRY_BUDGET_MS) break
+      if (elapsed + delay >= opts.timeoutMs) break
       await sleep(delay, signal)
       const slept = interrupted()
       if (slept !== undefined) return slept
