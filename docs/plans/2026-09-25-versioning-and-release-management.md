@@ -60,7 +60,7 @@ dsh-cc ships two npm channels (`latest` and `next`), but it verifies both of the
 | **topic branch** | Any feature, fix, docs, or chore branch that targets `main` or a maintenance branch through a PR. |
 | **effective next** | `max(upstream latest, upstream next)` by semver. If upstream `next` is older than upstream `latest`, `next` is treated as equal to `latest`. |
 | **build channel** | The pin that the `publish` job itself builds and tests against (§9.5). |
-| **release owner** | The person configured as the required reviewer of the `npm-publish` environment (PR-0 configures @jianxx). This person makes every decision marked "release owner". |
+| **release owner** | The person configured as the required reviewer of the `npm-publish` environment (PR-0 configures the GitHub user `jianxx`). This person makes every decision marked "release owner". |
 
 ## 4. Current state and gaps
 
@@ -853,7 +853,7 @@ Each PR updates `docs/release.md` for the behavior it changes.
 
 ## 15. Open questions
 
-- **Q1.** Release owner identity. This plan assumes @jianxx is the `npm-publish` reviewer and has admin rights for rulesets. Confirm, or name the person.
+- **Q1.** Release owner identity. This plan assumes the GitHub user `jianxx` is the `npm-publish` reviewer and has admin rights for rulesets. Confirm, or name the person.
 - **Q2.** The transition policy. Until PR-9 resolves, rc's continue to publish to `next` built against `latest`, with the `next` leg informational and disclosed in the Release notes (§9.5 `build_channel`). The alternative is to block rc publishing until dsh-cc passes on dsh next. This plan chooses to continue publishing. Confirm.
 - **Q3.** Whether a `workflow_dispatch` run of `presubmit.yml` on a bot branch satisfies the required status check on that branch's PR. This is expected but unverified. It is resolved during PR-2 (§14 fallback).
 
