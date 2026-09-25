@@ -211,6 +211,7 @@ opus / blueprint    -> <provider>/<推理模型>
 haiku / sketch      -> <provider>/<快速模型>
 fable / masterplan  -> <provider>/<最强推理模型>
 architect           -> 继承主 Agent 路由（规划/编排）
+gauge               -> 类型化决策低价 lane（System One 模型；非生成用途）
 inherit             -> 继承主 Agent 路由
 ```
 

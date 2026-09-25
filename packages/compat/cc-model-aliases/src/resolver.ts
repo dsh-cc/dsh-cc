@@ -43,8 +43,12 @@ export const CC_ALIASES: readonly string[] = ['fable', 'opus', 'sonnet', 'haiku'
  * | `blueprint` | deep reasoning | opus |
  * | `masterplan` | maximum reasoning | fable |
  * | `architect` | planning / orchestration | inherit (main thread) |
+ * | `gauge` | typed-decision cheap lane (System One models; not generative) | haiku |
+ *
+ * `gauge` must never be used as agent frontmatter `model:` — it is a
+ * typed-decision lane selected by decision consumers, not a generative alias.
  */
-export const LANE_ALIASES: readonly string[] = ['sketch', 'draft', 'blueprint', 'masterplan', 'architect']
+export const LANE_ALIASES: readonly string[] = ['sketch', 'draft', 'blueprint', 'masterplan', 'architect', 'gauge']
 
 /** Unconfigured lane → CC family alias it shares a route with. */
 export const LANE_PEERS: Readonly<Record<string, string>> = {
@@ -52,6 +56,7 @@ export const LANE_PEERS: Readonly<Record<string, string>> = {
   draft: 'sonnet',
   blueprint: 'opus',
   masterplan: 'fable',
+  gauge: 'haiku',
 }
 
 /**

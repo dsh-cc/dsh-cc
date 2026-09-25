@@ -88,7 +88,7 @@ lowercase at merge and at lookup).
 | configured alias (string form) | `{ model: <target> }` |
 | configured alias (object form) | `{ provider?: <p>, model: <m>, reasoningEffort?: <effort> }` |
 | builtin alias unconfigured (`fable`/`opus`/`sonnet`/`haiku`) | no override — child inherits the parent route ("current model") |
-| dsh-cc lane unconfigured (`sketch`/`draft`/`blueprint`/`masterplan`) | follows the CC peer (`haiku`/`sonnet`/`opus`/`fable`); inherit if that peer is also unconfigured |
+| dsh-cc lane unconfigured (`sketch`/`draft`/`blueprint`/`masterplan`/`gauge`) | follows the CC peer (`haiku`/`sonnet`/`opus`/`fable`/`haiku`); inherit if that peer is also unconfigured |
 | `architect` unconfigured | no override — inherit the parent (main-thread) route |
 | anything else | passed through **verbatim** as a literal model id; a bare-lowercase-word form (e.g. `turbo`) logs a warning that it looks like an unconfigured alias |
 
@@ -203,8 +203,8 @@ cc-shell (and the routes service), so in CC mode the fix is always active.
   `getAliases` is a thunk evaluated **per invocation** (liveness). Optional
   `warn` replaces the default `console.warn` used for the unconfigured-custom-alias
   warning.
-- `BUILTIN_ALIASES` — CC family (`fable`/`opus`/`sonnet`/`haiku`) plus dsh-cc lanes (`sketch`/`draft`/`blueprint`/`masterplan`/`architect`).
-- `LANE_PEERS` — unconfigured-lane → CC-family map (`sketch→haiku`, `draft→sonnet`, `blueprint→opus`, `masterplan→fable`; `architect` has no peer).
+- `BUILTIN_ALIASES` — CC family (`fable`/`opus`/`sonnet`/`haiku`) plus dsh-cc lanes (`sketch`/`draft`/`blueprint`/`masterplan`/`architect`/`gauge`).
+- `LANE_PEERS` — unconfigured-lane → CC-family map (`sketch→haiku`, `draft→sonnet`, `blueprint→opus`, `masterplan→fable`, `gauge→haiku`; `architect` has no peer).
 - `toAgentOptions(route)` — drop `undefined` fields from a resolved route so
   per-field inheritance survives (never set a field to `undefined` on the child
   request); `undefined` in → `undefined` out, and an all-`undefined` route
@@ -234,6 +234,11 @@ except `architect` follows its CC peer, so a deployment that already maps
 | `blueprint` | Deep reasoning | `opus` |
 | `masterplan` | Maximum reasoning | `fable` |
 | `architect` | Planning and orchestration | inherit (main thread) |
+| `gauge` | Typed-decision cheap lane (System One models; not generative) | `haiku` |
+
+`gauge` is a typed-decision lane for System One models (e.g.
+`llmbox_systemone/laya`); **never use it as agent frontmatter `model:`** — it
+is selected by decision consumers, not generative callers.
 
 A configured string-form target that names another alias is followed **one
 hop** (`sketch: haiku` shares haiku's object route, including

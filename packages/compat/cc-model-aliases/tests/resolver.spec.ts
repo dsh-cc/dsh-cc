@@ -196,8 +196,54 @@ describe('createModelResolver inherit / builtin fallback / passthrough', () => {
 
   it('BUILTIN_ALIASES lists the CC family plus dsh-cc lanes', () => {
     expect([...BUILTIN_ALIASES].sort()).toEqual([
-      'architect', 'blueprint', 'draft', 'fable', 'haiku', 'masterplan', 'opus', 'sketch', 'sonnet',
+      'architect', 'blueprint', 'draft', 'fable', 'gauge', 'haiku', 'masterplan', 'opus', 'sketch', 'sonnet',
     ])
+  })
+
+  it('unconfigured gauge follows its haiku peer route (via peer)', () => {
+    const { resolve } = resolverFor({ haiku: { provider: 'p', model: 'flash' } }, {})
+    expect(resolve('gauge')).toEqual({ provider: 'p', model: 'flash' })
+    const { inspect } = inspectorFor({ haiku: { provider: 'p', model: 'flash' } }, {})
+    const inspection = inspect('gauge')
+    expect(inspection.kind).toBe('route')
+    expect(inspection.via).toBe('peer')
+    expect(inspection.hop).toBe('haiku')
+    expect(inspection.route).toEqual(inspect('haiku').route)
+  })
+
+  it('unconfigured gauge inherits when haiku is also unconfigured', () => {
+    const { resolve } = resolverFor({}, {})
+    expect(resolve('gauge')).toBeUndefined()
+  })
+
+  it('configured object-form gauge wins and protocol is NOT projected into the route', () => {
+    const { resolve } = resolverFor(
+      { haiku: 'flash' },
+      { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } },
+    )
+    expect(resolve('gauge')).toEqual({ provider: 'orchestrix', model: 'llmbox_systemone/laya' })
+    expect(resolve('gauge')).not.toHaveProperty('protocol')
+  })
+
+  it('gauge$high strips the level suffix like other lane aliases', () => {
+    const { resolve } = resolverFor({ haiku: { provider: 'p', model: 'flash' } }, {})
+    // The suffix becomes a stamped reasoningEffort on the peer route, not a literal lookup.
+    expect(resolve('gauge$high')).toEqual({ provider: 'p', model: 'flash', reasoningEffort: 'high' })
+  })
+
+  it('schemas accept {provider, model} without protocol in both layers', () => {
+    expect(() => ConfigAliasesSchema({ gauge: { provider: 'p', model: 'm' } } as never)).not.toThrow()
+    expect(() => SettingsAliasesSchema({ gauge: { provider: 'p', model: 'm' } } as never)).not.toThrow()
+  })
+
+  it('mergeAliasMaps round-trips an entry carrying protocol', () => {
+    const merged = mergeAliasMaps(
+      {},
+      { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } },
+    )
+    expect(Object.fromEntries(merged)['gauge']).toEqual({
+      provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone',
+    })
   })
 })
 
