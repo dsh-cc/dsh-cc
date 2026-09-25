@@ -9,10 +9,17 @@
  * Policy (Asia/Singapore weekdays; cron stays `0 0 * * 1-5`):
  *   1. Same Mon–Sun week already has a stable tag → skip (week_has_stable).
  *   2. No commits on main after last stable → skip (no_unreleased_work).
- *   3. Else compute next line from lastStable + bump/hasFeat.
+ *   3. Else compute the line = max(base, openRcLine, npm next line) where
+ *      base = next line from lastStable + bump/hasFeat and openRcLine = the
+ *      line of the highest v*-rc.* tag above lastStable (docs plan §6.2 /
+ *      §6.6; #144: base 0.8.0 but v0.8.1-rc.1 exists → line 0.8.1).
  *   4. No rc on that line yet → propose X.Y.Z-rc.1 (incl. mid-week first run).
  *   5. Commits after latest rc → propose X.Y.Z-rc.(N+1).
  *   6. No commits after latest rc → propose stable X.Y.Z.
+ *   Monotonic guard: a proposed rc is > every rc tag and >= npm `next`; a
+ *   proposed stable is > every stable tag. Violations throw
+ *   `monotonic_violation` (fails the job loudly instead of moving `next`
+ *   backwards).
  *
  * Never tags/publishes — the workflow only opens release/v* PRs.
  */
@@ -27,6 +34,8 @@ const ROOT = join(__dirname, "..");
 const STABLE_TAG_RE = /^v(\d+)\.(\d+)\.(\d+)$/;
 const RC_TAG_RE = /^v(\d+)\.(\d+)\.(\d+)-rc\.(\d+)$/;
 const DEFAULT_TZ = "Asia/Singapore";
+const VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/;
+const NPM_PACKAGE = "@dsh-cc/cli";
 
 function fail(msg) {
   console.error(`daily-release-decide: ${msg}`);
@@ -108,6 +117,53 @@ export function cmpSemverTriple(a, b) {
   return a.patch - b.patch;
 }
 
+/**
+ * Parse `X.Y.Z` / `X.Y.Z-rc.N` (optional leading `v`) → { major, minor,
+ * patch, rc } with rc = null for stable. Other shapes → null (V-1).
+ */
+export function parseVersion(name) {
+  const m = typeof name === "string" && name.match(VERSION_RE);
+  if (!m) return null;
+  return {
+    major: Number(m[1]),
+    minor: Number(m[2]),
+    patch: Number(m[3]),
+    rc: m[4] === undefined ? null : Number(m[4]),
+    line: `${m[1]}.${m[2]}.${m[3]}`,
+  };
+}
+
+/** SemVer order for parseVersion() results: X.Y.Z-rc.N < X.Y.Z. */
+export function cmpVersion(a, b) {
+  const t = cmpSemverTriple(a, b);
+  if (t !== 0) return t;
+  if (a.rc === null && b.rc === null) return 0;
+  if (a.rc === null) return 1;
+  if (b.rc === null) return -1;
+  return a.rc - b.rc;
+}
+
+/**
+ * Release line for `main` (docs plan §6.2, the #144 fix): the max X.Y.Z of
+ *   - base       = nextLineVersion(lastStable, bump, hasFeat)
+ *   - openRcLine = line of the highest v*-rc.* tag whose X.Y.Z > lastStable
+ *   - npm `next` = X.Y.Z of the current `next` dist-tag, when > lastStable
+ * so the ladder never restarts on a line below an rc already tagged or
+ * published to `next`.
+ */
+export function selectLine({ lastStable, bump, hasFeatSinceStable, tags = [], npmNext = null }) {
+  const stable = parseStable(lastStable);
+  const base = nextLineVersion(lastStable, bump, hasFeatSinceStable);
+  let best = parseVersion(base);
+  const consider = (p) => {
+    if (!p || cmpSemverTriple(p, stable) <= 0) return;
+    if (cmpSemverTriple(p, best) > 0) best = p;
+  };
+  for (const t of tags) consider(parseRc(t.name));
+  if (npmNext) consider(parseVersion(npmNext));
+  return best.line;
+}
+
 /** Next release LINE (bare X.Y.Z) from last stable + bump policy. */
 export function nextLineVersion(lastStable, bump, hasFeatSinceStable) {
   const parsed = parseStable(lastStable);
@@ -138,6 +194,7 @@ export function nextLineVersion(lastStable, bump, hasFeatSinceStable) {
  * @param {boolean} input.headAheadOfLatestRc  false when no rc
  * @param {'auto'|'patch'|'minor'} input.bump
  * @param {boolean} input.hasFeatSinceStable
+ * @param {string|null} [input.npmNext]  current `next` dist-tag, e.g. '0.8.1-rc.1'
  * @returns {{action:'propose'|'skip', reason:string, version?:string, last_stable:string, line?:string}}
  */
 export function decide(input) {
@@ -175,19 +232,35 @@ export function decide(input) {
     };
   }
 
-  // 3. Next line from last stable.
-  const line = nextLineVersion(lastStable, bump, hasFeatSinceStable);
+  const npmNext = input.npmNext ?? null;
+  const npmNextParsed = npmNext ? parseVersion(npmNext) : null;
+  if (npmNext && !npmNextParsed) {
+    throw new Error(`invalid npmNext '${npmNext}'; expected X.Y.Z or X.Y.Z-rc.N`);
+  }
+
+  // 3. Line = max(base, openRcLine, npm next line) (§6.2).
+  const line = selectLine({ lastStable, bump, hasFeatSinceStable, tags, npmNext });
 
   // 4. Only honour latestRcOnLine when it is on THIS line.
   let rc = input.latestRcOnLine ? parseRc(input.latestRcOnLine) : null;
   if (rc && rc.line !== line) {
     rc = null;
   }
+  // An rc already published to `next` on this line consumes its number even
+  // without a merged tag (V-4); headAheadOfLatestRc cannot speak for it, so
+  // the only safe move is past it.
+  const npmRcOnLine =
+    npmNextParsed && npmNextParsed.rc !== null && npmNextParsed.line === line
+      ? npmNextParsed.rc
+      : null;
 
   // 5–7. Ladder.
   let version;
   let reason;
-  if (!rc) {
+  if (npmRcOnLine !== null && npmRcOnLine > (rc ? rc.n : 0)) {
+    version = `${line}-rc.${npmRcOnLine + 1}`;
+    reason = "rc_bump";
+  } else if (!rc) {
     version = `${line}-rc.1`;
     reason = "first_rc";
   } else if (input.headAheadOfLatestRc) {
@@ -198,6 +271,8 @@ export function decide(input) {
     reason = "stabilize";
   }
 
+  assertMonotonic(version, tags, npmNextParsed);
+
   return {
     action: "propose",
     reason,
@@ -205,6 +280,27 @@ export function decide(input) {
     last_stable: lastStable,
     line,
   };
+}
+
+/**
+ * Invariant M (docs plan §6.6) at proposal time: rc > every rc tag and
+ * >= npm `next`; stable > every stable tag. Throws `monotonic_violation`.
+ */
+export function assertMonotonic(version, tags = [], npmNextParsed = null) {
+  const v = parseVersion(version);
+  for (const t of tags) {
+    const p = parseVersion(t.name);
+    if (!p || (p.rc === null) !== (v.rc === null)) continue;
+    if (cmpVersion(v, p) <= 0) {
+      throw new Error(`monotonic_violation: ${version} <= ${t.name}`);
+    }
+  }
+  if (v.rc !== null && npmNextParsed && cmpVersion(v, npmNextParsed) < 0) {
+    throw new Error(
+      `monotonic_violation: ${version} < npm next ${npmNextParsed.line}` +
+        (npmNextParsed.rc === null ? "" : `-rc.${npmNextParsed.rc}`),
+    );
+  }
 }
 
 /* ---- CI gather (git) ---- */
@@ -304,7 +400,35 @@ function warnLockstep(lastStable, latestRcOnLine) {
   }
 }
 
-export function gatherInputFromGit(bump) {
+/**
+ * Current `next` dist-tag of @dsh-cc/cli. Best effort: on a registry error
+ * warn and return null — merged rc tags still drive openRcLine, and every
+ * `next` publish comes from a tag on main (release-tag.yml).
+ */
+function fetchNpmNext() {
+  try {
+    const raw = execFileSync("npm", ["view", NPM_PACKAGE, "dist-tags", "--json"], {
+      encoding: "utf-8",
+      cwd: ROOT,
+      timeout: 60_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const next = JSON.parse(raw).next ?? null;
+    if (next && !parseVersion(next)) {
+      console.error(`daily-release-decide: warning: ignoring unparseable npm next '${next}'`);
+      return null;
+    }
+    return next;
+  } catch (e) {
+    console.error(
+      `daily-release-decide: warning: npm view ${NPM_PACKAGE} dist-tags failed ` +
+        `(${e.message.split("\n")[0]}); deciding from git tags only`,
+    );
+    return null;
+  }
+}
+
+export function gatherInputFromGit(bump, { npmNext } = {}) {
   if (!["auto", "patch", "minor"].includes(bump)) {
     fail(`invalid bump '${bump ?? ""}'. Expected auto | patch | minor`);
   }
@@ -314,7 +438,8 @@ export function gatherInputFromGit(bump) {
     fail("no stable v* tag reachable from main; cannot establish a release baseline");
   }
   const hasFeatSinceStable = hasFeatSince(lastStable);
-  const line = nextLineVersion(lastStable, bump, hasFeatSinceStable);
+  const next = npmNext === undefined ? fetchNpmNext() : npmNext;
+  const line = selectLine({ lastStable, bump, hasFeatSinceStable, tags, npmNext: next });
   const latestRcOnLine = highestRcOnLine(tags, line);
   warnLockstep(lastStable, latestRcOnLine);
   return {
@@ -327,6 +452,7 @@ export function gatherInputFromGit(bump) {
     headAheadOfLatestRc: latestRcOnLine ? headAheadOf(latestRcOnLine) : false,
     bump,
     hasFeatSinceStable,
+    npmNext: next,
   };
 }
 
@@ -344,15 +470,23 @@ function printDecision(result) {
 
 function parseArgs(argv) {
   let bump = "auto";
+  let npmNext; // undefined → query npm
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--bump") {
       bump = argv[++i];
     } else if (a.startsWith("--bump=")) {
       bump = a.slice("--bump=".length);
+    } else if (a === "--npm-next") {
+      npmNext = argv[++i];
+    } else if (a.startsWith("--npm-next=")) {
+      npmNext = a.slice("--npm-next=".length);
+    } else if (a === "--no-npm") {
+      npmNext = null;
     } else if (a === "--help" || a === "-h") {
       console.error(
-        "Usage: node scripts/daily-release-decide.mjs --bump auto|patch|minor\n" +
+        "Usage: node scripts/daily-release-decide.mjs --bump auto|patch|minor " +
+          "[--npm-next X.Y.Z[-rc.N] | --no-npm]\n" +
           "Stdout: action=… reason=… last_stable=… [version=…] (GITHUB_OUTPUT lines)",
       );
       process.exit(0);
@@ -360,14 +494,17 @@ function parseArgs(argv) {
       fail(`unknown arg '${a}'`);
     }
   }
-  return { bump };
+  if (npmNext !== undefined && npmNext !== null && !parseVersion(npmNext)) {
+    fail(`invalid --npm-next '${npmNext}'; expected X.Y.Z or X.Y.Z-rc.N`);
+  }
+  return { bump, npmNext };
 }
 
 function main() {
-  const { bump } = parseArgs(process.argv.slice(2));
+  const { bump, npmNext } = parseArgs(process.argv.slice(2));
   let input;
   try {
-    input = gatherInputFromGit(bump);
+    input = gatherInputFromGit(bump, { npmNext });
   } catch (e) {
     if (e && e.status !== undefined) {
       fail(`git failed: ${e.message}`);
@@ -379,7 +516,8 @@ function main() {
       `latestRcOnLine=${input.latestRcOnLine ?? "(none)"} ` +
       `headAheadOfStable=${input.headAheadOfStable} ` +
       `headAheadOfLatestRc=${input.headAheadOfLatestRc} ` +
-      `hasFeat=${input.hasFeatSinceStable} bump=${bump}`,
+      `hasFeat=${input.hasFeatSinceStable} bump=${bump} ` +
+      `npmNext=${input.npmNext ?? "(none)"}`,
   );
   let result;
   try {
