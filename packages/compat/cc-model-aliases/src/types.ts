@@ -99,5 +99,5 @@ export interface DetailedRoute {
  */
 export type AliasTarget
   = | string
-    | { readonly provider?: string; readonly model: string; readonly reasoningEffort?: string }
+    | { readonly provider?: string; readonly model: string; readonly reasoningEffort?: string; readonly protocol?: string }
     | null

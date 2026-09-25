@@ -58,7 +58,7 @@ alias 的查找顺序:**settings overlay → config 默认 → builtin fallback*
 | 已配置 alias(字符串形式) | `{ model: <target> }` |
 | 已配置 alias(对象形式) | `{ provider?: <p>, model: <m>, reasoningEffort?: <effort> }` |
 | 未配置的 builtin alias(`fable`/`opus`/`sonnet`/`haiku`) | 无 override——child 继承父路由(「当前模型」) |
-| 未配置的 dsh-cc lane(`sketch`/`draft`/`blueprint`/`masterplan`) | 跟随 CC 对标名(`haiku`/`sonnet`/`opus`/`fable`);对标也未配置则 inherit |
+| 未配置的 dsh-cc lane(`sketch`/`draft`/`blueprint`/`masterplan`/`gauge`) | 跟随 CC 对标名(`haiku`/`sonnet`/`opus`/`fable`/`haiku`);对标也未配置则 inherit |
 | 未配置的 `architect` | 无 override——继承父(主线程)路由 |
 | 其它 | **原样**作为字面 model id 透传;裸小写单词形式(如 `turbo`)记录一条「看起来像未配置 alias」的告警 |
 
@@ -115,8 +115,8 @@ alias 的查找顺序:**settings overlay → config 默认 → builtin fallback*
 - `overlayStampedEffort(resolved, stamped)` / `stampedEffortOf(options)` — 服务 `agent/request` listener 使用的宿主侧 effort overlay;为测试与宿主内嵌而导出。
 - `mergeAliasMaps(config, settings)` — 带 `null` 删除与大小写不敏感 key 折叠的 entry-shallow merge;返回只含已配置 alias 的有效 `ReadonlyMap`。
 - `createModelResolver(getAliases, { warn })` — 构建 `resolveModel` 闭包。`getAliases` 是**每次调用**求值的 thunk(liveness)。可选 `warn` 替换默认的 `console.warn`(用于未配置自定义 alias 告警)。
-- `BUILTIN_ALIASES` — CC 家族(`fable`/`opus`/`sonnet`/`haiku`)加上 dsh-cc lane(`sketch`/`draft`/`blueprint`/`masterplan`/`architect`)。
-- `LANE_PEERS` — 未配置 lane → CC 家族映射(`sketch→haiku`、`draft→sonnet`、`blueprint→opus`、`masterplan→fable`;`architect` 无对标)。
+- `BUILTIN_ALIASES` — CC 家族(`fable`/`opus`/`sonnet`/`haiku`)加上 dsh-cc lane(`sketch`/`draft`/`blueprint`/`masterplan`/`architect`/`gauge`)。
+- `LANE_PEERS` — 未配置 lane → CC 家族映射(`sketch→haiku`、`draft→sonnet`、`blueprint→opus`、`masterplan→fable`、`gauge→haiku`;`architect` 无对标)。
 - `toAgentOptions(route)` — 丢弃 resolved route 中的 `undefined` 字段以保住按字段继承(绝不把 child 请求的字段写成 `undefined`);`undefined` 进 → `undefined` 出,全 `undefined` 的 route 收敛为 `undefined`(「无 override」)。由 Task、cc-plugin-loader、hooks bridge 与 memory recall 共享。
 - `toOneShotRoute(route, parent?)` — 把 resolved alias 填成完整的 `{provider, model}` 二元组,供独立的 one-shot `ctx.llm.stream` 调用使用:alias 字段优先,缺失字段从 `parent` 继承;补不完整(继承后仍无 model)返回 `undefined`,调用方视为「未配置」。session-title overlay 与 WebFetch summarizer 使用。
 - `ConfigAliasesSchema` / `SettingsAliasesSchema`(及其 record 形式)— config 层(无 `null`)与 settings 层(允许 `null`)的 schemastery schema,外加 `AliasTarget` / `ResolvedRoute` 类型。
@@ -132,6 +132,9 @@ alias 的查找顺序:**settings overlay → config 默认 → builtin fallback*
 | `blueprint` | 深度推理 | `opus` |
 | `masterplan` | 最强推理 | `fable` |
 | `architect` | 规划与编排 | inherit(主线程) |
+| `gauge` | 类型化决策低价 lane(System One 模型;非生成用途) | `haiku` |
+
+`gauge` 是面向 System One 模型(如 `llmbox_systemone/laya`)的类型化决策 lane;**绝不要把它用作 agent frontmatter 的 `model:`**——它由决策消费者选择,而非生成式调用方。
 
 已配置的字符串目标若指向另一个 alias,会**跟随一跳**(`sketch: haiku` 共用 haiku 的对象路由,含 `reasoningEffort`)。对象形式目标是具体路由,不作为名字再跟。第二跳不跟,因此 `sketch: draft` + `draft: haiku` 停在字面 `"haiku"`(防环)。
 

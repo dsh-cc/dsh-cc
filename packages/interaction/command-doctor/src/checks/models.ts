@@ -40,6 +40,7 @@ const LANES: readonly { lane: string; peer: string }[] = [
   { lane: 'draft', peer: 'sonnet' },
   { lane: 'blueprint', peer: 'opus' },
   { lane: 'masterplan', peer: 'fable' },
+  { lane: 'gauge', peer: 'haiku' },
 ]
 
 /** Collect the models group checks. */
@@ -59,8 +60,14 @@ export async function modelChecks(
   }
   const inspect = routes.inspect.bind(routes)
   const checks: Check[] = []
+  // Peer-deduped: several lanes may share a peer (sketch and gauge both peer haiku),
+  // so fold them into one `peer (+ lane + lane)` row instead of duplicate ids.
+  const peerLanes = new Map<string, string[]>()
   for (const { lane, peer } of LANES) {
-    checks.push(aliasCheck(inspect, peer, `${peer} (+ ${lane})`))
+    peerLanes.get(peer)?.push(lane) ?? peerLanes.set(peer, [lane])
+  }
+  for (const [peer, lanes] of peerLanes) {
+    checks.push(aliasCheck(inspect, peer, `${peer} (+ ${lanes.join(' + ')})`))
   }
   checks.push(aliasCheck(inspect, 'architect', 'architect'))
   for (const { lane } of LANES) {

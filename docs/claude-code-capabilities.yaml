@@ -3327,7 +3327,11 @@ capabilities:
         Frontmatter aliases (sonnet/opus/haiku/fable + dsh lanes + open set),
         settings model-aliases overlay with null-delete and builtin fallback,
         shared toAgentOptions per-field inheritance, and the ccModelRoutes
-        service all work. Cheap-lane observability: an unconfigured builtin
+        service all work. The `gauge` lane (peer haiku) is a decision-only,
+        System One routing lane for typed-decision consumers — never agent
+        frontmatter `model:`; object-form gauge targets may carry an opaque
+        `protocol` marker (e.g. `systemone`) that is consumed from the merged
+        alias map, not projected into resolved routes. Cheap-lane observability: an unconfigured builtin
         alias inheriting the parent route emits a once-per-alias
         `model-aliases.warnOnInherit`-gated logger.warn (dsh-cc W5). Follow-ups:
         the /model command, ANTHROPIC_* env vars

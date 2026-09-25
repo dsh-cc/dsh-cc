@@ -23,7 +23,7 @@ describe('models checks', () => {
     })
   })
 
-  it('renders the five peer-deduped rows with inherit as info', async () => {
+  it('renders the six peer-deduped rows with inherit as info', async () => {
     const ctx = new Context()
     ctx.provide('ccModelRoutes', routes({
       haiku: { kind: 'route', route: { provider: 'deepseek', model: 'm-lite' }, via: 'configured' },
@@ -36,7 +36,7 @@ describe('models checks', () => {
     ])
     const haiku = report.checks.find(check => check.id === 'models.alias.haiku')
     expect(haiku).toMatchObject({ status: 'ok' })
-    expect(haiku?.summary).toContain('haiku (+ sketch)')
+    expect(haiku?.summary).toContain('haiku (+ sketch + gauge)')
     expect(haiku?.summary).toContain('deepseek/m-lite')
     expect(report.checks.find(check => check.id === 'models.alias.architect')).toMatchObject({ status: 'info' })
   })

@@ -30,12 +30,15 @@ const MODEL_ONLY = z.string().min(1)
  * A target that pins an explicit route: `model` is required; `provider` is
  * optional (inherit the parent provider) but must be non-empty when present;
  * `reasoningEffort` is an optional opaque non-empty string whose legal
- * spellings belong to the target model's adapter.
+ * spellings belong to the target model's adapter. `protocol` is an optional
+ * opaque protocol marker (e.g. `systemone`); it is intentionally not projected
+ * into resolved routes — the alias-map reader (route-policy layer) consumes it.
  */
 const EXPLICIT_ROUTE = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),
   reasoningEffort: z.string().min(1),
+  protocol: z.string().min(1),
 })
 
 /**

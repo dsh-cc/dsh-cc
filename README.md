@@ -237,6 +237,7 @@ opus / blueprint    -> <provider>/<reasoning model>
 haiku / sketch      -> <provider>/<fast model>
 fable / masterplan  -> <provider>/<maximum-reasoning model>
 architect           -> parent agent route (planning / orchestration)
+gauge               -> typed-decision cheap lane (System One models; not generative)
 inherit             -> parent agent route
 ```
 
