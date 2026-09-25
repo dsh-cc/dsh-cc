@@ -4,6 +4,7 @@
 **Date:** 2026-09-25
 **Branch:** `docs/versioning-release-plan` (based on `origin/main` eb6aeb9).
 **Supersedes:** the harness-anchor policy of `docs/plans/2026-09-12-harness-0.1.5-rc1-compatibility.md` §1 ("anchor to the dsh meta-package `latest`" — now: anchor *each* dsh-cc channel to the same-named dsh channel) and the "Open-range policy" of `docs/plans/2026-09-08-harness-0.1.2-rc1-compat.md:363-370` (peer floors are now generated from pins, §10). `docs/release.md` remains the operator runbook; each implementation PR updates the sections it changes.
+**Review log:** round 1 (2026-09-25, adversarial execution-readiness review): the PR-4…PR-8 window that would have blocked routine rc publishing at the `publish-plan` gate was closed by folding PR-8 into PR-4; `X.Y.Z(·)` notation, the raw-tuple reunification edge case, forward-only maintenance pins, the §9.3 promotion measurement, the R7 enumeration mechanism, PR-1/PR-2's `presubmit.yml` scope split, and execution-time version resolution were all pinned down.
 
 All anchors below were verified against `origin/main` eb6aeb9 on 2026-09-25. Registry and upstream data were captured on 2026-09-25 at 20:09 SGT (Appendix B).
 
@@ -375,7 +376,7 @@ Initial content after PR-1, with no behavior change. It uses the upstream tag co
 }
 ```
 
-Content after PR-6 (latest bump) and PR-8 (add `next`, informational):
+Content after PR-4 (adds `next` as informational, pinned at the then-current effective next) and PR-6 (bumps `latest` to 0.1.5-rc.3):
 
 ```json
 {
@@ -502,7 +503,7 @@ jobs:
 
 - A leg is required iff its channel is in `required` **and** the ruleset lists its check. PR-2 is followed by the ruleset change that requires `presubmit (latest)` (§7.7).
 - **Promotion of `next` to required** (§12.8) happens when all of these hold:
-  - (1) `presubmit (next)` passed on the last 5 consecutive `push` runs on `main` (cancelled runs don't count);
+  - (1) the `presubmit (next)` leg succeeded on all of the 5 most recent non-cancelled `push` runs of `presubmit.yml` on `main` — measured with `gh run list --workflow presubmit.yml --branch main --event push --limit 10 --json status,conclusion`, skipping runs whose `conclusion` is `cancelled`;
   - (2) no open `harness-bump/main` PR changes `channels.next`;
   - (3) no PR labelled `harness-split` is open.
 - **Demotion** (the escape hatch): if the `next` pin moves and the `harness-bump/main` PR stays red on `next` for 5 business days, and the fix would not break `latest`, the release owner MAY demote. Run `set-required latest`, then the ruleset change. This is the only alternative to a split. If the fix *would* break `latest`, it is T2 (§7.6.1).
@@ -633,6 +634,7 @@ After a sync, the author MUST run `pnpm install --frozen-lockfile`. It is expect
 ### 10.5 `check-publish-manifests.mjs` (PR-1)
 
 - `rangeSatisfiedBy` splits the range on the exact separator ` || `. Each part MUST be one of the existing shapes (`>=`, `^`, bare). The range is satisfied if any part is. Any other whitespace still throws (`:113-118`).
+- The per-part semantics are normative, not to be re-derived: the existing `>=` and `^` shapes are already node-semver-exact via their prerelease-exclusion guards (`check-publish-manifests.mjs:129` and `:151`), and a pure-OR split reproduces node-semver union semantics exactly because node-semver applies its prerelease-tuple screening per union member. Any refactor MUST keep both guards; Appendix A is the conformance suite for every comparator in this section.
 - New check: every `@deepseek-ai/dsh-*` peer MUST equal `peerRange(pins)` exactly.
 - The existing sibling-version check (`:296-319`) stays, but it becomes channel-aware. `dsh-cc-gates` exports `HARNESS_CHANNEL=<leg channel>`. When that channel is in `required`, a sibling-version mismatch is an error, as today. When it is informational, the mismatch is printed as a `::warning::` and the rest of the leg still runs, so an informational leg reports real typecheck and test results instead of stopping at the manifest check. Without `HARNESS_CHANNEL` (local runs), the check behaves as for a required channel.
 - Tests in `scripts/check-publish-manifests.test.mjs` cover every row of Appendix A for `>=0.1.5-rc.3 || >=0.1.7-rc.2`.
@@ -685,10 +687,10 @@ The workflow opens and updates PRs only. It MUST NOT merge, tag, publish, change
 
 1. `U = npm view @deepseek-ai/dsh dist-tags --json`. `Ul = U.latest`. `En = max(U.latest, U.next)`.
 2. Targets: `main`, plus the in-service maintenance branch, if any (§7.6.6).
-3. For each target, read `.github/harness-pins.json` with `git show origin/<base>:.github/harness-pins.json` and compute the desired changes:
+3. For each target, read `.github/harness-pins.json` with `git show origin/<base>:.github/harness-pins.json` and compute the desired changes. `X.Y.Z(v)` below means `v` with the `-rc.N` suffix stripped:
    - `main` serving `latest` → desired `latest = Ul`. `main` serving `next` → desired `next = En`.
-   - `main` in split mode, when `X.Y.Z(Ul) ≥ X.Y.Z(main.next.version)` → **reunification**: `set-serves latest,next`, `latest = Ul`, `next = En`. `required` becomes `["latest"]`, plus `next` if it was required before.
-   - Maintenance branch → desired `latest = Ul` iff `X.Y.Z(Ul) ≤ X.Y.Z(branch.latest.version)`. Otherwise no change: `main` handles the new line.
+   - `main` in split mode, when `X.Y.Z(Ul) ≥ X.Y.Z(main.next.version)` → **reunification**: `set-serves latest,next`, `latest = Ul`, `next = En`. `required` becomes `["latest"]`, plus `next` if it was required before. Because the comparison strips prereleases, an upstream `latest` that is itself an rc on the same line `main` serves as `next` (for example Ul = 0.1.7-rc.3 while `main.next` = 0.1.7-rc.2) also triggers reunification.
+   - Maintenance branch → desired `latest = Ul` iff `X.Y.Z(Ul) ≤ X.Y.Z(branch.latest.version)` **and** `compareVersions(Ul, branch.latest.version) > 0`. The first clause routes same-or-earlier-line moves to the branch; the second keeps branch pins forward-only — a same-line rc never replaces the branch's stable pin, and if upstream rolls `latest` back no PR is opened (the release owner handles that under R4). Otherwise no change: `main` handles the new line.
 4. Resolve each desired version to a SHA (§8.3). If the tag is missing, emit an `::error::` and skip that target. The job fails red and retries on the next schedule.
 5. Output JSON: `[{ base, head: "harness-bump/<base-slug>", ops: [...], title }]`. The title is `chore(harness): track dsh latest <L>, next <N>` (omit a channel the target does not serve; prefix `reunify: ` for reunification).
 
@@ -787,7 +789,7 @@ To run the ladder now instead of waiting for the schedule: `gh workflow run dail
    gh workflow run npm-channel-admin.yml -f action=repoint -f channel=<latest|next> -f version=P -f dry_run=false
    ```
 
-   The workflow (PR-5) uses the `npm-publish` environment, which needs **release owner approval**. It runs `node scripts/npm-channel-admin.mjs repoint --channel C --version P --allow-downgrade`. That command enumerates the non-private packages at tag `vP` and runs `npm dist-tag add <name>@P C` for each. Run it with `dry_run=true` first; that prints the commands without executing them.
+   The workflow (PR-5) uses the `npm-publish` environment, which needs **release owner approval**. It runs `node scripts/npm-channel-admin.mjs repoint --channel C --version P --allow-downgrade`. That command materializes tag `vP` (`git worktree add` on the tag) and enumerates its non-private packages through the same enumeration code path `publish-packages.mjs` uses, then runs `npm dist-tag add <name>@P C` for each. Run it with `dry_run=true` first; that prints the commands without executing them.
 3. Deprecate the bad version B:
 
    ```sh
@@ -821,18 +823,20 @@ Demotion is the reverse: `set-required latest`, then remove the check.
 
 Each PR updates `docs/release.md` for the behavior it changes.
 
+Version and SHA literals in this plan (§8.2, the table below) are the values at authoring time (2026-09-25). Each PR resolves the current upstream state with `npm view @deepseek-ai/dsh dist-tags --json` at execution time, substitutes the then-current effective latest / effective next, and records the actual versions and SHAs used in its PR body.
+
 | PR | Scope | Files | Acceptance criteria | Depends on |
 |---|---|---|---|---|
 | **PR-0** (settings, no code) | Close G6 for publishing. Add the `harness-split` label | `npm-publish`: required reviewer = release owner; deployment policy = branches `main`, `release/*.x` and tags `v*`. `gh label create harness-split` | `gh api repos/dsh-cc/dsh-cc/environments` shows a `required_reviewers` rule; a dry dispatch waits for approval | — |
-| **PR-1** | Pins as the source of truth, with no behavior change | new `.github/harness-pins.json` (§8.2, first block), `scripts/harness-pins.mjs`, `scripts/harness-pins.test.mjs`; `scripts/check-publish-manifests.mjs` (+test) `\|\|` support and exact-range check; `presubmit.yml`/`publish.yml` read the pin via `harness-pins.mjs get latest sha` from `deepseek-ai/deepseek-harness`; `bootstrap.mjs` gains `DSH_CHANNEL` and channel-aware messages; `version-gate.spec.ts`, `bootstrap.spec.ts`; `package.json` adds `check:harness-pins`; `.husky/pre-commit` runs it | `harness-pins.mjs check` passes; `sync` produces no diff (peers stay `>=0.1.5-rc.1`); presubmit green at the new source/SHA | — |
+| **PR-1** | Pins as the source of truth, with no behavior change | new `.github/harness-pins.json` (§8.2, first block), `scripts/harness-pins.mjs`, `scripts/harness-pins.test.mjs`; `scripts/check-publish-manifests.mjs` (+test) `\|\|` support and exact-range check; `presubmit.yml`/`publish.yml` read the pin via `harness-pins.mjs get latest sha` from `deepseek-ai/deepseek-harness` — a minimal in-place substitution of the `DSH_HARNESS_REF` usages only (the env removal and the matrix restructure are PR-2's; §9.2); `bootstrap.mjs` gains `DSH_CHANNEL` and channel-aware messages; `version-gate.spec.ts`, `bootstrap.spec.ts`; `package.json` adds `check:harness-pins`; `.husky/pre-commit` runs it | `harness-pins.mjs check` passes; `sync` produces no diff (peers stay `>=0.1.5-rc.1`); presubmit green at the new source/SHA | — |
 | **PR-2** | Matrix CI | `.github/actions/harness-setup/action.yml`, `.github/actions/dsh-cc-gates/action.yml`, `presubmit.yml` (§9.2), `package.json` `test:release-tooling` | The PR shows a `presubmit (latest)` check; `gh workflow run presubmit.yml --ref <branch>` attaches the check to that branch's PR (verify on this PR); release-tooling tests run. **Afterwards (release owner):** add `presubmit (latest)` as a required check | PR-1 |
 | **PR-3** | Monotonic versions and bot CI | `scripts/daily-release-decide.mjs` (+test: #144 scenario → `0.8.1-rc.2`; a maintenance-branch floor; split no-stabilize; monotonic throw), new `scripts/check-channel-monotonic.mjs` (+test), `scripts/release.mjs` (+test: `main` or `release/X.Y.x`, HEAD==origin/<branch>, V-10, served-channel check, monotonic), `daily-release.yml` (`actions: write`, dispatch presubmit on the release branch, monotonic check before `gh pr create`) | All tests pass; a `daily-release` dry run on `main` prints `version=0.8.1-rc.2` (or the next rc at that time) | PR-2 |
-| **PR-4** | Channel-aware publish | `publish.yml` (§9.5), `release-tag.yml` (§9.7), `scripts/publish-packages.mjs` (`--advance next`, rerun re-tag) | A `workflow_dispatch` of `release-tag.yml` with `dry_run=true` passes for a stable and an rc; unit tests for `publish-plan` cover every row of §9.5; the next real rc's Release shows the verified-against block | PR-3 |
+| **PR-4** | Channel-aware publish; `next` added as informational | `publish.yml` (§9.5), `release-tag.yml` (§9.7), `scripts/publish-packages.mjs` (`--advance next`, rerun re-tag); pins ops in the same PR: `harness-pins.mjs set-serves latest,next` + `bump --channel next --version <effective next at execution time>` + `sync` (peers unchanged: `required` stays `["latest"]`). The serves expansion MUST land together with the `publish-plan` gate: without it, the gate (`exit 1 unless C ∈ serves`, §9.5) would reject every routine rc tag until the next pin was added, freezing the daily ladder in the PR-4…PR-8 window (Q2 forbids that) | A `workflow_dispatch` of `release-tag.yml` with `dry_run=true` passes for a stable and an rc; unit tests for `publish-plan` cover every row of §9.5; the next real rc's Release shows the verified-against block; from this PR on, both `presubmit (latest)` and `presubmit (next)` run, and `presubmit (next)` MAY be red (G8) — it is informational and not a required check | PR-3 |
 | **PR-5** | Rollback tooling | `.github/workflows/npm-channel-admin.yml` (inputs `action`, `channel`, `version`, `message`, `dry_run`; environment `npm-publish`; the same token auth as publish, `publish.yml:191-200`, `:228-230`), `scripts/npm-channel-admin.mjs` (+test with a stubbed `npm`) | A dry run lists 85 `npm dist-tag add` commands for `version=0.8.1-rc.1 channel=next` | PR-4 |
 | **PR-6** | First real pin move: `latest` → 0.1.5-rc.3 | `harness-pins.mjs bump --channel latest --version 0.1.5-rc.3` + `sync` (77 manifests, `bootstrap.mjs`, `pnpm-workspace.yaml`); `README.md`/`README.zh.md` lines 21–31 rewritten to the channel-pair wording of §5.2 with no version numbers ("verified dsh versions are listed in each GitHub Release") | `presubmit (latest)` green at `a4c74a9`; `check` clean | PR-2 |
 | **PR-7** | Watcher | `.github/workflows/harness-watch.yml`, `scripts/harness-watch.mjs` (+test with injected dist-tags and git/gh stubs), `.github/retired-branches.txt` (empty) | A dispatch with `dry_run=true` prints a plan; a real run against a pins file edited to be stale opens exactly one PR, and a second run is a no-op | PR-2, PR-6 |
-| **PR-8** | Add `next` as informational | `set-serves latest,next`, `bump --channel next --version 0.1.7-rc.2`, `sync` (peers unchanged, because `required` is still `["latest"]`) | Both legs run; `presubmit (next)` is expected **red** (G8) and is not required | PR-2, PR-4 |
-| **PR-9** | Adapt to dsh next | engineering: handle the three removed harness packages (G8) | Outcome A: one commit green on both legs → R8 promotion. Outcome B: not possible → `harness-split` label → R5 (first maintenance branch `release/0.8.x` cut from the stable produced in S1) | PR-8 |
+| **PR-8** | Withdrawn | Its operations (add `next` as informational: `set-serves latest,next`, `bump --channel next`, `sync`) are folded into PR-4 so the `publish-plan` gate never blocks routine rc publishing; its acceptance note (both legs run; `presubmit (next)` is informational and MAY be red, G8) moved to PR-4 with them | — | — |
+| **PR-9** | Adapt to dsh next | engineering: handle the three removed harness packages (G8) | Outcome A: one commit green on both legs → R8 promotion. Outcome B: not possible → `harness-split` label → R5 (first maintenance branch `release/0.8.x` cut from the stable produced in S1) | PR-4 |
 | **PR-10** (optional) | `/doctor` pairing warning | `command-doctor` `src/harness-range.ts`, `src/checks/env.ts`, specs | The spec reproduces Appendix A; `warn` on a mixed pair | PR-1 |
 
 **Immediate recommendation (not performed by this PR):** close PR #144 without merging. Merged and published, it would move `@dsh-cc/*@next` from 0.8.1-rc.1 down to 0.8.0-rc.4 (G3). Until PR-3 lands, produce any needed rc by hand with a matching branch name: `pnpm release 0.8.1-rc.2` on `main`, then push `release/v0.8.1-rc.2`, as in `docs/release.md:42-62`. Do not re-version a bot branch (G7).
