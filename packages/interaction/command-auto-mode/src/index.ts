@@ -27,6 +27,8 @@ import {
   DEFAULT_SOFT_DENY,
   PROBE_EVENT,
   expandSlot,
+  pickClassifierRouteName,
+  type ClassifierBackend,
 } from '@dsh-cc/permission-rules'
 import { helpable } from '@dsh-cc/command-usage'
 import { sanitize } from './sanitize.ts'
@@ -46,6 +48,8 @@ interface AutoModeSection {
   classifier?: {
     enabled?: boolean
     route?: string
+    backend?: 'haiku' | 'auto'
+    gaugeAllowThreshold?: number
     timeoutMs?: number
     cacheMaxEntries?: number
     auditFullText?: boolean
@@ -73,17 +77,50 @@ export function renderDefaults(): string {
   }, null, 2))
 }
 
+/**
+ * The effective classifier backend, computed by the caller from live state
+ * (design doc §4.6). Omitted on the render ⇒ byte-identical legacy output
+ * (the gauge-less compat contract).
+ */
+export interface EffectiveClassifier {
+  /** The effective route NAME (explicit value | 'gauge' armed-auto | 'haiku'). */
+  routeName: string
+  /** How the route was picked. */
+  source: 'explicit' | 'auto-gauge' | 'default'
+  /** The armed gauge alias (`provider/model` + protocol), or null. */
+  gauge?: { route: string; protocol: string } | null
+}
+
+/** The pinned route-selection policy sentence (§4.6). */
+const ROUTE_POLICY = 'explicit route > backend auto (gauge when armed) > haiku'
+
 /** `/auto-mode config` — the effective trusted-scoped autoMode slice. */
-export function renderConfig(autoMode: AutoModeSection | undefined): string {
+export function renderConfig(autoMode: AutoModeSection | undefined, effective?: EffectiveClassifier): string {
   const classifier = autoMode?.classifier
+  const classifierView: Record<string, unknown> = {
+    enabled: classifier?.enabled === true,
+    route: classifier?.route ?? 'haiku',
+    timeoutMs: classifier?.timeoutMs ?? 8000,
+    cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
+    auditFullText: classifier?.auditFullText === true,
+  }
+  if (effective !== undefined) {
+    // Honest backend report (§4.6): the gauge-less fields stay as computed
+    // above; the new fields carry the policy-resolved route and the armed
+    // gauge alias. `gaugeAllowThreshold` reports the CONFIGURED value only —
+    // the adapter applies its own default constant at consumption.
+    const route = effective.routeName
+    const gauge = effective.gauge ?? null
+    classifierView.route = route
+    classifierView.routeSource = effective.source
+    classifierView.routePolicy = ROUTE_POLICY
+    classifierView.backend = classifier?.backend ?? 'haiku'
+    classifierView.gaugeAllowThreshold = classifier?.gaugeAllowThreshold ?? null
+    classifierView.gaugeRoute = gauge?.route ?? null
+    classifierView.gaugeProtocol = gauge?.protocol ?? null
+  }
   const payload = {
-    classifier: {
-      enabled: classifier?.enabled === true,
-      route: classifier?.route ?? 'haiku',
-      timeoutMs: classifier?.timeoutMs ?? 8000,
-      cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
-      auditFullText: classifier?.auditFullText === true,
-    },
+    classifier: classifierView,
     classifyAllShell: autoMode?.classifyAllShell === true,
     slots: {
       soft_deny: slotView(autoMode?.soft_deny, DEFAULT_SOFT_DENY),
@@ -185,7 +222,56 @@ export function renderReview(events: readonly unknown[], full: boolean): string 
   return lines.join('\n')
 }
 
-function executeAutoMode(settings: SettingsLike | undefined, invocation: CommandInvocation): CommandResult {
+/** Face of the merged `model-aliases` gauge alias entry (object form, §4.3). */
+type GaugeEntry = { provider?: unknown; model?: unknown; protocol?: unknown }
+
+/**
+ * The armed gauge alias from the merged `model-aliases` overlay (§4.3):
+ * object form `{provider, model}` + the protocol bit (explicit
+ * `protocol: 'systemone'` or the `llmbox_systemone/` family-prefix
+ * heuristic). `null` when the entry is unresolvable as a System One lane.
+ */
+function gaugeInfo(settings: SettingsLike): { route: string; protocol: string } | null {
+  const overlay = settings.get('model-aliases') as Record<string, unknown> | undefined
+  const entry = overlay?.gauge as GaugeEntry | string | undefined
+  if (entry === undefined || entry === null || typeof entry !== 'object') return null
+  const { provider, model, protocol } = entry
+  if (typeof provider !== 'string' || typeof model !== 'string') return null
+  const resolved =
+    typeof protocol === 'string' ? protocol
+      : model.includes('llmbox_systemone/') ? 'systemone'
+        : undefined
+  return resolved === undefined ? null : { route: `${provider}/${model}`, protocol: resolved }
+}
+
+/**
+ * Compute the §4.6 effective classifier from live state: explicit route wins
+ * verbatim; otherwise the shared policy helper decides (gauge only when
+ * armed via `backend: 'auto'`). Requires the settings provider; a caller
+ * without it renders the legacy one-arg output.
+ */
+function effectiveClassifier(
+  ctx: Context,
+  autoMode: AutoModeSection | undefined,
+  settings: SettingsLike,
+): EffectiveClassifier {
+  const explicit = autoMode?.classifier?.route
+  if (explicit !== undefined) {
+    return {
+      routeName: explicit,
+      source: 'explicit',
+      gauge: explicit === 'gauge' ? gaugeInfo(settings) : null,
+    }
+  }
+  const backend = (autoMode?.classifier?.backend ?? 'haiku') as ClassifierBackend
+  const routeName = pickClassifierRouteName(ctx, undefined, backend)
+  if (routeName === 'gauge') {
+    return { routeName: 'gauge', source: 'auto-gauge', gauge: gaugeInfo(settings) }
+  }
+  return { routeName: 'haiku', source: 'default', gauge: null }
+}
+
+function executeAutoMode(ctx: Context, settings: SettingsLike | undefined, invocation: CommandInvocation): CommandResult {
   const parts = invocation.rawInput.trim().split(/\s+/).filter(Boolean)
   const subcommand = parts[0] ?? ''
   if (subcommand === 'defaults') {
@@ -196,7 +282,7 @@ function executeAutoMode(settings: SettingsLike | undefined, invocation: Command
       return { kind: 'error', text: 'No settings provider is mounted in this composition.' }
     }
     const permissions = settings.get('permissions') as { autoMode?: AutoModeSection } | undefined
-    return { kind: 'success', text: renderConfig(permissions?.autoMode) }
+    return { kind: 'success', text: renderConfig(permissions?.autoMode, effectiveClassifier(ctx, permissions?.autoMode, settings)) }
   }
   if (subcommand === 'review') {
     const arg = parts[1] ?? ''
@@ -226,7 +312,7 @@ export function apply(ctx: Context): void {
     name: 'auto-mode',
     description: 'show auto-mode classifier defaults, the effective trusted-scoped configuration, or this session\'s permission audit',
     input: { hint: '[defaults|config|review [full]]' },
-    handler: (invocation: CommandInvocation) => executeAutoMode(settings, invocation),
+    handler: (invocation: CommandInvocation) => executeAutoMode(ctx, settings, invocation),
   }, {
     subcommands: [
       { word: 'defaults', summary: 'print the built-in slot lists ($defaults-expanded)' },

@@ -15,6 +15,8 @@ import { ccToolAliases } from '@dsh-cc/tools'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
+import { createWarnOnce } from './route-policy.ts'
+import { resolveClassifierBackend } from './gauge-backend.ts'
 import { createClassifierStreamAdapter, type ClassifierStream } from './classifier-lane.ts'
 import {
   appendSessionClassifier,
@@ -141,6 +143,8 @@ async function returnCheck(
  * listener).
  */
 export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
+  // Per-process policy warn-once ledger (§4.5) — ONE emitter for the plugin.
+  const policyWarnOnce = createWarnOnce((message) => ctx.logger.warn(message))
   const decideDeps: DecideDeps = {
     classifierEnabled: host.config.classifierEnabled !== false,
     exemptSandboxedBashFromToolAsk: host.config.exemptSandboxedBashFromToolAsk === true,
@@ -168,8 +172,18 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     get stream() {
       return llmStream
     },
+    // §4.5 backend composition (PR-B B2b): the policy helper picks the
+    // route NAME (explicit > backend auto armed-gauge > haiku); a chat name
+    // resolves exactly as today, an armed/explicit gauge assembles the
+    // System One lane from the alias + `llm-pi-ai` provider record +
+    // credential-ref chain. The PI probe seam below stays chat-only.
     resolveRoute: (exec) =>
-      resolveDetailedRoute(ctx, exec, host.settingsSection().autoMode?.classifier?.route ?? 'haiku'),
+      resolveClassifierBackend(ctx, exec, {
+        route: host.settingsSection().autoMode?.classifier?.route,
+        backend: host.settingsSection().autoMode?.classifier?.backend ?? 'haiku',
+        warnOnce: policyWarnOnce,
+        resolveChatRoute: (e, name) => resolveDetailedRoute(ctx, e, name),
+      }),
     warn: (message) => ctx.logger.warn(message),
     // R5 debug channel: opt-in via DSH_PERMISSION_CLASSIFIER_DEBUG=1, from
     // the plugin's scoped process logger — raw classifier output NEVER

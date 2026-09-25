@@ -10,7 +10,97 @@
 
 import z from '@deepseek-ai/schemastery'
 import { PERMISSION_MODES, SOURCE_PRIORITY, type PermissionMode, type PermissionRuleSource } from './types.ts'
-import type { AutoModeSettings } from './auto-stage.ts'
+
+/** `permissions.autoMode.classifier` — the plugin-local hand-mirror of the shared AutoModeClassifierSchema. */
+export interface AutoModeClassifierSettings {
+  /** Master switch for the LLM risk classifier stage (default `false`). */
+  enabled?: boolean
+  /**
+   * Explicit model route used for classification. When set, it WINS over
+   * `backend` verbatim (including `gauge`); when unset, the route policy
+   * picks `gauge` when armed (backend `'auto'` + a configured System One
+   * gauge alias) and `'haiku'` otherwise. No schema default — absence is
+   * preserved and the policy helper decides (default `'haiku'`).
+   */
+  route?: string
+  /**
+   * Backend selection when `route` is unset (default `'haiku'` at
+   * consumption): `'haiku'` always uses the chat classifier; `'auto'` arms
+   * the gauge System One lane when the gauge alias is configured with the
+   * systemone protocol.
+   */
+  backend?: 'haiku' | 'auto'
+  /**
+   * System One gauge allow-gate threshold, 0–1 (only consulted by the
+   * System One adapter; the consumption default lives in the adapter's
+   * constant). Absence-preserving.
+   */
+  gaugeAllowThreshold?: number
+  /** Per-call timeout in milliseconds (default `8000`). */
+  timeoutMs?: number
+  /** Verdict cache size in entries (default `256`). */
+  cacheMaxEntries?: number
+  /**
+   * D13 reconsider pass (default FALSE, absence-preserving): a non-failure
+   * `ask` verdict earns ONE reconsider call; only ask→allow is possible.
+   */
+  secondPass?: boolean
+  /**
+   * D10/S5 full-text audit (default FALSE, absence-preserving): when true,
+   * `permission/classifier` audit events carry the raw rendered input
+   * (≤8192 chars by construction) in addition to the digest.
+   */
+  auditFullText?: boolean
+}
+
+/** `permissions.autoMode.probe` — the plugin-local hand-mirror of the shared AutoModeProbe schema (S7/W3). */
+export interface AutoModeProbeSettings {
+  /** Master switch for the input-layer PI probe (default `true`). */
+  enabled?: boolean
+  /** Model route used for the probe (default `'haiku'`). */
+  route?: string
+  /** Per-call timeout in milliseconds (default `5000`). */
+  timeoutMs?: number
+  /** Scan-set override (exact tool names or trailing-`*` prefix patterns); replaces the default set entirely. */
+  toolPatterns?: string[]
+}
+
+/** `permissions.autoMode` — the plugin-local hand-mirror of the shared AutoModeSchema. */
+export interface AutoModeSettings {
+  /**
+   * Soft-deny hints evaluated by the classifier, in CC's snake_case spelling.
+   * `$defaults` expansion happens at consumption time — the schema never
+   * expands it.
+   */
+  soft_deny?: string[]
+  /**
+   * Unconditional hard-deny prose (S4/D4): a classifier `deny` must cite one
+   * of these EXACTLY or it downgrades to `ask`. In CC's snake_case spelling;
+   * `$defaults` expansion happens at consumption time.
+   */
+  hard_deny?: string[]
+  /**
+   * Allow-exception prose evaluated after the soft-deny rules (S2), in CC's
+   * snake_case spelling. `$defaults` expansion happens at consumption time —
+   * the schema never expands it.
+   */
+  allow?: string[]
+  /**
+   * Environment trust-boundary prose (S2): what the classifier treats as
+   * in-scope. `$defaults` expansion happens at consumption time.
+   */
+  environment?: string[]
+  /**
+   * Suspend EVERY bash and PowerShell allow rule (whole-tool and content)
+   * in `auto` mode — the hard override on the otherwise best-effort
+   * suspension list (design doc D1/R5). Absent ⇒ `false`.
+   */
+  classifyAllShell?: boolean
+  /** LLM risk classifier configuration; absent when the section omits it. */
+  classifier?: AutoModeClassifierSettings
+  /** Input-layer PI-probe configuration (S7); absent when the section omits it. */
+  probe?: AutoModeProbeSettings
+}
 
 /** The settings section resolved from the settings document. */
 export interface PermissionSettings {
@@ -127,7 +217,13 @@ export const DEFAULT_READ_ONLY_TOOLS = ['read', 'glob', 'grep', 'search', 'web_f
 /** The classifier sub-object schema: defaults apply only when the object is present. */
 const autoModeClassifierSchema = z.object({
   enabled: z.boolean().default(false),
-  route: z.string().default('haiku'),
+  // Absence-preserving: an unset `route` defers to `backend` at consumption
+  // (the `'haiku'` schema default was removed — pickClassifierRouteName).
+  route: z.union([z.string(), z.const(undefined)]),
+  // Absence-preserving enum union; consumption default `'haiku'`.
+  backend: z.union(['haiku', 'auto'] as const),
+  // Absence-preserving (gauge allow-gate; the adapter owns the default).
+  gaugeAllowThreshold: z.union([z.number(), z.const(undefined)]),
   timeoutMs: z.number().default(8000),
   cacheMaxEntries: z.number().default(256),
 })

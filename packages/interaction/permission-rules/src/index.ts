@@ -134,6 +134,7 @@ export { summarizeChildHandoff, handoffWarningText, HANDOFF_ASK_STORM, type Chil
 export { filterAutoAllowRules } from './auto-rule-filter.ts'
 export { DEFAULT_MEDIUM_PATTERNS, DEFAULT_DANGEROUS_PATTERNS, CRITICAL_BASH_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
+export { pickClassifierRouteName, GAUGE_STRING_PAIR_KEY, type ClassifierBackend, type PolicyWarn } from './route-policy.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

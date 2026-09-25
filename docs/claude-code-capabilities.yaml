@@ -3301,6 +3301,23 @@ capabilities:
         this is a deliberate dsh-cc security extension, not parity drift;
         `sudo` and `curl | sh` are deliberately NOT reclassified so
         bypassPermissions keeps its escape value.
+        Gauge System One backend slice (2026-09-25): the classifier stage
+        gains an optional NATIVE typed-decision backend for System One
+        models (Laya class) behind `permissions.autoMode.classifier.backend`
+        ('haiku' default | 'auto'), resolving the `gauge` lane alias when
+        armed (explicit `route` always wins; gauge armed requires a
+        `protocol: "systemone"` alias entry or the `llmbox_systemone/`
+        model-id prefix). The backend speaks `POST /v1/systemone`
+        (`{state, questions}` typed `choice` decisions) instead of the chat
+        stream — gateway connection facts come from the `llm-pi-ai`
+        provider record, Bearer via credential-ref. Gating is on
+        `P(allow)` against `classifier.gaugeAllowThreshold` (corpus-derived
+        default 0.5); a `deny` choice collapses to `ask` (gauge cannot cite
+        an exact hard_deny rule), and a silently gateway-truncated state
+        (`usage.input_tokens` pinned at the checkpoint window) fails to
+        `ask`. Audit events gain optional `probabilities`/`confidence`
+        scalars (digest-only contract intact). CC has no such backend —
+        deliberate dsh-cc extension.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

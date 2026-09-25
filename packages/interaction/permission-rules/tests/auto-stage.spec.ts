@@ -64,7 +64,8 @@ function harness(overrides: Partial<Harness> = {}): Harness {
   h.deps = {
     settingsRead: () => h.settings.value,
     stream: async () => { h.streams += 1; return h.scripted.shift() ?? '{"verdict":"allow","reason":"ok"}' },
-    resolveRoute: () => h.route,
+    // PR-B: the resolved backend is now a discriminated union; the chat lane keeps the plain route shape.
+    resolveRoute: () => (h.route === undefined ? undefined : { backend: 'chat' as const, route: h.route }),
     warn: (message: string) => { h.warnings.push(message) },
     audit: vi.fn(),
     // A16 stale-mode: the harness pins mode at `auto` unless a test overrides modeOf.
@@ -386,7 +387,7 @@ describe('F4 per-route failure breaker', () => {
       if (next === undefined) throw new Error('script exhausted')
       return await next(opts)
     }
-    h.deps.resolveRoute = (e: ToolExecution) => routes[e.name] ?? h.route
+    h.deps.resolveRoute = (e: ToolExecution) => (routes[e.name] ?? h.route) === undefined ? undefined : { backend: 'chat' as const, route: routes[e.name] ?? h.route }
     return h
   }
 
@@ -508,7 +509,7 @@ describe('R2 cancelled classifications are breaker-neutral', () => {
       if (next === undefined) throw new Error('script exhausted')
       return await next(opts)
     }
-    h.deps.resolveRoute = (e: ToolExecution) => routes[e.name] ?? h.route
+    h.deps.resolveRoute = (e: ToolExecution) => (routes[e.name] ?? h.route) === undefined ? undefined : { backend: 'chat' as const, route: routes[e.name] ?? h.route }
     return h
   }
 
@@ -552,7 +553,7 @@ describe('R3 restart-durable breaker seeding (session-log)', () => {
       if (next === undefined) throw new Error('script exhausted')
       return await next(opts)
     }
-    h.deps.resolveRoute = (e: ToolExecution) => routes[e.name] ?? h.route
+    h.deps.resolveRoute = (e: ToolExecution) => (routes[e.name] ?? h.route) === undefined ? undefined : { backend: 'chat' as const, route: routes[e.name] ?? h.route }
     return h
   }
 
@@ -631,7 +632,7 @@ describe('R3 restart-durable breaker seeding (session-log)', () => {
   it('concurrent first-calls seed once (synchronous guard) and trip exactly once', async () => {
     const h = harness()
     h.settings.value = { autoMode: { classifier: { enabled: true, timeoutMs: 30 } } }
-    h.deps.resolveRoute = () => ({ provider: 'p1', model: 'm1' })
+    h.deps.resolveRoute = () => ({ backend: 'chat' as const, route: { provider: 'p1', model: 'm1' } })
     const gates: Array<(value: string) => void> = []
     h.deps.stream = () => new Promise<string>(resolve => { gates.push(resolve) })
     const session = sessionOf('seed-conc')
@@ -875,5 +876,120 @@ describe('S5 full-text audit (classifier.auditFullText)', () => {
     h.settings.value = { autoMode: { classifier: { enabled: true, auditFullText: true } } }
     await stage.maybeEscalate(decided(), exec({ session, args: { command: 'pwd' } }))
     expect(typeof lastAudit(h).input).toBe('string')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// PR-B unit B2b: System One gauge branch (wire stubbed via `fetchImpl`).
+// ---------------------------------------------------------------------------
+
+/** T1 probe envelope (.impl/2026-09-25-gauge-system-one-probe-evidence.md): allow on `git status`. */
+const T1_ENVELOPE = {
+  model: 'laya-rl-agent',
+  answers: {
+    verdict: {
+      type: 'choice',
+      choice: 'allow',
+      probabilities: { allow: 0.5015, ask: 0.2658, deny: 0.2327 },
+      confidence: 0.0555,
+    },
+  },
+  usage: { input_tokens: 83, output_tokens: 0 },
+}
+
+function gaugeHarness(envelopes: unknown[], backend?: Partial<{ baseURL: string; model: string }>) {
+  const h = harness()
+  h.settings.value = { autoMode: { classifier: { enabled: true } } }
+  const fetchImpl = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(envelopes.length > 0 ? envelopes.shift() : T1_ENVELOPE),
+  })) as unknown as typeof fetch
+  h.deps.fetchImpl = fetchImpl
+  h.deps.resolveRoute = () => ({
+    backend: 'systemone' as const,
+    provider: 'deepseek',
+    model: backend?.model ?? 'llmbox_systemone/laya',
+    baseURL: backend?.baseURL ?? 'http://127.0.0.1:8080',
+  })
+  return { h, fetchImpl }
+}
+
+function envelopeWith(choice: string, probabilities: Record<string, number>, inputTokens = 83): unknown {
+  return { ...T1_ENVELOPE, answers: { verdict: { type: 'choice', choice, probabilities, confidence: 0.05 } }, usage: { input_tokens: inputTokens, output_tokens: 0 } }
+}
+
+describe('auto-stage × System One gauge lane (B2b)', () => {
+  function lastAudit(h: Harness): ClassifierAuditEventData {
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, ClassifierAuditEventData]>
+    expect(calls.length).toBeGreaterThan(0)
+    return calls.at(-1)![1]
+  }
+
+  it('armed systemone + T1 allow envelope ⇒ allow, no chat stream call, ONE audit event with provider/model + probabilities/confidence', async () => {
+    const { h, fetchImpl } = gaugeHarness([structuredClone(T1_ENVELOPE)])
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('g1-allow')
+    expect(await stage.maybeEscalate(decided(), exec({ session }))).toBe('allow')
+    expect(h.streams).toBe(0)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    const audit = lastAudit(h)
+    expect(audit).toMatchObject({
+      tool: 'Bash',
+      verdict: 'allow',
+      provider: 'deepseek',
+      model: 'llmbox_systemone/laya',
+      route: 'systemone/llmbox_systemone/laya',
+      probabilities: T1_ENVELOPE.answers.verdict.probabilities,
+      confidence: 0.0555,
+      cacheHit: false,
+    })
+  })
+
+  it('deny answer collapses to ask with the pinned deny-downgrade reason; audit verdict is ask (post-gating)', async () => {
+    const { h } = gaugeHarness([envelopeWith('deny', { allow: 0.2, ask: 0.3, deny: 0.5 })])
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('g2-deny')
+    const out = await stage.maybeEscalate(decided(), exec({ session }))
+    expect(out).toMatchObject({ kind: 'ask' })
+    expect((out as { kind: 'ask'; reason: string }).reason).toContain('deny downgraded: gauge cannot cite an exact hard-deny rule')
+    expect(lastAudit(h).verdict).toBe('ask')
+  })
+
+  it('truncated usage (input_tokens = window) ⇒ ask with the truncation reason', async () => {
+    const { h } = gaugeHarness([envelopeWith('allow', { allow: 0.9, ask: 0.05, deny: 0.05 }, 1024)])
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('g3-truncated')
+    expect(await stage.maybeEscalate(decided(), exec({ session }))).toEqual({ kind: 'ask', reason: 'state truncated by gateway' })
+    expect(lastAudit(h).verdict).toBe('ask')
+  })
+
+  it('failure path (fetch 400 envelope) ⇒ failure error counted by the breaker and audited; breaker opens after the threshold', async () => {
+    const { h, fetchImpl } = gaugeHarness()
+    fetchImpl.mockImplementation(async () => ({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ error: { type: 'invalid_request_error', message: 'bad' } }),
+    }))
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('g4-error')
+    for (let i = 0; i < 3; i += 1) {
+      expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: `cmd-${i}` } }))).toMatchObject({ kind: 'ask' })
+      expect(lastAudit(h).failure).toBe('error')
+    }
+    // 4th call: the breaker for `systemone/<model>` is open.
+    expect(await stage.maybeEscalate(decided(), exec({ session, args: { command: 'cmd-3' } })))
+      .toEqual({ kind: 'ask', reason: 'auto-mode classifier unavailable: route systemone/llmbox_systemone/laya breaker open' })
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('verdict LRU: an identical call is served from the cache (cacheHit, one wire call)', async () => {
+    const { h, fetchImpl } = gaugeHarness([structuredClone(T1_ENVELOPE)])
+    const stage = createAutoStage(h.deps)
+    const session = sessionOf('g5-cache')
+    expect(await stage.maybeEscalate(decided(), exec({ session }))).toBe('allow')
+    expect(await stage.maybeEscalate(decided(), exec({ session }))).toBe('allow')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(lastAudit(h).cacheHit).toBe(true)
   })
 })

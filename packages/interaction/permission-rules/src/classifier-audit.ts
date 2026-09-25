@@ -42,6 +42,15 @@ export interface ClassifierAuditEventData {
   route?: string
   provider?: string
   model?: string
+  /**
+   * System One gauge lane only (§4.4): the raw choice probabilities; the
+   * audit `verdict` is the post-gating verdict and the raw argmax remains
+   * reconstructible from these. Derived scalars only — the digest-only
+   * contract is unaffected.
+   */
+  probabilities?: Record<string, number>
+  /** System One gauge lane only (§4.4): the gateway's entropy-normalized confidence scalar. */
+  confidence?: number
   latencyMs: number
   cacheHit: boolean
 }
