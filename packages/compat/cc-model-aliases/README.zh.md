@@ -134,7 +134,7 @@ alias 的查找顺序:**settings overlay → config 默认 → builtin fallback*
 | `architect` | 规划与编排 | inherit(主线程) |
 | `gauge` | 类型化决策低价 lane(System One 模型;非生成用途) | `haiku` |
 
-`gauge` 是面向 System One 模型(如 `llmbox_systemone/laya`)的类型化决策 lane;**绝不要把它用作 agent frontmatter 的 `model:`**——它由决策消费者选择,而非生成式调用方。
+`gauge` 是面向 System One 模型(如 `llmbox_systemone/laya`)的类型化决策 lane;**绝不要把它用作 agent frontmatter 的 `model:`**——它由决策消费者选择,而非生成式调用方。该约束是强制的:System One 目标(`protocol: "systemone"` 或 `llmbox_systemone/` 模型 id)在解析出的路由上保留 `protocol: 'systemone'`,聊天投影(`toAgentOptions` / `toOneShotRoute`)拒绝此类路由,routes 服务的 `llm/stream` 守卫以 `SystemOneChatModelError`(code `SYSTEMONE_NOT_CHAT_MODEL`)拒绝任何针对 System One 模型的聊天请求。permission-rules 分类器与探针通过自己的协议客户端访问 System One,不受影响。
 
 已配置的字符串目标若指向另一个 alias,会**跟随一跳**(`sketch: haiku` 共用 haiku 的对象路由,含 `reasoningEffort`)。对象形式目标是具体路由,不作为名字再跟。第二跳不跟,因此 `sketch: draft` + `draft: haiku` 停在字面 `"haiku"`(防环)。
 
