@@ -12,7 +12,10 @@ function harness(settings?: unknown): { def: Registered; run(raw: string): Comma
   const registered: Registered[] = []
   const ctx = {
     commands: { register: (def: Registered) => { registered.push(def) } },
-    get: (_: string) => settings,
+    // Only the settings service is mounted; everything else (e.g.
+    // `ccModelRoutes`) reads as absent so the policy helper takes its
+    // overlay-fallback face.
+    get: (name: string) => name === 'settings' ? settings : undefined,
   } as unknown as Context
   apply(ctx)
   expect(registered).toHaveLength(1)
@@ -61,7 +64,12 @@ describe('/auto-mode config', () => {
       classifyAllShell: boolean
       slots: Record<string, { configured: string[] | null; expanded: string[] }>
     }
-    expect(parsed.classifier).toEqual({ enabled: true, route: 'glm-flash', timeoutMs: 4000, cacheMaxEntries: 128, auditFullText: false })
+    expect(parsed.classifier).toEqual({
+      enabled: true, route: 'glm-flash', routeSource: 'explicit',
+      routePolicy: 'explicit route > backend auto (gauge when armed) > haiku',
+      backend: 'haiku', gaugeAllowThreshold: null, gaugeRoute: null, gaugeProtocol: null,
+      timeoutMs: 4000, cacheMaxEntries: 128, auditFullText: false,
+    })
     expect(parsed.classifyAllShell).toBe(true)
     expect(parsed.slots.soft_deny.configured).toEqual(['Never run terraform apply'])
     expect(parsed.slots.soft_deny.expanded).toEqual(['Never run terraform apply'])
@@ -91,13 +99,86 @@ describe('/auto-mode config', () => {
     const settings = { get: () => ({}) }
     const { run } = harness(settings)
     const parsed = JSON.parse((run('config') as { text: string }).text) as Record<string, unknown>
-    expect(parsed.classifier).toEqual({ enabled: false, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256, auditFullText: false })
+    expect(parsed.classifier).toEqual({
+      enabled: false, route: 'haiku', routeSource: 'default',
+      routePolicy: 'explicit route > backend auto (gauge when armed) > haiku',
+      backend: 'haiku', gaugeAllowThreshold: null, gaugeRoute: null, gaugeProtocol: null,
+      timeoutMs: 8000, cacheMaxEntries: 256, auditFullText: false,
+    })
   })
 
   it('no settings provider mounted: friendly error, no throw', () => {
     const { run } = harness(undefined)
     const result = run('config')
     expect(result.kind).toBe('error')
+  })
+
+  it('legacy render stays byte-identical when no effective backend is computed (gauge-less compat)', () => {
+    // Pure one-arg call: exactly today's classifier key set.
+    const out = renderConfig(FIXTURE)
+    expect(Object.keys(JSON.parse(out).classifier)).toEqual(['enabled', 'route', 'timeoutMs', 'cacheMaxEntries', 'auditFullText'])
+  })
+
+  it('explicit route: reported verbatim with source explicit and no gauge', () => {
+    const settings = { get: (ns: string) => ns === 'permissions' ? { autoMode: { classifier: { enabled: true, route: 'haiku' } } } : {} }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as {
+      classifier: Record<string, unknown>
+    }
+    expect(parsed.classifier.route).toBe('haiku')
+    expect(parsed.classifier.routeSource).toBe('explicit')
+    expect(parsed.classifier.routePolicy).toBe('explicit route > backend auto (gauge when armed) > haiku')
+    expect(parsed.classifier.gauge).toBeUndefined()
+    expect(parsed.classifier.gaugeRoute).toBeNull()
+    expect(parsed.classifier.gaugeProtocol).toBeNull()
+  })
+
+  it('backend auto + armed object-form gauge alias: the gauge lane is reported honestly', () => {
+    const settings = {
+      get: (ns: string) => ns === 'permissions'
+        ? { autoMode: { classifier: { enabled: true, backend: 'auto' } } }
+        : ns === 'model-aliases'
+          ? { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } }
+          : {},
+    }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as {
+      classifier: Record<string, unknown>
+    }
+    expect(parsed.classifier.route).toBe('gauge')
+    expect(parsed.classifier.routeSource).toBe('auto-gauge')
+    expect(parsed.classifier.backend).toBe('auto')
+    expect(parsed.classifier.gaugeAllowThreshold).toBeNull()
+    expect(parsed.classifier.gaugeRoute).toBe('orchestrix/llmbox_systemone/laya')
+    expect(parsed.classifier.gaugeProtocol).toBe('systemone')
+  })
+
+  it('backend auto + unconfigured gauge: haiku default, no gauge fields', () => {
+    const settings = { get: (ns: string) => ns === 'permissions' ? { autoMode: { classifier: { enabled: true, backend: 'auto' } } } : {} }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as {
+      classifier: Record<string, unknown>
+    }
+    expect(parsed.classifier.route).toBe('haiku')
+    expect(parsed.classifier.routeSource).toBe('default')
+    expect(parsed.classifier.gaugeRoute).toBeNull()
+  })
+
+  it("backend 'haiku' + configured gauge: still the default haiku path (auto arms, haiku never)", () => {
+    const settings = {
+      get: (ns: string) => ns === 'permissions'
+        ? { autoMode: { classifier: { enabled: true, backend: 'haiku' } } }
+        : ns === 'model-aliases'
+          ? { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } }
+          : {},
+    }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as {
+      classifier: Record<string, unknown>
+    }
+    expect(parsed.classifier.route).toBe('haiku')
+    expect(parsed.classifier.routeSource).toBe('default')
+    expect(parsed.classifier.gaugeRoute).toBeNull()
   })
 })
 

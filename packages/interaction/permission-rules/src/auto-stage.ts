@@ -39,6 +39,10 @@ import {
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { createLlmClassifier, expandSoftDeny, type ClassifierRoute, type LlmClassifier } from './llm-classifier.ts'
+import { DEFAULT_GAUGE_ALLOW_THRESHOLD } from './gauge-adapter.ts'
+import { createSystemOneLane, systemOneEscalate, type SystemOneLane } from './gauge-stage.ts'
+import type { ClassifierBackendRoute } from './gauge-backend.ts'
+import type { AutoModeSettings } from './settings-schema.ts'
 import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, DEFAULT_HARD_DENY, expandSlot } from './slots.ts'
 import { createContextBundler } from './context-bundle.ts'
 import type { DecidedCall } from './decide.ts'
@@ -53,77 +57,9 @@ import {
 // S7 PI probe); re-exported here for the historical import sites.
 export { CLASSIFIER_BREAKER_THRESHOLD, BREAKER_FAILURE_TAGS, trailingRouteFailureStreak } from './classifier-breaker.ts'
 
-/** `permissions.autoMode.classifier` — the plugin-local hand-mirror of the shared AutoModeClassifierSchema. */
-export interface AutoModeClassifierSettings {
-  /** Master switch for the LLM risk classifier stage (default `false`). */
-  enabled?: boolean
-  /** Model route used for classification (default `'haiku'`). */
-  route?: string
-  /** Per-call timeout in milliseconds (default `8000`). */
-  timeoutMs?: number
-  /** Verdict cache size in entries (default `256`). */
-  cacheMaxEntries?: number
-  /**
-   * D13 reconsider pass (default FALSE, absence-preserving): a non-failure
-   * `ask` verdict earns ONE reconsider call; only ask→allow is possible.
-   */
-  secondPass?: boolean
-  /**
-   * D10/S5 full-text audit (default FALSE, absence-preserving): when true,
-   * `permission/classifier` audit events carry the raw rendered input
-   * (≤8192 chars by construction) in addition to the digest.
-   */
-  auditFullText?: boolean
-}
-
-/** `permissions.autoMode.probe` — the plugin-local hand-mirror of the shared AutoModeProbe schema (S7/W3). */
-export interface AutoModeProbeSettings {
-  /** Master switch for the input-layer PI probe (default `true`). */
-  enabled?: boolean
-  /** Model route used for the probe (default `'haiku'`). */
-  route?: string
-  /** Per-call timeout in milliseconds (default `5000`). */
-  timeoutMs?: number
-  /** Scan-set override (exact tool names or trailing-`*` prefix patterns); replaces the default set entirely. */
-  toolPatterns?: string[]
-}
-
-/** `permissions.autoMode` — the plugin-local hand-mirror of the shared AutoModeSchema. */
-export interface AutoModeSettings {
-  /**
-   * Soft-deny hints evaluated by the classifier, in CC's snake_case spelling.
-   * `$defaults` expansion happens at consumption time — the schema never
-   * expands it.
-   */
-  soft_deny?: string[]
-  /**
-   * Unconditional hard-deny prose (S4/D4): a classifier `deny` must cite one
-   * of these EXACTLY or it downgrades to `ask`. In CC's snake_case spelling;
-   * `$defaults` expansion happens at consumption time.
-   */
-  hard_deny?: string[]
-  /**
-   * Allow-exception prose evaluated after the soft-deny rules (S2), in CC's
-   * snake_case spelling. `$defaults` expansion happens at consumption time —
-   * the schema never expands it.
-   */
-  allow?: string[]
-  /**
-   * Environment trust-boundary prose (S2): what the classifier treats as
-   * in-scope. `$defaults` expansion happens at consumption time.
-   */
-  environment?: string[]
-  /**
-   * Suspend EVERY bash and PowerShell allow rule (whole-tool and content)
-   * in `auto` mode — the hard override on the otherwise best-effort
-   * suspension list (design doc D1/R5). Absent ⇒ `false`.
-   */
-  classifyAllShell?: boolean
-  /** LLM risk classifier configuration; absent when the section omits it. */
-  classifier?: AutoModeClassifierSettings
-  /** Input-layer PI-probe configuration (S7); absent when the section omits it. */
-  probe?: AutoModeProbeSettings
-}
+// The autoMode settings hand-mirrors moved to ./settings-schema.ts (size budget);
+// re-exported here for the historical import sites.
+export type { AutoModeClassifierSettings, AutoModeProbeSettings, AutoModeSettings } from './settings-schema.ts'
 
 /**
  * Structural dependency face the service supplies. `stream` is the llm
@@ -138,8 +74,14 @@ export type AutoStageDeps = {
    * service is mounted (the stage then disarms).
    */
   stream: ((opts: { provider: string; model: string; system: string; prompt: string; maxTokens: number; reasoningEffort?: string; signal?: AbortSignal }) => Promise<string>) | undefined
-  /** Resolve the configured classifier route for this call's session. */
-  resolveRoute(exec: ToolExecution): { provider: string; model: string; reasoningEffort?: string } | undefined
+  /**
+   * Resolve the configured classifier backend for this call's session
+   * (§4.5): a chat route (`{backend:'chat'}`), the System One gauge lane
+   * (`{backend:'systemone'}`), or `undefined` when unresolvable. May be
+   * async (the gauge credential-ref chain resolves asynchronously); the
+   * chat lane keeps returning the plain value as today.
+   */
+  resolveRoute(exec: ToolExecution): ClassifierBackendRoute | undefined | Promise<ClassifierBackendRoute | undefined>
   /** Process logger for the one-time disarm warning. */
   warn(message: string): void
   /** Durable audit sink (session append face, listener-owned). */
@@ -168,6 +110,11 @@ export type AutoStageDeps = {
    * skipped). `cwd` is the session cwd; `timeoutMs` bounds the child.
    */
   runCommand?: (cmd: string, opts: { cwd?: string; timeoutMs: number }) => Promise<string>
+  /**
+   * Optional fetch override for the System One gauge lane (test seam; the
+   * production wiring leaves it unset and the global fetch is used).
+   */
+  fetchImpl?: typeof fetch
 }
 
 /**
@@ -199,9 +146,12 @@ interface AutoModeSlice {
   hardDeny: string[]
   allowExceptions: string[]
   environment: string[]
-  route: string
   timeoutMs: number
   cacheMaxEntries: number
+  /** Backend selection for unset `route` (default `'haiku'` at consumption). */
+  backend: 'haiku' | 'auto'
+  /** Raw configured gauge allow-gate threshold (no default here). */
+  gaugeAllowThreshold: number | undefined
   secondPass: boolean
   /** S5/D10: audit the raw classifier input when this flag is on. */
   auditFullText: boolean
@@ -221,9 +171,10 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
     hardDeny,
     allowExceptions,
     environment,
-    route: classifier?.route ?? 'haiku',
     timeoutMs: classifier?.timeoutMs ?? 8000,
     cacheMaxEntries: classifier?.cacheMaxEntries ?? 256,
+    backend: classifier?.backend ?? 'haiku',
+    gaugeAllowThreshold: classifier?.gaugeAllowThreshold,
     secondPass: classifier?.secondPass === true,
     auditFullText: classifier?.auditFullText === true,
     enabled: classifier?.enabled === true,
@@ -302,6 +253,18 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
     return classifier
   }
 
+  /** The gauge lane (verdict LRU + wire call), memoized like the chat classifier. */
+  let gaugeLane: SystemOneLane | undefined
+  const ensureGaugeLane = (): SystemOneLane => {
+    if (gaugeLane !== undefined && builtRaw === slice.raw) return gaugeLane
+    gaugeLane = createSystemOneLane(slice.cacheMaxEntries, {
+      ...(deps.debug === undefined ? {} : { debug: deps.debug }),
+      ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+    })
+    builtRaw = slice.raw
+    return gaugeLane
+  }
+
   const disarmUnarmed = (exec: ToolExecution): string => {
     if (!warnedUnarmed) {
       warnedUnarmed = true
@@ -339,6 +302,7 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       if (current.raw !== builtRaw) {
         slice = current
         classifier = undefined
+        gaugeLane = undefined
       }
       // A settings change is the operator's "I fixed the lane": reset ALL
       // breaker state (the shared W1 machinery) plus the per-cwd
@@ -362,9 +326,32 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       // reason — never a silent fall-through to the downstream allow.
       const unavailable = (reason: string): StageOutcome => ({ kind: 'ask', reason })
       if (deps.stream === undefined) return unavailable(disarmUnarmed(exec))
-      // The route for this call is passed to classify as data; the audit event
-      // is appended from this call's own exec session — no ambient fields.
-      const route: ClassifierRoute | undefined = deps.resolveRoute(exec)
+      // The backend for this call is passed as data; the audit event is
+      // appended from this call's own exec session — no ambient fields.
+      const backendInfo = await deps.resolveRoute(exec)
+      if (backendInfo === undefined) return unavailable(disarmUnarmed(exec))
+      if (backendInfo.backend === 'systemone') {
+        // D13: secondPass is skipped on the System One backend (no
+        // reconsider prompt exists for typed decisions).
+        return systemOneEscalate(exec, backendInfo, ensureGaugeLane(), {
+          breaker,
+          seed: seedBreakerFromLog,
+          modeOf: (e) => deps.modeOf(e),
+          audit: (session, event) => deps.audit(session, event),
+          pauseAuto: (e, notice) => deps.pauseAuto(e, notice),
+        }, {
+          slots: {
+            softDeny: slice.softDeny,
+            hardDeny: slice.hardDeny,
+            allowExceptions: slice.allowExceptions,
+            environment: slice.environment,
+          },
+          gaugeAllowThreshold: slice.gaugeAllowThreshold ?? DEFAULT_GAUGE_ALLOW_THRESHOLD,
+          timeoutMs: slice.timeoutMs,
+          auditFullText: slice.auditFullText,
+        })
+      }
+      const route: ClassifierRoute | undefined = backendInfo.route
       if (route === undefined) return unavailable(disarmUnarmed(exec))
       const routeKey = `${route.provider}/${route.model}`
       seedBreakerFromLog(exec, routeKey, route)

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -7,6 +7,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import z from '@deepseek-ai/schemastery'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, CLASSIFIER_EVENT, foldClassifiers, foldPermissionMode, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
@@ -455,5 +457,111 @@ describe('S4 hybrid verdict space (listener delivery + trip)', () => {
     const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 's' }, agent))
     expect(result.isError).toBe(false)
     expect(classifierCalls(llm)).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// PR-B unit B2b: systemone-armed integration (global fetch stubbed — the
+// wire seam; production uses the same global fetch).
+// ---------------------------------------------------------------------------
+
+const GAUGE_T1 = {
+  model: 'laya-rl-agent',
+  answers: {
+    verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.5015, ask: 0.2658, deny: 0.2327 }, confidence: 0.0555 },
+  },
+  usage: { input_tokens: 83, output_tokens: 0 },
+}
+
+describe('listener × System One gauge lane (B2b integration)', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  async function mountGauge(envelope: unknown): Promise<{ ctx: Context; llm: FakeLlm; fetches: { url: string; init: RequestInit }[] }> {
+    const fetches: { url: string; init: RequestInit }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, init: RequestInit) => {
+      fetches.push({ url: String(url), init })
+      return { ok: true, status: 200, text: async () => JSON.stringify(envelope) } as Response
+    }))
+    const mounted = await mount({}, { routes: false })
+    // Register the two extra namespaces the gauge lane reads structurally,
+    // then write the alias overlay and the llm-pi-ai provider record.
+    registerNamespaceSafe(mounted.ctx, 'model-aliases' as SettingsNamespace, z.any(), {})
+    registerNamespaceSafe(mounted.ctx, 'llm-pi-ai' as unknown as SettingsNamespace, z.any(), {})
+    await mounted.ctx.settings.update('model-aliases' as SettingsNamespace, {
+      gauge: { provider: 'deepseek', model: 'llmbox_systemone/laya', protocol: 'systemone' },
+    })
+    await mounted.ctx.settings.update('llm-pi-ai' as unknown as SettingsNamespace, {
+      providers: { deepseek: { baseURL: 'http://127.0.0.1:9', apiKeyEnv: 'DSH_TEST_GAUGE_KEY' } },
+    })
+    await arm(mounted.ctx, { classifier: { enabled: true, backend: 'auto' } })
+    return { ...mounted, fetches }
+  }
+
+  it('armed gauge route: T1 allow envelope → allow, no chat classifier call, ONE permission/classifier audit event with the systemone lane identity + scalars', async () => {
+    const { ctx, llm, fetches } = await mountGauge(structuredClone(GAUGE_T1))
+    delete process.env.DSH_TEST_GAUGE_KEY
+    const asked: unknown[] = []
+    ctx.on('approval/request', async (req) => { asked.push(req); return 'allowed-once' })
+    const agent = agentOf('gauge-allow')
+    ctx.permissionRules.setMode(agent, 'auto')
+
+    const result = await ctx.tools.execute(exec('Bash', { command: 'ls -la' }, agent))
+    expect(result.isError).toBe(false)
+    expect(text(result)).toBe('ran:ls -la')
+    expect(asked).toHaveLength(0)
+    expect(classifierCalls(llm)).toHaveLength(0)
+    expect(fetches).toHaveLength(1)
+    expect(fetches[0]!.url).toBe('http://127.0.0.1:9/v1/systemone')
+    const folded = foldClassifiers(agent.session.snapshotEvents())
+    expect(folded).toHaveLength(1)
+    expect(folded[0]).toMatchObject({
+      tool: 'Bash',
+      verdict: 'allow',
+      provider: 'deepseek',
+      model: 'llmbox_systemone/laya',
+      route: 'systemone/llmbox_systemone/laya',
+      probabilities: GAUGE_T1.answers.verdict.probabilities,
+      confidence: 0.0555,
+    })
+  })
+
+  it('armed gauge route: a deny answer collapses to ask with the deny-downgrade reason', async () => {
+    const { ctx } = await mountGauge({
+      model: 'laya-rl-agent',
+      answers: { verdict: { type: 'choice', choice: 'deny', probabilities: { allow: 0.2, ask: 0.3, deny: 0.5 }, confidence: 0.05 } },
+      usage: { input_tokens: 83, output_tokens: 0 },
+    })
+    const reasons: string[] = []
+    ctx.on('approval/request', async (req) => {
+      reasons.push(String((req as { reason?: string }).reason ?? ''))
+      return 'allowed-once'
+    })
+    const agent = agentOf('gauge-deny')
+    ctx.permissionRules.setMode(agent, 'auto')
+
+    // A MEDIUM-risk command: `rm -rf ~` is HIGH and denied by the
+    // deterministic waterfall before the stage is ever consulted.
+    await ctx.tools.execute(exec('Bash', { command: 'mv data data.bak' }, agent))
+    expect(reasons[0]).toContain('deny downgraded: gauge cannot cite an exact hard-deny rule')
+    expect(foldClassifiers(agent.session.snapshotEvents())[0]).toMatchObject({ verdict: 'ask' })
+  })
+
+  it('truncated usage (input_tokens pins at the window) ⇒ ask with the truncation reason + a warn', async () => {
+    const warns: string[] = []
+    const { ctx } = await mountGauge({
+      model: 'laya-rl-agent',
+      answers: { verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 }, confidence: 0.05 } },
+      usage: { input_tokens: 1024, output_tokens: 0 },
+    })
+    ctx.logger.on?.('warn', (m: string) => warns.push(String(m)))
+    const asked: unknown[] = []
+    ctx.on('approval/request', async (req) => { asked.push(req); return 'allowed-once' })
+    const agent = agentOf('gauge-truncated')
+    ctx.permissionRules.setMode(agent, 'auto')
+
+    await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    const folded = foldClassifiers(agent.session.snapshotEvents())
+    expect(folded[0]).toMatchObject({ verdict: 'ask', reason: 'state truncated by gateway' })
+    expect(asked).toHaveLength(1)
   })
 })

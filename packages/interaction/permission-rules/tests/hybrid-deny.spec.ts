@@ -253,7 +253,7 @@ function stageHarness(overrides: Partial<StageHarness> = {}): StageHarness {
   h.deps = {
     settingsRead: () => h.settings.value,
     stream: async () => { h.streams += 1; return h.scripted.shift() ?? '{"verdict":"allow","reason":"ok"}' },
-    resolveRoute: () => ({ provider: 'fake', model: 'classifier-model' }),
+    resolveRoute: () => ({ backend: 'chat' as const, route: { provider: 'fake', model: 'classifier-model' } }),
     warn: (message: string) => { h.warnings.push(message) },
     // Append for real: the backstop folds the session's durable log.
     audit: (session, event) => {

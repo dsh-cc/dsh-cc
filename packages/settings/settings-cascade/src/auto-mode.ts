@@ -16,8 +16,27 @@ import z from '@deepseek-ai/schemastery'
 export interface AutoModeClassifier {
   /** Master switch for the LLM risk classifier stage (default `false`). */
   enabled?: boolean
-  /** Model route used for classification (default `'haiku'`). */
+  /**
+   * Explicit model route used for classification. When set, it WINS over
+   * `backend` verbatim (including `gauge`); when unset, the route policy
+   * picks `gauge` when armed (backend `'auto'` + a configured System One
+   * gauge alias) and `'haiku'` otherwise. No schema default — absence is
+   * preserved and the policy helper decides (default `'haiku'`).
+   */
   route?: string
+  /**
+   * Backend selection when `route` is unset (default `'haiku'` at
+   * consumption): `'haiku'` always uses the chat classifier, even when a
+   * gauge alias is fully configured; `'auto'` arms the gauge System One
+   * lane when the gauge alias is configured with the systemone protocol.
+   */
+  backend?: 'haiku' | 'auto'
+  /**
+   * System One gauge allow-gate threshold, 0–1 (only consulted by the
+   * System One adapter; the consumption default lives in the adapter's
+   * constant). Absence-preserving.
+   */
+  gaugeAllowThreshold?: number
   /** Per-call timeout in milliseconds (default `8000`). */
   timeoutMs?: number
   /** Verdict cache size in entries (default `256`). */
@@ -112,7 +131,13 @@ export const AutoModeProbeSchema: z<AutoModeProbe> = z.object({
  */
 export const AutoModeClassifierSchema: z<AutoModeClassifier> = z.object({
   enabled: z.boolean().default(false),
-  route: z.string().default('haiku'),
+  // Absence-preserving: an unset `route` defers to `backend` at consumption
+  // (the `'haiku'` schema default was removed — pickClassifierRouteName).
+  route: z.union([z.string(), z.const(undefined)]),
+  // Absence-preserving enum union; consumption default `'haiku'`.
+  backend: z.union(['haiku', 'auto'] as const),
+  // Absence-preserving (gauge allow-gate; adapter owns the default).
+  gaugeAllowThreshold: z.union([z.number(), z.const(undefined)]),
   timeoutMs: z.number().default(8000),
   cacheMaxEntries: z.number().default(256),
   // Union with `undefined` keeps an absent `secondPass` key absent (default

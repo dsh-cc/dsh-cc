@@ -27,13 +27,22 @@ describe('AutoModeSchema', () => {
     expect(parse({ hard_deny: ['never do X'] })).toEqual({ hard_deny: ['never do X'] })
     expect(() => parse({ hard_deny: 'never do X' })).toThrow()
     expect(parse({ classifier: {} })).toEqual({
-      classifier: { enabled: false, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 },
+      classifier: { enabled: false, timeoutMs: 8000, cacheMaxEntries: 256 },
     })
+    // `route` is absence-preserving now (the policy helper decides when unset).
+    expect(parse({ classifier: { route: 'sonnet' } })).toEqual({
+      classifier: { enabled: false, route: 'sonnet', timeoutMs: 8000, cacheMaxEntries: 256 },
+    })
+    // backend / gaugeAllowThreshold are accepted and absence-preserving.
+    expect(parse({ classifier: { backend: 'auto', gaugeAllowThreshold: 0.9 } })).toEqual({
+      classifier: { enabled: false, backend: 'auto', gaugeAllowThreshold: 0.9, timeoutMs: 8000, cacheMaxEntries: 256 },
+    })
+    expect(() => parse({ classifier: { backend: 'gpt' } })).toThrow()
   })
 
   it('normalizes a partial classifier object with defaults', () => {
     expect(parse({ classifier: { enabled: true } })).toEqual({
-      classifier: { enabled: true, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 },
+      classifier: { enabled: true, timeoutMs: 8000, cacheMaxEntries: 256 },
     })
   })
 
@@ -143,13 +152,13 @@ describe('autoMode cascade layering (permissions.autoMode delivery route)', () =
   })
 
   it('S5 auditFullText is absence-preserving: absent stays absent; present round-trips; non-boolean rejects', () => {
-    expect(parse({ classifier: { enabled: true } })).toEqual({ classifier: { enabled: true, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 } })
-    expect(parse({ classifier: { enabled: true, auditFullText: true } })).toEqual({ classifier: { enabled: true, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256, auditFullText: true } })
+    expect(parse({ classifier: { enabled: true } })).toEqual({ classifier: { enabled: true, timeoutMs: 8000, cacheMaxEntries: 256 } })
+    expect(parse({ classifier: { enabled: true, auditFullText: true } })).toEqual({ classifier: { enabled: true, timeoutMs: 8000, cacheMaxEntries: 256, auditFullText: true } })
     expect(() => parse({ classifier: { auditFullText: 'yes' } })).toThrow()
   })
 
   it('D13 secondPass is absence-preserving: absent stays absent; present round-trips', () => {
-    expect(parse({ classifier: { enabled: true } })).toEqual({ classifier: { enabled: true, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256 } })
-    expect(parse({ classifier: { enabled: true, secondPass: true } })).toEqual({ classifier: { enabled: true, route: 'haiku', timeoutMs: 8000, cacheMaxEntries: 256, secondPass: true } })
+    expect(parse({ classifier: { enabled: true } })).toEqual({ classifier: { enabled: true, timeoutMs: 8000, cacheMaxEntries: 256 } })
+    expect(parse({ classifier: { enabled: true, secondPass: true } })).toEqual({ classifier: { enabled: true, timeoutMs: 8000, cacheMaxEntries: 256, secondPass: true } })
   })
 })
