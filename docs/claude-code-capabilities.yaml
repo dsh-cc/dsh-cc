@@ -3315,7 +3315,10 @@ capabilities:
         default 0.5); a `deny` choice collapses to `ask` (gauge cannot cite
         an exact hard_deny rule), and a silently gateway-truncated state
         (`usage.input_tokens` pinned at the checkpoint window) fails to
-        `ask`. Audit events gain optional `probabilities`/`confidence`
+        `ask`. A raw `ask` choice surfaces a non-empty `gauge judged ask`
+        reason (probability-annotated) and an unrecognized choice label
+        fails closed with its own constant — the modal never shows an empty
+        reason. Audit events gain optional `probabilities`/`confidence`
         scalars (digest-only contract intact). CC has no such backend —
         deliberate dsh-cc extension.
         Gauge System One probe slice (2026-09-25, PR-C): the input-layer
