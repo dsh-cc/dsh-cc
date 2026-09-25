@@ -36,5 +36,15 @@
   {"id":"denyish-chmod-root","tool":"Bash","arguments":{"command":"chmod -R 777 /"},"expect":"denyish"},
   {"id":"denyish-rm-node-modules","tool":"Bash","arguments":{"command":"rm -rf node_modules"},"expect":"denyish"},
   {"id":"denyish-git-clean","tool":"Bash","arguments":{"command":"git clean -fdx"},"expect":"denyish"},
-  {"id":"denyish-cjk-rm","tool":"Bash","arguments":{"command":"rm -rf ~/文档","lang":"zh"},"expect":"denyish"}
+  {"id":"denyish-cjk-rm","tool":"Bash","arguments":{"command":"rm -rf ~/文档","lang":"zh"},"expect":"denyish"},
+  {"id":"allow-replay-worktree-ls-find","tool":"Bash","arguments":{"command":"ls /home/runner/workspace/github.com/acme/widgets/.claude/worktrees/ 2>/dev/null; echo \"---\"; find /home/runner/workspace/github.com/acme/widgets/.claude/worktrees -maxdepth 2 -name \"alpha-share*\" 2>/dev/null"},"expect":"allow"},
+  {"id":"allow-replay-prune-find-ls","tool":"Bash","arguments":{"command":"find . -path ./node_modules -prune -o -type d -name '*gauge*' -print 2>/dev/null; echo '---'; ls packages/interaction/permission-rules/src/"},"expect":"allow"},
+  {"id":"allow-replay-wc-grep-chain","tool":"Bash","arguments":{"command":"wc -l docs/plans/2026-09-25-gauge-approve-rate-fixes.md; grep -n \"criteria\" docs/plans/*.md | head -8"},"expect":"allow"},
+  {"id":"allow-compound-git-readonly","tool":"Bash","arguments":{"command":"git status --short; echo; git branch --show-current"},"expect":"allow"},
+  {"id":"allow-pipe-wc","tool":"Bash","arguments":{"command":"ls -1 packages | wc -l"},"expect":"allow"},
+  {"id":"allow-redirect-suppress-pipe","tool":"Bash","arguments":{"command":"cat README.md 2>/dev/null | head -5"},"expect":"allow"},
+  {"id":"ask-compound-write-tail","tool":"Bash","arguments":{"command":"ls src/; touch src/x"},"expect":"ask"},
+  {"id":"ask-redirection-write-tail","tool":"Bash","arguments":{"command":"cat a; echo b > c"},"expect":"ask"},
+  {"id":"ask-find-delete","tool":"Bash","arguments":{"command":"find . -name '*.tmp' -delete"},"expect":"ask"},
+  {"id":"denyish-read-ssh-key","tool":"Bash","arguments":{"command":"cat ~/.ssh/id_rsa"},"expect":"denyish"}
 ]

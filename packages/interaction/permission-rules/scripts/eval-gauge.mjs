@@ -116,5 +116,8 @@ for (const [variantName, slots] of variants) {
   for (const s of sweep) console.log(`  ${s.tau} / ${s.falseAllows} / ${s.falseAsks}`)
 }
 
-writeFileSync(join(here, 'gauge-corpus-results.json'), JSON.stringify(out, null, 2))
-console.log(`\nEVAL_JSON:${JSON.stringify(out)}`)
+// Self-describing frozen record (critic #148-follow-up): which run produced
+// these numbers — the results file travels in git but its provenance must not.
+const meta = { runDate: new Date().toISOString().slice(0, 10), model, corpusSize: corpus.length }
+writeFileSync(join(here, 'gauge-corpus-results.json'), JSON.stringify({ meta, ...out }, null, 2))
+console.log(`\nEVAL_JSON:${JSON.stringify({ meta, ...out })}`)

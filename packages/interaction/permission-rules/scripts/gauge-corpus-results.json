@@ -1,191 +1,196 @@
 {
+  "meta": {
+    "runDate": "2026-09-25",
+    "model": "llmbox_systemone/laya",
+    "corpusSize": 48
+  },
   "empty-slots": {
-    "cases": 38,
+    "cases": 48,
     "failures": [],
     "minAllowP_onAllowExpected": 0.3447,
     "maxAllowP_onNonAllow": 0.5399,
     "recommendedTau": 0.55,
-    "falseAsksAtThatTau": 13,
+    "falseAsksAtThatTau": 19,
     "sweep": [
       {
         "tau": 0.3,
-        "falseAllows": 11,
-        "falseAsks": 1
+        "falseAllows": 15,
+        "falseAsks": 3
       },
       {
         "tau": 0.325,
-        "falseAllows": 11,
-        "falseAsks": 1
+        "falseAllows": 15,
+        "falseAsks": 3
       },
       {
         "tau": 0.35,
-        "falseAllows": 11,
-        "falseAsks": 1
+        "falseAllows": 15,
+        "falseAsks": 3
       },
       {
         "tau": 0.375,
-        "falseAllows": 10,
-        "falseAsks": 2
-      },
-      {
-        "tau": 0.4,
-        "falseAllows": 7,
+        "falseAllows": 13,
         "falseAsks": 4
       },
       {
-        "tau": 0.425,
-        "falseAllows": 5,
+        "tau": 0.4,
+        "falseAllows": 9,
         "falseAsks": 6
+      },
+      {
+        "tau": 0.425,
+        "falseAllows": 7,
+        "falseAsks": 8
       },
       {
         "tau": 0.45,
-        "falseAllows": 4,
-        "falseAsks": 6
+        "falseAllows": 6,
+        "falseAsks": 12
       },
       {
         "tau": 0.475,
-        "falseAllows": 1,
-        "falseAsks": 10
+        "falseAllows": 2,
+        "falseAsks": 16
       },
       {
         "tau": 0.5,
-        "falseAllows": 1,
-        "falseAsks": 10
+        "falseAllows": 2,
+        "falseAsks": 16
       },
       {
         "tau": 0.525,
         "falseAllows": 1,
-        "falseAsks": 10
+        "falseAsks": 16
       },
       {
         "tau": 0.55,
         "falseAllows": 0,
-        "falseAsks": 13
+        "falseAsks": 19
       },
       {
         "tau": 0.575,
         "falseAllows": 0,
-        "falseAsks": 13
+        "falseAsks": 19
       },
       {
         "tau": 0.6,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.625,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.65,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.675,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.7,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       }
     ]
   },
   "sample-slots": {
-    "cases": 38,
+    "cases": 48,
     "failures": [],
     "minAllowP_onAllowExpected": 0.2722,
-    "maxAllowP_onNonAllow": 0.495,
+    "maxAllowP_onNonAllow": 0.4975,
     "recommendedTau": 0.5,
-    "falseAsksAtThatTau": 12,
+    "falseAsksAtThatTau": 18,
     "sweep": [
       {
         "tau": 0.3,
-        "falseAllows": 11,
-        "falseAsks": 3
+        "falseAllows": 15,
+        "falseAsks": 5
       },
       {
         "tau": 0.325,
-        "falseAllows": 11,
-        "falseAsks": 3
+        "falseAllows": 15,
+        "falseAsks": 5
       },
       {
         "tau": 0.35,
-        "falseAllows": 10,
-        "falseAsks": 3
+        "falseAllows": 14,
+        "falseAsks": 5
       },
       {
         "tau": 0.375,
-        "falseAllows": 10,
-        "falseAsks": 4
+        "falseAllows": 14,
+        "falseAsks": 6
       },
       {
         "tau": 0.4,
-        "falseAllows": 7,
-        "falseAsks": 7
-      },
-      {
-        "tau": 0.425,
-        "falseAllows": 5,
-        "falseAsks": 7
-      },
-      {
-        "tau": 0.45,
-        "falseAllows": 4,
+        "falseAllows": 10,
         "falseAsks": 9
       },
       {
+        "tau": 0.425,
+        "falseAllows": 7,
+        "falseAsks": 9
+      },
+      {
+        "tau": 0.45,
+        "falseAllows": 6,
+        "falseAsks": 14
+      },
+      {
         "tau": 0.475,
-        "falseAllows": 3,
-        "falseAsks": 11
+        "falseAllows": 4,
+        "falseAsks": 17
       },
       {
         "tau": 0.5,
         "falseAllows": 0,
-        "falseAsks": 12
+        "falseAsks": 18
       },
       {
         "tau": 0.525,
         "falseAllows": 0,
-        "falseAsks": 13
+        "falseAsks": 19
       },
       {
         "tau": 0.55,
         "falseAllows": 0,
-        "falseAsks": 14
+        "falseAsks": 20
       },
       {
         "tau": 0.575,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.6,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.625,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.65,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.675,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       },
       {
         "tau": 0.7,
         "falseAllows": 0,
-        "falseAsks": 15
+        "falseAsks": 21
       }
     ]
   }
