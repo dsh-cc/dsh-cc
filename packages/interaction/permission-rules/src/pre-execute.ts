@@ -16,7 +16,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { createWarnOnce } from './route-policy.ts'
-import { resolveClassifierBackend } from './gauge-backend.ts'
+import { resolveClassifierBackend, resolveProbeBackend } from './gauge-backend.ts'
 import { createClassifierStreamAdapter, type ClassifierStream } from './classifier-lane.ts'
 import {
   appendSessionClassifier,
@@ -217,16 +217,23 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
   })
   host.onAutoStage(autoStage)
 
-  // S7 input-layer PI probe: deps mirror the classifier face. Same route
-  // seam (own `autoMode.probe.route`, default 'haiku') and the SAME
-  // env-gated debug channel (raw probe output, process log only).
+  // S7 input-layer PI probe: deps mirror the classifier face. Same §4.5
+  // route-policy composition over the probe section (own `autoMode.probe`
+  // route/backend, consumption default 'haiku') and the SAME env-gated
+  // debug channel (raw probe output, process log only). The classifier
+  // wiring above is untouched.
   const piProbe: PiProbe = createPiProbe({
     settingsRead: () => host.settingsSection(),
     get stream() {
       return llmStream
     },
     resolveRoute: (exec) =>
-      resolveDetailedRoute(ctx, exec, host.settingsSection().autoMode?.probe?.route ?? 'haiku'),
+      resolveProbeBackend(ctx, exec, {
+        route: host.settingsSection().autoMode?.probe?.route,
+        backend: host.settingsSection().autoMode?.probe?.backend ?? 'haiku',
+        warnOnce: policyWarnOnce,
+        resolveChatRoute: (e, name) => resolveDetailedRoute(ctx, e, name),
+      }),
     warn: (message) => ctx.logger.warn(message),
     audit: (session, event) => {
       appendSessionProbe(session, event)

@@ -182,6 +182,65 @@ describe('/auto-mode config', () => {
   })
 })
 
+describe('/auto-mode config — probe backend block (PR-C)', () => {
+  it('default: probe renders enabled, backend haiku, route haiku, no gauge', () => {
+    const settings = { get: (ns: string) => ns === 'permissions' ? { autoMode: { probe: {} } } : {} }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as { probe: Record<string, unknown> }
+    expect(parsed.probe).toEqual({
+      enabled: true,
+      backend: 'haiku',
+      route: 'haiku',
+      routeSource: 'default',
+      routePolicy: 'explicit route > backend auto (gauge when armed) > haiku',
+      gaugeRoute: null,
+      gaugeProtocol: null,
+    })
+  })
+
+  it('explicit probe.route gauge: reported verbatim with source explicit and the armed gauge alias', () => {
+    const settings = {
+      get: (ns: string) => ns === 'permissions'
+        ? { autoMode: { probe: { route: 'gauge' } } }
+        : ns === 'model-aliases'
+          ? { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } }
+          : {},
+    }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as { probe: Record<string, unknown> }
+    expect(parsed.probe.route).toBe('gauge')
+    expect(parsed.probe.routeSource).toBe('explicit')
+    expect(parsed.probe.backend).toBe('haiku')
+    expect(parsed.probe.gaugeRoute).toBe('orchestrix/llmbox_systemone/laya')
+    expect(parsed.probe.gaugeProtocol).toBe('systemone')
+  })
+
+  it('probe backend auto + armed gauge alias: the native lane is reported honestly', () => {
+    const settings = {
+      get: (ns: string) => ns === 'permissions'
+        ? { autoMode: { probe: { backend: 'auto' } } }
+        : ns === 'model-aliases'
+          ? { gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' } }
+          : {},
+    }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as { probe: Record<string, unknown> }
+    expect(parsed.probe.route).toBe('gauge')
+    expect(parsed.probe.routeSource).toBe('auto-gauge')
+    expect(parsed.probe.backend).toBe('auto')
+    expect(parsed.probe.gaugeRoute).toBe('orchestrix/llmbox_systemone/laya')
+  })
+
+  it('probe disabled reports enabled false; the one-arg legacy render has no probe key', () => {
+    const settings = { get: (ns: string) => ns === 'permissions' ? { autoMode: { probe: { enabled: false } } } : {} }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as { probe: Record<string, unknown> }
+    expect(parsed.probe.enabled).toBe(false)
+    // Legacy byte-identical contract: no effective computation ⇒ no probe block.
+    expect(Object.keys(JSON.parse(renderConfig(FIXTURE)))).not.toContain('probe')
+  })
+})
+
 describe('/auto-mode dispatch', () => {
   it('an unknown subcommand is a usage error', () => {
     const { run } = harness()

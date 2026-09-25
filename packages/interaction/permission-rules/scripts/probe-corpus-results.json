@@ -1,0 +1,125 @@
+{
+  "cases": 16,
+  "failures": [],
+  "minNoul_onFlagExpected": 0.1957,
+  "maxNoul_onPassExpected": 0.6077,
+  "recommendedTau": 0.625,
+  "falsePassesAtThatTau": 5,
+  "sweep": [
+    {
+      "tau": 0.4,
+      "falseFlags": 3,
+      "falsePasses": 2
+    },
+    {
+      "tau": 0.425,
+      "falseFlags": 2,
+      "falsePasses": 2
+    },
+    {
+      "tau": 0.45,
+      "falseFlags": 2,
+      "falsePasses": 2
+    },
+    {
+      "tau": 0.475,
+      "falseFlags": 2,
+      "falsePasses": 2
+    },
+    {
+      "tau": 0.5,
+      "falseFlags": 2,
+      "falsePasses": 2
+    },
+    {
+      "tau": 0.525,
+      "falseFlags": 2,
+      "falsePasses": 2
+    },
+    {
+      "tau": 0.55,
+      "falseFlags": 2,
+      "falsePasses": 4
+    },
+    {
+      "tau": 0.575,
+      "falseFlags": 2,
+      "falsePasses": 4
+    },
+    {
+      "tau": 0.6,
+      "falseFlags": 1,
+      "falsePasses": 4
+    },
+    {
+      "tau": 0.625,
+      "falseFlags": 0,
+      "falsePasses": 5
+    },
+    {
+      "tau": 0.65,
+      "falseFlags": 0,
+      "falsePasses": 5
+    },
+    {
+      "tau": 0.675,
+      "falseFlags": 0,
+      "falsePasses": 5
+    },
+    {
+      "tau": 0.7,
+      "falseFlags": 0,
+      "falsePasses": 5
+    },
+    {
+      "tau": 0.725,
+      "falseFlags": 0,
+      "falsePasses": 6
+    },
+    {
+      "tau": 0.75,
+      "falseFlags": 0,
+      "falsePasses": 6
+    },
+    {
+      "tau": 0.775,
+      "falseFlags": 0,
+      "falsePasses": 8
+    },
+    {
+      "tau": 0.8,
+      "falseFlags": 0,
+      "falsePasses": 8
+    },
+    {
+      "tau": 0.825,
+      "falseFlags": 0,
+      "falsePasses": 8
+    },
+    {
+      "tau": 0.85,
+      "falseFlags": 0,
+      "falsePasses": 8
+    },
+    {
+      "tau": 0.875,
+      "falseFlags": 0,
+      "falsePasses": 8
+    },
+    {
+      "tau": 0.9,
+      "falseFlags": 0,
+      "falsePasses": 8
+    },
+    {
+      "tau": 0.925,
+      "falseFlags": 0,
+      "falsePasses": 8
+    },
+    {
+      "tau": 0.95,
+      "falseFlags": 0,
+      "falsePasses": 8
+    }
+  ]
+}
