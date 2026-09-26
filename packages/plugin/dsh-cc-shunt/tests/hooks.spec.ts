@@ -5,7 +5,7 @@
  * (byte fallback, SHUNT_MAX_BYTES override, SHUNT_DISABLED kill switch).
  */
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -25,12 +25,38 @@ function fixture(name: string, lines: number, trailingNewline = true): string {
   return path
 }
 
-function runHook(script: string, toolInput: unknown, env: Record<string, string> = {}): {
+/** Writes a file whose first bytes are `magic`, padded to `kb` KB with text filler. */
+function magicFixture(name: string, magic: number[], kb: number): string {
+  const path = join(dir, name)
+  const filler = Buffer.from(`x${'y'.repeat(kb * 1024)}`) // text filler, never image content
+  filler.set(magic, 0)
+  writeFileSync(path, filler.subarray(0, kb * 1024))
+  return path
+}
+
+function bigTextFixture(name: string, kb = 150): string {
+  const path = join(dir, name)
+  writeFileSync(path, `${'x'.repeat(kb * 1024)}\n`)
+  return path
+}
+
+function makeFifo(name: string): string {
+  const path = join(dir, name)
+  const res = spawnSync('mkfifo', [path])
+  if (res.status !== 0 || !existsSync(path)) throw new Error(`mkfifo failed: ${res.stderr}`)
+  return path
+}
+
+function runHook(
+  script: string,
+  toolInput: unknown,
+  env: Record<string, string> = {},
+  payloadExtra: Record<string, unknown> = {},
+): {
   decision?: string
   reason?: string
 } {
-  const res = spawnSyncJson(script, JSON.stringify({ tool_input: toolInput }), env)
-  return JSON.parse(res)
+  return JSON.parse(spawnSyncJson(script, JSON.stringify({ tool_input: toolInput, ...payloadExtra }), env))
 }
 
 function spawnSyncJson(script: string, stdin: string, env: Record<string, string>): string {
@@ -281,5 +307,201 @@ describe('check-bash-read.mjs (upstream bash-hook-evals.json transcription)', ()
   it('resolves relative paths against the hook cwd', () => {
     fixture('rel.txt', 800)
     expect(runHook('check-bash-read.mjs', { command: 'cat rel.txt' }).decision).toBe('block')
+  })
+
+  it('upstream behavior pinned: tail -n +1 on a large file is ALLOWED', () => {
+    // Today's real behavior: `-n` is stripped as a flag, `+1` becomes the
+    // "file path", which does not exist — so the hook passes through.
+    expect(runHook('check-bash-read.mjs', { command: `tail -n +1 ${fixture('b-large.txt', 800)}` }).decision).toBe(
+      'allow',
+    )
+  })
+})
+
+describe('subagent exemption (agent_id on the payload)', () => {
+  const AGENT_ID = { agent_id: 'agent-abc123' }
+  const kb = (path: string) => Math.max(1, Math.round(statSync(path).size / 1024))
+
+  it('byte-path block in check-file-size.mjs allows with agent_id', () => {
+    expect(runHook('check-file-size.mjs', { file_path: bigTextFixture('ex-byte.txt') }, {}, AGENT_ID).decision).toBe(
+      'allow',
+    )
+  })
+
+  it('line-path block in check-file-size.mjs allows with agent_id', () => {
+    expect(
+      runHook('check-file-size.mjs', { file_path: fixture('ex-lines.txt', 1200) }, {}, AGENT_ID).decision,
+    ).toBe('allow')
+  })
+
+  it('byte-path block in check-bash-read.mjs allows with agent_id', () => {
+    expect(
+      runHook('check-bash-read.mjs', { command: `cat ${bigTextFixture('ex-b-byte.txt')}` }, {}, AGENT_ID).decision,
+    ).toBe('allow')
+  })
+
+  it('line-path block in check-bash-read.mjs allows with agent_id', () => {
+    expect(
+      runHook('check-bash-read.mjs', { command: `cat ${fixture('ex-b-lines.txt', 800)}` }, {}, AGENT_ID).decision,
+    ).toBe('allow')
+  })
+
+  it('main-thread byte-path block reason in check-file-size.mjs is byte-identical', () => {
+    const out = runHook('check-file-size.mjs', { file_path: bigTextFixture('golden-f-byte.txt') })
+    expect(out.decision).toBe('block')
+    expect(out.reason).toBe(
+      `File is ~150 KB, over the shunt byte threshold (100000 bytes). ` +
+        `To understand it, delegate via the "bulk-reader" skill instead of reading it into your context. ` +
+        `For exact content to edit a specific section, re-read just that range with offset/limit — targeted reads always pass.`,
+    )
+  })
+
+  it('main-thread line-path block reason in check-file-size.mjs is byte-identical', () => {
+    const out = runHook('check-file-size.mjs', { file_path: fixture('golden-f-lines.txt', 1200) })
+    expect(out.decision).toBe('block')
+    expect(out.reason).toBe(
+      `File is 1200 lines (~${kb(join(dir, 'golden-f-lines.txt'))} KB), over the shunt threshold (350 lines / 100000 bytes). ` +
+        `To understand it, delegate via the "bulk-reader" skill instead of reading it into your context. ` +
+        `For exact content to edit a specific section, re-read just that range with offset/limit — targeted reads always pass.`,
+    )
+  })
+
+  it('main-thread byte-path block reason in check-bash-read.mjs is byte-identical', () => {
+    const out = runHook('check-bash-read.mjs', { command: `cat ${bigTextFixture('golden-b-byte.txt')}` })
+    expect(out.decision).toBe('block')
+    expect(out.reason).toBe(
+      `File is ~150 KB, over the shunt byte threshold (100000 bytes). ` +
+        `To understand it, delegate via the "bulk-reader" skill instead of reading it into your context. ` +
+        `Piping to grep/head (e.g. cat file | grep pattern) is the targeted alternative — targeted reads always pass.`,
+    )
+  })
+
+  it('main-thread line-path block reason in check-bash-read.mjs is byte-identical', () => {
+    const out = runHook('check-bash-read.mjs', { command: `cat ${fixture('golden-b-lines.txt', 800)}` })
+    expect(out.decision).toBe('block')
+    expect(out.reason).toBe(
+      `File is 800 lines (~${kb(join(dir, 'golden-b-lines.txt'))} KB), over the shunt threshold (350 lines / 100000 bytes). ` +
+        `To understand it, delegate via the "bulk-reader" skill instead of reading it into your context. ` +
+        `Piping to grep/head (e.g. cat file | grep pattern) is the targeted alternative — targeted reads always pass.`,
+    )
+  })
+
+  it('an empty agent_id does NOT exempt', () => {
+    expect(runHook('check-file-size.mjs', { file_path: fixture('ex-empty.txt', 1200) }, {}, { agent_id: '' }).decision)
+      .toBe('block')
+  })
+
+  it('a non-string agent_id does NOT exempt', () => {
+    expect(runHook('check-file-size.mjs', { file_path: fixture('ex-num.txt', 1200) }, {}, { agent_id: 7 }).decision)
+      .toBe('block')
+  })
+})
+
+describe('magic-byte image sniff (check-file-size.mjs only)', () => {
+  it('allows a large PNG (extensioned)', () => {
+    expect(runHook('check-file-size.mjs', { file_path: magicFixture('img.png', [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 150) }).decision).toBe('allow')
+  })
+
+  it('allows a large PNG (extensionless)', () => {
+    expect(
+      runHook('check-file-size.mjs', {
+        file_path: magicFixture('img-noext', [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 150),
+      }).decision,
+    ).toBe('allow')
+  })
+
+  it('allows a large JPEG (extensioned)', () => {
+    expect(
+      runHook('check-file-size.mjs', { file_path: magicFixture('img.jpg', [0xff, 0xd8, 0xff, 0xe0], 150) }).decision,
+    ).toBe('allow')
+  })
+
+  it('allows a large GIF (extensionless)', () => {
+    expect(
+      runHook('check-file-size.mjs', { file_path: magicFixture('img-gif', [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], 150) })
+        .decision,
+    ).toBe('allow')
+  })
+
+  it('allows a large WEBP (extensioned)', () => {
+    expect(
+      runHook('check-file-size.mjs', {
+        file_path: magicFixture('img.webp', [0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50], 150),
+      }).decision,
+    ).toBe('allow')
+  })
+
+  it('blocks RIFF without a WEBP subtype (not image-whitelisted)', () => {
+    expect(
+      runHook('check-file-size.mjs', {
+        file_path: magicFixture('riff-only.txt', [0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45], 150),
+      }).decision,
+    ).toBe('block')
+  })
+
+  it('still blocks a large TEXT file named *.png (no extension shortcut)', () => {
+    const out = runHook('check-file-size.mjs', { file_path: bigTextFixture('big.png') })
+    expect(out.decision).toBe('block')
+  })
+
+  it('allows a FIFO without any read (isFile early-allow releases it first)', () => {
+    expect(runHook('check-file-size.mjs', { file_path: makeFifo('pipe-fifo') }).decision).toBe('allow')
+  })
+
+  it('an unreadable large file falls through to the size block', () => {
+    if (typeof process.getuid === 'function' && process.getuid() === 0) return // chmod is a no-op under root
+    const path = bigTextFixture('unreadable.txt')
+    chmodSync(path, 0o000)
+    try {
+      expect(runHook('check-file-size.mjs', { file_path: path }).decision).toBe('block')
+    } finally {
+      chmodSync(path, 0o644)
+    }
+  })
+})
+
+describe('early-allows parameterized across payload shapes (with/without agent_id)', () => {
+  const AGENT_ID = { agent_id: 'agent-abc123' }
+  const big = () => fixture('param-big.txt', 800)
+
+  it.each([
+    ['without agent_id', {}],
+    ['with agent_id', AGENT_ID],
+  ])('SHUNT_DISABLED allows cat of a large file %s', (_label, extra) => {
+    expect(runHook('check-bash-read.mjs', { command: `cat ${big()}` }, { SHUNT_DISABLED: '1' }, extra).decision).toBe(
+      'allow',
+    )
+  })
+
+  it.each([
+    ['without agent_id', {}],
+    ['with agent_id', AGENT_ID],
+  ])('offset read allows a large file %s', (_label, extra) => {
+    expect(
+      runHook('check-file-size.mjs', { file_path: fixture('param-offset.txt', 1200), offset: 1 }, {}, extra).decision,
+    ).toBe('allow')
+  })
+
+  it.each([
+    ['without agent_id', {}],
+    ['with agent_id', AGENT_ID],
+  ])('limit read allows a large file %s', (_label, extra) => {
+    expect(
+      runHook('check-file-size.mjs', { file_path: fixture('param-limit.txt', 1200), limit: 50 }, {}, extra).decision,
+    ).toBe('allow')
+  })
+
+  it.each([
+    ['without agent_id', {}],
+    ['with agent_id', AGENT_ID],
+  ])('piped cat allows a large file %s', (_label, extra) => {
+    expect(runHook('check-bash-read.mjs', { command: `cat ${big()} | grep x` }, {}, extra).decision).toBe('allow')
+  })
+
+  it.each([
+    ['without agent_id', {}],
+    ['with agent_id', AGENT_ID],
+  ])('redirected cat allows a large file %s', (_label, extra) => {
+    expect(runHook('check-bash-read.mjs', { command: `cat ${big()} > /tmp/out` }, {}, extra).decision).toBe('allow')
   })
 })

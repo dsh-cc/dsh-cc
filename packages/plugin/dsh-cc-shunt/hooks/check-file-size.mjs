@@ -10,7 +10,7 @@
  * Allow contract: {"decision": "allow"} on stdout, exit 0.
  * Block contract: one-line {"decision": "block", "reason": "..."} on stdout, exit 0.
  */
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 
 const DEFAULT_MIN_LINES = 350
 const DEFAULT_MAX_BYTES = 100000
@@ -61,6 +61,10 @@ const limit = toolInput.limit
 // Kill switch.
 if (truthy(process.env.SHUNT_DISABLED)) allow()
 
+// Subagent exemption: invocations carrying CC-parity caller identity
+// (agent_id, bridge-injected for live subagents) bypass the gate.
+if (typeof payload.agent_id === 'string' && payload.agent_id !== '') allow()
+
 // Targeted reads always pass — the caller already knows what it needs.
 if (offset !== undefined || limit !== undefined) allow()
 
@@ -74,6 +78,31 @@ try {
   allow()
 }
 if (!stat.isFile()) allow()
+
+// Magic-byte image sniff: read_image has no offset/limit and accepts
+// extensionless paths by content sniffing, so large images can never be
+// paginated — allow real image content. No extension shortcut: a text file
+// named *.png stays gated. Any read error falls through to the thresholds.
+try {
+  const fd = openSync(filePath, 'r')
+  try {
+    const head = Buffer.alloc(12)
+    const n = readSync(fd, head, 0, 12, 0)
+    const b = head.subarray(0, n)
+    const isPng = n >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    const isJpeg = n >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
+    const isGif = n >= 4 && b.subarray(0, 4).equals(Buffer.from('GIF8', 'ascii'))
+    const isWebp =
+      n >= 12 &&
+      b.subarray(0, 4).equals(Buffer.from('RIFF', 'ascii')) &&
+      b.subarray(8, 12).equals(Buffer.from('WEBP', 'ascii'))
+    if (isPng || isJpeg || isGif || isWebp) allow()
+  } finally {
+    closeSync(fd)
+  }
+} catch {
+  // fall through
+}
 
 const minLines = intEnv('SHUNT_MIN_LINES', DEFAULT_MIN_LINES)
 const maxBytes = intEnv('SHUNT_MAX_BYTES', DEFAULT_MAX_BYTES)

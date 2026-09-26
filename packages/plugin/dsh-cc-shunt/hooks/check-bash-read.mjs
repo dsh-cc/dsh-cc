@@ -60,6 +60,10 @@ const command = typeof payload.tool_input?.command === 'string' ? payload.tool_i
 // Kill switch.
 if (truthy(process.env.SHUNT_DISABLED)) allow()
 
+// Subagent exemption: invocations carrying CC-parity caller identity
+// (agent_id, bridge-injected for live subagents) bypass the gate.
+if (typeof payload.agent_id === 'string' && payload.agent_id !== '') allow()
+
 // No command, or a targeted (piped / redirected) command.
 if (!command || command.includes('|') || command.includes('>') || !READ_COMMAND_RE.test(command)) allow()
 
