@@ -1,6 +1,6 @@
 # Subagent-aware shunt gate: CC-parity caller identity and the subagent exemption
 
-**Status:** **Design — four review rounds applied (critic; Codex SHIP-WITH-FIXES; reviewer rounds 2/3/4, each code-verified before application; 2026-09-25).** Identity transport is CC's own `agent_id` field, keyed on a *live* in-process subagent set (add at start, delete at end); `agent_type` stays a constant parity gap in this PR.
+**Status:** **Design — five review rounds applied (critic; Codex SHIP-WITH-FIXES; reviewer rounds 2/3/4/5, each code-verified before application; 2026-09-25).** Identity transport is CC's own `agent_id` field, keyed on a *live* in-process subagent set (add at start, delete at end); `agent_type` stays a constant parity gap in this PR.
 
 **Date:** 2026-09-25
 
@@ -42,7 +42,7 @@ worker subagent sessions too. The defects (precise scope after review):
 - **The identity seam is a live set keyed on start/end events.** The bridge already owns
   `subagentIds` (declared register-events.ts:52-54, allocated index.ts:200), but it is
   *add-only* by design — "every subagent id seen via start/end", feeding the TeammateIdle
-  filter (register-events.ts:217,228,321-322) — so it cannot distinguish "ended, then
+  filter (register-events.ts:217,230,321-323) — so it cannot distinguish "ended, then
   resumed as top-level in the same process" from "still a child". The design therefore
   adds a sibling **live set**: add at `subagent/start`, delete at `subagent/end`.
   Probed ordering for every subagent kind, grandchildren included: start → tool calls →
@@ -104,8 +104,18 @@ payload gains:
   change there). Kind-specific matchers remain non-firing: recorded as a parity gap in
   the manifest rows; the real type is the §10 follow-up.
 
-Events without a calling agent (PermissionDenied, Notification, PostCompact, SessionEnd,
-TaskCreated) stay as-is — recorded out of scope for the identity fill.
+**Which events carry the fields** — precise enumeration instead of a family hand-wave:
+- *With fields when the caller is a live-set member*: PreToolUse, PostToolUse,
+  PostToolUseFailure, PermissionRequest (:104/:138/:134/:243), Stop (:202), StopFailure
+  (:295), UserPromptSubmit (:78 — inside a child session this is the child's own event),
+  and TeammateIdle (:323 — idle fires strictly before end, so membership still holds).
+  SubagentStart/Stop already carry real `agent_id` + constant `agent_type` today —
+  unchanged here.
+- *Without fields (agent-less by construction — recorded gaps)*: PermissionDenied,
+  Notification, PostCompact, SessionEnd, TaskCreated (sessionBase/undefined agents), and
+  WorktreeCreate/Remove, whose invoke seam is agent-less by design (index.ts:209-216);
+  additionally, a `subagent-finished` worktree removal fires *after* the child's end, so
+  the live set would no longer hold the id even if an agent were threaded through.
 
 Known sibling bug, out of scope: an ended child resumed as a top-level session remains
 in add-only `subagentIds`, so it also triggers spurious TeammateIdle rows. The live set
@@ -197,9 +207,14 @@ now exists on the payload in CC's own shape, and the worker side never needed th
 2. **Plugin (`dsh-cc-shunt/tests/hooks.spec.ts`)**: all four block sites allow with
    `agent_id` present; main goldens byte-identical without it; magic-byte fixtures —
    PNG/JPEG/GIF/WEBP, extensionless PNG, **and a large text file named `.png` which must
-   stay blocked**; an unreadable (EACCES) file and a FIFO path exercise the try/catch
-   fall-through without blocking; kill switch / offset-limit / pipe early-allows
-   parameterized; `head -n 5` pin stays; **`tail -n +1` pin added**.
+   stay blocked**; kill switch / offset-limit / pipe early-allows parameterized;
+   `head -n 5` pin stays; **`tail -n +1` pin added**. Precise expectations
+   for the sniff guards: a FIFO asserts allow *without* any read — the `isFile`
+   early-allow releases it before the sniff, it never reaches the try/catch; an
+   unreadable large file (EACCES at the 12-byte read) falls through to the thresholds and
+   the test asserts the resulting **size block**. Under root, `chmod 000` is a no-op, so
+   that case carries the `process.getuid() === 0` skip guard (precedent
+   packages/launcher/tui/tests/store-restore.spec.ts:154-155).
 3. **End-to-end (required)** — the full dsh-cc path. Explicit assembly: subagent runtime
    + spawn provider, `@dsh-cc/subagent-task` (the real Task tool), the cc plugin loader
    with **both real plugins mounted** (dsh-cc-agents, dsh-cc-shunt), a model route for
@@ -270,20 +285,33 @@ now exists on the payload in CC's own shape, and the worker side never needed th
      `tail -n +1` had no pin — the pin is added rather than claimed; §10 gains id
      pre-allocation and the table lifecycle; the bridge README's `transcript_path`/
      `locate` claim contradicts payloads.ts and is fixed in passing.
-  Round-4 citation spot-check: all verified where referenced.
+  Round-4 citation spot-check: itself caught one slip — the end-handler add sits at
+  :230, not :228 (fixed in round 5).
 - Reviewer rounds 3/4 also confirmed: `exec.agent` is the calling subagent itself;
   shunt's `allow` decodes to a no-op (no auto-approval side channel); payload additions
   break nothing existing; start-before-tool-call ordering holds for every subagent
   kind, grandchildren included.
+- **Reviewer round 5** (precision pass, non-blocking): applied — the `:228` citation;
+  the §10 sketch's two lifecycle errors (pre-allocation is NOT universal today and the
+  type table must NOT follow start/end cycles — corrected below); §6.2 expectations
+  pinned exactly (FIFO released by `isFile` before the sniff; unreadable large file falls
+  through to a size block; chmod-under-root skip with the store-restore.spec.ts:154-155
+  precedent); and the §4.1 family hand-wave replaced by a per-event enumeration, with
+  WorktreeRemove `subagent-finished` explicitly field-less because it fires after end.
 
 ## 10. Deferred follow-up: real `agent_type`
 
-Separate PR: the Task dispatch (packages/subagent/task) — which allocates the durable
-child id at spawn — records `childId → type` in an in-process table; plugin agents get
-the scoped id (e.g. `dsh-cc-agents:critic`), file-defined agents the frontmatter `name`,
-untyped spawns `general-purpose`, internal forks `''` (not a CC subagent shape). Table
-lifecycle mirrors the child lifecycle: written at start, removed at end (the live set
-and the type table then become one map: presence ⇒ subagent, value ⇒ type). The bridge
-reads it when building payloads; manifest rows flip to full with matching evidence and
-kind-specific matchers start firing. Do NOT source the type from the descriptor label,
-the header, or `info.provider` (§2).
+Separate PR. Two structural changes in the Task dispatch (packages/subagent/task):
+(1) **always pre-allocate the child id** — today only resume-pin-captured starts pass a
+caller-chosen `childId`, while uncaptured background starts and forks get a
+harness-generated id — and (2) record `childId → type` in an in-process table at first
+spawn: plugin agents get the scoped id (e.g. `dsh-cc-agents:critic`), file-defined
+agents the frontmatter `name`, untyped spawns `general-purpose`, internal forks `''`
+(not a CC subagent shape). **The type table is long-lived and keyed by child id** — it
+must NOT follow the start/end cycles: a continuable child re-runs a full start/end pair
+on every wake while Task only knows the type at first spawn, so an end-deleted record
+would vanish after the first epoch. Only the *live* set follows start/end; the type
+table and the live set stay two separate structures (or one map with a permanent value
+column plus a live flag). The bridge reads the table when building payloads; manifest
+rows flip to full with matching evidence and kind-specific matchers start firing.
+Do NOT source the type from the descriptor label, the header, or `info.provider` (§2).
