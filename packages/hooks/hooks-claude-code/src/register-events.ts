@@ -52,6 +52,8 @@ export interface ListenerDeps {
   readonly subagentChildren: Map<SubagentRunId, Agent>
   /** Every subagent id seen via start/end, for the TeammateIdle filter. */
   readonly subagentIds: Set<string>
+  /** LIVE subagent ids (start adds, end deletes) — gates the CC caller-identity payload fields. */
+  readonly liveSubagentIds: Set<string>
 }
 
 /**
@@ -59,7 +61,7 @@ export interface ListenerDeps {
  * config is parsed and the run point / turn-safety cluster are built.
  */
 export function registerEvents(deps: ListenerDeps): void {
-  const { ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds } = deps
+  const { ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds, liveSubagentIds } = deps
 
   // --- UserPromptSubmit → PreStepDecision. The prompt text is the payload; no
   // matcher subject (CC ignores matchers for this event). ---
@@ -75,7 +77,7 @@ export function registerEvents(deps: ListenerDeps): void {
       continuation.onUserPrompt(agent.id)
     }
     const content = messages.flatMap(message => message.content)
-    const merged = await runPoint('UserPromptSubmit', '', promptPayload(ctx, agent, content), { agent, turn, signal })
+    const merged = await runPoint('UserPromptSubmit', '', promptPayload(ctx, agent, content, liveSubagentIds.has(agent.id)), { agent, turn, signal })
     const halted = turnSafety.applyHalt('UserPromptSubmit', merged, agent)
     turnSafety.surfaceNotices('UserPromptSubmit', merged, agent)
     if (halted || merged.decision === 'deny') {
@@ -101,7 +103,7 @@ export function registerEvents(deps: ListenerDeps): void {
     // the vendored one share the event name); at runtime the vendored registry
     // is the only `tools` service, so the value is always ours. See package README.
     const ccExec = exec as ToolExecution
-    const merged = await runPoint('PreToolUse', ccExec.name, preToolPayload(ctx, ccExec), { ...exec.agent ? { agent: exec.agent } : {}, turn, signal: exec.signal })
+    const merged = await runPoint('PreToolUse', ccExec.name, preToolPayload(ctx, ccExec, ccExec.agent !== undefined && liveSubagentIds.has(ccExec.agent.id)), { ...exec.agent ? { agent: exec.agent } : {}, turn, signal: exec.signal })
     const halted = turnSafety.applyHalt('PreToolUse', merged, exec.agent)
     turnSafety.surfaceNotices('PreToolUse', merged, exec.agent)
     if (halted) return { kind: 'deny', reason: merged.stopReason ?? 'halted by PreToolUse hook' }
@@ -131,11 +133,11 @@ export function registerEvents(deps: ListenerDeps): void {
     const ccExec = exec as ToolExecution
     const turn = lastTurn(exec.agent)
     if (result.isError) {
-      detached.track(runPoint('PostToolUseFailure', ccExec.name, postToolFailurePayload(ctx, ccExec, result), { ...exec.agent ? { agent: exec.agent } : {}, signal: exec.signal ?? detached.signal })
+      detached.track(runPoint('PostToolUseFailure', ccExec.name, postToolFailurePayload(ctx, ccExec, result, ccExec.agent !== undefined && liveSubagentIds.has(ccExec.agent.id)), { ...exec.agent ? { agent: exec.agent } : {}, signal: exec.signal ?? detached.signal })
         .then((merged) => { turnSafety.detachedOutcome('PostToolUseFailure', merged, exec.agent) })
         .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: PostToolUseFailure hook failed: ${String(error)}`) }))
     }
-    const merged = await runPoint('PostToolUse', ccExec.name, postToolPayload(ctx, ccExec, result), { ...exec.agent ? { agent: exec.agent } : {}, turn, signal: exec.signal })
+    const merged = await runPoint('PostToolUse', ccExec.name, postToolPayload(ctx, ccExec, result, ccExec.agent !== undefined && liveSubagentIds.has(ccExec.agent.id)), { ...exec.agent ? { agent: exec.agent } : {}, turn, signal: exec.signal })
     const halted = turnSafety.applyHalt('PostToolUse', merged, exec.agent)
     turnSafety.surfaceNotices('PostToolUse', merged, exec.agent)
     if (halted) {
@@ -199,7 +201,7 @@ export function registerEvents(deps: ListenerDeps): void {
     // false (recovered completion, cap reached, or feature disabled) fall
     // through to the normal Stop path untouched.
     if (continuation.tryContinue(agent, turn)) return
-    const merged = await runPoint('Stop', '', stopPayload(ctx, agent, turnSafety.hasBlocks(agent.id)), { agent, turn, signal })
+    const merged = await runPoint('Stop', '', stopPayload(ctx, agent, turnSafety.hasBlocks(agent.id), liveSubagentIds.has(agent.id)), { agent, turn, signal })
     if (turnSafety.applyHalt('Stop', merged, agent)) {
       turnSafety.surfaceNotices('Stop', merged, agent)
       return
@@ -215,6 +217,10 @@ export function registerEvents(deps: ListenerDeps): void {
   ctx.on('subagent/start', (info) => {
     const child = ctx.get('agents')?.get(info.id)
     subagentIds.add(info.id)
+    // The live set follows the start/end cycle: membership means the caller is
+    // currently a child. (Deliberately NOT folded into the TeammateIdle filter —
+    // that keeps its recorded add-only semantics.)
+    liveSubagentIds.add(info.id)
     if (child !== undefined) subagentChildren.set(info.runId, child)
     detached.track(runPoint('SubagentStart', SUBAGENT_TYPE, subagentPayload(ctx, 'SubagentStart', info, child), { ...child ? { agent: child } : {}, signal: detached.signal })
       .then((merged) => {
@@ -228,6 +234,7 @@ export function registerEvents(deps: ListenerDeps): void {
     const child = subagentChildren.get(info.runId) ?? ctx.get('agents')?.get(info.id)
     subagentChildren.delete(info.runId)
     subagentIds.add(info.id)
+    liveSubagentIds.delete(info.id)
     detached.track(runPoint('SubagentStop', SUBAGENT_TYPE, subagentPayload(ctx, 'SubagentStop', info, child), { ...child ? { agent: child } : {}, signal: detached.signal })
       .then((merged) => { turnSafety.detachedOutcome('SubagentStop', merged, child) }))
   })
@@ -240,7 +247,7 @@ export function registerEvents(deps: ListenerDeps): void {
   // chain decides (`ask`/no-decision delegate to `next()`). F2: a `continue:false`
   // hook rejects and cancels.
   ctx.on('approval/request', async (req: ApprovalRequest, next): Promise<ApprovalOutcome> => {
-    const merged = await runPoint('PermissionRequest', '', permissionRequestPayload(ctx, req), { ...req.agent ? { agent: req.agent } : {}, signal: req.signal ?? detached.signal })
+    const merged = await runPoint('PermissionRequest', '', permissionRequestPayload(ctx, req, req.agent !== undefined && liveSubagentIds.has(req.agent.id)), { ...req.agent ? { agent: req.agent } : {}, signal: req.signal ?? detached.signal })
     const halted = turnSafety.applyHalt('PermissionRequest', merged, req.agent)
     turnSafety.surfaceNotices('PermissionRequest', merged, req.agent)
     if (halted || merged.decision === 'deny') return 'rejected'
@@ -292,7 +299,7 @@ export function registerEvents(deps: ListenerDeps): void {
     // A2: count the error BEFORE dispatching the detached StopFailure — the
     // breaker is independent of, and must not delay, the hook dispatch.
     errorStreak.onError(agent, error)
-    detached.track(runPoint('StopFailure', '', stopFailurePayload(ctx, agent, error), { agent, signal: detached.signal })
+    detached.track(runPoint('StopFailure', '', stopFailurePayload(ctx, agent, error, liveSubagentIds.has(agent.id)), { agent, signal: detached.signal })
       .then((merged) => { turnSafety.detachedOutcome('StopFailure', merged, agent) })
       .catch((failure: unknown) => { ctx.logger.warn(`hooks-claude-code: StopFailure hook failed: ${String(failure)}`) }))
   })
@@ -320,7 +327,7 @@ export function registerEvents(deps: ListenerDeps): void {
   // does not distinguish root from child, so only agents seen as subagents fire.
   ctx.on('agent/status', ({ agent, status }) => {
     if (status === 'idle' && subagentIds.has(agent.id)) {
-      detached.track(runPoint('TeammateIdle', '', teammateIdlePayload(ctx, agent), { agent, signal: detached.signal })
+      detached.track(runPoint('TeammateIdle', '', teammateIdlePayload(ctx, agent, liveSubagentIds.has(agent.id)), { agent, signal: detached.signal })
         .then((merged) => { turnSafety.detachedOutcome('TeammateIdle', merged, agent) })
         .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: TeammateIdle hook failed: ${String(error)}`) }))
     }

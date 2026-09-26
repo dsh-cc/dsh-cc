@@ -25,6 +25,18 @@ import { ccCanonicalToolName, type ToolExecution, type ToolExecutionResult } fro
  */
 export const SUBAGENT_TYPE = 'general-purpose'
 
+/**
+ * CC caller-identity fields for a LIVE subagent caller (the in-process
+ * start/end set — see register-events). `agent_id` is CC's own hook-input
+ * field, equal to the SubagentStart id (grandchildren included); `agent_type`
+ * is the constant {@link SUBAGENT_TYPE} — kind-specific real types stay a
+ * recorded parity gap. Appended at the END of the payload; non-subagent
+ * payloads gain nothing and stay byte-identical.
+ */
+function callerIdentity(agent: Agent | undefined, isSubagent: boolean): Record<string, unknown> {
+  return isSubagent && agent !== undefined ? { agent_id: agent.id, agent_type: SUBAGENT_TYPE } : {}
+}
+
 /** Flatten content blocks to the text a hook payload carries (the common case). */
 function blocksToText(content: ContentBlock[]): string {
   return content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map(b => b.text).join('')
@@ -50,8 +62,8 @@ export function sessionStartPayload(_ctx: Context, agent: Agent, source: string)
 export function sessionResumePayload(_ctx: Context, agent: Agent, source: string): Record<string, unknown> {
   return { ...base(agent, 'SessionResume'), source }
 }
-export function promptPayload(_ctx: Context, agent: Agent, content: ContentBlock[]): Record<string, unknown> {
-  return { ...base(agent, 'UserPromptSubmit'), prompt: blocksToText(content) }
+export function promptPayload(_ctx: Context, agent: Agent, content: ContentBlock[], isSubagent = false): Record<string, unknown> {
+  return { ...base(agent, 'UserPromptSubmit'), prompt: blocksToText(content), ...callerIdentity(agent, isSubagent) }
 }
 
 /**
@@ -65,11 +77,11 @@ function hookToolName(name: string): string {
   return ccCanonicalToolName(name)
 }
 
-export function preToolPayload(_ctx: Context, exec: ToolExecution): Record<string, unknown> {
-  return { ...base(exec.agent, 'PreToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId }
+export function preToolPayload(_ctx: Context, exec: ToolExecution, isSubagent = false): Record<string, unknown> {
+  return { ...base(exec.agent, 'PreToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, ...callerIdentity(exec.agent, isSubagent) }
 }
-export function postToolPayload(_ctx: Context, exec: ToolExecution, result: ToolExecutionResult): Record<string, unknown> {
-  return { ...base(exec.agent, 'PostToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, tool_response: blocksToText(result.content) }
+export function postToolPayload(_ctx: Context, exec: ToolExecution, result: ToolExecutionResult, isSubagent = false): Record<string, unknown> {
+  return { ...base(exec.agent, 'PostToolUse'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, tool_response: blocksToText(result.content), ...callerIdentity(exec.agent, isSubagent) }
 }
 
 /**
@@ -78,8 +90,8 @@ export function postToolPayload(_ctx: Context, exec: ToolExecution, result: Tool
  * content (CC's `error` string). `is_interrupt` is omitted (not derivable from
  * the harness seam).
  */
-export function postToolFailurePayload(_ctx: Context, exec: ToolExecution, result: ToolExecutionResult): Record<string, unknown> {
-  return { ...base(exec.agent, 'PostToolUseFailure'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, error: blocksToText(result.content) }
+export function postToolFailurePayload(_ctx: Context, exec: ToolExecution, result: ToolExecutionResult, isSubagent = false): Record<string, unknown> {
+  return { ...base(exec.agent, 'PostToolUseFailure'), tool_name: hookToolName(exec.name), tool_input: exec.arguments, tool_use_id: exec.callId, error: blocksToText(result.content), ...callerIdentity(exec.agent, isSubagent) }
 }
 /**
  * The Stop payload. `stopHookActive` is the CC `stop_hook_active` loop-guard
@@ -88,8 +100,8 @@ export function postToolFailurePayload(_ctx: Context, exec: ToolExecution, resul
  * incrementing — block #1 observes `false`). The SubagentStop payload keeps
  * `stop_hook_active: false` — the bridge never blocks at SubagentStop.
  */
-export function stopPayload(_ctx: Context, agent: Agent, stopHookActive: boolean): Record<string, unknown> {
-  return { ...base(agent, 'Stop'), stop_hook_active: stopHookActive }
+export function stopPayload(_ctx: Context, agent: Agent, stopHookActive: boolean, isSubagent = false): Record<string, unknown> {
+  return { ...base(agent, 'Stop'), stop_hook_active: stopHookActive, ...callerIdentity(agent, isSubagent) }
 }
 /**
  * Build a SubagentStart/SubagentStop payload from the CC base (the child's
@@ -126,8 +138,8 @@ export function setupPayload(_ctx: Context, agent: Agent): Record<string, unknow
 }
 
 /** PermissionRequest: the tool the approval is about, from the tool-ext route. */
-export function permissionRequestPayload(_ctx: Context, req: ApprovalRequest): Record<string, unknown> {
-  return { ...base(req.agent, 'PermissionRequest'), tool_name: hookToolName(req.toolName) }
+export function permissionRequestPayload(_ctx: Context, req: ApprovalRequest, isSubagent = false): Record<string, unknown> {
+  return { ...base(req.agent, 'PermissionRequest'), tool_name: hookToolName(req.toolName), ...callerIdentity(req.agent, isSubagent) }
 }
 
 /** PermissionDenied: the observer only records the outcome, so the reason is approximated. */
@@ -171,11 +183,11 @@ function stopFailureErrorCode(error: unknown): string {
 }
 
 /** StopFailure: the failing agent plus the mapped error code and text. */
-export function stopFailurePayload(_ctx: Context, agent: Agent, error: unknown): Record<string, unknown> {
+export function stopFailurePayload(_ctx: Context, agent: Agent, error: unknown, isSubagent = false): Record<string, unknown> {
   const message = error && typeof error === 'object' && 'message' in error
     ? String((error as { message: unknown }).message)
     : String(error)
-  return { ...base(agent, 'StopFailure'), error: message, error_code: stopFailureErrorCode(error) }
+  return { ...base(agent, 'StopFailure'), error: message, error_code: stopFailureErrorCode(error), ...callerIdentity(agent, isSubagent) }
 }
 
 /** TaskCreated: the registry-issued id and producer label of a newly-appeared job. */
@@ -184,8 +196,8 @@ export function taskCreatedPayload(_ctx: Context, job: { id: JobId; label: strin
 }
 
 /** TeammateIdle: a subagent entered idle (the bridge only fires for subagent scopes). */
-export function teammateIdlePayload(_ctx: Context, agent: Agent): Record<string, unknown> {
-  return { ...base(agent, 'TeammateIdle') }
+export function teammateIdlePayload(_ctx: Context, agent: Agent, isSubagent = false): Record<string, unknown> {
+  return { ...base(agent, 'TeammateIdle'), ...callerIdentity(agent, isSubagent) }
 }
 
 /**

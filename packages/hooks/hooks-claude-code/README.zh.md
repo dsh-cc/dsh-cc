@@ -61,7 +61,11 @@ hook **本身**会在 agent 的会话工作区中运行：对 agent scope 点，
 
 matcher subject 是工具名称（`PreToolUse`／`PostToolUse`）、会话源（`SessionStart`），或常量 `agent_type`，其值为 `general-purpose`（`SubagentStart`／`SubagentStop`）。harness subagent seam 不携带每 kind label，因此桥接报告 Claude Code 自身 Task 工具默认值；默认／`*`／空 `agent_type` matcher 会触发，特定 kind matcher 不会触发。`UserPromptSubmit`／`Stop` 忽略 matcher。一个点上文件配置的多个 hook 会**按配置顺序串行运行**，并按最严格方式折叠（`deny > ask > allow`，见 `dsh-hook-protocol`）。串行使每个 hook 的 `hook/invoked`／`hook/result` 对在日志中相邻，权限决策的折叠结果与顺序无关（见 Agent Note 的「run serially, not concurrently」说明）。
 
-每个 agent scope stdin payload 都携带 `session_id` 与字符串形式的 `transcript_path`。可用时，桥接通过 `ctx.sessionPersistence.locate(session.header)` 解析后者，否则发送 `''`。查找不会创建或 flush 产物，因此第一个轮次结束检查点之前路径可能不存在，也可能省略当前开启轮次。
+每个 agent scope stdin payload 都携带 `session_id` 与字符串形式的 `transcript_path`。`transcript_path` **始终为 `''`**：被固定的 persistence seam 不暴露公开的产物路径访问器（其 jsonl 后端的 `locate` 是私有的），因此桥接无法解析路径 —— 与 pin 处上游自己的 hooks-claude-code 行为一致。（即便能解析，查找也不会创建或 flush 产物，第一个轮次结束检查点之前路径本就可能不存在。）
+
+### payload 上的调用者身份（`agent_id`／`agent_type`）
+
+当某个 hook payload 的调用 agent **当前是仍在运行的同进程 subagent** 时，payload 还会携带 `agent_id`（与同一 child 的 `SubagentStart` payload 的 id 相等，含孙级 child）以及常量 `agent_type: 'general-purpose'` —— kind 级真实类型仍是已记录的 parity gap。成员资格来自以 `subagent/start`／`subagent/end` 事件为键的**活跃集合（live set）**（start 加入、end 移除），覆盖 `PreToolUse`、`PostToolUse`、`PostToolUseFailure`、`PermissionRequest`、`UserPromptSubmit`、`Stop`、`StopFailure` 与 `TeammateIdle` 的 payload；非 subagent 的 payload 不会新增任何字段，保持逐字节不变。resume 行为：**已结束**后又被作为顶层会话 resume 的 child —— 无论同进程还是新进程 —— 都**不会**携带身份字段（其 id 在 end 时已移出集合，或从未加入过）；**冷恢复**的 continuable child 会重新进入集合，因为重新激活时会在下一次工具调用前重新发出 `subagent/start`。`SubagentStart`／`SubagentStop` payload 本就携带这两个字段，此处不变。注意与 CC 的 session_id 语义差异：dsh-cc 的 base 报告调用 agent 自身的 session id，因此 subagent payload 上 `agent_id` 与 `session_id` 相等（CC 报告父会话 id）。
 
 ## 上下文源
 

@@ -198,6 +198,12 @@ export function apply(ctx: Context, config: Config): void {
   // restrict the TeammateIdle bridge to subagent scopes, since `agent/status`
   // itself does not distinguish root from child agents.
   const subagentIds = new Set<string>()
+  // LIVE subagent ids: added at subagent/start, removed at subagent/end. Unlike
+  // the add-only `subagentIds`, membership means the caller is currently a
+  // child, so hook payloads gain CC caller-identity fields (agent_id/agent_type)
+  // exactly while the child is live — an ended child resumed as top-level
+  // re-emits no fields.
+  const liveSubagentIds = new Set<string>()
   ctx.effect(() => () => detached.drain(), 'hooks-claude-code: drain detached hook runs')
 
   // The http-hook header interpolation policy: the effective allowlist is the
@@ -327,7 +333,7 @@ export function apply(ctx: Context, config: Config): void {
   // lifecycle, approval, observe, SessionEnd, StopFailure, TaskCreated,
   // TeammateIdle) live in register-events.ts, extracted to keep this entry
   // under the 500-line source budget.
-  registerEvents({ ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds })
+  registerEvents({ ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds, liveSubagentIds })
 }
 
 // Public surface preserved from the pre-split monolith: prompt interpolation and
