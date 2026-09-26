@@ -43,6 +43,24 @@ alias is unconfigured, the workers silently inherit the parent's model route
 — everything works, but you get **zero token savings**. Configure the haiku
 alias for actual savings.
 
+## Subagent exemption
+
+Hook invocations that carry CC-parity caller identity (`agent_id` on the
+PreToolUse payload) bypass both gates. The field is injected by the dsh-cc
+bridge when the caller is a live subagent — it is not user-settable via
+`tool_input` — so workers (critic/executor/marathon, shunt-reader,
+shunt-writer, and any other subagent) paginate and inspect files freely;
+the gate's value lives on the main thread, where the harness read caps
+would make a block pure churn anyway.
+
+## Images
+
+The Read gate sniffs magic bytes (PNG, JPEG, GIF, WEBP) before the
+thresholds: `read_image` has no offset/limit, so large images are allowed
+regardless of size, extensioned or extensionless. There is no extension
+shortcut — a large **text** file named `*.png` is still gated. Any read
+error falls through to the normal thresholds.
+
 ## Known limits
 
 - Digest line references can go stale after edits — verify with a targeted

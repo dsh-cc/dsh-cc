@@ -33,6 +33,14 @@
 
 **shunt-worker 子代理固定 `model: haiku`。** 如果你的部署未配置 haiku 别名，worker 会静默继承父级的模型路由——一切照常工作，但**节省的 token 为零**。要真正省钱，请配置 haiku 别名。
 
+## 子代理豁免
+
+携带 CC 对齐调用者身份（PreToolUse 载荷上的 `agent_id`）的钩子调用会绕过两个门。该字段由 dsh-cc 桥接层在调用者是存活子代理时注入——不是用户可通过 `tool_input` 设置的——因此 worker（critic/executor/marathon、shunt-reader、shunt-writer 及其他子代理）可以自由分页和查看文件；门的价值在主线程，在那里 harness 读取上限本会让拦截变成纯粹的往返浪费。
+
+## 图片
+
+Read 门在阈值之前按魔数（PNG、JPEG、GIF、WEBP）嗅探：`read_image` 没有 offset/limit，因此大图片无论多大都放行，带扩展名或不带扩展名均可。没有基于扩展名的捷径——名为 `*.png` 的大**文本**文件仍然会被拦截。任何读取错误都会回退到正常阈值。
+
 ## 已知限制
 
 - 摘要中的行号引用在编辑后可能失效——在引用位置编辑前，请先用带 offset/limit 的定向读取确认。
