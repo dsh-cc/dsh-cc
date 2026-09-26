@@ -457,7 +457,15 @@ describe('e2e — shunt gate exempts live subagents through the real plugin hook
     )
 
     // Both epochs' Read payloads carried the identity; the SECOND epoch's
-    // start event was re-emitted for the same child id.
+    // start event was re-emitted for the same child id. SubagentStart hooks
+    // run DETACHED (fire-and-forget command spawns), so under suite load the
+    // two start payloads can land well after the pre-execute ones — wait for
+    // them explicitly instead of racing the marker (combined-run evidence).
+    await waitFor(
+      () => payloads(marker).filter(p => p.hook_event_name === 'SubagentStart').length >= 2,
+      30_000,
+      dumpState(adapter, marker),
+    )
     const readPayloads = payloads(marker).filter(p => p.hook_event_name === 'PreToolUse' && p.tool_name === 'Read')
     expect(readPayloads.length, `Read payloads=${JSON.stringify(payloads(marker))}`).toBeGreaterThanOrEqual(2)
     for (const payload of readPayloads) expect(payload.agent_id).toBe(agentId)
