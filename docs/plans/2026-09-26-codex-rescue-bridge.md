@@ -28,7 +28,7 @@ Conclusion: the Codex plugin's assumption "the host never confines bash" holds o
 
 ## 3. Design
 
-One new leaf package, `packages/plugins/cc-codex-bridge`, **shipped as an installable CC-parity plugin in the dsh-cc marketplace** (the dsh-cc-agents official-plugin precedent) rather than as a preset-mounted bundle (user decision, 2026-09-26): installation itself is the opt-in, so there is no settings gate — uninstall/disable is the kill switch. PR-2 spike must first prove a plugin context can register a `tools/pre-execute` listener and a prompt-dispatching slash command (the plugin MCP/hooks seams suggest yes; unverified). Three components.
+One new leaf package, `packages/plugins/cc-codex-bridge`, **shipped as an installable CC-parity plugin in the dsh-cc marketplace** (the dsh-cc-agents official-plugin precedent) rather than as a preset-mounted bundle (user decision, 2026-09-26): installation itself is the opt-in, so there is no settings gate — uninstall/disable is the kill switch. PR-2 spike must first prove a plugin context can register a `tools/pre-execute` listener and a prompt-dispatching slash command; this is **blocking**: the plugin MCP/hooks seams suggest yes but nobody has traced a tool-waterfall registration through the loader, so if the spike falsifies it, the packaging falls back to the preset-mounted, settings-gated shape this section replaced. Three components.
 
 ### 3.1 Launcher (`scripts/codex-rescue-run.mjs`, shipped in the package)
 
