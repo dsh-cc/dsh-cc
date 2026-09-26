@@ -63,7 +63,7 @@ dsh web
 
 The bundles above are the whole quick start. Two optional official plugins — shipped through the repo's `dsh-cc` marketplace — add preconfigured subagent lanes:
 
-- **`dsh-cc-agents`** — the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias) and `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias) subagents, plus an orchestration routing skill (`data-analysis`) and optional serena code-intelligence hooks (gated on serena-onboarded repos).
+- **`dsh-cc-agents`** — the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias), `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias), and `dsh-cc-agents:marathon` (long-horizon or repo-wide complexity, `fable` alias) subagents, plus two routing skills (`dsh-cc-agents-orchestration` for picking an agent, `data-analysis` for analysis tasks) and optional serena code-intelligence hooks (gated on serena-onboarded repos).
 - **`dsh-cc-shunt`** — PreToolUse gates that redirect bulk file reads and boilerplate generation to cheap-lane worker subagents, keeping large file corpora out of the main context (configure a `haiku` alias for real token savings).
 
 Install them inside a session:
@@ -188,27 +188,33 @@ See the [parity matrix](docs/cc-parity-matrix.md) for the currently bridged even
 The CC preset exposes a growing command surface, including:
 
 ```text
-/cost              token / cost information
-/doctor            session health report (--verbose / --json)
-/status            environment and session status
-/memory            inspect memories
-/skills            list installed skills
-/commit-split      propose an atomic-commit split of the working tree (dry-run)
-/config            inspect or change settings
-/permissions       inspect or change permission mode/rules
-/mcp               manage MCP connections
-/tasks             inspect current tasks/jobs
-/resume            resume an interrupted session
+/agents            manage continuable background agents
+/auto-mode         inspect the auto permission mode (defaults, config, decision review)
 /branch            worktree branch management
-/learn             distill recurring corrections into workspace memory
+/commit-split      propose an atomic-commit split of the working tree (dry-run)
 /compact           compact the session context
+/config            inspect or change settings
+/cost              token / cost information
 /diff              inspect CLAUDE.md / settings differences
-/init               scan a project and scaffold CLAUDE.md
-/plugin             manage plugins
-/provider           manage LLM providers (list/add/remove, rotate keys, set default)
-/onboard            re-run the first-run setup (clears the onboarding opt-out)
-/release-notes      show release notes
-/version            show version information
+/doctor            session health report (--verbose / --json)
+/export            write the session transcript to a file
+/help              list commands or show one command's help
+/init              scan a project and scaffold CLAUDE.md
+/learn             distill recurring corrections into workspace memory
+/mcp               manage MCP connections
+/memory            inspect memories
+/onboard           re-run the first-run setup (clears the onboarding opt-out)
+/permissions       inspect or change permission mode/rules
+/plugin            manage plugins
+/provider          manage LLM providers (list/add/remove, rotate keys, set default)
+/release-notes     show release notes
+/rename            pin an explicit title on the current session
+/resume            resume an interrupted session
+/skills            list installed skills
+/stats             session event-log stats (turns, tools, tokens)
+/status            environment and session status
+/tasks             inspect current tasks/jobs
+/version           show version information
 ```
 
 The TUI also provides terminal-oriented interactions such as todo inspection, approval flows, queued prompts, transcript export, usage/context display, and local shell commands.
@@ -316,9 +322,9 @@ On the `tui` profile, you can replace the built-in bottom status line with your 
 
 Project `.claude/settings.json` files shared with a Claude Code checkout work as-is; if both a camelCase `statusLine` and a dsh-native kebab `statusline` key are present, the dsh-native key wins.
 
-The command receives a Claude Code-compatible JSON session payload on stdin (the [CC statusline docs](https://code.claude.com/docs/en/statusline) describe the contract); dsh-cc supplies only the fields it can source truthfully. Its stdout's first line becomes the status line (ANSI escapes are passed through); a failure or empty output renders a blank line. The command reruns on session boot/resume, new messages, mode and model changes — and immediately when the command itself changes — plus on the `refreshInterval` timer, which is in **seconds** (minimum 1). Scripts get `COLUMNS`/`LINES` in their environment.
+The command receives a Claude Code-compatible JSON session payload on stdin (the [CC statusline docs](https://code.claude.com/docs/en/statusline) describe the contract); dsh-cc supplies only the fields it can source truthfully. Its stdout's first lines (up to 3) become the status line (ANSI escapes are passed through); a failure or empty output renders a blank line. The command reruns on session boot/resume, new messages, mode and model changes — and immediately when the command itself changes — plus on the `refreshInterval` timer, which is in **seconds** (minimum 1). Scripts get `COLUMNS`/`LINES` in their environment.
 
-v1 caveats: only the first output row is rendered (CC renders every row), and edits to `settings.json` made outside the running session apply at the next restart.
+Current limits: only the first 3 output rows are rendered (CC renders every row). Settings files are hot-reloaded, so `settings.json` edits made outside the running session apply without a restart — and when the `command` itself changes, the status line re-runs it immediately.
 
 ## Compatibility and known limits
 
@@ -336,27 +342,32 @@ The repository is a monorepo of small plugins and bundles grouped by responsibil
 
 ```text
 packages/
-  settings/       settings cascade and migrations
-  interaction/    permissions and slash commands
+  settings/       settings cascade, migrations, namespaces
+  interaction/    slash commands, permission rules, interaction plugins
   mcp/            MCP client and configuration
   hooks/          hook protocol and CC bridge
-  core/           tools, ToolSearch, NotebookEdit, StructuredOutput, Sleep
+  core/           tool registry, ToolSearch, NotebookEdit, StructuredOutput, Sleep, workflow
   skill/          SKILL.md support
   preset/         CC agent preset and agent compatibility
-  compat/         plugin loader, model aliases, output styles
-  memory/         CLAUDE.md memory and consolidation
-  workspace/      worktree tools
-  subagent/       coordinator / subagent integration
-  compaction/     micro-compaction
-  session/        cost, export, and stats commands
+  compat/         plugin loader and manager, model aliases, output styles
+  memory/         CLAUDE.md memory and dream consolidation
+  workspace/      worktree tool and session-cwd guard
+  subagent/       coordinator, task tool, handoff store, resume pins
+  compaction/     compaction tiers, cost gate, tool-use summaries
+  session/        session commands (cost, export, stats, learn) and forensics
+  context/        reversible tool-output compression (context-crusher)
+  llm-tuning/     reasoning-fold and side-query
+  observability/  cache-health observer
+  plugin/         first-party plugins of the in-repo marketplace
+  test-support/   shared test fixtures and eval harnesses (not published)
   bundle/         installable profile bundles
-  ui/             terminal UI
-  launcher/       optional dsh-cc executable
+  ui/             terminal UI and the vendored pi-tui renderer
+  launcher/       the dsh-cc executable
 ```
 
 Most packages are normal out-of-repo dsh plugins.
 
-A few packages vendor upstream implementations when the required changes need private/internal extension points rather than composition. These currently include the tools registry, MCP client, hook protocol, and Claude Code hook bridge. At runtime they are mounted under distinct package names while preserving the expected service interfaces.
+A few packages vendor upstream code when the required changes need private or internal extension points rather than composition. These currently include the tools registry, MCP client, hook protocol, and Claude Code hook bridge — mounted at runtime under distinct package names while preserving the expected service interfaces — plus the pi-tui terminal renderer under `ui/`, whose purity is enforced by `check:vendor-purity`.
 
 ## Local development
 

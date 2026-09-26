@@ -54,7 +54,7 @@ dsh web
 
 上面的 bundle 就是快速开始的全部内容。仓库内建的 `dsh-cc` 插件市场另有两个按需安装的官方插件，提供预配置的子代理通道：
 
-- **`dsh-cc-agents`** — `dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）和 `dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）子代理，外加一个编排路由 skill（`data-analysis`）和可选的 serena 代码智能 hooks（仅在完成 serena 初始化的仓库上启用）。
+- **`dsh-cc-agents`** — `dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）、`dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）、`dsh-cc-agents:marathon`（长程、不明确或全仓级别的复杂任务，走 `fable` 别名）三个子代理，外加两个路由 skill（挑 agent 的 `dsh-cc-agents-orchestration` 与数据分析编排的 `data-analysis`）和可选的 serena 代码智能 hooks（仅在完成 serena 初始化的仓库上启用）。
 - **`dsh-cc-shunt`** — PreToolUse 门禁，把批量文件阅读和样板代码生成重定向到廉价通道的 worker 子代理，让大文件语料不进入主上下文（配置 `haiku` 别名才能真正省 token）。
 
 在会话内安装：
@@ -169,26 +169,33 @@ Claude Code 风格 hooks 可以响应会话、用户输入、工具、权限、�
 CC preset 提供的命令包括：
 
 ```text
-/cost              token / 费用信息
-/doctor            会话健康检查（--verbose / --json）
-/status            环境和会话状态
-/memory            查看记忆
-/skills            查看已安装技能
-/commit-split      提交拆分建议（仅预演，不提交）
-/config            查看或修改配置
-/permissions       查看或修改权限模式/规则
-/mcp               管理 MCP 连接
-/tasks             查看任务和后台作业
-/resume            恢复中断的会话
+/agents            管理可继续对话的后台子代理
+/auto-mode         查看 auto 权限模式的默认值、配置与裁定记录
 /branch            管理 worktree 分支
-/learn             把反复出现的纠正沉淀为工作区记忆
+/commit-split      提交拆分建议（仅预演，不提交）
 /compact           压缩会话上下文
+/config            查看或修改配置
+/cost              token / 费用信息
 /diff              查看 CLAUDE.md / settings 差异
-/init               扫描项目并生成 CLAUDE.md
-/plugin             管理插件
-/provider           管理模型供应商（列表/添加/删除、轮换密钥、设为默认）
-/release-notes      查看版本说明
-/version            查看版本信息
+/doctor            会话健康检查（--verbose / --json）
+/export            把当前会话转录写入文件
+/help              列出所有命令或查看单个命令的帮助
+/init              扫描项目并生成 CLAUDE.md
+/learn             把反复出现的纠正沉淀为工作区记忆
+/mcp               管理 MCP 连接
+/memory            查看记忆
+/onboard           重新运行首次配置（清除 onboarding 免打扰标记）
+/permissions       查看或修改权限模式/规则
+/plugin            管理插件
+/provider          管理模型供应商（列表/添加/删除、轮换密钥、设为默认）
+/release-notes     查看版本说明
+/rename            为当前会话钉一个显式标题
+/resume            恢复中断的会话
+/skills            查看已安装技能
+/stats             会话事件日志统计（轮次、工具、token）
+/status            环境和会话状态
+/tasks             查看任务和后台作业
+/version           查看版本信息
 ```
 
 TUI 还提供 todo 查看、审批、排队输入、对话导出、用量/上下文显示和本地 shell 命令等终端交互。
@@ -288,9 +295,9 @@ profile 仍然是普通的 dsh 组合。自定义覆盖可以放在：
 
 与 Claude Code checkout 共享的项目 `.claude/settings.json` 文件可以直接使用；如果同时存在 camelCase 的 `statusLine` 和 dsh 原生的 kebab 风格 `statusline` 键，dsh 原生键优先。
 
-命令会在 stdin 上收到与 Claude Code 兼容的 JSON 会话负载（契约见 [CC statusline 文档](https://code.claude.com/docs/en/statusline)）；dsh-cc 只提供能真实取到来源的字段。命令 stdout 的第一行会成为状态栏内容（ANSI 转义原样透传）；失败或输出为空时渲染为空白行。命令会在会话启动/恢复、新消息、mode 和模型变化时重新运行——命令本身变化时立即运行——此外还按 `refreshInterval` 定时器运行，单位为**秒**（最小值 1）。脚本的环境中会带上 `COLUMNS`/`LINES`。
+命令会在 stdin 上收到与 Claude Code 兼容的 JSON 会话负载（契约见 [CC statusline 文档](https://code.claude.com/docs/en/statusline)）；dsh-cc 只提供能真实取到来源的字段。命令 stdout 的前几行（最多 3 行）会成为状态栏内容（ANSI 转义原样透传）；失败或输出为空时渲染为空白行。命令会在会话启动/恢复、新消息、mode 和模型变化时重新运行——命令本身变化时立即运行——此外还按 `refreshInterval` 定时器运行，单位为**秒**（最小值 1）。脚本的环境中会带上 `COLUMNS`/`LINES`。
 
-v1 注意事项：只渲染输出的第一行（CC 会渲染每一行），并且运行中会话之外对 `settings.json` 的修改要等到下次重启才生效。
+当前限制：最多渲染输出的前 3 行（CC 会渲染每一行）。settings 文件会被监听并热更新——运行中会话之外对 `settings.json` 的修改无需重启即生效；当 `command` 本身变化时，状态栏命令会立刻重新运行。
 
 ## 兼容性与已知限制
 
