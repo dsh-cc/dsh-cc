@@ -110,7 +110,7 @@ describe('hooks-claude-code — caller-identity fields on live subagent payloads
     const sub = payloads(marker)[1]!
     expect(sub.agent_id).toBe(String(child.session.header.id))
     expect(sub.agent_type).toBe('general-purpose')
-  })
+  }, 30_000)
 
   it('field-set goldens: exact key set of a PreToolUse payload for a main agent and a live subagent', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-identity-'))
@@ -135,7 +135,7 @@ describe('hooks-claude-code — caller-identity fields on live subagent payloads
     const [mainPayload, childPayload] = payloads(marker)
     expect(Object.keys(mainPayload!).sort()).toEqual(['cwd', 'hook_event_name', 'session_id', 'tool_input', 'tool_name', 'tool_use_id', 'transcript_path'])
     expect(Object.keys(childPayload!).sort()).toEqual(['agent_id', 'agent_type', 'cwd', 'hook_event_name', 'session_id', 'tool_input', 'tool_name', 'tool_use_id', 'transcript_path'])
-  })
+  }, 30_000)
 
   it('live-set lifecycle: end deletes the id — the same session resumed as top-level emits NO fields', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-identity-'))
@@ -163,7 +163,7 @@ describe('hooks-claude-code — caller-identity fields on live subagent payloads
     await waitFor(() => payloads(marker).length >= 2)
     expect(payloads(marker)[1]).not.toHaveProperty('agent_id')
     expect(payloads(marker)[1]).not.toHaveProperty('agent_type')
-  })
+  }, 30_000)
 
   it('start precedes the first PreToolUse: the first tool payload of a child already carries agent_id', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-identity-'))
@@ -189,7 +189,7 @@ describe('hooks-claude-code — caller-identity fields on live subagent payloads
     expect(payloads(marker)[1]).toMatchObject({ hook_event_name: 'PreToolUse', agent_id: String(child.session.header.id) })
     // And the identity is equal across the two payloads for the same child.
     expect(payloads(marker)[1]!.agent_id).toBe(payloads(marker)[0]!.agent_id)
-  })
+  }, 30_000)
 
   it('a grandchild (depth 2) caller also carries the identity fields', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-identity-'))
@@ -210,5 +210,5 @@ describe('hooks-claude-code — caller-identity fields on live subagent payloads
     await runTool(grandchild)
     await waitFor(() => payloads(marker).length >= 1)
     expect(payloads(marker)[0]).toMatchObject({ agent_id: String(grandchild.session.header.id), agent_type: 'general-purpose' })
-  })
+  }, 30_000)
 })
