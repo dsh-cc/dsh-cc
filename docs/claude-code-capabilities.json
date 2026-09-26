@@ -2186,7 +2186,7 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Bridged with matcher support and the permissionDecision decision contract, but additionalContext is ignored, bounding hook-based pre-tool shaping."
+        "summary": "Bridged with matcher support and the permissionDecision decision contract. Payloads for live subagent callers also carry CC's agent_id plus a constant agent_type 'general-purpose' (kind-specific real types are a parity gap), and session_id is child-scoped where CC keeps the parent session id. additionalContext IS injected for a non-deny decision (post-result context, an ordering divergence from CC attaching it to the tool call); only updatedInput is ignored."
       }
     },
     "hooks.session-end": {
@@ -2413,10 +2413,10 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "partial"
         },
         "ux": {
-          "status": "full"
+          "status": "partial"
         }
       },
       "evidence": [
@@ -2431,7 +2431,8 @@
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "divergent",
+        "summary": "Reports a constant agent_type 'general-purpose' where CC's kind-specific matchers would see the real type, and a child-scoped session_id where CC reports the parent session."
       }
     },
     "hooks.subagent-stop": {
@@ -2461,10 +2462,10 @@
           "status": true
         },
         "behavioral": {
-          "status": "full"
+          "status": "partial"
         },
         "ux": {
-          "status": "full"
+          "status": "partial"
         }
       },
       "evidence": [
@@ -2479,7 +2480,8 @@
         }
       ],
       "deviation": {
-        "kind": "none"
+        "kind": "divergent",
+        "summary": "Reports a constant agent_type 'general-purpose' where CC's kind-specific matchers would see the real type, a child-scoped session_id where CC reports the parent session, and omits agent_transcript_path and last_assistant_message."
       }
     },
     "hooks.task-created": {
