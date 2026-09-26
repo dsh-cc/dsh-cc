@@ -154,6 +154,23 @@ describe('/auto-mode config', () => {
     expect(parsed.classifier.gaugeProtocol).toBe('systemone')
   })
 
+  it('backend auto + object-form gauge without a protocol field: the shared isSystemOneTarget rule (model id contains llmbox_systemone/) reports systemone', () => {
+    const settings = {
+      get: (ns: string) => ns === 'permissions'
+        ? { autoMode: { classifier: { enabled: true, backend: 'auto' } } }
+        : ns === 'model-aliases'
+          ? { gauge: { provider: 'orchestrix', model: 'gw/llmbox_systemone/laya' } }
+          : {},
+    }
+    const { run } = harness(settings)
+    const parsed = JSON.parse((run('config') as { text: string }).text) as {
+      classifier: Record<string, unknown>
+    }
+    expect(parsed.classifier.route).toBe('gauge')
+    expect(parsed.classifier.gaugeRoute).toBe('orchestrix/gw/llmbox_systemone/laya')
+    expect(parsed.classifier.gaugeProtocol).toBe('systemone')
+  })
+
   it('backend auto + unconfigured gauge: haiku default, no gauge fields', () => {
     const settings = { get: (ns: string) => ns === 'permissions' ? { autoMode: { classifier: { enabled: true, backend: 'auto' } } } : {} }
     const { run } = harness(settings)

@@ -25,5 +25,6 @@ export {
   type SettingsAliasEntry,
 } from './schema.ts'
 export type { AliasTarget, DetailedRoute, ResolvedRoute, AliasInspectKind, AliasInspectVia, AliasInspection } from './types.ts'
+export { SystemOneChatModelError, isSystemOneTarget } from './systemone-guard.ts'
 export { apply as applyRoutes, name as routesPluginName, MODEL_ALIASES_NAMESPACE, resolveAlias, resolveDetailedAlias, type ModelRoutes } from './service.ts'
 export { apply, name } from './service.ts'
