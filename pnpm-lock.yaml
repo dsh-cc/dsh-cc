@@ -2306,6 +2306,8 @@ importers:
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
 
+  packages/plugin/cc-codex-bridge: {}
+
   packages/plugin/dsh-cc-agents: {}
 
   packages/plugin/dsh-cc-shunt: {}
