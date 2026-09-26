@@ -31,6 +31,15 @@ npm install -g @dsh-cc/cli
 dsh-cc
 ```
 
+### 升级
+
+```sh
+npm install -g @dsh-cc/cli@latest
+dsh-cc
+```
+
+升级后首次启动时，启动器会按新版本重跑 profile 的 bundle 安装（记录在 `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`），profile 自动收敛，无需手动操作。reconcile 失败（比如网络问题，或新版本还处在 npm/pnpm 的 minimum-release-age 窗口内）时会警告并照常启动，下次启动重试。通过 `scripts/sync-local-profile.sh` 同步的开发版 profile 不会被启动器 reconcile，走开发恢复流程。
+
 启动器会创建并运行面向 CC 工作流的 `tui` profile。也可以显式组合这个 profile：
 
 ```sh
@@ -133,7 +142,7 @@ CC profile 中的 MCP 客户端支持：
 
 #### 可选：Serena 代码智能
 
-当你的 MCP 配置连接了 [Serena](https://github.com/oraios/serena) server 时，dsh-cc 会自动加以利用：系统提示词会引导模型在代码问题上优先使用 Serena 的符号工具，内置的 `explore` 子代理也会获得只读符号检索能力（`find_symbol`、`find_referencing_symbols`、`get_symbols_overview`）。Serena 完全可选——不安装时，会话行为完全一致，代码问答仍走内置的 Read/Grep 工具，只是少了这些引导。
+当你的 MCP 配置连接了 [Serena](https://github.com/oraios/serena) server 时，dsh-cc 会自动加以利用：系统提示词会引导模型在代码问题上优先使用 Serena 的符号工具，内置的 `explore` 子代理也会获得只读符号检索能力（`find_symbol`、`find_referencing_symbols`、`get_symbols_overview`）。Serena 完全可选，不安装时，会话行为完全一致，代码问答仍走内置的 Read/Grep 工具，只是少了这些引导。
 
 先安装一次 Serena，让本地 `serena` 命令进入 `PATH`：
 
@@ -163,6 +172,8 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 Claude Code 风格 hooks 可以响应会话、用户输入、工具、权限、压缩、任务和子代理生命周期事件。当前支持 command 和 HTTP executor，部分 prompt/agent executor 需要通过配置开关启用。
 
 仓库跟踪了一个 `hooks.json`，CC preset 会从启动目录加载它，承载本仓开发用 hook。serena 代码智能 hook 随官方 `dsh-cc-agents` 插件分发（带门控；本仓已完成 serena 初始化故会生效），需要在 `PATH` 中安装 `serena-hooks`，详见[本地开发](#本地开发)。
+
+当前桥接的事件集见[兼容矩阵](docs/cc-parity-matrix.md)。
 
 ## 斜杠命令
 
@@ -201,6 +212,10 @@ CC preset 提供的命令包括：
 TUI 还提供 todo 查看、审批、排队输入、对话导出、用量/上下文显示和本地 shell 命令等终端交互。
 
 `/provider` 在覆盖层中管理已配置的模型供应商：`/provider list` 列出当前路由，`/provider add <preset-id>` 通过向导添加内置预设（Moonshot、Z.AI/智谱、DeepSeek）或完全自定义的端点；每个路由的详情页支持轮换密钥、刷新模型列表、设为默认和删除。API 密钥通过掩码输入框录入并保存到凭据存储（`~/.dsh/.credentials.yaml`），不写入 settings；由环境变量提供的密钥只读展示。变更对新会话立即生效（凭据按请求解析）；当前会话保持原供应商，直到用 `/model` 重新选择。
+
+### 首次启动引导
+
+新装环境还没配置模型时，boot seed 会以无默认路由落定，TUI 自动打开 provider 面板：选一个预设、粘贴 API key（只存进凭据存储）、设默认模型，然后就能开始用。用 `Esc` 关掉面板只跳过本次会话，下次启动还会再弹。要永久关闭，在 `~/.dsh/settings.json` 的用户 settings 名字空间下设置 `cc-onboarding.suppressed: true`，随时可以用 `/onboard` 重新打开。非交互（非 TTY）运行不会触发这个流程，只显示普通的 "No model configured" 提示。
 
 ## 使用你需要的模型
 
@@ -248,7 +263,7 @@ Claude Code 是完整的编程 Agent 产品。`dsh-cc` 则把许多熟悉的交�
 
 本仓库主要以外部插件栈的方式提供能力。大部分功能通过 dsh profile 安装和组合，减少上游演进时维护长期 fork 的成本。
 
-少数组件因为依赖 DeepSeek Harness 当前尚未开放的内部扩展点而包含 vendored 实现，具体说明见英文首页的[架构章节](README.md#architecture)。
+少数组件因为依赖 DeepSeek Harness 当前尚未开放的内部扩展点而包含 vendored 实现，具体见下面的[架构](#架构)章节。
 
 ### 与模型/API Router 相比
 
@@ -295,15 +310,48 @@ profile 仍然是普通的 dsh 组合。自定义覆盖可以放在：
 
 与 Claude Code checkout 共享的项目 `.claude/settings.json` 文件可以直接使用；如果同时存在 camelCase 的 `statusLine` 和 dsh 原生的 kebab 风格 `statusline` 键，dsh 原生键优先。
 
-命令会在 stdin 上收到与 Claude Code 兼容的 JSON 会话负载（契约见 [CC statusline 文档](https://code.claude.com/docs/en/statusline)）；dsh-cc 只提供能真实取到来源的字段。命令 stdout 的前几行（最多 3 行）会成为状态栏内容（ANSI 转义原样透传）；失败或输出为空时渲染为空白行。命令会在会话启动/恢复、新消息、mode 和模型变化时重新运行——命令本身变化时立即运行——此外还按 `refreshInterval` 定时器运行，单位为**秒**（最小值 1）。脚本的环境中会带上 `COLUMNS`/`LINES`。
+命令会在 stdin 上收到与 Claude Code 兼容的 JSON 会话负载（契约见 [CC statusline 文档](https://code.claude.com/docs/en/statusline)）；dsh-cc 只提供能真实取到来源的字段。命令 stdout 的前几行（最多 3 行）会成为状态栏内容（ANSI 转义原样透传）；失败或输出为空时渲染为空白行。命令会在会话启动/恢复、新消息、mode 和模型变化时重新运行（命令本身变化时立即运行），此外还按 `refreshInterval` 定时器运行，单位为**秒**（最小值 1）。脚本的环境中会带上 `COLUMNS`/`LINES`。
 
-当前限制：最多渲染输出的前 3 行（CC 会渲染每一行）。settings 文件会被监听并热更新——运行中会话之外对 `settings.json` 的修改无需重启即生效；当 `command` 本身变化时，状态栏命令会立刻重新运行。
+当前限制：最多渲染输出的前 3 行（CC 会渲染每一行）。settings 文件会被监听并热更新，运行中会话之外对 `settings.json` 的修改无需重启即生效；当 `command` 本身变化时，状态栏命令会立刻重新运行。
 
 ## 兼容性与已知限制
 
 项目目标是提供**实用的 Claude Code 风格工作流兼容性**，而不是逐字节模拟 Claude Code。
 
 部分 hook 事件、后台子代理流程、通知/IDE shell 行为和供应商专属功能仍然不完整，或者依赖 DeepSeek Harness 后续开放扩展点。项目会在[兼容矩阵](docs/cc-parity-matrix.md)中明确标注完整、部分支持、缺失和非目标能力。
+
+## 架构
+
+本仓库是一个由小插件和 bundle 组成的 monorepo，按职责分组：
+
+```text
+packages/
+  settings/       settings 级联、迁移、名字空间
+  interaction/    斜杠命令、权限规则、交互类插件
+  mcp/            MCP 客户端与配置
+  hooks/          hook 协议与 CC 桥接
+  core/           工具注册表、ToolSearch、NotebookEdit、StructuredOutput、Sleep、workflow
+  skill/          SKILL.md 支持
+  preset/         CC agent preset 与 agent 资产兼容
+  compat/         plugin 加载器与管理器、模型别名、output styles
+  memory/         CLAUDE.md 记忆与 dream 整理
+  workspace/      worktree 工具与 session-cwd 防护
+  subagent/       coordinator、task 工具、handoff store、resume pins
+  compaction/     压缩分层、成本门、工具调用摘要
+  session/        会话命令（cost、export、stats、learn）与会话取证
+  context/        可逆的工具输出压缩（context-crusher）
+  llm-tuning/     reasoning-fold 与 side-query
+  observability/  cache-health observer
+  plugin/         仓内市场的第一方插件
+  test-support/   共享测试基建与评测 harness（不发布）
+  bundle/         可安装的 profile bundle
+  ui/             终端 UI 与 vendored 的 pi-tui 渲染器
+  launcher/       dsh-cc 可执行程序
+```
+
+大部分 package 是普通的仓外 dsh 插件。
+
+少数 package 在需要私有或内部扩展点、无法靠组合表达时会 vendor 上游代码。目前包括 tools 注册表、MCP 客户端、hook 协议和 Claude Code hook bridge，它们运行时以独立包名挂载并保持既有服务接口；`ui/` 下另有 vendored 的 pi-tui 终端渲染器，纯净性由 `check:vendor-purity` 门禁保证。
 
 ## 本地开发
 
@@ -315,21 +363,43 @@ pnpm run typecheck
 pnpm test
 ```
 
-要在真实 profile 中测试未发布的本地构建，可运行 `bash scripts/sync-local-profile.sh web` 同步。
-同步后 `dsh-cc --version` 会显示 `-dev+<commit>[.dirty]` 标签标识源码树；通过 npm 更新启动器会自动
-让 profile 回退到商店发布的 bundle。
+### Serena（`serena-hooks` 在 `PATH` 上）
 
-serena 代码智能 hook——裸读/裸搜爆发后的 PreToolUse 提醒，以及会话结束时按会话清理 hook 状态——随官方 `dsh-cc-agents` 插件分发（门控契约见插件 README 的 *Serena hooks* 一节）。本仓已完成 serena 初始化（跟踪了 `.serena/project.yml`），启用插件且 `serena-hooks` 在 `PATH` 上即生效：
+serena 代码智能 hook 有两件：裸读/裸搜爆发后的 PreToolUse 提醒，以及会话结束时按会话清理 hook 状态。它们随官方 `dsh-cc-agents` 插件分发（门控契约见插件 README 的 *Serena hooks* 一节）。本仓已完成 serena 初始化（跟踪了 `.serena/project.yml`），启用插件且 `serena-hooks` 在 `PATH` 上即会生效：
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-插件的门控 wrapper 把 hook 状态钉在项目内（`SERENA_HOME=<repo>/.serena`）：serena 默认状态目录（`~/.serena/hook_data`）在会话沙箱可写面之外，且 serena 会吞掉失败——不钉住则提醒计数器永不持久化、hook 静默空转。状态按会话 id 落在 `.serena/hook_data/`（已 gitignore），会话销毁时删除。
+这个 pin 提供 `serena`、`serena-agent` 和 `serena-hooks` 三个命令。插件的门控 wrapper 把 hook 状态钉在项目内（`SERENA_HOME=<repo>/.serena`）：serena 默认状态目录（`~/.serena/hook_data`）在会话沙箱可写面之外，且 serena 会吞掉失败，不钉住则提醒计数器永不持久化、hook 静默空转。状态按会话 id 落在 `.serena/hook_data/`（已 gitignore），会话销毁时删除。
 
 本仓自己跟踪的 `hooks.json` 只保留引用 `scripts/hooks/` 的仓库开发用 hook（编辑后诊断提醒、serena 失败看门狗）。
 
-更多离线开发、依赖和测试说明见 **[docs/dev.md](docs/dev.md)**。
+健康检查和索引仍是一次性的 `uvx` 命令，见 [docs/code-intelligence-health.md](docs/code-intelligence-health.md)。
+
+要在真实 profile 中测试未发布的本地构建：
+
+```sh
+pnpm run build
+bash scripts/sync-local-profile.sh web
+dsh web
+```
+
+同步后 `dsh-cc --version` 会显示 `-dev+<commit>[.dirty]` 标签标识源码树；通过 npm 更新启动器会自动让 profile 回退到商店发布的 bundle。
+
+要验证生产 bundle 组合在用户级环境里确实能启动（全新 `DSH_HOME`、harness 自愈回退、伪 TTY、无 LLM 调用），跑 presubmit 和 publish 共用的同一道门：
+
+```sh
+pnpm smoke:profile-boot
+```
+
+本地开发期间安装或更新 CC preset：
+
+```sh
+bash scripts/sync-cc-preset.sh
+```
+
+更多离线开发细节和仓库特有的依赖规则见 **[docs/dev.md](docs/dev.md)**。
 
 ## Packages 与版本发布
 
