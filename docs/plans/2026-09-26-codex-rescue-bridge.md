@@ -28,7 +28,7 @@ Conclusion: the Codex plugin's assumption "the host never confines bash" holds o
 
 ## 3. Design
 
-One new leaf package, `packages/plugins/cc-codex-bridge`, gated by settings `cc-codex-bridge.enabled` (default **false**; hot reload comes free from the settings cascade). Three components.
+One new leaf package, `packages/plugins/cc-codex-bridge`, **shipped as an installable CC-parity plugin in the dsh-cc marketplace** (the dsh-cc-agents official-plugin precedent) rather than as a preset-mounted bundle (user decision, 2026-09-26): installation itself is the opt-in, so there is no settings gate — uninstall/disable is the kill switch. PR-2 spike must first prove a plugin context can register a `tools/pre-execute` listener and a prompt-dispatching slash command (the plugin MCP/hooks seams suggest yes; unverified). Three components.
 
 ### 3.1 Launcher (`scripts/codex-rescue-run.mjs`, shipped in the package)
 
@@ -71,9 +71,9 @@ v1 ships one slash command `/codex-bridge rescue <text>`. It is **runtime-regist
 
 v1 deliberately does **not** ship a custom subagent: a markdown file dropped into a package does not enter any agent registry (the bundled-agent index or the CC plugin loader are the real seams — Codex round-2 finding C-F2), and the original `/codex:rescue` entry remains as-is (non-goal; §6 follow-ups).
 
-### 3.4 Registration and gates
+### 3.4 Packaging and gates
 
-New-package checklist per house practice: workspace tsconfig reference, preset yml row behind an isolate realm, preset composition assertion bump, package README trio (en/zh), capability manifest row for the new permission seam plus regenerated parity docs in the same commit, deep imports from package roots only.
+Plugin-shaped distribution checklist: package in-repo, `plugin.json` + marketplace manifest entry, README trio (en/zh), capability manifest row for the new permission seam plus regenerated parity docs in the same commit, deep imports from package roots only. The preset-yml/isolate-realm wiring is **not** needed (the plugin loader mounts it), which removes the original composition-test obligations; the PR-2 spike (§3 lead) substitutes as the first gate.
 
 ## 4. Security model (final)
 
@@ -96,7 +96,8 @@ New-package checklist per house practice: workspace tsconfig reference, preset y
 ## 6. Follow-ups (explicitly out of v1)
 
 - Upstream issue/PR to the openai-codex plugin: nested-confinement detection should map the companion's internal sandbox to the externally-sandboxed shape (P6). When that lands, `/codex:rescue` heals itself; the bridge remains as our own lane.
-- Upstream hardening proposal to the harness: scrub the dangerous ambient injection set (`BASH_ENV`, `ENV`, `SHELLOPTS`, `PS4`, `NODE_OPTIONS`, `PYTHONSTARTUP` — see the two-class analysis in §4) at the subprocess layer, closing the class for every tool call, not just ours.
+- Upstream hardening proposal to the harness: scrub the dangerous ambient injection set (`BASH_ENV`/`ENV` — the define-only class; `SHELLOPTS`, `PS4`, `NODE_OPTIONS` — the unconditional class; `PYTHONSTARTUP` — conditional, interactive-Python only) at the subprocess layer, closing the class for every tool call, not just ours.
+- The rest of the codex plugin's lanes (`review`, `adversarial-review`, `transfer`, job management) share the companion's nested-sandbox dead end (same explicit sandbox parameter, P6). v1 scopes the bridge to rescue; absorbing those lanes — or deleting the plugin from a dsh deployment once the bridge proves itself — is a later call.
 - A bundled-agent rescue entry (`dsh-cc-agents`-side), once the bundled-agent seam is deliberately extended.
 - `--resume <threadId>` grammar; Codex-side execpolicy hardening for the tunneled command set.
 
@@ -124,6 +125,7 @@ New-package checklist per house practice: workspace tsconfig reference, preset y
 | 6 | Codex (convergence confirm) | NO-GO → folded | P0 shell-function takeover via absolute-path function names + `$BASH_ENV` (harness bash executes via `bash -c`) → retained as residual with the precondition-collapse argument (such an env already compromises every approved bash call) + upstream `BASH_ENV` scrub proposal (§6). P0 stdin contradiction → pipe-stdin specified (write-then-close, EOF handling test). P1 quoting contradiction → substitution rejected in unquoted/double-quoted contexts only; single-quoted bytes are pure data, which is what makes hostile install paths expressible. P1 leading-dash grammar fork → leading-dash prompts allowed (stdin handoff), grammar unified |
 | 7 | Codex (convergence confirm) | NO-GO → folded | P0 refutation of the round-6 precondition-collapse argument, correct and adopted: a define-but-never-invoke function file is inert for approved calls and fires only on the bridge's unapproved one, so the bridge *does* add a trigger point → closed by disarming whenever ambient `BASH_ENV`/`ENV` is non-empty (§3.1 arming + §3.2 per-call), upstream scrub proposal kept as belt. P1 resume stdin contract pinned (`resume --last -` literal; EOF tests for both shapes). Quoting and leading-dash verified closed |
 | 8 | Codex (convergence confirm) | interrupted — provider safety filter killed the review after its rounds-7 closures verified passing | Its own live probes proved the env-injection class is broader (`SHELLOPTS`+`PS4` substitution and `NODE_OPTIONS=--require` execute under empty `BASH_ENV`/`ENV`) → folded as the two-class analysis in §4 (define-only = disarm-gated; unconditional = ambient compromise with zero delta) and the generalized scrub list in §6 |
-| 9 | Codex (text-consistency audit, final) | FAIL → folded, no structural objection | Six text-level contradictions repaired: fresh-form `-` stdin claim unified (help text + prow), `PYTHONSTARTUP` moved to conditional vectors, "zero sandbox widening" scoped to the dsh outer sandbox, injection worst-case restated as outer-confined (network included), round ledger completed with the aborted round-1 companion-lane row, stale §5 cross-ref marked then-§5/now-§4 |
+| 9 | Codex (text-consistency audit, final) | FAIL → folded, no structural objection | Six text-level contradictions repaired: fresh-form `-` stdin claim unified (help text + round-8 probe), `PYTHONSTARTUP` moved to conditional vectors, "zero sandbox widening" scoped to the dsh outer sandbox, injection worst-case restated as outer-confined (network included), round ledger completed with the aborted round-1 companion-lane row, stale §5 cross-ref marked then-§5/now-§4 |
+| — | User directive (2026-09-26) | applied | Distribute as an installable CC-parity plugin, not a preset-mounted bundle; installation is the opt-in, settings gate dropped; uninstall/disable is the kill switch. PR-2 spike first proves plugin-context registration of the pre-execute listener and prompt-dispatch command (§3 lead, §3.4) |
 
 A note on process honesty: the Codex round-2 lane died of account quota mid-review (findings recovered from its rollout file, not its final message — the session had piped stdout through `tail`); both round-3 lanes returned complete verdicts. Reviews were blind: each lane saw only the design input, never the other lane's output.
