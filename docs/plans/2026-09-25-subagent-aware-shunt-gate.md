@@ -285,13 +285,13 @@ now exists on the payload in CC's own shape, and the worker side never needed th
      `tail -n +1` had no pin — the pin is added rather than claimed; §10 gains id
      pre-allocation and the table lifecycle; the bridge README's `transcript_path`/
      `locate` claim contradicts payloads.ts and is fixed in passing.
-  Round-4 citation spot-check: itself caught one slip — the end-handler add sits at
-  :230, not :228 (fixed in round 5).
 - Reviewer rounds 3/4 also confirmed: `exec.agent` is the calling subagent itself;
   shunt's `allow` decodes to a no-op (no auto-approval side channel); payload additions
   break nothing existing; start-before-tool-call ordering holds for every subagent
   kind, grandchildren included.
-- **Reviewer round 5** (precision pass, non-blocking): applied — the `:228` citation;
+- **Reviewer round 5** (precision pass, non-blocking): applied — the `:228` citation
+  (its own catch; round 4's "spot-check: all verified" self-claim was wrong), corrected
+  in §2;
   the §10 sketch's two lifecycle errors (pre-allocation is NOT universal today and the
   type table must NOT follow start/end cycles — corrected below); §6.2 expectations
   pinned exactly (FIFO released by `isFile` before the sniff; unreadable large file falls
