@@ -53,7 +53,25 @@ function fakeChild(): EventEmitter & { pid: number; stdout: EventEmitter } {
 describe('grok-review-run launcher — integration (real subprocess, staged stub)', () => {
   let stage: ReturnType<typeof newStage>
 
-  afterEach(() => cleanupStages())
+  const leakedChildTail = () => {
+    const handles = (process as never as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.() ?? []
+    return handles
+      .filter((h) => (h as { constructor?: { name?: string } })?.constructor?.name === 'ChildProcess')
+      .map((h) => {
+        const rec = h as Record<string, unknown>
+        return { pid: rec.pid, argsTail: (rec.spawnargs as string[] | undefined)?.slice(-2), killed: rec.killed, exitCode: rec.exitCode ?? null }
+      })
+  }
+  // TEMP CI diagnostic (kept until PR #166 is green): which row leaves a
+  // ChildProcess registered. (The `-- big` row was identified last cycle.)
+  afterEach(function (this: unknown) {
+    cleanupStages()
+    if (process.env.CI) {
+      const name = (this as { task?: { name?: string } })?.task?.name ?? '?'
+      const leaked = leakedChildTail()
+      if (leaked.length > 0) console.error('CI-ROW-LEAK', JSON.stringify({ row: name, leaked }))
+    }
+  })
   afterAll(() => rmSync(RUNTIME_DIR, { recursive: true, force: true }))
   // TEMP CI diagnostic (kept until the PR-#166 teardown hang is green): dump
   // the leaked child identity. Round-4 note: after skipIf(CI) on the two
