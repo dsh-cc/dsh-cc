@@ -147,8 +147,17 @@ export function spawnLauncher(
     stderr += d
   })
   const done = new Promise<RunResult>((resolve) => {
-    const settle = (code: number | null, signal: NodeJS.Signals | null) =>
+    const settle = (code: number | null, signal: NodeJS.Signals | null) => {
       resolve({ child, code, signal, stdout, stderr })
+      // Free the child handle + pipes once settled: under exitOnly, the
+      // launcher's 'exit' precedes its 'close', and a surviving grandchild
+      // (the launcher's detached grok stub) can keep our pipe ends alive
+      // past the test — a forked vitest worker then refuses to terminate
+      // (PR #166 CI red, 2026-09-27; diagnosed via a CI-only handle dump:
+      // leaked ChildProcess pid=<the sigterm-me launcher>, exitCode=130).
+      child.stdout?.destroy()
+      child.stderr?.destroy()
+    }
     // A spawn-level failure (EAGAIN under full-suite load, ENOENT) emits
     // 'error' and neither 'exit' nor 'close' — settling on it keeps the
     // failure named instead of hanging to the test timeout.
