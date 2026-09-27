@@ -49,6 +49,11 @@ describe('packages/plugin/cc-codex-bridge package shape', () => {
     expect(existsSync(join(PKG_DIR, 'scripts', 'lib', 'argv.mjs'))).toBe(true)
   })
 
+  it('the hooks directory holds the PreToolUse allow hook and its wiring', () => {
+    expect(existsSync(join(PKG_DIR, 'hooks', 'hooks.json'))).toBe(true)
+    expect(existsSync(join(PKG_DIR, 'hooks', 'codex-rescue-allow.mjs'))).toBe(true)
+  })
+
   it('the nested plugin manifest is name/version lockstep with package.json', () => {
     const manifest = JSON.parse(
       readFileSync(join(PKG_DIR, '.claude-plugin', 'plugin.json'), 'utf8'),

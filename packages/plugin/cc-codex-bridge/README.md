@@ -31,10 +31,12 @@ installation; **uninstalling or disabling the plugin is the kill switch**.
 
 ## Current status
 
-PR-1 ships the skeleton: package layout, marketplace entry, the shared
-lexer/argv-parser with its hostile-input fixture table, and a placeholder
-`/rescue` command. **Hook activation follows** — invoking Codex rescue today goes
-through the normal approval-requiring path.
+PR-1 shipped the skeleton and PR-2 activates the gate: the plugin installs a
+PreToolUse hook that auto-allows exactly the canonical rescue invocation
+(byte-pinned anchors, expansion-free, disarm/refusal-checked per call) — the
+lane is live once the plugin is installed. **Still to come (PR-3)**: the entry
+surface healing — a SessionStart hook that rewrites `/rescue` with the
+canonical text and lands the final rescue.md.
 
 ## Install / uninstall
 

@@ -7,6 +7,7 @@
   "files": [
     ".claude-plugin/plugin.json",
     "commands",
+    "hooks",
     "scripts",
     "README.md"
   ],
