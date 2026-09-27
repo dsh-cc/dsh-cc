@@ -30,7 +30,7 @@ const config: Config = {
     projectDir: .
 ```
 
-配置只在加载时解析**一次**。`configPath` 是**进程级**配置：相对路径在加载时根据进程启动 cwd 解析，因此一份配置应用于整个进程。尚未进行每会话（`session/new.cwd`）配置发现（`TODO(per-session-hook-config)`）。读取／解析失败会被隔离处理，其中包括实际消费 matcher 的事件所带的无效 matcher 正则（会报告其 pattern 与事件）：桥接记录警告且不注册任何内容，而不是使启动崩溃（路径拼写错误不应使 agent（智能体）停止）。`command`、`http`、`prompt`、`agent` 四种执行器都会运行（后两者仅在对应开关开启时运行，见下）；未知 handler `type` 会被跳过并记录警告。没有每 hook `timeout` 的 hook 会使用协议参考默认值 `DEFAULT_HOOK_TIMEOUT_MS`（来自 `dsh-hook-protocol`，10 分钟，即 CC 默认值；`prompt`／`agent` hook 的每 hook `timeout` 不会应用到 fork —— 由父操作 signal 管控）。
+配置只在加载时解析**一次**。`configPath` 是**进程级**配置：相对路径在加载时根据进程启动 cwd 解析，因此一份配置应用于整个进程。尚不支持按会话（`session/new.cwd`）发现配置（`TODO(per-session-hook-config)`）。读取／解析失败会被隔离处理，其中包括实际消费 matcher 的事件所带的无效 matcher 正则（会报告其 pattern 与事件）：桥接记录警告且不注册任何内容，而不是使启动崩溃（路径拼写错误不应使 agent（智能体）停止）。`command`、`http`、`prompt`、`agent` 四种执行器都会运行（后两者仅在对应开关开启时运行，见下）；未知 handler `type` 会被跳过并记录警告。没有每 hook `timeout` 的 hook 会使用协议参考默认值 `DEFAULT_HOOK_TIMEOUT_MS`（来自 `dsh-hook-protocol`，10 分钟，即 CC 默认值；`prompt`／`agent` hook 的每 hook `timeout` 不会应用到 fork —— 由父操作 signal 管控）。
 
 hook **本身**会在 agent 的会话工作区中运行：对 agent scope 点，桥接会将会话 `cwd`（`session/new.cwd`）作为 hook 进程工作目录，因此 hook 的 `pwd`／相对路径／marker 作用于用户项目树，而非服务器启动目录。
 
@@ -39,14 +39,14 @@ hook **本身**会在 agent 的会话工作区中运行：对 agent scope 点，
 | CC hook | Harness 点 | 映射 |
 |---|---|---|
 | `SessionStart` | `agent/session-start`（emit） | additionalContext → `agent.inject()` 到新会话（无法阻塞） |
-| `UserPromptSubmit` | `agent/pre-step`（waterfall（瀑布式事件）） | `deny` → `PreStepDecision.reject`；仅 additionalContext → 通过 `next()` 委托，再向下游 `enter` 决策追加一条单独标记来源的消息（后续外层 listener 仍可 reject／改写） |
+| `UserPromptSubmit` | `agent/pre-step`（waterfall，瀑布式事件） | `deny` → `PreStepDecision.reject`；仅 additionalContext → 通过 `next()` 委托，再向下游 `enter` 决策追加一条单独标记来源的消息（后续外层 listener 仍可 reject／改写） |
 | `PreToolUse` | `tools/pre-execute`（waterfall） | `deny` → `PreToolDecision.deny`；`ask` → `PreToolDecision.ask` |
 | `PostToolUse` | `tools/post-execute`（waterfall） | `deny` → 带反馈的 `block`；仅 additionalContext → 通过 `next()` 委托，再将一个单独标记源的上下文前置到下游决策；Code Mode 将子调用上下文延迟到外层 `run_code` 结果 |
 | `PostToolUseFailure` | `tools/post-execute` 且结果为 `isError`（emit） | 只观测；工具结果为错误时触发，与同一调用上的 `PostToolUse` 互斥；payload 携带 `tool_name`／`tool_input`／`tool_use_id` + 展平的 `error` 文本 |
 | `Stop` | `agent/turn-stopping`（serial） | 阻塞 Stop hook 通过 `steer()` 送入其原因，强制再执行一步 |
 | `SubagentStart` | `subagent/start`（emit） | additionalContext → `agent.inject()` 到仍在运行的同进程 child；远程 child 没有本地注入目标 |
 | `SubagentStop` | `subagent/end`（emit） | 只观测 |
-| `PermissionRequest` | `approval/request`（waterfall（瀑布式事件）） | `deny` → 拒绝审批；`allow`/`approve` → 预审批（`allowed-once`）；无决策 → 委托给应答者链 |
+| `PermissionRequest` | `approval/request`（waterfall，瀑布式事件） | `deny` → 拒绝审批；`allow`/`approve` → 预审批（`allowed-once`）；无决策 → 委托给应答者链 |
 | `PermissionDenied` | `session/event` 观测 `approval/decided {outcome:'rejected'}`（emit） | 只观测 |
 | `Notification` | `session/event` 观测 `approval/asked`（emit） | **部分支持**：仅 `permission_prompt` 子类型触发；payload 携带 `notification_type: 'permission_prompt'` |
 | `PostCompact` | `session/event` 观测 `compaction/end`（emit） | 只观测 |
@@ -113,5 +113,5 @@ hook 不返回上下文时没有成本。Hook 文本取决于数据，会被记�
 
 - **内置错误恢复：** 当轮次触及模型输出 token 上限（最后一个 assistant attempt 的 `max-tokens` 结束帧）时，会在同一轮次内自动作为下一步继续，最多 3 次（`CLAUDE_CODE_OUTPUT_TOKEN_CONTINUATION_CAP` 可覆盖；`0` 禁用；非法值回退为 3），注入 Claude Code 的续写措辞 *"Output token limit hit. Resume directly — no apology, no recap. Pick up mid-thought."* —— 触顶的 stopping 事件不会调用 Stop hook，恢复后正常完成的 stopping 仍会运行 Stop。连续 3 次（`CLAUDE_CODE_AGENT_ERROR_CONSECUTIVE_CAP`）或累计 20 次（`CLAUDE_CODE_AGENT_ERROR_TOTAL_CAP`）API 错误会以 warn + 一条持久 notice 行呈现（含最近一次分类的错误码）；请求重试仍由 harness 负责。与 Claude Code 的两处已记录分歧：(1) **输出上限恢复期间抑制 Stop** —— 用户配置的阻塞 Stop hook 在触顶后的该次 stopping 失去否决窗口（CC 从不在恢复中途运行 Stop）；恢复后的步骤正常完成或达到续写上限时 Stop 正常运行。(2) **续写是模型可见的下一步元消息** —— CC 不可见地继续同一逻辑响应；此处措辞以 plugin 来源的 user 角色下一步消息注入（每次续写多一个模型步骤，transcript 仍记录一条携带粘性 `max-tokens` 原因的 `turn/end`）。此外错误连击计数按 agent 维度（失败的 subagent 子代理独立计数），而 CC 的上限是会话级。
 - **通用 payload 与输出字段只支持部分功能：** 已映射事件会省略 Claude Code 原本会提供的 `prompt_id`、`transcript_path`、`permission_mode` 和 `effort`。`systemMessage` 会作为持久的暗色 notice 行呈现 —— 相比 CC 的仅用户可见消息存在降级：notice 行对模型可见（会进入会话历史），但其 plugin source 保证它们不会出现在用户行中、也不会重置 stop-block 计数器；空／纯空白消息会渲染 `(<point> hook message)` 回退标签。`{"continue": false}` 会通过 `agent.cancel({kind:'hook'})` 停止运行 —— 任何排队或 steering 输入都会被丢弃（在停止 notice 中注明）；在脱离 emit 点上（无运行中的轮次），停止只是记录日志的 no-op。不会应用 `suppressOutput` 和 `terminalSequence`；`stopReason` 仅出现在停止 notice 中。
-- **Handler 与配置只支持部分功能：** 运行 shell 形式 command handler，并运行 `http` handler（带 `allowedHttpHookUrls` + 拦截 header `allowedEnvVars`）。`prompt`／`agent` handler 仅在 `enablePromptHooks`／`enableAgentHooks` 开启时运行（否则跳过并警告）；未知 handler `type` 被跳过并警告。不遵循 `args`、`async`、`asyncRewake`、`shell`、`if`、`once` 和 `statusMessage` 等 command handler 选项；`prompt`／`agent` 的 `model` 覆盖经 `ccModelRoutes` alias 服务解析后映射到 fork 的 `agentOptions`（未写 `model` → 默认走 `resolve('haiku')` 低价车道；不可解析 → 继承父路由），每 hook `timeout` 不会应用到 fork。 在 cc preset 中，本插件行位于 `cc-services` isolate group 内，fork 的模型解析才能看见 `ccModelRoutes`。匹配 handler 串行运行且不去重，而 Claude Code 会并行运行并对相同 handler 去重。一个进程级 `configPath` 会在加载时解析一次；尚未实现 Claude Code 的分层项目、用户、插件与策略发现和实时重新加载（`TODO(per-session-hook-config)`）。
+- **Handler 与配置只支持部分功能：** 运行 shell 形式 command handler，并运行 `http` handler（带 `allowedHttpHookUrls` + 拦截 header `allowedEnvVars`）。`prompt`／`agent` handler 仅在 `enablePromptHooks`／`enableAgentHooks` 开启时运行（否则跳过并警告）；未知 handler `type` 被跳过并警告。不遵循 `args`、`async`、`asyncRewake`、`shell`、`if`、`once` 和 `statusMessage` 等 command handler 选项；`prompt`／`agent` 的 `model` 覆盖经 `ccModelRoutes` alias 服务解析后映射到 fork 的 `agentOptions`（未写 `model` → 默认走 `resolve('haiku')` 低价车道；不可解析 → 继承父路由），每 hook `timeout` 不会应用到 fork。在 cc preset 中，本插件行位于 `cc-services` isolate group 内，fork 的模型解析才能看见 `ccModelRoutes`。匹配 handler 串行运行且不去重，而 Claude Code 会并行运行并对相同 handler 去重。一个进程级 `configPath` 会在加载时解析一次；尚未实现 Claude Code 的分层项目、用户、插件与策略发现和实时重新加载（`TODO(per-session-hook-config)`）。
 - **Hook 诊断：** `timeout`、`exit-code`、`parse-failure`、`spawn-failure`、`stop-cap`、`config` 等类别的 hook 问题会以 JSON 行追加到 `<dsh home>/hooks/diagnostics.jsonl`，并可在 `/doctor` 中查看（最近 10 条加上全部已记录问题的计数）。该文件是尽力而为的共享日志：跨进程并发追加可能交错，所有文件系统错误都会被吞掉（诊断绝不破坏 hook 运行），读取方会跳过残缺／非法行，日志超过 256 KB 时会压缩并保留最新 100 条有效记录。
