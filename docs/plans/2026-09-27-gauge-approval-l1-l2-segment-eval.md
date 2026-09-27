@@ -2,7 +2,8 @@
 
 - Date: 2026-09-27 (v6, review complete)
 - Status: **Reviewed — both lanes green** (critic SHIP at round 5; codex SHIP WITH FIXES at
-  round 5, its single fix folded verbatim). Pending implementation PRs per D7.
+  round 5, its single fix folded verbatim). Implementation: PR #164 (L2) + PR #165 (L1,
+  stacked). Implementation-time corrections in §10.
 - Adjudication ledger: §9.
 - Input evidence: production session-audit decomposition 2026-09-20 → 27 (5,626
   `permission/classifier` events; gauge lane 395, ask rate 83.5%; ≈2% allow at steady
@@ -35,7 +36,8 @@ Meanwhile the user's escape hatch is broken three ways:
 Reference corpus (frozen at 2026-09-27T11:00+08:00 event time — earlier probe runs drifted
 as this worktree's own session kept appending events; only the frozen run is the reference):
 284 distinct production bash asks ⇒ opaque 58 (heredoc/subshell), tainted 69
-(redirection/substitution), coverable-by-existing-user-rules-after-D4 44, pure-reader
+(redirection/substitution), coverable by existing user rules under a prototype matcher 44
+(superseded by the honest replay, §10), pure-reader
 chains without any rule 7, classifier-bound by design 106 (interpreter-heavy).
 
 ## 2. Goals / non-goals
@@ -356,8 +358,10 @@ Unit:
   `FOO=1` ⇒ `Bash(FOO=1)` matched verbatim-only (R16 rows: vs `FOO=1`, `FOO=10`,
   `FOO=1 BAR=2`); wrapper branch — `sudo FOO=1 ls` ⇒ `Bash(ls)`; `sudo ls -la` ⇒
   `Bash(ls )`; bare `ls` ⇒ `Bash(ls)`).
-Integration (`listener-auto-stage`-adjacent): existing user rules `Bash(cd )` + `Bash(ls )`
-auto-allow `cd x && ls` in auto mode; only `Bash(ls )` ⇒ passthrough; `cd x && ls; rm -f y`
+Integration (`listener-auto-stage`-adjacent): existing user rules `Bash(cd )` + `Bash(ls)`
+(the bare form PR-3's derivation persists) auto-allow `cd x && ls` in auto mode; only
+`Bash(ls)` ⇒ passthrough; legacy `Bash(ls )` alone leaves the bare `ls` segment unmatched
+⇒ passthrough; `cd x && ls; rm -f y`
 ⇒ passthrough / denied by a matching `Bash(rm )` rule.
 Offline evidence (not a gate): frozen operator-state replay — same user-rule snapshot as
 §1's frozen corpus — ≥44/284 command shapes auto-allowed after the change; script output
@@ -465,3 +469,36 @@ rules would be a bit-incompatible behavior change.
 boundary regimes partition the prefix space without gaps or overlaps; doc closed under a
 fresh implementer read). codex: SHIP WITH FIXES — one MEDIUM folded verbatim: D6's test
 shorthand replaced by the four-cell test list. No further doc rounds; both lanes green.
+
+## 10. Implementation-time corrections (PR #164/#165, recorded post-review)
+
+Three facts surfaced while implementing; none changes a reviewed mechanism (fail-closed
+direction in every cell), and the two that touch this document are corrected inline:
+
+1. **D8 integration row was self-contradictory (found by the PR-3 executor).** The row
+   claimed `Bash(cd )` + `Bash(ls )` auto-allow `cd x && ls`, but under R10 the
+   trailing-space prefix `Bash(ls )` never matches the bare `ls` segment the splitter
+   produces. The shipped test pins the correct pair: `Bash(cd )` + `Bash(ls)` (the bare
+   form is what D5 derivation now persists for bare commands). Corrected inline above.
+2. **Composition is per-source.** `allSegmentsAdmissible` iterates sources outermost —
+   every segment must find its allow rule in the SAME source tier (user/local/…), matching
+   today's single-subject behavior exactly and staying fail-closed for mixed-source
+   coverage. The doc did not pin mixed-source composition; the stricter reading shipped.
+3. **Guards are consulted only after the waterfall allows** (`runtime-execute.ts`: ask
+   resolution precedes the guard stage). PR-3's guard test fixtures therefore allow the
+   call through the waterfall first; the segment-aware deny is exercised at the guard
+   stage. Pre-existing runtime ordering, documented in the test, not changed.
+4. **`types.ts` hygiene:** a types-only symbol was exported as a default VALUE
+   (`export default PermissionRule`), which breaks runtime module evaluation under
+   Node's strip-types (scripts importing the evaluator chain hit
+   `PermissionRule is not defined`). No consumer imported it; the line was removed in
+   PR-3 so `scripts/` can import the real modules.
+5. **Honest replay vs the §1 prototype estimate.** The frozen-corpus "44 coverable" was
+   computed with a looser prototype matcher. The shipped replay script
+   (`scripts/replay-segment-coverage.mjs`) runs the REAL evaluator (evaluateShell +
+   suspension filter) and reports 0 covered for the frozen corpus — expected: the
+   surviving frozen rules predate the new bare/space derivation boundary forms, so they
+   genuinely do not match (`Bash(ls )` never matches bare `ls`; R10 is load-bearing).
+   Coverage accrues per command family from the first fresh always-grant onward (the
+   mechanism itself is pinned by the unit/integration rows, e.g. `cd packages && ls`
+   allows with `Bash(cd )` + `Bash(ls)` end-to-end).
