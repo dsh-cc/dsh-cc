@@ -9,36 +9,27 @@
  * on EVERYTHING else — parse failure, non-Bash tool, non-match, disarmed
  * state, refusal, containment violation — emit NOTHING and exit 0, so the
  * command falls through to the unchanged existing permission flow. This
- * hook never denies (§3.2-f fail-closed-into-silence; PR-3's SessionStart
+ * hook never denies (§3.2-f fail-closed-into-silence; the SessionStart
  * hook surfaces armed/refused state).
  *
- * Canonical anchors are derived per-match inside THIS process (§9 S3): a
- * command hook runs through a PATH-resolved interpreter, so the byte-pinned
- * pair is `realpath(process.execPath)` and the realpath of the plugin's own
- * launcher script. Both must sit outside the writable-root refusal set and
+ * Canonical anchors are derived per-match inside THIS process via the
+ * shared canonical.mjs module (§5 one-source rule): a command hook runs
+ * through a PATH-resolved interpreter, so the byte-pinned pair is the
+ * realpath of this process's own interpreter executable and the realpath
+ * of the plugin's own launcher script (see canonical.mjs for the
+ * derivation). Both must sit outside the writable-root refusal set and
  * ambient BASH_ENV/ENV must be empty, or the bridge is disarmed for this
  * call.
  */
-import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { isAbsolute, join } from 'node:path'
+import { arming, inside, safeReal } from '../scripts/lib/canonical.mjs'
 import { matchInvocation } from '../scripts/lib/argv.mjs'
 
 const REASON = 'cc-codex-bridge: canonical rescue invocation (byte-pinned anchors, expansion-free)'
 
 /** Silent pass: no stdout at all, exit 0 — the unchanged existing flow decides. */
 const silent = () => process.exit(0)
-
-const safeReal = (p) => {
-  try {
-    return realpathSync(p)
-  } catch {
-    return null
-  }
-}
-
-const inside = (p, roots) => p !== null && roots.some((root) => p === root || p.startsWith(root + '/'))
 
 let input = ''
 process.stdin.setEncoding('utf8')
@@ -55,18 +46,9 @@ const command = payload?.tool_input?.command
 if (typeof command !== 'string' || command === '') silent()
 
 try {
-  const NODE = safeReal(process.execPath)
-  const LAUNCHER = safeReal(fileURLToPath(new URL('../scripts/codex-rescue-run.mjs', import.meta.url)))
-  if (NODE === null || LAUNCHER === null) silent()
-
-  const cwd = safeReal(typeof payload.cwd === 'string' ? payload.cwd : process.cwd())
-  // Refusal set (§3.2-e): the agent session cwd plus the canonical tmp roots.
-  const refusalRoots = [cwd, safeReal(tmpdir()), safeReal('/tmp')].filter((p) => p !== null)
-  // ARMING: both anchors must sit outside every refusal root...
-  if (inside(NODE, refusalRoots) || inside(LAUNCHER, refusalRoots)) silent()
-  // ...and ambient BASH_ENV/ENV must be empty (define-only function files
-  // would fire exactly on this unapproved-by-classifier call).
-  if (process.env.BASH_ENV || process.env.ENV) silent()
+  const arm = arming(typeof payload.cwd === 'string' ? payload.cwd : process.cwd(), { hookUrl: import.meta.url })
+  if (!arm.armed) silent()
+  const { node: NODE, launcher: LAUNCHER, cwd } = arm
 
   const match = matchInvocation(command, { node: NODE, launcher: LAUNCHER })
   if (!match.ok) silent()

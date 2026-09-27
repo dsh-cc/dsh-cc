@@ -4663,6 +4663,77 @@
         "kind": "none"
       }
     },
+    "plugins.codex-bridge": {
+      "title": "Codex rescue bridge plugin (cc-codex-bridge)",
+      "category": "plugins",
+      "plane": "host",
+      "upstream": {
+        "summary": "dsh-cc extension with no Claude Code analog: an official marketplace plugin providing an approval-free Codex rescue lane — one canonical, byte-pinned bash invocation auto-allowed through a PreToolUse hook, with the armed/refused status and the exact canonical command surfaced at session start via a SessionStart additionalContext hook and a static /rescue slash command.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/plugin/cc-codex-bridge/scripts/codex-rescue-run.mjs",
+          "anchor": "CODEX_HOME: H"
+        },
+        {
+          "type": "source",
+          "path": "packages/plugin/cc-codex-bridge/scripts/lib/canonical.mjs",
+          "anchor": "export function arming"
+        },
+        {
+          "type": "source",
+          "path": "packages/plugin/cc-codex-bridge/hooks/codex-rescue-allow.mjs",
+          "anchor": "permissionDecision: 'allow'"
+        },
+        {
+          "type": "source",
+          "path": "packages/plugin/cc-codex-bridge/hooks/codex-rescue-context.mjs",
+          "anchor": "hookEventName: 'SessionStart'"
+        },
+        {
+          "type": "source",
+          "path": "packages/plugin/cc-codex-bridge/hooks/hooks.json",
+          "anchor": "SessionStart"
+        },
+        {
+          "type": "source",
+          "path": "packages/plugin/cc-codex-bridge/commands/rescue.md",
+          "anchor": "Fail closed when the block is absent"
+        },
+        {
+          "type": "test",
+          "path": "packages/plugin/cc-codex-bridge/tests/hook.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/plugin/cc-codex-bridge/tests/hook-context.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/e2e-codex-bridge.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "First-party dsh-cc plugin (design: docs/plans/2026-09-26-codex-rescue-bridge.md): the nested-sandbox dead end of the stock /codex:rescue path (Codex's internal sandbox cannot stack under dsh's Seatbelt confinement) is solved by state relocation, not sandbox widening — Codex runs with its internal sandbox off while the dsh outer sandbox remains the single write boundary, and the only permission delta is exactly one canonical command form. Opt-in by installation; uninstall/disable is the kill switch. In dsh-cc's own repo dev sessions arming is refused (launcher under the workspace) and the lane degrades to the normal approval-requiring path."
+      }
+    },
     "plugins.foreign-rules": {
       "title": "Foreign rules import (cline/windsurf/copilot)",
       "category": "plugins",

@@ -126,6 +126,8 @@ function toolResults(request: { messages?: readonly unknown[] } | undefined): Ar
 }
 
 let calls = 0
+// The mounted cc-codex-bridge plugin (commands seam + hook surface), set by setup.
+let bridgeMount: Awaited<ReturnType<typeof mountCcPlugin>> | undefined
 function callTool(ctx: Context, name: string, args: unknown, agent: Agent) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
@@ -146,6 +148,7 @@ const executedCommands: string[] = []
  */
 async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts: { agentsDir?: boolean; parkParent?: boolean } = {}) {
   executedCommands.length = 0
+  bridgeMount = undefined
   const dir = mkdtempSync(join(tmpdir(), 'codex-bridge-e2e-'))
   dirs.push(dir)
   const ctx = new Context()
@@ -170,8 +173,16 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
   const pre = join(dir, 'probe.sh')
   writeFileSync(pre, `#!/usr/bin/env bash\ncat >> "${marker}"\necho >> "${marker}"\n`)
   chmodSync(pre, 0o755)
+  // Side-band witness that agent/session-start fired at all (detached event):
+  // an absent marker means the event never fired in this assembly; a present
+  // marker with no armed block means the plugin context hook ran silently.
+  const sessionStartRan = join(dir, 'session-start-ran')
+  const ssTouch = join(dir, 'session-start.sh')
+  writeFileSync(ssTouch, `#!/usr/bin/env bash\ntouch "${sessionStartRan}"\n`)
+  chmodSync(ssTouch, 0o755)
   writeFileSync(join(dir, 'hooks.json'), JSON.stringify({ hooks: {
     PreToolUse: [{ hooks: [{ type: 'command', command: pre }] }],
+    SessionStart: [{ hooks: [{ type: 'command', command: ssTouch }] }],
   } }))
   await ctx.plugin(HooksClaude, { configPath: join(dir, 'hooks.json') })
   const tools = ctx.get('tools') as { reserve?(name: string): () => void }
@@ -216,7 +227,19 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
       return [{ type: 'text', text: out }]
     },
   }))
-  await mountCcPlugin(ctx, { root: BRIDGE_PLUGIN_DIR })
+  // The bare testkit assembly has no commands service, and without one the
+  // loader skips plugin command mounting ("commands seam 'commands' is not
+  // mounted", cc-plugin-loader/src/commands.ts). This recording stub keeps
+  // the mount/render path real; S2 invokes the loader-rendered
+  // MountedPluginCommand.run directly, so no harness registry is under test.
+  const commandRegistry = new Map<string, unknown>()
+  ctx.provide('commands', {
+    register: (definition: { name: string }) => {
+      commandRegistry.set(definition.name, definition)
+      return () => { commandRegistry.delete(definition.name) }
+    },
+  } as never)
+  await mountCcPlugin(ctx, { root: BRIDGE_PLUGIN_DIR }).then(m => { bridgeMount = m })
 
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -229,7 +252,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
     if (subject !== parent || opts.parkParent === false) return next()
     return { kind: 'reject' as const }
   })
-  return { ctx, parent, adapter, dir, ws, marker }
+  return { ctx, parent, adapter, dir, ws, marker, sessionStartRan, mount: bridgeMount! }
 }
 
 function requestsFor(adapter: MockAdapter, sessionId: string) {
@@ -250,10 +273,11 @@ function dumpState(adapter: MockAdapter, marker = ''): () => string {
 }
 
 /** A downstream (append-order, so AFTER the bridge's prepended listener)
- * tools/pre-execute listener deciding only on the exact canonical string. */
-function gateCanonical(ctx: Context, verdict: 'deny' | 'ask'): void {
+ * tools/pre-execute listener deciding only on the exact given command string
+ * (default: the canonical invocation). */
+function gateCanonical(ctx: Context, verdict: 'deny' | 'ask', command: string = CANONICAL): void {
   ctx.on('tools/pre-execute', async (exec: { name?: string; arguments?: { command?: string } }, next) => {
-    if (exec?.name !== 'bash' || exec?.arguments?.command !== CANONICAL) return next()
+    if (exec?.name !== 'bash' || exec?.arguments?.command !== command) return next()
     return verdict === 'deny' ? { kind: 'deny', reason: 'downstream deny' } : { kind: 'ask', reason: 'downstream ask' }
   })
 }
@@ -410,5 +434,98 @@ describe('e2e — codex-rescue-bridge PreToolUse allow hook through the real plu
     expect(denied.text).not.toContain('codex-rescue:')
     expect(executedCommands).not.toContain('echo hello')
     await waitNoActivation(ctx, SessionId(String(childRequest!.sessionId)))
+  }, 90_000)
+})
+
+describe('e2e — codex-rescue-bridge entry surface (PR-3): SessionStart context + rescue command', () => {
+  /** All text blocks across a request's serialized messages. */
+  function requestTexts(request: { messages?: readonly unknown[] } | undefined): string[] {
+    const out: string[] = []
+    for (const message of request?.messages ?? []) {
+      const content = (message as { content?: unknown }).content
+      if (!Array.isArray(content)) continue
+      for (const block of content as Array<Record<string, unknown>>) {
+        if (block?.type === 'text' && typeof block.text === 'string') out.push(block.text)
+      }
+    }
+    return out
+  }
+
+  it('S1: the SessionStart context hook lands the armed canonical block in the parent\'s messages', async () => {
+    const { parent, adapter, sessionStartRan } = await setup([
+      textResponse('acknowledged'),
+    ], { parkParent: false })
+    // Side-band first: agent/session-start fired at all in this assembly
+    // (detached witness hook). Then synchronize on the injected block in the
+    // NEXT-STEP INBOX — the bridge.spec.ts precedent: the SessionStart hook
+    // runs detached, agent.inject lands in inbox.nextStep and becomes a
+    // user/message only after step entry, so wait for the inbox before the
+    // followup and the FIRST request already carries the block.
+    await waitFor(() => existsSync(sessionStartRan), 30_000, dumpState(adapter))
+    await waitFor(
+      () => (parent as unknown as { inbox: { nextStep: Array<{ content: Array<{ type: string; text?: string }> }> } })
+        .inbox.nextStep.some(message =>
+          message.content.some(block => block.type === 'text'
+            && (block.text ?? '').includes('Codex rescue lane is ARMED')
+            && (block.text ?? '').includes(`'${LAUNCHER}'`)
+            && (block.text ?? '').includes('--prompt-file'))),
+      30_000,
+      dumpState(adapter),
+    )
+    parent.followup(createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } }))
+    await parent.whenIdle()
+    expect(requestTexts(requestsFor(adapter, 'parent').at(0)).join('\n')).toContain('Codex rescue lane is ARMED')
+  }, 90_000)
+
+  it('S2: the mounted /rescue command renders its template into the parent; the scripted model then issues exactly one canonical call', async () => {
+    const { parent, adapter, marker, mount } = await setup([
+      toolCallResponse('r1', 'bash', { command: CANONICAL }),
+      textResponse('rescue attempted'),
+    ], { parkParent: false })
+    const rescue = mount.commands.find(c => c.info.name === 'cc-codex-bridge:rescue')
+    expect(rescue).toBeDefined()
+    // The real seam: the loader's MountedPluginCommand.run substitutes
+    // $ARGUMENTS and dispatches the rendered body via agent.followup — the
+    // same path the harness-registered bare alias uses.
+    const result = await rescue!.run({ rawInput: 'review the failing spec', agent: parent })
+    expect(result.kind).toBe('success')
+    await waitFor(
+      () => requestsFor(adapter, 'parent').some(r => toolResults(r).some(b => b.text.includes('codex-rescue:'))),
+      30_000,
+      dumpState(adapter, marker),
+    )
+    // The plugin command's rendered template reached the parent (the body's
+    // fail-closed clause is in the model-visible prompt).
+    expect(requestTexts(requestsFor(adapter, 'parent').at(0)).join('\n')).toContain('SessionStart')
+    // Template → exactly one canonical argv call, allowed and executed.
+    expect(executedCommands.filter(c => c === CANONICAL)).toHaveLength(1)
+    expect(payloads(marker).some(p =>
+      p.hook_event_name === 'PreToolUse' && p.tool_name === 'Bash'
+      && (p.tool_input as { command?: string })?.command === CANONICAL)).toBe(true)
+  }, 90_000)
+
+  it('S3 control: a hand-rolled near-miss invocation fails closed (downstream ask stands, no marker)', async () => {
+    // The model free-forms a PATH-trampoline `node` bare name — never
+    // byte-equal to the canonical anchor. The hook stays silent for it; the
+    // scripted downstream ask for exactly that string then stands (nothing
+    // may downgrade it), so the call fails closed.
+    const NEAR_MISS = `node ${LAUNCHER} -- 'review the failing spec'`
+    const { ctx, parent, adapter, marker } = await setup([
+      toolCallResponse('r1', 'bash', { command: NEAR_MISS }),
+      textResponse('unreachable'),
+    ], { parkParent: false })
+    gateCanonical(ctx, 'ask', NEAR_MISS)
+    parent.followup(createUserMessage({ content: [{ type: 'text', text: 'run the rescue' }], source: { kind: 'user' } }))
+    await parent.whenIdle()
+    await waitFor(
+      () => requestsFor(adapter, 'parent').some(r => toolResults(r).some(b => b.isError)),
+      30_000,
+      dumpState(adapter, marker),
+    )
+    const failed = toolResults(requestsFor(adapter, 'parent').find(r => toolResults(r).some(b => b.isError))!)
+      .find(b => b.isError)!
+    expect(failed.isError).toBe(true)
+    expect(failed.text).not.toContain('codex-rescue:')
+    expect(executedCommands).not.toContain(NEAR_MISS)
   }, 90_000)
 })
