@@ -5316,6 +5316,61 @@
         },
         {
           "type": "test",
+          "path": "packages/interaction/permission-rules/tests/auto-rule-filter.spec.ts",
+          "anchor": "autoSuspendedReason"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/permission-rules.spec.ts",
+          "anchor": "autoSuspensionReason (D6 service notice seam)"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/driver-approval.spec.ts",
+          "anchor": "always-grant suspension notices (D6 four cells"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/driver-approvals.ts",
+          "anchor": "suspension notices"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/permission-rules/src/shell-segments.ts",
+          "anchor": "splitShellCommand"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/shell-segments.spec.ts",
+          "anchor": "splitShellCommand — quoting (D1)"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/evaluate.spec.ts",
+          "anchor": "evaluateShell (segmented path, D2)"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/auto-rule-filter.spec.ts",
+          "anchor": "D4 safe short-head exemption (SAFE_SHORT_HEADS)"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/decide-verbose.spec.ts",
+          "anchor": "segment-aware integration (PR-3 L1"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/approval-preview.spec.ts",
+          "anchor": "derivation decision order (D5)"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/driver-approval.spec.ts",
+          "anchor": "cell 3 (auto, PR-3)"
+        },
+        {
+          "type": "test",
           "path": "packages/interaction/permission-rules/tests/evaluate.spec.ts",
           "anchor": "content-deny beats a same-source allow (D2)"
         },

@@ -27,7 +27,7 @@ The plugin registers a `tools/pre-execute` listener and folds one decision per c
 3. **whole-tool deny** → deny.
 4. **content deny** (all sources) → deny — deny-first ordering (D2): a content deny beats any content allow and any whole-tool ask, in every mode.
 5. **whole-tool ask** → ask (a sandboxed, confining `Bash` is exempt and allowed instead when `exemptSandboxedBashFromToolAsk` is set).
-6. **content ask**, then **content allow**, by source priority (behavior outer, sources inner; declaration order preserved within behavior+source).
+6. **content ask**, then **content allow**, by source priority (behavior outer, sources inner; declaration order preserved within behavior+source). For bash commands the content phases evaluate per top-level shell **segment** (D1/PR-3): a command is split into segments (`splitShellCommand`), deny/ask match on any segment's raw or assignment-stripped subject, and content allow requires EVERY segment to match (tainted segments — command substitution or writing redirections — never match; assignment-bearing segments match their raw text only). Commands the scanner cannot trust (unterminated quotes, heredocs, subshells, groups, reserved words) are opaque and fail closed: content allow is skipped entirely.
 7. **mode** short-circuits: `bypassPermissions` allows everything (unless `disableBypassPermissionsMode`); `acceptEdits` auto-allows file-edit tools; `plan` auto-allows read-only tools. `auto` is not an evaluate short-circuit — it evaluates like `default` but with broad allow rules suspended (see below).
 8. **whole-tool allow** is the coarse default for that tool when nothing more specific matched.
 9. **no match** → passthrough to downstream listeners (ultimately the approval seam), which may still `ask`.

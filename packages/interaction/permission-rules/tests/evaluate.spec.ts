@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { parseRule } from '../src/parser.ts'
-import { evaluatePermission, mergeRuleSets } from '../src/evaluate.ts'
+import { evaluatePermission, evaluateShell, mergeRuleSets } from '../src/evaluate.ts'
+import { splitShellCommand } from '../src/shell-segments.ts'
 import { PLAN_READONLY_REASON } from '../src/types.ts'
-import type { EvaluationInput, PermissionRuleSet } from '../src/types.ts'
+import type { EvaluationInput, PermissionDecision, PermissionRuleSet } from '../src/types.ts'
 import { EMPTY_RULE_SET } from '../src/types.ts'
 
 function input(overrides: Partial<EvaluationInput> = {}): EvaluationInput {
@@ -350,5 +351,134 @@ describe('mergeRuleSets', () => {
       { allow: [], deny: [], ask: [], bypassImmune: [parseRule('Edit(.git*)', 'deny', 'config')] },
     )
     expect(merged.bypassImmune).toHaveLength(1)
+  })
+})
+
+describe('evaluateShell (segmented path, D2)', () => {
+  const shell = (command: string, overrides: Partial<EvaluationInput> = {}): PermissionDecision =>
+    evaluateShell(input({ ...overrides, subject: command }), splitShellCommand(command))
+
+  it('allows a composed command when every segment matches a content allow', () => {
+    // PR-3 derivation persists the bare form for argument-free grants, so the
+    // `ls` segment matches `Bash(ls)` (conjunctive token boundary, D4).
+    expect(shell('cd x && ls', {
+      rules: rules({ allow: [parseRule('Bash(cd )', 'allow', 'userSettings'), parseRule('Bash(ls)', 'allow', 'userSettings')] }),
+    })).toEqual({ kind: 'allow' })
+  })
+
+  it('phase order: composed deny beats a whole-tool ask', () => {
+    const decision = shell('ls; rm -f y', {
+      rules: rules({
+        deny: [parseRule('Bash(rm )', 'deny', 'config')],
+        ask: [parseRule('Bash', 'ask', 'config')],
+      }),
+    })
+    expect(decision).toMatchObject({ kind: 'deny' })
+  })
+
+  it('phase order: whole-tool ask beats a content ask on one segment', () => {
+    const decision = shell('ls; rm -f y', {
+      rules: rules({
+        ask: [parseRule('Bash', 'ask', 'config'), parseRule('Bash(rm )', 'ask', 'config')],
+      }),
+    })
+    expect(decision.kind).toBe('ask')
+  })
+
+  it('tool allow fires after a failed content allow (segment unmatched)', () => {
+    expect(shell('ls && curl example.com', {
+      rules: rules({ allow: [parseRule('Bash(ls )', 'allow', 'config'), parseRule('Bash', 'allow', 'config')] }),
+    })).toEqual({ kind: 'allow' })
+  })
+
+  it('R8: taint blocks allow, not deny', () => {
+    const denied = shell('ls > /tmp/x && rm y', {
+      rules: rules({ deny: [parseRule('Bash(rm )', 'deny', 'config')] }),
+    })
+    expect(denied).toMatchObject({ kind: 'deny' })
+    const passed = shell('ls > /tmp/x', {
+      rules: rules({ allow: [parseRule('Bash(ls )', 'allow', 'config')] }),
+    })
+    expect(passed).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R10 token boundary: Bash(ls) matches ls and ls -la, never lsof', () => {
+    const allow = rules({ allow: [parseRule('Bash(ls)', 'allow', 'userSettings')] })
+    expect(shell('ls', { rules: allow })).toEqual({ kind: 'allow' })
+    expect(shell('ls -la', { rules: allow })).toEqual({ kind: 'allow' })
+    expect(shell('lsof', { rules: allow })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R10: Bash(ls ) keeps its trailing-space prefix and does not newly match bare ls', () => {
+    const allow = rules({ allow: [parseRule('Bash(ls )', 'allow', 'userSettings')] })
+    expect(shell('ls -la', { rules: allow })).toEqual({ kind: 'allow' })
+    expect(shell('ls', { rules: allow })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R14: an assignment-bearing segment is never allowed by a plain subject rule', () => {
+    expect(shell('PATH=/attacker && ls', {
+      rules: rules({ allow: [parseRule('Bash(ls)', 'allow', 'userSettings')] }),
+    })).toEqual({ kind: 'passthrough' })
+    expect(shell('LD_PRELOAD=/x.so ls', {
+      rules: rules({ allow: [parseRule('Bash(ls)', 'allow', 'userSettings')] }),
+    })).toEqual({ kind: 'passthrough' })
+    expect(shell('FOO=1 ls', {
+      rules: rules({ allow: [parseRule('Bash(ls )', 'allow', 'userSettings')] }),
+    })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R14: an assignment-only segment is admissible only untainted and raw-matched', () => {
+    const allow = rules({ allow: [parseRule('Bash(H=/tmp/x)', 'allow', 'userSettings')] })
+    expect(shell('H=/tmp/x', { rules: allow })).toEqual({ kind: 'allow' })
+    expect(shell('H=/tmp/x; ls', { rules: allow, subject: 'H=/tmp/x; ls' })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R15: assignment-headed rule boundary (Bash(FOO=1 ls))', () => {
+    const allow = rules({ allow: [parseRule('Bash(FOO=1 ls)', 'allow', 'userSettings')] })
+    expect(shell('FOO=1 ls', { rules: allow })).toEqual({ kind: 'allow' })
+    expect(shell('FOO=1 ls -la', { rules: allow })).toEqual({ kind: 'allow' })
+    expect(shell('FOO=1 lsof', { rules: allow })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R15: Bash(FOO=1 ls ) does not newly match bare FOO=1 ls', () => {
+    expect(shell('FOO=1 ls', {
+      rules: rules({ allow: [parseRule('Bash(FOO=1 ls )', 'allow', 'userSettings')] }),
+    })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R16: an assignment-only rule matches verbatim only', () => {
+    const allow = rules({ allow: [parseRule('Bash(FOO=1)', 'allow', 'userSettings')] })
+    expect(shell('FOO=1', { rules: allow })).toEqual({ kind: 'allow' })
+    expect(shell('FOO=10', { rules: allow })).toEqual({ kind: 'passthrough' })
+    expect(shell('FOO=1 BAR=2', { rules: allow })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R12: opaque commands fail closed to content allows', () => {
+    expect(shell('ls <(x)', {
+      rules: rules({ allow: [parseRule('Bash(ls )', 'allow', 'userSettings')] }),
+    })).toEqual({ kind: 'passthrough' })
+  })
+
+  it('R12: opaque commands keep deny/ask matching on the raw whole subject', () => {
+    expect(shell('cat << EOF\nbody\nEOF', {
+      rules: rules({ deny: [parseRule('Bash(cat)', 'deny', 'config')] }),
+    })).toMatchObject({ kind: 'deny' })
+  })
+
+  it('segment-aware deny catches a deny evaded via a prefix (compose)', () => {
+    expect(shell('ls && rm -rf x', {
+      rules: rules({ deny: [parseRule('Bash(rm )', 'deny', 'config')] }),
+    })).toMatchObject({ kind: 'deny' })
+  })
+
+  it('deny matches a segment subject (assignment-stripped candidate)', () => {
+    expect(shell('FOO=1 rm -f y', {
+      rules: rules({ deny: [parseRule('Bash(rm )', 'deny', 'config')] }),
+    })).toMatchObject({ kind: 'deny' })
+  })
+
+  it('plan wrap applies once inside evaluateShell', () => {
+    expect(shell('ls > /tmp/x && rm y', { mode: 'plan', rules: rules() }))
+      .toMatchObject({ kind: 'deny', reason: PLAN_READONLY_REASON })
   })
 })

@@ -16,7 +16,7 @@
 |---|---|---|
 | `name` | string | worktree slug。每个以 `/` 分隔的段只允许字母、数字、`.`、`_`、`-`；最长 64 字符。省略时自动生成 `形容词-名词-后缀` 随机 slug。 |
 
-工具从调用方 agent 的会话 cwd 定位仓库根（`git rev-parse --show-toplevel`）；不在 git 工作树内时返回结构化错误而不做任何更改。由于本 harness 中会话工作目录在创建时即固定，cwd 切换通过两种对不可变会话 cwd 安全的方式进行声明：工具结果与 `tool:worktree:cwd` systemPrompt 运行时上下文都会声明新的工作目录，并告知模型后续 shell/fs 调用需传入与返回的 `worktreePath` 相同的 `workdir`。pre-release 状态下的取舍记录在 [git-worktree-tools Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-git-worktree-tools.md)。
+工具从调用方 agent 的会话 cwd 定位仓库根（`git rev-parse --show-toplevel`）；不在 git 工作树内时返回结构化错误而不做任何更改。由于本 harness 中会话工作目录在创建时即固定，cwd 切换以两种不改动这一固定值的方式声明：工具结果与 `tool:worktree:cwd` systemPrompt 运行时上下文都会声明新的工作目录，并告知模型后续 shell/fs 调用需传入与返回的 `worktreePath` 相同的 `workdir`。pre-release 状态下的取舍记录在 [git-worktree-tools Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-git-worktree-tools.md)。
 
 ### `ExitWorktree`
 

@@ -162,6 +162,30 @@ describe('bypass-immune guards', () => {
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/bypass-immune/)
   })
+
+  it('segment-aware bash guard: a deny on a later segment fires (D2/PR-3)', async () => {
+    // Guards are consulted only after the waterfall allows (runtime order:
+    // pre-execute → ask resolution → guards), so the fixture needs a
+    // whole-tool allow in default mode to reach the guard stage.
+    const ctx = await mount({ rules: { bypassImmune: ['Bash(rm )'], allow: ['Bash'] } })
+    const result = await ctx.tools.execute(exec('Bash', { command: 'ls && rm -rf x' }))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toMatch(/bypass-immune/)
+  })
+
+  it('opaque bash guard falls back to the raw whole-subject match (D2/PR-3)', async () => {
+    const ctx = await mount({ rules: { bypassImmune: ['Bash(cat)'] } })
+    const result = await ctx.tools.execute(exec('Bash', { command: 'cat << EOF\nbody\nEOF' }))
+    expect(result.isError).toBe(true)
+  })
+
+  it('non-bash guards keep whole-subject matching (WebFetch/file paths unchanged)', async () => {
+    const ctx = await mount({ rules: { bypassImmune: ['edit(.git*)'] } })
+    const result = await ctx.tools.execute(exec('edit', { file_path: '.git/config' }))
+    expect(result.isError).toBe(true)
+    const clean = await ctx.tools.execute(exec('edit', { file_path: 'src/a && b.ts' }))
+    expect(clean.isError).toBe(false)
+  })
 })
 
 describe('modes via the plugin', () => {
@@ -564,5 +588,45 @@ describe('defaultMode getter (live merged settings default)', () => {
     expect(ctx.permissionRules.defaultMode).toBe('auto')
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { defaultMode: 'acceptEdits' })
     expect(ctx.permissionRules.defaultMode).toBe('acceptEdits')
+  })
+})
+
+describe('autoSuspensionReason (D6 service notice seam)', () => {
+  async function mountWithSettings(): Promise<Context> {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(MemorySettings)
+    await ctx.plugin(PermissionRules, {
+      fileEditTools: ['edit'],
+      readOnlyTools: ['read'],
+      bashToolName: 'Bash',
+    })
+    return ctx
+  }
+
+  it('parses raw rule strings and reports the suspension cause', async () => {
+    const ctx = await mountWithSettings()
+    expect(ctx.permissionRules.autoSuspensionReason('Bash')).toBe('whole-tool')
+    expect(ctx.permissionRules.autoSuspensionReason('Task')).toBe('subagent')
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(python:*)')).toBe('interpreter')
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm run build)')).toBe('package-runner')
+    // Narrow enough to stay effective with the sweep off.
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm publish:*)')).toBeUndefined()
+  })
+
+  it('honors the LIVE autoMode.classifyAllShell setting (hot reload)', async () => {
+    const ctx = await mountWithSettings()
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm publish:*)')).toBeUndefined()
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifyAllShell: true } })
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm publish:*)')).toBe('classify-all-shell')
+  })
+
+  it('returns undefined (never throws) for garbage rule text', async () => {
+    const ctx = await mountWithSettings()
+    expect(ctx.permissionRules.autoSuspensionReason('')).toBeUndefined()
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(unterminated')).toBeUndefined()
+    expect(ctx.permissionRules.autoSuspensionReason('&&& not a rule')).toBeUndefined()
   })
 })

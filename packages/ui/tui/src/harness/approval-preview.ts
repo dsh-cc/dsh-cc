@@ -9,10 +9,10 @@
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import {
   canonicalizeHostname,
-  contentMatches,
   isWebFetchRuleTool,
-  parseRuleString,
   ruleString,
+  splitShellCommand,
+  stripLeadingAssignments,
 } from '@dsh-cc/permission-rules'
 import type { ApprovalPreview } from '../store.ts'
 
@@ -133,17 +133,24 @@ export function restoredArgsOf(req: ApprovalRequest): Record<string, unknown> | 
 
 /**
  * Derive the permission rule an "always" answer persists for the approved
- * call. Shell commands get a trailing-space first-word prefix rule
- * (`Bash(npm )` matches `npm install …` but not `npmx …` — the deliberate
- * trailing space replaces the colon-carrying `:*` legacy form). The stripped
- * first-word rule is verified to content-match the RAW command; on mismatch
- * (env prefixes, stripped wrappers) it falls back to a raw prefix — the
- * original command from offset 0 through the end of the stripped first word
- * plus a trailing space (`sudo FOO=bar npm x` → `Bash(sudo FOO=bar npm )`) —
- * which matches by construction. A WebFetch call derives a
- * `WebFetch(domain:<host>)` rule on the exact host from its UNTRUNCATED `url`
- * argument (underivable — never a whole-tool persistent fallback — when the
- * URL is missing or unparseable); every other tool gets a whole-tool rule.
+ * call (D5 decision order). Shell commands:
+ *
+ * 1. assignment-leading segments persist the RAW assignment-bearing prefix
+ *    through the first command token, with a trailing space iff arguments
+ *    follow (`FOO=1 ls` ⇒ `Bash(FOO=1 ls)`; `FOO=1 ls -la` ⇒ `Bash(FOO=1 ls
+ *    )`); an assignment-only command persists its exact raw form
+ *    (`Bash(FOO=1)`, matched verbatim-only at evaluation, R16);
+ * 2. otherwise supported wrappers (`sudo `, `npx `, `yarn `) and any
+ *    wrapper-local assignment arguments are consumed left to right and the
+ *    INNER command is persisted — bare form when argument-free
+ *    (`sudo FOO=1 ls` ⇒ `Bash(ls)`), trailing-space form otherwise
+ *    (`sudo ls -la` ⇒ `Bash(ls )`) — WITHOUT verifying against the raw
+ *    wrapper-bearing command (the raw-prefix fallback is removed for this
+ *    branch; R13: users grant the inner command). A WebFetch call derives a
+ *    `WebFetch(domain:<host>)` rule on the exact host from its UNTRUNCATED
+ *    `url` argument (underivable — never a whole-tool persistent fallback —
+ *    when the URL is missing or unparseable); every other tool gets a
+ *    whole-tool rule.
  */
 export function allowRuleOf(
   toolName: string,
@@ -159,54 +166,49 @@ export function allowRuleOf(
   if (preview?.kind === 'command') {
     const command = preview.command.trim()
     if (command === '') return { kind: 'underivable' }
+    // Derive from the first top-level segment; opaque commands degrade to
+    // the raw trimmed command.
+    const split = splitShellCommand(command)
+    const segment = split.kind === 'segments' ? (split.segments[0]?.raw ?? command) : command
+    if (segment === '') return { kind: 'underivable' }
 
-    // Strip leading env assignments (FOO=bar …) and common wrapper prefixes
-    // (sudo/npx/yarn) repeatedly, so the first word of the fully stripped
-    // remainder is the underlying command.
-    const prefixesToStrip = ['sudo ', 'npx ', 'yarn ']
-    let remaining = command
+    const subject = stripLeadingAssignments(segment)
+    if (subject !== segment) {
+      // Assignment-leading (D5 step 1). Assignment-only commands have no
+      // command token: persist the exact raw form.
+      if (subject === '') return { kind: 'rule', rule: ruleString(name, segment) }
+      const offset = segment.length - subject.length
+      const tokenEnd = firstTokenEnd(subject)
+      const hasArgs = subject.slice(tokenEnd).trim() !== ''
+      const prefix = segment.slice(0, offset + tokenEnd)
+      return { kind: 'rule', rule: ruleString(name, hasArgs ? `${prefix} ` : prefix) }
+    }
+
+    // No leading assignment (D5 step 2): consume wrappers and wrapper-local
+    // assignments repeatedly, then persist the inner-command rule.
+    let rest = segment
     while (true) {
-      const env = remaining.match(/^[A-Z_][A-Z0-9_]*=\S*\s+/)
-      if (env !== null) {
-        remaining = remaining.slice(env[0].length)
+      const wrapper = ['sudo ', 'npx ', 'yarn '].find(candidate => rest.startsWith(candidate))
+      if (wrapper !== undefined) {
+        rest = rest.slice(wrapper.length)
         continue
       }
-      const wrapper = prefixesToStrip.find(prefix => remaining.startsWith(prefix))
-      if (wrapper === undefined) break
-      remaining = remaining.slice(wrapper.length)
-    }
-
-    // For compound commands (&&, ||, ;), only consider the first segment
-    // This is a simplification - the rule will match any command starting
-    // with the first segment's command, which is the desired behavior.
-    const firstSegment = remaining.split(/&&|\|\||;/)[0]?.trim() ?? ''
-
-    const firstWord = firstSegment.split(/\s+/)[0] ?? ''
-    if (firstWord === '') return { kind: 'underivable' }
-    // ruleString escapes parens/backslashes so a subshell-opening first word
-    // round-trips through parseRuleString.
-    const strippedRule = ruleString(name, `${firstWord} `)
-    // Verify the stripped rule content-matches the RAW command; the raw
-    // subject is what evaluation matches, so a stripped derivation that no
-    // longer covers the raw command would persist a dead rule.
-    try {
-      const parsed = parseRuleString(strippedRule)
-      if (parsed.matcher !== undefined && contentMatches(parsed.matcher, command)) {
-        return { kind: 'rule', rule: strippedRule }
+      const assignmentEnd = assignmentWordEnd(rest)
+      if (assignmentEnd !== undefined) {
+        rest = rest.slice(assignmentEnd)
+        continue
       }
-    } catch {
-      // Not parseable — fall through to the raw-prefix fallback.
+      break
     }
-    // Raw-prefix fallback: slice the original command from 0 through the end
-    // of the stripped first word (its offset inside the raw command) plus a
-    // trailing space, so the prefix matches the raw command by construction.
-    const stripOffset = command.length - remaining.length
-    const leading = remaining.length - remaining.trimStart().length
-    const end = Math.min(command.length, stripOffset + leading + firstWord.length)
-    // Trailing space only when something follows the first word — a bare
-    // `yarn build` must still match its own prefix rule.
-    const tail = command.slice(end)
-    return { kind: 'rule', rule: ruleString(name, tail === '' ? command.slice(0, end) : `${command.slice(0, end)} `) }
+    const inner = rest.trim()
+    const tokenEnd = firstTokenEnd(inner)
+    const firstWord = inner.slice(0, tokenEnd)
+    if (firstWord === '') return { kind: 'underivable' }
+    // Argument-free inner commands persist the bare form (`Bash(ls)`),
+    // argument-bearing ones the trailing-space form (`Bash(ls )`) — both
+    // covered by the D4 conjunctive token boundary at evaluation.
+    const hasArgs = inner.slice(tokenEnd).trim() !== ''
+    return { kind: 'rule', rule: ruleString(name, hasArgs ? `${firstWord} ` : firstWord) }
   }
   // WebFetch persists a domain rule on the exact host (not `*.host`) derived
   // from the untruncated restored args (display args previews are truncated).
@@ -229,8 +231,55 @@ export function allowRuleOf(
   return { kind: 'rule', rule: name }
 }
 
-/** Whether an error is the settings provider's revision-conflict rejection. */
-export function isSettingsConflict(error: unknown): boolean {
+/**
+ * The end index (in `text`) just past its first whitespace-delimited token,
+ * quotes and escapes respected (D5 derivation token scans).
+ */
+function firstTokenEnd(text: string): number {
+  let index = 0
+  let quote: 'none' | '"' | "'" = 'none'
+  while (index < text.length) {
+    const char = text[index]
+    if (quote === 'none') {
+      if (char === ' ' || char === '\t') break
+      if (char === '\\' && index + 1 < text.length) {
+        index += 2
+        continue
+      }
+      if (char === '"' || char === "'") {
+        quote = char
+        index += 1
+        continue
+      }
+    } else if (char === quote) {
+      quote = 'none'
+    }
+    index += 1
+  }
+  return index
+}
+
+/**
+ * End index just past a leading `NAME=value` assignment word (plus trailing
+ * whitespace) in `text`, or undefined when the text does not begin with one.
+ * Case-permissive names; the value runs to unquoted whitespace.
+ */
+function assignmentWordEnd(text: string): number | undefined {
+  let index = 0
+  while (index < text.length && /\s/.test(text[index]!)) index += 1
+  const start = index
+  while (index < text.length && /[A-Za-z0-9_]/.test(text[index]!)) index += 1
+  if (index === start || text[index] !== '=' || /[0-9]/.test(text[start]!)) return undefined
+  index += 1
+  while (index < text.length && !/\s/.test(text[index]!)) {
+    if (text[index] === '\\') index += 1
+    index += 1
+  }
+  while (index < text.length && /\s/.test(text[index]!)) index += 1
+  return index
+}
+
+/** Whether an error is the settings provider's revision-conflict rejection. */export function isSettingsConflict(error: unknown): boolean {
   const candidate = error as { name?: unknown; code?: unknown } | null
   if (candidate === null || typeof candidate !== 'object') return false
   return candidate.code === 'SETTINGS_CONFLICT' || candidate.name === 'SettingsConflictError'
