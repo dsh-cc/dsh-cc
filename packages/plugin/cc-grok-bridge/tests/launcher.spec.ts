@@ -350,15 +350,30 @@ describe('grok-review-run launcher — integration (real subprocess, staged stub
   it('T10-class: SIGKILL of the launcher leaves the lock for stale reclaim and writes NO orphan marker', async () => {
     stage = newStage()
     const { H } = homePathsFor(stage)
-    const sleeperEnv = baseEnv(stage, { GROK_STUB_SLEEP_MS: '8000' })
+    const pidFile = `${stage.mkd}/stub.pid`
+    const sleeperEnv = baseEnv(stage, { GROK_STUB_SLEEP_MS: '8000', GROK_STUB_PIDFILE: pidFile })
     const victim = spawnLauncher(['--', 'killed'], { cwd: stage.ws, env: sleeperEnv, exitOnly: true })
-    await waitFor(() => existsSync(`${H}/.lock`))
+    await waitFor(() => existsSync(`${H}/.lock`) && existsSync(pidFile))
     victim.child.kill('SIGKILL')
     const killed = await victim.done
     expect(killed.code !== null || killed.signal !== null).toBe(true)
-    await waitFor(() => !existsSync(`${H}/.lock`) || existsSync(`${H}/.lock`)) // settled
     expect(existsSync(`${H}/.lock`)).toBe(true) // lock remains until >6h stale reclaim
     expect(existsSync(`${H}/.orphaned`)).toBe(false) // nothing observed the death
+    // Hygiene, not assertion: the hard-killed launcher's group-leader stub
+    // would sleep out the 8 s holding our stdout/stderr pipes open, which
+    // hangs the vitest forks-pool teardown (CI red of PR #166, first run).
+    // Free the streams and drain the zombie deterministically before leaving.
+    victim.child.stdout?.destroy()
+    victim.child.stderr?.destroy()
+    const stubPid = Number(readFileSync(pidFile, 'utf8').trim())
+    await waitFor(() => {
+      try {
+        process.kill(stubPid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
   }, LONG)
 
   it('T5/T6 real signaling: SIGTERM to a running launcher exits 130, the TERM-ignoring stub only dies at the SIGKILL grace, and the lock is released', async () => {
