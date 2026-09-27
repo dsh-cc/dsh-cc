@@ -162,6 +162,30 @@ describe('bypass-immune guards', () => {
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/bypass-immune/)
   })
+
+  it('segment-aware bash guard: a deny on a later segment fires (D2/PR-3)', async () => {
+    // Guards are consulted only after the waterfall allows (runtime order:
+    // pre-execute → ask resolution → guards), so the fixture needs a
+    // whole-tool allow in default mode to reach the guard stage.
+    const ctx = await mount({ rules: { bypassImmune: ['Bash(rm )'], allow: ['Bash'] } })
+    const result = await ctx.tools.execute(exec('Bash', { command: 'ls && rm -rf x' }))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toMatch(/bypass-immune/)
+  })
+
+  it('opaque bash guard falls back to the raw whole-subject match (D2/PR-3)', async () => {
+    const ctx = await mount({ rules: { bypassImmune: ['Bash(cat)'] } })
+    const result = await ctx.tools.execute(exec('Bash', { command: 'cat << EOF\nbody\nEOF' }))
+    expect(result.isError).toBe(true)
+  })
+
+  it('non-bash guards keep whole-subject matching (WebFetch/file paths unchanged)', async () => {
+    const ctx = await mount({ rules: { bypassImmune: ['edit(.git*)'] } })
+    const result = await ctx.tools.execute(exec('edit', { file_path: '.git/config' }))
+    expect(result.isError).toBe(true)
+    const clean = await ctx.tools.execute(exec('edit', { file_path: 'src/a && b.ts' }))
+    expect(clean.isError).toBe(false)
+  })
 })
 
 describe('modes via the plugin', () => {

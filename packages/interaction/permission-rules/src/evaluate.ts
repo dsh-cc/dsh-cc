@@ -26,6 +26,9 @@ import {
   type PermissionRuleSource,
 } from './types.ts'
 import { contentMatches } from './parser.ts'
+import { type SegmentResult, type ShellSegment } from './shell-segments.ts'
+import { stripLeadingAssignments } from './shell-words.ts'
+import { exemptShortHeadBoundaryOf } from './auto-rule-filter.ts'
 
 /**
  * Merge several rule sets into one, consulting rules by source priority. On a
@@ -194,6 +197,210 @@ function firstBypassImmune(
     if (contentMatches(rule.matcher, subject)) return rule
   }
   return undefined
+}
+
+/** The first whitespace-delimited token of a command string (D4 boundary). */
+function commandToken(text: string): string {
+  return text.trim().split(/\s+/)[0] ?? ''
+}
+
+/**
+ * The bash-specific evaluation entry point (D2): folds the SAME global
+ * waterfall, but the content phases run per top-level segment (`raw` OR
+ * `subject` candidates) for segmented commands and fail-closed (content
+ * allow skipped) for opaque ones. Returns the FINAL decision including the
+ * plan-mode wrap, which applies ONCE here — `evaluatePermission` retains its
+ * own wrap for its existing callers; `decide.ts` applies no second wrap.
+ * @param input - the call, rule set, mode, and exemption flags.
+ * @param result - the {@link splitShellCommand} output for the command.
+ * @returns the final decision.
+ */
+export function evaluateShell(input: EvaluationInput, result: SegmentResult): PermissionDecision {
+  const effectiveMode: EvaluationInput['mode'] =
+    (input.bypassDisabled ?? false) && input.mode === 'bypassPermissions' ? 'default' : input.mode
+  const decision = result.kind === 'segments'
+    ? foldSegmented(input, effectiveMode, input.toolName, result.segments, input.rules)
+    : foldOpaque(input, effectiveMode, input.toolName, input.subject, input.rules)
+  // Plan is read-only: leftover ask/passthrough on a mutating call become a
+  // deny pointing at exit_plan_mode. Allow (including a matching allow rule)
+  // and deny (including deny rules) stand.
+  if (effectiveMode === 'plan' && input.isReadOnly !== true
+    && (decision.kind === 'ask' || decision.kind === 'passthrough')) {
+    return { kind: 'deny', reason: PLAN_READONLY_REASON }
+  }
+  return decision
+}
+
+/** The segmented waterfall: content phases loop over segments (D2). */
+function foldSegmented(
+  input: EvaluationInput,
+  effectiveMode: EvaluationInput['mode'],
+  toolName: string,
+  segments: readonly ShellSegment[],
+  rules: PermissionRuleSet,
+): PermissionDecision {
+  const immuneDeny = firstSegmentMatch(rules.bypassImmune, toolName, segments)
+  if (immuneDeny !== undefined) return denyOf(immuneDeny)
+  const toolDeny = firstToolLevel(rules.deny, toolName)
+  if (toolDeny !== undefined) return denyOf(toolDeny)
+  if (effectiveMode === 'bypassPermissions') return { kind: 'allow' }
+  for (const source of SOURCE_PRIORITY) {
+    const matched = firstSegmentMatch(rules.deny, toolName, segments, source)
+    if (matched !== undefined) return denyOf(matched)
+  }
+  const toolAsk = firstToolLevel(rules.ask, toolName)
+  if (toolAsk !== undefined) {
+    if (ccToolAliases(toolName).includes('Bash') && input.sandboxedBashExempt === true) {
+      return { kind: 'allow' }
+    }
+    return askOf(toolAsk)
+  }
+  for (const source of SOURCE_PRIORITY) {
+    const matched = firstSegmentMatch(rules.ask, toolName, segments, source)
+    if (matched !== undefined) return askOf(matched)
+  }
+  // Content allow: EVERY segment must be admissible (deny/ask already had
+  // their segment-wide shot above; taint never allow-matches).
+  for (const source of SOURCE_PRIORITY) {
+    if (allSegmentsAdmissible(rules.allow, toolName, segments, source)) return { kind: 'allow' }
+  }
+  if (effectiveMode === 'acceptEdits' && input.isFileEdit === true) {
+    return { kind: 'allow' }
+  }
+  if (effectiveMode === 'plan' && input.isReadOnly === true) {
+    return { kind: 'allow' }
+  }
+  const toolAllow = firstToolLevel(rules.allow, toolName)
+  if (toolAllow !== undefined) return { kind: 'allow' }
+  return { kind: 'passthrough' }
+}
+
+/**
+ * The opaque waterfall (D2): the command's structure is unknown, so matching
+ * runs on the raw whole subject and content allow is skipped entirely —
+ * prefix approval must never launder heredocs, substitutions, subshells,
+ * group syntax, or control flow.
+ */
+function foldOpaque(
+  input: EvaluationInput,
+  effectiveMode: EvaluationInput['mode'],
+  toolName: string,
+  subject: string | undefined,
+  rules: PermissionRuleSet,
+): PermissionDecision {
+  const immuneDeny = firstBypassImmune(rules.bypassImmune, toolName, subject)
+  if (immuneDeny !== undefined) return denyOf(immuneDeny)
+  const toolDeny = firstToolLevel(rules.deny, toolName)
+  if (toolDeny !== undefined) return denyOf(toolDeny)
+  if (effectiveMode === 'bypassPermissions') return { kind: 'allow' }
+  for (const source of SOURCE_PRIORITY) {
+    const matched = firstContentMatch(rules.deny, toolName, subject, source)
+    if (matched !== undefined) return denyOf(matched)
+  }
+  const toolAsk = firstToolLevel(rules.ask, toolName)
+  if (toolAsk !== undefined) {
+    if (ccToolAliases(toolName).includes('Bash') && input.sandboxedBashExempt === true) {
+      return { kind: 'allow' }
+    }
+    return askOf(toolAsk)
+  }
+  for (const source of SOURCE_PRIORITY) {
+    const matched = firstContentMatch(rules.ask, toolName, subject, source)
+    if (matched !== undefined) return askOf(matched)
+  }
+  // Content allow skipped (fail-closed, R12).
+  if (effectiveMode === 'acceptEdits' && input.isFileEdit === true) {
+    return { kind: 'allow' }
+  }
+  if (effectiveMode === 'plan' && input.isReadOnly === true) {
+    return { kind: 'allow' }
+  }
+  const toolAllow = firstToolLevel(rules.allow, toolName)
+  if (toolAllow !== undefined) return { kind: 'allow' }
+  return { kind: 'passthrough' }
+}
+
+/**
+ * The first rule in `list` whose `raw` OR `subject` matches any segment —
+ * source outer, then segment order, then rule declaration order.
+ */
+function firstSegmentMatch(
+  list: readonly PermissionRule[],
+  toolName: string,
+  segments: readonly ShellSegment[],
+  source?: PermissionRule['source'],
+): PermissionRule | undefined {
+  for (const segment of segments) {
+    for (const rule of list) {
+      if (source !== undefined && rule.source !== source) continue
+      if (rule.content === undefined || rule.matcher === undefined) continue
+      if (!ruleMatchesTool(rule, toolName)) continue
+      if (contentMatches(rule.matcher, segment.raw) || contentMatches(rule.matcher, segment.subject)) return rule
+    }
+  }
+  return undefined
+}
+
+/**
+ * The one content-allow rule (in `source`) that admits `segment`, or
+ * undefined. Matching policy per D2 phase 7:
+ * - tainted segments are never admissible;
+ * - assignment-only segments match on `raw` only; an assignment-only rule
+ *   (`Bash(FOO=1)`) matches verbatim only (R16);
+ * - assignment-bearing segments match on `raw` ONLY (assignments define the
+ *   launch environment); a literal-prefix rule with an assignment-headed
+ *   content additionally enforces the executable-token boundary (R15);
+ * - plain segments match their text; an exempted safe short-head rule
+ *   additionally enforces the token boundary (D4/R10).
+ */
+function matchAllowForSegment(
+  list: readonly PermissionRule[],
+  toolName: string,
+  segment: ShellSegment,
+  source: PermissionRule['source'],
+): PermissionRule | undefined {
+  if (segment.tainted) return undefined
+  const boundaryToken = segment.first
+  for (const rule of list) {
+    if (rule.source !== source) continue
+    if (rule.content === undefined || rule.matcher === undefined) continue
+    if (!ruleMatchesTool(rule, toolName)) continue
+    if (segment.assignmentOnly || segment.subject !== segment.raw) {
+      // Assignment-leading segments (including assignment-only ones) are
+      // allow-matched against `raw` ONLY — never the stripped subject.
+      if (!contentMatches(rule.matcher, segment.raw)) continue
+      if (rule.matcher.kind !== 'prefix') return rule
+      const headExecutable = commandToken(stripLeadingAssignments(rule.matcher.prefix))
+      if (segment.assignmentOnly && stripLeadingAssignments(rule.matcher.prefix).trim() === '') {
+        // Assignment-only rule: verbatim equality, never prefix (R16).
+        if (segment.raw !== rule.matcher.prefix) continue
+        return rule
+      }
+      if (rule.matcher.prefix !== stripLeadingAssignments(rule.matcher.prefix)
+        && commandToken(stripLeadingAssignments(segment.raw)) !== headExecutable) continue
+      return rule
+    }
+    // Plain segment: matched on its (raw === subject) text.
+    if (!contentMatches(rule.matcher, segment.raw)) continue
+    const safeHead = exemptShortHeadBoundaryOf(rule)
+    if (safeHead !== undefined && boundaryToken !== safeHead) continue
+    return rule
+  }
+  return undefined
+}
+
+/** Whether EVERY segment finds an admissible allow rule at one source. */
+function allSegmentsAdmissible(
+  list: readonly PermissionRule[],
+  toolName: string,
+  segments: readonly ShellSegment[],
+  source: PermissionRule['source'],
+): boolean {
+  if (segments.length === 0) return false
+  for (const segment of segments) {
+    if (matchAllowForSegment(list, toolName, segment, source) === undefined) return false
+  }
+  return true
 }
 
 /** Deny decision for a matched rule. */

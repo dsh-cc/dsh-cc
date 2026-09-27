@@ -137,10 +137,12 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
       : undefined
     const derivedReason = engine?.autoSuspensionReason(rule)
     let coveredBy: string | undefined
+    let overrodeCovering: string | undefined
     let replaced = 0
     try {
       await settings.editUserSection(PERMISSION_SETTINGS_NAMESPACE, rawSection => {
         coveredBy = undefined
+        overrodeCovering = undefined
         replaced = 0
         const current = Array.isArray(rawSection.allow) ? [...rawSection.allow as unknown[]] : []
         const newRule = parseRuleSafe(rule, 'allow', 'userSettings')
@@ -148,10 +150,17 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
         for (const entry of current) {
           if (typeof entry !== 'string') continue
           const parsed = parseRuleSafe(entry, 'allow', 'userSettings')
-          if (parsed !== undefined && ruleSubsumes(parsed, newRule)) {
-            coveredBy = entry
-            return undefined
+          if (parsed === undefined || !ruleSubsumes(parsed, newRule)) continue
+          coveredBy = entry
+          // Cell 3 (PR-3): covering rule suspended, derived rule effective —
+          // persist the narrower rule anyway so the grant actually applies
+          // under auto, and report the override.
+          if (engine !== undefined && derivedReason === undefined
+            && engine.autoSuspensionReason(entry) !== undefined) {
+            overrodeCovering = entry
+            return { ...rawSection, allow: [...current, rule] }
           }
+          return undefined
         }
         const kept = current.filter(entry => {
           if (typeof entry !== 'string') return true
@@ -166,16 +175,13 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
       rt.showNotice(`Allowed once only — saving the allow rule failed: ${message}`)
       return
     }
+    if (overrodeCovering !== undefined) {
+      rt.showNotice(`Always allow: ${rule} — overrode covering rule ${overrodeCovering}, which auto mode suspends.`)
+      return
+    }
     if (coveredBy !== undefined) {
       if (engine !== undefined) {
         const coveringReason = engine.autoSuspensionReason(coveredBy)
-        if (derivedReason === undefined && coveringReason !== undefined) {
-          // Cell 3: covering rule suspended, derived effective — the swallow
-          // stays (PR-2), but the user hears that the covering rule is dead
-          // under auto.
-          rt.showNotice(`Already covered by ${coveredBy} — note: that rule is suspended under auto; it will not apply there.`)
-          return
-        }
         if (derivedReason !== undefined && coveringReason !== undefined) {
           // Cell 4: both rules suspended — neither applies under auto.
           rt.showNotice(`Already covered by ${coveredBy} — note: auto mode suspends the applicable rules (${derivedReason}, ${coveringReason}); neither applies there. The "session" answer works today.`)

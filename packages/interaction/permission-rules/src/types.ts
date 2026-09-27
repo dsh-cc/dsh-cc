@@ -165,5 +165,3 @@ export interface EvaluationInput {
    */
   readonly isReadOnly?: boolean
 }
-
-export default PermissionRule

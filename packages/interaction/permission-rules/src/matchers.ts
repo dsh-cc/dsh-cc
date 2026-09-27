@@ -8,6 +8,7 @@
 import { ccToolAliases, type ToolExecution } from '@dsh-cc/tools'
 import { canonicalizeHostname } from './domain.ts'
 import { contentMatches } from './parser.ts'
+import { splitShellCommand } from './shell-segments.ts'
 import type { PermissionRule } from './types.ts'
 
 /** Whether an authored rule's tool name answers to a harness call's tool name. */
@@ -40,4 +41,12 @@ export function subjectOf(exec: ToolExecution, bashToolName: string): string | u
     return canonicalizeHostname(args.url)
   }
   return undefined
+}
+
+/** Bash bypass-immune guard helper (D2): any segment's raw OR subject matches; opaque ⇒ raw whole-subject fallback. */
+export function ruleMatchesAnyShellSegment(rule: PermissionRule, toolName: string, subject: string): boolean {
+  const result = splitShellCommand(subject)
+  if (result.kind === 'opaque') return ruleMatches(rule, toolName, subject)
+  return result.segments.some(segment =>
+    ruleMatches(rule, toolName, segment.raw) || ruleMatches(rule, toolName, segment.subject))
 }
