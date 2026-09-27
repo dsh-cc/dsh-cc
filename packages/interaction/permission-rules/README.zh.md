@@ -27,7 +27,7 @@ Claude Code 兼容的权限规则引擎。解析 `ToolName` 与 `ToolName(conten
 3. **整工具 deny** → deny。
 4. **内容 deny**（全部来源）→ deny——deny 优先排序（D2）：内容 deny 胜过任何内容 allow 与整工具 ask，适用于所有模式。
 5. **整工具 ask** → ask（当设置了 `exemptSandboxedBashFromToolAsk` 时，被沙箱限制的 `Bash` 豁免并直接 allow）。
-6. **内容 ask**，随后**内容 allow**，按来源优先级（行为在外、来源在内；行为+来源内保持声明顺序）。
+6. **内容 ask**，随后**内容 allow**，按来源优先级（行为在外、来源在内；行为+来源内保持声明顺序）。bash 命令的内容相位按顶层 shell **段**求值（D1/PR-3）：命令先切成段（`splitShellCommand`），deny/ask 在任一段的 raw 文本或剥去赋值前缀后的 subject 上命中，而内容 allow 要求**每一**段都命中（带命令替换或写入重定向的污点段永不可 allow；带赋值前缀的段只按 raw 文本匹配）。扫描器无法信任的命令（引号未闭合、heredoc、子 shell、组语法、保留字）视为 opaque 且 fail closed：内容 allow 相位整体跳过。
 7. **模式**短路：`bypassPermissions` 放行一切（除非 `disableBypassPermissionsMode`）；`acceptEdits` 自动放行文件编辑工具；`plan` 自动放行只读工具。`auto` 不是 evaluate 短路——它按 `default` 评估，但宽泛的 allow 规则会被挂起（见下）。
 8. **整工具 allow** 是该工具的粗略默认——没有更具体的规则命中时放行。
 9. **无命中** → passthrough 给下游监听器（最终到审批缝），后者仍可能 `ask`。
@@ -62,7 +62,7 @@ await ctx.plugin(PermissionRules, {
 
 每条规则携带 `PermissionRuleSource`（`session` > `cliArg` > `policySettings` > `flagSettings` > `localSettings` > `projectSettings` > `userSettings` > `config`），用于内容规则的优先级。引擎在调用时解析生效模式：plan 激活（来自 `@deepseek-ai/dsh-plan-mode`）最先覆盖，然后是会话记录的 `permission/mode` 覆盖（`foldPermissionMode`），否则回退到 `defaultMode`。
 
-模式是**持久的**——`setMode(agent, mode)` 追加一条 last-wins 的 `permission/mode` 会话事件（插件加载时注册进 `KNOWN_SESSION_EVENT_TYPES`，持久化可恢复它）。`plan` 归 plan-mode 所有，在这里会抛错。进入 `bypassPermissions` 会把会话沙箱钉到 `danger-full-access` 并记录 `resumeSandbox`；离开时恢复记录（或回退 `workspace-write`）的约束。`auto` 模式是**严格规则**语义（设计文档 D3/D11）：旧的 LOW+ask→allow 代理已移除，命中 ask 规则即使在 LOW 风险也会提示；宽泛的 allow 规则在评估时被挂起（`filterAutoAllowRules`）——整工具 bash/PowerShell allow、实质全覆盖的 bash 内容 allow、解释器与包管理器运行前缀（`python`、`node`、`npm run`、`npx` 等）以及任何 `Task`/`Agent`/`subagent`/`subagent_fork` allow；`autoMode.classifyAllShell: true` 挂起所有 bash 与 PowerShell allow 规则。`/permissions` 以 "suspended in auto mode" 标注被挂起的规则，`effectiveRuleSet(mode)` 是所有预览消费者的唯一接缝。"本次会话允许"授权现在适用于所有非 plan 模式下的规则 ask（grant-on-ask，D2）。LLM 分类器阶段武装时，只读工具调用豁免——完全不经过模型（读流量零额外延迟）。判定解析保持严格并 fail-closed：模型输出畸形时返回常量原因 `classifier output unparseable`（模型输出永不展示；审计记录只含摘要）。按路由的连续失败熔断器（阈值 3，按 `provider/model` 键控）会为故障车道打开断路——该路由不再调用分类器，每进程一次 warn、每会话一条 `breaker` 审计事件；`rebuild()`（设置变更）重置熔断状态并重新武装。
+模式是**持久的**——`setMode(agent, mode)` 追加一条 last-wins 的 `permission/mode` 会话事件（插件加载时注册进 `KNOWN_SESSION_EVENT_TYPES`，持久化可恢复它）。`plan` 归 plan-mode 所有，在这里会抛错。进入 `bypassPermissions` 会把会话沙箱钉到 `danger-full-access` 并记录 `resumeSandbox`；离开时恢复记录（或回退 `workspace-write`）的约束。`auto` 模式是**严格规则**语义（设计文档 D3/D11）：旧的 LOW+ask→allow 代理已移除，命中 ask 规则即使在 LOW 风险也会提示；宽泛的 allow 规则在评估时被挂起（`filterAutoAllowRules`）——整工具 bash/PowerShell allow、实质全覆盖的 bash 内容 allow、解释器与包管理器运行前缀（`python`、`node`、`npm run`、`npx` 等）以及任何 `Task`/`Agent`/`subagent`/`subagent_fork` allow；`autoMode.classifyAllShell: true` 挂起所有 bash 与 PowerShell allow 规则。`/permissions` 以 "suspended in auto mode" 标注被挂起的规则，`effectiveRuleSet(mode)` 是所有预览消费者的唯一接缝。"本次会话允许"授权现在适用于所有非 plan 模式下的规则 ask（grant-on-ask，D2）。LLM 分类器阶段武装时，只读工具调用豁免——完全不经过模型（读流量零额外延迟）。判定解析保持严格并 fail-closed：模型输出畸形时返回常量原因 `classifier output unparseable`（模型输出永不展示；审计记录只含摘要）。按路由的连续失败熔断器（阈值 3，按 `provider/model` 键控）会为故障车道打开断路——该路由不再调用分类器，每进程一次 warn、每会话一条 `breaker` 审计事件；60 秒冷却后该路由进入半开状态并只放行一次探测调用——成功则关闭熔断，失败则重新打开并重新计时冷却；`rebuild()`（设置变更）重置熔断状态并重新武装。System One 客户端对 HTTP 429 最多重试两次（遵循 `Retry-After`，上限 2 秒，否则用带抖动的指数退避），总预算 3 秒，之后按原有路径降级。
 
 ## 切换模式
 

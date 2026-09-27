@@ -35,7 +35,20 @@ export interface ResolvedRoute {
    * adapter (`max`, `xhigh`, `high`, …). Absent → no effort stamp.
    */
   readonly reasoningEffort?: string | undefined
+  /**
+   * Wire protocol marker kept from the alias target. `'systemone'` marks a
+   * System One (typed-decision) model: it is NOT a chat model, and the chat
+   * path rejects it (`SystemOneChatModelError`). Absent → ordinary chat model.
+   * Never forwarded into spawn `agentOptions` or one-shot routes.
+   */
+  readonly protocol?: ModelProtocol | undefined
 }
+
+/**
+ * Typed wire-protocol markers a resolved route can carry. Only System One is
+ * recognized today; other alias-target `protocol` strings are not projected.
+ */
+export type ModelProtocol = 'systemone'
 
 /**
  * What an alias lookup resolved to, for provenance reporting (`/doctor`).

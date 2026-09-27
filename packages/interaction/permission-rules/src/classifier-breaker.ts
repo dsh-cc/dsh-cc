@@ -14,6 +14,14 @@
  */
 export const CLASSIFIER_BREAKER_THRESHOLD = 3
 
+/**
+ * Cooldown (ms) an open route breaker waits before going half-open: the first
+ * call after the cooldown is admitted as the single recovery probe. Probe
+ * success closes the breaker; a counted probe failure re-opens it and
+ * restarts the cooldown. Module constant like the threshold (no settings knob).
+ */
+export const CLASSIFIER_BREAKER_COOLDOWN_MS = 60_000
+
 /** The failure tags the breaker counts; `cancelled`/`unarmed` are host noise and never count. */
 export const BREAKER_FAILURE_TAGS: readonly string[] = ['malformed', 'error', 'timeout']
 
@@ -63,7 +71,14 @@ export type RouteBreakerDeps<C> = {
    * consumer's opaque call context (exec + route).
    */
   auditBreakerOnce(ctx: C, routeKey: string): void
+  /** Cooldown before an open route admits its half-open probe (default {@link CLASSIFIER_BREAKER_COOLDOWN_MS}). */
+  cooldownMs?: number
+  /** Injectable clock in ms (default `Date.now`); tests drive the cooldown with it. */
+  now?: () => number
 }
+
+/** Observable per-route breaker state. */
+export type RouteBreakerState = 'closed' | 'open' | 'half-open'
 
 /**
  * Per-route consecutive-failure breaker with session-log seeding (R3). Holds
@@ -73,6 +88,14 @@ export type RouteBreakerDeps<C> = {
  * `cancelled`/`unarmed` are neutral, `reset()` (settings change — the
  * operator's "I fixed the lane") clears everything, and the durable log seeds a
  * resumed session exactly once.
+ *
+ * Half-open recovery: an open route stays blocked for the cooldown; the first
+ * {@link isOpen} check after it admits exactly ONE probe call (every other
+ * concurrent call stays blocked). The probe's recorded outcome decides:
+ * success closes the breaker (streak 0), a counted failure re-opens it and
+ * restarts the cooldown, and a neutral outcome (`cancelled`, …) just frees the
+ * probe slot. A probe that never records (e.g. discarded as `stale-mode`) is
+ * abandoned after one more cooldown so the route can never wedge.
  */
 export class RouteBreaker<C> {
   private readonly routeFailures = new Map<string, number>()
@@ -82,8 +105,20 @@ export class RouteBreaker<C> {
   /** Session ids whose durable log already seeded this process's breaker state (R3). */
   private readonly seededSessions = new Set<string>()
   private warnedBreaker = false
+  /** When each open route last opened (ms, injected clock) — the cooldown anchor. */
+  private readonly openedAt = new Map<string, number>()
+  /** Routes with an admitted half-open probe in flight → when it was admitted. */
+  private readonly probeStartedAt = new Map<string, number>()
 
   constructor(private readonly deps: RouteBreakerDeps<C>) {}
+
+  private now(): number {
+    return (this.deps.now ?? Date.now)()
+  }
+
+  private get cooldownMs(): number {
+    return this.deps.cooldownMs ?? CLASSIFIER_BREAKER_COOLDOWN_MS
+  }
 
   /** Clear ALL breaker state (settings change / rebuild). */
   reset(): void {
@@ -91,11 +126,40 @@ export class RouteBreaker<C> {
     this.breakerOpen.clear()
     this.breakerAudited.clear()
     this.seededSessions.clear()
+    this.openedAt.clear()
+    this.probeStartedAt.clear()
     this.warnedBreaker = false
   }
 
+  /**
+   * Gate one call on `routeKey`: `true` means blocked (breaker open). Call it
+   * exactly once per call — once the cooldown has elapsed, the first check
+   * admits that call as the half-open probe (returns `false`) and later
+   * checks stay blocked until the probe records its outcome.
+   */
   isOpen(routeKey: string): boolean {
-    return this.breakerOpen.has(routeKey)
+    if (!this.breakerOpen.has(routeKey)) return false
+    const now = this.now()
+    const probeAt = this.probeStartedAt.get(routeKey)
+    // A probe is in flight: block everyone else until it records, unless it
+    // was abandoned (never recorded within one cooldown).
+    if (probeAt !== undefined && now - probeAt < this.cooldownMs) return true
+    if (now - (this.openedAt.get(routeKey) ?? now) < this.cooldownMs) return true
+    this.probeStartedAt.set(routeKey, now)
+    return false
+  }
+
+  /** Observable state of one route (pure read; never admits a probe). */
+  state(routeKey: string): RouteBreakerState {
+    if (!this.breakerOpen.has(routeKey)) return 'closed'
+    return this.probeStartedAt.has(routeKey) ? 'half-open' : 'open'
+  }
+
+  /** Mark a route open now (cooldown anchor), clearing any in-flight probe. */
+  private open(routeKey: string): void {
+    this.breakerOpen.add(routeKey)
+    this.openedAt.set(routeKey, this.now())
+    this.probeStartedAt.delete(routeKey)
   }
 
   /**
@@ -122,7 +186,7 @@ export class RouteBreaker<C> {
     if (streak <= 0) return
     this.routeFailures.set(routeKey, streak)
     if (streak < this.deps.threshold) return
-    this.breakerOpen.add(routeKey)
+    this.open(routeKey)
     if (!this.warnedBreaker) {
       this.warnedBreaker = true
       this.deps.warn(`${this.deps.label}: route ${routeKey} restored with ${streak} consecutive failures from the session log; breaker open for this route, ${this.deps.outcomeNote}`)
@@ -138,15 +202,33 @@ export class RouteBreaker<C> {
    * `sessionId` '' (no session) skips only the audit — the counter still moves.
    */
   record(sessionId: string, routeKey: string, failure: string | undefined, ctx: C): void {
+    const probing = this.probeStartedAt.has(routeKey)
     if (failure === undefined) {
       this.routeFailures.set(routeKey, 0)
+      // Half-open probe succeeded: close the breaker.
+      if (probing) {
+        this.breakerOpen.delete(routeKey)
+        this.openedAt.delete(routeKey)
+        this.probeStartedAt.delete(routeKey)
+      }
       return
     }
-    if (!this.deps.failureTags.includes(failure)) return
+    if (!this.deps.failureTags.includes(failure)) {
+      // Neutral probe outcome: free the slot so the next call may probe.
+      if (probing) this.probeStartedAt.delete(routeKey)
+      return
+    }
+    if (probing) {
+      // Half-open probe failed: re-open and restart the cooldown (no new
+      // warn — warn-once per process — and the audit stays one per session).
+      this.open(routeKey)
+      this.auditOnce(sessionId, routeKey, ctx)
+      return
+    }
     const count = (this.routeFailures.get(routeKey) ?? 0) + 1
     this.routeFailures.set(routeKey, count)
     if (count < this.deps.threshold) return
-    this.breakerOpen.add(routeKey)
+    if (!this.breakerOpen.has(routeKey)) this.open(routeKey)
     if (!this.warnedBreaker) {
       this.warnedBreaker = true
       this.deps.warn(`${this.deps.label}: route ${routeKey} failed ${this.deps.threshold} consecutive classifications; breaker open for this route, ${this.deps.outcomeNote}`)

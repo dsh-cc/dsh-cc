@@ -22,7 +22,7 @@
 
 ## 写前先读（read-before-write）门
 
-与 CC 的 `validateInput` 一致，工具拒绝写入模型从未读过的 notebook，也拒绝在文件自读取后被改动时（stale write）进行写入。该门由 harness 观测 seam 驱动：插件在 `apply()` 中维护一张 `readStates` 表，并记录每条 `present` 的 `fs/observed` 观测（即 Read/Write/Edit 工具在提交时发出的事件），按键为解析后的路径。execute 时：无已观测读记录 → 拒绝；当前 `ctx.fs.stat()` 版本与该观测版本不一致 → 拒绝。写完后用写入结果的版本重新建立基线——因此工具自身的写视为“已读”的最新基线。seam 暴露的是不透明 `FsVersion` 新鲜度令牌而非 mtime；比较该令牌是 seam 原生的陈旧性校验，严格强于 CC 的 mtime 比较。
+与 CC 的 `validateInput` 一致，工具拒绝写入模型从未读过的 notebook，也拒绝在文件自读取后被改动（stale write）时写入。该门由 harness 观测 seam 驱动：插件在 `apply()` 中维护一张 `readStates` 表，并记录每条 `present` 的 `fs/observed` 观测（即 Read/Write/Edit 工具在提交时发出的事件），按键为解析后的路径。execute 时：无已观测读记录 → 拒绝；当前 `ctx.fs.stat()` 版本与该观测版本不一致 → 拒绝。写完后用写入结果的版本重新建立基线——因此工具自身的写视为“已读”的最新基线。seam 暴露的是不透明 `FsVersion` 新鲜度令牌而非 mtime；比较该令牌是 seam 原生的陈旧性校验，严格强于 CC 的 mtime 比较。
 
 该工具为 `isConcurrencySafe = () => false`：它会改动共享的单元格状态与读基线，因此绝不可与并行的兄弟 `NotebookEdit` 调用重叠。
 

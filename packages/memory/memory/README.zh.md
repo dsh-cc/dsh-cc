@@ -4,7 +4,7 @@
 
 面向 DeepSeek Harness 的 Claude Code 风格文件记忆：可持久化的 memdir 格式、
 `memory` 系统提示词 section、`memory_save` 写入通道，以及通过 fork 的
-side-query 进行动态召回。所有文件访问都走可选的 `ctx.fs` 缝，因此远程或沙箱
+side-query 动态召回。所有文件访问都走可选的 `ctx.fs` 缝，因此远程或沙箱
 后端可无改动使用（无 provider 的宿主将记忆挂载为只读）。
 
 ## 本包提供的能力

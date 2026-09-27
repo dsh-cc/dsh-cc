@@ -22,6 +22,7 @@
  */
 
 import type { AliasInspection, AliasTarget, DetailedRoute, ResolvedRoute } from './types.ts'
+import { SYSTEMONE_PROTOCOL, isSystemOneModelId, isSystemOneTarget } from './systemone-guard.ts'
 
 /**
  * Claude Code family aliases. Unconfigured → inherit the parent route.
@@ -47,6 +48,9 @@ export const CC_ALIASES: readonly string[] = ['fable', 'opus', 'sonnet', 'haiku'
  *
  * `gauge` must never be used as agent frontmatter `model:` — it is a
  * typed-decision lane selected by decision consumers, not a generative alias.
+ * This is enforced, not just documented: a System One target keeps
+ * `protocol: 'systemone'` on its resolved route, and the chat path rejects it
+ * with `SystemOneChatModelError` (see `./systemone-guard.ts`).
  */
 export const LANE_ALIASES: readonly string[] = ['sketch', 'draft', 'blueprint', 'masterplan', 'architect', 'gauge']
 
@@ -231,21 +235,14 @@ export function createModelInspector(
         const foldedTarget = hit.trim().toLowerCase()
         if (followed.kind === 'route') return { kind: 'route', via: 'one-hop', hop: foldedTarget, route: followed.route }
         if (followed.kind === 'inherit') return { kind: 'inherit', via: 'one-hop', hop: foldedTarget }
-        return { kind: 'literal', route: { model: hit } }
+        return { kind: 'literal', route: literalRoute(hit) }
       }
       // Object form: forward the route fields that are present. `provider` and
       // `reasoningEffort` are optional (absent = inherit / no stamp); `model`
       // is always set on a schema-valid object entry. Object targets are
-      // concrete routes — they are not followed as alias names.
-      return {
-        kind: 'route',
-        via: 'configured',
-        route: {
-          ...(hit.provider === undefined ? {} : { provider: hit.provider }),
-          ...(hit.model === undefined ? {} : { model: hit.model }),
-          ...(hit.reasoningEffort === undefined ? {} : { reasoningEffort: hit.reasoningEffort }),
-        },
-      }
+      // concrete routes — they are not followed as alias names. The System One
+      // protocol marker is kept so the chat path can reject the route.
+      return { kind: 'route', via: 'configured', route: objectRoute(hit) }
     }
 
     // Unconfigured lane → follow its CC peer (`sketch` → `haiku`, …).
@@ -269,7 +266,7 @@ export function createModelInspector(
     if (/^[a-z]+$/.test(folded)) {
       warn(`cc-model-aliases: model "${trimmed}" is not a configured alias and is not builtin; passing through verbatim as a literal model id`)
     }
-    return { kind: 'literal', route: { model: trimmed } }
+    return { kind: 'literal', route: literalRoute(trimmed) }
   }
   return (model) => {
     if (model === undefined || model.trim().length === 0) return { kind: 'inherit' }
@@ -318,18 +315,30 @@ function followStringTarget(
   if (folded.length === 0 || folded === from || folded === 'inherit') return { kind: 'inherit' }
   const next = aliases.get(folded)
   if (next !== undefined && next !== null) {
-    if (typeof next === 'string') return { kind: 'route', route: { model: next } }
-    return {
-      kind: 'route',
-      route: {
-        ...(next.provider === undefined ? {} : { provider: next.provider }),
-        ...(next.model === undefined ? {} : { model: next.model }),
-        ...(next.reasoningEffort === undefined ? {} : { reasoningEffort: next.reasoningEffort }),
-      },
-    }
+    if (typeof next === 'string') return { kind: 'route', route: literalRoute(next) }
+    return { kind: 'route', route: objectRoute(next) }
   }
   if (BUILTIN_SET.has(folded)) return { kind: 'inherit' }
   return { kind: 'literal' }
+}
+
+/**
+ * Project an object-form alias target into a route: forward the present route
+ * fields, plus `protocol: 'systemone'` when the target is a System One target
+ * (explicit protocol field or the System One model-id family).
+ */
+function objectRoute(target: Exclude<AliasTarget, string | null>): ResolvedRoute {
+  return {
+    ...(target.provider === undefined ? {} : { provider: target.provider }),
+    ...(target.model === undefined ? {} : { model: target.model }),
+    ...(target.reasoningEffort === undefined ? {} : { reasoningEffort: target.reasoningEffort }),
+    ...(isSystemOneTarget(target) ? { protocol: SYSTEMONE_PROTOCOL } : {}),
+  }
+}
+
+/** A literal model-id route, marked System One when the id is in that family. */
+function literalRoute(model: string): ResolvedRoute {
+  return isSystemOneModelId(model) ? { model, protocol: SYSTEMONE_PROTOCOL } : { model }
 }
 
 /** Compact-fill a record's own string keys, folding each to lowercase. */
