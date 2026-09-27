@@ -1,0 +1,21 @@
+{
+  "name": "@dsh-cc/plugin-cc-codex-bridge",
+  "version": "0.8.1-rc.1",
+  "description": "Official dsh-cc plugin: an approval-free Codex rescue lane — one canonical, locked-down bash invocation auto-allowed via a PreToolUse hook, with Codex's internal sandbox off while the dsh outer sandbox remains the single write boundary.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": [
+    ".claude-plugin/plugin.json",
+    "commands",
+    "scripts",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/plugin/cc-codex-bridge"
+  }
+}

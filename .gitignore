@@ -162,9 +162,16 @@ packages/**/src/*.d.ts.map
 # per serena's official worktree guidance); serena's own .serena/.gitignore
 # keeps cache/ and project.local.yml machine-local.
 
-# scripts/lib/ contains source, not build output
+# scripts/lib/ contains source, not build output. A middle-slash pattern is
+# root-anchored, so each nested scripts/lib needs its own negation — first
+# party: the codex-bridge launcher's shared modules.
 !scripts/lib/
+!/packages/plugin/cc-codex-bridge/scripts/lib/
 
 # Test-suite scratch dirs (workflow-journal/tool-workflow suites seed temp
 # journals here relative to the run cwd; regenerated on every run)
 .scratch/
+
+# cc-codex-bridge launcher spec runtime dirs (fake codex stub fixtures,
+# regenerated per run under tests/.runtime/<pid>-<rand>/)
+/packages/plugin/cc-codex-bridge/tests/.runtime/

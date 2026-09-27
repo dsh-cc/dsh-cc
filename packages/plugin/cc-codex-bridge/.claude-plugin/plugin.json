@@ -1,0 +1,5 @@
+{
+  "name": "cc-codex-bridge",
+  "description": "Official dsh-cc plugin: an approval-free Codex rescue lane — one canonical, locked-down bash invocation auto-allowed via a PreToolUse hook, with Codex's internal sandbox off while the dsh outer sandbox remains the single write boundary.",
+  "version": "0.8.1-rc.1"
+}

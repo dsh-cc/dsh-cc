@@ -10,6 +10,11 @@
       "name": "dsh-cc-shunt",
       "source": "./packages/plugin/dsh-cc-shunt",
       "description": "Official dsh-cc plugin: hard PreToolUse gates redirect bulk reads/boilerplate generation to cheap-lane shunt-worker subagents to save main-context tokens."
+    },
+    {
+      "name": "cc-codex-bridge",
+      "source": "./packages/plugin/cc-codex-bridge",
+      "description": "Official dsh-cc plugin: an approval-free Codex rescue lane — one canonical, locked-down bash invocation auto-allowed via a PreToolUse hook, with Codex's internal sandbox off while the dsh outer sandbox remains the single write boundary."
     }
   ]
 }
