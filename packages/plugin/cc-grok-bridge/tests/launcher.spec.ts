@@ -46,6 +46,14 @@ describe('grok-review-run launcher — integration (real subprocess, staged stub
 
   afterEach(() => cleanupStages())
   afterAll(() => rmSync(RUNTIME_DIR, { recursive: true, force: true }))
+  // TEMP CI diagnostic (PR #166 forks-worker teardown hang): dump handle
+  // classes still registered at suite end. Remove once root-caused.
+  afterAll(() => {
+    if (process.env.CI) {
+      const handles = (process as never as { _getActiveHandles?: () => Array<{ constructor: { name: string } }> })._getActiveHandles?.() ?? []
+      console.error('CI-HANDLE-DUMP', JSON.stringify(handles.map((h) => h?.constructor?.name)))
+    }
+  })
 
   it('happy path fresh: exact argv (no --cwd, -p prompt last), GROK_HOME shadow, spawn cwd, exit 0, .text printed, auth 0600, prompt shadow unlinked', async () => {
     stage = newStage()

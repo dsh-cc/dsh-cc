@@ -308,6 +308,8 @@ export async function runLauncher(argv = process.argv.slice(2), deps = {}) {
     killGroup('SIGTERM')
     graceTimer = setTimeout(() => killGroup('SIGKILL'), REAP_GRACE_MS)
     budgetTimer = setTimeout(onReapBudgetExpiry, REAP_BUDGET_MS)
+    graceTimer.unref() // hygiene: alone, timers must not keep the process alive
+    budgetTimer.unref()
   }
 
   /** Memoized finalize: unlink shadow prompt → release → detach → exit. */

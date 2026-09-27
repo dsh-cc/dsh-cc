@@ -108,6 +108,7 @@ export function acquireLock(H) {
       /* lock vanished underneath us — release will notice too */
     }
   }, 60_000)
+  heartbeat.unref() // hygiene handle: never keep a process alive by itself
   let released = false
   return () => {
     if (released) return
