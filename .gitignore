@@ -167,6 +167,7 @@ packages/**/src/*.d.ts.map
 # party: the codex-bridge launcher's shared modules.
 !scripts/lib/
 !/packages/plugin/cc-codex-bridge/scripts/lib/
+!/packages/plugin/cc-grok-bridge/scripts/lib/
 
 # Test-suite scratch dirs (workflow-journal/tool-workflow suites seed temp
 # journals here relative to the run cwd; regenerated on every run)
@@ -175,3 +176,4 @@ packages/**/src/*.d.ts.map
 # cc-codex-bridge launcher spec runtime dirs (fake codex stub fixtures,
 # regenerated per run under tests/.runtime/<pid>-<rand>/)
 /packages/plugin/cc-codex-bridge/tests/.runtime/
+/packages/plugin/cc-grok-bridge/tests/.runtime/

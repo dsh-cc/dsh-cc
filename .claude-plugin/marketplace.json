@@ -15,6 +15,11 @@
       "name": "cc-codex-bridge",
       "source": "./packages/plugin/cc-codex-bridge",
       "description": "Official dsh-cc plugin: an approval-free Codex rescue lane — one canonical, locked-down bash invocation auto-allowed via a PreToolUse hook, with Codex's internal sandbox off while the dsh outer sandbox remains the single write boundary."
+    },
+    {
+      "name": "cc-grok-bridge",
+      "source": "./packages/plugin/cc-grok-bridge",
+      "description": "Official dsh-cc plugin: an approval-free Grok review lane — one canonical, locked-down bash invocation auto-allowed via a PreToolUse hook, with Grok's tool approvals bypassed inside the run while the dsh outer sandbox remains the single write boundary."
     }
   ]
 }

@@ -2311,6 +2311,8 @@ importers:
 
   packages/plugin/cc-codex-bridge: {}
 
+  packages/plugin/cc-grok-bridge: {}
+
   packages/plugin/dsh-cc-agents: {}
 
   packages/plugin/dsh-cc-shunt: {}
