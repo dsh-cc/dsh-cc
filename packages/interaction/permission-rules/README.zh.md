@@ -27,7 +27,7 @@ Claude Code 兼容的权限规则引擎。解析 `ToolName` 与 `ToolName(conten
 3. **整工具 deny** → deny。
 4. **内容 deny**（全部来源）→ deny——deny 优先排序（D2）：内容 deny 胜过任何内容 allow 与整工具 ask，适用于所有模式。
 5. **整工具 ask** → ask（当设置了 `exemptSandboxedBashFromToolAsk` 时，被沙箱限制的 `Bash` 豁免并直接 allow）。
-6. **内容 ask**，随后**内容 allow**，按来源优先级（行为在外、来源在内；行为+来源内保持声明顺序）。
+6. **内容 ask**，随后**内容 allow**，按来源优先级（行为在外、来源在内；行为+来源内保持声明顺序）。bash 命令的内容相位按顶层 shell **段**求值（D1/PR-3）：命令先切成段（`splitShellCommand`），deny/ask 在任一段的 raw 文本或剥去赋值前缀后的 subject 上命中，而内容 allow 要求**每一**段都命中（带命令替换或写入重定向的污点段永不可 allow；带赋值前缀的段只按 raw 文本匹配）。扫描器无法信任的命令（引号未闭合、heredoc、子 shell、组语法、保留字）视为 opaque 且 fail closed：内容 allow 相位整体跳过。
 7. **模式**短路：`bypassPermissions` 放行一切（除非 `disableBypassPermissionsMode`）；`acceptEdits` 自动放行文件编辑工具；`plan` 自动放行只读工具。`auto` 不是 evaluate 短路——它按 `default` 评估，但宽泛的 allow 规则会被挂起（见下）。
 8. **整工具 allow** 是该工具的粗略默认——没有更具体的规则命中时放行。
 9. **无命中** → passthrough 给下游监听器（最终到审批缝），后者仍可能 `ask`。
