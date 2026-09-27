@@ -20,6 +20,36 @@ remains the single write boundary — workspace plus temp areas only.
 - Codex credentials are synced into a `0700` temp-dir home per run; the Codex CLI
   itself resolves to a validated absolute path at spawn.
 
+## Usage
+
+1. **Status at session start.** A SessionStart hook fires on every session
+   (startup and resume alike) and injects a `cc-codex-bridge:` block stating
+   whether the lane is **ARMED** — including the exact canonical invocation to
+   type — or **NOT armed** with the machine reason in plain words.
+2. **Invoke the rescue** with the plugin command:
+
+   ```sh
+   /cc-codex-bridge:rescue review the failing spec
+   ```
+
+   The bare `rescue` name may collide with the Codex plugin's command, in
+   which case the bare registration is skipped — the scoped name above and the
+   always-present SessionStart canonical block keep the lane usable regardless.
+3. **Multi-line prompts** go through `--prompt-file`: write the prompt text to
+   a file inside the workspace (or the canonical tmpdir) and use the
+   `--prompt-file <path>` form from the SessionStart block.
+4. **`--last` only on explicit continue**: the resume flag is used only when
+   the user explicitly asks to continue the previous rescue.
+5. **Fail closed.** If the SessionStart block is absent or reports NOT armed,
+   the model must not guess or construct the canonical invocation — the rescue
+   falls back to the normal, approval-requiring path (stock `/codex:rescue`).
+
+## Dev-session degradation
+
+In dsh-cc's own repo dev sessions the launcher anchor sits inside the session
+workspace, so arming is refused (`anchor-under-writable-root`) and the lane
+degrades to the normal approval path. Expected and documented.
+
 ## Security model (capability tunnel, stated plainly)
 
 Enabling the bridge means explicitly dropping the human checkpoint for this one
@@ -31,12 +61,11 @@ installation; **uninstalling or disabling the plugin is the kill switch**.
 
 ## Current status
 
-PR-1 shipped the skeleton and PR-2 activates the gate: the plugin installs a
-PreToolUse hook that auto-allows exactly the canonical rescue invocation
-(byte-pinned anchors, expansion-free, disarm/refusal-checked per call) — the
-lane is live once the plugin is installed. **Still to come (PR-3)**: the entry
-surface healing — a SessionStart hook that rewrites `/rescue` with the
-canonical text and lands the final rescue.md.
+PR-1 shipped the skeleton, PR-2 activated the gate (the PreToolUse hook that
+auto-allows exactly the canonical rescue invocation), and PR-3 completes the
+entry surface: the SessionStart status/canonical-block hook and the final
+`/cc-codex-bridge:rescue` command — the lane is fully usable once the plugin
+is installed.
 
 ## Install / uninstall
 
