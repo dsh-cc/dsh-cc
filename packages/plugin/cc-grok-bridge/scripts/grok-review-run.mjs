@@ -209,6 +209,8 @@ export async function runLauncher(argv = process.argv.slice(2), deps = {}) {
         for (const sig of SIGNALS) process.off(sig, handler)
       }
     },
+    prepareHome,
+    acquireLock,
     platform: process.platform,
     cwd: () => process.cwd(),
     tmpdir: os.tmpdir,
@@ -375,7 +377,10 @@ export async function runLauncher(argv = process.argv.slice(2), deps = {}) {
     // acquireLock) — no signal window can strand the lock: a pre-lock
     // signal hits the guarded finalize with nothing to reap/release.
     detachRef.fn = d.onSignal(onSignal)
-    ;({ H } = prepareHome({ cwd: d.cwd(), tmpdir: d.tmpdir() }))
+    // A registration-time signal finalized us already (T5 window): do NOT
+    // proceed to touch the home or spawn anything.
+    if (finalizeDone) return 130
+    ;({ H } = d.prepareHome({ cwd: d.cwd(), tmpdir: d.tmpdir() }))
     // Orphan marker check (codex-R5 B3): STRICTLY precedes the step-6
     // sweep, and `.orphaned` is never in the sweep allowlist — the poison
     // marker survives until a human removes it.
@@ -384,7 +389,7 @@ export async function runLauncher(argv = process.argv.slice(2), deps = {}) {
         'previous run left a live child after the reap budget (H/.orphaned) — inspect processes and remove the marker to re-enable this lane',
       )
     }
-    releaseLock = acquireLock(H)
+    releaseLock = d.acquireLock(H)
 
     // Step 6: sweep BEFORE credentials, inside the lock (order closes the
     // planted-destination DoS). Sweep failure of any entry is fail-closed.
@@ -413,6 +418,9 @@ export async function runLauncher(argv = process.argv.slice(2), deps = {}) {
     const args = ['--permission-mode', 'bypassPermissions', '--output-format', 'json']
     if (last) args.push('-c')
     args.push(...promptArg)
+    // Pre-spawn signal window (T5/T6 boundary): a signal that finalized us
+    // mid-INIT must not still produce a run.
+    if (finalizeDone) return 130
     const env = buildChildEnv(d.env, H)
     child = d.spawn(grok, args, {
       cwd: realpathSync(d.cwd()),

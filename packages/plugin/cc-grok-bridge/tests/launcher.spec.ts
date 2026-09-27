@@ -461,11 +461,29 @@ describe('grok-review-run — unit seams (injected deps)', () => {
   })
 
   function depsFor(s: ReturnType<typeof newStage>, over: Record<string, unknown> = {}) {
+    const { R, H } = homePathsFor(s)
     return {
       cwd: () => s.ws,
       tmpdir: () => s.varDir,
       homedir: () => s.fakeHome,
       env: { ...baseEnv(s) },
+      // Fake home seams: real fs, ZERO timers/process handles (the real
+      // acquireLock carries a 60s heartbeat interval — exactly the class of
+      // lingering handle the CI forks pool hangs on).
+      prepareHome: () => {
+        mkdirSync(R, { recursive: true, mode: 0o700 })
+        mkdirSync(H, { recursive: true, mode: 0o700 })
+        return { tmp: s.varDir, R, H }
+      },
+      acquireLock: () => {
+        mkdirSync(`${H}/.lock`)
+        let released = false
+        return () => {
+          if (released) return
+          released = true
+          rmSync(`${H}/.lock`, { recursive: true, force: true })
+        }
+      },
       ...over,
     }
   }
