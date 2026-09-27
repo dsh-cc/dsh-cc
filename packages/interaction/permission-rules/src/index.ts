@@ -28,7 +28,7 @@ import { parseRule, ruleString } from './parser.ts'
 import { criticalDenyRules } from './critical-deny.ts'
 import { pinDefaultMode } from './default-mode-pin.ts'
 import { mergeRuleSets } from './evaluate.ts'
-import { filterAutoAllowRules } from './auto-rule-filter.ts'
+import { autoSuspensionReasonOf, filterAutoAllowRules, type SuspensionCategory } from './auto-rule-filter.ts'
 import { registerPreExecute } from './pre-execute.ts'
 import type { AutoStage } from './auto-stage.ts'
 import type { PiProbe } from './pi-probe.ts'
@@ -122,6 +122,7 @@ export {
   SWITCHABLE_PERMISSION_MODES,
   PLAN_READONLY_REASON,
   type PermissionMode,
+  type PermissionRule,
   type SwitchablePermissionMode,
 } from './types.ts'
 export {
@@ -131,7 +132,7 @@ export {
 } from './parser.ts'
 export { canonicalizeHostname, isWebFetchRuleTool } from './domain.ts'
 export { summarizeChildHandoff, handoffWarningText, HANDOFF_ASK_STORM, type ChildHandoffSummary } from './return-check.ts'
-export { filterAutoAllowRules } from './auto-rule-filter.ts'
+export { autoSuspendedReason, autoSuspensionReasonOf, filterAutoAllowRules, type SuspensionCategory } from './auto-rule-filter.ts'
 export { DEFAULT_MEDIUM_PATTERNS, DEFAULT_DANGEROUS_PATTERNS, CRITICAL_BASH_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
 export { pickClassifierRouteName, pickGaugeRouteName, GAUGE_STRING_PAIR_KEY, type ClassifierBackend, type PolicyWarn } from './route-policy.ts'
@@ -421,17 +422,12 @@ export class PermissionRulesService extends Service {
    * Grant a session-scoped allow rule on the agent's session: in-memory match
    * for the rest of this session plus a `permission/session-allow` audit
    * event. Never touches the `permissions` settings namespace.
-   * @param agent - the agent whose session is granted the rule.
-   * @param rule - the rule string (e.g. `Bash(npm )` or a whole-tool name).
    */
   addSessionAllow(agent: Agent, rule: string): void {
     this.sessionAllowlist.add(agent.session, rule)
   }
 
-  /**
-   * Drop every session-scoped rule for the agent's session (audited clear
-   * record in the session log).
-   */
+  /** Drop every session-scoped rule for the agent's session (audited clear). */
   clearSessionAllows(agent: Agent): void {
     this.sessionAllowlist.clear(agent.session)
   }
@@ -482,17 +478,20 @@ export class PermissionRulesService extends Service {
   }
 
   /**
-   * The rule set a call in `mode` is evaluated against (D1 seam): in `auto`
-   * mode the merged set with suspended allow rules filtered out
-   * (`classifyAllShell` from the live autoMode section); every other mode
-   * returns the merged set unchanged. The single seam for `/permissions` and
-   * any future preview consumer.
+   * The rule set a call in `mode` is evaluated against (D1): `auto` filters
+   * suspended allow rules out of the merged set (live `classifyAllShell`);
+   * every other mode returns it unchanged. Also the `/permissions` seam.
    */
   effectiveRuleSet(mode: PermissionMode): PermissionRuleSet {
     if (mode !== 'auto') return this.state.rules
     return filterAutoAllowRules(this.state.rules, {
       classifyAllShell: this.settingsSection().autoMode?.classifyAllShell === true,
     })
+  }
+
+  /** The auto-suspension cause of one serialized rule (D6); malformed text yields undefined. */
+  autoSuspensionReason(ruleText: string): SuspensionCategory | undefined {
+    return autoSuspensionReasonOf(ruleText, this.settingsSource, this.settingsSection().autoMode)
   }
 }
 

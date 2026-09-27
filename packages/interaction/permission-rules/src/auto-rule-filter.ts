@@ -9,7 +9,8 @@
 
 import { ccToolAliases } from '@dsh-cc/tools'
 import { hasUnescapedWildcard } from './parser.ts'
-import type { PermissionRule, PermissionRuleSet } from './types.ts'
+import { parseRuleSafe } from './subsumption.ts'
+import type { PermissionRule, PermissionRuleSet, PermissionRuleSource } from './types.ts'
 
 /** Whole-tool allow rules for these spellings are always suspended in auto. */
 const SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'subagent', 'subagent_fork'])
@@ -74,6 +75,61 @@ function suspended(rule: PermissionRule, classifyAllShell: boolean): boolean {
   if (head.trim().length < 3) return true
   if (INTERPRETER_TOKENS.has(firstToken(head))) return true
   return PACKAGE_RUNNER.test(head.trim().toLowerCase())
+}
+
+/**
+ * Why an allow rule is suspended from the rule set under auto mode (D6):
+ * the cause categories of {@link suspended}, reported to the user when an
+ * "always allow" write lands on a rule class auto mode will ignore.
+ */
+export type SuspensionCategory =
+  | 'whole-tool'
+  | 'short-head'
+  | 'interpreter'
+  | 'package-runner'
+  | 'subagent'
+  | 'classify-all-shell'
+
+/**
+ * The suspension cause of one allow rule under auto mode, in the precedence
+ * `subagent` > `whole-tool` > `short-head` > `interpreter` >
+ * `package-runner` > `classify-all-shell` — the last reported only when
+ * `classifyAllShell` is on, the rule governs a shell tool, and no more
+ * specific category applies. Undefined when the rule is not suspended.
+ * @param rule - the parsed authored rule.
+ * @param opts - `classifyAllShell` from the `autoMode` settings section.
+ */
+export function autoSuspendedReason(
+  rule: PermissionRule,
+  opts: { classifyAllShell: boolean },
+): SuspensionCategory | undefined {
+  const shell = isBashRuleTool(rule.toolName) || isPowerShellRuleTool(rule.toolName)
+  if (SUBAGENT_TOOLS.has(rule.toolName)) return 'subagent'
+  if (rule.content === undefined) {
+    if (shell) return 'whole-tool'
+  } else if (shell) {
+    const head = matcherHead(rule)
+    if (head.trim().length < 3) return 'short-head'
+    if (INTERPRETER_TOKENS.has(firstToken(head))) return 'interpreter'
+    if (PACKAGE_RUNNER.test(head.trim().toLowerCase())) return 'package-runner'
+  }
+  return opts.classifyAllShell && shell ? 'classify-all-shell' : undefined
+}
+
+/**
+ * String-level convenience wrapper over {@link autoSuspendedReason} (D6):
+ * parses `ruleText` with the tolerant parser (garbage ⇒ `undefined`, never a
+ * throw). Settings-facing callers pass their live autoMode section so the
+ * answer follows hot reloads.
+ */
+export function autoSuspensionReasonOf(
+  ruleText: string,
+  source: PermissionRuleSource,
+  autoMode: { classifyAllShell?: boolean } | undefined,
+): SuspensionCategory | undefined {
+  const rule = parseRuleSafe(ruleText, 'allow', source)
+  if (rule === undefined) return undefined
+  return autoSuspendedReason(rule, { classifyAllShell: autoMode?.classifyAllShell === true })
 }
 
 /**

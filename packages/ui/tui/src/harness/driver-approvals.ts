@@ -20,7 +20,12 @@ import {
   typeQuestionText,
 } from '../store.ts'
 import type { ApprovalAnswerKind, SettingsProviderLike } from '../state/driver-types.ts'
-import { PERMISSION_SETTINGS_NAMESPACE, parseRuleSafe, ruleSubsumes } from '@dsh-cc/permission-rules'
+import {
+  PERMISSION_SETTINGS_NAMESPACE,
+  parseRuleSafe,
+  ruleSubsumes,
+  type SuspensionCategory,
+} from '@dsh-cc/permission-rules'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import {
   UserQuestionError,
@@ -121,6 +126,16 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
       rt.showNotice('Allowed once only — no writable settings provider is mounted.')
       return
     }
+    // D6 suspension notices: reported ONLY in `auto` mode, through the
+    // permission engine's live `autoMode.classifyAllShell` setting. An absent
+    // engine (plugin not mounted) silently skips suspension reporting — the
+    // persist path never depends on it.
+    const engine = rt.state().permissionMode === 'auto'
+      ? (rt.ctx.get('permissionRules') as
+          | { autoSuspensionReason(rule: string): SuspensionCategory | undefined }
+          | undefined)
+      : undefined
+    const derivedReason = engine?.autoSuspensionReason(rule)
     let coveredBy: string | undefined
     let replaced = 0
     try {
@@ -152,10 +167,31 @@ export function createApprovalsSection(rt: DriverApprovalsCtx): ApprovalsSection
       return
     }
     if (coveredBy !== undefined) {
+      if (engine !== undefined) {
+        const coveringReason = engine.autoSuspensionReason(coveredBy)
+        if (derivedReason === undefined && coveringReason !== undefined) {
+          // Cell 3: covering rule suspended, derived effective — the swallow
+          // stays (PR-2), but the user hears that the covering rule is dead
+          // under auto.
+          rt.showNotice(`Already covered by ${coveredBy} — note: that rule is suspended under auto; it will not apply there.`)
+          return
+        }
+        if (derivedReason !== undefined && coveringReason !== undefined) {
+          // Cell 4: both rules suspended — neither applies under auto.
+          rt.showNotice(`Already covered by ${coveredBy} — note: auto mode suspends the applicable rules (${derivedReason}, ${coveringReason}); neither applies there. The "session" answer works today.`)
+          return
+        }
+        // Cell 2: covering rule effective — plain notice regardless of the
+        // derived rule's suspension (the grant genuinely applies).
+      }
       rt.showNotice(`Already covered by ${coveredBy}`)
       return
     }
-    rt.showNotice(`Always allow: ${rule}${replaced > 0 ? ` — replaced ${replaced} narrower rules` : ''}`)
+    rt.showNotice(`Always allow: ${rule}${replaced > 0 ? ` — replaced ${replaced} narrower rules` : ''}${
+      derivedReason === undefined
+        ? ''
+        : ` — note: auto mode suspends this rule class (${derivedReason}); it will keep asking there. The "session" answer works today.`
+    }`)
   }
 
   /**

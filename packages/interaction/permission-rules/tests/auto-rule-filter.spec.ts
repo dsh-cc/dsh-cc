@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseRule } from '../src/parser.ts'
-import { filterAutoAllowRules } from '../src/auto-rule-filter.ts'
+import { autoSuspendedReason, filterAutoAllowRules } from '../src/auto-rule-filter.ts'
 import { EMPTY_RULE_SET, type PermissionRuleSet } from '../src/types.ts'
 
 function rules(overrides: Partial<PermissionRuleSet> = {}): PermissionRuleSet {
@@ -85,5 +85,55 @@ describe('filterAutoAllowRules', () => {
 
   it('returns an empty allow list for the empty rule set', () => {
     expect(filterAutoAllowRules(EMPTY_RULE_SET, { classifyAllShell: false })).toEqual(EMPTY_RULE_SET)
+  })
+})
+
+describe('autoSuspendedReason (D6 cause categories)', () => {
+  const reason = (raw: string, classifyAllShell = false) =>
+    autoSuspendedReason(parseRule(raw, 'allow', 'config'), { classifyAllShell })
+
+  it('reports whole-tool for whole-tool bash and PowerShell allows', () => {
+    expect(reason('Bash')).toBe('whole-tool')
+    expect(reason('PowerShell')).toBe('whole-tool')
+    expect(reason('pwsh')).toBe('whole-tool')
+  })
+
+  it('reports short-head for effectively blanket bash content allows', () => {
+    expect(reason('Bash(cu*)')).toBe('short-head')
+    expect(reason('Bash( *)')).toBe('short-head')
+  })
+
+  it('reports interpreter for interpreter first tokens', () => {
+    expect(reason('Bash(python:*)')).toBe('interpreter')
+    expect(reason('Bash(node script.js)')).toBe('interpreter')
+    expect(reason('Bash(ruby)')).toBe('interpreter')
+  })
+
+  it('reports package-runner for package-runner first tokens', () => {
+    expect(reason('Bash(npm run build)')).toBe('package-runner')
+    expect(reason('Bash(pnpm dlx *)')).toBe('package-runner')
+    expect(reason('Bash(npx *)')).toBe('package-runner')
+  })
+
+  it('reports subagent for every Task/Agent/subagent spelling, whole-tool and content', () => {
+    expect(reason('Task')).toBe('subagent')
+    expect(reason('subagent_fork')).toBe('subagent')
+    expect(reason('Task(prompt)')).toBe('subagent')
+  })
+
+  it('classify-all-shell reports only when no more specific category applies', () => {
+    // Precedence: whole-tool/interpreter beat classify-all-shell.
+    expect(reason('Bash', true)).toBe('whole-tool')
+    expect(reason('Bash(python:*)', true)).toBe('interpreter')
+    // A lark-cli-style long-head bash rule: suspended only by the sweep.
+    expect(reason('Bash(npm publish:*)', true)).toBe('classify-all-shell')
+    expect(reason('Bash(npm publish:*)', false)).toBeUndefined()
+    expect(reason('pwsh(Get-ChildItem)', true)).toBe('classify-all-shell')
+  })
+
+  it('reports undefined for non-suspended rules', () => {
+    expect(reason('Edit')).toBeUndefined()
+    expect(reason('Edit(.git*)')).toBeUndefined()
+    expect(reason('Bash(npm publish:*)', false)).toBeUndefined()
   })
 })
