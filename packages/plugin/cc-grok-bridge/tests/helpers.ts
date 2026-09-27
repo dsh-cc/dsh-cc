@@ -151,12 +151,13 @@ export function spawnLauncher(
       resolve({ child, code, signal, stdout, stderr })
       // Free the child handle + pipes once settled: under exitOnly, the
       // launcher's 'exit' precedes its 'close', and a surviving grandchild
-      // (the launcher's detached grok stub) can keep our pipe ends alive
-      // past the test — a forked vitest worker then refuses to terminate
-      // (PR #166 CI red, 2026-09-27; diagnosed via a CI-only handle dump:
-      // leaked ChildProcess pid=<the sigterm-me launcher>, exitCode=130).
+      // (the launcher's detached grok stub) can keep the child handle
+      // registered past the test even after stream.destroy() — a forked
+      // vitest worker then refuses to terminate (PR #166 CI red, twice;
+      // dump: leaked ChildProcess pid=<sigterm-me launcher>, exitCode=130).
       child.stdout?.destroy()
       child.stderr?.destroy()
+      child.unref()
     }
     // A spawn-level failure (EAGAIN under full-suite load, ENOENT) emits
     // 'error' and neither 'exit' nor 'close' — settling on it keeps the
