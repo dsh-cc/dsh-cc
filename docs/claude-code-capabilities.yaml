@@ -2780,6 +2780,48 @@ capabilities:
         8 files per provider / 12000 chars per section, opt-out via the
         `cc-foreign-rules.disabled` settings namespace. No format conversion.
 
+  plugins.grok-bridge:
+    title: Grok review bridge plugin (cc-grok-bridge)
+    category: plugins
+    plane: host
+    upstream:
+      summary: >-
+        dsh-cc extension with no Claude Code analog: an official marketplace
+        plugin providing an approval-free Grok review lane — one canonical,
+        byte-pinned bash invocation auto-allowed through a PreToolUse hook,
+        with the armed/refused status and the exact canonical command surfaced
+        at session start via a SessionStart additionalContext hook and a
+        static /review slash command.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/plugin/cc-grok-bridge/scripts/grok-review-run.mjs, anchor: "GROK_HOME: H" }
+      - { type: source, path: packages/plugin/cc-grok-bridge/scripts/lib/canonical.mjs, anchor: "export function arming" }
+      - { type: source, path: packages/plugin/cc-grok-bridge/hooks/grok-review-allow.mjs, anchor: "permissionDecision: 'allow'" }
+      - { type: source, path: packages/plugin/cc-grok-bridge/hooks/grok-review-context.mjs, anchor: "hookEventName: 'SessionStart'" }
+      - { type: source, path: packages/plugin/cc-grok-bridge/hooks/hooks.json, anchor: "SessionStart" }
+      - { type: source, path: packages/plugin/cc-grok-bridge/commands/review.md, anchor: "If the SessionStart block is missing or reports NOT armed, STOP" }
+      - { type: test, path: packages/plugin/cc-grok-bridge/tests/hook.spec.ts }
+      - { type: test, path: packages/plugin/cc-grok-bridge/tests/hook-context.spec.ts }
+      - { type: test, path: packages/subagent/task/tests/e2e-grok-bridge.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        First-party dsh-cc plugin (design:
+        docs/plans/2026-09-27-grok-review-bridge.md): Grok's session state
+        cannot initialize under a dsh workspace-write sandbox (~/.grok is
+        outside the writable roots), which the bridge solves by relocating
+        GROK_HOME into the canonical tmpdir and seeding auth.json; the
+        sandbox-write boundary stays entirely on the dsh side while Grok's
+        internal approvals are bypassed inside the run. Opt-in by
+        installation; uninstall/disable is the kill switch. In dsh-cc's own
+        repo dev sessions arming is refused (launcher under the workspace)
+        and the lane degrades to the normal approval-requiring path.
+
   plugins.loader:
     title: Plugin system
     category: plugins
