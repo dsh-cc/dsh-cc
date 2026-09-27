@@ -346,3 +346,171 @@ describe('unified modal pipeline (approvals + questions share one FIFO)', () => 
     expect(driver.state.question).toBeUndefined()
   })
 })
+
+/**
+ * D6 always-grant suspension notices: in `auto` mode the "always" write path
+ * reports whether the derived (and any covering) rule class is suspended by
+ * auto mode. Fixtures mirror approval-preview.spec's write-path harness —
+ * a raw-section settings provider plus a fake permission engine whose
+ * `autoSuspensionReason` answers per rule string — with a seeded
+ * `permission/mode` session event flipping the display mode.
+ */
+
+interface SuspensionFixture {
+  ctx: Record<string, unknown>
+  agent: { id: string; session: { id: string; events: unknown[] } }
+  request(req: { agent: unknown; toolName: string; callId?: string }): Promise<string>
+  settings: {
+    currentUser: Record<string, unknown>
+    editCalls: unknown[]
+  }
+}
+
+/** A paired tool/call event so the approval preview carries `npm install foo`. */
+const callEvent = (callId: string, args: unknown): unknown => ({
+  type: 'tool/call',
+  data: { callId, arguments: JSON.stringify(args) },
+})
+
+function makeSuspensionCtx(
+  mode: 'auto' | 'default',
+  userAllow: string[],
+  suspensionOf: (rule: string) => string | undefined,
+): SuspensionFixture {
+  const handlers = new Set<(req: { agent: unknown; toolName: string }, next: () => unknown) => unknown>()
+  const events = [callEvent('c1', { command: 'npm install foo' })]
+  if (mode === 'auto') events.push({ type: 'permission/mode', data: { mode: 'auto' } })
+  const agent = {
+    id: 'a-susp',
+    session: { id: 's-susp', header: {}, events, snapshotEvents() { return this.events } },
+    options: {},
+    status: 'idle',
+  }
+  const settings = {
+    writable: true,
+    currentUser: { allow: structuredClone(userAllow) } as Record<string, unknown>,
+    editCalls: [] as unknown[],
+    async editUserSection(
+      _ns: unknown,
+      edit: (rawSection: Record<string, unknown>) => Record<string, unknown> | undefined,
+    ) {
+      settings.editCalls.push(null)
+      const next = edit(structuredClone(settings.currentUser))
+      if (next === undefined) return
+      settings.currentUser = next
+    },
+  }
+  const engine = { autoSuspensionReason: suspensionOf }
+  const ctx: Record<string, unknown> = {
+    get(key: string) {
+      if (key === 'agentPresets') {
+        return { defaultId: 'cc', resolve: async () => ({ id: 'cc' }), mount: async () => ({ id: 'cc' }) }
+      }
+      if (key === 'settings') return settings
+      if (key === 'permissionRules') return engine
+      return undefined
+    },
+    on(event: string, handler: (req: { agent: unknown; toolName: string }, next: () => unknown) => unknown) {
+      if (event === 'approval/request') handlers.add(handler)
+      return () => {}
+    },
+    agents: { create: async () => ({ agent, dispose: async () => {} }) },
+  }
+  return {
+    ctx,
+    agent,
+    settings,
+    request(req) {
+      let result: unknown
+      for (const handler of handlers) result = handler(req, () => undefined)
+      return Promise.resolve(result as Promise<string>)
+    },
+  }
+}
+
+describe('always-grant suspension notices (D6 four cells × mode gate)', () => {
+  let prevHome: string | undefined
+  let tempHome: string
+
+  beforeEach(() => {
+    prevHome = process.env.DSH_HOME
+    tempHome = mkdtempSync(join(tmpdir(), 'dsh-driver-approval-susp-'))
+    process.env.DSH_HOME = tempHome
+  })
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = prevHome
+  })
+
+  /** Fire a Bash approval for `npm install foo` (derives `Bash(npm )`) and answer "always". */
+  async function alwaysAllowBash(
+    mode: 'auto' | 'default',
+    userAllow: string[],
+    suspensionOf: (rule: string) => string | undefined,
+  ): Promise<{ fixture: SuspensionFixture; notice: string | undefined }> {
+    const fixture = makeSuspensionCtx(mode, userAllow, suspensionOf)
+    const driver = await createDriver(fixture.ctx as never, {})
+    const pending = fixture.request({ agent: fixture.agent, toolName: 'Bash', callId: 'c1' })
+    // Sanity: the seeded session event really drove the display mode.
+    expect(driver.state.permissionMode).toBe(mode)
+    driver.answerApproval('always')
+    await pending
+    await new Promise(resolve => setTimeout(resolve, 0))
+    return { fixture, notice: driver.state.notice }
+  }
+
+  const suspendedShortHead = (rule: string) => (rule === 'Bash(npm )' ? 'short-head' : undefined)
+
+  it('cell 1 (auto): a suspended derived rule appends the suspension note to the success notice', async () => {
+    const { fixture, notice } = await alwaysAllowBash('auto', [], suspendedShortHead)
+    expect(fixture.settings.currentUser).toEqual({ allow: ['Bash(npm )'] })
+    expect(notice).toBe('Always allow: Bash(npm ) — note: auto mode suspends this rule class (short-head); it will keep asking there. The "session" answer works today.')
+  })
+
+  it('cell 2 (auto): an effective covering rule keeps the plain covered-by notice', async () => {
+    const { notice } = await alwaysAllowBash('auto', ['Bash(npm )'], () => undefined)
+    expect(notice).toBe('Already covered by Bash(npm )')
+  })
+
+  it('cell 2 (auto, derived suspended + covering effective): plain covered-by notice, no suspension text', async () => {
+    // Covering whole-tool `Bash(npm)` is effective; the derived `Bash(npm )`
+    // is suspended — the grant applies through the covering rule, so no
+    // suspension warning must surface.
+    const suspensionOf = (rule: string) => (rule === 'Bash(npm )' ? 'short-head' : undefined)
+    const { notice } = await alwaysAllowBash('auto', ['Bash(npm)'], suspensionOf)
+    expect(notice).toBe('Already covered by Bash(npm)')
+  })
+
+  it('cell 3 (auto): a suspended covering rule over an effective derived rule keeps the swallow and notes the suspension', async () => {
+    // `Bash(npm)` (prefix `npm`, suspended whole-tool) covers `Bash(npm )`.
+    const suspensionOf = (rule: string) => (rule === 'Bash(npm)' ? 'whole-tool' : undefined)
+    const { fixture, notice } = await alwaysAllowBash('auto', ['Bash(npm)'], suspensionOf)
+    expect(fixture.settings.currentUser).toEqual({ allow: ['Bash(npm)'] })
+    expect(notice).toBe('Already covered by Bash(npm) — note: that rule is suspended under auto; it will not apply there.')
+  })
+
+  it('cell 4 (auto): both rules suspended notes both categories and points at the session answer', async () => {
+    const suspensionOf = (rule: string) =>
+      rule === 'Bash(npm)' ? 'whole-tool' : rule === 'Bash(npm )' ? 'short-head' : undefined
+    const { fixture, notice } = await alwaysAllowBash('auto', ['Bash(npm)'], suspensionOf)
+    expect(fixture.settings.currentUser).toEqual({ allow: ['Bash(npm)'] })
+    expect(notice).toBe('Already covered by Bash(npm) — note: auto mode suspends the applicable rules (short-head, whole-tool); neither applies there. The "session" answer works today.')
+  })
+
+  it('non-auto mode reports zero suspension notices in every cell', async () => {
+    const cell1 = await alwaysAllowBash('default', [], suspendedShortHead)
+    expect(cell1.notice).toBe('Always allow: Bash(npm )')
+    const cell2 = await alwaysAllowBash('default', ['Bash(npm )'], suspendedShortHead)
+    expect(cell2.notice).toBe('Already covered by Bash(npm )')
+    const cell3 = await alwaysAllowBash(
+      'default',
+      ['Bash(npm)'],
+      rule => (rule === 'Bash(npm)' ? 'whole-tool' : undefined),
+    )
+    expect(cell3.notice).toBe('Already covered by Bash(npm)')
+    const cell4 = await alwaysAllowBash('default', ['Bash(npm)'], rule =>
+      rule === 'Bash(npm)' ? 'whole-tool' : rule === 'Bash(npm )' ? 'short-head' : undefined)
+    expect(cell4.notice).toBe('Already covered by Bash(npm)')
+  })
+})

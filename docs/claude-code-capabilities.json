@@ -5316,6 +5316,26 @@
         },
         {
           "type": "test",
+          "path": "packages/interaction/permission-rules/tests/auto-rule-filter.spec.ts",
+          "anchor": "autoSuspendedReason"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/permission-rules.spec.ts",
+          "anchor": "autoSuspensionReason (D6 service notice seam)"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/driver-approval.spec.ts",
+          "anchor": "always-grant suspension notices (D6 four cells"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/driver-approvals.ts",
+          "anchor": "suspension notices"
+        },
+        {
+          "type": "test",
           "path": "packages/interaction/permission-rules/tests/evaluate.spec.ts",
           "anchor": "content-deny beats a same-source allow (D2)"
         },

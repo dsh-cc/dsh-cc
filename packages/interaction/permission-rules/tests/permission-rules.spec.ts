@@ -566,3 +566,43 @@ describe('defaultMode getter (live merged settings default)', () => {
     expect(ctx.permissionRules.defaultMode).toBe('acceptEdits')
   })
 })
+
+describe('autoSuspensionReason (D6 service notice seam)', () => {
+  async function mountWithSettings(): Promise<Context> {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(MemorySettings)
+    await ctx.plugin(PermissionRules, {
+      fileEditTools: ['edit'],
+      readOnlyTools: ['read'],
+      bashToolName: 'Bash',
+    })
+    return ctx
+  }
+
+  it('parses raw rule strings and reports the suspension cause', async () => {
+    const ctx = await mountWithSettings()
+    expect(ctx.permissionRules.autoSuspensionReason('Bash')).toBe('whole-tool')
+    expect(ctx.permissionRules.autoSuspensionReason('Task')).toBe('subagent')
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(python:*)')).toBe('interpreter')
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm run build)')).toBe('package-runner')
+    // Narrow enough to stay effective with the sweep off.
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm publish:*)')).toBeUndefined()
+  })
+
+  it('honors the LIVE autoMode.classifyAllShell setting (hot reload)', async () => {
+    const ctx = await mountWithSettings()
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm publish:*)')).toBeUndefined()
+    await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { autoMode: { classifyAllShell: true } })
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(npm publish:*)')).toBe('classify-all-shell')
+  })
+
+  it('returns undefined (never throws) for garbage rule text', async () => {
+    const ctx = await mountWithSettings()
+    expect(ctx.permissionRules.autoSuspensionReason('')).toBeUndefined()
+    expect(ctx.permissionRules.autoSuspensionReason('Bash(unterminated')).toBeUndefined()
+    expect(ctx.permissionRules.autoSuspensionReason('&&& not a rule')).toBeUndefined()
+  })
+})

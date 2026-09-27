@@ -3091,6 +3091,10 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/permission-rules.spec.ts, anchor: "defaultMode getter (live merged settings default)" }
       - { type: test, path: packages/interaction/permission-rules/tests/auto-rule-filter.spec.ts, anchor: "filterAutoAllowRules" }
       - { type: source, path: packages/interaction/permission-rules/src/auto-rule-filter.ts, anchor: "filterAutoAllowRules" }
+      - { type: test, path: packages/interaction/permission-rules/tests/auto-rule-filter.spec.ts, anchor: "autoSuspendedReason" }
+      - { type: test, path: packages/interaction/permission-rules/tests/permission-rules.spec.ts, anchor: "autoSuspensionReason (D6 service notice seam)" }
+      - { type: test, path: packages/ui/tui/tests/driver-approval.spec.ts, anchor: "always-grant suspension notices (D6 four cells" }
+      - { type: source, path: packages/ui/tui/src/harness/driver-approvals.ts, anchor: "suspension notices" }
       - { type: test, path: packages/interaction/permission-rules/tests/evaluate.spec.ts, anchor: "content-deny beats a same-source allow (D2)" }
       - { type: test, path: packages/interaction/permission-rules/tests/classifier.spec.ts, anchor: "raises MEDIUM for a destructive command" }
       - { type: test, path: packages/interaction/permission-rules/tests/decide-verbose.spec.ts, anchor: "MEDIUM + matched allow rule" }
