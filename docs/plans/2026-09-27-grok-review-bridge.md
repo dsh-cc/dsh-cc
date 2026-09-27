@@ -1,6 +1,6 @@
 # cc-grok-bridge: an approval-free Grok review lane (structured mirror of codex-rescue-bridge)
 
-**Status:** **Review-converged (2026-09-27)** — five review rounds: critic ×4 (last: closure, all pins applied), grok dogfood lane SHIP-WITH-FIXES; codex ×4 NO-GO (65 findings adjudicated one by one: 61 folded, 4 adjudicated-final with reasons in §8; lane retired by user decision — divergence adjudicated per the project rule, not obeyed infinitely). Probe evidence (§2): executed 2026-09-27 against grok 1.0.41 (`4220f3b224a6`, Mach-O arm64) under the session's dsh `workspace-write` confine, incl. review-triggered P10–P14.
+**Status:** **Shipped — PR #166 (2026-09-27)**. Five review rounds: critic ×4 (closure all pins applied), grok dogfood lane SHIP-WITH-FIXES; codex ×4 NO-GO (65 findings adjudicated one by one: 61 folded, 4 adjudicated-final with reasons in §8; lane retired by user decision — divergence adjudicated per the project rule, not obeyed infinitely). Probe evidence (§2): executed 2026-09-27 against grok 1.0.41 (`4220f3b224a6`, Mach-O arm64) under the session's dsh `workspace-write` confine, incl. review-triggered P10–P14.
 **Date:** 2026-09-27
 **Worktree:** `.claude/worktrees/grok-plugin` (branch `worktree-grok-plugin`)
 **Reference design:** `docs/plans/2026-09-26-codex-rescue-bridge.md` (shipped as #159/#160/#161). Structural mirror; every deviation is enumerated (§3.1.D) with its grounding (probe vs reasoning).
