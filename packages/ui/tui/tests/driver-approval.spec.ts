@@ -482,12 +482,13 @@ describe('always-grant suspension notices (D6 four cells × mode gate)', () => {
     expect(notice).toBe('Already covered by Bash(npm)')
   })
 
-  it('cell 3 (auto): a suspended covering rule over an effective derived rule keeps the swallow and notes the suspension', async () => {
-    // `Bash(npm)` (prefix `npm`, suspended whole-tool) covers `Bash(npm )`.
+  it('cell 3 (auto, PR-3): a suspended covering rule over an effective derived rule persists the narrower rule and reports the override', async () => {
+    // `Bash(npm)` (prefix `npm`, suspended whole-tool) covers `Bash(npm )`;
+    // PR-3 persists the derived rule anyway so the grant applies under auto.
     const suspensionOf = (rule: string) => (rule === 'Bash(npm)' ? 'whole-tool' : undefined)
     const { fixture, notice } = await alwaysAllowBash('auto', ['Bash(npm)'], suspensionOf)
-    expect(fixture.settings.currentUser).toEqual({ allow: ['Bash(npm)'] })
-    expect(notice).toBe('Already covered by Bash(npm) — note: that rule is suspended under auto; it will not apply there.')
+    expect(fixture.settings.currentUser).toEqual({ allow: ['Bash(npm)', 'Bash(npm )'] })
+    expect(notice).toBe('Always allow: Bash(npm ) — overrode covering rule Bash(npm), which auto mode suspends.')
   })
 
   it('cell 4 (auto): both rules suspended notes both categories and points at the session answer', async () => {

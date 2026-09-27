@@ -17,7 +17,8 @@
 
 import type { ToolExecution } from '@dsh-cc/tools'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { evaluatePermission } from './evaluate.ts'
+import { evaluatePermission, evaluateShell } from './evaluate.ts'
+import { splitShellCommand } from './shell-segments.ts'
 import { assessBashCommand, assessFilePath, type RiskAssessment } from './classifier.ts'
 import { filterAutoAllowRules } from './auto-rule-filter.ts'
 import { isBashToolName, subjectOf } from './matchers.ts'
@@ -134,7 +135,7 @@ export function decideCallVerbose(deps: DecideDeps, exec: ToolExecution): Decide
   // applied post-waterfall in mapPostWaterfall.
   const mode = effectiveMode(deps, exec)
   const subject = subjectOf(exec, deps.bashToolName)
-  const decision = evaluatePermission({
+  const evaluationInput = {
     toolName: exec.name,
     ...subject === undefined ? {} : { subject },
     // Bypass-immune rules are enforced by the monotonic guard layer, not the
@@ -151,7 +152,13 @@ export function decideCallVerbose(deps: DecideDeps, exec: ToolExecution): Decide
     isFileEdit: deps.fileEditTools.has(exec.name),
     isReadOnly,
     sandboxedBashExempt: sandboxedBash(deps, exec),
-  })
+  }
+  // Bash-shaped execs evaluate per shell segment (D2/PR-3); everything else
+  // keeps the whole-subject waterfall. No second plan wrap: both entry
+  // points apply the wrap themselves.
+  const decision = isBashToolName(exec.name, deps.bashToolName) && subject !== undefined
+    ? evaluateShell(evaluationInput, splitShellCommand(subject))
+    : evaluatePermission(evaluationInput)
   return { decision, risk, mode, isReadOnly }
 }
 

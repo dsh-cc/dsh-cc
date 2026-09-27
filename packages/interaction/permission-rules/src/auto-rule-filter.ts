@@ -60,6 +60,28 @@ function firstToken(head: string): string {
   return (head.trim().split(/\s+/)[0] ?? '').replace(/:$/, '').toLowerCase()
 }
 
+/**
+ * The ONLY heads shorter than 3 characters the `<3` suspension exemption
+ * admits (D4): no content read, no write surface. `wc` and every
+ * write-capable head stay suspended. The exemption table and the evaluator's
+ * conjunctive boundary table are THIS list in one place.
+ */
+export const SAFE_SHORT_HEADS = ['cd', 'ls'] as const
+
+/**
+ * The safe short head of a literal-prefix bash content allow rule whose
+ * trimmed fixed head is exactly one {@link SAFE_SHORT_HEADS} entry (D4
+ * eligibility: bash content rule + non-wildcard prefix matcher + head in the
+ * safe list), or undefined — shared with `evaluateShell`'s conjunctive
+ * boundary so both sides use the same table.
+ */
+export function exemptShortHeadBoundaryOf(rule: PermissionRule): string | undefined {
+  if (rule.matcher?.kind !== 'prefix') return undefined
+  const head = rule.matcher.prefix.trim()
+  if (!isBashRuleTool(rule.toolName)) return undefined
+  return (SAFE_SHORT_HEADS as readonly string[]).includes(head) ? head : undefined
+}
+
 /** Whether one allow rule is suspended from the rule set under auto mode. */
 function suspended(rule: PermissionRule, classifyAllShell: boolean): boolean {
   const bash = isBashRuleTool(rule.toolName)
@@ -72,7 +94,11 @@ function suspended(rule: PermissionRule, classifyAllShell: boolean): boolean {
   if (rule.content === undefined) return shell
   if (!shell) return false
   const head = matcherHead(rule)
-  if (head.trim().length < 3) return true
+  if (head.trim().length < 3) {
+    // D4: the <3 suspension lifts ONLY for eligible safe short heads
+    // (`cd`/`ls`, literal prefix, bash) — G2 repair; everything else stays.
+    if (!(bash && exemptShortHeadBoundaryOf(rule) !== undefined)) return true
+  }
   if (INTERPRETER_TOKENS.has(firstToken(head))) return true
   return PACKAGE_RUNNER.test(head.trim().toLowerCase())
 }
@@ -109,7 +135,8 @@ export function autoSuspendedReason(
     if (shell) return 'whole-tool'
   } else if (shell) {
     const head = matcherHead(rule)
-    if (head.trim().length < 3) return 'short-head'
+    const shortHeadLifted = isBashRuleTool(rule.toolName) && exemptShortHeadBoundaryOf(rule) !== undefined
+    if (head.trim().length < 3 && !shortHeadLifted) return 'short-head'
     if (INTERPRETER_TOKENS.has(firstToken(head))) return 'interpreter'
     if (PACKAGE_RUNNER.test(head.trim().toLowerCase())) return 'package-runner'
   }

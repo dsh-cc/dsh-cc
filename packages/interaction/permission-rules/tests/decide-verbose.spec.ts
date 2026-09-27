@@ -221,3 +221,47 @@ describe('decideCallVerbose (verbose core split)', () => {
     expect(mediumRead.isReadOnly).toBe(true)
   })
 })
+
+describe('segment-aware integration (PR-3 L1: D4-exempt short heads in auto)', () => {
+  const autoDeps = (allow: string[]) => deps({
+    defaultMode: () => 'auto',
+    classifierEnabled: false,
+    rules: () => rules({ allow: allow.map(raw => parseRule(raw, 'allow', 'config')) }),
+  })
+
+  it('existing user rules Bash(cd ) + Bash(ls) auto-allow `cd x && ls` in auto mode', () => {
+    // PR-3 derivation persists the BARE form for argument-free grants
+    // (`ls` ⇒ `Bash(ls)`); with the old trailing-space `Bash(ls )` the bare
+    // `ls` segment does not match (R10 — see the deviation note in the PR).
+    const d = autoDeps(['Bash(cd )', 'Bash(ls)'])
+    expect(decideCall(d, fakeExec('Bash', { command: 'cd x && ls' }))).toEqual({ kind: 'allow' })
+  })
+
+  it('R10: the old trailing-space Bash(ls ) alone leaves `cd x && ls` passthrough', () => {
+    expect(decideCall(autoDeps(['Bash(ls )']), fakeExec('Bash', { command: 'cd x && ls' })))
+      .toEqual({ kind: 'passthrough' })
+  })
+
+  it('`cd x && ls; rm -f y` stays passthrough without a matching rule', () => {
+    expect(decideCall(autoDeps(['Bash(cd )', 'Bash(ls)']), fakeExec('Bash', { command: 'cd x && ls; rm -f y' })))
+      .toEqual({ kind: 'passthrough' })
+  })
+
+  it('`cd x && ls; rm -f y` is denied by a matching Bash(rm ) rule (segment-aware deny)', () => {
+    // The deny must sit in the DENY list — `Bash(rm )` as an allow rule would
+    // legitimately allow the `rm -f y` segment (head ≥3 chars, kept in auto).
+    const d = deps({
+      defaultMode: () => 'auto',
+      classifierEnabled: false,
+      rules: () => rules({
+        allow: [parseRule('Bash(cd )', 'allow', 'config'), parseRule('Bash(ls)', 'allow', 'config')],
+        deny: [parseRule('Bash(rm )', 'deny', 'config')],
+      }),
+    })
+    expect(decideCall(d, fakeExec('Bash', { command: 'cd x && ls; rm -f y' }))).toMatchObject({ kind: 'deny' })
+  })
+
+  it('a single exempt rule stays passthrough for its own compound (single-rule case)', () => {
+    expect(decideCall(autoDeps(['Bash(cd )']), fakeExec('Bash', { command: 'cd x' }))).toEqual({ kind: 'allow' })
+  })
+})

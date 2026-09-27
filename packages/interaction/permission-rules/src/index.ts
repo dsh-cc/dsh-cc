@@ -44,7 +44,7 @@ import {
   foldPermissionMode,
   switchSessionPermissionMode,
 } from './mode.ts'
-import { ruleMatches, subjectOf } from './matchers.ts'
+import { ruleMatches, ruleMatchesAnyShellSegment, subjectOf, isBashToolName } from './matchers.ts'
 import { SessionAllowlist, foldSessionAllows } from './session-allowlist.ts'
 import { createSandboxApprovalListener } from './approval-listener.ts'
 
@@ -135,6 +135,8 @@ export { summarizeChildHandoff, handoffWarningText, HANDOFF_ASK_STORM, type Chil
 export { autoSuspendedReason, autoSuspensionReasonOf, filterAutoAllowRules, type SuspensionCategory } from './auto-rule-filter.ts'
 export { DEFAULT_MEDIUM_PATTERNS, DEFAULT_DANGEROUS_PATTERNS, CRITICAL_BASH_PATTERNS } from './classifier.ts'
 export { parseRuleSafe, contentSubsumes, ruleSubsumes } from './subsumption.ts'
+export { splitShellCommand, type ShellSegment, type OpaqueWhy, type SegmentResult } from './shell-segments.ts'
+export { stripLeadingAssignments } from './shell-words.ts'
 export { pickClassifierRouteName, pickGaugeRouteName, GAUGE_STRING_PAIR_KEY, type ClassifierBackend, type PolicyWarn } from './route-policy.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -385,7 +387,12 @@ export class PermissionRulesService extends Service {
     this.guardDisposers = this.bypassImmuneRules.map(rule =>
       this.ctx.tools.guard((exec) => {
         const subject = subjectOf(exec, this.bashToolName)
-        if (subject === undefined || !ruleMatches(rule, exec.name, subject)) return undefined
+        if (subject === undefined) return undefined
+        // Bash guards are segment-aware (D2/PR-3); everything else whole-subject.
+        const matched = isBashToolName(exec.name, this.bashToolName)
+          ? ruleMatchesAnyShellSegment(rule, exec.name, subject)
+          : ruleMatches(rule, exec.name, subject)
+        if (!matched) return undefined
         return `denied by permission rule ${ruleString(rule.toolName, rule.content)} [${rule.source}] (bypass-immune)`
       }),
     )
@@ -418,11 +425,7 @@ export class PermissionRulesService extends Service {
     return foldSessionCwd(agent.session.snapshotEvents()) ?? agent.session.header?.cwd
   }
 
-  /**
-   * Grant a session-scoped allow rule on the agent's session: in-memory match
-   * for the rest of this session plus a `permission/session-allow` audit
-   * event. Never touches the `permissions` settings namespace.
-   */
+  /** Grant a session-scoped allow rule (in-memory match + audit event); never touches settings. */
   addSessionAllow(agent: Agent, rule: string): void {
     this.sessionAllowlist.add(agent.session, rule)
   }
@@ -432,10 +435,7 @@ export class PermissionRulesService extends Service {
     this.sessionAllowlist.clear(agent.session)
   }
 
-  /**
-   * Whether switching to `bypassPermissions` is disabled by Config or the
-   * settings section.
-   */
+  /** Whether bypassPermissions is disabled by Config or the settings section. */
   private bypassDisabled(): boolean {
     return this.config.disableBypassPermissionsMode === true
       || this.settingsSection().disableBypassPermissionsMode === 'disable'

@@ -137,3 +137,42 @@ describe('autoSuspendedReason (D6 cause categories)', () => {
     expect(reason('Bash(npm publish:*)', false)).toBeUndefined()
   })
 })
+
+describe('D4 safe short-head exemption (SAFE_SHORT_HEADS)', () => {
+  const reason = (raw: string, classifyAllShell = false) =>
+    autoSuspendedReason(parseRule(raw, 'allow', 'config'), { classifyAllShell })
+
+  it('exempts `cd` and `ls` short-head rules in every form', () => {
+    expect(filterAutoAllowRules(
+      allowStrings(['Bash(cd)', 'Bash(cd )', 'Bash(ls)', 'Bash(ls )']),
+      { classifyAllShell: false },
+    ).allow.map(rule => rule.content)).toEqual(['cd', 'cd ', 'ls', 'ls '])
+    expect(reason('Bash(cd)')).toBeUndefined()
+    expect(reason('Bash(ls )')).toBeUndefined()
+  })
+
+  it('keeps every other short head suspended (rm, mv, fd, wc, sh)', () => {
+    expect(filterAutoAllowRules(
+      allowStrings(['Bash(rm )', 'Bash(mv )', 'Bash(fd)', 'Bash(wc)', 'Bash(sh)']),
+      { classifyAllShell: false },
+    ).allow).toHaveLength(0)
+    expect(reason('Bash(wc)')).toBe('short-head')
+  })
+
+  it('wildcard short heads are ineligible (literal prefix only)', () => {
+    // D4 eligibility needs a literal prefix matcher: `Bash(cd *)`/`Bash(ls *)`
+    // are wildcards and stay suspended, while `Bash(cd:*)` is a 3-char prefix
+    // head that legitimately stays in force (never inside the <3 scope).
+    expect(filterAutoAllowRules(
+      allowStrings(['Bash(cd *)', 'Bash(ls *)', 'Bash(cd:*)']),
+      { classifyAllShell: false },
+    ).allow.map(rule => rule.content)).toEqual(['cd:*'])
+  })
+
+  it('interpreter/package-runner/whole-tool/classifyAllShell behavior is unchanged', () => {
+    expect(reason('Bash(python:*)')).toBe('interpreter')
+    expect(reason('Bash(npm run build)')).toBe('package-runner')
+    expect(reason('Bash')).toBe('whole-tool')
+    expect(reason('Bash(cd)', true)).toBe('classify-all-shell')
+  })
+})

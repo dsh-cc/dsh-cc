@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { allowRuleOf, createDriver, payloadOf } from '@dsh-cc/tui/harness/driver.ts'
-import { PERMISSION_SETTINGS_NAMESPACE, canonicalizeHostname, contentMatches, parseRuleString, ruleString } from '@dsh-cc/permission-rules'
+import { PERMISSION_SETTINGS_NAMESPACE, contentMatches, parseRuleString, ruleString } from '@dsh-cc/permission-rules'
 
 /**
  * Approval-as-preview + always-allow contract: the approval prompt carries a
@@ -188,19 +188,28 @@ describe('allowRuleOf rule generation', () => {
     expect(ruleString('Bash', 'npm ')).toBe('Bash(npm )')
   })
 
-  it('falls back to a raw-prefix rule when the stripped first word cannot match the raw command', () => {
-    // FOO=bar npm install → the raw prefix covers the producing call.
+  it('derivation decision order (D5): assignment-leading, assignment-only, and wrapper branches', () => {
+    // Assignment-leading: raw prefix through the first command token, space iff args follow.
     expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar npm install' }))
       .toEqual({ kind: 'rule', rule: 'Bash(FOO=bar npm )' })
     expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=bar BAZ=qux npm install' }))
       .toEqual({ kind: 'rule', rule: 'Bash(FOO=bar BAZ=qux npm )' })
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'sudo npm install' }))
-      .toEqual({ kind: 'rule', rule: 'Bash(sudo npm )' })
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'npx npm install' }))
-      .toEqual({ kind: 'rule', rule: 'Bash(npx npm )' })
-    // The plan example: raw prefix through the end of the stripped first word.
-    expect(allowRuleOf('Bash', { kind: 'command', command: 'sudo FOO=bar npm x' }))
-      .toEqual({ kind: 'rule', rule: 'Bash(sudo FOO=bar npm )' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=1 ls' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(FOO=1 ls)' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=1 ls -la' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(FOO=1 ls )' })
+    // Assignment-only: exact raw form.
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'FOO=1' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(FOO=1)' })
+    // Wrapper branch: inner rule, no raw verification (R13).
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'sudo FOO=1 ls' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(ls)' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'sudo ls -la' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(ls )' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'ls' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(ls)' })
+    expect(allowRuleOf('Bash', { kind: 'command', command: 'yarn build' }))
+      .toEqual({ kind: 'rule', rule: 'Bash(build)' })
   })
 
   it('handles compound commands by deriving from the first segment (raw prefix when prefixed)', () => {
@@ -210,43 +219,29 @@ describe('allowRuleOf rule generation', () => {
       .toEqual({ kind: 'rule', rule: 'Bash(FOO=bar git )' })
   })
 
-  it('every derived rule matches its producing call (invariant corpus)', () => {
-    const subjectOf = (toolName: string, args: Record<string, unknown>): string | undefined => {
-      if (typeof args.command === 'string') return args.command
-      if (typeof args.url === 'string') return canonicalizeHostname(args.url)
-      if (typeof args.file_path === 'string') return args.file_path
-      return undefined
-    }
-    const corpus: [string, Record<string, unknown>][] = [
-      ['Bash', { command: 'npm install foo' }],
-      ['Bash', { command: 'FOO=bar npm install' }],
-      ['Bash', { command: 'FOO=bar BAZ=qux npm run build' }],
-      ['Bash', { command: 'sudo npm install' }],
-      ['Bash', { command: 'npx npm install' }],
-      ['Bash', { command: 'yarn build' }],
-      ['Bash', { command: 'sudo FOO=bar npm x' }],
-      ['Bash', { command: 'git add . && git commit -m x' }],
-      ['Bash', { command: 'FOO=bar git add . && git commit' }],
-      ['Bash', { command: 'ls -la' }],
-      ['Bash', { command: '(cd /tmp && ls)' }],
-      ['WebFetch', { url: 'https://docs.example.com/a' }],
-      ['WebFetch', { url: 'https://Example.COM.:8443/x' }],
-      ['Write', { file_path: '/tmp/new.ts', content: 'export {}\n' }],
-      ['Edit', { file_path: '/tmp/a.ts', old_string: 'a', new_string: 'b' }],
-      ['Read', { file_path: '/tmp/a.ts' }],
+  it('derives the pinned rule for every corpus call (D5 decision order; wrapper/assignment rows are inner rules by design, R13)', () => {
+    const corpus: [string, Record<string, unknown>, string][] = [
+      ['Bash', { command: 'npm install foo' }, 'Bash(npm )'],
+      ['Bash', { command: 'FOO=bar npm install' }, 'Bash(FOO=bar npm )'],
+      ['Bash', { command: 'FOO=bar BAZ=qux npm run build' }, 'Bash(FOO=bar BAZ=qux npm )'],
+      ['Bash', { command: 'sudo npm install' }, 'Bash(npm )'],
+      ['Bash', { command: 'npx npm install' }, 'Bash(npm )'],
+      ['Bash', { command: 'yarn build' }, 'Bash(build)'],
+      ['Bash', { command: 'sudo FOO=bar npm x' }, 'Bash(npm )'],
+      ['Bash', { command: 'git add . && git commit -m x' }, 'Bash(git )'],
+      ['Bash', { command: 'FOO=bar git add . && git commit' }, 'Bash(FOO=bar git )'],
+      ['Bash', { command: 'ls -la' }, 'Bash(ls )'],
+      ['Bash', { command: '(cd /tmp && ls)' }, 'Bash(\\(cd )'],
+      ['WebFetch', { url: 'https://docs.example.com/a' }, 'WebFetch(domain:docs.example.com)'],
+      ['WebFetch', { url: 'https://Example.COM.:8443/x' }, 'WebFetch(domain:example.com)'],
+      ['Write', { file_path: '/tmp/new.ts', content: 'export {}\n' }, 'Write'],
+      ['Edit', { file_path: '/tmp/a.ts', old_string: 'a', new_string: 'b' }, 'Edit'],
+      ['Read', { file_path: '/tmp/a.ts' }, 'Read'],
     ]
-    for (const [toolName, args] of corpus) {
+    for (const [toolName, args, expected] of corpus) {
       const preview = payloadOf(previewReq(toolName, 'c', [callEvent('c', args)]))
       const derived = allowRuleOf(toolName, preview, args)
-      expect(derived.kind, `${toolName} ${JSON.stringify(args)}`).toBe('rule')
-      if (derived.kind !== 'rule') continue
-      const parsed = parseRuleString(derived.rule)
-      expect(parsed.toolName, derived.rule).toBe(toolName)
-      if (parsed.content === undefined) continue
-      // Whole-tool rules match trivially; content rules must match the
-      // producing call's subject (subjectOf semantics).
-      const subject = subjectOf(toolName, args)
-      expect(contentMatches(parsed.matcher!, subject!), `${derived.rule} vs ${subject}`).toBe(true)
+      expect(derived, `${toolName} ${JSON.stringify(args)}`).toEqual({ kind: 'rule', rule: expected })
     }
   })
 })
