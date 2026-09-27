@@ -47,11 +47,20 @@ describe('grok-review-run launcher — integration (real subprocess, staged stub
   afterEach(() => cleanupStages())
   afterAll(() => rmSync(RUNTIME_DIR, { recursive: true, force: true }))
   // TEMP CI diagnostic (PR #166 forks-worker teardown hang): dump handle
-  // classes still registered at suite end. Remove once root-caused.
+  // classes AND the leaked child process identity. Remove once root-caused.
   afterAll(() => {
     if (process.env.CI) {
-      const handles = (process as never as { _getActiveHandles?: () => Array<{ constructor: { name: string } }> })._getActiveHandles?.() ?? []
-      console.error('CI-HANDLE-DUMP', JSON.stringify(handles.map((h) => h?.constructor?.name)))
+      const handles = (process as never as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.() ?? []
+      const detail = handles.map((h) => {
+        const rec = h as Record<string, unknown>
+        const ctor = (h as { constructor?: { name?: string } })?.constructor?.name
+        if (ctor === 'ChildProcess') {
+          return { ctor, pid: rec.pid, spawnfile: rec.spawnfile, spawnargsTail: (rec.spawnargs as string[] | undefined)?.slice(-3), killed: rec.killed, exitCode: rec.exitCode ?? null }
+        }
+        if (ctor === 'Pipe' || ctor === 'Socket') return { ctor, fd: (rec as { fd?: unknown }).fd ?? null }
+        return { ctor }
+      })
+      console.error('CI-HANDLE-DUMP', JSON.stringify(detail))
     }
   })
 
