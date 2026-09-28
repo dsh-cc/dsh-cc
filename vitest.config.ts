@@ -93,5 +93,11 @@ export default defineConfig({
   test: {
     include: ['packages/*/*/tests/**/*.spec.ts', 'packages/launcher/*/tests/**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/lib/**'],
+    coverage: {
+      // Vendored upstream TUI code (pi-tui, never modified in-tree) and the
+      // test-support packages (test harness infrastructure, not product code)
+      // are not this repo's coverage responsibility.
+      exclude: ['packages/ui/pi-tui/**', 'packages/test-support/**'],
+    },
   },
 })
