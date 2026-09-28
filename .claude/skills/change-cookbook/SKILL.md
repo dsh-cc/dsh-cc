@@ -23,8 +23,10 @@ verify**. Prefer one-pass implementation.
 Before leaving plan mode: have `dsh-cc-agents:critic` review the plan cold;
 revise; re-review if the plan changed substantially.
 
-High-stakes / irreversible choices: parallel blind review (`critic` + Codex),
-then dig into disagreement before deciding.
+High-stakes / irreversible choices: parallel blind review — `critic` plus
+the two external bridge lanes (cc-grok-bridge review, cc-codex-bridge),
+exactly as AGENTS.md's High-stakes decisions section prescribes. Dig
+into disagreement before deciding.
 
 ## 2. Where to work (stop lines)
 

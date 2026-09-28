@@ -23,7 +23,13 @@ via `"disableAllHooks": true`.
   → dsh-cc-agents:critic (Opus)
 - Mechanical (approved-plan execution, repetitive edits, checks)
   → dsh-cc-agents:executor (Sonnet)
-- Codex (/codex:rescue --background) is a peer engineer, not a reviewer.
+- Codex is a peer engineer, not the default reviewer (exception: the
+  high-stakes blind-review passes below). Reach Codex through the
+  cc-codex-bridge lane (`/cc-codex-bridge:rescue`): an ARMED lane runs
+  its SessionStart canonical invocation; a missing or NOT-armed lane
+  follows that command's own fallback instructions (that fallback is
+  for rescue work only — review passes do not take it, see below).
+  Never reach for the stock codex plugin yourself.
 
 ### Plan-first
 Enter plan mode before: new features, >2-3-file changes, multiple
@@ -35,9 +41,23 @@ Staff Engineer; revise per its findings, re-review if substantial.
 
 ### High-stakes decisions (parallel blind review)
 For irreversible or expensive choices (architecture, data model,
-deleting subsystems, public API shape): task dsh-cc-agents:critic AND Codex in
-parallel, blind to each other. Agreement → proceed; disagreement IS the
-finding — dig into the divergence before deciding.
+deleting subsystems, public API shape): task dsh-cc-agents:critic AND
+dispatch two external review lanes — the cc-grok-bridge review lane
+(`/cc-grok-bridge:review`) and the cc-codex-bridge lane
+(`/cc-codex-bridge:rescue`, carrying a review-only brief here) — all
+three blind to each other, all issued in the same assistant message.
+Bridge dispatch is a parent-session bash call using the exact canonical
+invocation from each lane's SessionStart block (multi-line briefs via
+`--prompt-file`); the bridge lanes are not subagents — never spawn them
+via the Task tool, and never fill a review seat with the stock codex
+plugin (`codex:codex-rescue` / `/codex:rescue`). Do not feed one lane's
+output into another lane's prompt. A lane whose SessionStart block is
+absent or reports NOT armed is stopped and reported to the user, not
+replaced: cc-grok-bridge has no fallback (do not guess or construct an
+invocation), and for review passes cc-codex-bridge does not take its
+stock-plugin fallback either — the user decides whether to proceed on
+the reduced roster. Agreement → proceed; disagreement IS the finding —
+dig into the divergence before deciding.
 
 ### Execution & failure recovery
 Decompose the approved plan into mechanical units → dsh-cc-agents:executor; you
