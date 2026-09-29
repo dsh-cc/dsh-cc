@@ -36,7 +36,7 @@ async function harness(): Promise<{
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   const plugin = await ctx.plugin(commandInit)
   return { ctx, agent, plugin, followups }
 }

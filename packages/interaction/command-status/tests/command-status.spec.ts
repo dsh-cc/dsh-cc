@@ -44,7 +44,7 @@ describe('@dsh-cc/command-status registration', () => {
       runMaintenance: task => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     expect(ctx.commands.find(agent, 'status')).toBeDefined()
     await plugin.dispose()
     expect(ctx.commands.find(agent, 'status')).toBeUndefined()
@@ -104,7 +104,7 @@ describe('/status human command', () => {
       runMaintenance: task => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     const execution = await ctx.commands.execute(agent, '/status', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
     const text = (execution?.result as { text: string }).text
@@ -139,7 +139,7 @@ describe('/status trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/status help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

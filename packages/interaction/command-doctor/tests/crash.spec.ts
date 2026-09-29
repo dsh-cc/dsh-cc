@@ -49,7 +49,7 @@ describe('crash isolation', () => {
       mountThrowing(ctx, seam, new Error(`kaboom-${seam}`))
     }
     const agent = makeAgent(ctx)
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     const execution = await ctx.commands.execute(agent, '/doctor', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
     const text = (execution?.result as { text: string }).text

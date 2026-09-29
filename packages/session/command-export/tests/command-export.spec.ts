@@ -91,7 +91,7 @@ async function harness(overrides: unknown): Promise<{
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent, session, plugin, config }
 }
 
@@ -231,7 +231,7 @@ describe('/export trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/export help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

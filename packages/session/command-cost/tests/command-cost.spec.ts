@@ -61,7 +61,7 @@ describe('@dsh-cc/command-cost registration', () => {
       runMaintenance: task => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
 
     expect(commandCost.name).toBe('command-cost')
     expect(commandCost.inject).toEqual(['commands'])
@@ -264,7 +264,7 @@ describe('/cost trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/cost help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

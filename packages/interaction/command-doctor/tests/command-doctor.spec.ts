@@ -38,7 +38,7 @@ describe('@dsh-cc/command-doctor registration', () => {
     await ctx.plugin(AgentRegistry)
     const plugin = await ctx.plugin(commandDoctor)
     const agent = makeAgent(ctx)
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     expect(ctx.commands.find(agent, 'doctor')).toBeDefined()
     const execution = await ctx.commands.execute(agent, '/doctor', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
@@ -54,7 +54,7 @@ describe('@dsh-cc/command-doctor registration', () => {
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandDoctor)
     const agent = makeAgent(ctx)
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     const execution = await ctx.commands.execute(agent, '/doctor', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
     const text = (execution?.result as { text: string }).text
@@ -102,7 +102,7 @@ describe('/doctor help interception', () => {
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandDoctor)
     const agent = makeAgent(ctx)
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     const execution = await ctx.commands.execute(agent, '/doctor help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
     const text = execution?.result.text ?? ''

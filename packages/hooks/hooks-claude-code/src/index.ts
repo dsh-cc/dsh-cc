@@ -298,11 +298,15 @@ export function apply(ctx: Context, config: Config): void {
   const errorStreak = createErrorStreak({ ctx, surfaceNotices: turnSafety.surfaceNotices })
   const continuation = createContinuation({ ctx })
 
-  // SessionStart injects context when its detached hook resolves; a slow hook
-  // may miss the first request.
+  // agent/created (rc.2: SessionStart folded into agent creation — `source`
+  // lives on the payload and listeners may return a promise; the SessionStart
+  // hook injects context when it resolves; a slow hook may miss the first
+  // request. We keep the detached fire-and-forget shape (sibling awaits) so a
+  // slow hook cannot stall the serial creation dispatch.
   // TODO(session-start-gating): add a startup gate before promising first-turn delivery.
-  ctx.on('agent/session-start', ({ agent, source }) => {
-    detached.track(runPoint('SessionStart', source, sessionStartPayload(ctx, agent, source), { agent, signal: detached.signal })
+  ctx.on('agent/created', ({ agent, source, signal }) => {
+    const ownerSignal = signal === undefined ? detached.signal : AbortSignal.any([signal, detached.signal])
+    detached.track(runPoint('SessionStart', source, sessionStartPayload(ctx, agent, source), { agent, signal: ownerSignal })
       .then((merged) => {
         turnSafety.detachedOutcome('SessionStart', merged, agent)
         const context = turnSafety.contextFrom(merged)
@@ -315,7 +319,7 @@ export function apply(ctx: Context, config: Config): void {
     // seeded brand-new (no prior history), so it is the closest harness analog
     // to Claude Code's initial boot. resume/clear/compact sources skip it.
     if (source === 'startup') {
-      detached.track(runPoint('Setup', 'init', setupPayload(ctx, agent), { agent, signal: detached.signal })
+      detached.track(runPoint('Setup', 'init', setupPayload(ctx, agent), { agent, signal: ownerSignal })
         .then((merged) => { turnSafety.detachedOutcome('Setup', merged, agent) })
         .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: Setup hook failed: ${String(error)}`) }))
     }
@@ -323,7 +327,7 @@ export function apply(ctx: Context, config: Config): void {
     // fires it — dsh has no emit point for `clear`/`compact`, so those stay
     // unimplemented (see docs).
     if (source === 'resume') {
-      detached.track(runPoint('SessionResume', '', sessionResumePayload(ctx, agent, source), { agent, signal: detached.signal })
+      detached.track(runPoint('SessionResume', '', sessionResumePayload(ctx, agent, source), { agent, signal: ownerSignal })
         .then((merged) => { turnSafety.detachedOutcome('SessionResume', merged, agent) })
         .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: SessionResume hook failed: ${String(error)}`) }))
     }

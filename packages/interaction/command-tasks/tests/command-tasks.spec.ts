@@ -61,7 +61,7 @@ describe('/tasks human command', () => {
       runMaintenance: task => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     return { ctx, agent }
   }
 
@@ -133,7 +133,7 @@ describe('/tasks trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/tasks help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

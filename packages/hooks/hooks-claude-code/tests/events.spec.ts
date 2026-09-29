@@ -302,7 +302,7 @@ describe('hooks-claude-code bridge — PostToolUseFailure', () => {
 })
 
 describe('hooks-claude-code bridge — SessionResume', () => {
-  it('fires SessionResume when agent/session-start has source=resume', async () => {
+  it('fires SessionResume on a second agent/created edge with source=resume', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-hooks-claude-events-'))
     dirs.push(dir)
     const srMarker = join(dir, 'sr-ran')
@@ -312,7 +312,10 @@ describe('hooks-claude-code bridge — SessionResume', () => {
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
     const agent = await ctx.agentLoop.create(SessionId('sr-session'), { provider: 'mock', model: 'mock' })
-    ctx.emit(ctx, 'agent/session-start', { agent, source: 'resume' })
+    // rc.2: creation itself announces `agent/created` with source `startup`
+    // (no SessionResume); a resume edge is a second created announcement —
+    // emitted here once, with source `resume`.
+    ctx.emit(ctx, 'agent/created', { agent, source: 'resume' })
     await waitFor(() => existsSync(srMarker))
     expect(existsSync(srMarker)).toBe(true)
   })
@@ -332,7 +335,8 @@ describe('hooks-claude-code bridge — SessionResume', () => {
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter)
     const agent = await ctx.agentLoop.create(SessionId('sr-startup-session'), { provider: 'mock', model: 'mock' })
-    ctx.emit(ctx, 'agent/session-start', { agent, source: 'startup' })
+    // rc.2: creation itself announces `agent/created` with source `startup` —
+    // no manual emission (a second edge would fire the hook twice).
     await waitFor(() => existsSync(setupMarker))
     expect(existsSync(setupMarker)).toBe(true)
     expect(existsSync(srMarker)).toBe(false)

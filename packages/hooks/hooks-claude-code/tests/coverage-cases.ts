@@ -340,7 +340,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
         },
         session: { id: SessionId('child-x'), header: { id: 'child-x' } },
       } as unknown as Parameters<typeof ctx.agents.register>[0]
-      ctx.agents.register(child)
+      await ctx.agents.register(child)
       ctx.emit(subagentCarrier(ctx), 'subagent/start', { runId: SubagentRunId('run-x'), provider: 'p', id: SessionId('child-x'), local: true })
       await waitFor(() => injected.includes('child guidance'))
       expect(injected).toContain('child guidance')
@@ -356,7 +356,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
       const ctx = await harness(path, new MockAdapter([]))
       const warn = vi.fn(); ctx.logger.warn = warn as never
       const child = { id: SessionId('child-y'), inject: () => { throw new Error('inject boom') }, session: { id: SessionId('child-y'), header: { id: 'child-y' } } } as unknown as Parameters<typeof ctx.agents.register>[0]
-      ctx.agents.register(child)
+      await ctx.agents.register(child)
       ctx.emit(subagentCarrier(ctx), 'subagent/start', { runId: SubagentRunId('run-y'), provider: 'p', id: SessionId('child-y'), local: true })
       await waitFor(() => warn.mock.calls.some(c => String(c[0]).includes('SubagentStart hook failed')))
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('SubagentStart hook failed'))
@@ -837,11 +837,13 @@ export function defineCoverageCases(group: CoverageGroup): void {
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       // Surfaced: the notice user-message carries the shaped text with the
-      // plugin notice source the TUI renders as a dim status row.
+      // notice source (form-keyed, kind-tolerant — the production router
+      // stamps `kind: 'hooks-claude-code', form: 'notice'`) that the TUI
+      // renders as a dim status row.
       const notice = events(agent).find(e => e.type === 'user/message'
-        && e.data.source.kind === 'plugin' && (e.data.source as { form?: string; summary?: string }).form === 'notice')
+        && (e.data.source as { form?: string }).form === 'notice')
       expect(notice?.type === 'user/message' && notice.data.content.some(b => b.type === 'text' && b.text === 'heads up')).toBe(true)
-      expect(notice?.type === 'user/message' && (notice.data.source as { plugin?: string }).plugin).toBe('hooks-claude-code')
+      expect(notice?.type === 'user/message' && (notice.data.source as { kind?: string }).kind).toBe('hooks-claude-code')
       expect(notice?.type === 'user/message' && (notice.data.source as { summary?: string }).summary).toBe('heads up')
       // And it is model-facing per the documented degradation: injected notices
       // enter session history (delivery to a LATER request; this single-step

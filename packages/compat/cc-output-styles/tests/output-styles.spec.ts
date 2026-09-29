@@ -82,7 +82,7 @@ async function harness(config: Record<string, unknown> = {}, withSettings = true
   ctx.on('system-prompt/change', () => { count += 1 })
   await ctx.plugin(ccOutputStyles, config)
   const { agent } = stubAgent(ctx, `cc-output-styles-${Math.random()}`)
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent, changeCount: () => count }
 }
 

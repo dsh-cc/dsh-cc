@@ -71,7 +71,7 @@ async function harness(seam?: { entries(): McpConnectionEntry[]; disconnect(name
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent }
 }
 

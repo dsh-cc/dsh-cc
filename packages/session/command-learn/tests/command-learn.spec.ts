@@ -106,7 +106,7 @@ async function harness(withSettings = false): Promise<{ ctx: Context; agent: Age
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent }
 }
 

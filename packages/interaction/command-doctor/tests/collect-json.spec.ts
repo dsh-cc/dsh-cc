@@ -38,7 +38,7 @@ async function run(flags: string): Promise<{ kind: string; text: string }> {
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(commandDoctor)
   const agent = makeAgent(ctx)
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   const line = flags.length === 0 ? '/doctor' : `/doctor ${flags}`
   const execution = await ctx.commands.execute(agent, line, [], new AbortController().signal)
   return execution?.result as { kind: string; text: string }

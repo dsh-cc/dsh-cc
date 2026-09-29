@@ -33,7 +33,7 @@ function makeAgent(ctx: Context): Agent {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
 }
 
@@ -118,7 +118,7 @@ describe('/version trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/version help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

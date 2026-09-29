@@ -47,7 +47,7 @@ async function harness(): Promise<{
   })
   const session = ctx.sessions.create(SessionId(`command-skills-${Math.random()}`))
   const agent = stubAgent(session)
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent, plugin }
 }
 
@@ -111,7 +111,7 @@ describe('/skills human command', () => {
     const session = ctx.sessions.create(SessionId(`command-skills-scoped-${Math.random()}`))
     const agent = stubAgent(session)
     bindScopeParent(agent, scopeOf(preset.ctx) as object)
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
 
     expect(await ctx.skills.list()).toEqual([])
     expect((await ctx.skills.list({ scope: agent })).map(s => s.name)).toEqual(['preset-skill'])
@@ -150,7 +150,7 @@ describe('/skills trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/skills help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

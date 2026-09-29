@@ -48,7 +48,7 @@ describe('/rename human command', () => {
       runMaintenance: task => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     return { ctx, agent }
   }
 
@@ -126,7 +126,7 @@ describe('/rename human command', () => {
         runMaintenance: task => task(new AbortController().signal),
         whenIdle: () => Promise.resolve(),
       }
-      ctx.agents.register(agent)
+      await ctx.agents.register(agent)
 
       const execution = await ctx.commands.execute(agent, '/rename Whatever I Typed', [], new AbortController().signal)
       expect(execution?.result.kind).toBe('success')
@@ -162,7 +162,7 @@ describe('/rename trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/rename help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

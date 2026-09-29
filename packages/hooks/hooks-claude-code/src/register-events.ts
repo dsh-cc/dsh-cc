@@ -8,6 +8,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import type { JobId } from '@deepseek-ai/dsh-jobs'
 import type { SubagentRunId } from '@deepseek-ai/dsh-subagent'
@@ -311,7 +312,7 @@ export function registerEvents(deps: ListenerDeps): void {
   if (jobs) {
     const seenJobs = new Set<JobId>()
     const diffJobs = (owner: Agent | undefined): void => {
-      for (const job of jobs.list(owner)) {
+      for (const job of jobs.list(owner === undefined ? undefined : SessionId(owner.id))) {
         if (seenJobs.has(job.id)) continue
         seenJobs.add(job.id)
         detached.track(runPoint('TaskCreated', '', taskCreatedPayload(ctx, job), { signal: detached.signal })

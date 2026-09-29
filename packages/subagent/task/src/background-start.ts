@@ -28,7 +28,8 @@ export const PROVIDER_SPAWN = 'spawn'
  * Per-parent admission limit for continuable children (UX plan §3.6): no
  * upstream resident-children cap exists, so the Task tool refuses a new
  * continuable start when the parent already has this many live children —
- * counted directly as `listChildren` entries with `activity: 'running'`.
+ * counted as `listChildren` entries with a live running activation in the
+ * agents registry (rc.2: the catalog row no longer carries `activity`).
  * A safety valve, not a scheduling policy.
  */
 export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
@@ -89,11 +90,13 @@ export interface SubagentsLike {
   interrupt?(childId: string, authority: { kind: 'ancestor'; agent: Agent }): void
   /**
    * Duck-typed `listChildren` (harness `ctx.subagents.listChildren`): the
-   * durable children of one parent session with a store-snapshot `activity`.
-   * Used by the §3.6 capacity guard. Absent → the guard degrades open.
+   * durable direct-children catalog of one parent session. rc.2 row shape
+   * (`SubagentCatalogEntry` = `{id, createdAt} & mode/label` — the old
+   * `activity`/`hasChildren`/`kind` fields are gone). Used by the §3.6
+   * capacity guard. Absent → the guard degrades open.
    */
   listChildren?(parentSessionId: string, signal?: AbortSignal): Promise<
-    { kind: string; activity?: string }[]
+    { id: string; mode?: string }[]
   >
 }
 
@@ -188,10 +191,13 @@ export function preparedBackground(
 /**
  * The §3.6 capacity guard (both `startBackground` and the collect path):
  * refuse a new continuable child when the parent already has
- * {@link MAX_LIVE_CONTINUABLE_CHILDREN} live children — counted directly as
- * `listChildren` entries with `activity: 'running'`. Degrades open when the
- * seam lacks `listChildren` or the listing fails: a safety valve must never
- * block starts on its own infrastructure trouble.
+ * {@link MAX_LIVE_CONTINUABLE_CHILDREN} live children. rc.2 dropped the
+ * catalog's `activity` field, so liveness is re-derived from the live agents
+ * registry (`agents.get(id)?.status === 'running'`) — the same derivation
+ * rc.2's own consumer uses (tool-subagent-control `statusOf`). Degrades open
+ * when the seam lacks `listChildren`, the listing fails, or the agents
+ * registry is unavailable: a safety valve must never block starts on its own
+ * infrastructure trouble.
  */
 export async function assertLiveCapacity(
   seam: SubagentsLike,
@@ -199,13 +205,16 @@ export async function assertLiveCapacity(
   signal: AbortSignal,
 ): Promise<void> {
   if (typeof seam.listChildren !== 'function') return
-  let children: { kind: string; activity?: string }[]
+  let children: { id: string; mode?: string }[]
   try {
     children = await seam.listChildren(parent.id, signal)
   } catch {
     return
   }
-  const live = children.filter(child => child.kind === 'child' && child.activity === 'running').length
+  // The live registry sits beside the subagents seam on the same context;
+  // an absent registry degrades the guard open (no false blocks).
+  const agents = parent.ctx.get('agents') as { get?(id: string): { status?: string } | undefined } | undefined
+  const live = children.filter(child => agents?.get?.(child.id)?.status === 'running').length
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
     throw new Error(
       `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; /agents stop <id> to `

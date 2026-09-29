@@ -70,7 +70,7 @@ async function harness(withService: boolean): Promise<{
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent, plugin, setMode, calls }
 }
 
@@ -301,7 +301,7 @@ describe('/permissions trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/permissions help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

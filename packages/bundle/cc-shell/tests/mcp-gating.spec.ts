@@ -1,7 +1,7 @@
 /**
  * Tests for the cc-shell glue's gated MCP discovery: when a dsh-native config
  * (`<cwd>/.mcp.json` or `$DSH_HOME/.mcp.json`) declares at least one server,
- * Claude Code config files are skipped with a warn + one-shot session-start
+ * Claude Code config files are skipped with a warn + one-shot agent/created
  * notice pointing at `/mcp migrate`; `mcpLoadClaudeFiles: true` restores the
  * old all-merge behavior and an explicit `mcpConfigFiles` list bypasses
  * gating entirely.
@@ -172,11 +172,15 @@ async function newCtx(): Promise<Context> {
   return ctx
 }
 
-/** Emit `agent/session-start` twice with a stub agent capturing injected messages. */
+/**
+ * Fire `agent/created` twice with a stub agent capturing injected messages
+ * (rc.2: creation announces the event; the plugin's one-shot closure flag
+ * must still inject exactly once across repeated announcements).
+ */
 function emitSessionStartTwice(ctx: Context): unknown[] {
   const captured: unknown[] = []
-  const agent = { inject: (message: unknown) => captured.push(message) }
-  for (let i = 0; i < 2; i++) ctx.emit(ctx, 'agent/session-start', { agent, source: 'startup' })
+  const agent = { inject: (message: unknown) => captured.push(message) } as never
+  for (let i = 0; i < 2; i++) ctx.emit(ctx, 'agent/created', { agent, source: 'startup' })
   return captured
 }
 
@@ -314,8 +318,8 @@ describe('cc-shell glue deferred MCP mounts', () => {
     await awaitReady(ctx.get('mcpConnections')!, 'fast-rn')
 
     const captured: unknown[] = []
-    const agent = { session: { id: 'rn-1' }, inject: (message: unknown) => captured.push(message) }
-    ctx.emit(ctx, 'agent/session-start', { agent, source: 'startup' })
+    const agent = { session: { id: 'rn-1' }, inject: (message: unknown) => captured.push(message) } as never
+    ctx.emit(ctx, 'agent/created', { agent, source: 'startup' })
     expect(captured).toHaveLength(1)
     expect(JSON.stringify(captured[0])).toContain('slow-rn')
 
@@ -363,8 +367,8 @@ describe('cc-shell glue deferred MCP mounts', () => {
     await awaitReady(registry, 'rn-settled-a')
 
     const captured: unknown[] = []
-    const agent = { session: { id: 'rn-2' }, inject: (message: unknown) => captured.push(message) }
-    ctx.emit(ctx, 'agent/session-start', { agent, source: 'startup' })
+    const agent = { session: { id: 'rn-2' }, inject: (message: unknown) => captured.push(message) } as never
+    ctx.emit(ctx, 'agent/created', { agent, source: 'startup' })
     expect(captured).toHaveLength(0)
 
     for (const turn of [1, 2]) {
