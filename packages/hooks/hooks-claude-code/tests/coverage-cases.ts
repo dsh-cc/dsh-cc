@@ -645,7 +645,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
       const contexts = events(agent).filter(event => event.type === 'user/message' && event.data.source.kind !== 'user')
       expect(contexts.map(event => event.type === 'user/message' && event.data.source)).toEqual([
         { kind: 'plugin', plugin: 'policy' },
-        { kind: 'plugin', plugin: 'hooks-claude-code' },
+        { kind: 'hooks-claude-code' },
       ])
     })
 
@@ -687,7 +687,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
 
       const contexts = events(agent).filter(event => event.type === 'user/message' && event.data.source.kind !== 'user')
       expect(contexts.map(event => event.type === 'user/message' && event.data.source)).toEqual([
-        { kind: 'plugin', plugin: 'hooks-claude-code' },
+        { kind: 'hooks-claude-code' },
         { kind: 'plugin', plugin: 'policy' },
       ])
     })

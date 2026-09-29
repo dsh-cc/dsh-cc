@@ -466,7 +466,7 @@ export function createPiProbe(deps: PiProbeDeps): PiProbe {
       // never mutated (new array only).
       const warning: UserMessage = createUserMessage({
         content: [{ type: 'text', text: probeWarningText(exec.name, sanitizeReason(outcome.reason)) }],
-        source: { kind: 'plugin', plugin: 'permission-rules' },
+        source: { kind: 'permission-rules' },
       })
       return { ...d, additionalContexts: [...(d.additionalContexts ?? []), warning] }
     },

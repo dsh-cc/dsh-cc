@@ -11,6 +11,14 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the edit-recovery-hint producer (own named kind). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'edit-recovery-hint': { readonly kind: 'edit-recovery-hint' } & ContextFormed
+  }
+}
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { PostToolDecision, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
 import { isRecoveryCandidate, RECOVERY_HINT, resultTextOf } from './hint.ts'
@@ -28,7 +36,7 @@ const EDIT_TOOL = 'edit'
 function hintMessage(): UserMessage {
   return createUserMessage({
     content: [{ type: 'text', text: RECOVERY_HINT }],
-    source: { kind: 'plugin', plugin: 'edit-recovery-hint' },
+    source: { kind: 'edit-recovery-hint' },
   })
 }
 

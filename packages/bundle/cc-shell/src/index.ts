@@ -23,6 +23,14 @@ import { existsSync, readFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the cc-shell-glue producer (own named kind; no converter same-name entry). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'cc-shell-glue': { readonly kind: 'cc-shell-glue' } & ContextFormed
+  }
+}
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
 import {
   buildRegistrations,
@@ -242,7 +250,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           .map(entry => entry.name)
       if (pending.length === 0) return
       const text = `MCP: still connecting — ${pending.join(', ')}. Tools from these servers become available once ready.`
-      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'plugin', plugin: 'cc-shell-glue', form: 'notice', summary: text } }))
+      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'cc-shell-glue', form: 'notice', summary: text } }))
       const sid = agent.session?.id
       mountMcpReadyNotice(ctx, registry!, pending, typeof sid === 'string' ? sid : undefined)
     })
@@ -260,7 +268,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     ctx.on('agent/session-start', ({ agent }: { agent: { inject(message: unknown): void } }) => {
       if (fired) return
       fired = true
-      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'plugin', plugin: 'cc-shell-glue', form: 'notice', summary: text } }))
+      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'cc-shell-glue', form: 'notice', summary: text } }))
     })
   }
 

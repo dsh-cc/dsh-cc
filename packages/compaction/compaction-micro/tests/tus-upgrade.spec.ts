@@ -83,8 +83,8 @@ describe('micro × TUS placeholder upgrade (Consumer A)', () => {
     const result = m.microcompactSession(s, tus)
     expect(result.replaced).toHaveLength(1)
     const text = s.eventAt(result.replaced[0]!.replacementSeq)
-    const body = (text?.data as { message: { content: [{ content: [{ text?: string }] }] } }).message.content[0]
-      .content[0]?.text ?? ''
+    const body = (text?.data as { message: { content: [{ text?: string }] } }).message.content[0]
+      ?.text ?? ''
     expect(body).toBe(tusFramedSummary(row('call-1')))
     expect(body).toContain('<tool-result-summary untrusted="true" tool="read" bytes="31240">')
   })
@@ -100,8 +100,8 @@ describe('micro × TUS placeholder upgrade (Consumer A)', () => {
     expect(withTus.replaced).toHaveLength(without.replaced.length)
     const a = without.replaced[0]!.replacementSeq
     const b = withTus.replaced[0]!.replacementSeq
-    const ta = (s1.eventAt(a)?.data as { message: { content: [{ content: [{ text?: string }] }] } }).message.content[0].content[0]?.text
-    const tb = (s2.eventAt(b)?.data as { message: { content: [{ content: [{ text?: string }] }] } }).message.content[0].content[0]?.text
+    const ta = (s1.eventAt(a)?.data as { message: { content: [{ text?: string }] } }).message.content[0]?.text
+    const tb = (s2.eventAt(b)?.data as { message: { content: [{ text?: string }] } }).message.content[0]?.text
     expect(tb).toBe(ta)
   })
 

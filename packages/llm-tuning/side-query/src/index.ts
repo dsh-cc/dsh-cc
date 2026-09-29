@@ -17,6 +17,14 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the side-query producer (own named kind). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'side-query': { readonly kind: 'side-query' } & ContextFormed
+  }
+}
 import { resolveAlias, toOneShotRoute } from '@dsh-cc/model-aliases'
 
 /** Options for {@link runSideQuery}. */
@@ -109,7 +117,7 @@ export async function runSideQuery(ctx: Context, opts: SideQueryOptions): Promis
       ...(opts.system === undefined ? {} : { system: opts.system }),
       messages: [createUserMessage({
         content: [{ type: 'text', text: opts.prompt }],
-        source: { kind: 'plugin', plugin: 'side-query' },
+        source: { kind: 'side-query' },
       })],
       signal,
     }

@@ -29,6 +29,14 @@ import type { CompactionEngine, ManualCompactAgentContext } from '@deepseek-ai/d
 import { setCompactHint, takeCompactHint } from '@dsh-cc/compaction-basic'
 import { resolvePrice } from '@dsh-cc/command-cost'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the compaction-cost-gate producer (own named kind). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'compaction-cost-gate': { readonly kind: 'compaction-cost-gate' } & ContextFormed
+  }
+}
 import { evaluateGate } from './gate.ts'
 import { CostGateLedger, projectKeyOf } from './ledger.ts'
 import { registerCostGateSettings } from './settings.ts'
@@ -348,7 +356,7 @@ export class CompactionCostGate extends Service {
     try {
       agent.inject?.(createUserMessage({
         content: [{ type: 'text', text }],
-        source: { kind: 'plugin', plugin: 'compaction-cost-gate' },
+        source: { kind: 'compaction-cost-gate' },
       }))
     } catch (error: unknown) {
       this.ctx.logger.warn(`compaction-cost-gate: failed to inject pause notice: ${error instanceof Error ? error.message : String(error)}`)

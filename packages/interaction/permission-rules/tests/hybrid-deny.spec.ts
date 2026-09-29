@@ -223,7 +223,7 @@ function stageExec(opts: { session?: Session; args?: unknown } = {}): ToolExecut
 }
 
 function sessionOf(id: string): Session {
-  return Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
+  return Session.create(SessionId(id), undefined, { version: 4, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
 }
 
 function decided(overrides: Partial<DecidedCall> = {}): DecidedCall {

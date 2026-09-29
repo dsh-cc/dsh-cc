@@ -104,10 +104,10 @@ describe('renderDelta (§4.1)', () => {
     expect(text).toBe('[assistant] let me check\n[assistant tool_use read_file] {"path":"a.ts"}')
   })
 
-  it('renders tool-result block text content', () => {
+  it('renders tool-role message text content', () => {
     const text = renderDelta([{
       role: 'tool',
-      content: [{ type: 'tool-result', content: [{ type: 'text', text: 'file body' }] }],
+      content: [{ type: 'text', text: 'file body' }],
     }])
     expect(text).toBe('file body')
   })

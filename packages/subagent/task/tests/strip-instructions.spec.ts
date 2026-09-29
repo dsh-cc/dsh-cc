@@ -64,7 +64,7 @@ const taskPrompt = {
 const otherPlugin = {
   id: 'plugin-1',
   content: [{ type: 'text', text: 'hook context' }],
-  source: { kind: 'plugin', plugin: 'hooks-claude-code' },
+  source: { kind: 'hooks-claude-code' },
 }
 
 const threeMessages = [taskPrompt, claudeMd, otherPlugin]

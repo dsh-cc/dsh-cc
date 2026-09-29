@@ -280,15 +280,19 @@ export async function scanSessions(
     const projectDir = join(sessionsRoot, projectKey);
     for (const sessionId of readdirSync(projectDir)) {
       const dir = join(projectDir, sessionId);
-      // The writer emits exactly one stream format per session dir (v3 since
-      // harness 0.1.5), so prefer-v3 is only a pathological-transition
-      // tie-break for a dir that somehow holds both files.
-      let file = join(dir, "session.v3.jsonl.zstd");
+      // The writer emits exactly one stream format per session dir (v4 since
+      // harness 0.1.7-rc.2), so the resolver is only a pathological-transition
+      // tie-break for a dir that somehow holds several files. v4-first, then
+      // v3, then legacy — keeps pre-upgrade sessions scannable.
+      let file = join(dir, "session.v4.jsonl.zstd");
       if (!existsSync(file)) {
-        file = join(dir, "session.jsonl.zstd");
+        file = join(dir, "session.v3.jsonl.zstd");
         if (!existsSync(file)) {
-          sessionsNoStream++;
-          continue;
+          file = join(dir, "session.jsonl.zstd");
+          if (!existsSync(file)) {
+            sessionsNoStream++;
+            continue;
+          }
         }
       }
       let mtimeMs: number | undefined;

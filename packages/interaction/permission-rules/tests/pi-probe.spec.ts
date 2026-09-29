@@ -32,7 +32,7 @@ function exec(opts: { name?: string; args?: unknown; session?: Session; signal?:
 }
 
 function sessionOf(id: string, cwd = '/work'): Session {
-  return Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
+  return Session.create(SessionId(id), undefined, { version: 4, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
 }
 
 const text = (t: string): ContentBlock => ({ type: 'text', text: t })

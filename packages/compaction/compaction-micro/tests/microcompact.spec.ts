@@ -80,9 +80,7 @@ function replacementText(s: Session, call: string): string | undefined {
     const msg = event.data.message as SessionEvent<'tool/result'>['data']['message']
     if (msg.source.callId !== ToolCallId(call)) continue
     const block = msg.content[0]
-    return block?.type === 'tool-result' && block.content[0]?.type === 'text'
-      ? block.content[0].text
-      : undefined
+    return block?.type === 'text' ? block.text : undefined
   }
   return undefined
 }
@@ -196,8 +194,7 @@ describe('Microcompactor window + freeze', () => {
       const replacement = s.eventAt(SessionSeq(record.replacementSeq)) as SessionEvent<'tool/result'> | undefined
       expect(replacement?.type).toBe('tool/result')
       const block = replacement!.data.message.content[0]
-      expect(block?.type === 'tool-result' && block.content[0]?.type === 'text'
-        && block.content[0].text.startsWith(MICROCOMPACT_MARKER)).toBe(true)
+      expect(block?.type === 'text' && block.text.startsWith(MICROCOMPACT_MARKER)).toBe(true)
       expect(replacement!.sourceEventSeqs).toContain(record.originalSeq)
     }
   })

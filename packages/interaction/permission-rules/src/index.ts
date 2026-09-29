@@ -15,6 +15,14 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the permission-rules producer (own named kind). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'permission-rules': { readonly kind: 'permission-rules' } & ContextFormed
+  }
+}
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'

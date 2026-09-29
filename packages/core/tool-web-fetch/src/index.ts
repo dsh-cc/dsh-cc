@@ -12,6 +12,14 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { BlockAssembler, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the tool-web-fetch producer (own named kind). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'tool-web-fetch': { readonly kind: 'tool-web-fetch' } & ContextFormed
+  }
+}
 import { fetchMetaFromValue, formatFetchOutput, parseFetchArgs, presentFetchCall, presentFetchResult } from '@deepseek-ai/dsh-tool-web'
 import { toOneShotRoute } from '@dsh-cc/model-aliases'
 import { defineTool } from '@dsh-cc/tools'
@@ -192,7 +200,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         system: 'Extract/summarize the fetched document to answer the user prompt. Return only the extraction. Cite the URL as a markdown link.',
         messages: [createUserMessage({
           content: [{ type: 'text', text: `Prompt:\n${prompt}\n\nDocument:\n${converted}` }],
-          source: { kind: 'plugin', plugin: name },
+          source: { kind: 'tool-web-fetch' },
         })],
         signal: exec.signal,
       }

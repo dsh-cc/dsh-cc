@@ -301,7 +301,26 @@ describe("scanSessions", () => {
     expect(scan.sessionsNoStream).toBe(0);
   });
 
-  it("prefers session.v3.jsonl.zstd when both stream files exist", async () => {
+  it("prefers session.v4.jsonl.zstd over v3 and legacy when several exist (v4-first resolver)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forensics-v4-"));
+    const dir = join(root, "proj-key", "sess-v4");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "session.jsonl.zstd"), Buffer.from(headerLine()));
+    writeFileSync(join(dir, "session.v3.jsonl.zstd"), Buffer.from(headerLine()));
+    writeFileSync(join(dir, "session.v4.jsonl.zstd"), Buffer.from(headerLine()));
+    const seen: string[] = [];
+    const scan = await scanSessions(root, {
+      decompress: async (f) => {
+        seen.push(f);
+        return headerLine();
+      },
+    });
+    expect(scan.sessionsScanned).toBe(1);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].endsWith("session.v4.jsonl.zstd")).toBe(true);
+  });
+
+  it("prefers session.v3.jsonl.zstd over legacy when both exist (pre-v4 fallback)", async () => {
     const root = mkdtempSync(join(tmpdir(), "forensics-both-"));
     const dir = join(root, "proj-key", "sess-both");
     mkdirSync(dir, { recursive: true });

@@ -129,7 +129,7 @@ describe('hooks-claude-code bridge — UserPromptSubmit', () => {
     // The injected context reached the model and is recorded with the plugin source.
     expect(JSON.stringify(adapter.requests[0]!.messages)).toContain('remember: be brief')
     const ctxMsg = events(agent).find(e => e.type === 'user/message' && e.data.source.kind !== 'user')
-    expect(ctxMsg?.type === 'user/message' && ctxMsg.data.source).toEqual({ kind: 'plugin', plugin: 'hooks-claude-code' })
+    expect(ctxMsg?.type === 'user/message' && ctxMsg.data.source).toEqual({ kind: 'hooks-claude-code' })
   })
 })
 

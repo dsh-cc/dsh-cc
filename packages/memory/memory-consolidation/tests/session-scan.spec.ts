@@ -87,6 +87,24 @@ describe('scanSessions', () => {
     expect(result.sessions.find((s) => s.id === 'from-v3')?.sub).toBe(false)
   })
 
+  it('1b. prefers the v4 stream when it coexists with v3 and legacy (v4-first resolver)', async () => {
+    const base = await makeRoot()
+    const { zstdCompressSync } = await import('node:zlib')
+    const dir = await seedSession(base, '--proj--', 'sess-v4', { ...HEADER, id: 'from-v3' })
+    await writeFile(
+      join(dir, 'session.jsonl.zstd'),
+      zstdCompressSync(Buffer.from(`${JSON.stringify({ type: 'session', data: { origin: 'subagent' } })}\n`)),
+    )
+    await writeFile(
+      join(dir, 'session.v4.jsonl.zstd'),
+      zstdCompressSync(Buffer.from(`${JSON.stringify({ type: 'session', ...HEADER, id: 'from-v4' })}\n`)),
+    )
+    const result = await scanSessions(base)
+    expect(result.scanned).toBe(1)
+    expect(result.unreadable).toBe(0)
+    expect(result.sessions.map((s) => s.id)).toEqual(['from-v4'])
+  })
+
   it('2. parses the pinned header contract defensively', async () => {
     const base = await makeRoot()
     // v3: top-level fields.

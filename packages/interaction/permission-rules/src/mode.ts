@@ -221,7 +221,7 @@ export function switchSessionPermissionMode(args: SwitchSessionPermissionModeArg
   try {
     agent.inject(createUserMessage({
       content: [{ type: 'text', text: `The permission mode changed to "${mode}" (${origin ?? 'changed by the user'}).` }],
-      source: { kind: 'plugin', plugin: 'permission-rules' },
+      source: { kind: 'permission-rules' },
     }))
   } catch {
     // Tests and headless agents may omit inject; mode is already durable.

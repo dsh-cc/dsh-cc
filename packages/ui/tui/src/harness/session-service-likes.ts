@@ -12,10 +12,14 @@
 
 /**
  * The 0.1.5 handle-model `sessionPersistence.list()` face: one lightweight
- * snapshot per stored session. The flat fields the picker needs (id, cwd,
- * createdAt, lineage) all live on `snapshot.header`; the snapshot exposes no
- * mtime, so last-activity refinement (`updatedAtMs`) is unavailable at list
- * time and the picker falls back to `createdAt`.
+ * snapshot per stored session. Verified verbatim against 0.1.7-rc.2
+ * `SessionPersistenceSnapshot` (`{header, revision, eventCount?, sizeBytes?}`;
+ * the v4 format bump changed only the stream file name, not this shape), so
+ * the /resume picker mapping reads v4 headers unchanged. The flat fields the
+ * picker needs (id, cwd, createdAt, lineage) all live on `snapshot.header`;
+ * the snapshot exposes no mtime, so last-activity refinement
+ * (`updatedAtMs`) is unavailable at list time and the picker falls back to
+ * `createdAt`.
  */
 export type PersistenceSnapshotLike = {
   readonly header: {

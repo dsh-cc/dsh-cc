@@ -76,10 +76,10 @@ describe('auto pre-step failure cap', () => {
     const notice = agent.inject.mock.calls[0]![0] as {
       role: string
       content: Array<{ type: string; text: string }>
-      source: { kind: string; plugin: string }
+      source: { kind: string }
     }
     expect(notice.role).toBe('user')
-    expect(notice.source).toEqual({ kind: 'plugin', plugin: 'compaction-micro' })
+    expect(notice.source).toEqual({ kind: 'compaction-micro' })
     expect(notice.content).toHaveLength(1)
     expect(notice.content[0]!.text).toBe(
       'microcompact failed 3 consecutive time(s) (last: disk full); '

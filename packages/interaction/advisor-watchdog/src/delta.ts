@@ -49,8 +49,6 @@ export interface DeltaBlock {
   name?: string
   /** `tool-call` blocks: raw JSON arguments string. */
   arguments?: string
-  /** `tool-result` blocks: nested content. */
-  content?: readonly DeltaBlock[]
 }
 
 /** Structural message subset read off the `llm/stream` request snapshot. */
@@ -130,12 +128,6 @@ function renderBlock(block: DeltaBlock): string {
   if (block.type === 'tool-call') {
     return `[assistant tool_use ${block.name ?? 'unknown'}] ${truncateArgs(block.arguments ?? '')}`
   }
-  if (block.type === 'tool-result') {
-    return (block.content ?? [])
-      .filter(nested => nested.type === 'text')
-      .map(nested => nested.text ?? '')
-      .join('\n')
-  }
   return block.text ?? ''
 }
 
@@ -144,8 +136,11 @@ function renderMessage(message: DeltaMessage): string {
   const role = message.role ?? 'user'
   const textParts: string[] = []
   const toolLines: string[] = []
+  // v4: tool results are first-class role-'tool' messages whose content is
+  // the body directly — their text lands in the tool lines, never in prose.
+  const isTool = role === 'tool'
   for (const block of message.content) {
-    if (block.type === 'tool-call' || block.type === 'tool-result') {
+    if (block.type === 'tool-call' || isTool) {
       const line = renderBlock(block)
       if (line.length > 0) toolLines.push(line)
     } else if (block.type === 'text') {

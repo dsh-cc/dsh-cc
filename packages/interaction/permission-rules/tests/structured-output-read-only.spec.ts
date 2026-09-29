@@ -137,7 +137,7 @@ function exec(name: string, args: unknown, agent?: Agent): ToolExecutionInput {
 }
 
 function agentOf(id: string, cwd = '/work'): Agent {
-  const session = Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
+  const session = Session.create(SessionId(id), undefined, { version: 4, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
   session.append('turn/start', { turn: 1 })
   return { id, session, inject: () => {} } as unknown as Agent
 }

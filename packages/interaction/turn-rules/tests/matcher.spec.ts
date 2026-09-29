@@ -75,7 +75,7 @@ describe('bounded unit build', () => {
         { content: [{ type: 'text', text: 'reminder body' }], source: { kind: 'turn-rules' } },
         { content: [{ type: 'text', text: 'memory body' }], source: { kind: 'memory' } },
         { content: [{ type: 'text', text: 'advisor body' }], source: { kind: 'advisor' } },
-        { content: [{ type: 'text', text: 'attributed plugin' }], source: { kind: 'plugin' } },
+        { content: [{ type: 'text', text: 'attributed plugin' }], source: { kind: 'plugin:legacy-producer' } },
       ],
       200_000,
     )

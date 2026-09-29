@@ -15,7 +15,7 @@
  */
 
 import { freezeMessage } from '@deepseek-ai/dsh-llm'
-import type { Message, ToolResultBlock } from '@deepseek-ai/dsh-llm'
+import type { Message } from '@deepseek-ai/dsh-llm'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
 // Type-only: the `compaction/prune` shadow-price SessionEventMap merge.
@@ -94,9 +94,8 @@ export function attemptSwap(input: SwapInput): SwapResult {
   if (located === undefined) return { outcome: 'stale' }
   const { seq, event } = located
   const message = event.data.message
-  const first = message.content[0]
-  const resultBlock: ToolResultBlock | undefined = first?.type === 'tool-result' ? first : undefined
-  const body = resultBlock === undefined ? undefined : joinTextBlocks(resultBlock.content)
+  // v4: the tool-result body is the message content directly (no wrapper block).
+  const body = joinTextBlocks(message.content)
   if (body !== input.fullText) return { outcome: 'stale' }
 
   const suffixTokens = suffixTokensAfter(session, seq, input.estimateMessage)
@@ -120,15 +119,11 @@ export function attemptSwap(input: SwapInput): SwapResult {
   if (!gate.pass) return { outcome: 'gate-failed', gate: facts }
   if (!input.apply) return { outcome: 'dry-run', gate: facts }
 
-  // Preserve every non-content field of the original tool-result block (type,
-  // toolCallId, isError, plus future additions) — the "may change only
-  // content" surface invariant.
-  const replacementBlock: ToolResultBlock = resultBlock === undefined
-    ? { type: 'tool-result', toolCallId: message.source.callId, content: [{ type: 'text', text: input.stubText }] }
-    : { ...resultBlock, content: [{ type: 'text', text: input.stubText }] }
+  // v4: toolCallId/isError live on the message itself; replacing content
+  // preserves them — the "may change only content" surface invariant.
   const replacementMessage = freezeMessage<ToolResultMessage>({
     ...message,
-    content: [replacementBlock],
+    content: [{ type: 'text', text: input.stubText }],
   })
   // Shadow-price protocol: the metering event and its replacement are
   // appended synchronously adjacent so the token meter subtracts the

@@ -169,8 +169,9 @@ function replaceOpOf(
 ): { start: number; end: number } | undefined {
   const op = event.surfaceOp
   if (typeof op !== 'object' || op === null || op.op !== 'replace') return undefined
-  // 0.1.5 spelling (startSeq/endSeq) first; fall back to the pre-rename
-  // start/end pair for logs written before the retarget.
+  // Verified at 0.1.7-rc.2 (session/src/surface.ts:300): replace-op fields are
+  // `startSeq`/`endSeq`. The pre-rename start/end pair stays for logs written
+  // before the retarget.
   if ('startSeq' in op && 'endSeq' in op
     && typeof op.startSeq === 'number' && typeof op.endSeq === 'number') {
     return { start: op.startSeq, end: op.endSeq }
@@ -299,11 +300,15 @@ export function applySessionEvent(
       const replace = replaceOpOf(event)
       if (replace !== undefined) return applySurfaceReplace(state, event, replace)
       // Route on UserMessage.source.kind: only human input renders as a user
-      // row. Injected context (kind 'plugin') is model-facing — a notice form
-      // surfaces as a one-line dim status per its contract, every other form
-      // (instructions/catalog/snapshot/relay/recall) stays hidden. Tool and
-      // unknown/absent kinds fold to nothing: never dump unrecognized
-      // injected content as if the user typed it.
+      // row. Injected context (any non-'user' kind) is model-facing — a
+      // notice form surfaces as a one-line dim status per its contract, every
+      // other form (instructions/catalog/snapshot/relay/recall) stays hidden.
+      // Notice routing is kind-INDEPENDENT on purpose: v4 writers mint named
+      // kinds and resumed v3 logs carry converter spellings
+      // (`plugin:<name>` or same-name kinds) — keying on any single kind
+      // would silently drop notices. Tool and unknown/absent kinds fold to
+      // nothing: never dump unrecognized injected content as if the user
+      // typed it.
       const source = data !== null && typeof data === 'object'
         ? (data as { source?: unknown }).source
         : undefined
@@ -312,11 +317,11 @@ export function applySessionEvent(
         ? (source as { kind: string }).kind
         : undefined
       if (kind !== 'user') {
-        if (kind === 'plugin') {
-          const plugin = source as { form?: unknown; summary?: unknown }
-          if (plugin.form === 'notice' && typeof plugin.summary === 'string') {
-            return upsertRow(state, { kind: 'status', text: plugin.summary, ...seqTag(event) })
-          }
+        const injected = source !== null && typeof source === 'object'
+          ? (source as { form?: unknown; summary?: unknown })
+          : undefined
+        if (injected?.form === 'notice' && typeof injected.summary === 'string') {
+          return upsertRow(state, { kind: 'status', text: injected.summary, ...seqTag(event) })
         }
         return state
       }
