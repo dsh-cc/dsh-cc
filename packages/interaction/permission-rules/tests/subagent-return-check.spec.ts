@@ -6,7 +6,7 @@ import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool, type ToolExecutionInput } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import PermissionRules, {
   PERMISSION_SETTINGS_NAMESPACE,
   appendSessionClassifier,

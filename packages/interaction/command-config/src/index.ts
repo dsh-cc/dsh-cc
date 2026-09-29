@@ -6,7 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { helpable } from '@dsh-cc/command-usage'
 import { keyAllowed, parseConfigArgs, renderConfig, type AllowEntry } from './config.ts'

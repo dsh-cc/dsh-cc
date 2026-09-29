@@ -7,6 +7,30 @@
  * layer in turn. A top-level `env` section is split out and applied in two
  * stages, holding dangerous variables until trust. Writes are write-through
  * to the user layer, keeping higher-layer contributions read-side only.
+ *
+ * NAMESPACE DISPOSITION MATRIX (migration plan 2026-09-29 Q3 addendum;
+ * closed at Slice 1b — namespace → disposition → evidence):
+ * - `llm-pi-ai`           → BRIDGE WITH DATA MIGRATION. dsh-cc UI reads it
+ *   (tui provider-read, describe user layer) and writes it (tui
+ *   provider-settings.writeRoute, mirrored to the `llm-pi-ai` entry config by
+ *   the tui provider-bridge; gauge-backend reads the same user-override seam).
+ * - `agent-default-model` → BRIDGE WITH DATA MIGRATION. TUI setAsDefault
+ *   replaces the user section; provider-bridge mirrors provider/model into
+ *   the `agent-default-model` entry config (rc.2 persists via configEditor).
+ * - `agent-loop`          → REMOVED upstream entirely (rc.2 deleted
+ *   AGENT_LOOP_SETTINGS_*); `grep AGENT_LOOP_SETTINGS` over dsh-cc returns
+ *   zero — no seam exists.
+ * - `permission-presets`  → REMOVED / NO BRIDGE. Only a type-only
+ *   `@deepseek-ai/dsh-permission-presets` import (command-status); no dsh-cc
+ *   read/write of the namespace; the no-op configure() facade covers boot.
+ * - `llm-deepseek`        → REMOVED / NO BRIDGE. Only a test-support import;
+ *   no dsh-cc settings read/write.
+ * - `bash-local`/`pwsh-local` → REMOVED / NO BRIDGE. Executor package imports
+ *   in tests only; no namespace read/write anywhere in dsh-cc.
+ * - tool-subagent model-selection → REMOVED / NO BRIDGE. No dsh-cc
+ *   namespace reads; rc.2 subagent tooling reads its own Config.
+ * - `web-search-deepseek` → REMOVED / NO BRIDGE. Zero dsh-cc references.
+ *
  * @module @dsh-cc/settings-cascade
  */
 
@@ -15,7 +39,7 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import { resolveLocalSettingsDir, type LocalRootDeps } from './local-root.ts'
 import { mergeSettingsSection } from './merge.ts'
 import { reassembleTrustedAutoMode } from './trusted-scope.ts'

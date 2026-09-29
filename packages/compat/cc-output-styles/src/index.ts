@@ -11,7 +11,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { join } from 'node:path'
 import { defaultDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'

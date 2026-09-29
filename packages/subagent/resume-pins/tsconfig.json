@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../settings/settings-provider"
+    },
+    {
       "path": "../../preset/claude-code-agents"
     },
     {

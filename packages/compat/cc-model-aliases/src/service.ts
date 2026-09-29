@@ -17,7 +17,7 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace, SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace, SettingsProvider } from '@dsh-cc/settings-provider'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 // Type-only: pull in the declaration-merged `agent/request` event so the host
 // overlay listener typechecks. Does not extend AgentOptions.

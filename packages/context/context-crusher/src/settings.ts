@@ -6,7 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import { Config, SettingsSchema } from './config.ts'
 import type { CrusherConfig, ResolvedConfig } from './types.ts'

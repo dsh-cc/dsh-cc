@@ -8,6 +8,9 @@
     "src"
   ],
   "references": [
+    {
+      "path": "../../settings/settings-provider"
+    },
     { "path": "../../core/tools" },
     { "path": "../../preset/claude-code-agents" },
     { "path": "../../compat/cc-model-aliases" },

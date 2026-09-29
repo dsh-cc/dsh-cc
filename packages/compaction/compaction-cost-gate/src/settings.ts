@@ -8,7 +8,7 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import type { ModelPrice } from '@dsh-cc/command-cost'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import type { CostGateSettings } from './types.ts'

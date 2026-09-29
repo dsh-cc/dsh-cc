@@ -16,6 +16,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
+import { readUserSection } from '@dsh-cc/settings-ns'
 import { pickGaugeRouteName, type ClassifierBackend, type PolicyWarn } from './route-policy.ts'
 import type { ClassifierRoute } from './llm-classifier.ts'
 
@@ -79,10 +80,13 @@ export async function assembleSystemOneBackend(
   const model = resolved?.model ?? parent?.model
   if (provider === undefined || provider.length === 0 || model === undefined || model.length === 0) return null
 
-  // Provider connection facts from the `llm-pi-ai` namespace — the same
-  // namespace the TUI provider flows read (design §4.3). Structural read.
-  const settings = ctx.get('settings') as { get?: (ns: string) => unknown } | undefined
-  const raw = typeof settings?.get === 'function' ? settings.get('llm-pi-ai') : undefined
+  // Provider connection facts from the `llm-pi-ai` user override — the same
+  // user-layer section the TUI provider flows read. Q3 disposition (bridge,
+  // migration plan addendum): the rc.2 adapter reads its own entry Config, so
+  // the bridge's user-override read seam is the source of truth here, not the
+  // namespace's resolved value. Structural read.
+  const settings = ctx.get('settings') as { describe?: () => ReadonlyArray<{ ns?: unknown; user?: unknown }> } | undefined
+  const raw = readUserSection(settings, 'llm-pi-ai')
   const providers = (raw as { providers?: unknown } | undefined)?.providers
   const record = (typeof providers === 'object' && providers !== null
     ? (providers as Record<string, unknown>)[provider]

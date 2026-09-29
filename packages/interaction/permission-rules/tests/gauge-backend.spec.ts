@@ -4,11 +4,20 @@ import type { ToolExecution } from '@dsh-cc/tools'
 import { resolveClassifierBackend, resolveProbeBackend, GAUGE_UNRESOLVABLE_KEY } from '../src/gauge-backend.ts'
 import { createWarnOnce, resetPolicyWarned } from '../src/route-policy.ts'
 
-/** Minimal ctx face: only `settings` (and a logger) are consulted. */
+/** Minimal ctx face: only `settings` (and a logger) are consulted. The gauge
+ * read seam is the describe-based RAW USER OVERRIDE (Q3 bridge), so doubles
+ * expose `describe()` rather than a resolved-value `get`. */
 function ctxWith(namespaces: Record<string, unknown>): Context {
   return {
     get: (name: string) =>
-      name === 'settings' ? { get: (ns: string) => namespaces[ns] } : undefined,
+      name === 'settings'
+        ? {
+            // `get` serves the resolved-alias readers; `describe` serves the
+            // Q3 user-override read seam the gauge provider record goes through.
+            get: (ns: string) => namespaces[ns],
+            describe: () => Object.entries(namespaces).map(([ns, user]) => ({ ns, user })),
+          }
+        : undefined,
     logger: { warn: () => {}, debug: () => {}, info: () => {} },
   } as unknown as Context
 }
@@ -132,7 +141,10 @@ describe('resolveClassifierBackend (B2b)', () => {
     const ctx = {
       get: (name: string) =>
         name === 'settings'
-          ? { get: (ns: string) => (ns === 'model-aliases' ? gaugeAlias({ provider: 'deepseek' }) : ns === 'llm-pi-ai' ? providerRecord()['llm-pi-ai'] : undefined) }
+          ? {
+              get: (ns: string) => (ns === 'model-aliases' ? gaugeAlias({ provider: 'deepseek' }) : ns === 'llm-pi-ai' ? providerRecord()['llm-pi-ai'] : undefined),
+              describe: () => [{ ns: 'model-aliases', user: gaugeAlias({ provider: 'deepseek' }) }, { ns: 'llm-pi-ai', user: providerRecord()['llm-pi-ai'] }],
+            }
           : name === 'credentials'
             ? { resolve: async (ref: string) => ({ value: ref === 'GAUGE_TEST_KEY' ? 'from-credentials' : undefined }) }
             : undefined,

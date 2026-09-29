@@ -50,7 +50,7 @@
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
-    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
     "@dsh-cc/command-cost": "workspace:^",

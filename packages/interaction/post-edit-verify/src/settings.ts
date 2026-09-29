@@ -19,7 +19,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import z from '@deepseek-ai/schemastery'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import type { VerifyRule } from './rules.ts'

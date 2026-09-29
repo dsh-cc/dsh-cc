@@ -13,13 +13,13 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type z from '@deepseek-ai/schemastery'
+import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { installSectionSafe } from '@dsh-cc/settings-ns'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import { installSectionSafe, registerNamespaceSafe } from '@dsh-cc/settings-ns'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value
 // dependency on the seam.
@@ -237,6 +237,13 @@ export class PermissionRulesService extends Service {
     // rules in force, exactly as the fallback contract requires. A stored
     // change re-enters reload() to rebuild merged state and the guards.
     ctx.inject(['settings'], () => {
+      // Q3 disposition matrix (migration plan addendum): `llm-pi-ai` is
+      // BRIDGED — the rc.2 adapter reads its own entry Config, so this
+      // registration only makes the user-override section describable for
+      // the gauge backend's read seam and the TUI bridge's write seam.
+      // Passthrough schema: the raw user section is the contract. Duplicate
+      // registrations degrade to live reads inside the helper.
+      registerNamespaceSafe(ctx, 'llm-pi-ai' as SettingsNamespace, z.any() as never)
       // Idempotent install: a duplicate namespace skips the throwing
       // installSection and wires live reads + settings/updated instead.
       installSectionSafe(ctx, PERMISSION_SETTINGS_NAMESPACE, permissionSettingsSchema(), {}, {

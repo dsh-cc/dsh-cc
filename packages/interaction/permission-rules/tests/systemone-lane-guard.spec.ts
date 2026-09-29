@@ -22,7 +22,11 @@ const NAMESPACES: Record<string, unknown> = {
 
 async function mount(): Promise<Context> {
   const ctx = new Context()
-  ctx.provide('settings', { get: (ns: string) => NAMESPACES[ns], register: () => ({}) })
+  ctx.provide('settings', {
+    get: (ns: string) => NAMESPACES[ns],
+    describe: () => Object.entries(NAMESPACES).map(([ns, user]) => ({ ns, user })),
+    register: () => ({}),
+  })
   applyModelRoutes(ctx, {})
   return ctx
 }

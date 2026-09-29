@@ -4,8 +4,8 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsConflictError } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 
 // Concurrency gate for `node:fs/promises.readFile`. When armed, the next read

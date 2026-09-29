@@ -47,6 +47,9 @@
       "@dsh-cc/settings-migrations": [
         "./packages/settings/settings-migrations/src/index.ts"
       ],
+      "@dsh-cc/settings-provider": [
+        "./packages/settings/settings-provider/src/index.ts"
+      ],
       "@dsh-cc/permission-rules": [
         "./packages/interaction/permission-rules/src/index.ts"
       ],

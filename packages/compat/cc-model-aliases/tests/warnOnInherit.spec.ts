@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider } from '@dsh-cc/settings-provider'
 import { MODEL_ALIASES_NAMESPACE, resolveAlias } from '@dsh-cc/model-aliases'
 import { apply } from '../src/index.ts'
 

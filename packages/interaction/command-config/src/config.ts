@@ -5,7 +5,7 @@
  * @module @dsh-cc/command-config/config
  */
 
-import type { SettingsDescriptor } from '@deepseek-ai/dsh-settings'
+import type { SettingsDescriptor } from '@dsh-cc/settings-provider'
 
 /** A parsed `/config` update request. */
 export interface ConfigArgs {

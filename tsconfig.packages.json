@@ -8,6 +8,9 @@
       "path": "./packages/settings/settings-migrations"
     },
     {
+      "path": "./packages/settings/settings-provider"
+    },
+    {
       "path": "./packages/interaction/permission-rules"
     },
     {

@@ -32,4 +32,4 @@ export function installSectionSafe<T>(ctx: Context, ns: SettingsNamespace, schem
 
 ## Shape
 
-Library package: no preset row, no capability-manifest entry. Consumed by the preset-row registrants with `workspace:^` in `dependencies` (launcher-closure guarantee), with the harness `@deepseek-ai/cordis` + `@deepseek-ai/dsh-settings` as peers.
+Library package: no preset row, no capability-manifest entry. Consumed by the preset-row registrants with `workspace:^` in `dependencies` (launcher-closure guarantee), with the harness `@deepseek-ai/cordis` as a peer and the vendored `@dsh-cc/settings-provider` contract.

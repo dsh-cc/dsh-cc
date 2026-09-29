@@ -4,7 +4,7 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { SettingsCascadeProvider, type Config, type EnvSettings } from '../src/index.ts'
 
 // Concurrency gate for `node:fs/promises.readFile`. When armed, reads hang in

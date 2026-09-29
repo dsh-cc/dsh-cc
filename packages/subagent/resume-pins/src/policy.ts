@@ -13,7 +13,7 @@
  * @module @dsh-cc/subagent-resume-pins/policy
  */
 
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 
 /** The settings namespace carrying the resume policy. */
 export const RESUME_POLICY_NAMESPACE = 'subagents-resume' as SettingsNamespace

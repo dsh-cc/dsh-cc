@@ -27,8 +27,7 @@
   "peerDependencies": {
     "@deepseek-ai/dsh-commands": ">=0.1.7-rc.2",
     "@deepseek-ai/dsh-invariants": ">=0.1.7-rc.2",
-    "@deepseek-ai/cordis": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-settings": ">=0.1.7-rc.2"
+    "@deepseek-ai/cordis": ">=0.1.7-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
@@ -37,7 +36,7 @@
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
-    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"
   },
   "publishConfig": {

@@ -51,6 +51,7 @@ import {
   reopenField,
 } from './provider-actions.ts'
 import { createDetail } from './provider-detail.ts'
+import { ensureProviderBridge } from './provider-bridge.ts'
 
 export {
   PROVIDER_SETTINGS_NAMESPACE,
@@ -332,6 +333,10 @@ export function createProviderSection(rt: ProviderSectionDeps): ProviderRuntime 
   }
 
   async function fetchList(): Promise<ProviderList> {
+    // Q3-addendum bridge (b): before the first read/write use, register the
+    // bridged namespaces on the cascade and one-shot copy the pre-existing
+    // settings.json sections into the live plugin entries. Best-effort.
+    await ensureProviderBridge(rt.ctx)
     const llm = rt.ctx.get('llm') as LlmManageLike | undefined
     const credentials = rt.ctx.get('credentials') as CredentialsLike | undefined
     const settings = rt.ctx.get('settings') as SettingsDescribeLike | undefined

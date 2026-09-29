@@ -25,12 +25,11 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-settings": ">=0.1.7-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
-    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"
   },
   "publishConfig": {
