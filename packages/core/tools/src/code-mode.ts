@@ -3,13 +3,25 @@
  * tools through nested executions scheduled under the native concurrency
  * contract; each sub-dispatch is logged for reconstruction, while only the
  * outer curated result enters model history.
+ *
+ * FORK DRIFT (harness 0.1.7-rc.2 retarget, compile-fix strategy — NOT a
+ * rebase): this fork tracks the harness `core/tools` presentation layer only
+ * as far as Slice 0 requires. Ported from upstream `ptc.ts`: the
+ * `PtcRuntime` two-stage contract (`run(resolve(request))` instead of the
+ * deleted `CodeRuntime`'s one-stage `run(request)`), the runtime-getter
+ * `executionInstructions`/`sandboxMode` reads, and the sandbox-denial /
+ * escalation-guidance presentation copy. Deliberately NOT ported (kept for
+ * later slices): the model-facing `sandbox_permissions`/`justification`
+ * parameters and the `approveEscalation` flow — dsh-cc resolves the standing
+ * sandbox policy outside this transport, so the request never carries a
+ * `sandboxPolicy` and the getters stay read-only here. The
+ * `PreToolDecision`/`cancel` port is Slice 4, untouched.
  * @module @dsh-cc/tools/src/code-mode
  */
 
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { CodeBindingFunction, CodeRunResult, CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
-import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import type { PtcBindingFunction, PtcJsonValue, PtcRunResult, PtcRunSandbox, PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import { jsonNormalizeArgs, renderValue } from './json-render.ts'
 import { CodeRunFailedError, resolveFlavor, RUN_CODE_DESCRIPTION_PARAM_DESCRIPTION, RUN_CODE_NAME, TYPESCRIPT_FLAVOR } from './run-code-defs.ts'
 import { defineTool, parameterSchemaSpecToJsonSchema } from './schema.ts'
@@ -22,7 +34,17 @@ export { CodeRunFailedError, RUN_CODE_NAME, SDK_SECTION_ORDER } from './run-code
 export type { CodeSdkLanguage } from './run-code-defs.ts'
 
 /** Canonical value returned by the outer Code Mode transport. */
-type RunCodeOutput = { logs: string[]; result?: JsonValue }
+type RunCodeOutput = { logs: string[]; result?: PtcJsonValue; sandbox?: PtcRunSandbox }
+
+/**
+ * Escalation guidance appended wherever the model sees a sandbox denial or
+ * the `run_code` schema (ported from the harness presentation layer): wider
+ * access is per-execution, evidence-first, and never replayed.
+ */
+function escalationGuidance(runtime: PtcRuntime | undefined): string {
+  return runtime?.sandboxMode === undefined ? ''
+    : ' A sandbox escalation approves this complete program for one execution only. Nested tools retain their own policies and approvals. Request wider access only after evidence of a denial. Earlier effects may already have completed: inspect them before explicitly retrying. Programs are never replayed automatically.'
+}
 
 /**
  * Registry-private capabilities the bridge receives at construction — the
@@ -30,15 +52,15 @@ type RunCodeOutput = { logs: string[]; result?: JsonValue }
  * off its public service API and flow here as closures instead.
  */
 export interface RunCodeBridgeOptions {
-  /** Resolves `ctx.codeRuntime` or throws the loud misconfiguration error (shared with the registry's assembly-time checks). */
-  requireRuntime: () => CodeRuntime
+  /** Resolves `ctx.ptcRuntime` or throws the loud misconfiguration error (shared with the registry's assembly-time checks). */
+  requireRuntime: () => PtcRuntime
   /**
-   * Reads `ctx.codeRuntime` without throwing: `undefined` when none is mounted.
+   * Reads `ctx.ptcRuntime` without throwing: `undefined` when none is mounted.
    * Lets schema emission tell "no runtime" (degrade to TS; the readers that
    * reach it are {@link resolveFlavor}'s) apart from "unknown language" (fail
    * loud).
    */
-  peekRuntime: () => CodeRuntime | undefined
+  peekRuntime: () => PtcRuntime | undefined
   /** The run's overlap cap for parallel-classified sub-calls (the registry passes its validated `maxParallelSubCalls`). */
   maxParallel: number
   /** Runs the contained `tools/code-dispatch-log` waterfall over one settled sub-dispatch (the registry's private invoker). */
@@ -82,11 +104,24 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
         properties: {
           logs: { type: 'array', required: true, items: { type: 'string' } },
           result: { type: 'json' },
+          sandbox: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              mode: { type: 'string', required: true, enum: ['read-only', 'workspace-write', 'danger-full-access'] },
+              denied: { type: 'boolean', required: true },
+              enforcement: { type: 'string', enum: ['full', 'partial'] },
+            },
+          },
         },
       },
       render: (_args, value) => {
         const rendered = value.result === undefined ? '' : renderValue(value.result)
         const parts = [value.logs.join('\n'), rendered].filter(part => part.length > 0)
+        // Ported from the harness presentation layer: surface file-sandbox
+        // outcomes on the curated result so the model can react to a denial.
+        if (value.sandbox?.enforcement === 'partial') parts.push('File sandbox enforcement is partial on this host.')
+        if (value.sandbox?.denied) parts.push(`The ${value.sandbox.mode} file sandbox denied an operation.${escalationGuidance(peekRuntime())}`)
         return [{ type: 'text', text: parts.length > 0 ? parts.join('\n') : '(run_code completed with no output)' }]
       },
     },
@@ -226,7 +261,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
       // would be narrowed away by control flow analysis.
       const runOver = (): boolean => runController.signal.aborted
 
-      const binding = (name: string): CodeBindingFunction => async (rawArgs: unknown): Promise<JsonValue> => {
+      const binding = (name: string): PtcBindingFunction => async (rawArgs: unknown): Promise<PtcJsonValue> => {
         if (runOver()) {
           throw new Error(`run_code run is over (${String(runController.signal.reason)}); ${name} not dispatched`)
         }
@@ -242,7 +277,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
           parent: exec.token,
           signal: runController.signal,
         }
-        type DispatchOutcome = { isError: true; message: string } | { isError: false; value: JsonValue }
+        type DispatchOutcome = { isError: true; message: string } | { isError: false; value: PtcJsonValue }
         const scheduler = registry[TOOL_RUNTIME_SCHEDULER]
         const outcome = await new Promise<DispatchOutcome>((resolve, reject) => {
           // Set by the dispatch stage (or start() for a pre-settled result): what commit() finalizes in submission order.
@@ -363,7 +398,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
       // own key (a plain-object assignment would hit the prototype setter,
       // silently dropping the binding), and the runtime host resolves
       // binding names as own properties only.
-      const functions: Record<string, CodeBindingFunction> = Object.create(null) as Record<string, CodeBindingFunction>
+      const functions: Record<string, PtcBindingFunction> = Object.create(null) as Record<string, PtcBindingFunction>
       // Enumerate the CALLING AGENT's visible set (scoped tools join,
       // restricted globals vanish) — the same view the SDK section declared,
       // so a program can bind exactly what its prompt promised; sub-dispatch
@@ -374,9 +409,11 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
       }
 
       try {
-        let result: CodeRunResult
+        let result: PtcRunResult
         try {
-          result = await runtime.run({
+          // Two-stage rc.2 contract: resolve() validates options and fills the
+          // provider defaults (cwd, deadline) before run() executes.
+          result = await runtime.run(runtime.resolve({
             program: args.code,
             bindings: [{
               global: 'tools',
@@ -384,7 +421,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
               errorClass: { name: 'ToolCallError', memberNameProperty: 'toolName' },
             }],
             signal: runController.signal,
-          })
+          }))
         } finally {
           // Abort sub-dispatches and drain every in-flight dispatch before
           // closing the turn (queued-unstarted ones are abandoned unlogged).
@@ -395,10 +432,13 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
 
         if (result.error) {
           const logsText = result.logs.length > 0 ? `\nCaptured output:\n${result.logs.join('\n')}` : ''
-          throw new CodeRunFailedError(`code run failed (${result.error.kind}): ${result.error.message}${logsText}`)
+          const sandboxText = result.sandbox === undefined ? ''
+            : `\nFile sandbox: ${result.sandbox.mode}${result.sandbox.enforcement === undefined ? '' : `; enforcement: ${result.sandbox.enforcement}`}${result.sandbox.denied ? '; operation denied' : ''}.`
+          throw new CodeRunFailedError(`code run failed (${result.error.kind}): ${result.error.message}${logsText}${sandboxText}${result.sandbox?.denied ? escalationGuidance(runtime) : ''}`)
         }
         return {
           logs: result.logs,
+          ...result.sandbox === undefined ? {} : { sandbox: result.sandbox },
           ...result.value !== undefined ? { result: result.value } : {},
         }
       } finally {
@@ -423,7 +463,16 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
   // is the least invasive point that still emits the loaded runtime's language.
   Object.defineProperty(definition, 'description', {
     enumerable: true,
-    get: () => resolveFlavor(peekRuntime).description,
+    get: () => {
+      // Ported from the harness presentation layer: surface the runtime's
+      // own usage guidance plus the cwd note and escalation guidance.
+      const runtime = peekRuntime()
+      const instructions = runtime?.executionInstructions
+      return resolveFlavor(peekRuntime).description
+        + (instructions ? ` ${instructions}` : '')
+        + (runtime === undefined ? '' : " The working directory is the Session's current directory.")
+        + escalationGuidance(runtime)
+    },
   })
   Object.defineProperty(definition, 'parameters', {
     enumerable: true,

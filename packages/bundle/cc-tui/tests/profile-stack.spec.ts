@@ -50,7 +50,11 @@ describe('tui profile stack (permissions + shell + tui)', () => {
   })
 
   it('defaults the roster to cc and mounts the TUI driver', () => {
-    expect(stacked.get('agent-presets')?.config?.default).toBe('cc')
+    // Harness 0.1.7 (G15): the roster moved from the deleted agent-presets
+    // scanner to the registry + declaration row; see cc-tui/cordis.patch.yml.
+    expect(stacked.get('agent-preset-registry')?.config?.default).toBe('cc')
+    expect(stacked.get('preset-cc')?.name).toBe('@deepseek-ai/dsh-agent-preset')
+    expect(stacked.get('preset-cc')?.config?.id).toBe('cc')
     expect(stacked.get('tui')?.name).toBe('@dsh-cc/tui')
     expect(stacked.get('tui')?.config?.agentPreset).toBe('cc')
   })

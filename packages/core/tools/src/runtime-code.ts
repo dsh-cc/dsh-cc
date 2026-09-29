@@ -1,6 +1,6 @@
 /**
  * ToolRuntime Code Mode collaborators: the reserved `run_code` transport
- * factory wiring, the code-runtime resolver, the code-dispatch log waterfall,
+ * factory wiring, the ptc-runtime resolver, the code-dispatch log waterfall,
  * and the approval-seam `ask` resolution. Bodies are verbatim moves from the
  * former `ToolRuntime` methods with `this.` → `rt.`.
  * @module
@@ -9,7 +9,7 @@
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import type { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
+import type { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 // Type-only: makes `ctx.get('approval')` resolve to the ApprovalService
 // augmentation. The seam stays optional at runtime — see `serviceAsk`.
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -32,11 +32,11 @@ import type { ToolRuntimeCore } from './runtime-core.ts'
  */
 export function requireCodeTransport(rt: ToolRuntimeCore): ToolDefinition {
   rt.codeTransport ??= createRunCodeTool(rt, {
-    requireRuntime: () => rt.requireCodeRuntime(rt.defaultMode),
+    requireRuntime: () => rt.requirePtcRuntime(rt.defaultMode),
     // The language-aware description/parameters getters read the runtime
     // without demanding one, so a native-default process can still project
     // the transport for an agent that chose code.
-    peekRuntime: () => rt.ctx.get('codeRuntime'),
+    peekRuntime: () => rt.ctx.get('ptcRuntime'),
     maxParallel: rt.maxParallelSubCalls,
     shapeDispatchLog: dispatch => rt.shapeDispatchLog(dispatch),
   })
@@ -44,7 +44,7 @@ export function requireCodeTransport(rt: ToolRuntimeCore): ToolDefinition {
 }
 
 /**
- * Resolve the code runtime or throw the actionable misconfiguration error.
+ * Resolve the PTC runtime or throw the actionable misconfiguration error.
  * Read at use time (assembly / run_code execution), NOT via static
  * `inject`: an inject entry would hold `ctx.tools` — and every tool plugin
  * behind it — hostage to a code runtime existing even under `mode:
@@ -59,10 +59,10 @@ export function requireCodeTransport(rt: ToolRuntimeCore): ToolDefinition {
  * point it is testable); rationale in the
  * [language-dispatch note](../../../../.agents/notes/implemented/feature/2026-07-31-code-mode-language-dispatch.md).
  */
-export function requireCodeRuntime(rt: ToolRuntimeCore, mode: ToolPresentationMode): CodeRuntime {
-  const runtime = rt.ctx.get('codeRuntime')
+export function requirePtcRuntime(rt: ToolRuntimeCore, mode: ToolPresentationMode): PtcRuntime {
+  const runtime = rt.ctx.get('ptcRuntime')
   if (!runtime) {
-    throw new Error(`dsh-tools: mode "${mode}" requires a code runtime — load a ctx.codeRuntime implementation (e.g. @deepseek-ai/dsh-code-runtime-worker-thread) or set tools mode to "native"`)
+    throw new Error(`dsh-tools: mode "${mode}" requires a PTC runtime — load a ctx.ptcRuntime implementation (e.g. @deepseek-ai/dsh-ptc-runtime-node) or set tools mode to "native"`)
   }
   if (!Object.hasOwn(SDK_RENDERERS, runtime.language)) {
     const known = Object.keys(SDK_RENDERERS).map(name => JSON.stringify(name)).join(', ')

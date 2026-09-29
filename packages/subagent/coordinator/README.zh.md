@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-协调模式是一种基于可继续子代理（continuable subagent）的、作用于单个 agent 作用域的编排角色：激活后，宿主 agent 不再直接修改工作区，而是把任务委派给有名字的后台 worker，并在它们之间路由消息。激活由部署开关控制——Config 的 `enabled` 或 `DSH_COORDINATOR_MODE` 环境变量——它作用于挂载本包的 agent 作用域，因此 preset 会[把该组合编排进会话](../preset/agent-presets/README.md)，并通过在 resume 时从固定的组合中重新挂载来保持该模式。
+协调模式是一种基于可继续子代理（continuable subagent）的、作用于单个 agent 作用域的编排角色：激活后，宿主 agent 不再直接修改工作区，而是把任务委派给有名字的后台 worker，并在它们之间路由消息。激活由部署开关控制——Config 的 `enabled` 或 `DSH_COORDINATOR_MODE` 环境变量——它作用于挂载本包的 agent 作用域，因此 preset 会把该组合编排进会话，并通过在 resume 时从固定的组合中重新挂载来保持该模式。
 
 ## 激活与工具限制
 

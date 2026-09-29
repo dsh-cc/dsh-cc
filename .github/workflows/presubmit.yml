@@ -44,7 +44,7 @@ on:
 env:
   # deepseek-harness pin: single source of truth for the checkout ref and
   # the harness-artifact cache key
-  DSH_HARNESS_REF: 1ef9c1fa9afbea78c5537bfc8b6d1c27d598798e # 0.1.5-rc.1 release commit
+  DSH_HARNESS_REF: 787b746b807df83776957875683b8853c862ca2c # 0.1.7-rc.2 release commit
 
 permissions:
   contents: read

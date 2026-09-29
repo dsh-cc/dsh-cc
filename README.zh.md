@@ -22,9 +22,9 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-`dsh-cc` 要求 `dsh` **>= 0.1.5-rc.1**；默认的 `npm install -g @deepseek-ai/dsh` 目前即可满足（截至 2026-09-12），启动器会在启动时校验该下限。
+`dsh-cc` 要求 `dsh` **>= 0.1.7-rc.2**；默认的 `npm install -g @deepseek-ai/dsh` 目前即可满足（截至 2026-09-29），启动器会在启动时校验该下限。
 
-如果已经安装 `dsh` **>= 0.1.5-rc.1**，只需安装启动器：
+如果已经安装 `dsh` **>= 0.1.7-rc.2**，只需安装启动器：
 
 ```sh
 npm install -g @dsh-cc/cli
@@ -393,11 +393,9 @@ dsh web
 pnpm smoke:profile-boot
 ```
 
-本地开发期间安装或更新 CC preset：
-
-```sh
-bash scripts/sync-cc-preset.sh
-```
+CC preset 无需单独安装：`tui` profile 的 bundle patch 直接向 harness
+agent-preset registry 声明 `cc` 名册，组合内容由随 bundle 装入 profile
+`node_modules` 的 `@dsh-cc/preset-cc` 提供。
 
 更多离线开发细节和仓库特有的依赖规则见 **[docs/dev.md](docs/dev.md)**。
 

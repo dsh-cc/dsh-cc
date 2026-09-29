@@ -331,7 +331,7 @@ export interface Config {
    * sends only `run_code` plus a generated SDK prompt and collapses the
    * executor to the same surface (a model-direct call may only name
    * `run_code`; `run_code` SDK sub-dispatches keep every visible tool); `both`
-   * sends both forms. Code modes require a `ctx.codeRuntime` whose `language`
+   * sends both forms. Code modes require a `ctx.ptcRuntime` whose `language`
    * has a registered SDK renderer (TypeScript or Python) and fail prompt
    * assembly when it is absent or has no renderer. Under `code`, native names
    * in `toolOrder` are invalid.

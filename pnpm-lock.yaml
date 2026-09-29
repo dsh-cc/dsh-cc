@@ -929,15 +929,15 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../../../deepseek-harness/packages/core/agent
         version: link:../../../../deepseek-harness/packages/core/agent
-      '@deepseek-ai/dsh-code-runtime':
-        specifier: link:../../../../deepseek-harness/packages/code-runtime/code-runtime
-        version: link:../../../../deepseek-harness/packages/code-runtime/code-runtime
       '@deepseek-ai/dsh-invariants':
         specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
         version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-ptc-runtime':
+        specifier: link:../../../../deepseek-harness/packages/ptc-runtime/ptc-runtime
+        version: link:../../../../deepseek-harness/packages/ptc-runtime/ptc-runtime
       '@deepseek-ai/dsh-scope':
         specifier: link:../../../../deepseek-harness/packages/core/scope
         version: link:../../../../deepseek-harness/packages/core/scope
@@ -3197,9 +3197,9 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../../../deepseek-harness/packages/core/agent
         version: link:../../../../deepseek-harness/packages/core/agent
-      '@deepseek-ai/dsh-agent-presets':
-        specifier: link:../../../../deepseek-harness/packages/preset/agent-presets
-        version: link:../../../../deepseek-harness/packages/preset/agent-presets
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
+        version: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands

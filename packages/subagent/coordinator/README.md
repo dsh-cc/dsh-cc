@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Coordinator mode is an agent-scoped orchestration role over continuable subagents: when active, the hosting agent stops editing the workspace directly and instead delegates work to named background workers and routes messages among them. Activation is a deployment flag — Config `enabled` or the `DSH_COORDINATOR_MODE` env — and it takes effect on the agent whose scope mounts this package, so a preset [composes it](../preset/agent-presets/README.md) into a session and the mode survives resume by being re-mounted from that pinned composition.
+Coordinator mode is an agent-scoped orchestration role over continuable subagents: when active, the hosting agent stops editing the workspace directly and instead delegates work to named background workers and routes messages among them. Activation is a deployment flag — Config `enabled` or the `DSH_COORDINATOR_MODE` env — and it takes effect on the agent whose scope mounts this package, so a preset composes it into a session and the mode survives resume by being re-mounted from that pinned composition.
 
 ## Activation and tool restriction
 

@@ -33,10 +33,10 @@
     "@dsh-cc/permission-rules": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-commands": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-session": ">=0.1.5-rc.1",
-    "@deepseek-ai/schemastery": ">=0.1.5-rc.1"
+    "@deepseek-ai/cordis": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-commands": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-session": ">=0.1.7-rc.2",
+    "@deepseek-ai/schemastery": ">=0.1.7-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",

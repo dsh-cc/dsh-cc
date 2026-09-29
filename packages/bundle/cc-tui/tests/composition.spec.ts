@@ -47,11 +47,26 @@ describe('cc-tui bundle patch', () => {
     expect(ids).not.toContain('webserver')
   })
 
-  it('inserts agent-presets defaulting to cc and a tui row', () => {
+  it('inserts the preset registry (default: cc), the cc declaration row, and a tui row', () => {
+    // Harness >=0.1.7-rc.2 (G15): the deleted @deepseek-ai/dsh-agent-presets
+    // scanner is replaced by the registry + a dsh-agent-preset declaration
+    // row whose plugins carry the composition by reference (file-backed
+    // include of @dsh-cc/preset-cc/agent.cordis.yml from the profile's
+    // node_modules — the single tested source of the cc composition).
     const rows = flatten(doc)
-    const presets = rows.find(row => row.id === 'agent-presets')
-    expect(presets?.name).toBe('@deepseek-ai/dsh-agent-presets')
-    expect(presets?.config?.default).toBe('cc')
+    const registry = rows.find(row => row.id === 'agent-preset-registry')
+    expect(registry?.name).toBe('@deepseek-ai/dsh-agent-preset-registry')
+    expect(registry?.config?.default).toBe('cc')
+    const preset = rows.find(row => row.id === 'preset-cc')
+    expect(preset?.name).toBe('@deepseek-ai/dsh-agent-preset')
+    expect(preset?.config?.id).toBe('cc')
+    expect(preset?.config?.plugins).toEqual([
+      {
+        id: 'cc-composition',
+        name: '@deepseek-ai/cordis-plugin-include',
+        config: { path: 'node_modules/@dsh-cc/preset-cc/agent.cordis.yml' },
+      },
+    ])
     const tui = rows.find(row => row.id === 'tui')
     expect(tui?.name).toBe('@dsh-cc/tui')
     expect(tui?.config?.agentPreset).toBe('cc')

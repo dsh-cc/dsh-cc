@@ -176,7 +176,7 @@ echo "synced ${#synced[@]} packages into $dest"
 node "$repo_root/scripts/stamp-build-info.mjs" "$dest/dsh-cc-build.json"
 [ "$missing_lib" -eq 0 ] || exit 1
 
-# The runtime reads the cc preset composition from the per-user
-# .agent-presets copy, NOT from the synced package — keep the two in lockstep
-# so a package-only sync can never boot a stale composition.
-bash "$repo_root/scripts/sync-cc-preset.sh"
+# No preset-copy step: since harness 0.1.7-rc.2 the cc preset boots from the
+# agent-preset declaration row in the bundle patch, whose composition is the
+# synced @dsh-cc/preset-cc/agent.cordis.yml itself (the old
+# scripts/sync-cc-preset.sh / ~/.dsh/.agent-presets copy is retired).

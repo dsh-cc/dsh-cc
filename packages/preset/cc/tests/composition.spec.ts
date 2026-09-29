@@ -21,11 +21,17 @@ const BASE_IDS = [
   'planning', 'compaction', 'delegation', 'tool-ask-user', 'tool-todo', 'tool-web',
 ]
 
-// The standard-preset anchor for the drift gate. We align with whichever
-// upstream is CURRENTLY linked/installed rather than pinning a version, so the
-// gate tracks the real upstream instead of silently skipping.
+// The standard-preset anchor for the drift gate, re-pointed for harness
+// 0.1.7-rc.2 (G15): the old `apps/cli/config/agent-presets/standard/` tree is
+// deleted. The live upstream composition is now the web-app bundle's
+// declaration row: `packages/bundle/web-app/presets/standard.patch.yml` — a
+// patch (an `insert` list) holding one `@deepseek-ai/dsh-agent-preset` row
+// whose `config.plugins` IS the standard entry list. We align with whichever
+// upstream is CURRENTLY linked/installed rather than pinning a version, so
+// the gate tracks the real upstream. A missing anchor is a hard failure: the
+// old silent skip disabled the safety check it existed for.
 interface AnchorPreset {
-  /** Absolute path to the `config/agent-presets/standard/agent.cordis.yml` file. */
+  /** Absolute path to the upstream `standard.patch.yml` declaration. */
   file: string
   /** Human-readable origin, used in gate failure messages. */
   source: string
@@ -34,13 +40,13 @@ interface AnchorPreset {
 // tier-1: the linked upstream checkout. `@deepseek-ai/cordis-plugin-include` is
 // symlinked (via node_modules) into the deepseek-harness repo's vendor/include/,
 // so walking up from its package.json — never a relative path, which breaks in
-// a worktree layout — finds the standard preset in that checkout.
+// a worktree layout — finds the standard preset declaration in that checkout.
 function resolveLinkedAnchor(): AnchorPreset | undefined {
   try {
     const real = realpathSync(includePkg)
     let cur = dirname(real)
     for (let i = 0; i < 4; i++) {
-      const cand = join(cur, 'apps', 'cli', 'config', 'agent-presets', 'standard', 'agent.cordis.yml')
+      const cand = join(cur, 'packages', 'bundle', 'web-app', 'presets', 'standard.patch.yml')
       if (existsSync(cand)) {
         return { file: cand, source: `linked upstream checkout (${cur})` }
       }
@@ -54,6 +60,7 @@ function resolveLinkedAnchor(): AnchorPreset | undefined {
 
 // tier-2: an installed deployment at or above the vendored floor. Newest-mtime
 // first across `~/.npm/_npx` npx-install dirs and the `~/.dsh/profiles` install.
+// The web-app bundle ships its preset declarations (`presets/*.patch.yml`).
 function resolveInstalledAnchor(): AnchorPreset | undefined {
   const floor = parseVendoredFloor(yamlText)
   const candidates: string[] = []
@@ -73,10 +80,10 @@ function resolveInstalledAnchor(): AnchorPreset | undefined {
     try {
       const version = JSON.parse(readFileSync(p, 'utf8')).version
       if (cmpVersion(version, floor) >= 0) {
-        const file = join(dirname(p), 'config', 'agent-presets', 'standard', 'agent.cordis.yml')
-        // A qualifying install whose layout lacks the preset file (or a future
+        // A qualifying install whose layout lacks the declaration (or a future
         // rename) must fall through to the next candidate, not turn the
         // should-skip case into a readFileSync failure inside the test.
+        const file = join(dirname(p), '..', 'dsh-web-app', 'presets', 'standard.patch.yml')
         if (!existsSync(file)) continue
         return {
           file,
@@ -125,7 +132,13 @@ function safeReaddir(dir: string): string[] {
 
 const anchor = resolveLinkedAnchor() ?? resolveInstalledAnchor()
 if (!anchor) {
-  console.warn('[composition] drift gate: no anchor preset found (tier-1 link, tier-2 install); gate skipped')
+  // Hard failure, not a skip: with the anchor gone the gate protects nothing
+  // and a silent skip would let baseline drift ship unnoticed (G15).
+  throw new Error(
+    '[composition] drift gate: no upstream standard-preset anchor found '
+      + '(tier-1 linked checkout packages/bundle/web-app/presets/standard.patch.yml, '
+      + 'tier-2 installed dsh-web-app); cannot verify the cc baseline',
+  )
 }
 
 describe('agent.cordis.yml composition', () => {
@@ -486,66 +499,84 @@ describe('agent.cordis.yml composition', () => {
     ).toEqual([])
   })
 
-  it.runIf(!!anchor)(
-    'curated baseline matches the vendored standard preset (drift gate)',
+  it(
+    'curated baseline matches the upstream standard preset (drift gate)',
     () => {
-      const vendoredBase = readFileSync(anchor!.file, 'utf8')
+      // Both sides are canonicalized through load→dump and compared ROW BY
+      // ROW (recursively through cordis:group configs): the upstream side is
+      // now a nested patch row (indented under preset-standard's plugins),
+      // the dsh-cc side is the flat agent.cordis.yml base slice, and raw
+      // line-diffing would report indentation and comment noise instead of
+      // real drift. Each divergent row id must appear in DRIFT_ALLOWANCE
+      // with its reason — an unlisted divergence, or an upstream change to a
+      // whitelisted row that cc has not deliberately mirrored, fails here.
+      const upstreamPatch = yaml.load(readFileSync(anchor!.file, 'utf8'), { schema: entryListSchema })
+      const standard = flattenInserts(upstreamPatch).find((r: any) => r.id === 'preset-standard')
+      if (standard === undefined) {
+        throw new Error(`no preset-standard declaration in ${anchor!.file}`)
+      }
       const endToken = '# END dsh-cc header'
       const ccToken = '# ── cc rows ──'
       const start = yamlText.indexOf(endToken) + endToken.length + 1
       const end = yamlText.indexOf(ccToken)
-      const myBase = yamlText.slice(start, end).trimEnd()
+      const mine = rowMap(yaml.load(yamlText.slice(start, end), { schema: entryListSchema }))
+      const upstream = rowMap(standard.config.plugins)
 
-      const a = myBase.split('\n')
-      const b = vendoredBase.trimEnd().split('\n')
-      // LCS diff so inserted comment lines (above tool-web) are reported as
-      // additions instead of shifting every later line out of alignment.
-      const ops = lcsOps(a, b)
-      const diffs: string[] = []
-      for (const op of ops) {
-        if (op.type === 'equal') continue
-        const mine = op.a === -1 ? '' : a[op.a]
-        const vend = op.b === -1 ? '' : b[op.b]
-        // Whitelist: the tool-web config change (fetch/searchTimeoutMs lines,
-        // any shape), comment-only lines added to document that change, and
-        // the `disabled: true` additions on the harness subagent tool rows
-        // (tool-subagent / tool-subagent-fork), whose Task is replaced by the
-        // cc-services `tool-task` row. Only my-side additions are whitelisted —
-        // an upstream `disabled: true` we drop would still be flagged.
-        const isConfigChange =
-          (op.a !== -1 && a[op.a].includes('fetch:')) ||
-          (op.a !== -1 && a[op.a].includes('searchTimeoutMs:')) ||
-          (op.b !== -1 && b[op.b].includes('fetch:')) ||
-          (op.b !== -1 && b[op.b].includes('searchTimeoutMs:')) ||
-          (op.a !== -1 && a[op.a].trim() === 'disabled: true')
-        const isComment = mine.trimStart().startsWith('#') || vend.trimStart().startsWith('#')
-        // Whitelist: the two deliberate name swaps in the compaction group
-        // (row ids stay identical). The CC engine subclass folds /compact
-        // hints into the summarizer; the CC command forwards the free-text
-        // argument instead of rejecting it. Matched both directions so the
-        // LCS may report the swap as one del/add pair or two one-sided ops.
-        const isNameSwap =
-          ((mine.includes("name: '@dsh-cc/compaction-basic'")
-            && (vend === '' || vend.includes("name: '@deepseek-ai/dsh-compaction-basic'")))
-          || (mine.includes("name: '@dsh-cc/command-compact'")
-            && (vend === '' || vend.includes("name: '@deepseek-ai/dsh-command-compact'")))
-          || (vend.includes("name: '@deepseek-ai/dsh-compaction-basic'")
-            && (mine === '' || mine.includes("name: '@dsh-cc/compaction-basic'")))
-          || (vend.includes("name: '@deepseek-ai/dsh-command-compact'")
-            && (mine === '' || mine.includes("name: '@dsh-cc/command-compact'"))))
-        if (isConfigChange || isComment || isNameSwap) continue
-        diffs.push(
-          `${op.type === 'add' ? '+' : '-'}  mine: ${mine}\n` +
-            `${op.type === 'del' ? '-' : '+'}  vendored: ${vend}`,
-        )
+      const diffs: { id: string; text: string }[] = []
+      for (const id of new Set([...mine.keys(), ...upstream.keys()])) {
+        const a = mine.get(id)
+        const b = upstream.get(id)
+        if (a === undefined) {
+          diffs.push({ id, text: `upstream-only row ${id}:\n${canonical(b)}` })
+        } else if (b === undefined) {
+          diffs.push({ id, text: `cc-only row ${id}:\n${canonical(a)}` })
+        } else if (canonical(a) !== canonical(b)) {
+          diffs.push({ id, text: `row ${id} diverged:\n--- cc ---\n${canonical(a)}\n--- upstream ---\n${canonical(b)}` })
+        }
       }
+      const unexpected = diffs.filter(({ id }) => DRIFT_ALLOWANCE[id] === undefined)
       expect(
-        diffs,
-        `baseline drifted from the vendored standard preset (${anchor!.source}); ` +
-          `${diffs.length} diff line(s) outside the whitelist`,
+        unexpected.map(({ text }) => text),
+        `baseline drifted from the upstream standard preset (${anchor!.source}); ` +
+          `${unexpected.length} unlisted divergence(s) — fold in upstream changes or ` +
+          `document the deliberate delta in DRIFT_ALLOWANCE`,
       ).toEqual([])
     },
   )
+})
+
+describe('cc declaration row (packages/bundle/cc-tui/cordis.patch.yml)', () => {
+  // The declaration row IS the roster under the 0.1.7-rc.2 registry
+  // architecture (G15): pin its identity, its carried composition (by
+  // reference — the file-backed include row), and its metadata against
+  // preset.yml so the two never drift.
+  const patch = yaml.load(
+    readFileSync(new URL('../../../bundle/cc-tui/cordis.patch.yml', import.meta.url), 'utf8'),
+    { schema: entryListSchema },
+  ) as any[]
+
+  it('declares cc with the include-carried composition and preset.yml metadata', () => {
+    const rows = flattenInserts(patch)
+    const registry = rows.find((r) => r.id === 'agent-preset-registry')
+    expect(registry?.name).toBe('@deepseek-ai/dsh-agent-preset-registry')
+    expect(registry?.config?.default).toBe('cc')
+    const row = rows.find((r) => r.id === 'preset-cc')
+    expect(row?.name).toBe('@deepseek-ai/dsh-agent-preset')
+    expect(row?.config?.id).toBe('cc')
+    const preset = yaml.load(readFileSync(presetYmlPath, 'utf8'), { schema: entryListSchema }) as any
+    expect(row?.config?.name).toBe(preset.name)
+    expect(row?.config?.description).toBe(preset.description)
+    expect(row?.config?.order).toBe(preset.order)
+    // Composition by reference: profile node_modules is the resolution base
+    // of the declaring loader, and @dsh-cc/preset-cc ships agent.cordis.yml.
+    expect(row?.config?.plugins).toEqual([
+      {
+        id: 'cc-composition',
+        name: '@deepseek-ai/cordis-plugin-include',
+        config: { path: 'node_modules/@dsh-cc/preset-cc/agent.cordis.yml' },
+      },
+    ])
+  })
 })
 
 describe('version comparison (drift-gate floor binding)', () => {
@@ -564,33 +595,55 @@ describe('version comparison (drift-gate floor binding)', () => {
   })
 })
 
-/** Minimal LCS line-diff. Yields add/del/equal ops against both inputs. */
-function lcsOps(a: string[], b: string[]): { type: 'add' | 'del' | 'equal'; a: number; b: number }[] {
-  const n = a.length
-  const m = b.length
-  const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0))
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
-    }
+/** Flatten nested `insert` patch lists into one row list (document order). */
+function flattenInserts(rows: unknown): any[] {
+  const out: any[] = []
+  for (const row of Array.isArray(rows) ? rows : []) {
+    out.push(row)
+    if (Array.isArray((row as any)?.insert)) out.push(...flattenInserts((row as any).insert))
   }
-  const ops: { type: 'add' | 'del' | 'equal'; a: number; b: number }[] = []
-  let i = 0
-  let j = 0
-  while (i < n || j < m) {
-    if (i < n && j < m && a[i] === b[j]) {
-      ops.push({ type: 'equal', a: i, b: j })
-      i++
-      j++
-    } else if (j < m && (i === n || dp[i][j + 1] >= dp[i + 1][j])) {
-      ops.push({ type: 'add', a: -1, b: j })
-      j++
-    } else {
-      ops.push({ type: 'del', a: i, b: -1 })
-      i++
-    }
+  return out
+}
+
+/**
+ * Deliberate divergences of the cc baseline from the upstream standard
+ * preset, keyed by row id. Anything not listed must match upstream exactly.
+ */
+const DRIFT_ALLOWANCE: Record<string, string> = {
+  // Upstream carries the working-directory clause as a separate `suffix`;
+  // cc folds both clauses into one `prefix` (same rendered text).
+  persona: 'suffix folded into prefix',
+  // The /goal command stays host-plane in cc (the tool row is mounted here).
+  'command-goal': 'host-plane row, not part of the agent composition',
+  // Upstream-only surfaces cc does not ship.
+  present: 'upstream-only surface',
+  'tool-plugin-manager': 'upstream-only (disabled) surface',
+  // Deliberate name swaps, ids unchanged: the CC engine subclass folds a
+  // /compact hint into the summarizer; the CC command forwards the argument.
+  compaction: '@dsh-cc/compaction-basic + @dsh-cc/command-compact replace the upstream rows',
+  // CC workflow surface: the journal provider + @dsh-cc/tool-workflow replace
+  // workflow-ptc; the harness tool-workflow adapter stays disabled (duplicate
+  // `workflow` registration) and tool-ralph stays enabled; the harness
+  // subagent tools stay disabled (replaced by cc-services `tool-task`).
+  delegation: 'journal + @dsh-cc/tool-workflow swap, tool-ralph enabled, subagent tools disabled',
+  // fetch: false — cc-services tool-web-fetch owns the model-facing tool.
+  'tool-web': 'fetch disabled, searchTimeoutMs carried forward',
+}
+
+/** Index rows by id. Group rows are kept atomic: their canonical form
+ * includes the nested children, so one allowance entry covers a whole
+ * deliberately-diverged group. */
+function rowMap(rows: unknown): Map<string, any> {
+  const map = new Map<string, any>()
+  for (const row of flattenInserts(rows)) {
+    if (!map.has(row.id)) map.set(row.id, row)
   }
-  return ops
+  return map
+}
+
+/** Canonical YAML rendering: one shape for both sides of the drift diff. */
+function canonical(value: unknown): string {
+  return yaml.dump(value, { schema: entryListSchema, lineWidth: -1 }).trimEnd()
 }
 
 describe('preset.yml metadata', () => {

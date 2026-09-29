@@ -24,8 +24,8 @@
     "@dsh-cc/settings-ns": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-settings": ">=0.1.7-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {

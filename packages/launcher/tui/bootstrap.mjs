@@ -524,7 +524,7 @@ export function slugRetryDecision({ named, attempt, maxAttempts = 5 }) {
 // acceptable — it happens once, before the profile exists.
 
 /** Lowest harness version the published bundles are known to work with. */
-export const MIN_DSH_VERSION = '0.1.5-rc.1'
+export const MIN_DSH_VERSION = '0.1.7-rc.2'
 
 const VERSION_RE = /\d+\.\d+\.\d+(?:-[\w.+-]+)?/
 
@@ -792,7 +792,10 @@ export function runStoreRestore(profileDir, ownVersion, deps = {}) {
         }
       } catch {
         tryRm(presetDir, true)
-        log('dsh-cc: removed dev preset copy at .agent-presets/cc (store boot will reinstall it)')
+        // Legacy garbage collection only: the preset scanner that consumed
+        // ~/.dsh/.agent-presets was deleted upstream at harness 0.1.7-rc.2;
+        // the cc roster is now the bundle's declaration row.
+        log('dsh-cc: removed stale dev preset copy at .agent-presets/cc (surface retired at harness 0.1.7)')
       }
       log(`dsh-cc: launcher updated ${from} → ${ownVersion}; restored store bundles in profile "${profileName}" (re-run scripts/sync-local-profile.sh to resume a dev build)`)
       return { restored: true, from, to: ownVersion }

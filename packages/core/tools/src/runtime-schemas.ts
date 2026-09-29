@@ -77,11 +77,11 @@ export function sdkSection(rt: ToolRuntimeCore): { name: string; order: number; 
     text: (context) => {
       const mode = rt.modeFor(context.scope)
       if (mode === 'native') return ''
-      const runtime = rt.requireCodeRuntime(mode)
+      const runtime = rt.requirePtcRuntime(mode)
       // Own-property read: a language like `toString`/`constructor` would
       // otherwise resolve an inherited Object.prototype member as a renderer.
       const render = SDK_RENDERERS[runtime.language]
-      /* v8 ignore next -- requireCodeRuntime rejects an unknown language before this runs. */
+      /* v8 ignore next -- requirePtcRuntime rejects an unknown language before this runs. */
       if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${runtime.language}`)
       return render(rt.sdkSchemas(context.scope))
     },
@@ -165,7 +165,7 @@ export function wireSchemas(rt: ToolRuntimeCore, scope?: ScopeKey): ToolProvider
   // flavor-table guard would otherwise surface first. This keeps the
   // renderer-table rejection the canonical assembly-time error for a
   // language with no SDK renderer.
-  rt.requireCodeRuntime(mode)
+  rt.requirePtcRuntime(mode)
   const schemas = [...view.visible.values()].map(definition => rt.schemaOf(definition, false))
   if (mode === 'code') {
     return {

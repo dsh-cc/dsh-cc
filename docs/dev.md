@@ -93,9 +93,10 @@ stale claims are yours.
 
 ## Worktree local setup
 
-- After `bash scripts/sync-local-profile.sh web`, also run
-  `bash scripts/sync-cc-preset.sh` — it rsyncs the CC preset combo into
-  `~/.dsh/.agent-presets/cc` so the `cc` preset is available in any profile.
+- After `bash scripts/sync-local-profile.sh web`, the `cc` agent preset is
+  available in any profile: the bundle patch declares it against the harness
+  agent-preset registry, and the composition ships inside the
+  `@dsh-cc/preset-cc` package (no preset-copy step is needed).
 - Deps in a fresh worktree: run `pnpm install --frozen-lockfile` inside the
   worktree. pnpm hard-links packages from its shared global content-addressable
   store, so this is fast, needs no network, and yields a real self-contained
@@ -161,7 +162,7 @@ pnpm exec tsx packages/test-support/cache-trajectory/src/bin.ts \
 Workflow: calibrate with `--report-only`/`--out` distributions first, then
 tighten the trajectory's `thresholds` (or set the env gate in CI). The full
 bundle-patch composition (preset roster + TUI rows) boots only under a
-deployed dsh installation — deploy with `scripts/sync-cc-preset.sh`, then run
+deployed dsh installation — sync the bundles with `scripts/sync-local-profile.sh`, then run
 the bin there; harness-side clients link this package rather than the reverse.
 
 ## Capability freshness ritual

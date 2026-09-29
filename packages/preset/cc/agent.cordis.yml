@@ -25,8 +25,8 @@
 # A service row here MUST sit inside a group carrying an `isolate` realm.
 # Without one it publishes into the root realm, where it is process-global —
 # another preset publishing the same name collides, and a host reader would
-# resolve one preset's instance for every session; `dsh-agent-presets` rejects
-# that at mount. `true` means an entry-local realm: this standing mount's own
+# resolve one preset's instance for every session; the preset mount rejects
+# that. `true` means an entry-local realm: this standing mount's own
 # private instance, apart from every other preset's. (A shared label does NOT
 # pool instances — `provide()` throws on the second registration under the
 # same realm symbol; labels join REALMS, and are not what this file needs.)

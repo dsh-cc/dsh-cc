@@ -2,6 +2,18 @@
 
 English | [中文](README.zh.md)
 
+<!-- FORK DRIFT (harness 0.1.7-rc.2 retarget, compile-fix strategy — not a rebase):
+     `@dsh-cc/tools` forks harness `core/tools`. This slice ports the PTC retarget
+     only: `CodeRuntime` → `PtcRuntime` (two-stage `resolve`/`run`),
+     `ctx.codeRuntime` → `ctx.ptcRuntime`, the `@deepseek-ai/dsh-ptc-runtime`
+     dependency/link, and the upstream sandbox-denial / escalation-guidance /
+     execution-instructions presentation copy (upstream `ptc.ts:129, 375, 721,
+     752`). Deliberately not ported yet: the `sandbox_permissions`/`justification`
+     escalation parameters and `approveEscalation` flow, and the
+     `PreToolDecision`/`cancel` port (Slice 4). Full drift is recorded in the
+     migration PR; see `docs/plans/2026-09-29-harness-0.1.7-rc.2-migration.md`.
+-->
+
 Tool registry and execution pipeline. Tool plugins register their schemas and executors; the agent loop executes each call through `tools/pre-execute` (the extensible allow/deny gate) → monotonic registered guards → `tools/execute` (an around-dispatch wrapper for timeout/retry/metrics plugins) → `tools/post-execute` (inspect/replace the result, attach context) → the definition-owned `finalizeContent` boundary → the observe-only `tools/result` notification. The registry also owns HOW its tools are presented to the model — its `mode` config selects native function calling, [Code Mode](#code-mode), or both, and one agent shadows that default for itself with `presentAs`.
 
 ## Service: `ToolRuntime` (ctx key: `tools`)

@@ -32,9 +32,10 @@ interface FiberLike {
 }
 
 /**
- * Local copy of `@deepseek-ai/dsh-agent-presets` `leakedServices` +
- * `withinFiber` (cc-shell has no agent-presets dependency). Keep in lockstep
- * with harness `packages/preset/agent-presets/src/mount.ts`.
+ * Local copy of `@deepseek-ai/dsh-agent-preset-registry` `leakedServices` +
+ * `withinFiber` (cc-shell has no agent-preset-registry dependency). Keep in
+ * lockstep with harness `packages/preset/agent-preset-registry/src/mount.ts`
+ * (the deleted agent-presets package moved there in 0.1.7-rc.2).
  */
 function leakedServices(ctx: Context, mount: FiberLike): string[] {
   const store = ctx.reflect.store

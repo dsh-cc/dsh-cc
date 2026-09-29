@@ -11,7 +11,7 @@ import type { ScopeKey, Scoped } from '@deepseek-ai/dsh-scope'
 import type { ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
-import type { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
+import type { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import { TOOL_RUNTIME_SCHEDULER } from './scheduler.ts'
 import { ToolLayer, resolveMaxParallelSubCalls } from './tool-layer.ts'
 import type { ToolAskResolution, ToolCancellationState } from './tool-layer.ts'
@@ -22,7 +22,7 @@ import { executionMode, get, guard as registerGuard, guardReason, isAdmitted, re
 import { collapses, collapseSection, modeFor, presentAs, schemaOf, schemas, sdkSchemas, sdkSection, wireSchemas } from './runtime-schemas.ts'
 import { applyFinalContent, callerCancelled, cancellationResult, completeScheduledExecution, createExecution, dispatchScheduledExecution, dispatchToolBody, execute, finalizeScheduledExecution, finishScheduledExecution, prepareExecution, prepareScheduledExecution } from './runtime-execute.ts'
 import { createSuccessResult, markCanonical, materializeFinalResult, normalizeDispatchResult, notifyResult, postExecute } from './runtime-results.ts'
-import { requireCodeRuntime, requireCodeTransport, serviceAsk, shapeDispatchLog } from './runtime-code.ts'
+import { requirePtcRuntime, requireCodeTransport, serviceAsk, shapeDispatchLog } from './runtime-code.ts'
 
 export {
   defineTool,
@@ -485,7 +485,7 @@ export class ToolRuntime extends Service {
   /** @internal */
   requireCodeTransport(): ToolDefinition { return requireCodeTransport(this) }
   /** @internal */
-  requireCodeRuntime(mode: ToolPresentationMode): CodeRuntime { return requireCodeRuntime(this, mode) }
+  requirePtcRuntime(mode: ToolPresentationMode): PtcRuntime { return requirePtcRuntime(this, mode) }
   /** @internal */
   shapeDispatchLog(dispatch: CodeDispatchLog): Promise<ContentBlock[]> { return shapeDispatchLog(this, dispatch) }
   /** @internal */
