@@ -112,7 +112,7 @@ describe('@dsh-cc/cache-health composition', () => {
       runMaintenance: (task: (signal: AbortSignal) => void) => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent as never)
+    await ctx.agents.register(agent as never)
     const execution = await ctx.commands.execute(agent as never, '/cache-health', [], new AbortController().signal)
     expect(execution?.result).toMatchObject({ kind: 'success' })
     const text = (execution?.result as { text: string }).text

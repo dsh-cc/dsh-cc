@@ -18,12 +18,17 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, default as SessionStore } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { ResolvedSubagentStartRequest, SubagentCapabilities, SubagentProvider, SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
 import type { WorkflowResult, WorkflowRun } from '@deepseek-ai/dsh-workflow'
-import WorkerThreadWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
+import PtcWorkflowEngine from '@deepseek-ai/dsh-workflow-ptc'
+import NodePtcRuntime from '@deepseek-ai/dsh-ptc-runtime-node'
+import Sandbox from '@deepseek-ai/dsh-sandbox-local'
+import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
+import FileSystem from '@deepseek-ai/dsh-fs-local'
+import Subprocess from '@deepseek-ai/dsh-subprocess-local'
 import { mountCcWorkflowRunRegistry, parseJournal } from '@dsh-cc/tool-workflow'
 import { CcWorkflowJournalProvider } from '../src/provider.ts'
 
@@ -79,35 +84,6 @@ class FakeSpawnProvider implements SubagentProvider {
 
 interface DurableRecord { runId: string; type: string; data: Record<string, unknown> }
 
-/** Fake parent session/agent stand-ins (the registry-resume.spec.ts idiom). */
-function fakeParentSession(records: DurableRecord[]): { parent: Agent; session: unknown } {
-  const append = (type: string, data: unknown): void => {
-    records.push({ runId: (data as { runId?: string }).runId ?? '', type, data: data as Record<string, unknown> })
-  }
-  const session = {
-    append,
-    snapshotEvents: () => [],
-    header: { id: 'sess-test', cwd: process.cwd() },
-  }
-  const parent = {
-    id: SessionId('workflow-parent'),
-    options: {},
-    session,
-  } as unknown as Agent
-  return { parent, session }
-}
-
-function fakeCallbackAgent(session: unknown): Agent {
-  return {
-    id: 'caller-agent',
-    options: {},
-    status: 'idle',
-    session,
-    inject: vi.fn(),
-    followup: vi.fn(),
-  } as never
-}
-
 async function setup() {
   const scratch = mkdtempSync(join(process.cwd(), '.scratch', 'spike-'))
   const home = join(scratch, 'home')
@@ -116,7 +92,13 @@ async function setup() {
   process.env.DSH_HOME = home
   const records: DurableRecord[] = []
   const ctx = new Context()
+  // SandboxPolicy.resolve walks the session projection registry, so the
+  // projection registry AND a real SessionStore (real sessions only) must be
+  // mounted BEFORE it — a fabricated session leaves the projection cursor
+  // NaN and SandboxPolicy throws `SessionSeq must be a non-negative safe
+  // integer` (the upstream workflow-ptc tests/setup.ts fakeParent idiom).
   await ctx.plugin(SessionProjectionRegistry)
+  await ctx.plugin(SessionStore)
   await ctx.plugin(SubagentRuntime)
   const spawnProvider = new FakeSpawnProvider()
   ctx.subagents.registerProvider(spawnProvider)
@@ -126,9 +108,28 @@ async function setup() {
     warn: message => { throw new Error(`unexpected journal warning: ${message}`) },
   })
   ctx.subagents.registerProvider(journalProvider)
-  await ctx.plugin(WorkerThreadWorkflowEngine, { provider: 'cc-workflow-journal', maxConcurrentAgents: 8 })
-  const { parent, session } = fakeParentSession(records)
-  const callerAgent = fakeCallbackAgent(session)
+  // Harness 0.1.7: the worker-thread engine was replaced by the sandboxed
+  // Node PTC executor (`workflow-ptc`). Its runtime prerequisites come from
+  // the upstream tests/setup.ts idiom: fs/subprocess/sandbox must exist
+  // BEFORE NodePtcRuntime, whose inject list parks the fiber when they are
+  // missing (cordis does not throw — the plugin just never activates).
+  await ctx.plugin(FileSystem)
+  await ctx.plugin(Subprocess)
+  await ctx.plugin(Sandbox)
+  await ctx.plugin(SandboxPolicy, { mode: 'danger-full-access', workspaceRoot: scratch })
+  await ctx.plugin(NodePtcRuntime, { graceMs: 50 })
+  await ctx.plugin(PtcWorkflowEngine, { provider: 'cc-workflow-journal', maxConcurrentAgents: 8 })
+  // Real parent session + agent through the store (upstream fakeParent idiom).
+  const session = ctx.sessions.create(undefined, { meta: { cwd: scratch } })
+  const parent = { id: session.id, session, options: {} } as unknown as Agent
+  // Records-capture seam (2 lines): side-band capture of the real session's
+  // durable appends — the same stream the run registry writes its rows to.
+  const append = session.append.bind(session) as (t: string, d: Record<string, unknown>) => unknown
+  session.append = ((type: string, data: Record<string, unknown>) => {
+    records.push({ runId: (data as { runId?: string }).runId ?? '', type, data })
+    return append(type, data)
+  }) as never
+  const callerAgent = parent
   return {
     ctx,
     spawnProvider,
@@ -141,6 +142,7 @@ async function setup() {
     registry: ctx.ccWorkflowRunRegistry,
     cleanup: async () => {
       await journalProvider.disposeAllJournals()
+      await ctx.fiber.dispose()
       if (realHome === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = realHome
       rmSync(scratch, { recursive: true, force: true })
@@ -184,8 +186,8 @@ async function waitSettled(fixture: Awaited<ReturnType<typeof setup>>, runId: st
   throw new Error(`run ${runId} never published its settled projection`)
 }
 
-function journalPath(runId: string): string {
-  return join(process.env.DSH_HOME!, 'workflows', 'runs', 'sess-test', `${runId}.jsonl`)
+function journalPath(fixture: Awaited<ReturnType<typeof setup>>, runId: string): string {
+  return join(process.env.DSH_HOME!, 'workflows', 'runs', String(fixture.session.header.id), `${runId}.jsonl`)
 }
 
 describe('workflow resume journal spike (real worker-thread engine)', () => {
@@ -224,7 +226,7 @@ describe('workflow resume journal spike (real worker-thread engine)', () => {
 
       // --- Run 2: full resume of run 1 --------------------------------
       await waitSettled(fixture, first.runId)
-      const journalText = readFileSync(journalPath(first.runId), 'utf8')
+      const journalText = readFileSync(journalPath(fixture, first.runId), 'utf8')
       const parsed = parseJournal(journalText)
       expect(parsed.corrupt).toBe(false)
       expect(parsed.lines).toHaveLength(TOTAL)
@@ -243,7 +245,7 @@ describe('workflow resume journal spike (real worker-thread engine)', () => {
 
       // --- Run 3: edit ONE middle prompt ('fan 2' -> 'fan EDITED') ----
       await waitSettled(fixture, second.runId)
-      const journal2 = readFileSync(journalPath(second.runId), 'utf8')
+      const journal2 = readFileSync(journalPath(fixture, second.runId), 'utf8')
       const editedArgs = { fans: ['fan 0', 'fan 1', 'fan EDITED', 'fan 3'], items: ['a', 'b', 'c'] }
       const run3 = fixture.engine.start({ meta: { name: 'spike', description: 'spike script' }, script: SCRIPT, args: editedArgs, parent: fixture.parent })
       fixture.registry.register({

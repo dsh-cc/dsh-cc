@@ -17,7 +17,7 @@ export const inject = ['invariants']
 /**
  * No runtime invariant: this provider's contracts are the cross-file merge
  * and policy first-source-wins — composition logic proven by package tests;
- * the in-process commit relation is owned by `@deepseek-ai/dsh-settings`.
+ * the in-process commit relation is owned by `@dsh-cc/settings-provider`.
  */
 const install: InvariantInstaller = () => {}
 

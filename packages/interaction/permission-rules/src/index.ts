@@ -13,13 +13,14 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type z from '@deepseek-ai/schemastery'
+import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { foldSessionCwd } from '@dsh-cc/session-cwd'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { installSectionSafe } from '@dsh-cc/settings-ns'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import { installSectionSafe, registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import './message-source.ts' // declares the 'permission-rules' message kind
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value
 // dependency on the seam.
@@ -237,6 +238,11 @@ export class PermissionRulesService extends Service {
     // rules in force, exactly as the fallback contract requires. A stored
     // change re-enters reload() to rebuild merged state and the guards.
     ctx.inject(['settings'], () => {
+      // Q3 disposition: `llm-pi-ai` is BRIDGED (the rc.2 adapter reads its
+      // own entry Config); this registration only keeps the raw user section
+      // describable for the gauge backend read seam and the TUI bridge write
+      // seam. Passthrough schema: the raw user section is the contract.
+      registerNamespaceSafe(ctx, 'llm-pi-ai' as SettingsNamespace, z.any() as never)
       // Idempotent install: a duplicate namespace skips the throwing
       // installSection and wires live reads + settings/updated instead.
       installSectionSafe(ctx, PERMISSION_SETTINGS_NAMESPACE, permissionSettingsSchema(), {}, {
@@ -314,22 +320,16 @@ export class PermissionRulesService extends Service {
   }
 
   /**
-   * S6/D9 subagent-handoff return checks. Runs ONLY for spawn tools
-   * (`subagent`/`subagent_fork`, via the CC `Task` alias), ONLY in effective
-   * `auto` mode, warn-only, and never throws (the listener wraps this in the
-   * probe's fail-open catch).
+   * S6/D9 subagent-handoff return checks — spawn tools only (CC `Task`
+   * alias), effective `auto` mode only, warn-only, never throws.
    *
-   * ARM (a): when the child session is resolvable — `result.value.agentId`
-   * (the Task tool's output schema, packages/subagent/task/src/tool.ts) +
-   * the `agents` registry (`ctx.agents.get(id)`, the one-shot-ledger face,
-   * packages/subagent/task/src/one-shot-ledger.ts:77-80) — fold the child's
-   * classifier/probe audit and warn on deny/breaker/trip/≥5-ask. An
-   * unresolvable child under a resolver that THREW logs a debug note only —
-   * never a fabricated warning.
+   * ARM (a), resolvable child (`result.value.agentId` + `ctx.agents.get`,
+   * the one-shot-ledger face, task/src/one-shot-ledger.ts:77-80): fold the
+   * child's classifier/probe audit; warn on deny/breaker/trip/≥5-ask. A
+   * throw without a resolvable child logs debug only — never fabricates.
    *
-   * ARM (b) ALWAYS: screen the returned report text through the S7 probe
-   * machinery (`piProbe.screen` — same instance, lane, breaker, audit) and
-   * warn the parent to treat a flagged report as suspect.
+   * ARM (b) ALWAYS: screen the returned report text through `piProbe.screen`
+   * (same instance, lane, breaker, audit) and warn on a flagged report.
    */
 
   /** Reject a settings section the engine could not act on — fail loud at the settings boundary. */

@@ -6,7 +6,7 @@ import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool, type ToolExecutionInput } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import PermissionRules, {
   PERMISSION_SETTINGS_NAMESPACE,
   appendSessionClassifier,
@@ -95,7 +95,7 @@ class FakeAgents extends Service {
 }
 
 function childOf(id: string, events: 'none' | 'deny' | 'breaker' | 'asks4' | 'asks5' | 'tripProbeBreaker' = 'none'): Agent {
-  const session = Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
+  const session = Session.create(SessionId(id), undefined, { version: 4, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd: '/work' })
   session.append('turn/start', { turn: 1 })
   if (events === 'deny') {
     appendSessionClassifier(session, { tool: 'Bash', digest: 'd', verdict: 'deny', rule: 'hard rule', latencyMs: 1, cacheHit: false })
@@ -155,7 +155,7 @@ function exec(name: string, args: unknown, agent?: Agent): ToolExecutionInput {
 }
 
 function agentOf(id: string, cwd = '/work'): Agent {
-  const session = Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
+  const session = Session.create(SessionId(id), undefined, { version: 4, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
   session.append('turn/start', { turn: 1 })
   return { id, session, inject: () => {} } as unknown as Agent
 }

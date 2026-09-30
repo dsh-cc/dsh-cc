@@ -41,11 +41,12 @@ export async function runShellCommand(rt: DriverBashCtx, raw: string): Promise<v
       const row = shellOutputRow(result.stdout, result.stderr, { exitCode: 0, timedOut: false })
       if (row.text.length > 0) rt.emit(upsertRow(rt.state(), row))
     } else {
-      const result = await rt.shell.run(rt.shell.resolve({
+      const execution = await rt.shell.execute(rt.shell.resolve({
         command,
         timeoutMs: BASH_TIMEOUT_MS,
         stdoutMaxBytes: BASH_STDOUT_MAX_BYTES,
       }))
+      const result = await execution.result()
       const row = shellOutputRow(result.stdout.text, result.stderr.text, result)
       if (row.text.length > 0) rt.emit(upsertRow(rt.state(), row))
     }

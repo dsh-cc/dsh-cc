@@ -1,106 +1,91 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { SessionEvent, SessionHeader, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
-import {
-  SessionPersistence,
-  SessionPersistenceNotFoundError,
-  SessionPersistenceRevision,
-} from '@deepseek-ai/dsh-session-persistence'
-import type { SessionAccess, SessionHandle, SessionPersistenceSnapshot } from '@deepseek-ai/dsh-session-persistence'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
+import * as Storage from '@deepseek-ai/dsh-storage'
+import type { KvUnit, KvUnitDescriptor, StorageBackend } from '@deepseek-ai/dsh-storage'
+import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import * as toolSchedule from '@deepseek-ai/dsh-schedule'
 
-interface StoredProbeSession {
-  readonly header: SessionHeader
-  readonly events: SessionEvent[]
+/** In-memory StorageBackend: per-record maps plus the optional global slot. */
+class MemoryBackend implements StorageBackend {
+  readonly units = new Map<string, { tables: Map<string, Map<string, unknown>>; global: unknown }>()
+
+  readonly kv = {
+    open: async (descriptor: KvUnitDescriptor): Promise<KvUnit> => {
+      if (this.units.has(descriptor.name)) throw new Error(`unit "${descriptor.name}" already open`)
+      const unit = { tables: new Map(descriptor.tables.map(name => [name, new Map<string, unknown>()])), global: null as unknown }
+      this.units.set(descriptor.name, unit)
+      return {
+        loadAll: async () => ({
+          tables: Object.fromEntries([...unit.tables].map(([name, rows]) => [name, Object.fromEntries(rows)])),
+          global: unit.global,
+        }),
+        putRecord: async (table, key, value) => { unit.tables.get(table)!.set(key, structuredClone(value)) },
+        deleteRecord: async (table, key) => { unit.tables.get(table)!.delete(key) },
+        setGlobal: async (value) => { unit.global = structuredClone(value) },
+        close: async () => { this.units.delete(descriptor.name) },
+      }
+    },
+  }
+
+  async close(): Promise<void> {}
 }
 
-/** In-memory handle-based persistence, just enough for agent-loop's write path
- * (mirrors upstream schedule plugin.spec's PersistenceProbe). */
-class PersistenceProbe extends SessionPersistence {
-  private readonly stored = new Map<string, StoredProbeSession>()
-
-  override async create(header: SessionHeader): Promise<SessionHandle> {
-    const entry: StoredProbeSession = { header, events: [] }
-    this.stored.set(header.id, entry)
-    return this.handle(entry, 'write')
-  }
-
-  // Appends are durable on resolution here; nothing buffers, so the service-wide flush is a no-op.
-  override async flush(): Promise<void> {}
-
-  override async open(id: SessionId, access: SessionAccess): Promise<SessionHandle> {
-    const entry = this.stored.get(id)
-    if (entry === undefined) throw new SessionPersistenceNotFoundError(id)
-    return this.handle(entry, access)
-  }
-
-  override async stat(id: SessionId): Promise<SessionPersistenceSnapshot | undefined> {
-    const entry = this.stored.get(id)
-    return entry === undefined ? undefined : this.snapshot(entry)
-  }
-
-  override async list(): Promise<SessionPersistenceSnapshot[]> {
-    return [...this.stored.values()].map(entry => this.snapshot(entry))
-  }
-
-  private snapshot(entry: StoredProbeSession): SessionPersistenceSnapshot {
-    return {
-      header: entry.header,
-      revision: SessionPersistenceRevision(`probe-${entry.header.id}-${entry.events.length}`),
-      eventCount: entry.events.length,
-    }
-  }
-
-  private handle(entry: StoredProbeSession, access: SessionAccess): SessionHandle {
-    return {
-      id: entry.header.id,
-      header: entry.header,
-      inheritedEventCount: SessionLogOffset(0),
-      access,
-      read: async (offset = 0, length = Number.MAX_SAFE_INTEGER) =>
-        ({ eventState: 'detached', events: structuredClone(entry.events.slice(offset, offset + length)) }),
-      append: async (events) => { entry.events.push(...events) },
-      flush: async () => {},
-      close: async () => {},
-      [Symbol.asyncDispose]: async () => {},
-    }
-  }
-}
-
-/**
- * cc-shell bundle schedule row (`@deepseek-ai/dsh-schedule`). Mirrors the
- * upstream plugin.spec pattern (real services, direct tool execution) rather
- * than a full-timing loop — deterministic. assert_shape: the tool registers on
- * future root agents and a schedule_create call appends schedule/change.
- */
+/** Mount the ScheduleService prerequisites with an in-memory durable medium. */
 async function harness(): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(PersistenceProbe)
+  await ctx.plugin(Storage.default)
+  const backend = new MemoryBackend()
+  ctx.effect(() => ctx.storage.backend.register('fixture', backend))
+  ctx.effect(() => async () => { await backend.close() })
+  const facility = new DomainFacility(ctx, { backend: 'fixture' })
+  ctx.effect(() => {
+    const unmount = ctx.storage.mount('domain', facility)
+    ctx.provide('storageDomain', facility)
+    return async () => { await facility.closeAll(); unmount() }
+  })
+  ctx.provide('sessionController', { resolveAgent: async () => { throw new Error('missing Session') } } as never)
+  // AgentLoop.create persists new sessions — the empty `as never` provide
+  // crashed at 0.1.7 (handle-model `persistence.create`). Mount the real
+  // jsonl persistence into a tmp root.
+  const persistenceRoot = mkdtempSync(join(tmpdir(), 'cc-schedule-bundle-'))
+  await ctx.plugin(JsonlSessionPersistence, { root: persistenceRoot, compression: 'none' })
   ctx.on('session/flush', () => {})
   await ctx.plugin(AgentLoop, { agents: [] })
   return ctx
 }
 
 describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
-  it('has the Loader-safe function-plugin export shape', () => {
-    expect('default' in toolSchedule).toBe(false)
-    expect(toolSchedule.name).toBe('schedule')
-    expect(toolSchedule.inject).toEqual(['agents', 'sessions', 'tools', 'sessionPersistence'])
+  it('has the Loader-safe class-plugin export shape', () => {
+    // 0.1.7-rc.2 shape: the plugin is the class itself, exported as the
+    // DEFAULT only (no `ScheduleService` named export); the loader must
+    // unwrap the module namespace to that class.
+    expect(typeof toolSchedule.default).toBe('function')
+    expect((toolSchedule.default as unknown as { inject: string[] }).inject).toEqual(
+      ['agents', 'sessions', 'tools', 'storageDomain', 'sessionController', 'sessionPersistence'],
+    )
     const loader = Object.create(Loader.prototype) as Loader
-    expect(loader.unwrapExports(toolSchedule)).toBe(toolSchedule)
+    expect(loader.unwrapExports(toolSchedule)).toBe(toolSchedule.default)
   })
 
-  it('registers schedule_create/list/delete on future root agents and appends schedule/change', async () => {
+  it('registers schedule_create/list/delete on future root agents and creates durable tasks', async () => {
     const ctx = await harness()
+    const changed: unknown[] = []
+    ctx.on('schedule/changed', () => { changed.push(true) })
     const existing = await ctx.agents.create({ sessionId: SessionId('cc-schedule-existing') })
-    const plugin = await ctx.plugin(toolSchedule)
     expect(ctx.tools.get('schedule_create', existing.agent)).toBeUndefined()
 
+    // Mount after the old agent exists: tools land on FUTURE root agents.
+    await ctx.plugin(toolSchedule.default, {})
     const root = await ctx.agents.create({ sessionId: SessionId('cc-schedule-root') })
     expect(ctx.tools.get('schedule_create', root.agent)?.name).toBe('schedule_create')
     expect(ctx.tools.get('schedule_list', root.agent)?.name).toBe('schedule_list')
@@ -111,21 +96,19 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-schedule-create'),
       name: 'schedule_create',
-      arguments: { prompt: 'future reminder', after_seconds: 3600 },
+      arguments: { title: 'future reminder', prompt: 'future reminder', after_seconds: 3600 },
       agent: root.agent,
     }))
     expect(created.isError).toBe(false)
     if (created.isError) throw new Error('expected Schedule create value')
-    expect(created.value).toMatchObject({ id: 'schedule-1', deliveryMode: 'session-local' })
+    expect(created.value).toMatchObject({ kind: 'after', prompt: 'future reminder', deliveryMode: 'host' })
 
-    // The durable create appended a schedule/change event to the session log.
-    expect(root.agent.session.snapshotEvents().some(e => e.type === 'schedule/change')).toBe(true)
+    // The durable create landed in storage and announced itself post-commit.
+    expect(changed.length).toBeGreaterThan(0)
+    expect((await ctx.schedule.catalog()).some(entry => entry.prompt === 'future reminder')).toBe(true)
 
-    await plugin.dispose()
-    expect(ctx.tools.get('schedule_create', root.agent)).toBeUndefined()
-
-    await root.dispose()
     await existing.dispose()
+    await root.dispose()
     await ctx.fiber.dispose()
   })
 })

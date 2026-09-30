@@ -65,7 +65,7 @@ async function harness(settings?: Record<string, unknown>): Promise<{
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   void ctx.agents
   return { ctx, session, defaultDir: tempDir }
 }

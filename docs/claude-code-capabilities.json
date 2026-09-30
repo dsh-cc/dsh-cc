@@ -1200,7 +1200,7 @@
     "engine.schedule": {
       "title": "Schedule / reminders",
       "category": "engine",
-      "plane": "preset",
+      "plane": "host",
       "upstream": {
         "summary": "Scheduled reminders, including cron-expression selectors.",
         "refs": []
@@ -1222,8 +1222,12 @@
       "evidence": [
         {
           "type": "source",
-          "path": "packages/preset/cc/agent.cordis.yml",
+          "path": "packages/bundle/cc-shell/cordis.patch.yml",
           "anchor": "- id: schedule"
+        },
+        {
+          "type": "source",
+          "path": "packages/bundle/cc-shell/src/schedule-mount.ts"
         },
         {
           "type": "test",
@@ -1654,7 +1658,7 @@
         {
           "type": "source",
           "path": "packages/preset/cc/agent.cordis.yml",
-          "anchor": "- id: workflow-worker-thread"
+          "anchor": "- id: workflow-ptc"
         },
         {
           "type": "source",
@@ -2186,7 +2190,7 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Bridged with matcher support and the permissionDecision decision contract. Payloads for live subagent callers also carry CC's agent_id plus a constant agent_type 'general-purpose' (kind-specific real types are a parity gap), and session_id is child-scoped where CC keeps the parent session id. additionalContext IS injected for a non-deny decision (post-result context, an ordering divergence from CC attaching it to the tool call); only updatedInput is ignored."
+        "summary": "Bridged with matcher support and the permissionDecision decision contract. Payloads for live subagent callers also carry CC's agent_id plus a constant agent_type 'general-purpose' (kind-specific real types are a parity gap), and session_id is child-scoped where CC keeps the parent session id. additionalContext IS injected for a non-deny decision (post-result context, an ordering divergence from CC attaching it to the tool call); only updatedInput is ignored. Harness 0.1.7 adds the PreToolDecision `cancel` kind (deny-with-different-user-text: canonical cancellation without a policy denial); CC's permissionDecision codec (allow|deny|ask) has no counterpart, so CC hooks can never emit it — it arises downstream only and the bridge folds it verbatim."
       }
     },
     "hooks.session-end": {

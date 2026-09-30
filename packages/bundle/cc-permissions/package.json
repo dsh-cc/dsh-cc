@@ -26,6 +26,15 @@
     "@dsh-cc/permission-rules": "workspace:^",
     "@dsh-cc/command-permissions": "workspace:^"
   },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@deepseek-ai/dsh-agent-default-model": "link:../../../../deepseek-harness/packages/core/agent-default-model",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@dsh-cc/settings-provider": "workspace:^",
+    "vitest": "^4.1.8"
+  },
   "publishConfig": {
     "access": "public"
   }

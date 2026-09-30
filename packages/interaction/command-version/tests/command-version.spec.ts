@@ -16,7 +16,7 @@ const OWN_VERSION: string = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ).version
 
-function makeAgent(ctx: Context): Agent {
+async function makeAgent(ctx: Context): Promise<Agent> {
   const session = ctx.sessions.create(SessionId(`command-version-${Math.random()}`))
   const agent: Agent = {
     id: session.id,
@@ -33,7 +33,7 @@ function makeAgent(ctx: Context): Agent {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
 }
 
@@ -47,7 +47,7 @@ async function harness(overrides: Record<string, unknown> = {}): Promise<{
   await ctx.plugin(CommandRuntime)
   await ctx.plugin(AgentRegistry)
   const plugin = await ctx.plugin(commandVersion)
-  const agent = makeAgent(ctx)
+  const agent = await makeAgent(ctx)
   return { ctx, agent, plugin }
 }
 
@@ -118,7 +118,7 @@ describe('/version trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/version help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

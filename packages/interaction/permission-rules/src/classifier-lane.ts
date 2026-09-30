@@ -87,7 +87,7 @@ export function createClassifierStreamAdapter(llm: ClassifierLlm, warn: (message
       system: opts.system,
       messages: [createUserMessage({
         content: [{ type: 'text', text: opts.prompt }],
-        source: { kind: 'plugin', plugin: 'permission-rules' },
+        source: { kind: 'permission-rules' },
       })],
       maxTokens: opts.maxTokens,
       ...(effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) }),

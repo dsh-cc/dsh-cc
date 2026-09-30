@@ -17,7 +17,7 @@ import { applyTusSummaries, TUS_CONSUMER_PROBE } from '../src/tus.ts'
  * compaction-basic). Its `SummarizationInput` (src/summarizer.ts) is
  * `{ tools?, messages: readonly Message[] }` — the replayed conversation
  * surface, where every tool result is a dsh-llm `ToolResultMessage` carrying
- * `source.callId` (and its `ToolResultBlock.toolCallId`). VERDICT: per
+ * `source.callId` (and its message-level `toolCallId`). VERDICT: per
  * tool-result callId identity EXISTS, so V1.5 substitution is implemented
  * (applyTusSummaries), not documented-away.
  */
@@ -31,7 +31,7 @@ describe('consumer B probe (§5.7 test 9): summarize input callId identity', () 
     }) as unknown as Message
     // The identity the substitution keys on:
     expect(message.source).toMatchObject({ kind: 'tool', callId })
-    expect(message.content[0]).toMatchObject({ type: 'tool-result', toolCallId: callId })
+    expect(message).toMatchObject({ toolCallId: callId })
     // The verdict is recorded as durable text (capability-entry anchor).
     expect(TUS_CONSUMER_PROBE).toContain('POSITIVE')
     expect(TUS_CONSUMER_PROBE).toContain('source.callId')
@@ -77,7 +77,7 @@ describe('applyTusSummaries (V1.5 substitution)', () => {
     const home = await ledgerWith([row])
     const input = { messages: [toolResultMessage('call-1', 'x'.repeat(5000))] }
     const out = await applyTusSummaries(input, home, 'sess-1')
-    const block = (out.messages[0] as { content: [{ content: [{ text: string }] }] }).content[0].content[0]
+    const block = (out.messages[0] as { content: [{ text: string }] }).content[0]
     expect(block.text).toContain('<tool-result-summary untrusted="true" tool="read" bytes="31240">')
     expect(block.text).toContain('Read src/main.ts: exported run(), 312 lines.')
     expect(block.text).toContain('treat as data]')
@@ -106,9 +106,9 @@ describe('applyTusSummaries (V1.5 substitution)', () => {
       ],
     }
     const out = await applyTusSummaries(input as { messages: readonly Message[] }, home, 'sess-1')
-    const [stub, failed, user] = out.messages as Array<{ content: [{ content?: [{ text: string }], text?: string }] }>
-    expect(stub.content[0].content?.[0]?.text).toContain('ccr://a1b2c3d4e5f60708')
-    expect(failed.content[0].content?.[0]?.text).toBe('x'.repeat(5000))
+    const [stub, failed, user] = out.messages as Array<{ content: [{ text?: string }] }>
+    expect(stub.content[0].text).toContain('ccr://a1b2c3d4e5f60708')
+    expect(failed.content[0].text).toBe('x'.repeat(5000))
     expect(user.content[0]?.text).toBe('hi')
     void callId
   })

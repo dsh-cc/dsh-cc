@@ -6,6 +6,9 @@
   },
   "include": ["src"],
   "references": [
+    {
+      "path": "../../settings/settings-provider"
+    },
     { "path": "../../compat/cc-plugin-loader" },
     { "path": "../../compat/cc-plugin-manager" },
     { "path": "../../compat/cc-model-aliases" },

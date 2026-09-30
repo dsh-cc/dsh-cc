@@ -16,26 +16,26 @@ These rows previously lived in the global `cc-shell` patch (`packages/bundle/cc-
 
 ## Install
 
-```bash
-bash scripts/sync-local-profile.sh web   # mirror @dsh-cc/* packages into the profile
-bash scripts/sync-cc-preset.sh           # install the cc preset into ~/.dsh/.agent-presets/
-```
-
-Both scripts copy, they do not symlink; plugin code and preset files are read at boot, so **restart dsh** after the first install (subsequent file edits are picked up on the next restart too).
+No install step: the `tui` profile's bundle patch (`packages/bundle/cc-tui/cordis.patch.yml`)
+mounts the harness agent-preset registry (`default: cc`) and declares this
+preset with a file-backed include row pointing at `agent.cordis.yml` inside
+this package, which the bundles install into the profile's `node_modules`.
+Plugin code and preset files are read at boot, so **restart dsh** after
+updating packages.
 
 ## Select
 
 - **Web UI**: pick "CC mode" from the agent-preset selector; or
-- **settings**: `~/.dsh/settings.json` → `"agent-presets": { "default": "cc" }`.
+- **settings**: `~/.dsh/settings.json` → `"agent-preset-registry": { "default": "cc" }`.
 - **TUI**: `dsh --profile tui` (or `dsh-cc`) boots the terminal surface with this preset as the default.
 
 ## Known limits
 
 1. **Standing mount, host-plane singletons.** A preset is mounted once per process under a standing scope. MCP connections, the on-disk CC plugin directories loaded by the glue, the subagent-provider roster, and CC-plugin `settings.json` writes resolve to process-shared host-plane singletons (the same criterion upstream `subagents`/`goals` already follow), so those are not per-session across simultaneously mounted presets.
-2. **Vendored baseline, drift gate.** The standard baseline is vendored. After upgrading dsh, run the drift gate (`pnpm vitest run packages/preset/cc`, or the binary directly) to re-diff it against the new standard preset and fold in upstream changes. On a CI machine with no dsh install present, the gate auto-skips via `it.runIf`.
-3. **Uninstall is deletion.** Remove `~/.dsh/.agent-presets/cc` (or however it was installed); the four built-in modes are unaffected — a user-root preset of the same `id` never overrides the installed system-root entries.
+2. **Vendored baseline, drift gate.** The standard baseline is vendored. After upgrading dsh, run the drift gate (`pnpm vitest run packages/preset/cc`, or the binary directly) to re-diff it against the new standard preset and fold in upstream changes. A missing upstream anchor (`packages/bundle/web-app/presets/standard.patch.yml`, or an installed `@deepseek-ai/dsh-web-app`) fails the gate — it never skips.
+3. **Uninstall.** Remove the `preset-cc` declaration row from the bundle patch (or the bundle itself); the built-in modes are unaffected.
 4. **`DSH_COORDINATOR_MODE=1` breaks this preset's mount.** The coordinator needs an agent `ctx`, and a standing mount has none; that failure is now scoped to this preset's session creation. In the old global-patch era the whole app failed to boot — the blast radius is narrower, but the mode is still unsupported here.
-5. **A settings default to a missing preset errors.** If the default names a preset that does not exist, session creation reports `agent-preset-not-found` (the `details.available` list names the valid ids). Reset by pointing `~/.dsh/settings.json` → `agent-presets.default` back to `standard`.
+5. **A settings default to a missing preset errors.** If the default names a preset that does not exist, session creation reports `agent-preset-not-found` (the `details.available` list names the valid ids). Reset by pointing `~/.dsh/settings.json` → `agent-preset-registry.default` back to `standard`.
 
 ## Links
 

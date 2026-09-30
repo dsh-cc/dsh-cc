@@ -18,20 +18,28 @@ import {
 
 // --- fakes ------------------------------------------------------------------
 
+/** rc.2 catalog row shape (`SubagentCatalogEntry`): no `activity`/`hasChildren`. */
 interface FakeChild {
   id: string
-  activity: 'running' | 'inactive'
-  hasChildren: boolean
   mode?: 'one-shot' | 'continuable'
   label?: string
 }
 
-function makeServices(children: readonly FakeChild[], agents: Record<string, { status?: string }> = {}): SnapshotServices & {
+function makeServices(
+  children: readonly FakeChild[],
+  agents: Record<string, { status?: string }> = {},
+  /** Child ids that carry durable sub-descendants (rc.2 `listDescendants` fold). */
+  descendantParents: Map<string, boolean> = new Map(),
+): SnapshotServices & {
   interrupts: { id: string; authority: unknown }[]
 } {
   const interrupts: { id: string; authority: unknown }[] = []
   return {
     listChildren: async () => children,
+    // rc.2 re-derivation: the `[has children]` tag comes from descendant rows.
+    listDescendants: async () => [...descendantParents.entries()]
+      .filter(([, has]) => has)
+      .map(([id]) => ({ id, hasChildren: true })),
     getAgent: (id: string) => agents[id],
     readPin: (childId: string) => {
       if (childId === 'pinned-ok') {
@@ -60,7 +68,7 @@ async function rows(services: ReturnType<typeof makeServices>): Promise<AgentRow
 describe('buildAgentsSnapshot', () => {
   it('derives residency: running child with live running agent', async () => {
     const services = makeServices(
-      [{ id: 'c1', activity: 'running', hasChildren: false, mode: 'continuable', label: 'scout' }],
+      [{ id: 'c1', mode: 'continuable', label: 'scout' }],
       { c1: { status: 'running' } },
     )
     expect(await rows(services)).toEqual([
@@ -70,28 +78,28 @@ describe('buildAgentsSnapshot', () => {
 
   it('derives idle: live agent present but not running', async () => {
     const services = makeServices(
-      [{ id: 'c2', activity: 'running', hasChildren: false, mode: 'continuable', label: 'worker' }],
+      [{ id: 'c2', mode: 'continuable', label: 'worker' }],
       { c2: { status: 'idle' } },
     )
     expect((await rows(services))[0]!.residency).toBe('idle')
   })
 
-  it('derives ready: activity running but no live agent (settled continuable)', async () => {
-    const services = makeServices([{ id: 'c3', activity: 'running', hasChildren: true, mode: 'continuable', label: 'done-child' }])
+  it('derives ready: settled continuable child with no live agent', async () => {
+    const services = makeServices([{ id: 'c3', mode: 'continuable', label: 'done-child' }])
     expect((await rows(services))[0]!.residency).toBe('ready')
   })
 
-  it('derives ready: persistence-only child (activity inactive)', async () => {
-    const services = makeServices([{ id: 'c4', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'parked' }])
+  it('derives ready: persistence-only child (no live activation)', async () => {
+    const services = makeServices([{ id: 'c4', mode: 'continuable', label: 'parked' }])
     expect((await rows(services))[0]!.residency).toBe('ready')
   })
 
   it('attaches pin state including gate deny code', async () => {
     const services = makeServices([
-      { id: 'pinned-ok', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'a' },
-      { id: 'pinned-deny', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'b' },
-      { id: 'pinned-corrupt', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'c' },
-      { id: 'unpinned', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'd' },
+      { id: 'pinned-ok', mode: 'continuable', label: 'a' },
+      { id: 'pinned-deny', mode: 'continuable', label: 'b' },
+      { id: 'pinned-corrupt', mode: 'continuable', label: 'c' },
+      { id: 'unpinned', mode: 'continuable', label: 'd' },
     ])
     const list = await rows(services)
     expect(list.find(r => r.id === 'pinned-ok')!.pin).toEqual({ state: 'pinned' })
@@ -108,10 +116,10 @@ describe('renderAgentsList', () => {
 
   it('groups Working / Idle / Ready in that order with pinned rows', async () => {
     const services = makeServices([
-      { id: 'ready-1', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'zzz' },
-      { id: 'run-1', activity: 'running', hasChildren: false, mode: 'continuable', label: 'aaa' },
-      { id: 'idle-1', activity: 'running', hasChildren: false, mode: 'continuable', label: 'bbb' },
-      { id: 'pinned-deny', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'mmm' },
+      { id: 'ready-1', mode: 'continuable', label: 'zzz' },
+      { id: 'run-1', mode: 'continuable', label: 'aaa' },
+      { id: 'idle-1', mode: 'continuable', label: 'bbb' },
+      { id: 'pinned-deny', mode: 'continuable', label: 'mmm' },
     ], { 'run-1': { status: 'running' }, 'idle-1': { status: 'idle' } })
     const text = renderAgentsList(await rows(services))
     const workingAt = text.indexOf('Working (')
@@ -130,8 +138,8 @@ describe('renderAgentsList', () => {
 
   it('sorts deterministically within a group', async () => {
     const services = makeServices([
-      { id: 'b', activity: 'running', hasChildren: false, mode: 'continuable', label: 'same' },
-      { id: 'a', activity: 'running', hasChildren: false, mode: 'continuable', label: 'same' },
+      { id: 'b', mode: 'continuable', label: 'same' },
+      { id: 'a', mode: 'continuable', label: 'same' },
     ], { a: { status: 'running' }, b: { status: 'running' } })
     const text = renderAgentsList(await rows(services))
     expect(text.indexOf('a')).toBeLessThan(text.indexOf('b', text.indexOf('a') + 1))
@@ -141,7 +149,9 @@ describe('renderAgentsList', () => {
 describe('renderAgentDetail', () => {
   it('renders ids, residency, children, and pin provenance', async () => {
     const services = makeServices(
-      [{ id: 'pinned-ok', activity: 'inactive', hasChildren: true, mode: 'continuable', label: 'scout' }],
+      [{ id: 'pinned-ok', mode: 'continuable', label: 'scout' }],
+      {},
+      new Map([['pinned-ok', true]]),
     )
     const list = await rows(services)
     const text = renderAgentDetail(list[0]!, services.readPin('pinned-ok'), services.pinPath('pinned-ok'), PARENT)
@@ -208,12 +218,12 @@ describe('/agents human command', () => {
     ctx.provide('resumePinStore', { read: services.readPin, pathFor: services.pinPath })
     await ctx.plugin(commandAgents)
     const agent = makeFakeAgent(ctx, `agents-${Math.random()}`)
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     return { ctx, agent, services }
   }
 
   it('publishes the read-only ccAgents snapshot service on the root context', async () => {
-    const { ctx, services } = await harness(makeServices([{ id: 'c1', activity: 'inactive', hasChildren: false, mode: 'continuable', label: 'x' }]))
+    const { ctx, services } = await harness(makeServices([{ id: 'c1', mode: 'continuable', label: 'x' }]))
     const snapshot = ctx.get('ccAgents') as { list(parent: string): Promise<AgentRow[]> } | undefined
     expect(snapshot).toBeDefined()
     const list = await snapshot!.list('parent-1')
@@ -224,11 +234,11 @@ describe('/agents human command', () => {
 
   it('executes /agents, /agents <id>, and stop through the command registry', async () => {
     const { ctx, agent, services } = await harness(makeServices(
-      [{ id: 'pinned-deny', activity: 'running', hasChildren: false, mode: 'continuable', label: 'fast work' }],
+      [{ id: 'pinned-deny', mode: 'continuable', label: 'fast work' }],
       { 'pinned-deny': { status: 'running' } },
     ))
     // Live child in the agents registry: makes the residency derive 'running'.
-    ctx.agents.register(makeFakeAgent(ctx, 'pinned-deny', 'running'))
+    await ctx.agents.register(makeFakeAgent(ctx, 'pinned-deny', 'running'))
     const listText = await (ctx.commands.execute(agent, '/agents', [], new AbortController().signal) as Promise<{ result?: { text?: string } }>)
       .then(r => r.result?.text ?? '')
     expect(listText).toContain('[gate: WORKSPACE_CHANGED]')
@@ -258,7 +268,7 @@ describe('/agents help interception', () => {
     ctx.provide('resumePinStore', { read: services.readPin, pathFor: services.pinPath })
     await ctx.plugin(commandAgents)
     const agent = makeFakeAgent(ctx, `agents-help-${Math.random()}`)
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     return { ctx, agent }
   }
 

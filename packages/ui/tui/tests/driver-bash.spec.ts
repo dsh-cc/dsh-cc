@@ -43,10 +43,11 @@ function makeShellService(script: FakeResult[] = []) {
         stdoutMaxBytes: request.stdoutMaxBytes ?? 1_024,
       }
     },
-    async run(spec: FakeSpec): Promise<FakeResult> {
+    async execute(spec: FakeSpec): Promise<{ result(): Promise<FakeResult> }> {
       specs.push(spec)
       const next = script.shift()
-      return next ?? { exitCode: 0, timedOut: false, stdout: { text: '' }, stderr: { text: '' } }
+      const result = next ?? { exitCode: 0, timedOut: false, stdout: { text: '' }, stderr: { text: '' } }
+      return { result: async () => result }
     },
   }
   return { service, specs }

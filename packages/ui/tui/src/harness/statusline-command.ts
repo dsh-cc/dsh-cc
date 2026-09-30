@@ -126,7 +126,7 @@ export function createStatusLineCommand(deps: StatusLineCommandDeps): StatusLine
       }
     }, timeoutMs)
     inFlight = { controller, capTimer }
-    deps.executor.run(spec).then(
+    deps.executor.execute(spec).then((handle) => handle.result()).then(
       (result: ShellRunResultLike) => {
         if (inFlight?.controller === controller) {
           clearTimeout(inFlight.capTimer)

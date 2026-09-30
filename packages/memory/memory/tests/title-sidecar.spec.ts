@@ -83,6 +83,22 @@ describe('writeTitleSidecar / readTitleSidecar', () => {
     expect(readTitleSidecar(CWD, 'v1', { sessionsRoot: root })).toBe('V1 title')
   })
 
+  it('compares freshness against the v4 stream first (v4-first resolver)', () => {
+    const root = tempSessionsRoot()
+    // Sidecar newer than the v3 log but OLDER than the v4 log: stale.
+    const dir = seedSession(root, CWD, 'v4-stale', { file: 'session.v4.jsonl.zstd' })
+    writeTitleSidecar(CWD, 'v4-stale', 'Stale title', { sessionsRoot: root })
+    utimesSync(join(dir, 'title.txt'), new Date(1_000_000), new Date(1_000_000))
+    utimesSync(join(dir, 'session.v4.jsonl.zstd'), new Date(2_000_000), new Date(2_000_000))
+    expect(readTitleSidecar(CWD, 'v4-stale', { sessionsRoot: root })).toBeUndefined()
+    // Sidecar newer than the newest (v4) stream: fresh, and the v4 stream wins
+    // over the older v3 one.
+    const dir2 = seedSession(root, CWD, 'v4-fresh', { file: 'session.v4.jsonl.zstd' })
+    seedSession(root, CWD, 'v4-fresh', { file: 'session.v3.jsonl.zstd' })
+    writeTitleSidecar(CWD, 'v4-fresh', 'Fresh title', { sessionsRoot: root })
+    expect(readTitleSidecar(CWD, 'v4-fresh', { sessionsRoot: root })).toBe('Fresh title')
+  })
+
   it('returns undefined for an empty sidecar', () => {
     const root = tempSessionsRoot()
     const dir = seedSession(root, CWD, 'empty-sidecar', { absent: true })

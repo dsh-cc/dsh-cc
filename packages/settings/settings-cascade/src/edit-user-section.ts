@@ -10,7 +10,7 @@
  * @module @dsh-cc/settings-cascade/edit-user-section
  */
 
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { readUserText, writeJsonAtomic } from './persist.ts'
 
 /**

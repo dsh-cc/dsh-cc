@@ -7,8 +7,8 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as ccOutputStyles from '../src/index.ts'
@@ -82,7 +82,7 @@ async function harness(config: Record<string, unknown> = {}, withSettings = true
   ctx.on('system-prompt/change', () => { count += 1 })
   await ctx.plugin(ccOutputStyles, config)
   const { agent } = stubAgent(ctx, `cc-output-styles-${Math.random()}`)
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent, changeCount: () => count }
 }
 

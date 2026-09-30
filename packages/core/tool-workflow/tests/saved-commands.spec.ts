@@ -18,8 +18,8 @@ import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntimeCC from '@dsh-cc/tools'
 // The harness validator this package's local shape replication must agree with
-// (source of truth: deepseek-harness workflow-worker-thread/src/meta.ts:13-44).
-import { validateMeta } from '@deepseek-ai/dsh-workflow-worker-thread/src/meta.ts'
+// (source of truth: deepseek-harness workflow-ptc/src/meta.ts).
+import { validateMeta } from '@deepseek-ai/dsh-workflow-ptc'
 import { mountSavedWorkflowCommands, metaShapeViolations } from '../src/commands.ts'
 import type { CommandsSeamLike, SavedWorkflowCommandDefinition, WorkflowCommandsContext } from '../src/commands.ts'
 import { savedWorkflowDirs } from '../src/launch.ts'

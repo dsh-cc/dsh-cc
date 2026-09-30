@@ -5,7 +5,7 @@ import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import { foldPlanMode, foldPermissionMode, foldSandboxMode } from '@dsh-cc/permission-rules'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -88,7 +88,7 @@ function openTurnAgent(id: string): Agent {
 /** An agent whose session carries a working directory (enables the escape check). */
 function openAgentWithCwd(id: string, cwd: string): Agent {
   const session = Session.create(SessionId(id), undefined, {
-    version: 3,
+    version: 4,
     isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),

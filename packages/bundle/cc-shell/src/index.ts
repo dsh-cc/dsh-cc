@@ -23,6 +23,14 @@ import { existsSync, readFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the cc-shell-glue producer (own named kind; no converter same-name entry). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'cc-shell-glue': { readonly kind: 'cc-shell-glue' } & ContextFormed
+  }
+}
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
 import {
   buildRegistrations,
@@ -219,8 +227,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   // 3. Deferred-connect visibility window: prompts submitted while a deferred
   //    server is still handshaking cannot see its `mcp__*` tools. When any
-  //    deferred server was mounted, register a one-shot `agent/session-start`
-  //    hook (same pattern as the gating notice below) that lists the servers
+  //    deferred server was mounted, register a one-shot `agent/created` hook
+  //    (same pattern as the gating notice below; rc.2 folds the old
+  //    `agent/session-start` into agent creation, `source` on the payload)
+  //    that lists the servers
   //    still `connecting` at that moment, then mounts a settle follow-up: a
   //    one-shot `agent/pre-step` listener that appends a "servers ready /
   //    unavailable" summary to the first matching enter decision once every
@@ -230,8 +240,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   //    first prompt injects nothing.
   if (deferredNames.length > 0) {
     let fired = false
-    ctx.on('agent/session-start', ({ agent }: { agent: { inject(message: unknown): void; session?: { id?: unknown } } }) => {
-      // One shot per process, consumed even when suppressed.
+    ctx.on('agent/created', ({ agent }: { agent: { inject(message: unknown): void; session?: { id?: unknown } } }) => {
+      // One shot per process, consumed even when suppressed. The registry
+      // announces `agent/created` for every created agent (main + subagent
+      // fan-out), so the closure flag still picks the first announcement.
       if (fired) return
       fired = true
       const registry = ctx.get('mcpConnections') as CcMcpClient.McpConnectionsService | undefined
@@ -242,25 +254,25 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           .map(entry => entry.name)
       if (pending.length === 0) return
       const text = `MCP: still connecting — ${pending.join(', ')}. Tools from these servers become available once ready.`
-      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'plugin', plugin: 'cc-shell-glue', form: 'notice', summary: text } }))
+      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'cc-shell-glue', form: 'notice', summary: text } }))
       const sid = agent.session?.id
       mountMcpReadyNotice(ctx, registry!, pending, typeof sid === 'string' ? sid : undefined)
     })
   }
 
   // 4. Gating notice: warn immediately, then inject once on the first
-  //    `agent/session-start` (the TUI cannot see logger.warn). The closure
+  //    `agent/created` (the TUI cannot see logger.warn). The closure
   //    flag makes it fire exactly once per process even when subagent/resume
-  //    fan-out re-emits the event.
+  //    fan-out creates further agents, each announced.
   if (gatedPaths !== undefined && noticeSources.length > 0) {
     const skipped = noticeSources.map(source => `${source.path} (${source.names.length} servers)`).join(', ')
     const text = `MCP: dsh config takes precedence — skipped Claude Code MCP config: ${skipped}. Run /mcp migrate to import them into ${gatedPaths.target}, then restart the session.`
     ctx.logger.warn(`cc-shell-glue: ${text}`)
     let fired = false
-    ctx.on('agent/session-start', ({ agent }: { agent: { inject(message: unknown): void } }) => {
+    ctx.on('agent/created', ({ agent }: { agent: { inject(message: unknown): void } }) => {
       if (fired) return
       fired = true
-      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'plugin', plugin: 'cc-shell-glue', form: 'notice', summary: text } }))
+      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'cc-shell-glue', form: 'notice', summary: text } }))
     })
   }
 

@@ -16,6 +16,9 @@ import SystemPrompt, { renderContextSnapshot } from '@deepseek-ai/dsh-system-pro
 import ToolRuntime from '@dsh-cc/tools'
 import { ShellExecutor } from '@deepseek-ai/dsh-shell'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
+
+/** Minimal foreground-handle face for the scripted executor. */
+type ShellExecutionLike = { result(): Promise<ShellRunResult> }
 import { FileSystem } from '@deepseek-ai/dsh-fs'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import * as ToolGitWorktree from '@dsh-cc/tool-git-worktree'
@@ -58,9 +61,10 @@ class ScriptedShell extends ShellExecutor {
     }
   }
 
-  run(spec: ShellExecSpec): Promise<ShellRunResult> {
+  execute(spec: ShellExecSpec): Promise<ShellExecutionLike> {
     this.requests.push({ command: spec.command, workdir: spec.workdir })
-    return Promise.resolve(this.outcome(spec))
+    const outcome = this.outcome(spec)
+    return Promise.resolve({ result: () => Promise.resolve(outcome) })
   }
 
   start(_spec: ShellExecSpec): ShellProcess {

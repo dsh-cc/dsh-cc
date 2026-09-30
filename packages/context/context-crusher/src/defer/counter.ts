@@ -17,7 +17,7 @@
  * @module @dsh-cc/context-crusher/defer/counter
  */
 
-import type { ContentBlock, GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, GenerateOptions, RequestMessage, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { shortHash } from '../store.ts'
 
 /**
@@ -35,18 +35,16 @@ export function joinTextBlocks(blocks: readonly ContentBlock[]): string | undefi
 }
 
 /**
- * Fingerprints of every fully-textual tool-result block in one outbound
+ * Fingerprints of every fully-textual tool-role message in one outbound
  * prompt. A request that contains the same resident twice still counts once
  * (Set semantics).
  */
-export function toolResultFingerprints(messages: readonly Message[]): Set<string> {
+export function toolResultFingerprints(messages: readonly RequestMessage[]): Set<string> {
   const out = new Set<string>()
   for (const message of messages) {
-    for (const block of message.content) {
-      if (block.type !== 'tool-result') continue
-      const text = joinTextBlocks(block.content)
-      if (text !== undefined) out.add(shortHash(text))
-    }
+    if (message.role !== 'tool') continue
+    const text = joinTextBlocks(message.content)
+    if (text !== undefined) out.add(shortHash(text))
   }
   return out
 }

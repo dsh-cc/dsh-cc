@@ -4,9 +4,9 @@
  *
  * Layout: `<sessionsRoot>/<projectKey>/<sessionId>/<stream>`; any directory at
  * depth 2 is treated as a session dir. Stream resolution mirrors
- * session-forensics/src/scan.ts: prefer `session.v3.jsonl.zstd`, fall back to
- * the legacy `session.jsonl.zstd` (the writer emits exactly one format per
- * dir). Only the header line is needed, so the read is a bounded prefix
+ * session-forensics/src/scan.ts: prefer `session.v4.jsonl.zstd` (harness
+ * 0.1.7), fall back to `session.v3.jsonl.zstd` then legacy
+ * `session.jsonl.zstd` (the writer emits exactly one format per dir). Only the header line is needed, so the read is a bounded prefix
  * (256 KiB compressed → 16 KiB decompressed) via `node:fs`/`node:zlib`
  * in-process zstd — no fs seam (prefix reads are impossible over it) and no
  * `zstd` CLI (plan §3.1, cold-review blockers #1/#2).
@@ -43,6 +43,8 @@ const READ_WINDOW = 256 * 1024;
 /** Decompressed text budget: stop reading once the header must have surfaced. */
 const TEXT_BUDGET = 16 * 1024;
 
+/** v4-first, then v3, then legacy — one stream format per dir, older spellings kept readable. */
+const V4_STREAM = "session.v4.jsonl.zstd";
 const V3_STREAM = "session.v3.jsonl.zstd";
 const LEGACY_STREAM = "session.jsonl.zstd";
 
@@ -146,7 +148,7 @@ export async function scanSessions(sessionsRoot: string): Promise<SessionScanRes
         const sessionDir = join(projectDir, entry.name);
         // Stream resolution mirrors session-forensics/src/scan.ts.
         let header: Record<string, any> | undefined;
-        for (const stream of [V3_STREAM, LEGACY_STREAM]) {
+        for (const stream of [V4_STREAM, V3_STREAM, LEGACY_STREAM]) {
           header = await readHeader(join(sessionDir, stream));
           if (header !== undefined) break;
         }

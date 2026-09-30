@@ -12,7 +12,6 @@ const DEFAULT_PRESET = 'cc'
 /** Structural face of `ctx.agentPresets` used by the TUI. */
 export interface AgentPresetsLike {
   readonly defaultId: string
-  resolve(id?: string): Promise<{ id: string; broken?: string }>
   mount(agentCtx: Context, id?: string): Promise<{ id: string }>
 }
 
@@ -29,8 +28,17 @@ export function rosterOf(ctx: Context): AgentPresetsLike | undefined {
 
 /**
  * Resolve the preset a new/resumed session will run under. Missing roster
- * or unknown id throws — the TUI must not silently fall back to the host
- * plane (that would leak tools and skip CC commands).
+ * throws — the TUI must not silently fall back to the host plane (that would
+ * leak tools and skip CC commands).
+ *
+ * Harness 0.1.7-rc.2 (agent-preset registry): existence/brokenness is
+ * enforced INSIDE the AgentSetup (`agentPresets.mount`), not here. The
+ * registry's `resolve()`/`list()` run a diagnostic audit that can wait on
+ * loader settlement, and its docstring is explicit: callers must not run
+ * inside a Host row's own activation — the TUI row IS that activation
+ * (self-deadlock observed: first frame never renders). A failed mount rolls
+ * the whole session creation back (agents.create setup contract), so nothing
+ * is lost by deferring the check.
  */
 export async function composePreset(
   ctx: Context,
@@ -43,17 +51,17 @@ export async function composePreset(
         + `Boot with dsh --profile tui (or run dsh-cc) so @dsh-cc/bundle-tui is composed.`,
     )
   }
-  const resolved = await presets.resolve(requested)
-  if (resolved.broken !== undefined) {
-    throw new Error(
-      `dsh-cc-tui: agent preset "${resolved.id}" cannot compose a session (${resolved.broken}). `
-        + `Re-install the CC preset (dsh-cc, or bash scripts/sync-cc-preset.sh).`,
-    )
-  }
   return {
-    agentPreset: resolved.id,
+    agentPreset: requested,
     setup: async (agentCtx: Context) => {
-      await presets.mount(agentCtx, resolved.id)
+      try {
+        await presets.mount(agentCtx, requested)
+      } catch (error) {
+        throw new Error(
+          `dsh-cc-tui: agent preset "${requested}" cannot compose a session (${(error as Error).message}). `
+            + `Re-install dsh-cc (npm install -g @dsh-cc/cli) so the bundled CC preset declaration ships intact.`,
+        )
+      }
     },
   }
 }

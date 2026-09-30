@@ -107,7 +107,14 @@ function text(result: { content: { type: string; text?: string }[] }): string {
 function toolResults(request: { messages?: readonly unknown[] } | undefined): Array<{ text: string; isError: boolean }> {
   const out: Array<{ text: string; isError: boolean }> = []
   for (const message of request?.messages ?? []) {
-    const content = (message as { content?: unknown }).content
+    // v4 ToolResultMessage: role 'tool' with flat content blocks + message-level isError.
+    const m = message as { role?: string; isError?: boolean; content?: unknown }
+    if (m.role === 'tool') {
+      const blocks = Array.isArray(m.content) ? m.content as Array<{ text?: string }> : []
+      out.push({ text: blocks.map(b => b.text ?? '').join('\n'), isError: m.isError === true })
+      continue
+    }
+    const content = m.content
     if (!Array.isArray(content)) continue
     for (const block of content as Array<Record<string, unknown>>) {
       if (block?.type !== 'tool-result') continue

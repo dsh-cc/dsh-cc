@@ -72,8 +72,9 @@ export function writeTitleSidecar(sessionCwd: string, sessionId: string, title: 
 
 /**
  * Read the sidecar when it exists and is fresh: its mtime must not be older
- * than the session log's (`session.v3.jsonl.zstd`, falling back to
- * `session.jsonl.zstd`); a missing session log counts as fresh. Missing,
+ * than the session log's (v4-first resolver: `session.v4.jsonl.zstd`,
+ * falling back to v3, then `session.jsonl.zstd`); a missing session log
+ * counts as fresh. Missing,
  * empty, unreadable, or stale sidecars return `undefined` so the caller
  * falls back to the host title snapshot path.
  * @param sessionCwd - the session's working directory.
@@ -87,16 +88,16 @@ export function readTitleSidecar(sessionCwd: string, sessionId: string, options?
     const stat = statSync(target)
     if (stat.size === 0) return undefined
     const dir = dirname(target)
-    try {
-      // Missing session log ⇒ the sidecar counts as fresh.
-      const v3 = statSync(join(dir, 'session.v3.jsonl.zstd')).mtimeMs
-      if (stat.mtimeMs < v3) return undefined
-    } catch {
+    // v4-first resolver: compare against the newest stream spelling present
+    // (v4, then v3, then legacy); none present ⇒ the sidecar counts as fresh.
+    const streamNames = ['session.v4.jsonl.zstd', 'session.v3.jsonl.zstd', 'session.jsonl.zstd']
+    for (const streamName of streamNames) {
       try {
-        const v1 = statSync(join(dir, 'session.jsonl.zstd')).mtimeMs
-        if (stat.mtimeMs < v1) return undefined
+        const stream = statSync(join(dir, streamName)).mtimeMs
+        if (stat.mtimeMs < stream) return undefined
+        break
       } catch {
-        // No session log at all — fresh.
+        // Try the next-older spelling.
       }
     }
     const title = readFileSync(target, 'utf8').trim()

@@ -158,7 +158,7 @@ export function mountMcpReadyNotice(
         ...decision,
         messages: [...decision.messages, createUserMessage({
           content: [{ type: 'text', text }],
-          source: { kind: 'plugin', plugin: 'cc-shell-glue', form: 'notice', summary: text },
+          source: { kind: 'cc-shell-glue', form: 'notice', summary: text },
         })],
       }
     } catch {

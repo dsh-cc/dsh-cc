@@ -84,9 +84,9 @@ function redactContent(content: unknown, depth = 0): unknown {
   if (depth > 3) return undefined
   return content.map((block: ContentBlock) => {
     if (typeof block?.text === 'string') return { type: block.type, text: redactText(block.text) }
-    // Real tool/result shape nests the output one level down:
-    // content: [{ type: 'tool-result', content: [{ type: 'text', text }] }] —
-    // without the recursion CCR markers living in that nested text are lost.
+    // v4 tool/result shape puts the output text directly in message.content;
+    // the generic recursion still descends into any nested arrays, so CCR
+    // markers living there are kept either way.
     if (Array.isArray(block?.content)) return { type: block.type, content: redactContent(block.content, depth + 1) }
     return { type: block?.type }
   })

@@ -828,7 +828,7 @@ describe('createDriver /resume session switcher overlay', () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-sidecar-titles-'))
     const dir = join(home, '.dsh', 'sessions', '--proj--', 's-beta')
     mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, 'session.v3.jsonl.zstd'), 'frame')
+    writeFileSync(join(dir, 'session.v4.jsonl.zstd'), 'frame')
     writeFileSync(join(dir, 'title.txt'), 'Sidecar title')
     sidecarHome.root = home
     try {
@@ -873,7 +873,7 @@ describe('createDriver /resume session switcher overlay', () => {
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'title.txt'), 'Stale sidecar title')
     utimesSync(join(dir, 'title.txt'), new Date(1_000_000), new Date(1_000_000))
-    writeFileSync(join(dir, 'session.v3.jsonl.zstd'), 'frame')
+    writeFileSync(join(dir, 'session.v4.jsonl.zstd'), 'frame')
     sidecarHome.root = home
     try {
       const { ctx } = makeSwitchableCtx({

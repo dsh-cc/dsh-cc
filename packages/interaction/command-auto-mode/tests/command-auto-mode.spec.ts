@@ -279,7 +279,7 @@ describe('/auto-mode dispatch', () => {
 
 describe('/auto-mode review (S5)', () => {
   function sessionWith(events: Array<{ type: string; data: Record<string, unknown> }>): unknown {
-    const session = Session.create(SessionId('review'), undefined, { version: 3, isSeeded: false, id: SessionId('review'), createdAt: Date.now(), cwd: '/work' })
+    const session = Session.create(SessionId('review'), undefined, { version: 4, isSeeded: false, id: SessionId('review'), createdAt: Date.now(), cwd: '/work' })
     for (const { type, data } of events) session.append(type, data as never)
     return { session, id: 'review' }
   }

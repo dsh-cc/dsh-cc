@@ -22,9 +22,9 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-`dsh-cc` requires `dsh` **>= 0.1.5-rc.1**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-12), and the launcher enforces the floor at bootstrap.
+`dsh-cc` requires `dsh` **>= 0.1.7-rc.2**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-29), and the launcher enforces the floor at bootstrap.
 
-Already have `dsh` **>= 0.1.5-rc.1**? Install only the launcher:
+Already have `dsh` **>= 0.1.7-rc.2**? Install only the launcher:
 
 ```sh
 npm install -g @dsh-cc/cli
@@ -413,11 +413,10 @@ calls) — the same gate presubmit and publish run:
 pnpm smoke:profile-boot
 ```
 
-To install/update the CC preset during local development:
-
-```sh
-bash scripts/sync-cc-preset.sh
-```
+The CC preset needs no separate install step: the `tui` profile's bundle patch
+declares the `cc` agent-preset registry roster directly, and the composition is
+carried by `@dsh-cc/preset-cc` (installed with the bundles into the profile's
+`node_modules`).
 
 See **[docs/dev.md](docs/dev.md)** for offline development details and repository-specific dependency rules.
 

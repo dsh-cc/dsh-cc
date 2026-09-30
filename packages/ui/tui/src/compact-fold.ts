@@ -11,13 +11,19 @@ const SUMMARY_OPEN_TAG = '<compacted-summary>'
 const SUMMARY_CLOSE_TAG = '</compacted-summary>'
 
 /**
- * Duck-type the compact checkpoint's UserMessage source: the compaction
- * checkpoint lands as `source: { kind: 'plugin', plugin: 'compact', … }`.
- * Unknown shapes (absent, non-object, other plugins) are not checkpoints.
+ * Duck-type the compact checkpoint's UserMessage source. Accepted spellings:
+ * the harness named kinds (`compact-checkpoint`, and `compact-basic` from
+ * `dsh-compaction-basic`), the pre-conversion legacy shape
+ * `{ kind: 'plugin', plugin: 'compact' }`, and the `plugin:<name>` spellings
+ * a resumed v3 session can carry (the v3→v4 converter rewrites unknown
+ * producers to `plugin:<original name>` — e.g. `plugin:compact`-style).
+ * Unknown shapes (absent, non-object, other kinds) are not checkpoints.
  */
 export function isCompactCheckpointSource(source: unknown): boolean {
   if (source === null || typeof source !== 'object') return false
   const record = source as { kind?: unknown; plugin?: unknown }
+  if (record.kind === 'compact-checkpoint' || record.kind === 'compact-basic') return true
+  if (typeof record.kind === 'string' && /^plugin:\S*compact/.test(record.kind)) return true
   return record.kind === 'plugin' && record.plugin === 'compact'
 }
 

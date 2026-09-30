@@ -27,5 +27,8 @@ allowBuilds:
   protobufjs: false
 
 minimumReleaseAgeExclude:
-  - '@deepseek-ai/dsh-timeout@0.1.5-rc.1'
-  - '@deepseek-ai/dsh-http-proxy@0.1.5-rc.1'
+  - '@deepseek-ai/dsh-timeout@0.1.7-rc.2'
+  - '@deepseek-ai/dsh-http-proxy@0.1.7-rc.2'
+  # New in the 0.1.7-rc.2 retarget: the deleted dsh-code-runtime replacement;
+  # follows the publish-time floor + local link pattern of the entries above.
+  - '@deepseek-ai/dsh-ptc-runtime@0.1.7-rc.2'

@@ -6,9 +6,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
-    "lib",
-    "presets",
-    "scripts/stage-preset.mjs"
+    "lib"
   ],
   "exports": {
     ".": {
@@ -22,9 +20,6 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "scripts": {
-    "prepack": "node ./scripts/stage-preset.mjs"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
@@ -32,16 +27,16 @@
   },
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-agent": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-agent-presets": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-commands": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-invariants": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-llm": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-plan-mode": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-session": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-user-approval": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-user-questions": ">=0.1.5-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-agent": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-commands": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-invariants": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-llm": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-plan-mode": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-session": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-user-approval": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-user-questions": ">=0.1.7-rc.2",
     "@deepseek-ai/schemastery": ">=3.18.1"
   },
   "dependencies": {
@@ -64,13 +59,14 @@
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
-    "@deepseek-ai/dsh-agent-presets": "link:../../../../deepseek-harness/packages/preset/agent-presets",
+    "@deepseek-ai/dsh-agent-preset-registry": "link:../../../../deepseek-harness/packages/preset/agent-preset-registry",
     "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
     "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-plan-mode": "link:../../../../deepseek-harness/packages/plan/plan-mode",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
-    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
+    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
     "@deepseek-ai/dsh-user-questions": "link:../../../../deepseek-harness/packages/interaction/user-questions",
     "@deepseek-ai/dsh-workflow": "link:../../../../deepseek-harness/packages/workflow/workflow",

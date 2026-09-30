@@ -14,8 +14,8 @@ import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { MergedHookOutcome } from '@dsh-cc/hook-protocol'
 import type { HookIssue } from '@dsh-cc/hook-protocol'
 
-/** The `{kind:'plugin'}` source stamped on context/steer messages from this module. */
-const PLUGIN_SOURCE: { kind: 'plugin'; plugin: string } = { kind: 'plugin', plugin: 'hooks-claude-code' }
+/** The source stamped on context/steer messages from this module (kind shared with continuation.ts). */
+const PLUGIN_SOURCE: { kind: 'hooks-claude-code' } = { kind: 'hooks-claude-code' }
 
 /** The reference stop-hook consecutive-block cap (CC parity), used when the env override is absent or invalid. */
 const DEFAULT_STOP_BLOCK_CAP = 8
@@ -93,7 +93,7 @@ export function createTurnSafety(deps: { ctx: Context; recordIssue?: RecordIssue
       const summary = raw.replace(/\s+/g, ' ').trim().slice(0, 200)
       const text = summary.length > 0 ? summary : `(${point} hook message)`
       if (agent !== undefined) {
-        agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'plugin', plugin: 'hooks-claude-code', form: 'notice', summary: text } }))
+        agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'hooks-claude-code', form: 'notice', summary: text } }))
       } else {
         ctx.logger.warn(`hooks-claude-code: ${point} hook message: ${text}`)
       }

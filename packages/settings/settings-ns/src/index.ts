@@ -14,7 +14,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
-import type { SettingsNamespace, SettingsProvider, SettingsRegisterOptions } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace, SettingsProvider, SettingsRegisterOptions } from '@dsh-cc/settings-provider'
 
 /** Composition base layer and cross-field validation passed through to the provider. */
 export interface SafeRegisterOptions<T> {
@@ -166,6 +166,39 @@ export function registerNamespaceSafe<T>(
   }
   readers.set(settings, reader as SettingsReader<never>)
   return reader
+}
+
+/**
+ * Duck-typed describe face needed for a raw user-layer read.
+ */
+export type DescribeFace = {
+  describe?: () => ReadonlyArray<{ ns?: unknown; user?: unknown }> | undefined
+}
+
+/**
+ * Read one namespace's RAW USER OVERRIDE section off the provider's
+ * `describe()` descriptors (migration plan Q3 addendum (d)): the layered
+ * cascade's user layer, never the fully resolved value. Degrades to
+ * `undefined` on an absent service, an unregistered namespace, or junk shape
+ * — read paths stay total.
+ */
+export function readUserSection(
+  settings: DescribeFace | undefined,
+  ns: string,
+): Record<string, unknown> | undefined {
+  if (settings === undefined || typeof settings.describe !== 'function') return undefined
+  try {
+    const descriptor = (settings.describe() ?? []).find(
+      (entry): entry is { ns?: unknown; user?: unknown } =>
+        entry !== null && typeof entry === 'object' && String((entry as { ns?: unknown }).ns) === ns,
+    )
+    const user = descriptor?.user
+    return user !== null && typeof user === 'object' && !Array.isArray(user)
+      ? structuredClone(user as Record<string, unknown>)
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**

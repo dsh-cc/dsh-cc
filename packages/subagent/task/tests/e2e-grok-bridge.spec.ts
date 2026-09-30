@@ -134,7 +134,14 @@ function text(result: { content: { type: string; text?: string }[] }): string {
 function toolResults(request: { messages?: readonly unknown[] } | undefined): Array<{ text: string; isError: boolean }> {
   const out: Array<{ text: string; isError: boolean }> = []
   for (const message of request?.messages ?? []) {
-    const content = (message as { content?: unknown }).content
+    // v4 ToolResultMessage: role 'tool' with flat content blocks + message-level isError.
+    const m = message as { role?: string; isError?: boolean; content?: unknown }
+    if (m.role === 'tool') {
+      const blocks = Array.isArray(m.content) ? m.content as Array<{ text?: string }> : []
+      out.push({ text: blocks.map(b => b.text ?? '').join('\n'), isError: m.isError === true })
+      continue
+    }
+    const content = m.content
     if (!Array.isArray(content)) continue
     for (const block of content as Array<Record<string, unknown>>) {
       if (block?.type !== 'tool-result') continue
@@ -193,7 +200,8 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
   const pre = join(dir, 'probe.sh')
   writeFileSync(pre, `#!/usr/bin/env bash\ncat >> "${marker}"\necho >> "${marker}"\n`)
   chmodSync(pre, 0o755)
-  // Side-band witness that agent/session-start fired at all (detached event):
+  // Side-band witness that the SessionStart edge fired at all (rc.2: the
+  // agent/created announcement that agentLoop.create() performs carries it):
   // an absent marker means the event never fired in this assembly; a present
   // marker with no armed block means the plugin context hook ran silently.
   const sessionStartRan = join(dir, 'session-start-ran')
@@ -475,7 +483,8 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
     const { parent, adapter, sessionStartRan } = await setup([
       textResponse('acknowledged'),
     ], { parkParent: false })
-    // Side-band first: agent/session-start fired at all in this assembly
+    // Side-band first: the SessionStart edge (rc.2 agent/created) fired at
+    // all in this assembly
     // (detached witness hook). Then synchronize on the injected block in the
     // NEXT-STEP INBOX — the SessionStart hook runs detached, agent.inject
     // lands in inbox.nextStep and becomes a user/message only after step

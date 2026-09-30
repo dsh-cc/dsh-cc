@@ -33,6 +33,7 @@ export const inject = ['commands', 'subagents', 'agents', 'resumePinStore']
 /** Duck-typed faces of the injected services (host-plane + realm-interior). */
 interface SubagentsLike {
   listChildren(parentSessionId: SessionId): Promise<readonly ChildEntryLike[]>
+  listDescendants?(rootSessionId: SessionId): Promise<readonly { id: SessionId; hasChildren?: boolean }[]>
   interrupt(targetSessionId: SessionId, authority: unknown): void
 }
 interface PinStoreLike {
@@ -54,6 +55,14 @@ function toSnapshotServices(
 ): SnapshotServices {
   return {
     listChildren: async parentSessionId => await subagents.listChildren(SessionId(parentSessionId)),
+    // rc.2: `hasChildren` left the catalog rows; re-derive from the
+    // descendant traversal root rows when the seam exposes it.
+    ...(typeof subagents.listDescendants === 'function'
+      ? {
+        listDescendants: async parentSessionId =>
+          await subagents.listDescendants!(SessionId(parentSessionId)),
+      }
+      : {}),
     getAgent: id => agents.get(id),
     readPin: childId => pinStore.read(childId) as never,
     pinPath: childId => pinStore.pathFor(childId),

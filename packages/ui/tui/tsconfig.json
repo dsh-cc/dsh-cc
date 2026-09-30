@@ -10,6 +10,9 @@
   ],
   "references": [
     {
+      "path": "../../settings/settings-provider"
+    },
+    {
       "path": "../../interaction/command-agents"
     },
     {

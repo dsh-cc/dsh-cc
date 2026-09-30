@@ -83,7 +83,7 @@ interface FakeRunResult {
 }
 
 /**
- * Fake shell executor (resolve→run seam): records every resolved spec the
+ * Fake shell executor (resolve→execute seam): records every resolved spec the
  * runner hands over, with a swappable settle handler. Deferred mode parks the
  * run's settle until `settle()` is called (in-flight / dispose tests).
  */
@@ -102,10 +102,15 @@ function makeExecutor() {
   let parked: ((result: FakeRunResult) => void) | undefined
   const service = {
     resolve: (req: (typeof specs)[number]) => req,
-    run: (spec: (typeof specs)[number]): Promise<FakeRunResult> => {
+    execute: async (spec: (typeof specs)[number]): Promise<{ result(): Promise<FakeRunResult> }> => {
       specs.push(spec)
-      if (deferred) return new Promise<FakeRunResult>((resolvePromise) => { parked = resolvePromise })
-      return handler(spec)
+      if (deferred) {
+        let parkedResolve!: (result: FakeRunResult) => void
+        const promise = new Promise<FakeRunResult>((resolvePromise) => { parkedResolve = resolvePromise })
+        parked = parkedResolve
+        return { result: () => promise }
+      }
+      return { result: () => handler(spec) }
     },
   }
   let deferred = false

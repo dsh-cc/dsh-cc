@@ -63,8 +63,8 @@ body:
     id: dsh-version
     attributes:
       label: dsh version · dsh 版本
-      description: Output of `dsh --version` (dsh-cc needs dsh >= 0.1.5-rc.1).
-      placeholder: 0.1.5-rc.1
+      description: Output of `dsh --version` (dsh-cc needs dsh >= 0.1.7-rc.2).
+      placeholder: 0.1.7-rc.2
     validations:
       required: true
 

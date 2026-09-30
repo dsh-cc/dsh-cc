@@ -33,8 +33,9 @@ function fakeShell(run: (spec: ShellExecSpec, request: ShellExecRequest) => Prom
       requests.push(request)
       return request as unknown as ShellExecSpec
     },
-    async run(spec: ShellExecSpec): Promise<ShellRunResult> {
-      return run(spec, requests[requests.length - 1]!)
+    async execute(spec: ShellExecSpec) {
+      const result = await run(spec, requests[requests.length - 1]!)
+      return { result: () => Promise.resolve(result) }
     },
   } as unknown as ShellExecutor
   return { shell, requests }

@@ -40,7 +40,7 @@ describe('@dsh-cc/command-plugin registration', () => {
       runMaintenance: task => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     expect(ctx.commands.find(agent, 'plugin')).toBeDefined()
     expect(ctx.commands.find(agent, 'reload-plugins')).toBeDefined()
     await plugin.dispose()
@@ -127,7 +127,7 @@ describe('/plugin and /reload-plugins human commands', () => {
       runMaintenance: task => task(new AbortController().signal),
       whenIdle: () => Promise.resolve(),
     }
-    ctx.agents.register(agent)
+    await ctx.agents.register(agent)
     return { ctx, agent }
   }
 
@@ -187,7 +187,7 @@ describe('/reload-plugins trailing help request', () => {
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return agent
     const execution = await ctx.commands.execute(agent, '/reload-plugins help', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')

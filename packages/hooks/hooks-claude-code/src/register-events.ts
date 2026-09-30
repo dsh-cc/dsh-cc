@@ -117,7 +117,11 @@ export function registerEvents(deps: ListenerDeps): void {
     // ask/allow (stricter than the hook); only then apply the hook decision —
     // `allow` suppresses the permission prompt entirely.
     const downstream = await next()
+    // Downstream deny always wins; downstream cancel returns BEFORE hook
+    // ask/allow folding — an external allower cannot resurrect a cancelled
+    // execution (CC hooks can never emit cancel; it arises downstream only).
     if (downstream.kind === 'deny') return downstream
+    if (downstream.kind === 'cancel') return downstream
     if (merged.decision === 'ask') return { kind: 'ask', ...merged.reason !== undefined ? { reason: merged.reason } : {} }
     if (merged.decision === 'allow') return { kind: 'allow' }
     return downstream
@@ -304,23 +308,23 @@ export function registerEvents(deps: ListenerDeps): void {
       .catch((failure: unknown) => { ctx.logger.warn(`hooks-claude-code: StopFailure hook failed: ${String(failure)}`) }))
   })
 
-  // TaskCreated → bridge-side diff of the jobs registry: subscribe to changes,
-  // re-read the visible snapshot, and emit once per newly-appeared job id. Reads
-  // with no owner (unowned-only visible set); priming suppresses pre-existing jobs.
+  // TaskCreated → the jobs registry's event stream: prime the seen set with the
+  // pre-existing unowned-visible jobs, then fire once per newly-registered job.
+  // The preset-scoped mount subscribes `{ owners: 'scope' }` so composed owners
+  // stay isolated from other presets ({ owner } would also deliver unowned
+  // jobs broadly); dispatch is `registered`-events only.
   const jobs = ctx.get?.('jobs')
   if (jobs) {
-    const seenJobs = new Set<JobId>()
-    const diffJobs = (owner: Agent | undefined): void => {
-      for (const job of jobs.list(owner)) {
-        if (seenJobs.has(job.id)) continue
-        seenJobs.add(job.id)
-        detached.track(runPoint('TaskCreated', '', taskCreatedPayload(ctx, job), { signal: detached.signal })
-          .then((merged) => { turnSafety.detachedOutcome('TaskCreated', merged) })
-          .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: TaskCreated hook failed: ${String(error)}`) }))
-      }
-    }
-    for (const job of jobs.list(undefined)) seenJobs.add(job.id) // prime
-    jobs.onJobsChanged(diffJobs)
+    const seenJobs = new Set<JobId>(
+      (jobs.list(undefined) as readonly { id: JobId }[]).map((job) => job.id), // prime
+    )
+    jobs.events.subscribe({ owners: 'scope' }, (event) => {
+      if (event.type !== 'registered' || seenJobs.has(event.job.id)) return
+      seenJobs.add(event.job.id)
+      detached.track(runPoint('TaskCreated', '', taskCreatedPayload(ctx, event.job), { signal: detached.signal })
+        .then((merged) => { turnSafety.detachedOutcome('TaskCreated', merged) })
+        .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: TaskCreated hook failed: ${String(error)}`) }))
+    })
   }
 
   // TeammateIdle → a subagent (non-root) transitioning to idle. `agent/status`

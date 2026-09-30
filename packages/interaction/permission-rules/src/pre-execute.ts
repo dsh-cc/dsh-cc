@@ -131,7 +131,7 @@ async function returnCheck(
     if (!summary.warn) return out
     const warning: UserMessage = createUserMessage({
       content: [{ type: 'text', text: handoffWarningText(label, summary.reason) }],
-      source: { kind: 'plugin', plugin: 'permission-rules' },
+      source: { kind: 'permission-rules' },
     })
     return { ...out, additionalContexts: [...(out.additionalContexts ?? []), warning] }
   }

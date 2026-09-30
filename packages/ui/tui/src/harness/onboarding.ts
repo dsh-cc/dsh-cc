@@ -12,7 +12,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import z from '@deepseek-ai/schemastery'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import type { TuiState } from '../store.ts'
 import { upsertRow } from '../store.ts'
 import type { ProviderRuntime } from '../provider-command.ts'

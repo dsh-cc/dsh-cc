@@ -16,7 +16,15 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { freezeMessage, ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, ToolResultBlock, UserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+/** Message-source kind for the compaction-micro producer (own named kind). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'compaction-micro': { readonly kind: 'compaction-micro' } & ContextFormed
+  }
+}
 import type { Session, SessionEvent, SessionSeq, ToolResultMessage } from '@deepseek-ai/dsh-session'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 // Type-only: the `compaction/prune` shadow-price SessionEventMap merge.
@@ -209,7 +217,7 @@ export class Microcompactor extends Service {
     try {
       agent.inject(createUserMessage({
         content: [{ type: 'text', text }],
-        source: { kind: 'plugin', plugin: 'compaction-micro' },
+        source: { kind: 'compaction-micro' },
       }))
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
@@ -246,9 +254,7 @@ export class Microcompactor extends Service {
     for (const candidate of candidates.slice(0, retainedFrom)) {
       const { seq, event } = candidate
       const message = event.data.message
-      const content = message.content[0]
-      const resultBlock = content?.type === 'tool-result' ? content : undefined
-      const blocks: readonly ContentBlock[] = resultBlock?.content ?? []
+      const blocks: readonly ContentBlock[] = message.content
       if (isMicrocompactPlaceholder(blocks)) continue
       // §5.6: a crushed result's reversibility lives in its `context_retrieve`
       // locator — a TUS substitution would destroy it, so skip.
@@ -263,15 +269,11 @@ export class Microcompactor extends Service {
         ? `${tusFramedSummary(tusRow)}${locatorLine === undefined ? '' : `\n${locatorLine}`}`
         : this.placeholderContent(locatorLine)
 
-      // Preserve every non-content field of the original tool-result block (type,
-      // toolCallId, isError, plus future additions) so the surface rewrite honors
-      // the "may change only content" invariant.
-      const replacementBlock: ToolResultBlock = resultBlock === undefined
-        ? { type: 'tool-result', toolCallId: message.source.callId, content: [{ type: 'text', text: placeholder }] }
-        : { ...resultBlock, content: [{ type: 'text', text: placeholder }] }
+      // v4: toolCallId/isError live on the message itself; replacing content
+      // preserves them (the "may change only content" surface invariant).
       const replacementMessage = freezeMessage<ToolResultMessage>({
         ...message,
-        content: [replacementBlock],
+        content: [{ type: 'text', text: placeholder }],
       })
       // Shadow-price protocol: the metering event and its replacement are
       // appended synchronously adjacent so a pure consumer subtracts the

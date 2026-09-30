@@ -242,8 +242,8 @@ describe('F2 — continue:false halts each in-run seam', () => {
     await waitForIdle(ctx, agent)
     expect(ran).toBe(true) // post-execute: the tool already ran
     const result = events(agent).find(e => e.type === 'tool/result')
-    expect(result?.type === 'tool/result' && result.data.message.content[0].isError).toBe(true)
-    expect(result?.type === 'tool/result' && result.data.message.content[0].content.some(b => b.type === 'text' && b.text.includes('tool output rejected'))).toBe(true)
+    expect(result?.type === 'tool/result' && result.data.message.isError).toBe(true)
+    expect(result?.type === 'tool/result' && result.data.message.content.some(b => b.type === 'text' && b.text.includes('tool output rejected'))).toBe(true)
     const turnEnd = events(agent).findLast(e => e.type === 'turn/end')
     expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason.kind === 'aborted'
       && turnEnd.data.reason.reason.kind === 'hook').toBe(true)
@@ -350,7 +350,7 @@ describe('F4 — PreToolUse allow pre-approves (downstream boundaries still win)
     // No APPROVAL prompt ever reached an answerer (the hook allow bypassed it).
     expect(requests).toHaveLength(0)
     const result = events(agent).find(e => e.type === 'tool/result')
-    expect(result?.type === 'tool/result' && result.data.message.content[0].isError).toBe(false)
+    expect(result?.type === 'tool/result' && result.data.message.isError).toBe(false)
   })
 
   it('a hook allow + a downstream boundary deny → denied (the boundary wins), in BOTH listener orders', async () => {
@@ -370,8 +370,8 @@ describe('F4 — PreToolUse allow pre-approves (downstream boundaries still win)
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       const result = events(agent).find(e => e.type === 'tool/result')
-      const denied = result?.type === 'tool/result' && result.data.message.content[0].isError === true
-        && result.data.message.content[0].content.some(b => b.type === 'text' && b.text.includes('boundary says no'))
+      const denied = result?.type === 'tool/result' && result.data.message.isError === true
+        && result.data.message.content.some(b => b.type === 'text' && b.text.includes('boundary says no'))
       return ran === false && denied === true
     }
     expect(await runOrder(true)).toBe(true) // boundary registered BEFORE the bridge
@@ -451,8 +451,8 @@ describe('S2 — PostToolUse tool-result replacement', () => {
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     const result = events(agent).find(e => e.type === 'tool/result')
-    expect(result?.type === 'tool/result' && result.data.message.content[0].isError).toBe(false)
-    expect(result?.type === 'tool/result' && result.data.message.content[0].content.some(b => b.type === 'text' && b.text === 'replaced output')).toBe(true)
+    expect(result?.type === 'tool/result' && result.data.message.isError).toBe(false)
+    expect(result?.type === 'tool/result' && result.data.message.content.some(b => b.type === 'text' && b.text === 'replaced output')).toBe(true)
   })
 
   it('a non-string updatedToolOutput is JSON.stringify-ed into the replacement text', async () => {
@@ -466,7 +466,7 @@ describe('S2 — PostToolUse tool-result replacement', () => {
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
     const result = events(agent).find(e => e.type === 'tool/result')
-    expect(result?.type === 'tool/result' && result.data.message.content[0].content.some(b => b.type === 'text' && b.text === '{"rows":3}')).toBe(true)
+    expect(result?.type === 'tool/result' && result.data.message.content.some(b => b.type === 'text' && b.text === '{"rows":3}')).toBe(true)
   })
 
   it('a downstream replacement (content or value) wins over the hook replacement; a downstream block beats it too', async () => {
@@ -485,10 +485,10 @@ describe('S2 — PostToolUse tool-result replacement', () => {
       await waitForIdle(ctx, agent)
       const result = events(agent).find(e => e.type === 'tool/result')
       if (result?.type !== 'tool/result') return false
-      const text = JSON.stringify(result.data.message.content[0].content)
+      const text = JSON.stringify(result.data.message.content)
       return mode === 'content'
         ? text.includes('downstream content') && !text.includes('hook replacement')
-        : result.data.message.content[0].isError === true && !text.includes('hook replacement')
+        : result.data.message.isError === true && !text.includes('hook replacement')
     }
     expect(await downstreamWins('content')).toBe(true)
     expect(await downstreamWins('block')).toBe(true)
@@ -506,8 +506,8 @@ describe('S2 — PostToolUse tool-result replacement', () => {
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
       const result = events(agent).find(e => e.type === 'tool/result')
-      if (result?.type !== 'tool/result' || result.data.message.content[0].isError) return undefined
-      const blocks = result.data.message.content[0].content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
+      if (result?.type !== 'tool/result' || result.data.message.isError) return undefined
+      const blocks = result.data.message.content.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
       return blocks.length === 1 && blocks[0].text === 'raw' ? undefined : blocks[0].text
     }
     // mcp__ tool: the MCP field applies, the plain field is ignored.

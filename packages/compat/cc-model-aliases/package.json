@@ -33,9 +33,8 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-agent": ">=0.1.5-rc.1",
-    "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
+    "@deepseek-ai/cordis": ">=0.1.7-rc.2",
+    "@deepseek-ai/dsh-agent": ">=0.1.7-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
@@ -47,7 +46,7 @@
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
     "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
-    "@deepseek-ai/dsh-settings": "link:../../../../deepseek-harness/packages/settings/settings",
+    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/dsh-subagent-fork-in-process": "link:../../../../deepseek-harness/packages/subagent/subagent-fork-in-process",
     "@deepseek-ai/dsh-subagent-spawn-in-process": "link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process",

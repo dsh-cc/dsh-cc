@@ -13,7 +13,7 @@ import type { ScopeKey, ScopedLayers } from '@deepseek-ai/dsh-scope'
 import type { ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
-import type { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
+import type { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import { renderToolsSdk } from './ts-types.ts'
 import type { ToolSdkSchema } from './ts-types.ts'
 import { renderToolsSdkPy } from './py-types.ts'
@@ -25,7 +25,7 @@ import type { CodeDispatchLog, MutableToolRunContext, PreToolDecision, Scheduled
 
 /**
  * Language → SDK-section renderer. The registry looks up the loaded
- * `ctx.codeRuntime.language` in this table when assembling the `tools:sdk`
+ * `ctx.ptcRuntime.language` in this table when assembling the `tools:sdk`
  * section under a non-native mode; a runtime whose language is not a key
  * fails the assembly loudly (same idiom as `toolOrder` violations). Adding a
  * new backend language is three parallel edits — a {@link CodeSdkLanguage}
@@ -34,8 +34,8 @@ import type { CodeDispatchLog, MutableToolRunContext, PreToolDecision, Scheduled
  * at. The `satisfies` clause pins this table's key set to that union, which
  * the flavor table is checked against too, so any of the three left out is a
  * typecheck failure. What no check reaches is the prose that names the values
- * instead of deriving them: the seam's `dsh-code-runtime` README pair, its
- * `CodeRuntime.language` JSDoc, and `docs/subsystems/code-runtime.md`
+ * instead of deriving them: the seam's `dsh-ptc-runtime` README pair, its
+ * `PtcRuntime.language` JSDoc, and `docs/subsystems/code-runtime.md`
  * with its zh pair, plus this package's own README pair and the
  * {@link Config.mode} JSDoc.
  */
@@ -125,7 +125,7 @@ export interface ToolRuntimeCore {
 
   // — code mode —
   requireCodeTransport(): ToolDefinition
-  requireCodeRuntime(mode: ToolPresentationMode): CodeRuntime
+  requirePtcRuntime(mode: ToolPresentationMode): PtcRuntime
   shapeDispatchLog(dispatch: CodeDispatchLog): Promise<ContentBlock[]>
   serviceAsk(exec: ToolExecution, ask: Extract<PreToolDecision, { kind: 'ask' }>): Promise<ToolAskResolution>
 }

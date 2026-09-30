@@ -13,9 +13,17 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 
-/** The `{kind:'plugin'}` source stamped on continuation steer messages. */
-const PLUGIN_SOURCE: { kind: 'plugin'; plugin: string } = { kind: 'plugin', plugin: 'hooks-claude-code' }
+/** Message-source kind for this producer (converter same-name spelling, session-format-v3-to-v4 README). */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'hooks-claude-code': { readonly kind: 'hooks-claude-code' } & ContextFormed
+  }
+}
+
+/** The source stamped on continuation steer messages. */
+const PLUGIN_SOURCE: { kind: 'hooks-claude-code' } = { kind: 'hooks-claude-code' }
 
 /** The default number of continuations per turn (CC parity), used when the env override is absent or invalid. */
 const DEFAULT_CONTINUATION_CAP = 3

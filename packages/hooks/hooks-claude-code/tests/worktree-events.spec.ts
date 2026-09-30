@@ -17,10 +17,12 @@ const FakeShell = {
   apply(ctx: Context): void {
     ctx.provide('shell', {
       resolve: (r: unknown) => r,
-      run: async (spec: { command: string }) => ({
-        exitCode: 0, signal: null, timedOut: false, aborted: false, timeoutMs: 1000,
-        stdout: { text: spec.command === 'adopt.sh' ? '/hook/created/tree\n' : '', truncated: false },
-        stderr: { text: '', truncated: false },
+      execute: async (spec: { command: string }) => ({
+        result: async () => ({
+          exitCode: 0, signal: null, timedOut: false, aborted: false, timeoutMs: 1000,
+          stdout: { text: spec.command === 'adopt.sh' ? '/hook/created/tree\n' : '', truncated: false },
+          stderr: { text: '', truncated: false },
+        }),
       }),
       start: () => { throw new Error('never') },
     } satisfies Partial<ShellExecutorT>)

@@ -7,6 +7,18 @@
  * layer in turn. A top-level `env` section is split out and applied in two
  * stages, holding dangerous variables until trust. Writes are write-through
  * to the user layer, keeping higher-layer contributions read-side only.
+ *
+ * NAMESPACE DISPOSITION MATRIX (migration plan 2026-09-29 Q3 addendum,
+ * closed at Slice 1b):
+ * - `llm-pi-ai`, `agent-default-model` → BRIDGE WITH DATA MIGRATION: the
+ *   TUI reads/writes them via this cascade's user layer; tui/provider-bridge
+ *   mirrors writes into the rc.2 plugin entry configs (configEditor).
+ * - `agent-loop` → REMOVED upstream (rc.2 deleted AGENT_LOOP_SETTINGS_*).
+ * - `permission-presets`, `llm-deepseek`, `bash-local`/`pwsh-local`,
+ *   tool-subagent model-selection, `web-search-deepseek` → REMOVED / NO
+ *   BRIDGE: zero dsh-cc namespace reads/writes; the no-op configure()
+ *   facade covers their boot.
+ *
  * @module @dsh-cc/settings-cascade
  */
 
@@ -15,7 +27,7 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import { resolveLocalSettingsDir, type LocalRootDeps } from './local-root.ts'
 import { mergeSettingsSection } from './merge.ts'
 import { reassembleTrustedAutoMode } from './trusted-scope.ts'

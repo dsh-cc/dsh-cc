@@ -4,8 +4,8 @@ import { createUserMessage, ToolCallId  } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
-import type { CodeRunRequest, CodeRunResult } from '@deepseek-ai/dsh-code-runtime'
+import { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
+import type { PtcRunRequest, PtcRunResult, PtcRunSpec } from '@deepseek-ai/dsh-ptc-runtime'
 import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool } from '@dsh-cc/tools'
 import type { Config, JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -23,21 +23,27 @@ const testToolSignal = new AbortController().signal
  * Service Definition / Service Provider / Consumer roles the seam promises.
  */
 
-/** A scriptable in-repo CodeRuntime: each test sets `behavior` to drive the bindings however it needs. */
-class FakeRuntime extends CodeRuntime {
+/** A scriptable in-repo PtcRuntime: each test sets `behavior` to drive the bindings however it needs. */
+class FakeRuntime extends PtcRuntime {
   readonly language: string
   readonly isolation = 'fake'
-  behavior: (request: CodeRunRequest) => Promise<CodeRunResult> = () => Promise.resolve({ logs: [] })
-  lastRequest?: CodeRunRequest
+  behavior: (request: PtcRunRequest) => Promise<PtcRunResult> = () => Promise.resolve({ logs: [] })
+  lastRequest?: PtcRunRequest
 
   constructor(ctx: Context, config: { language?: string } = {}) {
     super(ctx)
     this.language = config.language ?? 'typescript'
   }
 
-  run(request: CodeRunRequest): Promise<CodeRunResult> {
+  // Two-stage rc.2 contract: the fake resolves transparently (records the
+  // request, no default synthesis) and runs the resolved spec.
+  resolve(request: PtcRunRequest): PtcRunSpec {
     this.lastRequest = request
-    return this.behavior(request)
+    return request as PtcRunSpec
+  }
+
+  run(spec: PtcRunRequest): Promise<PtcRunResult> {
+    return this.behavior(spec)
   }
 }
 
@@ -55,7 +61,7 @@ async function setup(options: SetupOptions = {}) {
   let runtime: FakeRuntime | undefined
   if (options.runtime !== false) {
     await ctx.plugin(FakeRuntime, options.runtime ?? {})
-    runtime = ctx.codeRuntime as FakeRuntime
+    runtime = ctx.ptcRuntime as FakeRuntime
   }
   return { ctx, tools: ctx.tools, systemPrompt: ctx.systemPrompt, runtime: runtime! }
 }
@@ -359,7 +365,7 @@ describe('mode-aware wire contribution', () => {
 
   it('rejects every assembly when a non-native mode has no code runtime', async () => {
     const { systemPrompt } = await setup({ mode: 'code', runtime: false })
-    await expect(systemPrompt.assemble()).rejects.toThrow(/requires a code runtime/)
+    await expect(systemPrompt.assemble()).rejects.toThrow(/requires a PTC runtime/)
   })
 
   it('rejects every assembly when the runtime language has no registered SDK renderer', async () => {
@@ -378,7 +384,7 @@ describe('mode-aware wire contribution', () => {
   })
 
   it("assembles under a python runtime in mode 'both' as well, SDK and schema together", async () => {
-    // `both` reaches the same wireSchemas/requireCodeRuntime/SDK-section code
+    // `both` reaches the same wireSchemas/requirePtcRuntime/SDK-section code
     // as `code`, so this pins the mode-by-language matrix rather than a
     // separate path — including that the `wireSchemas` projection behind
     // `assembly.tools` picks the Python flavor under `both` instead of hitting
@@ -423,12 +429,12 @@ describe('mode-aware wire contribution', () => {
 
   it('resolves the run_code schema flavor lazily and fails loud on a language absent from the flavor table', async () => {
     // The flavor getter reads the runtime directly (peekRuntime), so it — not
-    // requireCodeRuntime — owns the flavor-table guard. Keeping
+    // requirePtcRuntime — owns the flavor-table guard. Keeping
     // RUN_CODE_FLAVORS in step with SDK_RENDERERS is the compiler's job (both
     // are `satisfies`-checked against CodeSdkLanguage), so what the guard
     // covers is a mounted runtime naming a language absent from both tables,
     // which throws when the schema is projected. Assembly's
-    // requireCodeRuntime rejects such a language earlier; this reaches the
+    // requirePtcRuntime rejects such a language earlier; this reaches the
     // guard on its own.
     const { ctx } = await setup({ mode: 'code', runtime: { language: 'ruby' } })
     const definition = ctx.tools.get(RUN_CODE_NAME)
@@ -1225,7 +1231,7 @@ describe('the run_code dispatch bridge', () => {
     await ctx.plugin(ToolRuntime, { mode: 'code' })
     const result = await runCode(ctx, 'program')
     expect(result.isError).toBe(true)
-    expect((result.content[0] as { text: string }).text).toContain('requires a code runtime')
+    expect((result.content[0] as { text: string }).text).toContain('requires a PTC runtime')
   })
 
   it('presents the model-authored description as the execute-card title over the program input', async () => {
@@ -1253,7 +1259,7 @@ describe('the run_code dispatch bridge', () => {
     ['result only', { logs: [], value: 'returned' }, 'returned'],
     ['logs plus result', { logs: ['printed'], value: 'returned' }, 'printed\nreturned'],
     ['no output', { logs: [] }, '(run_code completed with no output)'],
-  ] as [string, CodeRunResult, string][])('keeps %s in durable content without a result presenter', async (_name, output, text) => {
+  ] as [string, PtcRunResult, string][])('keeps %s in durable content without a result presenter', async (_name, output, text) => {
     const { ctx, runtime } = await setup({ mode: 'code' })
     runtime.behavior = () => Promise.resolve(output)
 
@@ -1793,6 +1799,6 @@ describe('per-agent presentation', () => {
     scope.ctx.tools.presentAs('both')
 
     await expect(systemPrompt.assemble({ scope: agent }))
-      .rejects.toThrow('mode "both" requires a code runtime')
+      .rejects.toThrow('mode "both" requires a PTC runtime')
   })
 })

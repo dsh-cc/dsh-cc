@@ -83,10 +83,31 @@
   disabled: true
 
 - insert:
-    - id: agent-presets
-      name: '@deepseek-ai/dsh-agent-presets'
+    # Harness >=0.1.7-rc.2 agent-preset architecture (G15): the old
+    # @deepseek-ai/dsh-agent-presets package and its filesystem scanner
+    # (includeShippedRoot, ~/.dsh/.agent-presets) are deleted upstream. The
+    # registry owns the roster and the declaration row below IS the cc
+    # roster. The composition is carried by reference: the file-backed
+    # include row mounts @dsh-cc/preset-cc/agent.cordis.yml from the
+    # profile's node_modules (a hard dependency of @dsh-cc/tui), keeping
+    # that tested file the single source of the cc composition.
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
         default: cc
+
+    - id: preset-cc
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: cc
+        name: CC mode
+        description: Full Standard-mode capability, plus the Claude Code surface — .claude plugin directories, Claude hooks, slash commands, persistent memory, output styles, and fetch-enabled Web tools.
+        order: 5
+        plugins:
+          - id: cc-composition
+            name: '@deepseek-ai/cordis-plugin-include'
+            config:
+              path: node_modules/@dsh-cc/preset-cc/agent.cordis.yml
 
     - id: tui
       name: '@dsh-cc/tui'

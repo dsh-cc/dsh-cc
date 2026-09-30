@@ -23,20 +23,23 @@ class FakeShell {
       sandboxPolicy: undefined,
     }
   }
-  async run(spec: ShellExecSpec): Promise<ShellRunResult> {
-    const command = spec.command
-    if (command.includes('rev-parse')) {
-      return this.isRepo
-        ? result(0, 'true\n', '')
-        : result(128, '', 'fatal: not a git repository')
-    }
-    if (command.includes('diff --stat')) {
-      return result(0, '1 file changed, 2 insertions(+)\n', '')
-    }
-    if (command.includes('diff --')) {
-      return result(0, LONG_DIFF, '')
-    }
-    return result(0, '', '')
+  async execute(spec: ShellExecSpec): Promise<{ result(): Promise<ShellRunResult> }> {
+    const outcome = await (async (): Promise<ShellRunResult> => {
+      const command = spec.command
+      if (command.includes('rev-parse')) {
+        return this.isRepo
+          ? result(0, 'true\n', '')
+          : result(128, '', 'fatal: not a git repository')
+      }
+      if (command.includes('diff --stat')) {
+        return result(0, '1 file changed, 2 insertions(+)\n', '')
+      }
+      if (command.includes('diff --')) {
+        return result(0, LONG_DIFF, '')
+      }
+      return result(0, '', '')
+    })()
+    return { result: () => Promise.resolve(outcome) }
   }
   async start(): Promise<ShellProcess> {
     throw new Error('start not used in tests')
@@ -81,7 +84,7 @@ async function harness(): Promise<{
     runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
-  ctx.agents.register(agent)
+  await ctx.agents.register(agent)
   return { ctx, agent, plugin, shell }
 }
 

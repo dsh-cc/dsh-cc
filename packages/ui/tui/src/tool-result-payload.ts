@@ -49,24 +49,41 @@ export function normalizeToolResult(data: unknown): ToolResultPayload {
   const withMeta = (payload: ToolResultPayload): ToolResultPayload =>
     meta === undefined ? payload : { ...payload, meta }
 
-  // Wrapped shape: { message: { source?, content: [tool-result] }, meta }.
+  // Message-wrapped shapes, oldest to newest:
+  // - v3 wrapped: { message: { source {kind:'tool',callId}, content: [tool-result block] } }.
+  // - v4 flat ToolResultMessage: role 'tool', source keeps callId, callId
+  //   moves to message.toolCallId, content is direct, isError on the message
+  //   (session-format-v3-to-v4 README, tool-results table).
   if (isObject(data.message)) {
-    const blocks = Array.isArray(data.message.content) ? data.message.content : []
+    const message = data.message
+    const blocks = Array.isArray(message.content) ? message.content : []
     const block = blocks.find(candidate => isObject(candidate) && candidate.type === 'tool-result')
     const blockRec = isObject(block) ? block : undefined
-    const source = data.message.source
+    const source = message.source
     const sourceCallId = isObject(source) && source.callId !== undefined
       ? String(source.callId)
       : ''
     const blockCallId = blockRec?.toolCallId !== undefined ? String(blockRec.toolCallId) : ''
-    const callId = sourceCallId !== '' ? sourceCallId : blockCallId
+    const messageCallId = message.toolCallId !== undefined ? String(message.toolCallId) : ''
+    const callId = sourceCallId !== '' ? sourceCallId : blockCallId !== '' ? blockCallId : messageCallId
     if (callId === '') return { callId: '', isError: hasError, text: '' }
-    const content = Array.isArray(blockRec?.content) ? blockRec.content : undefined
+    if (blockRec !== undefined) {
+      // v3 wrapped: the wrapper block supplies content and isError.
+      const content = Array.isArray(blockRec.content) ? blockRec.content : undefined
+      return withMeta({
+        callId,
+        ...(content !== undefined ? { content } : {}),
+        isError: blockRec.isError === true || hasError,
+        text: textOfBlocks(blockRec.content),
+      })
+    }
+    // v4 flat: content sits directly on the message; no wrapper block.
+    const content = Array.isArray(message.content) ? message.content : undefined
     return withMeta({
       callId,
       ...(content !== undefined ? { content } : {}),
-      isError: blockRec?.isError === true || hasError,
-      text: textOfBlocks(blockRec?.content),
+      isError: message.isError === true || hasError,
+      text: textOfBlocks(message.content),
     })
   }
 

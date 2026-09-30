@@ -147,9 +147,8 @@ export async function rebuildResidents(deps: RebuildDeps): Promise<Map<string, R
       if (event?.type !== 'tool/result') continue
       const message = event.data.message
       if (String(message.source.callId) !== String(candidate.callId)) continue
-      const block = message.content[0]
-      if (block?.type !== 'tool-result') continue
-      if (joinTextBlocks(block.content) === stored.text) {
+      // v4: the tool-result body is the message content directly (no wrapper block).
+      if (joinTextBlocks(message.content) === stored.text) {
         out.set(candidate.hash, candidate)
         break
       }

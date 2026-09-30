@@ -338,14 +338,15 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     expect(mcpTally).toMatchObject({ kind: 'mcpServers', loaded: 1, skipped: 0 })
 
     // The plugin server is registered (deferred) and still connecting —
-    // fire the one-shot session-start notice and check the deferred-names
+    // fire the one-shot agent/created notice (rc.2 renames the old
+    // session-start edge) and check the deferred-names
     // feed carries the plugin server.
     const registry = bootCtx.get('mcpConnections') as { entries(): { name: string; state: string }[] }
     expect(registry.entries().find(e => e.name === 'probe')?.state).toBe('connecting')
 
     const captured: unknown[] = []
-    const agent = { inject: (message: unknown) => captured.push(message) }
-    bootCtx.emit(bootCtx, 'agent/session-start', { agent, source: 'startup' })
+    const agent = { inject: (message: unknown) => captured.push(message) } as never
+    bootCtx.emit(bootCtx, 'agent/created', { agent, source: 'startup' })
     const texts = captured
       .map((m: { content?: Array<{ text?: string }> }) => (m.content ?? []).map(p => p.text ?? '').join(''))
       .join('\n')

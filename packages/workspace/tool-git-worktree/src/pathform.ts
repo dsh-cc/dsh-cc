@@ -16,6 +16,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import type { ToolRunContext } from '@dsh-cc/tools'
 import { readPermissionMode } from '@dsh-cc/session-cwd'
 import { adoptionRefusal } from './harden.ts'
+import { shellRun } from './exec.ts'
 import { worktreesDir } from './worktree.ts'
 
 /** A structured, model-visible failure (maps to an isError tool result). */
@@ -47,7 +48,7 @@ export function resolvePathArgument(raw: string, cwd: string, activeRepoRoot: st
  */
 export async function probeInsideRepo(ctx: Context, path: string, signal: AbortSignal): Promise<boolean> {
   try {
-    const result = await ctx.shell.run(ctx.shell.resolve({
+    const result = await shellRun(ctx, ({
       command: 'git rev-parse --show-toplevel',
       workdir: path,
       signal,
@@ -135,7 +136,7 @@ export async function resolveAdoptPath(
 /** Resolve the HEAD commit inside an adopted path ('' when it has none). */
 export async function headOfAdopted(ctx: Context, path: string, signal: AbortSignal): Promise<string> {
   try {
-    const result = await ctx.shell.run(ctx.shell.resolve({
+    const result = await shellRun(ctx, ({
       command: 'git rev-parse HEAD',
       workdir: path,
       signal,
@@ -149,7 +150,7 @@ export async function headOfAdopted(ctx: Context, path: string, signal: AbortSig
 /** Resolve the checked-out branch inside an adopted path ('' when unreadable). */
 export async function branchOfAdopted(ctx: Context, path: string, signal: AbortSignal): Promise<string> {
   try {
-    const result = await ctx.shell.run(ctx.shell.resolve({
+    const result = await shellRun(ctx, ({
       command: 'git branch --show-current',
       workdir: path,
       signal,

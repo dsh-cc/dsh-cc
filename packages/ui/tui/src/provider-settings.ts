@@ -6,6 +6,7 @@
  * @module @dsh-cc/tui/provider-command-settings
  */
 import { isSettingsConflict } from './harness/approval-preview.ts'
+import { DEFAULT_MODEL_SETTINGS_NAMESPACE, mirrorToEntry } from './provider-bridge.ts'
 import { PROVIDER_SETTINGS_NAMESPACE, type SettingsDescribeLike } from './provider-read.ts'
 import { setMessage } from './store/provider-panel.ts'
 import type { LlmManageLike } from './provider-flow.ts'
@@ -39,15 +40,25 @@ const revisionOf = (settings: SettingsWriteLike | undefined, ns: string = PROVID
  * Revision-guarded path-op write with one conflict retry (D1/D8a, the
  * writeAllowRule precedent). Returns the verbatim error message on failure
  * (§7: rendered as-is, previous routes keep serving).
+ *
+ * Q3-addendum guards: only `providers`-subtree paths are accepted (the
+ * bridge's entry-config mirror owns exactly that subtree of the `llm-pi-ai`
+ * entry), and a committed write mirrors the user-override section into the
+ * live plugin entry config — the rc.2 adapter reads its own Config, not this
+ * namespace.
  */
 export const writeRoute = async (core: ProviderCore, op: ProviderSettingsOp): Promise<string | undefined> => {
   const settings = settingsWriteOf(core)
   if (settings === undefined || typeof settings.mutate !== 'function') {
     return 'No writable settings provider is mounted.'
   }
+  if (op.path[0] !== 'providers') {
+    return 'Only llm-pi-ai.providers.* paths can be written here.'
+  }
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       await settings.mutate(PROVIDER_SETTINGS_NAMESPACE, [op], revisionOf(settings))
+      await mirrorToEntry(core.rt.ctx, PROVIDER_SETTINGS_NAMESPACE)
       return undefined
     } catch (error) {
       if (attempt === 0 && isSettingsConflict(error)) continue
@@ -70,6 +81,9 @@ export const setAsDefault = async (core: ProviderCore, route: string): Promise<v
     if (model === undefined || model === '') throw new Error('no models are registered for the route yet')
     if (settings === undefined || typeof settings.replace !== 'function') throw new Error('no writable settings provider is mounted')
     await settings.replace('agent-default-model', { provider: route, model }, revisionOf(settings, 'agent-default-model'))
+    // Q3 addendum (c): the rc.2 default-model service persists via its entry
+    // Config, so mirror the user-override section into the plugin entry too.
+    await mirrorToEntry(core.rt.ctx, DEFAULT_MODEL_SETTINGS_NAMESPACE)
     core.patch(p => setMessage(p, `Default model set to ${route}/${model} for new sessions — /model switches the running one.`))
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)

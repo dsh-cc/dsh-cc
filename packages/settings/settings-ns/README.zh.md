@@ -32,4 +32,4 @@ export function installSectionSafe<T>(ctx: Context, ns: SettingsNamespace, schem
 
 ## 形态
 
-纯库包：无 preset 行、无 capability manifest 条目。preset 行注册方以 `dependencies` 中的 `workspace:^` 依赖它（保证进启动闭包），peer 依赖 harness 的 `@deepseek-ai/cordis` 与 `@deepseek-ai/dsh-settings`。
+纯库包：无 preset 行、无 capability manifest 条目。preset 行注册方以 `dependencies` 中的 `workspace:^` 依赖它（保证进启动闭包），peer 依赖 harness 的 `@deepseek-ai/cordis`，并以 `@dsh-cc/settings-provider` 契约为依赖。

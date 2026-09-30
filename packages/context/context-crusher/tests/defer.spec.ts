@@ -88,9 +88,7 @@ function surfaceResultTexts(s: Session): string[] {
     const event = s.eventAt(seq)
     if (event?.type !== 'tool/result') continue
     const block = event.data.message.content[0]
-    if (block?.type === 'tool-result') {
-      out.push(block.content.map((b) => (b.type === 'text' ? b.text : '')).join('\n'))
-    }
+    if (block?.type === 'text') out.push(block.text)
   }
   return out
 }
@@ -190,8 +188,10 @@ describe('stream first-chunk counting', () => {
 
   function toolResultMessage(text: string): Message {
     return {
-      role: 'user',
-      content: [{ type: 'tool-result', toolCallId: ToolCallId('c1'), content: [{ type: 'text', text }] }],
+      role: 'tool',
+      content: [{ type: 'text', text }],
+      source: { kind: 'tool', callId: ToolCallId('c1') },
+      toolCallId: ToolCallId('c1'),
     } as unknown as Message
   }
 
@@ -202,14 +202,11 @@ describe('stream first-chunk counting', () => {
     expect(fps.size).toBe(1)
   })
 
-  it('skips tool-result blocks with non-text content', () => {
+  it('skips tool-role messages with non-text content', () => {
     const message = {
-      role: 'user',
-      content: [{
-        type: 'tool-result',
-        toolCallId: ToolCallId('c1'),
-        content: [{ type: 'image' }],
-      }],
+      role: 'tool',
+      content: [{ type: 'image' }],
+      source: { kind: 'tool', callId: ToolCallId('c1') },
     } as unknown as Message
     expect(toolResultFingerprints([message]).size).toBe(0)
   })
@@ -382,19 +379,16 @@ describe('attemptSwap (paired prune + replace, microcompact shape)', () => {
       expect(replacement.surfaceOp).toEqual({ op: 'replace', startSeq: seq, endSeq: seq })
       expect(replacement.sourceEventSeqs).toEqual([seq])
       const block = replacement.data.message.content[0]
-      expect(block?.type).toBe('tool-result')
-      if (block?.type === 'tool-result') {
-        // Every non-content field of the original block survives.
-        expect(block.toolCallId).toBe(ToolCallId('call-1'))
-        expect(block.isError).toBe(false)
-        expect(block.content).toEqual([{ type: 'text', text: STUB }])
-      }
+      expect(block).toEqual({ type: 'text', text: STUB })
+      // v4: toolCallId/isError live on the message and survive the rewrite.
+      expect(replacement.data.message.toolCallId).toBe(ToolCallId('call-1'))
+      expect(replacement.data.message.isError).toBe(false)
     }
     // Log stays append-only: the original event bytes are untouched; the
     // surface shows the stub.
     if (originalMessage?.type === 'tool/result') {
       const block = originalMessage.data.message.content[0]
-      expect(block?.type === 'tool-result' && block.content[0]).toEqual({ type: 'text', text: FULL })
+      expect(block).toEqual({ type: 'text', text: FULL })
     }
     expect(surfaceResultTexts(session)).toEqual([STUB])
   })

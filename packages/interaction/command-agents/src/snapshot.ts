@@ -34,12 +34,16 @@ export interface AgentRow {
   readonly parentId: string
 }
 
-/** The duck-typed `listChildren` entry subset this snapshot consumes. */
+/**
+ * The duck-typed `listChildren` entry subset this snapshot consumes.
+ * rc.2 shape (`SubagentCatalogEntry`, subagent projection-types.ts):
+ * `{id, createdAt} & mode/label` — the old `activity`, `hasChildren`, and
+ * `kind` fields are gone. Residency is re-derived from the live agents
+ * registry and child presence from `listDescendants`.
+ */
 export interface ChildEntryLike {
   readonly id: string
-  readonly activity: 'running' | 'inactive'
-  readonly hasChildren: boolean
-  readonly mode?: string
+  readonly mode?: 'one-shot' | 'continuable' | 'unknown'
   readonly label?: string
 }
 
@@ -71,6 +75,15 @@ export interface SnapshotServices {
   getAgent(id: string): { status?: string } | undefined
   readPin(childId: string): PinLike | CorruptPinLike | undefined
   pinPath(childId: string): string
+  /**
+   * rc.2 re-derivation of the old catalog `hasChildren` flag: the
+   * `listDescendants` root rows carry per-child `hasChildren`
+   * (`SubagentListEntry`, subagent control-types.ts). Optional: when the
+   * host seam does not expose it, children render without the
+   * `[has children]` tag rather than falsely claiming childlessness is
+   * authoritative… the tag is best-effort decoration, not control flow.
+   */
+  listDescendants?(parentSessionId: string): Promise<readonly { id: string; hasChildren?: boolean }[]>
 }
 
 /**
@@ -100,8 +113,11 @@ function pinViewOf(pin: PinLike | CorruptPinLike | undefined): AgentPinView | un
  * continuable or persistence-only) is `ready` — resumable, per the harness's
  * own ready semantics (F7 derive pattern).
  */
-function residencyOf(entry: ChildEntryLike, live: { status?: string } | undefined): Residency {
-  if (entry.activity === 'inactive') return 'ready'
+function residencyOf(live: { status?: string } | undefined): Residency {
+  // rc.2 mapping (catalog `activity` is gone): no live activation → `ready`
+  // (resumable, the harness's own semantics); a live running activation →
+  // `running`; live but not running → `idle`. Same derivation rc.2's own
+  // consumer uses (tool-subagent-control `statusOf`).
   if (live === undefined) return 'ready'
   return live.status === 'running' ? 'running' : 'idle'
 }
@@ -115,7 +131,14 @@ export async function buildAgentsSnapshot(
   services: SnapshotServices,
   parentSessionId: string,
 ): Promise<AgentRow[]> {
-  const children = await services.listChildren(parentSessionId)
+  const [children, descendants] = await Promise.all([
+    services.listChildren(parentSessionId),
+    // Best-effort hasChildren re-derivation; failure degrades to no tag.
+    services.listDescendants?.(parentSessionId).catch(() => undefined) ?? Promise.resolve(undefined),
+  ])
+  const childHasChildren = new Set(
+    (descendants ?? []).filter(entry => entry.hasChildren === true).map(entry => String(entry.id)),
+  )
   const list: AgentRow[] = []
   for (const entry of children) {
     if (entry.mode === 'one-shot') continue
@@ -123,8 +146,8 @@ export async function buildAgentsSnapshot(
     list.push({
       id: String(entry.id),
       ...(entry.label !== undefined && entry.label.length > 0 ? { label: entry.label } : {}),
-      residency: residencyOf(entry, live),
-      hasChildren: entry.hasChildren === true,
+      residency: residencyOf(live),
+      hasChildren: childHasChildren.has(String(entry.id)),
       ...(() => {
         const pin = pinViewOf(services.readPin(String(entry.id)))
         return pin === undefined ? {} : { pin }

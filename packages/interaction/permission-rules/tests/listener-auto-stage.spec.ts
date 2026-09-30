@@ -6,7 +6,7 @@ import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import z from '@deepseek-ai/schemastery'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, CLASSIFIER_EVENT, foldClassifiers, foldPermissionMode, type Config } from '@dsh-cc/permission-rules'
@@ -133,7 +133,7 @@ function text(result: ToolExecutionResult): string {
 }
 
 function agentOf(id: string, cwd = '/work'): Agent {
-  const session = Session.create(SessionId(id), undefined, { version: 3, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
+  const session = Session.create(SessionId(id), undefined, { version: 4, isSeeded: false, id: SessionId(id), createdAt: Date.now(), cwd })
   session.append('turn/start', { turn: 1 })
   return { id, session, inject: () => {} } as unknown as Agent
 }

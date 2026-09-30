@@ -4,7 +4,7 @@ import z from '@deepseek-ai/schemastery'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 
 const StatusLineSchema: z<{ type: string; command: string }> = z.object({
