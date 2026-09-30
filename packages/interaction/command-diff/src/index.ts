@@ -25,8 +25,8 @@ function shellq(value: string): string {
 
 /** Run one git command through the shell seam. */
 async function runGit(ctx: Context, req: ShellExecRequest): Promise<ShellRunResult> {
-  const spec = ctx.shell.resolve(req)
-  return ctx.shell.run(spec)
+  const execution = await ctx.shell.execute(ctx.shell.resolve(req))
+  return execution.result()
 }
 
 /** Execute `/diff [path]`. */

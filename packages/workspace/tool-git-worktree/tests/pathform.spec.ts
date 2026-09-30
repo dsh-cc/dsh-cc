@@ -40,9 +40,11 @@ function fakeCtx(opts: { approval?: (reason: string) => string; revParseExit?: n
     } },
     shell: {
       resolve: (r: unknown) => r,
-      run: async () => ({
-        exitCode: opts.revParseExit ?? 128, aborted: false, signal: null, timedOut: false, timeoutMs: 1,
-        stdout: { text: '', truncated: false }, stderr: { text: '', truncated: false },
+      execute: async () => ({
+        result: async () => ({
+          exitCode: opts.revParseExit ?? 128, aborted: false, signal: null, timedOut: false, timeoutMs: 1,
+          stdout: { text: '', truncated: false }, stderr: { text: '', truncated: false },
+        }),
       }),
     },
   } as unknown as Context

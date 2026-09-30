@@ -1155,21 +1155,31 @@ describe('Task tool', () => {
   })
 
   describe('capacity guard (25 live continuable children)', () => {
-    function childRow(activity: string): { kind: string; activity: string } {
-      return { kind: 'child', activity }
+    /** rc.2 dropped the catalog's `activity` field; rows carry ids and the
+     * fake agents registry derives liveness from `status === 'running'`. */
+    function childRow(id: string): { kind: string; id: string } {
+      return { kind: 'child', id }
     }
-    function withListChildren(rows: { kind: string; activity?: string }[]): { seam: Record<string, unknown>; listChildren: ReturnType<typeof vi.fn> } {
+    /** Install the subagents seam rows and a fake agents registry marking every listed id running. */
+    function withListChildren(ctx: Context, rows: { kind: string; id?: string }[]): ReturnType<typeof vi.fn> {
       const listChildren = vi.fn(async () => rows)
-      return { seam: { listChildren }, listChildren }
+      const seam = ctx.get('subagents') as Record<string, unknown>
+      seam['listChildren'] = listChildren
+      ctx.provide('agents', {
+        get: (id: string) => rows.some(row => row.kind === 'child' && row.id !== undefined && row.id === id) ? { status: 'running' } : undefined,
+      })
+      return listChildren
+    }
+
+    /** An agent fixture whose ctx resolves the fake agents registry (rc.2 liveness derivation). */
+    function agentWithCtx(ctx: Context, cwd = '/any'): Agent {
+      return { ctx, session: { header: { cwd } } } as unknown as Agent
     }
 
     it('refuses a background start at 25 running children with the actionable error', async () => {
       const { ctx } = await mount()
-      const rows = Array.from({ length: 25 }, () => childRow('running'))
-      const { listChildren } = withListChildren(rows)
-      const seam = ctx.get('subagents') as Record<string, unknown>
-      seam['listChildren'] = listChildren
-      const result = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentAt('/any'))
+      const listChildren = withListChildren(ctx, Array.from({ length: 25 }, (_, i) => childRow(`child-${i}`)))
+      const result = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentWithCtx(ctx))
       expect(result.isError).toBe(true)
       expect(result.content[0]!.text).toContain(
         'parent has 25 live subagents; /agents stop <id> to release one, or let children settle',
@@ -1179,24 +1189,20 @@ describe('Task tool', () => {
 
     it('refuses a foreground collect start at the same limit', async () => {
       const { ctx } = await mount()
-      const rows = Array.from({ length: 25 }, () => childRow('running'))
-      const seam = ctx.get('subagents') as Record<string, unknown>
-      seam['listChildren'] = vi.fn(async () => rows)
-      const result = await call(ctx, { description: 'x', prompt: 't' }, agentAt('/any'))
+      withListChildren(ctx, Array.from({ length: 25 }, (_, i) => childRow(`child-${i}`)))
+      const result = await call(ctx, { description: 'x', prompt: 't' }, agentWithCtx(ctx))
       expect(result.isError).toBe(true)
       expect(result.content[0]!.text).toContain('parent has 25 live subagents')
     })
 
     it('does not count inactive or non-child rows and admits at 24', async () => {
       const { ctx, continuableStarts } = await mount()
-      const rows = [
-        ...Array.from({ length: 24 }, () => childRow('running')),
-        childRow('inactive'),
+      withListChildren(ctx, [
+        ...Array.from({ length: 24 }, (_, i) => childRow(`child-${i}`)),
+        { kind: 'child' }, // no id: absent from the live registry, not counted
         { kind: 'diagnostic', id: 'x' },
-      ]
-      const seam = ctx.get('subagents') as Record<string, unknown>
-      seam['listChildren'] = vi.fn(async () => rows)
-      const result = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentAt('/any'))
+      ])
+      const result = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentWithCtx(ctx))
       expect(result.isError).toBe(false)
       expect(continuableStarts).toHaveLength(1)
     })

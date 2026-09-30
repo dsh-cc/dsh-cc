@@ -48,8 +48,9 @@ function rig(options: {
       requests.push(request)
       return request as unknown as ShellExecSpec
     },
-    async run(spec: ShellExecSpec): Promise<ShellRunResult> {
-      return options.shellRun(spec)
+    async execute(spec: ShellExecSpec) {
+      const result = await options.shellRun(spec)
+      return { result: () => Promise.resolve(result) }
     },
   } as unknown as ShellExecutor
   const ctx: CtxLike = {

@@ -14,7 +14,6 @@ import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import { createExecutionToken, fuseToolSignals, isAborted, toolAbortedBeforeDispatchResult, toolAbortedResult, toolErrorResult, ToolNotFoundError } from './abort-utils.ts'
 import { RUN_CODE_NAME } from './code-mode.ts'
 import type { MutableToolRunContext, PreToolDecision, ScheduledToolDispatch, ScheduledToolPreparation, ToolDefinition, ToolExecution, ToolExecutionInput, ToolExecutionResult, ToolRunContext } from './tool-types.ts'
-import type { ToolAskResolution } from './tool-layer.ts'
 import type { ToolRuntimeCore } from './runtime-core.ts'
 
 /**
@@ -171,16 +170,20 @@ export async function prepareExecution<T>(
       carrier, 'tools/pre-execute', exec,
       () => Promise.resolve<PreToolDecision>({ kind: 'allow' }),
     )
-    const askResolution: ToolAskResolution = gate.kind === 'ask'
+    const askResolution = gate.kind === 'ask'
       ? await rt.serviceAsk(exec, gate)
       : { decision: gate, approvalCancelled: false }
     const { decision } = askResolution
     if (rt.callerCancelled(exec) && askResolution.approvalCancelled) {
       return await next({ kind: 'post-result', exec, result: toolAbortedBeforeDispatchResult() })
     }
+    if (decision.kind === 'cancel') {
+      return await next({ kind: 'post-result', exec, result: toolAbortedBeforeDispatchResult() })
+    }
     const denialReason = decision.kind === 'allow'
       ? rt.guardReason(exec)
       : decision.reason
+    const denialInfo = decision.kind === 'deny' ? decision.info : undefined
     if (denialReason !== undefined) {
       return await next({
         kind: 'post-result',
@@ -188,7 +191,7 @@ export async function prepareExecution<T>(
         result: rt.materializeFinalResult({
           content: [{ type: 'text', text: `Error: ${denialReason}` }],
           isError: true,
-          error: { message: denialReason },
+          error: { message: denialReason, ...denialInfo === undefined ? {} : { info: denialInfo } },
         }),
       })
     }

@@ -1352,7 +1352,11 @@ capabilities:
         agent_type 'general-purpose' (kind-specific real types are a parity gap), and
         session_id is child-scoped where CC keeps the parent session id. additionalContext
         IS injected for a non-deny decision (post-result context, an ordering divergence
-        from CC attaching it to the tool call); only updatedInput is ignored.
+        from CC attaching it to the tool call); only updatedInput is ignored. Harness
+        0.1.7 adds the PreToolDecision `cancel` kind (deny-with-different-user-text:
+        canonical cancellation without a policy denial); CC's permissionDecision
+        codec (allow|deny|ask) has no counterpart, so CC hooks can never emit it —
+        it arises downstream only and the bridge folds it verbatim.
 
   hooks.session-end:
     title: SessionEnd hook

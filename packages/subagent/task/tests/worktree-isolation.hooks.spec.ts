@@ -12,6 +12,9 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { ShellExecutor } from '@deepseek-ai/dsh-shell'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
+
+/** Minimal foreground-handle face for the scripted executor. */
+type ShellExecutionLike = { result(): Promise<ShellRunResult> }
 import type { HookOutput, HookRunResult } from '@dsh-cc/hook-protocol'
 import { createIsolationWorktree, settleIsolationWorktree } from '../src/worktree-isolation.ts'
 
@@ -37,9 +40,10 @@ class ScriptedShell extends ShellExecutor {
       stdout: { text: '', truncated: false }, stderr: { text: '', truncated: false },
       ...hit?.result,    } as ShellRunResult
   }
-  run(spec: ShellExecSpec): Promise<ShellRunResult> {
+  execute(spec: ShellExecSpec): Promise<ShellExecutionLike> {
     this.requests.push({ command: spec.command, workdir: spec.workdir })
-    return Promise.resolve(this.outcome(spec))
+    const outcome = this.outcome(spec)
+    return Promise.resolve({ result: () => Promise.resolve(outcome) })
   }
   start(_spec: ShellExecSpec): ShellProcess { throw new Error('never') }
 }

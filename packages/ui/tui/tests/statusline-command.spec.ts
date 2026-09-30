@@ -56,8 +56,10 @@ function harness(deps: Partial<StatusLineCommandDeps> = {}): Harness {
         promise: done,
       } as unknown as ReturnType<ShellExecutorLike['resolve']>
     },
-    run(spec) {
-      return (spec as unknown as { promise: Promise<ShellRunResultLike> }).promise
+    async execute(spec) {
+      return {
+        result: () => (spec as unknown as { promise: Promise<ShellRunResultLike> }).promise,
+      }
     },
   }
   const runner = createStatusLineCommand({
@@ -281,7 +283,7 @@ describe('statusline command runner', () => {
         if (boom) throw new Error('spawn failed')
         return { ...request, workdir: '/repo', timeoutMs: TIMEOUT_MS, stdoutMaxBytes: MAX_BYTES } as ReturnType<ShellExecutorLike['resolve']>
       },
-      async run() { return ok('never\n') as ShellRunResultLike },
+      async execute() { return { result: async () => ok('never\n') as ShellRunResultLike } },
     }
     const runner = createStatusLineCommand({
       executor,

@@ -117,12 +117,9 @@ function resultTexts(agent: Agent): string[] {
   return events(agent)
     .filter((e) => e.type === 'tool/result')
     .map((e) => {
-      const content = (e.data as { message: { content: { type: string; content?: { type: string; text?: string }[]; text?: string }[] } }).message.content
-      return content.map((b) =>
-        b.type === 'tool-result'
-          ? (b.content ?? []).map((x) => x.text ?? '').join('\n')
-          : b.text ?? '',
-      ).join('\n')
+      // v4 ToolResultMessage: flat content blocks on the message.
+      const content = (e.data as { message: { content: { type: string; text?: string }[] } }).message.content
+      return content.map((b) => b.text ?? '').join('\n')
     })
 }
 
@@ -268,10 +265,9 @@ function surfaceResultTexts(agent: Agent): string[] {
   for (const seq of agent.session.surface.nodes) {
     const event = agent.session.eventAt(seq)
     if (event?.type !== 'tool/result') continue
-    const block = event.data.message.content[0]
-    if (block?.type === 'tool-result') {
-      out.push(block.content.map((b) => (b.type === 'text' ? b.text : '')).join('\n'))
-    }
+    // v4 ToolResultMessage: flat content blocks on the message.
+    const content = event.data.message.content as Array<{ type?: string; text?: string }>
+    out.push(content.map((b) => (b.type === 'text' ? b.text : '')).join('\n'))
   }
   return out
 }
@@ -342,9 +338,8 @@ describe('deferred externalization (real boot)', () => {
     const firstResult = log[firstResultIdx]
     expect(firstResult?.type).toBe('tool/result')
     if (firstResult?.type !== 'tool/result') return
-    const originalBlock = firstResult.data.message.content[0]
-    expect(originalBlock?.type === 'tool-result' && originalBlock.content[0])
-      .toEqual({ type: 'text', text: original })
+    // v4 ToolResultMessage: the message's flat content carries the text.
+    expect(firstResult.data.message.content[0]).toEqual({ type: 'text', text: original })
 
     const pruneIdx = log.findIndex((e) => e.type === 'compaction/prune')
     expect(pruneIdx).toBeGreaterThan(-1)
@@ -360,14 +355,10 @@ describe('deferred externalization (real boot)', () => {
     if (replacement?.type !== 'tool/result') throw new Error('replacement row missing')
     expect(replacement.surfaceOp).toEqual({ op: 'replace', startSeq: firstResultIdx, endSeq: firstResultIdx })
     expect(replacement.sourceEventSeqs).toEqual([firstResultIdx])
-    const replacementBlock = replacement.data.message.content[0]
-    if (replacementBlock?.type !== 'tool-result' || originalBlock?.type !== 'tool-result') {
-      throw new Error('replacement block missing')
-    }
-    // Every non-content field of the original block survives the swap.
-    expect(replacementBlock.toolCallId).toBe(originalBlock.toolCallId)
-    expect(replacementBlock.isError).toBe(originalBlock.isError)
-    expect(replacementBlock.content[0]?.type).toBe('text')
+    // v4: toolCallId/isError live on the message itself and survive the swap.
+    expect(replacement.data.message.toolCallId).toBe(firstResult.data.message.toolCallId)
+    expect(replacement.data.message.isError).toBe(firstResult.data.message.isError)
+    expect(replacement.data.message.content[0]?.type).toBe('text')
 
     // The original stays permanently retrievable (real tool, real loop).
     expect(resultTexts(agent).at(-1)).toBe(original)
@@ -433,13 +424,11 @@ describe('deferred externalization (real boot)', () => {
     for (const seq of [...session.surface.nodes]) {
       const event = session.eventAt(seq)
       if (event?.type !== 'tool/result') continue
-      const block = event.data.message.content[0]
-      if (block?.type !== 'tool-result') continue
       session.append('tool/result', {
         ...event.data,
         message: freezeMessage<ToolResultMessage>({
           ...event.data.message,
-          content: [{ ...block, content: [{ type: 'text', text: 'mutated body' }] }],
+          content: [{ type: 'text', text: 'mutated body' }],
         }),
       }, { surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq }, sourceEventSeqs: [seq] })
     }

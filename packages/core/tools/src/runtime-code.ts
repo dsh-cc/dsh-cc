@@ -126,6 +126,7 @@ export async function serviceAsk(
     toolName: exec.name,
     callId: exec.callId,
     ...ask.reason !== undefined ? { reason: ask.reason } : {},
+    ...ask.displayReason !== undefined ? { displayReason: ask.displayReason } : {},
     signal: exec.signal,
   })
   switch (outcome) {

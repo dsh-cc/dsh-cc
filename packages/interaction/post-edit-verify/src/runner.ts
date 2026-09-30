@@ -109,7 +109,8 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     let result: ShellRunResult
     try {
-      result = await options.shell.run(options.shell.resolve(request))
+      const execution = await options.shell.execute(options.shell.resolve(request))
+      result = await execution.result()
     } catch (error: unknown) {
       // The executor rejects only on infra faults (unusable workdir, missing
       // shell). Append nothing — the edit result stays exactly as before.

@@ -21,6 +21,8 @@ export const TOOL_ABORTED_BEFORE_DISPATCH = 'ABORTED_BEFORE_DISPATCH'
 export interface ToolErrorInfo {
   name: string
   code: string
+  /** Optional raw user-facing detail; durable projections preserve it but model-facing content does not include it. */
+  reason?: string
 }
 
 /** Canonical failure detail; internal routing information remains optional. */

@@ -212,8 +212,9 @@ export async function assertLiveCapacity(
     return
   }
   // The live registry sits beside the subagents seam on the same context;
-  // an absent registry degrades the guard open (no false blocks).
-  const agents = parent.ctx.get('agents') as { get?(id: string): { status?: string } | undefined } | undefined
+  // an absent registry (or a bare fixture agent without a ctx) degrades the
+  // guard open (no false blocks).
+  const agents = parent.ctx?.get?.('agents') as { get?(id: string): { status?: string } | undefined } | undefined
   const live = children.filter(child => agents?.get?.(child.id)?.status === 'running').length
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
     throw new Error(

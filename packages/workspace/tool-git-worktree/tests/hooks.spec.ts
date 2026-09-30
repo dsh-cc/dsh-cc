@@ -92,7 +92,7 @@ describe('runWorktreeCreateHook', () => {
       // no git repository contains the directory.
       const noRepo = {
         ...ctxWith([out({ stdout: `${outside}\n` })]),
-        shell: { resolve: (r: unknown) => r, run: async () => ({ exitCode: 128, stdout: { text: '' }, stderr: { text: '' }, aborted: false, signal: null, timedOut: false, timeoutMs: 1 }) },
+        shell: { resolve: (r: unknown) => r, execute: async () => ({ result: async () => ({ exitCode: 128, stdout: { text: '' }, stderr: { text: '' }, aborted: false, signal: null, timedOut: false, timeoutMs: 1 }) }) },
       } as unknown as Context
       expect(adoptionRefusal(outside, mainRoot)).not.toBeNull() // metadata-less refusal exists…
       const outcome = await runWorktreeCreateHook(noRepo, fields(outside), { mainRoot, signal })
@@ -111,7 +111,7 @@ describe('runWorktreeCreateHook', () => {
     try {
       const inRepo = {
         ...ctxWith([out({ stdout: `${inside}\n` })]),
-        shell: { resolve: (r: unknown) => r, run: async () => ({ exitCode: 0, stdout: { text: '/some/repo' }, stderr: { text: '' }, aborted: false, signal: null, timedOut: false, timeoutMs: 1 }) },
+        shell: { resolve: (r: unknown) => r, execute: async () => ({ result: async () => ({ exitCode: 0, stdout: { text: '/some/repo' }, stderr: { text: '' }, aborted: false, signal: null, timedOut: false, timeoutMs: 1 }) }) },
       } as unknown as Context
       const outcome = await runWorktreeCreateHook(inRepo, fields(inside), { mainRoot, signal })
       expect(outcome).toEqual({ kind: 'default' })

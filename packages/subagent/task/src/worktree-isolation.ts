@@ -149,11 +149,12 @@ export function isUnknownOptionFailure(result: ShellRunResult): boolean {
 
 /** Run one constructed git command through the `ctx.shell` seam. */
 async function runGit(ctx: Context, cmd: GitCmd, signal?: AbortSignal): Promise<ShellRunResult> {
-  return ctx.shell.run(ctx.shell.resolve({
+  const execution = await ctx.shell.execute(ctx.shell.resolve({
     command: cmd.command,
     workdir: cmd.workdir,
     ...(signal !== undefined ? { signal } : {}),
   }))
+  return execution.result()
 }
 
 /** Git failure copy for dispatch-time errors. */

@@ -12,7 +12,7 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 import { TOOL_ABORTED } from '@dsh-cc/tools'
 import type { ToolRunContext } from '@dsh-cc/tools'
 import { setSessionCwd } from '@dsh-cc/session-cwd'
-import type { ShellRunResult } from '@deepseek-ai/dsh-shell'
+import type { ShellExecRequest, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { repoRootFromCommonDir } from './harden.ts'
 import type { IncludeGit } from './include.ts'
 import { unlockWorktree } from './lifecycle.ts'
@@ -49,8 +49,17 @@ export function updateSessionCwd(exec: ToolRunContext, path: string): void {
 }
 
 /**
- * Run one git command to completion through the `ctx.shell` seam. Resolves a
- * fresh request (never passing an unresolved one to `run`) and maps abort /
+ * Resolve, execute, and await the foreground result of one shell request
+ * (rc.2 resolve→execute→result seam). Single per-package helper: every
+ * `ctx.shell` call site in this package routes through it.
+ */
+export async function shellRun(ctx: Context, request: ShellExecRequest): Promise<ShellRunResult> {
+  const execution = await ctx.shell.execute(ctx.shell.resolve(request))
+  return execution.result()
+}
+
+/**
+ * Run one git command to completion through the `ctx.shell` seam. Maps abort /
  * spawn failures to a structured {@link HarnessError}; a nonzero git exit
  * resolves normally for the caller to interpret.
  * @param ctx - the Cordis context.
@@ -63,11 +72,11 @@ export async function runGit(
   cmd: GitCmd,
   signal: AbortSignal,
 ): Promise<ShellRunResult> {
-  const result = await ctx.shell.run(ctx.shell.resolve({
+  const result = await shellRun(ctx, {
     command: cmd.command,
     workdir: cmd.workdir,
     signal,
-  }))
+  })
   if (result.aborted) {
     const error = new HarnessError('tool call aborted', TOOL_ABORTED)
     error.name = 'AbortError'

@@ -225,19 +225,24 @@ describe('hooks-claude-code bridge — TaskCreated (jobs diff)', () => {
     writeFileSync(join(dir, 'hooks.json'), JSON.stringify({ hooks: { TaskCreated: [{ hooks: [{ type: 'command', command: td }] }] } }))
 
     // A minimal jobs registry fake exposed via `ctx.get('jobs')`; the bridge
-    // subscribes to its onJobsChanged and diffs list() snapshots.
-    const jobs: { ids: Set<string>; listeners: Array<(owner?: unknown) => void> } = {
-      ids: new Set(),
-      listeners: [],
+    // subscribes to events ({ owners: 'scope' }) and fires on `registered`.
+    const jobs = {
+      ids: new Set<string>(),
+      listeners: [] as Array<(event: { type: string; job: { id: string; label: string } }) => void>,
       list() { return [...this.ids].map(id => ({ id, label: `task ${id}` })) },
-      onJobsChanged(fn: (owner?: unknown) => void) { this.listeners.push(fn); return () => {} },
+      events: {
+        subscribe(_filter: unknown, fn: (event: { type: string; job: { id: string; label: string } }) => void) {
+          jobs.listeners.push(fn)
+          return () => {}
+        },
+      },
     }
     const adapter = new MockAdapter([])
     const ctx = await harness(dir, adapter, (c) => { c.provide('jobs', jobs as never) })
     const agent = await ctx.agentLoop.create(SessionId('td-session'), { provider: 'mock', model: 'mock' })
-    // A brand-new job appears → the registered onJobsChanged listener fires.
+    // A brand-new job registers → the subscribed listener fires with its event.
     jobs.ids.add('task-1')
-    for (const l of jobs.listeners) l(undefined)
+    for (const l of jobs.listeners) l({ type: 'registered', job: { id: 'task-1', label: 'task task-1' } })
     await waitFor(() => existsSync(tdMarker))
     expect(existsSync(tdMarker)).toBe(true)
   })

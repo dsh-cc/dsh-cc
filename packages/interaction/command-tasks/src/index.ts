@@ -7,7 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { JobSnapshot } from '@deepseek-ai/dsh-jobs'
+import type { JobView } from '@deepseek-ai/dsh-jobs'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { formatAgentsFooter, formatJobs, type JobLine } from './tasks.ts'
@@ -25,8 +25,8 @@ interface AgentsSnapshotLike {
   list(parentSessionId: string): Promise<readonly unknown[]>
 }
 
-/** Map a background-job snapshot to the fields this command renders. */
-function toLine(job: JobSnapshot): JobLine {
+/** Map a background-job view to the fields this command renders. */
+function toLine(job: JobView): JobLine {
   return {
     id: String(job.id),
     kind: job.kind,
@@ -38,8 +38,7 @@ function toLine(job: JobSnapshot): JobLine {
 
 /** Execute `/tasks`: list the caller-visible background jobs. */
 async function executeTasks(ctx: Context, invocation: CommandInvocation): Promise<CommandResult> {
-  // rc.2 mechanical bit: `jobs.list` takes a SessionId owner, not the Agent.
-  // (The surrounding JobSnapshot/jobs surface migration is slice 4.)
+  // rc.2: `jobs.list` takes a SessionId owner (was the Agent).
   const jobs = ctx.jobs.list(SessionId(invocation.agent.session.id))
   const lines = [formatJobs(jobs.map(toLine))]
   // Cross-link footer: count this session's background agents from the same

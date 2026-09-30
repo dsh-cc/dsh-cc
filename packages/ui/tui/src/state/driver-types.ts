@@ -409,10 +409,11 @@ export type SubagentRunEndInfoLike = {
 
 /**
  * Structural stand-in for the deployment's `shell` service (ShellExecutor's
- * resolve→run seam), which the tui package doesn't import. `resolve` fills
- * the request's defaults/caps; `run` executes the resolved spec and reports
- * the first-cause outcome. Absent service → the driver degrades to a direct
- * child process (see `runShellCommand`).
+ * resolve→execute seam), which the tui package doesn't import. `resolve` fills
+ * the request's defaults/caps; `execute` prepares the resolved spec and hands
+ * back a handle whose `result()` settles with the first-cause outcome. Absent
+ * service → the driver degrades to a direct child process (see
+ * `runShellCommand`).
  */
 export type ShellExecSpecLike = {
   command: string
@@ -450,9 +451,14 @@ export type ShellExecRequestLike = {
   workdir?: string
 }
 
+/** The foreground handle `execute` returns; `result()` rejects only on infra faults. */
+export type ShellExecutionLike = {
+  result(): Promise<ShellRunResultLike>
+}
+
 export type ShellExecutorLike = {
   resolve(request: ShellExecRequestLike): ShellExecSpecLike
-  run(spec: ShellExecSpecLike): Promise<ShellRunResultLike>
+  execute(spec: ShellExecSpecLike): Promise<ShellExecutionLike>
 }
 
 /**

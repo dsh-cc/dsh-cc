@@ -35,7 +35,7 @@ describe('@dsh-cc/command-tasks rendering (pure)', () => {
 
 describe('/tasks human command', () => {
   async function harness(
-    jobs?: { list(caller?: Agent): { id: unknown; kind: string; status: string; startedAt: number; label: string }[] },
+    jobs?: { list(caller?: SessionId): { id: unknown; kind: string; status: string; startedAt: number; label: string }[] },
     agentsSnapshot?: { list(parent: string): Promise<readonly unknown[]> },
   ) {
     const ctx = new Context()
@@ -80,7 +80,7 @@ describe('/tasks human command', () => {
     ])
     const { ctx, agent } = await harness({ list })
     const execution = await ctx.commands.execute(agent, '/tasks', [], new AbortController().signal)
-    expect(list).toHaveBeenCalledWith(agent)
+    expect(list).toHaveBeenCalledWith(SessionId(agent.session.id))
     const text = (execution?.result as { text: string }).text
     expect(text).toContain('- bash-1 [bash] running')
   })

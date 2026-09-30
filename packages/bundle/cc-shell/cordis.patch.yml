@@ -62,3 +62,11 @@
         maxInputBytes: 4096
         maxOutputTokens: 64
         timeoutMs: 60000
+
+    # Harness 0.1.7: schedule became a host-plane service class
+    # (TypertRemoteService). Its old per-agent preset row parks the agent
+    # mount forever (cordis waits silently on the missing sessionController
+    # inject — see @dsh-cc/bundle-shell/schedule-mount); mount at host plane
+    # with the stub resolver instead.
+    - id: schedule
+      name: '@dsh-cc/bundle-shell/schedule-mount'

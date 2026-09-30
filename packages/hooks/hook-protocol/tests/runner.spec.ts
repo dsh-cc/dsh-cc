@@ -5,10 +5,10 @@ import type { RunHookOptions } from '@dsh-cc/hook-protocol'
 
 /**
  * A minimal stand-in for the bits of {@link ShellExecutor} that {@link runHook}
- * actually calls (`resolve` then `run`). `runHook` is pure plumbing over those
- * two methods, so a duck-typed recorder is the right test hook — the REAL
- * executor (dsh-bash-local) is exercised end-to-end by the hook-bridge plugins
- * that consume this library, not here.
+ * actually calls (`resolve`, then `execute`, then the handle's `result`).
+ * `runHook` is pure plumbing over those, so a duck-typed recorder is the right
+ * test hook — the REAL executor (dsh-bash-local) is exercised end-to-end by
+ * the hook-bridge plugins that consume this library, not here.
  */
 function recordingBash(run: (spec: ShellExecSpec) => Promise<ShellRunResult>): {
   bash: ShellExecutor
@@ -30,9 +30,10 @@ function recordingBash(run: (spec: ShellExecSpec) => Promise<ShellRunResult>): {
         sandboxPolicy: request.sandboxPolicy,
       }
     },
-    async run(spec: ShellExecSpec): Promise<ShellRunResult> {
+    async execute(spec: ShellExecSpec) {
       specs.push(spec)
-      return run(spec)
+      const result = await run(spec)
+      return { result: () => Promise.resolve(result) }
     },
   } as unknown as ShellExecutor
   return { bash, specs }

@@ -171,6 +171,12 @@ importers:
       '@deepseek-ai/dsh-session-projection':
         specifier: link:../../../../deepseek-harness/packages/session/session-projection
         version: link:../../../../deepseek-harness/packages/session/session-projection
+      '@deepseek-ai/dsh-storage':
+        specifier: link:../../../../deepseek-harness/packages/storage/storage
+        version: link:../../../../deepseek-harness/packages/storage/storage
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: link:../../../../deepseek-harness/packages/storage/storage-domain
+        version: link:../../../../deepseek-harness/packages/storage/storage-domain
       '@deepseek-ai/dsh-subagent':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent
         version: link:../../../../deepseek-harness/packages/subagent/subagent
@@ -927,9 +933,9 @@ importers:
       '@deepseek-ai/dsh-workflow':
         specifier: link:../../../../deepseek-harness/packages/workflow/workflow
         version: link:../../../../deepseek-harness/packages/workflow/workflow
-      '@deepseek-ai/dsh-workflow-worker-thread':
-        specifier: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
-        version: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
+      '@deepseek-ai/dsh-workflow-ptc':
+        specifier: link:../../../../deepseek-harness/packages/workflow/workflow-ptc
+        version: link:../../../../deepseek-harness/packages/workflow/workflow-ptc
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -3030,9 +3036,24 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../../../deepseek-harness/packages/core/agent
         version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-fs-local':
+        specifier: link:../../../../deepseek-harness/packages/fs/fs-local
+        version: link:../../../../deepseek-harness/packages/fs/fs-local
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
+      '@deepseek-ai/dsh-ptc-runtime-node':
+        specifier: link:../../../../deepseek-harness/packages/ptc-runtime/ptc-runtime-node
+        version: link:../../../../deepseek-harness/packages/ptc-runtime/ptc-runtime-node
+      '@deepseek-ai/dsh-sandbox':
+        specifier: link:../../../../deepseek-harness/packages/sandbox/sandbox
+        version: link:../../../../deepseek-harness/packages/sandbox/sandbox
+      '@deepseek-ai/dsh-sandbox-local':
+        specifier: link:../../../../deepseek-harness/packages/sandbox/sandbox-local
+        version: link:../../../../deepseek-harness/packages/sandbox/sandbox-local
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: link:../../../../deepseek-harness/packages/sandbox/sandbox-policy
+        version: link:../../../../deepseek-harness/packages/sandbox/sandbox-policy
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -3042,12 +3063,15 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent
         version: link:../../../../deepseek-harness/packages/subagent/subagent
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+        version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
       '@deepseek-ai/dsh-workflow':
         specifier: link:../../../../deepseek-harness/packages/workflow/workflow
         version: link:../../../../deepseek-harness/packages/workflow/workflow
-      '@deepseek-ai/dsh-workflow-worker-thread':
-        specifier: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
-        version: link:../../../../deepseek-harness/packages/workflow/workflow-worker-thread
+      '@deepseek-ai/dsh-workflow-ptc':
+        specifier: link:../../../../deepseek-harness/packages/workflow/workflow-ptc
+        version: link:../../../../deepseek-harness/packages/workflow/workflow-ptc
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery

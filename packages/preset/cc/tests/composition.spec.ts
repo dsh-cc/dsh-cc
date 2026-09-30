@@ -314,13 +314,16 @@ describe('agent.cordis.yml composition', () => {
       .toBeLessThan(configIds.indexOf('tool-ralph'))
     // The journal provider row mounts before the engine row; the engine's
     // provider flips from `spawn` to the wrapping journal provider (resume
-    // slice: frozen-until-first-miss same-session replay).
+    // slice: frozen-until-first-miss same-session replay). 0.1.7-rc.2: the
+    // worker-thread engine package was deleted upstream; the preset row is
+    // the sandboxed PTC engine (workflow-ptc).
     const journal = group.config.find((r: any) => r.id === 'subagent-workflow-journal')!
     expect(journal.name).toBe('@dsh-cc/workflow-journal')
     expect(journal.disabled).toBeUndefined()
     expect(configIds.indexOf('subagent-workflow-journal'))
-      .toBeLessThan(configIds.indexOf('workflow-worker-thread'))
-    const engine = group.config.find((r: any) => r.id === 'workflow-worker-thread')!
+      .toBeLessThan(configIds.indexOf('workflow-ptc'))
+    const engine = group.config.find((r: any) => r.id === 'workflow-ptc')!
+    expect(engine.name).toBe('@deepseek-ai/dsh-workflow-ptc')
     expect(engine.config).toMatchObject({ provider: 'cc-workflow-journal' })
   })
 

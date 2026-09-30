@@ -261,8 +261,13 @@
     - id: subagent-workflow-journal
       name: '@dsh-cc/workflow-journal'
 
-    - id: workflow-worker-thread
-      name: '@deepseek-ai/dsh-workflow-worker-thread'
+    # 0.1.7-rc.2: the worker-thread engine package was deleted upstream and
+    # replaced by the sandboxed Node PTC executor (workflow-ptc). The
+    # cc-workflow-journal provider wrap is unchanged — only the engine row
+    # moved. Prerequisites (ptc-runtime + fs/subprocess/sandbox) mount in the
+    # host base bundle.
+    - id: workflow-ptc
+      name: '@deepseek-ai/dsh-workflow-ptc'
       config:
         provider: cc-workflow-journal
 
@@ -612,8 +617,10 @@
 - id: coordinator
   name: '@dsh-cc/coordinator'
 
-- id: schedule
-  name: '@deepseek-ai/dsh-schedule'
+# `schedule` moved to the HOST plane at harness 0.1.7 (see
+# cc-shell/cordis.patch.yml): the rc.2 service class injects
+# sessionController, absent from tui profiles — a preset-scope row parks the
+# agent mount forever.
 
 - id: session-cwd
   name: '@dsh-cc/session-cwd'

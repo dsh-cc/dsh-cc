@@ -264,7 +264,7 @@ describe('hooks-claude-code bridge — agent executor', () => {
     // The decoded deny decision blocked the tool (verification subagent vetoed it).
     expect(ran).toBe(false)
     const result = [...agent.session.snapshotEvents()].find(e => e.type === 'tool/result')
-    expect(result?.type === 'tool/result' && result.data.message.content[0].isError).toBe(true)
+    expect(result?.type === 'tool/result' && result.data.message.isError).toBe(true)
   })
 
   it('is a warned no-op by default when agent hooks are disabled', async () => {

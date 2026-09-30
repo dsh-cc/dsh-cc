@@ -41,7 +41,20 @@ export async function mountTrajectoryTestStack(
   // Harness 0.1.5: the system-prompt persona knob is `personaPrefix` (a plain
   // template string).
   await mountAgentLoopTestDependencies(ctx, { systemPrompt: { personaPrefix: options.persona } })
-  await ctx.plugin(LlmDeepSeek, options.baseURL === undefined ? {} : { baseURL: options.baseURL })
+  // Harness 0.1.7: `dsh-llm-deepseek` is a plain library, not a plugin; the
+  // provider route is registered directly (the `llm-deepseek-api-key` idiom,
+  // minus credential resolution — mock servers accept any key).
+  const mountDeepSeekRoute = (scope: Context): void => {
+    const resolved = () => LlmDeepSeek.resolveAdapterOptions(options.baseURL === undefined ? {} : { baseURL: options.baseURL })
+    LlmDeepSeek.registerDeepSeekProvider(scope, 'deepseek-official', {
+      options: resolved,
+      providerName: 'DeepSeek',
+      resolveAuth: async () => ({ headers: { 'x-api-key': 'cache-trajectory-mock' } }),
+      discoverModels: provider => Promise.resolve(resolved().models.map(model => LlmDeepSeek.catalogModelInfo(provider, model))),
+    })
+  }
+  mountDeepSeekRoute.inject = ['llm']
+  await ctx.plugin(mountDeepSeekRoute)
   await ctx.plugin(AgentLoop, { agents: [] })
   if (options.ccPlugins === true) {
     await ctx.plugin(TokenMeter)
