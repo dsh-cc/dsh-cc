@@ -13,7 +13,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type z from '@deepseek-ai/schemastery'
+import z from '@deepseek-ai/schemastery'
 import type { SettingsNamespace, SettingsProvider, SettingsRegisterOptions } from '@dsh-cc/settings-provider'
 
 /** Composition base layer and cross-field validation passed through to the provider. */
@@ -52,6 +52,17 @@ export function duplicateRegistrationMessage(ns: SettingsNamespace): string {
 function isDuplicate(error: unknown, ns: SettingsNamespace): boolean {
   return error instanceof Error && error.message === duplicateRegistrationMessage(ns)
 }
+
+/**
+ * Presentation-free passthrough schema: resolves any section unchanged, so a
+ * namespace registered with it surfaces the raw user layer through the
+ * describe/scope seams — the only layer passthrough consumers (e.g. the
+ * /provider bridge) read. UI modules import it from here because
+ * check:tui-boundary forbids direct harness imports in tui UI sources, and the
+ * provider CALLS the schema at register time (a toJSON-only impostor crashes
+ * registration with a TypeError).
+ */
+export const AnySchema: z<unknown> = z.any()
 
 /**
  * Value mirror of the cordis `FiberState` members compared against: a const

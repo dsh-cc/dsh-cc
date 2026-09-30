@@ -22,7 +22,7 @@
  * @module @dsh-cc/tui/provider-bridge
  */
 import { isDeepStrictEqual } from 'node:util'
-import { readUserSection } from '@dsh-cc/settings-ns'
+import { AnySchema, readUserSection } from '@dsh-cc/settings-ns'
 import { DEFAULT_MODEL_ENTRY_ID, PROVIDER_ENTRY_ID } from './bridge-ids.ts'
 import { PROVIDER_SETTINGS_NAMESPACE, type SettingsDescribeLike } from './provider-read.ts'
 
@@ -145,10 +145,13 @@ export async function ensureProviderBridge(ctx: BridgeCtx): Promise<void> {
   const settings = ctx.get('settings') as (SettingsDescribeLike & { register?: (ns: string, schema: unknown) => unknown }) | undefined
   if (settings === undefined) return
   for (const ns of Object.keys(BRIDGE_TARGETS)) {
-    // Presentation-free passthrough registration: the descriptor surfaces the
-    // raw user layer, which is the only layer the read paths consume.
+    // Presentation-free passthrough via AnySchema (settings-ns owns the
+    // schemastery import — the tui-boundary gate bans harness imports in UI
+    // modules). The provider CALLS the schema at register time (resolveValue):
+    // the earlier toJSON-only impostor crashed register with a TypeError and
+    // stranded the migration below.
     try {
-      if (typeof settings.register === 'function') settings.register(ns, { toJSON: () => ({ type: 'any' }) })
+      if (typeof settings.register === 'function') settings.register(ns, AnySchema)
     } catch (error) {
       if (!(error instanceof Error && error.message.includes('already registered'))) throw error
     }

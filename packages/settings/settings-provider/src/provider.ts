@@ -168,6 +168,12 @@ export abstract class SettingsProvider extends Service {
     options?: SettingsRegisterOptions<T>,
   ): SettingsScope<T> {
     const parsedNs = parseSettingsNamespace(ns)
+    if (typeof schema !== 'function') {
+      // dsh-cc hardening (not upstream-verbatim): duck-typed callers once
+      // passed a toJSON-only impostor here; fail readably instead of surfacing
+      // "schema is not a function" from inside resolveValue.
+      throw new TypeError('settings.register: schema must be a callable schemastery Schema')
+    }
     if (this.registrations.has(parsedNs)) {
       throw new Error(`settings namespace "${parsedNs}" is already registered`)
     }
