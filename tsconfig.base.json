@@ -260,6 +260,9 @@
       "@dsh-cc/command-agents/snapshot": [
         "./packages/interaction/command-agents/src/snapshot.ts"
       ],
+      "@dsh-cc/command-agents/release": [
+        "./packages/interaction/command-agents/src/release.ts"
+      ],
       "@dsh-cc/subagent-task": [
         "./packages/subagent/task/src/index.ts"
       ],

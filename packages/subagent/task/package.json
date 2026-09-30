@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",
+    "@dsh-cc/command-agents": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
@@ -73,6 +74,7 @@
     "@deepseek-ai/dsh-subagent-fork-in-process": "link:../../../../deepseek-harness/packages/subagent/subagent-fork-in-process",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
     "@dsh-cc/claude-code-agents": "workspace:^",
+    "@dsh-cc/command-agents": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/plugin-loader": "workspace:^",

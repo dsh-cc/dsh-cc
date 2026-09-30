@@ -397,5 +397,114 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
   // Natural-settle cold resume works (pinned by the §4.12 test above).
   // Re-probed at 0.1.7-rc.2 (migration R5): unchanged — send resolves
   // (no DRAINING), child model calls stay at 1 ≥10s after the drain.
+  // Cross-reference (release valve, plan
+  // docs/plans/2026-09-30-subagent-release-valve.md F5): this same
+  // cold-resume-after-drain gap is why a released child cannot be continued
+  // in-session — `release_agent` and `/agents release <id>` ride the exact
+  // seam pinned here and their copy promises only what this test observes.
   it.skip('a later send_message cold-resumes the drained child from its persisted Session', () => {})
+})
+
+describe('Task background mode — release valve (T18–T18c)', () => {
+  it('T18: a real release_agent on a hung running child evicts it, preserves the session, and renders the released text', async () => {
+    const { ctx, parent } = await setup(['hang', textResponse('after release')])
+
+    const agentId = await startBackground(ctx, parent)
+    const childId = SessionId(agentId)
+    await vi.waitFor(() => expect(ctx.agents.get(childId)).toBeDefined(), { timeout: 10_000 })
+
+    const release = await callTool(ctx, 'release_agent', { agent_id: agentId }, parent)
+    expect(release.isError).toBe(false)
+    await waitNoActivation(ctx, childId)
+    expect(text(release as never)).toBe(
+      `Released agent ${agentId}: its in-flight turn was aborted and its resident activation evicted — `
+      + 'the capacity slot it held is free. Its resident descendants (if any) were evicted with it. '
+      + 'The persisted session survives on disk. Within this session it cannot be continued '
+      + '(send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents '
+      + 'marks it [released] for the rest of this process.',
+    )
+
+    // The persisted session survives with the interrupted prompt durable.
+    const loaded = await loadStoredSession(ctx.sessionPersistence, childId)
+    expect(String(loaded!.meta.id)).toBe(String(childId))
+    expect(JSON.stringify(loaded!.events)).toContain('slow work')
+    // F12b: the child's settle account on the parent is tolerated
+    // present-or-absent — no assertion either way.
+  }, 20_000)
+
+  it('T18b: releasing a natural-settled child renders the not-resident text', async () => {
+    const { ctx, parent } = await setup([textResponse('done early')])
+
+    const agentId = await startBackground(ctx, parent)
+    const childId = SessionId(agentId)
+    await waitNoActivation(ctx, childId)
+
+    const release = await callTool(ctx, 'release_agent', { agent_id: agentId }, parent)
+    expect(release.isError).toBe(false)
+    expect(text(release as never)).toBe(
+      `Agent ${agentId} has no resident activation (settled or released); nothing was evicted and `
+      + 'no capacity slot is held by it.',
+    )
+    expect(await loadStoredSession(ctx.sessionPersistence, childId)).toBeDefined()
+  }, 20_000)
+
+  it('T18c: releasing a parent child evicts its whole resident subtree (the grandchild too)', async () => {
+    const { ctx, parent } = await setup([
+      // Level 1, request 1: spawns its own background child (the grandchild).
+      toolCallResponse('r1', 'subagent_fork', {
+        description: 'inner task',
+        prompt: 'inner work',
+        run_in_background: true,
+      }),
+      // The grandchild's request is served NEXT (cross-agent FIFO): it hangs.
+      'hang',
+      // Level 1, request 2 (after the tool result): settles, leaving the
+      // grandchild running.
+      textResponse('level-1 settling with the grandchild running'),
+      textResponse('after release'),
+    ])
+
+    const level1Id = await startBackground(ctx, parent)
+    const level1Session = SessionId(level1Id)
+    // Level-1 goes idle once its turn ends; it may stay RESIDENT while the
+    // grandchild runs (a live child can hold the parent activation) — wait
+    // for idle, not eviction.
+    try {
+      await vi.waitFor(() => {
+        const level1 = ctx.agents.get(level1Session)
+        expect(level1?.status ?? 'gone').toBe('idle')
+      }, { timeout: 10_000, interval: 100 })
+    } catch {
+      const log = await loadStoredSession(ctx.sessionPersistence, level1Session)
+      throw new Error(`level-1 never went idle; log=${JSON.stringify(log?.events).slice(0, 1500)}`)
+    }
+
+    // The grandchild's durable id is in level-1's log (the spawn notice);
+    // poll — the persistence flush may lag the turn end slightly.
+    let grandId: string | undefined
+    await vi.waitFor(async () => {
+      const log = await loadStoredSession(ctx.sessionPersistence, level1Session)
+      grandId = /agentId: ([0-9a-f-]{36})/.exec(
+        JSON.stringify(log?.events ?? []),
+      )?.[1]
+      if (grandId === undefined) throw new Error('no spawn notice yet')
+    }, { timeout: 10_000, interval: 100 })
+    const grandSession = SessionId(grandId)
+    await vi.waitFor(() => expect(ctx.agents.get(grandSession)).toBeDefined(), { timeout: 10_000 })
+
+    const release = await callTool(ctx, 'release_agent', { agent_id: level1Id }, parent)
+    const releaseText = text(release as never)
+    expect(release.isError, `release failed: ${releaseText}`).toBe(false)
+    // Poll without object diffs (an Agent activation diff crashes
+    // pretty-format in this composition).
+    const gone = async (id: SessionId, label: string): Promise<void> => {
+      await vi.waitFor(() => {
+        if (ctx.agents.get(id) !== undefined) throw new Error(`${label} (${id}) still resident`)
+      }, { timeout: 10_000, interval: 100 })
+    }
+    await gone(level1Session, 'level-1')
+    await gone(grandSession, 'grandchild')
+    expect(releaseText).toContain('Its resident descendants (if any) were evicted with it.')
+    expect(releaseText).toContain(`Released agent ${level1Id}`)
+  }, 30_000)
 })

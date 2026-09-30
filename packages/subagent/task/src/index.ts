@@ -27,6 +27,7 @@ import { SpawnPinCapture, type ResumePinsConfig } from './resume-capture.ts'
 import { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex } from './plugin-agents.ts'
 import { registerTaskTool } from './tool.ts'
+import { registerReleaseAgentTool } from './release-agent.ts'
 import { mountSettledNoticeSuppression } from './suppress-settled.ts'
 import { mountAgentCatalog } from './catalog.ts'
 import { createOneShotLedger } from './one-shot-ledger.ts'
@@ -133,8 +134,8 @@ export const BACKGROUND_SECTION_TEXT = [
   '  background launch — the result arrives as a later wake; do not poll.',
   '- `subagent_type: "fork"` cannot run in the background (upstream harness issue #2124); use a',
   '  plain background spawn instead.',
-  '- Exiting your session drains a background child\'s in-flight turn; its persisted session',
-  '  survives and cold-resumes on the next `send_message`.',
+  '- Exiting your session drains every background child\'s in-flight turn (whole-forest teardown); its persisted session survives on disk — a child that settled on its own stays cold-resumable, but a DRAINED child does not resume on the next send_message (known upstream gap; cross-session resume after a drain is unverified).',
+  '- A background child holds one of 25 live-child capacity slots while it is running; settled children free theirs automatically. release_agent <id> evicts a stuck running child\'s resident activation (and its resident descendants\') one-way: same-session continuation is unavailable after release; its persisted session survives; eviction is cooperative — a cancel-resistant turn keeps its slot until it settles. Use it on stuck children you can discard, not as routine cleanup.',
 ].join('\n')
 
 /**
@@ -197,6 +198,7 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
   // lazily on every call so effect-scoped plugin mounts after apply() are seen.
   const pluginIndex = new PluginAgentIndex(ctx)
   registerTaskTool(ctx, registry, capture, pluginIndex)
+  registerReleaseAgentTool(ctx)
   mountActorContractGate(ctx)
   mountAgentCatalog(ctx, registry, pluginIndex)
   mountBackgroundSection(ctx)

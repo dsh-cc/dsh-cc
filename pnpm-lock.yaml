@@ -141,6 +141,9 @@ importers:
       '@deepseek-ai/dsh-bash-local':
         specifier: link:../../../../deepseek-harness/packages/shell/bash-local
         version: link:../../../../deepseek-harness/packages/shell/bash-local
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
       '@deepseek-ai/dsh-fs-local':
         specifier: link:../../../../deepseek-harness/packages/fs/fs-local
         version: link:../../../../deepseek-harness/packages/fs/fs-local
@@ -171,6 +174,9 @@ importers:
       '@deepseek-ai/dsh-session-projection':
         specifier: link:../../../../deepseek-harness/packages/session/session-projection
         version: link:../../../../deepseek-harness/packages/session/session-projection
+      '@deepseek-ai/dsh-session-query':
+        specifier: link:../../../../deepseek-harness/packages/session-query/session-query
+        version: link:../../../../deepseek-harness/packages/session-query/session-query
       '@deepseek-ai/dsh-storage':
         specifier: link:../../../../deepseek-harness/packages/storage/storage
         version: link:../../../../deepseek-harness/packages/storage/storage
@@ -2927,6 +2933,9 @@ importers:
       '@dsh-cc/claude-code-agents':
         specifier: workspace:^
         version: link:../../preset/claude-code-agents
+      '@dsh-cc/command-agents':
+        specifier: workspace:^
+        version: link:../../interaction/command-agents
       '@dsh-cc/memory':
         specifier: workspace:^
         version: link:../../memory/memory

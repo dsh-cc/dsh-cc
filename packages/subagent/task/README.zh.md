@@ -5,6 +5,7 @@
 面向 DeepSeek Harness 的 **Claude Code 兼容 Task 工具** 与 **按工作区隔离的 subagent 目录**。它挂载：
 
 - 内部工具名 `subagent_fork`（CC 显示名 `Task`），以 `subagent_type` 对会话工作区的 `.claude/agents` 定义做派发；
+- `release_agent` 释放阀：通过 harness 的 drain 缝隙逐出一个直接可延续 child 的常驻 activation（连同其常驻后代），当其为 running 时释放其容量槽位。驱逐是协作式的，且在本会话内单向不可逆（已释放的 child 无法在本会话内延续——上游 cold-resume-after-drain 缺口）；持久化的 session 保留。操作与文案经由 `@dsh-cc/command-agents/release` 与 `/agents release <id>` 共享，已释放的 id 处处携带进程本地的 `[released]` 标记；
 - `Available subagents` 系统提示词 section（**按工作区**渲染）；
 - 保留的工具名（`subagent`、`workflow`），使被禁用的 harness 行仍可被 restrict；
 - 一个 pre-step 剥离监听器，把 harness `agent-instructions` 的工作区基线（CLAUDE.md / AGENTS.md）从被委派的 Task child 中移除。
@@ -101,6 +102,8 @@ harness 的 `agent-instructions` 插件会在**每个**会话（包括 Task chil
 - `apply(ctx)` — cordis 插件入口（插件 id `cc-subagent-task`）；tools 或 system-prompt seam 任一缺席时也安全。
 - `AgentRegistry`（`./registry`）— 按工作区的定义缓存（`ensure` / `list` / `resolve`），惰性加载 `loadClaudeCodeAgents(root)`（用户层 + 项目层，项目遮蔽用户）。
 - `registerTaskTool` / `TASK_TOOL`（`./tool`）— 注册 `subagent_fork` Task 工具。
+- `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL`（`./release-agent`）— 注册
+  `release_agent` 释放阀工具（挂载遵循丢弃返回值的 F16 先例）。
 - `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER`（`./catalog`）— 挂载 `Available subagents` section。
 - `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`（`./strip-instructions`）— 挂载（或为测试分类）pre-step 剥离监听器，把 harness `agent-instructions` 工作区基线从被委派的 Task child 中移除。
 - `dispatchWorktreeIsolation` / `mountWorktreeIsolation` / `SubagentWorktreeRegistry`（`./worktree-isolation`）— `isolation: worktree` 的 create/adopt/settle/lock 生命周期（git 命令构造在 `@dsh-cc/tool-git-worktree`，绝不重复实现）。

@@ -21,11 +21,20 @@ import {
   renderAgentDetail,
   renderAgentsList,
   stopNotRunningCopy,
+  stopReleasedCopy,
   stopRunningCopy,
   unknownAgentCopy,
   type AgentRow,
   type SnapshotServices,
 } from './snapshot.ts'
+import {
+  ReleaseFailure,
+  renderReleaseOutcome,
+  runRelease,
+  isReleased,
+  isReleasing,
+  type ReleaseRegistryLike,
+} from './release.ts'
 
 export const name = 'command-agents'
 export const inject = ['commands', 'subagents', 'agents', 'resumePinStore']
@@ -35,6 +44,8 @@ interface SubagentsLike {
   listChildren(parentSessionId: SessionId): Promise<readonly ChildEntryLike[]>
   listDescendants?(rootSessionId: SessionId): Promise<readonly { id: SessionId; hasChildren?: boolean }[]>
   interrupt(targetSessionId: SessionId, authority: unknown): void
+  /** The release-valve seam (D1); absent → no-drain-seam gate error. */
+  drainContinuableChildren?(parent: Agent, ids: SessionId[]): Promise<void>
 }
 interface PinStoreLike {
   read(childId: string): unknown
@@ -66,6 +77,8 @@ function toSnapshotServices(
     getAgent: id => agents.get(id),
     readPin: childId => pinStore.read(childId) as never,
     pinPath: childId => pinStore.pathFor(childId),
+    isReleased: id => isReleased(id),
+    isReleasing: id => isReleasing(id),
   }
 }
 
@@ -73,18 +86,45 @@ function toSnapshotServices(
 async function executeAgents(
   snapshotServices: SnapshotServices,
   subagents: SubagentsLike,
+  agents: AgentsRegistryLike,
   caller: Agent,
   rawInput: string,
+  signal: AbortSignal,
 ): Promise<CommandResult> {
   const parsed = parseAgentsInput(rawInput)
   if (parsed.kind === 'error') return { kind: 'error', text: parsed.text }
   const parentSessionId = String(caller.session.id)
+  // The release branch runs BEFORE rows.find / any snapshot fast path: the
+  // authoritative drain seam, not the snapshot, decides.
+  if (parsed.kind === 'release') {
+    try {
+      const outcome = await runRelease({
+        parent: caller,
+        id: parsed.id,
+        subagents,
+        agents: agents as ReleaseRegistryLike,
+        signal,
+      })
+      return { kind: 'success', text: renderReleaseOutcome(outcome) }
+    } catch (failure) {
+      if (failure instanceof ReleaseFailure) return { kind: 'error', text: failure.message }
+      throw failure
+    }
+  }
   if (parsed.kind === 'stop') {
     const rows = await buildAgentsSnapshot(snapshotServices, parentSessionId)
     const row = rows.find(candidate => candidate.id === parsed.id)
     if (row === undefined) return { kind: 'error', text: unknownAgentCopy(parsed.id) }
+    // Symmetric stop-copy gates (D3): a released Ready row and a mid-drain
+    // (releasing) row must never read "stays resumable".
     if (row.residency !== 'running') {
+      if (row.released === true) {
+        return { kind: 'success', text: stopReleasedCopy(parsed.id) }
+      }
       return { kind: 'success', text: stopNotRunningCopy(parsed.id, row.residency) }
+    }
+    if (snapshotServices.isReleasing?.(parsed.id) === true) {
+      return { kind: 'success', text: stopReleasedCopy(parsed.id) }
     }
     subagents.interrupt(SessionId(parsed.id), { kind: 'ancestor', agent: caller })
     return { kind: 'success', text: stopRunningCopy(parsed.id) }
@@ -136,13 +176,14 @@ export function apply(ctx: Context): void {
 
   ctx.commands.register(helpable({
     name: 'agents',
-    description: 'list, inspect, or stop continuable background agents',
-    handler: (invocation: CommandInvocation) => executeAgents(snapshotServices, subagents, invocation.agent, invocation.rawInput),
+    description: 'list, inspect, stop, or release continuable background agents',
+    handler: (invocation: CommandInvocation) => executeAgents(snapshotServices, subagents, agents, invocation.agent, invocation.rawInput, invocation.signal),
   }, {
     usage: ['[<id>]'],
     subcommands: [
       { word: 'detail', args: '<id>', summary: 'Show one background agent by id (the bare form lists all)' },
-      { word: 'stop', args: '<id>', summary: 'Stop a running background agent by id' },
+      { word: 'stop', args: '<id>', summary: 'Interrupt a running agent\'s current turn (the activation stays resident; "/agents release <id>" evicts it)' },
+      { word: 'release', args: '<id>', summary: 'Evict an agent\'s resident activation (and resident descendants\'), freeing its capacity slot when it was running; cooperative; one-way in this session' },
     ],
   }))
 }
