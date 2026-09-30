@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/settings-provider",
   "description": "Vendored settings-provider contract (harness 0.1.5-rc.1 SettingsProvider seam) decoupled from the harness settings package, with a no-op configure() facade",
-  "version": "0.8.1",
+  "version": "0.8.2-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
