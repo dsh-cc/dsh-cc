@@ -16,8 +16,10 @@
  * Guards the raw `configEditor.edit` lacks live here: writes serialize per
  * namespace on a promise chain, only the namespace's own subtree keys are
  * ever rewritten, and `edit()` re-checks entry liveness against the live
- * Loader entry at apply time. On conflict the existing plugin entry wins and
- * the mismatch is logged once.
+ * Loader entry at apply time. On conflict a profile-layer override wins and
+ * the mismatch is logged once — composition-inherited defaults (the stock
+ * base bundle ships agent-default-model provider/model) are NOT user
+ * decisions and never block the migration.
  *
  * @module @dsh-cc/tui/provider-bridge
  */
@@ -35,6 +37,8 @@ export type BridgeCtx = { get(key: string): unknown }
 /** Duck-typed configEditor face (the rc.2 config-editor service). */
 type ConfigEditorLike = {
   entries?: () => Array<{ options?: { id?: unknown; config?: Record<string, unknown> } }>
+  /** Layered config view: composition-inherited vs the profile patch's own override. */
+  configuration?: () => Array<{ entry: object; inherited: Record<string, unknown>; override: Record<string, unknown> }>
   edit?: (entry: object, change: (current: Record<string, unknown>) => Record<string, unknown>) => Promise<void>
 }
 
@@ -97,10 +101,39 @@ function entryFor(ctx: BridgeCtx, target: BridgeTarget): { options?: { id?: unkn
 }
 
 /**
+ * Migration conflict predicate: the profile patch itself carries a key whose
+ * value differs from `desired` — user-meaningful, keep it. Composition-
+ * INHERITED values (e.g. the base bundle's agent-default-model defaults) are
+ * not user decisions and must not block the migration; the earlier
+ * presence-only guard mistook them for configuration and structurally
+ * stranded every settings.json `agent-default-model` section on the stock
+ * bundle. Doubles/legacy services without the layered view keep the
+ * conservative presence guard.
+ */
+function conflictsWithUserEntryConfig(
+  editor: ConfigEditorLike,
+  entryId: string,
+  existing: Record<string, unknown>,
+  desired: Record<string, unknown>,
+): boolean {
+  const rows = editor.configuration?.()
+  const row = rows?.find(candidate => entryOptionsIdOf(candidate) === entryId)
+  if (row === undefined) {
+    return Object.keys(existing).some(key => existing[key] !== undefined)
+  }
+  return Object.keys(desired).some(key => row.override[key] !== undefined && !isDeepStrictEqual(row.override[key], desired[key]))
+}
+
+/** Entry-id projection for one configuration() row (duck-typed entry). */
+function entryOptionsIdOf(row: { entry: object }): string {
+  return String((row.entry as { options?: { id?: unknown } }).options?.id)
+}
+
+/**
  * Apply `desired` to the target entry's config, skipping when the subtree
- * already matches (the migration's idempotence) and preferring the existing
- * plugin entry on conflict (never overwrite user-meaningful entry config;
- * log once).
+ * already matches (the migration's idempotence) and preferring a diverging
+ * profile-layer override over the user section (never overwrite user-
+ * meaningful entry config; log once).
  */
 async function applySubtree(ctx: BridgeCtx, ns: string, desired: Record<string, unknown>, migration: boolean): Promise<void> {
   const target = BRIDGE_TARGETS[ns]
@@ -112,8 +145,8 @@ async function applySubtree(ctx: BridgeCtx, ns: string, desired: Record<string, 
   const existing: Record<string, unknown> = {}
   for (const key of Object.keys(desired)) existing[key] = current[key]
   if (isDeepStrictEqual(existing, desired)) return
-  if (migration && Object.keys(existing).some(key => current[key] !== undefined) && !isDeepStrictEqual(existing, desired)) {
-    // Conflict: the entry already carries its own config. Prefer it.
+  if (migration && conflictsWithUserEntryConfig(editor, target.entryId, existing, desired)) {
+    // Conflict: the profile layer carries its own value for a key. Prefer it.
     const key = `${ns}:${target.entryId}`
     if (!warnedConflicts.has(key)) {
       warnedConflicts.add(key)
