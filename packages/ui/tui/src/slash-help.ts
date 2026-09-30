@@ -34,8 +34,11 @@ const LOCAL_HELP_SPECS: Readonly<Record<string, Omit<CommandHelpSpec, 'name' | '
     ],
   },
   agents: {
-    usage: ['[<id>|stop <id>]', '(no argument — list background agents)'],
-    notes: ['<id> shows one agent\'s detail; stop <id> interrupts a running agent.'],
+    usage: ['[<id>|stop <id>|release <id>]', '(no argument — list background agents)'],
+    notes: [
+      '<id> shows one agent\'s detail; stop <id> interrupts a running agent.',
+      'release <id> evicts the resident activation (its resident descendants\' too); frees a capacity slot for running agents; cooperative; one-way in this session.',
+    ],
   },
   usage: {},
   'export-md': {

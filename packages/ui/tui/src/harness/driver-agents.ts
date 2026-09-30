@@ -18,10 +18,19 @@ import {
   renderAgentDetail,
   renderAgentsList,
   stopNotRunningCopy,
+  stopReleasedCopy,
   stopRunningCopy,
   unknownAgentCopy,
   type AgentRow,
 } from '@dsh-cc/command-agents/snapshot'
+import {
+  ReleaseFailure,
+  isReleasing,
+  renderReleaseOutcome,
+  runRelease,
+  type ReleaseRegistryLike,
+  type ReleaseSubagentsLike,
+} from '@dsh-cc/command-agents/release'
 import type { DriverRunLocalCtx } from './driver-ctx.ts'
 
 /** The /agents slice of runLocal: one rendered status text per invocation. */
@@ -130,12 +139,42 @@ export function createAgentsSection(rt: DriverRunLocalCtx): AgentsSection {
   const agentsSlash = async (rawInput: string): Promise<string> => {
     const parsed = parseAgentsInput(rawInput)
     if (parsed.kind === 'error') return parsed.text
+    // The release branch runs BEFORE agentsRows(): the authoritative drain
+    // seam, not the snapshot, decides (D3).
+    if (parsed.kind === 'release') {
+      const ccAgents = rt.ctx.get('ccAgents') as { list?: unknown } | undefined
+      // The fold fallback must never authorize a release: only the published
+      // ccAgents snapshot counts as the authoritative agents surface (the
+      // fold's one-shot listing stays out of scope).
+      if (ccAgents === undefined || typeof ccAgents.list !== 'function') {
+        return 'Release needs the authoritative agents surface (ccAgents), which this composition does not publish; /agents release is unavailable here.'
+      }
+      try {
+        const outcome = await runRelease({
+          parent: rt.current.agent,
+          id: parsed.id,
+          subagents: rt.ctx.get('subagents') as ReleaseSubagentsLike | undefined,
+          agents: rt.ctx.agents as ReleaseRegistryLike | undefined, // property per F8
+        })
+        return renderReleaseOutcome(outcome)
+      } catch (failure) {
+        if (failure instanceof ReleaseFailure) return failure.message
+        throw failure
+      }
+    }
     const rows = await agentsRows()
     if (parsed.kind === 'list') return renderAgentsList(rows)
     const row = rows.find(candidate => candidate.id === parsed.id)
     if (row === undefined) return unknownAgentCopy(parsed.id)
     if (parsed.kind === 'stop') {
-      if (row.residency !== 'running') return stopNotRunningCopy(row.id, row.residency)
+      if (row.residency !== 'running') {
+        // Symmetric stop-copy gate (D3): a released Ready row never reads
+        // "resumable".
+        if (row.released === true) return stopReleasedCopy(row.id)
+        return stopNotRunningCopy(row.id, row.residency)
+      }
+      // A mid-drain (releasing) child must not read "stays resumable" either.
+      if (isReleasing(row.id)) return stopReleasedCopy(row.id)
       const subagents = rt.ctx.get('subagents') as
         | { interrupt?: (id: unknown, authority: unknown) => void }
         | undefined

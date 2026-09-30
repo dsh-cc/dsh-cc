@@ -35,6 +35,7 @@ describe('LOCAL_COMMANDS', () => {
     expect(agents).toBeDefined()
     expect(agents!.description.toLowerCase()).toContain('agents')
     expect(agents!.argumentHint).toContain('stop')
+    expect(agents!.argumentHint).toContain('release')
   })
 
   it('usage is listed with a panel description', () => {
