@@ -131,7 +131,24 @@ export function registerNamespaceSafe<T>(
   options?: SafeRegisterOptions<T>,
 ): SettingsReader<T> {
   const settings = ctx.get('settings') as SettingsProvider | undefined
-  if (settings === undefined) return () => undefined
+  if (settings === undefined) {
+    // rc.2 mount-order race: the vendored settings provider's async init
+    // settles DURING the preset mount sweep, so an early apply previously
+    // degraded to undefined-reads forever (the stranded-namespace incident:
+    // model-aliases/cost-gate/advisor/… silently ran on defaults and the
+    // auto-mode classifier disarmed every eligible call). Defer the whole
+    // registration to the provider's injectable arrival instead.
+    let deferred: SettingsReader<T> | undefined
+    try {
+      ctx.inject(['settings'], () => {
+        deferred = registerNamespaceSafe(ctx, ns, schema, options)
+      })
+    } catch {
+      // Caller fiber already unloading: match the legacy absent-service reader.
+      return () => undefined
+    }
+    return () => deferred?.()
+  }
   const memoized = readers.get(settings)
   if (memoized !== undefined) return memoized as SettingsReader<T>
   const registerOptions = options as SettingsRegisterOptions<T> | undefined
@@ -247,10 +264,18 @@ export function installSectionSafe<T>(
 ): void {
   const settings = ctx.get('settings') as SettingsProvider | undefined
   if (settings === undefined) {
-    // No provider: serve the composition entry, matching the harness's
-    // provider-loss fallback without an attach ceremony.
+    // rc.2 mount-order race (see registerNamespaceSafe): serve the composition
+    // entry immediately so attach-time consumers always have a source, then
+    // re-attach through the full ceremony when the provider arrives. A
+    // consumer must tolerate a second setSource/onChange pair (the normal
+    // attach/detach dance).
     hooks.setSource(() => entry)
     hooks.onChange()
+    try {
+      ctx.inject(['settings'], () => installSectionSafe(ctx, ns, schema, entry, hooks))
+    } catch {
+      // Caller fiber unloading: the entry fallback stands.
+    }
     return
   }
   if (settings.get(ns) === undefined) {

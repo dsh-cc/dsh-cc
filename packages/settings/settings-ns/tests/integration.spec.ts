@@ -132,3 +132,30 @@ describe('installSectionSafe under real cordis (§3.2.4)', () => {
     expect(first.changes).toBe(3)
   })
 })
+
+describe('mount-order race (rc.2 stranded-namespace regression)', () => {
+  it('registerNamespaceSafe defers registration until the provider becomes injectable', async () => {
+    const ctx = new Context()
+    const a: { reader?: SettingsReader<{ level: number }> } = {}
+    // Consumer mounts while `settings` is absent (the rc.2 preset sweep).
+    await ctx.plugin(registerPlugin({ registerNamespaceSafe }, a))
+    // During the race window the reader degrades — but MUST NOT stay degraded.
+    expect(a.reader!()).toBeUndefined()
+    await ctx.plugin(MemorySettings, { doc: { [NS]: { level: 9 } } })
+    expect(a.reader!()).toEqual({ level: 9 })
+  })
+
+  it('installSectionSafe serves the entry during the window, then re-attaches to the live provider', async () => {
+    const ctx = new Context()
+    const c: { source?: () => { level: number }; changes: number } = { changes: 0 }
+    const hooks = {
+      setSource: (fn: () => { level: number }) => (c.source = fn),
+      onChange: () => (c.changes += 1),
+    }
+    await ctx.plugin(sectionPlugin({ installSectionSafe }, { level: 3 }, hooks))
+    expect(c.source!()).toEqual({ level: 3 })
+    await ctx.plugin(MemorySettings, { doc: { [NS]: { level: 9 } } })
+    expect(c.source!()).toEqual({ level: 9 })
+    expect(c.changes).toBeGreaterThanOrEqual(2)
+  })
+})
