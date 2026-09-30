@@ -87,7 +87,7 @@ dsh web
 | 避免预先加载全部工具 | 通过 `ToolSearch` 和 MCP 按需发现工具 |
 | 在不同界面间切换 | 在终端和 Web profile 中复用同一套 CC 工作流后端 |
 
-`dsh-cc` 已经用于开发 `dsh-cc` 自身。当前仓库的实际配置会把不同任务路由到 Kimi、GLM 和 DeepSeek 模型，具体映射见[使用 dsh-cc 开发 dsh-cc](#使用-dsh-cc-开发-dsh-cc)。
+`dsh-cc` 已经用于开发 `dsh-cc` 自身。当前仓库的实际配置会把不同任务路由到 Kimi、GLM 和 DeepSeek 模型，另外为类型化审批别名 `gauge` 配了一条 System One 决策车道。具体映射见[使用 dsh-cc 开发 dsh-cc](#使用-dsh-cc-开发-dsh-cc)。
 
 ## 适合哪些开发者？
 
@@ -249,6 +249,7 @@ inherit             -> 继承主 Agent 路由
 | `opus` / `blueprint` | `glm-5.3` |
 | `sonnet` / `draft` | `glm-5.3-flash` |
 | `haiku` / `sketch` | `deepseek-v4-flash-0731` |
+| `gauge` | `jev`（System One 决策车道——输出类型化判定，非生成用途） |
 | `architect` | 继承主线程模型 |
 
 这只是项目自身的真实配置，不是强制默认值。用户可以映射到 DeepSeek Harness 部署支持的其他模型。

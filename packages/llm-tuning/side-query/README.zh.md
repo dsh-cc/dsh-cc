@@ -31,7 +31,7 @@ export async function runSideQuery(ctx: Context, opts: SideQueryOptions): Promis
 - **绝不抛异常**。所有失败形态——alias 无路由、超时、adapter 错误、空文本——都收敛进 `SideQueryResult`。dsh-llm runtime 会把 adapter 抛错规范化为终止 error chunk，因此两条路径都映射到 `reason: 'error'`。
 - 非流式契约：内部经 BlockAssembler 模式消费 `ctx.llm.stream` 并等待完整文本（`tool-web-fetch` 的一次性调用模式）。
 - `rejectToolCalls`（默认开启）拒绝发出 tool-call 块的流：side query 试图"动手"是 bug 而不是能力（memory recall selector 幻影执行事故的教训）。
-- `inheritedRoute` 报告 alias 是否回落到了父路由，供消费方计量"零节省"运行（配合 `@dsh-cc/cc-model-aliases` 的 `warnOnInherit`）。
+- `inheritedRoute` 报告 alias 是否回落到了父路由，供消费方计量"零节省"运行（配合 `@dsh-cc/model-aliases` 的 `warnOnInherit`）。
 - 无重试、无缓存、无持久化、无账本——这些属于消费方（如 `@dsh-cc/tool-use-summary` 自带账本）。
 
 ## 形态

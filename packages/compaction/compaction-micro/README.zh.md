@@ -4,7 +4,7 @@
 
 可安全回放、不依赖模型的微压缩（microcompact）服务（`ctx.microcompactor`）。它会原样保留最近的 `retainResults` 个 `tool/result` 表层节点，并将更早的节点替换为确定性的占位摘要；若原始结果引用了 spill 文件的 locator，占位摘要会重新嵌入该 locator——全程不发起模型调用，也不做摘要。
 
-这是 [`dsh-compaction-basic`](../compaction-basic/README.md) 的具体配套服务，不是压缩（compaction）后端。它在摘要之前合成运行，使摘要器读到已经过窗口收缩的表层。两个包仍可各自独立组合。
+这是 [`dsh-compaction-basic`](../compaction-basic-cc/README.md) 的具体配套服务，不是压缩（compaction）后端。它在摘要之前合成运行，使摘要器读到已经过窗口收缩的表层。两个包仍可各自独立组合。
 
 ## 服务 API
 
@@ -62,7 +62,7 @@ export function apply(ctx: Context): void {
 
 #### KV Cache 影响
 
-替换较早的结果会使从第一个改变的 token 起的复用失效。剩余前缀（包括原样保留的窗口尾部）在路由、envelope 与之前历史保持不变的情况下可复用。冻结决策避免重复执行再次失效缓存。
+替换较早的结果会使从第一个改变的 token 起的复用失效。剩余前缀（包括原样保留的窗口尾部）在路由、envelope 与之前历史保持不变的情况下可复用。冻结决策后，重复扫描不会再次使缓存失效。
 
 ## 已知限制与暂缓事项
 

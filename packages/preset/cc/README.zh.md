@@ -21,7 +21,7 @@ DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`mi
 ## 选用
 
 - **Web UI**：预设选择器里选「CC mode」；或
-- **settings**：`~/.dsh/settings.json` → `"agent-preset-registry": { "default": "cc" }`。
+- **settings**：`~/.dsh/settings.json` → `"agent-preset-registry": { "selectedDefault": "cc" }`。
 
 ## Known limits（已知限制）
 
@@ -29,7 +29,7 @@ DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`mi
 2. **基座 vendored，靠漂移闸**。标准基座是 vendored 的。升级 dsh 后运行漂移闸（`pnpm vitest run packages/preset/cc`，或直跑二进制）重新 diff 新标准 preset 并合入上游改动。找不到上游锚点（`packages/bundle/web-app/presets/standard.patch.yml` 或已安装的 `@deepseek-ai/dsh-web-app`）时闸直接失败，绝不跳过。
 3. **卸载**。从 bundle patch 中移除 `preset-cc` 声明行（或整个 bundle）；内置模式不受影响。
 4. **`DSH_COORDINATOR_MODE=1` 使本 preset 挂载失败**。coordinator 需要 agent `ctx`，而 standing 挂载点没有；该失败现在只影响本 preset 的会话创建。在旧全局 patch 时代整个 app 起不来——影响面已收窄，但此模式在此处仍不受支持。
-5. **settings 指向不存在的 preset 会报错**。若默认指向不存在的 preset，建会话报 `agent-preset-not-found`（`details.available` 列出可用 id）。把 `~/.dsh/settings.json` 的 `agent-preset-registry.default` 改回 `standard` 即复位。
+5. **settings 指向不存在的 preset 会报错**。若默认指向不存在的 preset，建会话报 `agent-preset/not-found`（`details.available` 列出可用 id）。把 `~/.dsh/settings.json` 的 `agent-preset-registry.selectedDefault` 改回 `standard` 即复位。
 
 ## 链接
 

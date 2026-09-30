@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/plugin` 与 `/reload-plugins` 命令：列出已挂载的 Claude Code 插件（名称、插件根目录与各组件加载计数），并重新扫描磁盘上的发现根目录以热重挂载。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册两个全局命令，因此每个已组合的命令适配器都能发现并执行它们，无需模型轮次。
+面向用户的 `/plugin` 与 `/reload-plugins` 命令：列出已挂载的 Claude Code 插件（名称、插件根目录与各组件加载计数），并重新扫描磁盘上的发现根目录以热重挂载。该插件通过 `ctx.commands` 注册两个全局命令，因此每个已组合的命令适配器都能发现并执行它们，无需模型轮次。
 
 ## 命令约定
 

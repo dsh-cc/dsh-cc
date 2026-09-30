@@ -36,7 +36,7 @@ side-query 动态召回。所有文件访问都走可选的 `ctx.fs` 缝，因�
   目录，由 host 侧生成 frontmatter、upsert `MEMORY.md` 指针行，并经 `ctx.fs` 缝以
   `{ mode: 'workspace-write', workspaceRoot: <记忆目录> }` 的 per-call 策略
   落盘——围栏保留，可写根恰好是记忆目录。校验（kebab-case slug、四种类型、大小
-  上限）与 `dsh-memory-consolidation` 的 fork 写回共用同一 `writeback` 边界。
+  上限）与 `@dsh-cc/memory-consolidation` 的 fork 写回共用同一 `writeback` 边界。
   注册是机会式的：宿主无 tools 服务时跳过并保持只读。
 - **动态召回** —— `agent/pre-step` 监听器用小型模型 side-query（通过
   `ctx.subagents` fork）判断哪些主题文件与当前轮相关，再通过 `agent.inject()`
@@ -101,7 +101,7 @@ await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
   `MEMORY_SAVE_SCOPES` —— 面向模型的保存通道。
 - `validateMemoryWrites(input)` / `writeMemoryFiles(fs, dir, writes)` /
   `memoryWritePolicy(dir)` / `MEMORY_WRITES_SCHEMA` —— 与
-  `dsh-memory-consolidation` 共用的 host 侧写回。
+  `@dsh-cc/memory-consolidation` 共用的 host 侧写回。
 - `readPressure(fs, dir)` / `armPressure(fs, dir, now, policy?)` /
   `markPressureForced(...)` / `clearPressure(...)` / `PRESSURE_FILE` ——
   整合压力标记（`.consolidation-needed`）：索引门产生压力时排队一次强制 dream。

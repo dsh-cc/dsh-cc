@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/skills` command that lists every available skill with its description, source, and invocation policy (invocable by model, user, or both). The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/skills` command that lists every available skill with its description, source, and invocation policy (invocable by model, user, or both). The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 

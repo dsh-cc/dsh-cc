@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/stats` 命令，基于会话事件日志实现：turn 与 step 计数、工具调用分布、token 用量汇总。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
+面向用户的 `/stats` 命令，基于会话事件日志实现：turn 与 step 计数、工具调用分布、token 用量汇总。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
 
 ## 命令约定
 

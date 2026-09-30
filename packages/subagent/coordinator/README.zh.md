@@ -27,7 +27,7 @@
 
 ## 结果回流与完成（复用既有协议）
 
-协调模式不会重新实现 worker 到协调者的结果回流，也不再有 report 工具。worker 通过 harness 的 `send_message` 控制工具把结果直接发回协调者（以协调者的会话 id 为目标）；当某 worker 结束（settle）时，subagent 服务的 continuation 结算会把它的 `subagent-settled` 通知作为唤醒消息注入协调者 agent 的会话（参见 [`dsh-subagent` continuation 结算投递](../subagent/README.md)）——这正是唤醒协调者循环的完成通知。本包记录这一复用而不是重复实现唤醒；其测试断言该通知确实到达协调者会话。
+协调模式不会重新实现 worker 到协调者的结果回流，也不再有 report 工具。worker 通过 harness 的 `send_message` 控制工具把结果直接发回协调者（以协调者的会话 id 为目标）；当某 worker 结束（settle）时，subagent 服务的 continuation 结算会把它的 `subagent-settled` 通知作为唤醒消息注入协调者 agent 的会话（参见 `dsh-subagent` continuation 结算投递）——这正是唤醒协调者循环的完成通知。本包记录这一复用而不是重复实现唤醒；其测试断言该通知确实到达协调者会话。
 
 ## 目录
 

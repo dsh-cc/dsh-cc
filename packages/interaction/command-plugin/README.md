@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/plugin` and `/reload-plugins` commands: list the mounted Claude Code plugins (name, root, and per-component load counts) and rescan the on-disk discovery roots to remount them live. The plugin registers two global commands through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter finds and executes them without a model turn.
+Human-facing `/plugin` and `/reload-plugins` commands: list the mounted Claude Code plugins (name, root, and per-component load counts) and rescan the on-disk discovery roots to remount them live. The plugin registers two global commands through `ctx.commands`, so every composed command adapter finds and executes them without a model turn.
 
 ## Command contract
 

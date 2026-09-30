@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/help` command that lists every registered slash command, or shows the detail for one named command (including its input hint). The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/help` command that lists every registered slash command, or shows the detail for one named command (including its input hint). The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The **shared core** of the Claude Code / Codex hook wire protocol. NOT a cordis plugin — it registers nothing and injects nothing. It is a **library** of dialect-neutral primitives the two bridge plugins (`@dsh-cc/hooks-claude-code`, `@dsh-cc/hooks-codex`) import so neither re-implements the identical halves of the protocol.
+The **shared core** of the Claude Code / Codex hook wire protocol. NOT a cordis plugin — it registers nothing and injects nothing. It is a **library** of dialect-neutral primitives the bridge plugins import so neither re-implements the identical halves of the protocol — dsh-cc ships the Claude Code bridge (`@dsh-cc/hooks-claude-code`); the Codex-side bridge lives upstream in the harness repo.
 
 Codex deliberately reimplements a *subset* of the Claude Code hook protocol — the same `hooks.json` matcher-group shape, the same exit-code/stdout output contract, the same command-hook execution model. The genuinely-shared parts live here; each bridge owns only what differs.
 
@@ -26,17 +26,17 @@ Codex deliberately reimplements a *subset* of the Claude Code hook protocol — 
 - **`runHttpHook(hook, options)`** — execute an `http` hook by POSTing `options.payload` to `hook.url`, then decode the response through the SAME exit-code contract as command hooks (HTTP status maps to exit code — 200 → 0, any other → the status as a non-blocking "exit"; a 200 body is parsed as structured stdout, so a 200-with-permissionDecision body blocks). Header values interpolate `$VAR`/`${VAR}` names, but only names in `options.allowedEnvVars` resolve (other references become empty strings — the exfiltration guard) and results are stripped of CR/LF/NUL (header injection). `options.allowedHttpHookUrls` restricts destinations (empty/absent = unrestricted — the safe default, since config loaders materialize an unset optional array as `[]`; non-empty = the URL must match one `*` pattern). Never throws: an allowlist violation or request failure becomes a non-blocking `HookOutput` with `exitCode: undefined`. `options.fetchImpl` and `options.now` are injectable for tests, and `interpolateEnvVars` is exported for direct unit testing.
 - **`parseHookOutput(exitCode, stdout, stderr, expectedEventName?)`** decodes exit status and structured stdout. Exit 2 blocks with stderr; other failures are non-blocking. A matching hook-specific permission decision overrides the legacy top-level decision; mismatched or missing event discriminators suppress only event-specific fields. Top-level fields remain event-agnostic, and successful non-JSON output is left to the bridge.
 - **`mergeHookOutputs(outputs)`** — fold the results of every hook that matched one point: permission precedence **deny > ask > allow**, halt sticky on the first `continue:false`, block reasons joined with `\n\n`, `additionalContext`/`systemMessages` accumulated in order.
-- **`createDetachedRuns()`** — quiescence tracking for the emit-shaped points, which run detached (no extension point awaits them). The bridge tracks each run chain — the hook run PLUS its continuation — and registers `drain()` as its effect disposer: drain fires the tracker's abort `signal` (so a still-running hook process is killed via `runHook`, not awaited out to its timeout), then resolves once every tracked chain has settled. `fiber.dispose()` resolving therefore means no detached hook work is left to fire into a disposed context ([defensive patterns](../../../docs/defensive-patterns.md): dispose must reach quiescence).
+- **`createDetachedRuns()`** — quiescence tracking for the emit-shaped points, which run detached (no extension point awaits them). The bridge tracks each run chain — the hook run PLUS its continuation — and registers `drain()` as its effect disposer: drain fires the tracker's abort `signal` (so a still-running hook process is killed via `runHook`, not awaited out to its timeout), then resolves once every tracked chain has settled. `fiber.dispose()` resolving therefore means no detached hook work is left to fire into a disposed context (defensive rule: dispose must reach quiescence — tracked here, drained in the bridge).
 
 ## `hook/*` session events
 
-Declaration-merged into `SessionEventMap` (log-only, like `compaction/*` — NOT a `SurfaceEventType`, no `surfaceOp`): `hook/invoked` (a hook command ran) and `hook/result` (its outcome, paired by `handlerId`, with `appendHookResult` owning the decision rule). Payloads and per-event JSDoc are in the generated [persistence log event catalog](../../../docs/persistence-catalog.md); `stderrSummary` is truncated to the record's `stderrSummaryMaxChars` (the bridge's config, reference default `DEFAULT_STDERR_SUMMARY_MAX_CHARS` = 500; omitted when empty).
+Declaration-merged into `SessionEventMap` (log-only, like `compaction/*` — NOT a `SurfaceEventType`, no `surfaceOp`): `hook/invoked` (a hook command ran) and `hook/result` (its outcome, paired by `handlerId`, with `appendHookResult` owning the decision rule). Payloads and per-event JSDoc live with the `hook/*` declarations in `src/`; `stderrSummary` is truncated to the record's `stderrSummaryMaxChars` (the bridge's config, reference default `DEFAULT_STDERR_SUMMARY_MAX_CHARS` = 500; omitted when empty).
 
-Hook invocation/result records must sit inside an open turn. `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop` satisfy that owner-defined relation by construction. `SessionStart` runs before turn 1 and gets no `hook/*` record; its allowed context remains pending in the inbox until a waking delivery opens a turn — see the hooks Agent Note.
+Hook invocation/result records must sit inside an open turn. `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop` satisfy that owner-defined relation by construction. `SessionStart` runs before turn 1 and gets no `hook/*` record; its allowed context remains pending in the inbox until a waking delivery opens a turn.
 
 ## Model Experience
 
-Indirectly, through `dsh-hooks-claude-code` and `dsh-hooks-codex`, which can turn parsed hook output into prompt context, blocked outcomes, or continuation feedback.
+Indirectly, through `@dsh-cc/hooks-claude-code`, which can turn parsed hook output into prompt context, blocked outcomes, or continuation feedback.
 
 #### KV Cache effect
 
@@ -44,4 +44,4 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **`HookOutput.updatedInput` is parsed but not honored** — input rewrite is a deferred consistency-design problem ([the pre-tool-input-rewrite Agent Note](../../../.agents/notes/proposed/feature/2026-06-30-pre-tool-input-rewrite.md)); a bridge logs + warns when a hook sets it. See `src/types.ts` for the full contracts.
+- **`HookOutput.updatedInput` is parsed but not honored** — input rewrite is a deferred consistency-design problem; a bridge logs + warns when a hook sets it. See `src/types.ts` for the full contracts.

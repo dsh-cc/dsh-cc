@@ -25,7 +25,7 @@ Claude Code 的 agent/CLAUDE.md frontmatter 用 alias 命名模型。没有 alia
 
 ## How the cc-shell bundle wires it（如何接线）
 
-- `Config.modelAliases` 提供**部署默认**（alias 名 → model id 或 `{provider, model}`）。
+- `@dsh-cc/model-aliases` 行自身的 `Config.modelAliases` 提供**部署默认**（alias 名 → model id 或 `{provider, model}`）。
 - `model-aliases` **settings 命名空间**的注册现在住在 `ccModelRoutes` 服务里，与其它 settings section 一样分层（user/project/local/flags）。
 - cc-shell 的 `AgentProvider` 通过**trampoline** 获得 `resolveModel`：`(model) => ctx.get('ccModelRoutes')?.resolve(model)`——**每次派发惰性查询**、现读（apply 时不快照），服务未挂载时降级为继承（`undefined` 解析 = 继承父路由，与旧 no-resolver fallback 字节兼容）。cc-shell 自己不再注册该命名空间。
 - Task 工具（`@dsh-cc/subagent-task`）是另一消费方：它在派发时以同一个 `ccModelRoutes` 解析器解析 subagent 定义 frontmatter 的 `model`。

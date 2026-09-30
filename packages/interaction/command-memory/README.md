@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/memory` command that lists the memdir memory files (name, type, first line) or prints one memory's body by name, reading through `ctx.fs`. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/memory` command that lists the memdir memory files (name, type, first line) or prints one memory's body by name, reading through `ctx.fs`. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/rename <title>` 命令：通过可选的宿主 `sessionTitle` 服务为当前会话固定一个显式用户标题。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令。
+面向用户的 `/rename <title>` 命令：通过可选的宿主 `sessionTitle` 服务为当前会话固定一个显式用户标题。该插件通过 `ctx.commands` 注册一个全局命令。
 
 ## 命令约定
 

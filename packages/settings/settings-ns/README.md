@@ -23,6 +23,7 @@ export function installSectionSafe<T>(ctx: Context, ns: SettingsNamespace, schem
 ## Semantics
 
 - **No provider → `undefined`.** Without `ctx.get('settings')` the reader returns `undefined` on every call; callers keep their graceful-degradation behavior.
+- **Mount-order deferral.** Both helpers run their registration inside `ctx.inject(['settings'])`: a preset plugin mounted before the settings service registers from a child scope once the service arrives, instead of racing the boot order.
 - **Read-through source of truth.** The reader always resolves through `settings.get(ns)`, never a cached scope object, so a disposed owner cannot serve a stale frozen value. Assumes an object schema (`z.object(...)`): a legitimate resolved value is never `undefined`, which is what makes the self-healing trigger unambiguous.
 - **Lazy self-healing.** When a read observes `undefined` and the setup-time context is still live, the reader re-registers with the same schema/options and re-reads — one register/unregister pair per lost owner.
 - **Duplicate tolerance.** A `register()` throw matching `settings namespace "<ns>" is already registered` (pinned constant, spec-pinned against harness drift) degrades to the live provider read. Value-fidelity caveat: under dual module copies with different schemas, the degrade path serves the other copy's resolved value.

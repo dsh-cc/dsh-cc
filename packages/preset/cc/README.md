@@ -26,7 +26,7 @@ updating packages.
 ## Select
 
 - **Web UI**: pick "CC mode" from the agent-preset selector; or
-- **settings**: `~/.dsh/settings.json` → `"agent-preset-registry": { "default": "cc" }`.
+- **settings**: `~/.dsh/settings.json` → `"agent-preset-registry": { "selectedDefault": "cc" }`.
 - **TUI**: `dsh --profile tui` (or `dsh-cc`) boots the terminal surface with this preset as the default.
 
 ## Known limits
@@ -35,7 +35,7 @@ updating packages.
 2. **Vendored baseline, drift gate.** The standard baseline is vendored. After upgrading dsh, run the drift gate (`pnpm vitest run packages/preset/cc`, or the binary directly) to re-diff it against the new standard preset and fold in upstream changes. A missing upstream anchor (`packages/bundle/web-app/presets/standard.patch.yml`, or an installed `@deepseek-ai/dsh-web-app`) fails the gate — it never skips.
 3. **Uninstall.** Remove the `preset-cc` declaration row from the bundle patch (or the bundle itself); the built-in modes are unaffected.
 4. **`DSH_COORDINATOR_MODE=1` breaks this preset's mount.** The coordinator needs an agent `ctx`, and a standing mount has none; that failure is now scoped to this preset's session creation. In the old global-patch era the whole app failed to boot — the blast radius is narrower, but the mode is still unsupported here.
-5. **A settings default to a missing preset errors.** If the default names a preset that does not exist, session creation reports `agent-preset-not-found` (the `details.available` list names the valid ids). Reset by pointing `~/.dsh/settings.json` → `agent-preset-registry.default` back to `standard`.
+5. **A settings default to a missing preset errors.** If the default names a preset that does not exist, session creation reports `agent-preset/not-found` (the `details.available` list names the valid ids). Reset by pointing `~/.dsh/settings.json` → `agent-preset-registry.selectedDefault` back to `standard`.
 
 ## Links
 

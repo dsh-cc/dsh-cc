@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/tasks` 命令：列出当前调用方可见的后台任务及其状态。它读取注入的 `jobs` 服务。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令。
+面向用户的 `/tasks` 命令：列出当前调用方可见的后台任务及其状态。它读取注入的 `jobs` 服务。该插件通过 `ctx.commands` 注册一个全局命令。
 
 ## 命令约定
 

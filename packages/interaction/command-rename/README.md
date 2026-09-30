@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/rename <title>` command: pin an explicit user title on the current session through the optional host `sessionTitle` service. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md).
+Human-facing `/rename <title>` command: pin an explicit user title on the current session through the optional host `sessionTitle` service. The plugin registers one global command through `ctx.commands`.
 
 ## Command contract
 

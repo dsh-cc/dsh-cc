@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Claude Code-compatible output style selection for the DeepSeek Harness. The selected style contributes a system-prompt section through the [`systemPrompt`](../../core/system-prompt/README.md) registry — empty for the `default` style — so the model's communication contract mirrors the familiar Claude Code `Explanatory` / `Learning` styles plus project- and user-authored custom styles.
+Claude Code-compatible output style selection for the DeepSeek Harness. The selected style contributes a system-prompt section through the `systemPrompt` registry — empty for the `default` style — so the model's communication contract mirrors the familiar Claude Code `Explanatory` / `Learning` styles plus project- and user-authored custom styles.
 
 ## Output styles
 
@@ -34,7 +34,7 @@ A switch re-emits `system-prompt/change`, so the next assembled prompt picks up 
 
 ## `/output-style` command
 
-Registered through [`ctx.commands`](../../interaction/commands/README.md); every composed command adapter discovers it without a model turn.
+Registered through `ctx.commands`; every composed command adapter discovers it without a model turn.
 
 | Input | Result |
 |---|---|

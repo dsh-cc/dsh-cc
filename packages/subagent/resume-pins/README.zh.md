@@ -27,7 +27,7 @@
   `{provider, model, reasoningEffort, maxTokens}` 元组逐字段（含缺席）应用到
   每个恢复的轮次，无论由谁恢复；
 - **`tools/post-execute`** 在 `send_message` 上加通知前缀，并在 `list_agents` 上
-  附注 `resumeState`/`definitionChanged`；
+  附注 `[resume-pin]` 状态与定义变化；
 - **`subagents-resume` 设置 namespace**（kebab-case），提供策略开关
   `onUnavailableModel`、`onDefinitionChanged`、`onWorkspaceChanged`
   （默认 `resume-with-notice`，可选 `block`，模型路由的兜底为 `route-current`；

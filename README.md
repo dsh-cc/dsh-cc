@@ -87,7 +87,7 @@ Install them inside a session:
 | Avoid loading every tool up front | Provides deferred discovery through `ToolSearch` and MCP integration |
 | Move between interfaces | Exposes the same CC-oriented backend through terminal and web profiles |
 
-`dsh-cc` is developed with `dsh-cc` itself. The repository's current setup routes work across Kimi, GLM, and DeepSeek models; see [Dogfooding dsh-cc](#dogfooding-dsh-cc) for the concrete mapping.
+`dsh-cc` is developed with `dsh-cc` itself. The repository's current setup routes work across Kimi, GLM, and DeepSeek models, plus a System One decision lane for the typed-approval `gauge` alias; see [Dogfooding dsh-cc](#dogfooding-dsh-cc) for the concrete mapping.
 
 ## Compatibility at a glance
 
@@ -259,6 +259,7 @@ Aliases are configuration, not hard-coded vendor bindings. This lets you preserv
 | `opus` / `blueprint` | `glm-5.3` |
 | `sonnet` / `draft` | `glm-5.3-flash` |
 | `haiku` / `sketch` | `deepseek-v4-flash-0731` |
+| `gauge` | `jev` (System One decision lane — typed verdicts, not generative) |
 | `architect` | inherit (main thread) |
 
 This is a real project configuration rather than a required default: users can map the aliases to any provider/model combination supported by their DeepSeek Harness deployment.

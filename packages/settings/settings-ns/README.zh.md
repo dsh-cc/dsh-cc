@@ -23,6 +23,7 @@ export function installSectionSafe<T>(ctx: Context, ns: SettingsNamespace, schem
 ## 语义
 
 - **无 provider → `undefined`。** 没有 `ctx.get('settings')` 时 reader 每次调用都返回 `undefined`；调用方保持既有的优雅降级行为。
+- **挂载顺序解耦。** 两个助手都把注册放进 `ctx.inject(['settings'])` 里：preset 插件先于 settings 服务挂载时，注册在子作用域中等待服务到达后再发生，不再与启动顺序竞争。
 - **直读事实源。** reader 始终经 `settings.get(ns)` 解析，绝不读缓存的 scope 对象，因此已销毁的属主不会吐出陈旧的冻结值。假设对象 schema（`z.object(...)`）：合法的解析值永不为 `undefined`，这正是自愈触发条件无歧义的前提。
 - **懒式自愈。** 当读取观察到 `undefined` 且启动期上下文仍然存活时，reader 用相同 schema/options 重新注册并重读——每个丢失的属主只产生一对 register/unregister。
 - **重复注册容忍。** 匹配 `settings namespace "<ns>" is already registered` 的 `register()` 抛错（常量钉死、spec 防上游漂移）降级为实时 provider 读取。值保真警告：双模块副本 schema 不同时，降级路径读到的是另一副本的解析值。

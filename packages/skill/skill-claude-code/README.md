@@ -15,7 +15,7 @@ Requires `ctx.skills` (`inject: ['skills']`).
 | Field | Default | Meaning |
 |---|---|---|
 | `providerName` | `claude-code` | Unique name used to register this provider on `ctx.skills`. |
-| `dshHome` | `$DSH_HOME` or `~/.dsh` | Harness home resolved by [`@deepseek-ai/dsh-home-paths`](../../util/home-paths/README.md); scans `skills` under this directory as the user root. |
+| `dshHome` | `$DSH_HOME` or `~/.dsh` | Harness home resolved by `@deepseek-ai/dsh-home-paths`; scans `skills` under this directory as the user root. |
 | `managedDir` | — | Optional managed policy root scanned before all defaults. |
 | `additionalDirs` | `[]` | Additional skill roots appended after project and user roots. |
 

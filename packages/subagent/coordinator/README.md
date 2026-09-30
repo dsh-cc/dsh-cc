@@ -27,7 +27,7 @@ An unknown worker reference is an errored result; a scheduling tool invoked with
 
 ## Result return and completion (reused protocols)
 
-Coordinator mode does not reinvent worker-to-coordinator reporting, and there is no report tool. A worker returns its outcome by sending a message back to the coordinator with the harness `send_message` control tool (addressed to the coordinator's session id), and when a worker settles the subagent service's continuation settlement injects its `subagent-settled` notice into the coordinator agent's session as a waking message ([`dsh-subagent` continuation settlement delivery](../subagent/README.md)) — the completion notification that wakes the coordinator's loop. This package documents that reuse rather than duplicating the wake; its tests assert the notice reaches the coordinator session.
+Coordinator mode does not reinvent worker-to-coordinator reporting, and there is no report tool. A worker returns its outcome by sending a message back to the coordinator with the harness `send_message` control tool (addressed to the coordinator's session id), and when a worker settles the subagent service's continuation settlement injects its `subagent-settled` notice into the coordinator agent's session as a waking message (`dsh-subagent` continuation settlement delivery) — the completion notification that wakes the coordinator's loop. This package documents that reuse rather than duplicating the wake; its tests assert the notice reaches the coordinator session.
 
 ## Directory
 

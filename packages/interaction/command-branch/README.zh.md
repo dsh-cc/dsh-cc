@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/branch [note]` 命令：将当前会话 fork 成一个新的子分支，并报告子会话 id。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令。
+面向用户的 `/branch [note]` 命令：将当前会话 fork 成一个新的子分支，并报告子会话 id。该插件通过 `ctx.commands` 注册一个全局命令。
 
 ## 命令约定
 

@@ -31,7 +31,7 @@ export async function runSideQuery(ctx: Context, opts: SideQueryOptions): Promis
 - **Never throws.** Every failure shape — unrouted alias, timeout, adapter error, empty text — collapses into `SideQueryResult`. The dsh-llm runtime normalizes adapter throws into terminal error chunks, so `reason: 'error'` covers both paths.
 - Non-streaming contract: consumes `ctx.llm.stream` through the BlockAssembler pattern and awaits the full text (the `tool-web-fetch` one-shot pattern).
 - `rejectToolCalls` (default) rejects streams that emit tool-call blocks. A side query that tries to *act* is a bug, not a capability (the memory recall-selector rogue-execution lesson).
-- `inheritedRoute` reports whether the alias fell back to the parent route, so consumers can meter zero-savings runs (see `warnOnInherit` in `@dsh-cc/cc-model-aliases`).
+- `inheritedRoute` reports whether the alias fell back to the parent route, so consumers can meter zero-savings runs (see `warnOnInherit` in `@dsh-cc/model-aliases`).
 - No retry, no cache, no persistence, no ledger — those belong to consumers (e.g. `@dsh-cc/tool-use-summary` keeps the ledger).
 
 ## Shape

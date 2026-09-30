@@ -34,10 +34,10 @@ agent 仍能工作——未配置的别名会解析为继承父路由——但�
 
 ## Name collisions
 
-如果你的工作区定义了名为 `deep-reasoner` 或 `fast-worker` 的基于文件的
-agent（例如 `.claude/agents/deep-reasoner.md`），裸名（`deep-reasoner`）
+如果你的工作区定义了名为 `critic`、`executor` 或 `marathon` 的基于文件的
+agent（例如 `.claude/agents/critic.md`），裸名（`critic`）
 会解析到你的工作区定义；插件副本只能通过精确的带作用域 id 解析
-（`dsh-cc-agents:critic` / `dsh-cc-agents:executor`）。
+（`dsh-cc-agents:critic` / `dsh-cc-agents:executor` / `dsh-cc-agents:marathon`）。
 两者都会出现在 agent 目录中；插件副本带有独特的"official plugin build"
 描述以便区分。
 
