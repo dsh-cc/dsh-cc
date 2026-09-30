@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/resume` command: list the recent sessions (id, title, cwd, availability, and start time) so a user can pick one to resume. It reads the optional `sessionQuery` service. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md).
+Human-facing `/resume` command: list the recent sessions (id, title, cwd, availability, and start time) so a user can pick one to resume. It reads the optional `sessionQuery` service. The plugin registers one global command through `ctx.commands`.
 
 ## Command contract
 

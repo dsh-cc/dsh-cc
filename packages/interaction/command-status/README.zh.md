@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/status` 命令：显示当前模型、权限 preset、会话 id 与工作目录的会话状态摘要。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
+面向用户的 `/status` 命令：显示当前模型、权限 preset、会话 id 与工作目录的会话状态摘要。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
 
 ## 命令约定
 
@@ -10,7 +10,7 @@
 |---|---|
 | `/status` | 显示当前 `provider/model`（来自最新 `request/header`）、生效的权限 preset（挂载了权限服务时）、会话 id 与工作目录。在当前组合中来源缺失的条目行会被省略，而不是显示为空。 |
 
-模型行读取会话的持久 `request/header` 日志；preset 行在存在时读取 [`ctx.permissionPresets`](../permission-presets/README.md)。两种来源都缺失的组合只会省略对应行。运行 `/status` 不消耗模型 token。
+模型行读取会话的持久 `request/header` 日志；preset 行在存在时读取 `ctx.permissionPresets`。两种来源都缺失的组合只会省略对应行。运行 `/status` 不消耗模型 token。
 
 ## 组合
 

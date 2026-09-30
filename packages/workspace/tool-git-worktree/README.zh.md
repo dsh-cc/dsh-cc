@@ -16,7 +16,7 @@
 |---|---|---|
 | `name` | string | worktree slug。每个以 `/` 分隔的段只允许字母、数字、`.`、`_`、`-`；最长 64 字符。省略时自动生成 `形容词-名词-后缀` 随机 slug。 |
 
-工具从调用方 agent 的会话 cwd 定位仓库根（`git rev-parse --show-toplevel`）；不在 git 工作树内时返回结构化错误而不做任何更改。由于本 harness 中会话工作目录在创建时即固定，cwd 切换以两种不改动这一固定值的方式声明：工具结果与 `tool:worktree:cwd` systemPrompt 运行时上下文都会声明新的工作目录，并告知模型后续 shell/fs 调用需传入与返回的 `worktreePath` 相同的 `workdir`。pre-release 状态下的取舍记录在 [git-worktree-tools Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-git-worktree-tools.md)。
+工具以钉住 git 公共目录的方式定位仓库根（`git rev-parse --git-common-dir`），因此在 linked worktree 内进入时，新 worktree 落在**主检出**的 `.claude/worktrees/` 下，而不会嵌套。创建过程做了加固：`git worktree add` 之前会停用仓库本地的 filter driver（后果：LFS 跟踪的内容以指针文件形式到达，需在 worktree 内运行 `git lfs pull` 恢复）；`.claude`、`.claude/worktrees` 与目标路径不允许是符号链接；已存在的目标目录仅当其 `.git` 条目解析回本仓库的 `.git/worktrees/` 注册时才被接纳。不在 git 工作树内时返回结构化错误而不做任何更改。由于本 harness 中会话工作目录在创建时即固定，cwd 切换以两种不改动这一固定值的方式声明：工具结果与 `tool:worktree:cwd` systemPrompt 运行时上下文都会声明新的工作目录，并告知模型后续 shell/fs 调用需传入与返回的 `worktreePath` 相同的 `workdir`。
 
 ### `ExitWorktree`
 

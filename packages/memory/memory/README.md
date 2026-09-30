@@ -51,7 +51,7 @@ providerless host mounts memory read-only).
   `{ mode: 'workspace-write', workspaceRoot: <memory dir> }` — confinement is
   kept, the writable root IS the memory directory. Validation (kebab-case
   slugs, the four types, size caps) shares the `writeback` boundary with
-  `dsh-memory-consolidation`'s fork write-back. Registration is opportunistic:
+  `@dsh-cc/memory-consolidation`'s fork write-back. Registration is opportunistic:
   hosts without a tools service skip it and stay read-only.
 - **Dynamic recall** — an `agent/pre-step` listener asks a small-model side
   query (a forked subagent via `ctx.subagents`) which topic files are relevant
@@ -128,7 +128,7 @@ entrypoint truncation caps and the five-file recall ceiling.
   `MEMORY_SAVE_SCOPES` — the model-facing save channel.
 - `validateMemoryWrites(input)` / `writeMemoryFiles(fs, dir, writes)` /
   `memoryWritePolicy(dir)` / `MEMORY_WRITES_SCHEMA` — the host-side write-back
-  shared with `dsh-memory-consolidation`.
+  shared with `@dsh-cc/memory-consolidation`.
 - `readPressure(fs, dir)` / `armPressure(fs, dir, now, policy?)` /
   `markPressureForced(...)` / `clearPressure(...)` / `PRESSURE_FILE` — the
   consolidation-pressure marker (`.consolidation-needed`) that queues a forced

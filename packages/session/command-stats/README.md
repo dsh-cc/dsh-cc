@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/stats` command over the session event log: turn and step counts, tool-call distribution, and token usage totals. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/stats` command over the session event log: turn and step counts, tool-call distribution, and token usage totals. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 

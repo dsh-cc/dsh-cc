@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/export` 命令，通过 [`ctx.fs`](../../fs/fs/README.md) 把当前会话 transcript 写入文件，格式为 markdown（默认）或无损 JSON。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
+面向用户的 `/export` 命令，通过 `ctx.fs` 把当前会话 transcript 写入文件，格式为 markdown（默认）或无损 JSON。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
 
 ## 命令约定
 

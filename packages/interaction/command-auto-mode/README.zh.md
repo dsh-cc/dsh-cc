@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/auto-mode` 命令：`auto` 模式 LLM 风险分类器配置的检查入口。该插件通过 [`ctx.commands`](../../commands/README.md) 注册一个全局命令，所有已组合的命令适配器无需模型回合即可发现并执行它。回答时不发起模型调用、不消耗 token。
+面向用户的 `/auto-mode` 命令：`auto` 模式 LLM 风险分类器配置的检查入口。该插件通过 `ctx.commands` 注册一个全局命令，所有已组合的命令适配器无需模型回合即可发现并执行它。回答时不发起模型调用、不消耗 token。
 
 分类器的策略面是 `permissions.autoMode` 设置节，包含三个槽位列表——`soft_deny`、`allow`（例外）和 `environment`（信任边界）。每个列表都支持字面量 `"$defaults"` 条目，在消费时按位置原样展开。设置级联组装 `autoMode` 键时只使用受信任的层（用户层、`--settings` 旗标、托管策略）——project 和 local（随仓库携带）层对该键一律忽略，因此克隆来的仓库永远无法替分类器划定它自己的信任边界。
 

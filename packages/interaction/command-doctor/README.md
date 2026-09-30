@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/doctor` command: a product-grade **session health report**. One data object, three renderings — default text, verbose text, and a JSON file under `$DSH_HOME`. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/doctor` command: a product-grade **session health report**. One data object, three renderings — default text, verbose text, and a JSON file under `$DSH_HOME`. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 

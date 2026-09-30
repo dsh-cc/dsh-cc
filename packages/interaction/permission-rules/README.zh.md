@@ -91,5 +91,3 @@ await ctx.plugin(PermissionRules, {
 ## Invariant 伴生插件
 
 `@dsh-cc/permission-rules/invariant` 在会话边界校验 `permission/mode` 会话事件：`mode` 必须是可切换的（绝不能是 `plan`），且 `resumeSandbox`——若存在——必须是已知沙箱模式（`read-only` | `workspace-write` | `danger-full-access`）。
-
-参见 [Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-cc-permission-rules.md)。

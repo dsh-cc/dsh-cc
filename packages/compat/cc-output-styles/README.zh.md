@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向 DeepSeek Harness、兼容 Claude Code 的输出风格选择。选中的风格通过 [`systemPrompt`](../../core/system-prompt/README.md) 注册表贡献一个系统提示词 section——`default` 风格下为空——使模型的沟通契约镜像熟悉的 Claude Code `Explanatory`／`Learning` 风格，加上项目与用户自定义风格。
+面向 DeepSeek Harness、兼容 Claude Code 的输出风格选择。选中的风格通过 `systemPrompt` 注册表贡献一个系统提示词 section——`default` 风格下为空——使模型的沟通契约镜像熟悉的 Claude Code `Explanatory`／`Learning` 风格，加上项目与用户自定义风格。
 
 ## 输出风格
 
@@ -34,7 +34,7 @@ Your concise coding and communication instructions here.
 
 ## `/output-style` 命令
 
-通过 [`ctx.commands`](../../interaction/commands/README.md) 注册；每个已组合的命令适配器都能发现并执行它，无需模型轮次。
+通过 `ctx.commands` 注册；每个已组合的命令适配器都能发现并执行它，无需模型轮次。
 
 | 输入 | 结果 |
 |---|---|

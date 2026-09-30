@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/resume` 命令：列出最近的会话（id、标题、工作目录、可用性状态与开始时间），以便用户挑选一个继续。它读取可选的 `sessionQuery` 服务。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令。
+面向用户的 `/resume` 命令：列出最近的会话（id、标题、工作目录、可用性状态与开始时间），以便用户挑选一个继续。它读取可选的 `sessionQuery` 服务。该插件通过 `ctx.commands` 注册一个全局命令。
 
 ## 命令约定
 

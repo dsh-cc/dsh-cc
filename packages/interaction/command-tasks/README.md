@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/tasks` command: list the caller-visible background jobs and their status. It reads the injected `jobs` service. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md).
+Human-facing `/tasks` command: list the caller-visible background jobs and their status. It reads the injected `jobs` service. The plugin registers one global command through `ctx.commands`.
 
 ## Command contract
 

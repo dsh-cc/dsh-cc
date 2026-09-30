@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/status` command: a session status summary showing the current model, permission preset, session id, and working directory. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/status` command: a session status summary showing the current model, permission preset, session id, and working directory. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 
@@ -10,7 +10,7 @@ Human-facing `/status` command: a session status summary showing the current mod
 |---|---|
 | `/status` | Show the current `provider/model` (from the latest `request/header`), the effective permission preset (when the permission service is mounted), the session id, and the working directory. Lines whose source is absent in the current composition are omitted rather than shown empty. |
 
-The model line reads the session's durable `request/header` log; the preset line reads [`ctx.permissionPresets`](../permission-presets/README.md) when present. A composition without either source simply omits that line. Running `/status` consumes no model tokens.
+The model line reads the session's durable `request/header` log; the preset line reads `ctx.permissionPresets` when present. A composition without either source simply omits that line. Running `/status` consumes no model tokens.
 
 ## Composition
 

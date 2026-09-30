@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/cost` 命令，基于会话 usage 日志实现。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。它会把每条已记录的 `assistant/message` usage 记录，对照最新的 `request/header` 模型路由与 Config 中的部署单价表进行折叠。
+面向用户的 `/cost` 命令，基于会话 usage 日志实现。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。它会把每条已记录的 `assistant/message` usage 记录，对照最新的 `request/header` 模型路由与 Config 中的部署单价表进行折叠。
 
 ## 命令约定
 

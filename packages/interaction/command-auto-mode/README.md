@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/auto-mode` command: introspection for the `auto`-mode LLM risk-classifier configuration. The plugin registers one global command through [`ctx.commands`](../../commands/README.md), so every composed command adapter discovers and executes it without a model turn. No model call is made and no token is consumed to answer.
+Human-facing `/auto-mode` command: introspection for the `auto`-mode LLM risk-classifier configuration. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn. No model call is made and no token is consumed to answer.
 
 The classifier's policy surface is the `permissions.autoMode` settings section with three slot lists — `soft_deny`, `allow` (exceptions), and `environment` (the trust boundary). Each list supports the literal `"$defaults"` entry, expanded position-preservingly at consumption time. The settings cascade assembles the `autoMode` key from TRUSTED layers only (user, `--settings` flag, managed policy) — project and local (repo-carried) layers are ignored for this key, so a cloned repository can never teach the classifier its own trust boundary.
 

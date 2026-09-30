@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向 DeepSeek Harness CC 的会话级工作目录——[worktree-session-isolation 设计](../../../docs/plans/worktree-session-isolation.md)的
+面向 DeepSeek Harness CC 的会话级工作目录——[worktree-session-isolation 设计](../../../docs/plans/2026-09-02-worktree-session-isolation.md)的
 WS1 + WS2 基础。
 
 ## 拥有什么

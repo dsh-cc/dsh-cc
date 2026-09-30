@@ -31,7 +31,7 @@ One cordis plugin (`apply`) with:
   `{provider, model, reasoningEffort, maxTokens}` tuple field-by-field
   (absence included) to every resumed turn, whatever resumed it;
 - **`tools/post-execute`** notice prefixing on `send_message` and
-  `resumeState`/`definitionChanged` annotation on `list_agents`;
+  `[resume-pin]` state / definition-change annotations on `list_agents`;
 - the **`subagents-resume` settings namespace** (kebab-case) with the policy
   knobs `onUnavailableModel`, `onDefinitionChanged`, `onWorkspaceChanged`
   (`resume-with-notice` defaults, `block` opt-in, `route-current` fallback for

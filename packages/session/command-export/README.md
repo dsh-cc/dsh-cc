@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/export` command that writes the current session transcript to a file through [`ctx.fs`](../../fs/fs/README.md) as markdown (default) or lossless JSON. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/export` command that writes the current session transcript to a file through `ctx.fs` as markdown (default) or lossless JSON. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/branch [note]` command: fork the current session into a new child branch and report the child session id. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md).
+Human-facing `/branch [note]` command: fork the current session into a new child branch and report the child session id. The plugin registers one global command through `ctx.commands`.
 
 ## Command contract
 

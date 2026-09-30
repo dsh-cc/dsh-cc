@@ -3,7 +3,7 @@
 English | [中文](README.zh.md)
 
 Session-scoped working directory for DeepSeek Harness CC — the WS1 + WS2
-foundation of the [worktree-session-isolation design](../../../docs/plans/worktree-session-isolation.md).
+foundation of the [worktree-session-isolation design](../../../docs/plans/2026-09-02-worktree-session-isolation.md).
 
 ## What it owns
 

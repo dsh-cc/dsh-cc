@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/mcp` command: list the registered MCP servers and their connection state, or reconnect/disconnect one by name. It reads and drives the optional `mcpConnections` service that an mcp-client instance mounts. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md).
+Human-facing `/mcp` command: list the registered MCP servers and their connection state, or reconnect/disconnect one by name. It reads and drives the optional `mcpConnections` service that an mcp-client instance mounts. The plugin registers one global command through `ctx.commands`.
 
 ## Command contract
 

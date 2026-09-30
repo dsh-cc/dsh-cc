@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 The replay-safe model-free microcompaction service (`ctx.microcompactor`). It keeps the most recent `retainResults` `tool/result` surface nodes verbatim and replaces every older one with a deterministic placeholder that re-embeds the original's spill locator when one was cited — no model call, no summarization.
 
-This is a concrete companion to [`dsh-compaction-basic`](../compaction-basic/README.md), not a compaction backend. It composes ahead of summarization so the summarizer reads an already window-reduced surface. Both packages remain independently composable.
+This is a concrete companion to [`dsh-compaction-basic`](../compaction-basic-cc/README.md), not a compaction backend. It composes ahead of summarization so the summarizer reads an already window-reduced surface. Both packages remain independently composable.
 
 ## Service API
 

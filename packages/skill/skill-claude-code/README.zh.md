@@ -15,7 +15,7 @@
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `providerName` | `claude-code` | 用于在 `ctx.skills` 上注册此 Provider 的唯一名称。 |
-| `dshHome` | `$DSH_HOME` 或 `~/.dsh` | 由 [`@deepseek-ai/dsh-home-paths`](../../util/home-paths/README.md) 解析的 harness 主目录；将其下的 `skills` 作为 user 根扫描。 |
+| `dshHome` | `$DSH_HOME` 或 `~/.dsh` | 由 `@deepseek-ai/dsh-home-paths` 解析的 harness 主目录；将其下的 `skills` 作为 user 根扫描。 |
 | `managedDir` | — | 可选的托管策略根，在所有默认根之前扫描。 |
 | `additionalDirs` | `[]` | 在 project 与 user 根之后追加的附加 skill 根。 |
 

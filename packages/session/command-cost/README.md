@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/cost` command over the session usage log. The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn. It folds each logged `assistant/message` usage record against the latest `request/header` model route and the deployment price table from Config.
+Human-facing `/cost` command over the session usage log. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn. It folds each logged `assistant/message` usage record against the latest `request/header` model route and the deployment price table from Config.
 
 ## Command contract
 

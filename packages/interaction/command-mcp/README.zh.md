@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/mcp` 命令：列出已注册的 MCP 服务器及其连接状态，或按名称重连/断开某个服务器。它读取并驱动由 mcp-client 实例挂载的可选 `mcpConnections` 服务。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令。
+面向用户的 `/mcp` 命令：列出已注册的 MCP 服务器及其连接状态，或按名称重连/断开某个服务器。它读取并驱动由 mcp-client 实例挂载的可选 `mcpConnections` 服务。该插件通过 `ctx.commands` 注册一个全局命令。
 
 ## 命令约定
 

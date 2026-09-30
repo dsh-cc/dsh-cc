@@ -45,7 +45,7 @@ resolves to "inherit the parent route" (the same no-override behavior as before)
 
 ## How the cc-shell bundle wires it
 
-- `Config.modelAliases` provides **deployment defaults** (alias name → model id
+- The `@dsh-cc/model-aliases` row's own `Config.modelAliases` provides **deployment defaults** (alias name → model id
   or `{provider, model}`).
 - The `model-aliases` **settings namespace** registration now lives in the `ccModelRoutes`
   service, layered exactly like every other settings section (user/project/local/flags).

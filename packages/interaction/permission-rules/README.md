@@ -91,5 +91,3 @@ Review the audit with `/auto-mode review [full]` (in `@dsh-cc/command-auto-mode`
 ## Invariant companion
 
 `@dsh-cc/permission-rules/invariant` validates `permission/mode` session events at the session boundary: `mode` must be switchable (never `plan`), and `resumeSandbox` — when present — must be a known sandbox mode (`read-only` | `workspace-write` | `danger-full-access`).
-
-See the [Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-cc-permission-rules.md).
