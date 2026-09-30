@@ -24,8 +24,13 @@ import { writeRoute } from '../src/provider-settings.ts'
 
 type Ctx = { get(key: string): unknown }
 
-/** ConfigEditor double: one entry per id, records edit() calls. */
-function fakeConfigEditor(entries: Record<string, Record<string, unknown>> = {}) {
+/** ConfigEditor double: one entry per id, records edit() calls. The layered
+ * `configuration()` view exists only when `layers` are given — plain doubles
+ * exercise the bridge's conservative presence-guard fallback. */
+function fakeConfigEditor(
+  entries: Record<string, Record<string, unknown>> = {},
+  layers?: Record<string, { inherited?: Record<string, unknown>; override?: Record<string, unknown> }>,
+) {
   const calls: Array<{ id: string; next: Record<string, unknown> }> = []
   const rows = new Map(Object.keys(entries).map(id => [id, {
     options: {
@@ -38,6 +43,15 @@ function fakeConfigEditor(entries: Record<string, Record<string, unknown>> = {})
     calls,
     entries: () => [...rows.values()],
     configOf: (id: string) => entries[id] ?? {},
+    ...(layers === undefined
+      ? {}
+      : {
+          configuration: () => [...rows.values()].map(entry => ({
+            entry,
+            inherited: structuredClone(layers[entry.options.id]?.inherited ?? entries[entry.options.id] ?? {}),
+            override: structuredClone(layers[entry.options.id]?.override ?? {}),
+          })),
+        }),
     edit: vi.fn(async (entry: { options: { id?: unknown } }, change: (current: Record<string, unknown>) => Record<string, unknown>) => {
       const id = String(entry.options.id)
       const next = change(entries[id] ?? {})
@@ -51,9 +65,11 @@ function fakeConfigEditor(entries: Record<string, Record<string, unknown>> = {})
 function fakeCtx(opts: {
   user?: Record<string, Record<string, unknown>>
   entries?: Record<string, Record<string, unknown>>
+  layers?: Record<string, { inherited?: Record<string, unknown>; override?: Record<string, unknown> }>
+  warns?: unknown[]
   withConfigEditor?: boolean
 } = {}) {
-  const editor = fakeConfigEditor(opts.entries)
+  const editor = fakeConfigEditor(opts.entries, opts.layers)
   const settings = {
     describe: () => Object.entries(opts.user ?? {}).map(([ns, user]) => ({ ns, user })),
     mutate: vi.fn(async () => {}),
@@ -62,7 +78,11 @@ function fakeCtx(opts: {
   }
   const ctx: Ctx & { editor: typeof editor } = {
     editor,
-    get: (key: string) => (key === 'settings' ? settings : key === 'configEditor' && opts.withConfigEditor !== false ? editor : undefined),
+    get: (key: string) =>
+      key === 'settings' ? settings
+        : key === 'logger' && opts.warns !== undefined ? { warn: (m: unknown) => opts.warns?.push(m) }
+        : key === 'configEditor' && opts.withConfigEditor !== false ? editor
+        : undefined,
   }
   return { ctx, settings, editor }
 }
@@ -109,6 +129,43 @@ describe('ensureProviderBridge (one-shot data migration)', () => {
     await ensureProviderBridge(ctx)
     await ensureProviderBridge(ctx)
     expect(ctx.editor.edit).not.toHaveBeenCalled()
+    expect(warns).toHaveLength(1)
+  })
+
+  it('migrates past composition-inherited defaults (they are not user decisions)', async () => {
+    // rc.2 regression: the stock base bundle ships agent-default-model config
+    // (deepseek-official/deepseek-flash). The presence-only guard mistook
+    // those inherited values for user configuration and stranded every
+    // settings.json agent-default-model section; with the layered view the
+    // migration must apply.
+    const { ctx, editor } = fakeCtx({
+      user: { 'agent-default-model': { provider: 'orchestrix', model: 'llmbox_ant/glm-5.3', reasoningEffort: 'max' } },
+      entries: { 'agent-default-model': { provider: 'deepseek-official', model: 'deepseek-flash' } },
+      layers: {
+        'agent-default-model': { inherited: { provider: 'deepseek-official', model: 'deepseek-flash' }, override: {} },
+      },
+    })
+    await ensureProviderBridge(ctx)
+    expect(editor.configOf('agent-default-model')).toEqual({ provider: 'orchestrix', model: 'llmbox_ant/glm-5.3', reasoningEffort: 'max' })
+  })
+
+  it('keeps a diverging profile-layer override during migration: no edit, warn once', async () => {
+    const warns: unknown[] = []
+    const { ctx, editor } = fakeCtx({
+      warns,
+      user: { 'agent-default-model': { provider: 'orchestrix', model: 'm-user', reasoningEffort: 'max' } },
+      entries: { 'agent-default-model': { provider: 'user-picked', model: 'm-picked' } },
+      layers: {
+        'agent-default-model': {
+          inherited: { provider: 'deepseek-official', model: 'deepseek-flash' },
+          override: { provider: 'user-picked', model: 'm-picked' },
+        },
+      },
+    })
+    await ensureProviderBridge(ctx)
+    await ensureProviderBridge(ctx)
+    expect(editor.edit).not.toHaveBeenCalled()
+    expect(editor.configOf('agent-default-model')).toEqual({ provider: 'user-picked', model: 'm-picked' })
     expect(warns).toHaveLength(1)
   })
 
