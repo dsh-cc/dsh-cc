@@ -36,6 +36,7 @@ const harnessAliases: Record<string, string | undefined> = {
   '@deepseek-ai/dsh-tool-subagent-report': harnessDir('packages/subagent/tool-subagent-report/lib/index.js'),
   '@deepseek-ai/dsh-subagent-spawn-in-process': harnessDir('packages/subagent/subagent-spawn-in-process/lib/index.js'),
   '@deepseek-ai/dsh-session-persistence-jsonl': harnessDir('packages/session/session-persistence-jsonl/lib/index.js'),
+  '@deepseek-ai/dsh-session-query': harnessDir('packages/session-query/session-query/lib/index.js'),
   '@deepseek-ai/dsh-session-projection': harnessDir('packages/session/session-projection/lib/index.js'),
   '@deepseek-ai/dsh-agent-loop-testkit': harnessDir('packages/test-support/agent-loop-testkit/lib/index.js'),
   '@deepseek-ai/dsh-agent-loop': harnessDir('packages/core/agent-loop/lib/index.js'),

@@ -17,6 +17,10 @@
       "types": "./lib/snapshot.d.ts",
       "default": "./lib/snapshot.js"
     },
+    "./release": {
+      "types": "./lib/release.d.ts",
+      "default": "./lib/release.js"
+    },
     "./invariant": {
       "types": "./lib/invariant.d.ts",
       "default": "./lib/invariant.js"

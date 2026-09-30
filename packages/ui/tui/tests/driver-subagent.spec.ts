@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { markReleasing, resetReleasedMarkers } from '@dsh-cc/command-agents/release'
 
 /**
  * Minimal ctx stub that captures `session/event`, `subagent/start`, and
@@ -410,5 +411,182 @@ describe('createDriver subagent tracking', () => {
     if (row?.kind === 'status') {
       expect(row.text).toContain('prompt: "read the flaky test"')
     }
+  })
+})
+
+/**
+ * /agents release slice (plan T23/T24/T25-tui/T25b-tui): the release branch
+ * runs BEFORE any snapshot consultation; only the published ccAgents surface
+ * authorizes a release.
+ */
+describe('createDriver /agents release', () => {
+  let prevHome: string | undefined
+  let tempHome: string
+
+  beforeEach(() => {
+    prevHome = process.env.DSH_HOME
+    tempHome = mkdtempSync(join(tmpdir(), 'dsh-driver-release-'))
+    process.env.DSH_HOME = tempHome
+  })
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = prevHome
+    resetReleasedMarkers()
+  })
+
+  interface ReleaseHarness {
+    ctx: ReturnType<typeof makeCtx>['ctx']
+    drain: ReturnType<typeof vi.fn>
+    interrupt: ReturnType<typeof vi.fn>
+    ccAgentsList: ReturnType<typeof vi.fn>
+  }
+
+  /** ctx with ccAgents published and a stubbed subagents drain seam. */
+  function makeReleaseCtx(agent: FakeAgent, rows: unknown[] = []): ReleaseHarness {
+    const built = makeCtx(agent)
+    const drain = vi.fn(async () => {})
+    const interrupt = vi.fn()
+    const ccAgentsList = vi.fn(async () => rows)
+    const ctxAny = built.ctx as unknown as { get: (key: string) => unknown }
+    const baseGet = ctxAny.get.bind(built.ctx)
+    ctxAny.get = (key: string) => {
+      if (key === 'ccAgents') return { list: ccAgentsList }
+      if (key === 'subagents') return { interrupt, listChildren: async () => [], drainContinuableChildren: drain }
+      return baseGet(key)
+    }
+    return { ctx: built.ctx, drain, interrupt, ccAgentsList }
+  }
+
+  it('releases via the drain seam without consulting snapshot rows (T23 catalog-miss + registry-hit)', async () => {
+    const agent = makeFakeAgent()
+    // Registry hit (resident idle) while the child catalog misses the id —
+    // the registry-only release path.
+    let resident = true
+    const registry = {
+      get: (id: string) => (resident && id === 'child-1' ? { status: 'idle' } : undefined),
+    }
+    const harness = makeReleaseCtx(agent)
+    // The drain evicts: the registry entry disappears after the drain call.
+    const releaseDrain = vi.fn(async () => { resident = false })
+    const ctxAny = harness.ctx as unknown as { get: (key: string) => unknown }
+    const baseGet = ctxAny.get.bind(harness.ctx)
+    ctxAny.get = (key: string) => {
+      if (key === 'subagents') {
+        return { interrupt: harness.interrupt, listChildren: async () => [], drainContinuableChildren: releaseDrain }
+      }
+      return baseGet(key)
+    }
+    // The registry rides the ctx.agents PROPERTY per F8, not ctx.get('agents').
+    ;(harness.ctx as unknown as { agents: unknown }).agents = {
+      ...(harness.ctx as unknown as { agents: unknown }).agents,
+      get: registry.get,
+    }
+    const driver = await createDriver(harness.ctx as never, {})
+
+    await driver.submit('/agents release child-1')
+    const row = driver.state.rows.at(-1)
+    expect(row?.kind).toBe('status')
+    if (row?.kind === 'status') {
+      expect(row.text).toBe(
+        '(Note: child-1 was absent from the readable child catalog — released via the live registry only.) '
+        + 'Released agent child-1: its resident (idle) activation was evicted; it held no capacity slot (only running children count toward the 25-child guard). '
+        + 'Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued '
+        + '(upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.',
+      )
+    }
+    // The drain spy saw the driver's current agent and exactly [id].
+    expect(releaseDrain).toHaveBeenCalledTimes(1)
+    const [drainParent, drainIds] = releaseDrain.mock.calls[0] as [unknown, unknown[]]
+    expect(drainParent).toBe(agent)
+    expect(drainIds.map(String)).toEqual(['child-1'])
+    // The branch never consulted the snapshot rows.
+    expect(harness.ccAgentsList).not.toHaveBeenCalled()
+  })
+
+  it('release of a ready row with no registry residency reports not-resident and never drains (T24)', async () => {
+    const agent = makeFakeAgent()
+    const harness = makeReleaseCtx(agent)
+    // Catalog hit (continuable) with no registry residency → not-resident.
+    const ctxAny = harness.ctx as unknown as { get: (key: string) => unknown }
+    const baseGet = ctxAny.get.bind(harness.ctx)
+    ctxAny.get = (key: string) => {
+      if (key === 'subagents') {
+        return { interrupt: harness.interrupt, listChildren: async () => [{ id: 'child-1', mode: 'continuable' }], drainContinuableChildren: harness.drain }
+      }
+      return baseGet(key)
+    }
+    const driver = await createDriver(harness.ctx as never, {})
+
+    await driver.submit('/agents release child-1')
+    const row = driver.state.rows.at(-1)
+    expect(row?.kind).toBe('status')
+    if (row?.kind === 'status') {
+      expect(row.text).toBe('Agent child-1 has no resident activation (settled or released); nothing was evicted and no capacity slot is held by it.')
+    }
+    expect(harness.drain).not.toHaveBeenCalled()
+  })
+
+  it('fold-only composition refuses release but keeps fold listing unchanged (T25-tui)', async () => {
+    const agent = makeFakeAgent()
+    const { ctx, emitStart, emitEnd } = makeCtx(agent)
+    const driver = await createDriver(ctx as never, {})
+
+    emitStart({ runId: 'r1', provider: 'openai', id: 'tui-abcdef01', local: true })
+    await driver.submit('/agents release tui-abcdef01')
+    const row = driver.state.rows.at(-1)
+    expect(row?.kind).toBe('status')
+    if (row?.kind === 'status') {
+      expect(row.text).toBe('Release needs the authoritative agents surface (ccAgents), which this composition does not publish; /agents release is unavailable here.')
+    }
+
+    await driver.submit('/agents')
+    const listRow = driver.state.rows.at(-1)
+    expect(listRow?.kind).toBe('status')
+    if (listRow?.kind === 'status') {
+      expect(listRow.text).toContain('Background agents:')
+    }
+  })
+
+  it('stop gates: released Ready row and mid-drain running row both get stopReleasedCopy (T25b-tui)', async () => {
+    const parentSessionId = 's-sub'
+    const agent = makeFakeAgent()
+    const readyRows = [{
+      id: 'child-1', residency: 'ready', hasChildren: false, parentId: parentSessionId, released: true,
+    }]
+    const runningRows = [{
+      id: 'child-2', residency: 'running', hasChildren: false, parentId: parentSessionId,
+    }]
+    const harness = makeReleaseCtx(agent, readyRows)
+    const ctxAny = harness.ctx as unknown as { get: (key: string) => unknown }
+    const baseGet = ctxAny.get.bind(harness.ctx)
+    let rows = readyRows
+    ctxAny.get = (key: string) => {
+      if (key === 'ccAgents') return { list: async () => rows }
+      return baseGet(key)
+    }
+    const driver = await createDriver(harness.ctx as never, {})
+
+    // A released Ready row gets stopReleasedCopy BEFORE the not-running
+    // early-return.
+    await driver.submit('/agents stop child-1')
+    let row = driver.state.rows.at(-1)
+    expect(row?.kind).toBe('status')
+    if (row?.kind === 'status') {
+      expect(row.text).toBe('Agent child-1 was released (or its release is in flight) in this process; it cannot be continued here — nothing to stop.')
+    }
+    expect(harness.interrupt).not.toHaveBeenCalled()
+
+    // A RUNNING row whose id isReleasing gets stopReleasedCopy instead of
+    // stopRunningCopy — a drain-pending child is not "resumable".
+    rows = runningRows
+    markReleasing('child-2')
+    await driver.submit('/agents stop child-2')
+    row = driver.state.rows.at(-1)
+    expect(row?.kind).toBe('status')
+    if (row?.kind === 'status') {
+      expect(row.text).toBe('Agent child-2 was released (or its release is in flight) in this process; it cannot be continued here — nothing to stop.')
+    }
+    expect(harness.interrupt).not.toHaveBeenCalled()
   })
 })

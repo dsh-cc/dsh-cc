@@ -72,6 +72,8 @@
     "@deepseek-ai/dsh-session-persistence": "link:../../../../deepseek-harness/packages/session/session-persistence",
     "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
     "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
+    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-session-query": "link:../../../../deepseek-harness/packages/session-query/session-query",
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
     "@dsh-cc/agent-loop-mock": "workspace:^",

@@ -30,6 +30,12 @@ export interface AgentRow {
   readonly hasChildren: boolean
   /** Pin state; `undefined` when the child has no resume pin. */
   readonly pin?: AgentPinView
+  /**
+   * Release-valve tag: the id sits in this process's released/releasing
+   * marker sets AND the row is `ready` (registry-absent at snapshot time) —
+   * per the D1 tagging rule, never from the marker alone.
+   */
+  readonly released?: boolean
   /** The parent session id the listing was rooted at. */
   readonly parentId: string
 }
@@ -84,6 +90,13 @@ export interface SnapshotServices {
    * authoritative… the tag is best-effort decoration, not control flow.
    */
   listDescendants?(parentSessionId: string): Promise<readonly { id: string; hasChildren?: boolean }[]>
+  /**
+   * Release-valve markers (process-local, F14): optional so compositions
+   * without the release module still snapshot; when present they gate the
+   * `[released]` tag and the stop-copy overrides.
+   */
+  isReleased?(id: string): boolean
+  isReleasing?(id: string): boolean
 }
 
 /**
@@ -143,11 +156,19 @@ export async function buildAgentsSnapshot(
   for (const entry of children) {
     if (entry.mode === 'one-shot') continue
     const live = services.getAgent(String(entry.id))
+    const residency = residencyOf(live)
+    // Release-valve tagging rule (D1): the marker is process-local and the
+    // row must read registry-absent (`ready`) at snapshot time — never the
+    // marker alone (a live activation is not a released row).
+    const released =
+      (services.isReleased?.(String(entry.id)) === true ||
+        services.isReleasing?.(String(entry.id)) === true) && residency === 'ready'
     list.push({
       id: String(entry.id),
       ...(entry.label !== undefined && entry.label.length > 0 ? { label: entry.label } : {}),
-      residency: residencyOf(live),
+      residency,
       hasChildren: childHasChildren.has(String(entry.id)),
+      ...(released ? { released: true } : {}),
       ...(() => {
         const pin = pinViewOf(services.readPin(String(entry.id)))
         return pin === undefined ? {} : { pin }
@@ -201,7 +222,8 @@ export function renderAgentsList(rows: readonly AgentRow[]): string {
               ? ' [pin unreadable]'
               : ' [pinned]'
       const childrenTag = row.hasChildren ? ' [has children]' : ''
-      lines.push(`  ${MARKERS[row.residency]} ${name} · ${shortIdOf(row.id)}${tag}${childrenTag}`)
+      const releasedTag = row.released === true ? ' [released]' : ''
+      lines.push(`  ${MARKERS[row.residency]} ${name} · ${shortIdOf(row.id)}${tag}${childrenTag}${releasedTag}`)
     }
   }
   return lines.join('\n')
@@ -223,6 +245,14 @@ export function renderAgentDetail(
   lines.push(`  residency: ${row.residency}`)
   lines.push(`  children: ${row.hasChildren ? 'present' : 'none'}`)
   lines.push(`  parent session: ${parentSessionId}`)
+  // Release-valve detail line: BEFORE the pin early-return, so an unpinned
+  // released row still discloses its process-local state.
+  if (row.released === true) {
+    lines.push(
+      '  released: this process — resident activation evicted or release in flight; '
+      + 'same-session continuation unavailable (upstream gap)',
+    )
+  }
   if (pin === undefined) {
     lines.push('  pin: none (not pinnable or not background-spawned)')
     return lines.join('\n')
@@ -259,6 +289,7 @@ export type ParsedAgentsInput =
   | { readonly kind: 'list' }
   | { readonly kind: 'detail'; readonly id: string }
   | { readonly kind: 'stop'; readonly id: string }
+  | { readonly kind: 'release'; readonly id: string }
   | { readonly kind: 'error'; readonly text: string }
 
 /** Copy for a stop request on a running child (both surfaces share it). */
@@ -269,6 +300,11 @@ export function stopRunningCopy(id: string): string {
 /** Copy for a stop request on an idle/ready child (shared no-op explanation). */
 export function stopNotRunningCopy(id: string, residency: string): string {
   return `Agent ${id} is not running (residency: ${residency}); nothing to stop — it is resumable.`
+}
+
+/** Copy for a stop request on a released (or releasing) child. */
+export function stopReleasedCopy(id: string): string {
+  return `Agent ${id} was released (or its release is in flight) in this process; it cannot be continued here — nothing to stop.`
 }
 
 /** Copy for a stop/detail on an id the snapshot does not know. */
@@ -295,6 +331,12 @@ export function parseAgentsInput(raw: string): ParsedAgentsInput {
       return { kind: 'error', text: 'Usage: /agents stop <id>' }
     }
     return { kind: 'stop', id: parts[1]! }
+  }
+  if (parts[0] === 'release') {
+    if (parts.length < 2 || parts[1]!.length === 0) {
+      return { kind: 'error', text: 'Usage: /agents release <id>' }
+    }
+    return { kind: 'release', id: parts[1]! }
   }
   if (parts[0] === 'attach') {
     return { kind: 'error', text: attachReservedCopy() }

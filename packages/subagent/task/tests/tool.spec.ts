@@ -18,6 +18,8 @@ import type { ToolRestriction } from '@dsh-cc/claude-code-agents'
 import { AgentRegistry } from '../src/registry.ts'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { backgroundTasksDisabled, registerTaskTool, TASK_TOOL } from '../src/tool.ts'
+import { RELEASE_AGENT_TOOL, registerReleaseAgentTool } from '../src/release-agent.ts'
+import { markReleasing, resetReleasedMarkers } from '@dsh-cc/command-agents/release'
 import { PinStore } from '@dsh-cc/subagent-resume-pins'
 import { SpawnPinCapture } from '../src/resume-capture.ts'
 import { BACKGROUND_SECTION_TEXT } from '../src/index.ts'
@@ -1176,14 +1178,20 @@ describe('Task tool', () => {
       return { ctx, session: { header: { cwd } } } as unknown as Agent
     }
 
+    /** The D4 capacity-guard copy: ONE single-line runtime literal (plan D4). */
+    const D4_CAPACITY_COPY =
+      'parent has 25 live subagents; free a slot with release_agent on a running child '
+      + '(or /agents release <id> interactively), or let children settle — only running '
+      + 'children hold slots, and only list_agents-visible children are releasable'
+
     it('refuses a background start at 25 running children with the actionable error', async () => {
       const { ctx } = await mount()
       const listChildren = withListChildren(ctx, Array.from({ length: 25 }, (_, i) => childRow(`child-${i}`)))
       const result = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentWithCtx(ctx))
       expect(result.isError).toBe(true)
-      expect(result.content[0]!.text).toContain(
-        'parent has 25 live subagents; /agents stop <id> to release one, or let children settle',
-      )
+      // The tool runtime prefixes tool errors with "Error: "; the copy after
+      // the prefix is the exact D4 literal (full equality).
+      expect(result.content[0]!.text).toBe(`Error: ${D4_CAPACITY_COPY}`)
       expect(listChildren).toHaveBeenCalled()
     })
 
@@ -1192,7 +1200,59 @@ describe('Task tool', () => {
       withListChildren(ctx, Array.from({ length: 25 }, (_, i) => childRow(`child-${i}`)))
       const result = await call(ctx, { description: 'x', prompt: 't' }, agentWithCtx(ctx))
       expect(result.isError).toBe(true)
-      expect(result.content[0]!.text).toContain('parent has 25 live subagents')
+      expect(result.content[0]!.text).toContain('free a slot with release_agent on a running child')
+    })
+
+    it('T16: releasing one running child flips the guard from refusing to admitting', async () => {
+      const { ctx } = await mount()
+      const rows = Array.from({ length: 25 }, (_, i) => ({ kind: 'child', id: `child-${i}`, mode: 'continuable' }))
+      withListChildren(ctx, rows)
+      const refused = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentWithCtx(ctx))
+      expect(refused.isError).toBe(true)
+      expect(refused.content[0]!.text).toBe(`Error: ${D4_CAPACITY_COPY}`)
+
+      // release_agent on a running child: the fake drain drops the row (the
+      // same rows array backs both the catalog listing and the fake registry,
+      // so the post-drain read sees it absent).
+      registerReleaseAgentTool(ctx)
+      const seam = ctx.get('subagents') as Record<string, unknown>
+      seam['drainContinuableChildren'] = async (_parent: unknown, ids: string[]): Promise<void> => {
+        const index = rows.findIndex(row => row.id === ids[0])
+        if (index >= 0) rows.splice(index, 1)
+      }
+      const agent = agentWithCtx(ctx)
+      const release = ctx.tools.execute({
+        signal: new AbortController().signal,
+        callId: 'call-release-1' as never,
+        name: RELEASE_AGENT_TOOL,
+        arguments: { agent_id: 'child-0' },
+        agent,
+      })
+      await new Promise(resolve => setTimeout(resolve, 20))
+      const released = (await release) as ToolCallResult
+      expect(released.isError).toBe(false)
+      expect(released.content[0]!.text).toContain('Released agent child-0')
+
+      const admitted = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentWithCtx(ctx))
+      expect(admitted.isError).toBe(false)
+    })
+
+    it('T17: an armed foreground collect of a marked-releasing child resolves the aborted branch with the released-specific copy', async () => {
+      const agentWithId = (id: string): Agent =>
+        ({ id, session: { header: { cwd: '/any' } } } as unknown as Agent)
+      const { ctx, startedChildIds, emitEnd } = await mount({ seamProviders: [pendingProvider()] })
+      const pending = call(ctx, { description: 'x', prompt: 't' }, agentWithId('parent-rel'))
+      await new Promise(resolve => setTimeout(resolve, 10))
+      expect(collectorsForSession('parent-rel')).toHaveLength(1)
+      markReleasing(startedChildIds[0]!)
+      emitEnd(startedChildIds[0]!, { stopReason: 'aborted' })
+      const result = await pending
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toBe(
+        `Error: subagent ${startedChildIds[0]} was released (or its release was in flight) `
+        + 'while it was being collected; it cannot be continued in this session.',
+      )
+      resetReleasedMarkers()
     })
 
     it('does not count inactive or non-child rows and admits at 24', async () => {
@@ -1212,6 +1272,29 @@ describe('Task tool', () => {
       const result = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentAt('/any'))
       expect(result.isError).toBe(false)
         expect(continuableStarts).toHaveLength(1)
+    })
+  })
+
+  describe('D5 background-section release guidance', () => {
+    it('carries the qualified session-exit bullet verbatim', () => {
+      expect(BACKGROUND_SECTION_TEXT).toContain(
+        '- Exiting your session drains every background child\'s in-flight turn (whole-forest teardown); '
+        + 'its persisted session survives on disk — a child that settled on its own stays cold-resumable, '
+        + 'but a DRAINED child does not resume on the next send_message (known upstream gap; '
+        + 'cross-session resume after a drain is unverified).',
+      )
+      expect(BACKGROUND_SECTION_TEXT).not.toContain('cold-resumes on the next `send_message`')
+    })
+
+    it('carries the release_agent capacity bullet verbatim', () => {
+      expect(BACKGROUND_SECTION_TEXT).toContain(
+        '- A background child holds one of 25 live-child capacity slots while it is running; settled '
+        + 'children free theirs automatically. release_agent <id> evicts a stuck running child\'s resident '
+        + 'activation (and its resident descendants\') one-way: same-session continuation is unavailable '
+        + 'after release; its persisted session survives; eviction is cooperative — a cancel-resistant '
+        + 'turn keeps its slot until it settles. Use it on stuck children you can discard, not as '
+        + 'routine cleanup.',
+      )
     })
   })
 

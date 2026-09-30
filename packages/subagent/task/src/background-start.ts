@@ -15,10 +15,11 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { outcomeToResult, promotedResult } from './collect-copy.ts'
 import type { AgentDefinition, ToolRestriction } from '@dsh-cc/claude-code-agents'
 import { cwdOf } from '@dsh-cc/memory'
 import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
-import { collectFirstEpoch, type EpochEventBus, type EpochOutcome } from './epoch-collector.ts'
+import { collectFirstEpoch, type EpochEventBus } from './epoch-collector.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
 
 /** Fresh-child provider: no parent conversation (CC Task default). */
@@ -215,9 +216,13 @@ export async function assertLiveCapacity(
   const agents = parent.ctx?.get?.('agents') as { get?(id: string): { status?: string } | undefined } | undefined
   const live = children.filter(child => agents?.get?.(child.id)?.status === 'running').length
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
+    // Single runtime literal (D4; T16 pins full equality against exactly it):
+    // the copy names the real release path — /agents stop cannot free a slot.
     throw new Error(
-      `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; /agents stop <id> to `
-      + 'release one, or let children settle',
+      `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
+      + 'release_agent on a running child (or /agents release <id> interactively), or '
+      + 'let children settle — only running children hold slots, and only '
+      + 'list_agents-visible children are releasable',
     )
   }
 }
@@ -243,84 +248,6 @@ export function assertContinuableCapable(seam: SubagentsLike): void {
   }
 }
 
-/**
- * Per-reason failure copy for the collect path (UX plan §4 Slice 3 item 2):
- * mirrors `settle`'s contract — `completed` becomes the tool result, every
- * other stop reason throws with a reason-specific, actionable message.
- */
-function stopReasonMessage(childId: string, stopReason: string): string {
-  switch (stopReason) {
-    case 'error':
-      return `subagent ${childId} run failed: the child hit a model or transport failure (stopReason "error").`
-    case 'max-tokens':
-      return `subagent ${childId} stopped with reason "max-tokens": the child hit its token ceiling before finishing.`
-    case 'refusal':
-      return `subagent ${childId} stopped with reason "refusal": the child declined the task.`
-    case 'aborted':
-      return `subagent ${childId} was interrupted (stopReason "aborted"); it may still be resumed — /agents for status.`
-    default:
-      return `subagent ${childId} stopped with reason "${stopReason}".`
-  }
-}
-
-/**
- * The user-promotion result (Ctrl+B, UX plan §3.4): the foreground wait is
- * released to background — the model sees the SAME contract as an explicit
- * `run_in_background: true` launch, with `backgroundedByUser: true` marking
- * the promotion. The child's report/finish notice arrives later as a wake
- * (its suppression mark was removed by `promote()` — exactly-once delivery).
- */
-function promotedResult(
-  childId: string,
-  captureWarning: string | undefined,
-): { text: string; status: 'async_launched'; agentId: string; backgroundedByUser: true } {
-  return {
-    text:
-      `Background subagent started (agentId: ${childId}). The user moved the foreground wait `
-      + 'to the background while it ran (status async_launched, backgroundedByUser: true); treat '
-      + 'this exactly like a background launch — the result arrives as a later waking message, '
-      + 'so do not compose on an inline result. '
-      + 'Control it by that id: `list_agents` for status, `send_message` to continue that same '
-      + 'assignment (a new task needs a fresh `subagent_fork`), `interrupt_agent` to stop its '
-      + 'current turn.'
-      + (captureWarning !== undefined
-        ? `\nresume pin capture failed: ${captureWarning}; this child will resume with legacy semantics`
-        : ''),
-    status: 'async_launched',
-    agentId: childId,
-    backgroundedByUser: true,
-  }
-}
-
-/**
- * Project the collect path's epoch outcome onto the tool output shape
- * (`settle`'s contract): `completed` → the closing message's text blocks;
- * any other stop reason — including the abort path's prompt-synthetic
- * `aborted` — throws with per-reason copy.
- */
-function outcomeToResult(
-  childId: string,
-  outcome: EpochOutcome,
-  captureWarning: string | undefined,
-): { text: string; status: 'completed' } {
-  // A promoted outcome never reaches here (the collect caller returns the
-  // async_launched result first); defensively it is an unexpected terminal.
-  if (outcome.kind !== 'epoch' || outcome.stopReason !== 'completed') {
-    throw new Error(stopReasonMessage(childId, outcome.kind === 'epoch' ? outcome.stopReason : outcome.kind))
-  }
-  const text = (outcome.output ?? [])
-    .filter(block => block.type === 'text')
-    .map(block => block.text ?? '')
-    .join('')
-  return {
-    text:
-      text
-      + (captureWarning !== undefined
-        ? `\nresume pin capture failed: ${captureWarning}; this child will resume with legacy semantics`
-        : ''),
-    status: 'completed' as const,
-  }
-}
 
 /**
  * Dispatch a FOREGROUND non-fork call by collecting the child's first epoch

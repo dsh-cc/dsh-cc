@@ -7,6 +7,13 @@ DeepSeek Harness. It mounts:
 
 - the `subagent_fork` tool (CC display name `Task`) with `subagent_type` dispatch over the
   session workspace's `.claude/agents` definitions;
+- the `release_agent` release valve: evicts a direct continuable child's resident
+  activation (and its resident descendants') through the harness drain seam, freeing the
+  child's capacity slot when it was running. Cooperative and one-way in this session
+  (same-session continuation of a released child is unavailable — upstream
+  cold-resume-after-drain gap); the persisted session survives. Shares the operation and
+  copy set with `/agents release <id>` via `@dsh-cc/command-agents/release`, so released
+  ids carry the process-local `[released]` marker everywhere;
 - the `Available subagents` system-prompt section, rendered per workspace;
 - the reserved tool names (`subagent`, `workflow`) that keep disabled harness rows
   restrictable;
@@ -247,6 +254,8 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
   `resolve`), lazily loading `loadClaudeCodeAgents(root)` (user layer + project layer,
   project shadows user).
 - `registerTaskTool` / `TASK_TOOL` (`./tool`) — register the `subagent_fork` Task tool.
+- `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL` (`./release-agent`) — register the
+  `release_agent` release-valve tool (dropped-return mount, F16 precedent).
 - `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER` (`./catalog`) —
   mount the `Available subagents` section.
 - `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`
