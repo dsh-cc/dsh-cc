@@ -11,6 +11,9 @@
  * absent-seam degradation.
  */
 import { describe, expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import {
   DEFAULT_MODEL_SETTINGS_NAMESPACE,
   PROVIDER_ENTRY_ID,
@@ -117,6 +120,74 @@ describe('ensureProviderBridge (one-shot data migration)', () => {
   it('exposes the bridged entry ids (llm-pi-ai owns the providers row)', () => {
     expect(PROVIDER_ENTRY_ID).toBe('llm-pi-ai')
     expect(DEFAULT_MODEL_SETTINGS_NAMESPACE).toBe('agent-default-model')
+  })
+})
+
+describe('ensureProviderBridge against a real SettingsProvider (rc.2 regression)', () => {
+  // The bridge used to register its namespaces with a toJSON-only impostor,
+  // which only doubles accepted: the vendored provider CALLS the schema at
+  // register time (resolveValue), so /provider crashed with "schema is not a
+  // function" and the settings.json → entry-config migration behind it never
+  // ran (custom providers silently dropped from the model list). Doubles here
+  // must therefore be the REAL vendored provider over a real cordis context.
+
+  /** In-memory provider: the smallest real `SettingsProvider` subclass. */
+  class MemorySettings extends SettingsProvider {
+    doc: Record<string, unknown>
+
+    constructor(ctx: ConstructorParameters<typeof SettingsProvider>[0], options?: { doc?: Record<string, unknown> }) {
+      super(ctx)
+      this.doc = structuredClone(options?.doc ?? {})
+    }
+
+    protected load(): Promise<Record<string, unknown>> {
+      return Promise.resolve(structuredClone(this.doc))
+    }
+
+    protected async persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
+      this.doc[ns] = structuredClone(section)
+    }
+
+    get writable(): boolean {
+      return true
+    }
+  }
+
+  /** Real vendored provider on a root context; only configEditor is doubled. */
+  async function realSettingsCtx(opts: { doc?: Record<string, unknown>; entries?: Record<string, Record<string, unknown>> } = {}) {
+    const root = new Context()
+    await root.plugin(MemorySettings, { doc: opts.doc ?? {} })
+    const editor = fakeConfigEditor(opts.entries)
+    const ctx: Ctx = { get: key => (key === 'configEditor' ? editor : root.get(key)) }
+    const settings = root.get('settings') as MemorySettings
+    return { ctx, editor, settings }
+  }
+
+  it('registers through the real provider and migrates the settings.json providers into the entry config', async () => {
+    const { ctx, editor, settings } = await realSettingsCtx({
+      doc: { 'llm-pi-ai': { providers: { orchestrix: { baseURL: 'https://api' } } } },
+      entries: { 'llm-pi-ai': {} },
+    })
+    await expect(ensureProviderBridge(ctx)).resolves.toBeUndefined()
+    expect(editor.configOf('llm-pi-ai')).toEqual({ providers: { orchestrix: { baseURL: 'https://api' } } })
+    const ns = settings.describe().map(row => String(row.ns))
+    expect(ns).toContain('llm-pi-ai')
+    expect(ns).toContain('agent-default-model')
+  })
+
+  it('is safe in either registration order: a namespace registered by another owner first is reused', async () => {
+    const { ctx, editor, settings } = await realSettingsCtx({
+      doc: { 'llm-pi-ai': { providers: { kimi: { apiKeyEnv: 'K' } } } },
+      entries: { 'llm-pi-ai': {} },
+    })
+    settings.register('llm-pi-ai', z.any())
+    await expect(ensureProviderBridge(ctx)).resolves.toBeUndefined()
+    expect(editor.configOf('llm-pi-ai')).toEqual({ providers: { kimi: { apiKeyEnv: 'K' } } })
+  })
+
+  it('rejects a non-callable schema with a readable error (duck-typed caller guard)', async () => {
+    const { settings } = await realSettingsCtx()
+    expect(() => settings.register('guard-probe', { toJSON: () => ({ type: 'any' }) } as never)).toThrow('callable schemastery Schema')
   })
 })
 
