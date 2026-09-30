@@ -4,9 +4,9 @@
  *
  * Layout: `<sessionsRoot>/<projectKey>/<sessionId>/<stream>`; any directory at
  * depth 2 is treated as a session dir. Stream resolution mirrors
- * session-forensics/src/scan.ts: prefer `session.v3.jsonl.zstd`, fall back to
- * the legacy `session.jsonl.zstd` (the writer emits exactly one format per
- * dir). Only the header line is needed, so the read is a bounded prefix
+ * session-forensics/src/scan.ts: prefer `session.v4.jsonl.zstd` (harness
+ * 0.1.7), fall back to `session.v3.jsonl.zstd` then legacy
+ * `session.jsonl.zstd` (the writer emits exactly one format per dir). Only the header line is needed, so the read is a bounded prefix
  * (256 KiB compressed → 16 KiB decompressed) via `node:fs`/`node:zlib`
  * in-process zstd — no fs seam (prefix reads are impossible over it) and no
  * `zstd` CLI (plan §3.1, cold-review blockers #1/#2).

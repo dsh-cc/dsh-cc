@@ -32,7 +32,7 @@ export const DEFAULT_MODEL_SETTINGS_NAMESPACE = 'agent-default-model'
 /** Duck-typed ctx face: the bridge only `get`s services. */
 export type BridgeCtx = { get(key: string): unknown }
 
-/** Duck-typed configEditor face (rc.2 `@deepseek-ai/dsh-config-editor`). */
+/** Duck-typed configEditor face (the rc.2 config-editor service). */
 type ConfigEditorLike = {
   entries?: () => Array<{ options?: { id?: unknown; config?: Record<string, unknown> } }>
   edit?: (entry: object, change: (current: Record<string, unknown>) => Record<string, unknown>) => Promise<void>

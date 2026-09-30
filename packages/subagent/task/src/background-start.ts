@@ -194,10 +194,8 @@ export function preparedBackground(
  * {@link MAX_LIVE_CONTINUABLE_CHILDREN} live children. rc.2 dropped the
  * catalog's `activity` field, so liveness is re-derived from the live agents
  * registry (`agents.get(id)?.status === 'running'`) — the same derivation
- * rc.2's own consumer uses (tool-subagent-control `statusOf`). Degrades open
- * when the seam lacks `listChildren`, the listing fails, or the agents
- * registry is unavailable: a safety valve must never block starts on its own
- * infrastructure trouble.
+ * rc.2's own consumer uses. Degrades open on seam/listing/registry trouble:
+ * a safety valve never blocks starts on its own infrastructure.
  */
 export async function assertLiveCapacity(
   seam: SubagentsLike,

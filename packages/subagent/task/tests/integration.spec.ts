@@ -395,5 +395,7 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
   // records only the initial request (1, never ≥2) within 10s — the same
   // "Activation never re-materializes into a turn" gap reproduced at 0.1.2.
   // Natural-settle cold resume works (pinned by the §4.12 test above).
+  // Re-probed at 0.1.7-rc.2 (migration R5): unchanged — send resolves
+  // (no DRAINING), child model calls stay at 1 ≥10s after the drain.
   it.skip('a later send_message cold-resumes the drained child from its persisted Session', () => {})
 })

@@ -8,28 +8,16 @@
  * stages, holding dangerous variables until trust. Writes are write-through
  * to the user layer, keeping higher-layer contributions read-side only.
  *
- * NAMESPACE DISPOSITION MATRIX (migration plan 2026-09-29 Q3 addendum;
- * closed at Slice 1b — namespace → disposition → evidence):
- * - `llm-pi-ai`           → BRIDGE WITH DATA MIGRATION. dsh-cc UI reads it
- *   (tui provider-read, describe user layer) and writes it (tui
- *   provider-settings.writeRoute, mirrored to the `llm-pi-ai` entry config by
- *   the tui provider-bridge; gauge-backend reads the same user-override seam).
- * - `agent-default-model` → BRIDGE WITH DATA MIGRATION. TUI setAsDefault
- *   replaces the user section; provider-bridge mirrors provider/model into
- *   the `agent-default-model` entry config (rc.2 persists via configEditor).
- * - `agent-loop`          → REMOVED upstream entirely (rc.2 deleted
- *   AGENT_LOOP_SETTINGS_*); `grep AGENT_LOOP_SETTINGS` over dsh-cc returns
- *   zero — no seam exists.
- * - `permission-presets`  → REMOVED / NO BRIDGE. Only a type-only
- *   `@deepseek-ai/dsh-permission-presets` import (command-status); no dsh-cc
- *   read/write of the namespace; the no-op configure() facade covers boot.
- * - `llm-deepseek`        → REMOVED / NO BRIDGE. Only a test-support import;
- *   no dsh-cc settings read/write.
- * - `bash-local`/`pwsh-local` → REMOVED / NO BRIDGE. Executor package imports
- *   in tests only; no namespace read/write anywhere in dsh-cc.
- * - tool-subagent model-selection → REMOVED / NO BRIDGE. No dsh-cc
- *   namespace reads; rc.2 subagent tooling reads its own Config.
- * - `web-search-deepseek` → REMOVED / NO BRIDGE. Zero dsh-cc references.
+ * NAMESPACE DISPOSITION MATRIX (migration plan 2026-09-29 Q3 addendum,
+ * closed at Slice 1b):
+ * - `llm-pi-ai`, `agent-default-model` → BRIDGE WITH DATA MIGRATION: the
+ *   TUI reads/writes them via this cascade's user layer; tui/provider-bridge
+ *   mirrors writes into the rc.2 plugin entry configs (configEditor).
+ * - `agent-loop` → REMOVED upstream (rc.2 deleted AGENT_LOOP_SETTINGS_*).
+ * - `permission-presets`, `llm-deepseek`, `bash-local`/`pwsh-local`,
+ *   tool-subagent model-selection, `web-search-deepseek` → REMOVED / NO
+ *   BRIDGE: zero dsh-cc namespace reads/writes; the no-op configure()
+ *   facade covers their boot.
  *
  * @module @dsh-cc/settings-cascade
  */

@@ -1,9 +1,9 @@
 /**
  * Scanner: walk the dsh-cc sessions store and normalize events into records.
  *
- * Layout: `<sessionsRoot>/<projectKey>/<sessionId>/session.jsonl.zstd` or
- * `<sessionsRoot>/<projectKey>/<sessionId>/session.v3.jsonl.zstd` (v3 since
- * harness 0.1.5; the writer emits exactly one format per session dir).
+ * Layout: `<sessionsRoot>/<projectKey>/<sessionId>/session.v4.jsonl.zstd` (v4
+ * since harness 0.1.7), falling back to session.v3.jsonl.zstd (0.1.5) then the
+ * legacy session.jsonl.zstd — the writer emits exactly one format per session dir.
  * Child sessions are separate directories; they are distinguished only by
  * the `type: "session"` header line (`origin`, `delegationDepth`,
  * `parentSession`), never by file naming.
