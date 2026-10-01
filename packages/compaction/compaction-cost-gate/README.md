@@ -43,4 +43,4 @@ export function apply(ctx: Context): void {
 }
 ```
 
-The service is mounted by the cc preset (`cc-services` group, id `compaction-cost-gate`). The compaction engine is deliberately not injected: cordis strict-read means a hard `inject` would kill the service where compaction is absent. It is read through a guarded accessor; when absent the package inactivates with one log line and one `compaction-unavailable` ledger row.
+The service is mounted by the cc preset (`compaction` group, id `compaction-cost-gate`). The compaction engine is deliberately not injected: cordis strict-read means a hard `inject` would kill the service where compaction is absent. It is read through a guarded accessor; when absent the package inactivates with one log line and one `compaction-unavailable` ledger row. Because a scoped get() cannot cross an isolate boundary, the gate shares the compaction realm.
