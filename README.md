@@ -22,7 +22,7 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-`dsh-cc` requires `dsh` **>= 0.2.0-rc.2**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-29), and the launcher enforces the floor at bootstrap.
+`dsh-cc` requires `dsh` **>= 0.2.0-rc.2**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-29), and the launcher enforces the floor at bootstrap. This floor tracks the development line — per-release pairings are listed in the table below.
 
 Already have `dsh` **>= 0.2.0-rc.2**? Install only the launcher:
 
@@ -58,6 +58,24 @@ dsh plugin --profile web add \
   @dsh-cc/bundle-shell
 dsh web
 ```
+
+### dsh version compatibility
+
+Each dsh-cc release is developed and CI-verified against one DeepSeek Harness (`dsh`) version. The launcher enforces that same version as the minimum dsh at bootstrap and refuses to start when dsh is older, with an upgrade hint.
+
+| dsh-cc release | Verified dsh |
+| --- | --- |
+| v0.8.3-rc.1 | 0.2.0-rc.2 |
+| v0.8.2 | 0.1.7-rc.2 |
+| v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
+| v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
+| v0.5.0 | 0.1.1-rc.2 (no launcher version gate) |
+
+There is no enforced upper bound, but only the listed pairing is CI-verified; running dsh-cc against a dsh newer than its verified version is untested territory. When a new dsh-cc release moves to a newer dsh version, upgrade dsh first, then dsh-cc.
+
+The two packages ship on independent schedules, so `@latest` on one side is not necessarily the verified partner of `@latest` on the other — check this table after upgrading either package.
+
+Maintainers: the verified pin lives in `.github/workflows/presubmit.yml` (`DSH_HARNESS_REF`) and the launcher floor in `packages/launcher/tui/bootstrap.mjs` (`MIN_DSH_VERSION`); update this table when either changes.
 
 ### Optional: official plugins
 

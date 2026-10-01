@@ -22,7 +22,7 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-`dsh-cc` 要求 `dsh` **>= 0.2.0-rc.2**；默认的 `npm install -g @deepseek-ai/dsh` 目前即可满足（截至 2026-09-29），启动器会在启动时校验该下限。
+`dsh-cc` 要求 `dsh` **>= 0.2.0-rc.2**；默认的 `npm install -g @deepseek-ai/dsh` 目前即可满足（截至 2026-09-29），启动器会在启动时校验该下限。该下限跟随开发主线；各版本的具体配对见下表。
 
 如果已经安装 `dsh` **>= 0.2.0-rc.2**，只需安装启动器：
 
@@ -58,6 +58,24 @@ dsh plugin --profile web add \
   @dsh-cc/bundle-shell
 dsh web
 ```
+
+### dsh 版本兼容对照
+
+每个 dsh-cc 版本都针对一个 DeepSeek Harness（`dsh`）版本开发并完成 CI 验证。启动器把同一个版本作为 dsh 下限，启动时校验，dsh 低于下限会拒绝启动并给出升级提示。
+
+| dsh-cc 版本 | 验证过的 dsh 版本 |
+| --- | --- |
+| v0.8.3-rc.1 | 0.2.0-rc.2 |
+| v0.8.2 | 0.1.7-rc.2 |
+| v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
+| v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
+| v0.5.0 | 0.1.1-rc.2（启动器无版本校验） |
+
+没有强制上限，但只有表中的配对经过 CI 验证；用比验证版本更新的 dsh 运行旧版 dsh-cc 是未经测试的组合。当 dsh-cc 新版提升对应的 dsh 版本时，请先升级 dsh，再升级 dsh-cc。
+
+两个包各自独立发版，两侧的 `@latest` 不一定互为验证过的配对——升级任意一侧后，请对照本表确认。
+
+维护者注意：验证用的 pin 记录在 `.github/workflows/presubmit.yml`（`DSH_HARNESS_REF`），启动器下限在 `packages/launcher/tui/bootstrap.mjs`（`MIN_DSH_VERSION`）；任一变化时请同步更新本表。
 
 ### 可选：官方插件
 
