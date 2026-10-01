@@ -113,9 +113,6 @@ importers:
       '@dsh-cc/session-title-provider':
         specifier: workspace:^
         version: link:../../compat/session-title-provider
-      '@dsh-cc/settings-migrations':
-        specifier: workspace:^
-        version: link:../../settings/settings-migrations
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
@@ -2724,21 +2721,6 @@ importers:
       chokidar:
         specifier: ^4.0.3
         version: 4.0.3
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: link:../../../../deepseek-harness/vendor/cordis
-        version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-home-paths':
-        specifier: link:../../../../deepseek-harness/packages/util/home-paths
-        version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../../deepseek-harness/vendor/schemastery
-        version: link:../../../../deepseek-harness/vendor/schemastery
-
-  packages/settings/settings-migrations:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis

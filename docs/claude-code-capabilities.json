@@ -5287,28 +5287,22 @@
       },
       "dimensions": {
         "recognized": {
-          "status": true
+          "status": false
         },
         "mounted": {
-          "status": true
+          "status": false
         },
         "behavioral": {
-          "status": "partial"
+          "status": "missing"
         },
         "ux": {
-          "status": "partial"
+          "status": "missing"
         }
       },
-      "evidence": [
-        {
-          "type": "test",
-          "path": "packages/settings/settings-migrations/tests/migrations.spec.ts",
-          "anchor": "runMigrations"
-        }
-      ],
+      "evidence": [],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Mechanism only (version-gated runMigrations over an atomically-written settings.json, auto-run on mount) — no real migrations yet."
+        "summary": "Removed after v0.8.3-rc.1 — the mechanism-only package (empty registry since inception) was deleted; re-add when the first real migration ships."
       }
     },
     "settings.precedence": {
