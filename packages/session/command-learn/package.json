@@ -34,11 +34,11 @@
     "@dsh-cc/skill-loader": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-commands": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-fs": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-home-paths": ">=0.1.7-rc.2",
-    "@deepseek-ai/dsh-skill": ">=0.1.7-rc.2",
+    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-commands": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-fs": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
