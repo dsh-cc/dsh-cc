@@ -43,4 +43,4 @@ export function apply(ctx: Context): void {
 }
 ```
 
-该服务由 cc 预设挂载（`cc-services` 组，id `compaction-cost-gate`）。压缩引擎被刻意不注入：cordis 严格读取意味着硬 `inject` 会在压缩缺失的地方杀死服务。它通过受保护的访问器读取；缺失时该包以一行日志和一条 `compaction-unavailable` 账本行失效。
+该服务由 cc 预设挂载（`compaction` 组，id `compaction-cost-gate`）。压缩引擎被刻意不注入：cordis 严格读取意味着硬 `inject` 会在压缩缺失的地方杀死服务。它通过受保护的访问器读取；缺失时该包以一行日志和一条 `compaction-unavailable` 账本行失效。因为作用域 get() 无法跨越 isolate 边界，门控必须共享 compaction realm。

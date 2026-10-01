@@ -304,3 +304,19 @@ specifier typechecks locally (vite/tsconfig paths resolve to source) while faili
 Fixed by importing from the package root and declaring `@deepseek-ai/dsh-commands`
 (peer + linked dev). Rule recorded for future work: never deep-import `@deepseek-ai/*`
 packages either — the repo's deep-import gate only covers `@dsh-cc/*` internal paths.
+
+## Mechanism correction (2026-11)
+
+§3.6's "compaction engine deliberately NOT injected; read through guarded accessor"
+assumed the service was discoverable cross-plane. Vendored cordis `internal/get`
+(vendor/cordis/src/reflect.ts) walks only the reader's own ancestor fibers and throws
+across an isolate-label boundary, so mounting the gate row in the sibling `cc-services`
+realm made the guarded accessor throw on every evaluation — the gate was permanently
+inert (production ledger: 84/84 rows kind=`compaction-unavailable`, 2026-09-21→10-01).
+
+The correction keeps the no-inject posture and changes the mount only: the
+`compaction-cost-gate` row now lives inside the `compaction` group of
+`packages/preset/cc/agent.cordis.yml` — the same rule as `toolResultPrune` — and the
+group's isolate map gains `compactionCostGate: true`. `tokenMeter` stays host-plane
+(the gate's `static inject` resolves upward); the settings namespace and
+`dshHomePath` are host-plane accessors, still reachable from inside the realm.

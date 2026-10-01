@@ -195,7 +195,7 @@ describe('agent.cordis.yml composition', () => {
     expect(row.config).toBeUndefined()
   })
 
-  it('isolates exactly the twelve cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
+  it('isolates exactly the eleven cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')
     expect(group.isolate).toEqual({
@@ -209,7 +209,6 @@ describe('agent.cordis.yml composition', () => {
       hooks: true,
       rules: true,
       contextCrusher: true,
-      compactionCostGate: true,
       ccActorContractGate: true,
     })
     const configIds = (group.config as any[]).map((r) => r.id)
@@ -288,6 +287,40 @@ describe('agent.cordis.yml composition', () => {
     // cc-services tool-web-fetch row instead.
     const toolWeb = doc.find((r) => r.id === 'tool-web')!
     expect(toolWeb.config).toMatchObject({ fetch: false })
+  })
+
+  it('mounts the cost-gate row inside the compaction group and isolates it there', () => {
+    // The gate reads the compaction engine through the guarded `ctx.compaction`
+    // accessor, and a scoped get() cannot cross an isolate boundary — a
+    // sibling-realm mount (the old cc-services placement) yields a permanently
+    // inert gate. The row MUST share the compaction realm, same rule as
+    // toolResultPrune (plan docs/plans/2026-09-20-cost-gated-plan-step-compaction.md,
+    // mechanism correction 2026-11).
+    const group = doc.find((r) => r.id === 'compaction')!
+    expect(group.name).toBe('cordis:group')
+    expect(group.isolate).toEqual({
+      compaction: true,
+      toolResultPruner: true,
+      compactionCostGate: true,
+    })
+    // Parsed-yml membership pin (not just raw text): the row must sit inside
+    // the compaction group's config, immediately after compaction-basic.
+    const compactionConfigIds = (group.config as any[]).map((r) => r.id)
+    expect(compactionConfigIds).toContain('compaction-cost-gate')
+    expect(compactionConfigIds.indexOf('compaction-cost-gate')).toBeGreaterThan(
+      compactionConfigIds.indexOf('compaction-basic'),
+    )
+    // Raw-text tripwire mirroring the group-membership order checks above:
+    // the `- id: compaction-cost-gate` row must sit inside the compaction
+    // group's config — after compaction-basic (engine+gate adjacency) and
+    // before the next group (cc-services).
+    const compactionGroupIdx = yamlText.indexOf('- id: compaction\n')
+    expect(compactionGroupIdx).toBeGreaterThan(-1)
+    const compactionBasicIdx = yamlText.indexOf('- id: compaction-basic')
+    const gateIdx = yamlText.indexOf('- id: compaction-cost-gate')
+    expect(gateIdx).toBeGreaterThan(compactionBasicIdx)
+    expect(gateIdx).toBeGreaterThan(compactionGroupIdx)
+    expect(gateIdx).toBeLessThan(yamlText.indexOf('- id: cc-services'))
   })
 
   it('swaps the harness tool-workflow row for @dsh-cc/tool-workflow in the delegation group', () => {
