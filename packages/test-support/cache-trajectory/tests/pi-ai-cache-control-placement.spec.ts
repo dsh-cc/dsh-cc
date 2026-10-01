@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { streamSimple } from '@earendil-works/pi-ai/api/anthropic-messages'
 import { streamSimple as streamSimpleOpenai } from '@earendil-works/pi-ai/api/openai-completions'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import type { Context, Model, Usage } from '@earendil-works/pi-ai'
 import type { FetchFunction } from '@earendil-works/pi-ai'
 
 /**
- * Placement-pin contract for pi-ai 0.85.1 prompt-cache markers (Phase 0,
+ * Placement-pin contract for pi-ai 0.87.1 prompt-cache markers (Phase 0,
  * sp-1): asserts WHERE `cache_control: { type: 'ephemeral' }` markers land in
  * the fully serialized request params (captured via `options.onPayload`
- * BEFORE any network) per dialect, and that `cacheRetention: 'none'`
- * suppresses them entirely. The stub fetch body only must not throw; the
- * assertions run purely on the onPayload params.
+ * BEFORE any network) per dialect. This spec feeds the dialect stream fns a
+ * TranscriptContext produced by `normalizeContext()` — 0.87.1 moved prompt
+ * text and tool declarations from `Context.systemPrompt`/`Context.tools` onto
+ * transcript system messages, and the dialect entry points now take the
+ * normalized type. Marker placement itself (system block, last tool, last
+ * user message; 3 total in the non-OAuth shape) is unchanged from the 0.85.1
+ * pins, re-verified here against the line the runtime adapter runs. The stub
+ * fetch body only must not throw; the assertions run purely on the onPayload
+ * params.
  */
 
 const STUB_USAGE: Usage = {
@@ -112,7 +119,7 @@ async function captureParams(
 ): Promise<Record<string, any>> {
   let captured: Record<string, any> | undefined
   const streamFn = model.api === 'anthropic-messages' ? streamSimple : streamSimpleOpenai
-  const events = streamFn(model as never, context, {
+  const events = streamFn(model as never, normalizeContext(context), {
     apiKey: 'sk-test',
     fetch: stubFetch,
     onPayload: (payload: unknown) => {
@@ -139,7 +146,7 @@ function collectCacheControl(value: unknown, found: Array<unknown> = []): Array<
   return found
 }
 
-describe('pi-ai 0.85.1 cache_control placement pins', () => {
+describe('pi-ai 0.87.1 cache_control placement pins', () => {
   it('anthropic-messages default: ephemeral marker on system, last tool, last user message', async () => {
     const params = await captureParams(anthropicModel)
 

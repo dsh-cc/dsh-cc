@@ -13,7 +13,7 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.85.1"
+    "@earendil-works/pi-ai": "^0.87.1"
   },
   "dependencies": {
     "zod": "^4.4.3",

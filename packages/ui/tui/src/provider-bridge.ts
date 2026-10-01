@@ -109,6 +109,7 @@ function entryFor(ctx: BridgeCtx, target: BridgeTarget): { options?: { id?: unkn
  * stranded every settings.json `agent-default-model` section on the stock
  * bundle. Doubles/legacy services without the layered view keep the
  * conservative presence guard.
+ * The layered-view contract is exercised against a REAL ConfigEditor mount in tests/provider-bridge-config-editor.spec.ts (design: docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md §4 Q1).
  */
 function conflictsWithUserEntryConfig(
   editor: ConfigEditorLike,
