@@ -20,6 +20,7 @@
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { subscribeLifecycle, type WatchBus, type WatchHandlers } from './subagent-watchers.ts'
 
 /** One output content block of the child's closing message. */
 export interface EpochOutputBlock {
@@ -52,10 +53,12 @@ export interface SubagentsInterruptLike {
   interrupt?(childId: string, authority: { kind: 'ancestor'; agent: Agent }): void
 }
 
-/** Duck-typed event bus (cordis `ctx.on`) the lifecycle events arrive on. */
-export interface EpochEventBus {
-  on(event: string, listener: (info: Record<string, unknown>) => void): (() => void) | void
-}
+/**
+ * Duck-typed event bus (cordis `ctx.on`) the lifecycle events arrive on.
+ * A structural alias of {@link WatchBus} (the shared fan-out core in
+ * `subagent-watchers.ts` accepts any `on(event: string, …)` duck shape).
+ */
+export type EpochEventBus = WatchBus<Record<string, unknown>, Record<string, unknown>>
 
 interface WatchEntry {
   /** Captured from the child's first `subagent/start` with `id === childId`. */
@@ -65,21 +68,22 @@ interface WatchEntry {
 
 /** The one shared watch map (per-process singleton, §3 "Parallel collects"). */
 const watches = new Map<string, WatchEntry>()
-/** The bus the shared listener pair is currently subscribed to. */
-let watchedBus: EpochEventBus | undefined
-/** Disposer of the shared listener pair on {@link watchedBus}. */
-let disposeWatchers: (() => void) | undefined
+/** Release of the shared listener pair, and the bus it is subscribed to. */
+let sharedRelease: (() => void) | undefined
+let sharedBus: EpochEventBus | undefined
 
-function ensureWatchers(bus: EpochEventBus): void {
-  if (disposeWatchers !== undefined && watchedBus === bus) return
-  // A collect on a different bus (never happens in production, where every
-  // collector shares the one cordis context) re-subscribes on the new bus.
-  if (disposeWatchers !== undefined) disposeWatchers()
-  const offStart = bus.on('subagent/start', info => {
+/**
+ * The collector's handler pair on the shared fan-out core: capture the
+ * runId from the child's first `subagent/start` and resolve the watch entry
+ * on the runId-matched `subagent/end` (first-wins return inside the
+ * watch-map iteration — the fan-out core dispatches to every subscriber).
+ */
+const epochHandlers: WatchHandlers<Record<string, unknown>, Record<string, unknown>> = {
+  onStart(info: Record<string, unknown>): void {
     const entry = watches.get(String(info.id))
     if (entry !== undefined && entry.runId === undefined) entry.runId = String(info.runId)
-  })
-  const offEnd = bus.on('subagent/end', info => {
+  },
+  onEnd(info: Record<string, unknown>): void {
     const runId = String(info.runId)
     for (const [childId, entry] of watches) {
       if (entry.runId !== runId) continue
@@ -89,21 +93,37 @@ function ensureWatchers(bus: EpochEventBus): void {
         stopReason: String(info.stopReason),
         ...(output !== undefined ? { output } : {}),
       })
-      if (watches.size === 0 && disposeWatchers !== undefined) disposeWatchers()
+      if (watches.size === 0 && sharedRelease !== undefined) {
+        sharedRelease()
+        sharedRelease = undefined
+        sharedBus = undefined
+      }
       return
     }
-  })
-  watchedBus = bus
-  disposeWatchers = () => {
-    offStart?.()
-    offEnd?.()
-    watchedBus = undefined
+  },
+}
+
+function ensureWatchers(bus: EpochEventBus): void {
+  // Invariant: `sharedRelease !== undefined` ⟺ subscribed, on `sharedBus`.
+  // Production shares one bus, so this attaches once on the 0→nonempty
+  // transition and re-attaches after any full detach; a different bus
+  // (never happens in production) re-subscribes on the new bus, mirroring
+  // the pre-refactor `watchedBus !== bus` behavior.
+  if (sharedRelease !== undefined) {
+    if (sharedBus === bus) return
+    sharedRelease()
   }
+  sharedRelease = subscribeLifecycle(bus, epochHandlers)
+  sharedBus = bus
 }
 
 function release(childId: string): void {
   watches.delete(childId)
-  if (watches.size === 0 && disposeWatchers !== undefined) disposeWatchers()
+  if (watches.size === 0 && sharedRelease !== undefined) {
+    sharedRelease()
+    sharedRelease = undefined
+    sharedBus = undefined
+  }
 }
 
 /** Instrumentation for tests and diagnostics: live watch entries. */

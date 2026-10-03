@@ -24,6 +24,8 @@
  * @module @dsh-cc/subagent-task/one-shot-ledger
  */
 
+import { subscribeLifecycle } from './subagent-watchers.ts'
+
 /** Production labels that mark a child as internal dsh-cc infrastructure. */
 export const INTERNAL_LABELS: readonly string[] = [
   // packages/memory/memory/src/recall.ts (the recall selector)
@@ -147,29 +149,31 @@ export function createOneShotLedger(deps: OneShotLedgerDeps): {
   const activeTtlMs = deps.activeTtlMs ?? DEFAULT_ACTIVE_TTL_MS
   // Rows the ledger keeps, keyed by runId (one row per epoch).
   const rowsByRunId = new Map<string, OneShotLedgerRow>()
-  const offStart = deps.bus.on('subagent/start', info => {
-    const id = String(info.id)
-    const child = deps.agents?.get?.(id)
-    const descriptor = resolveDescriptor(child)
-    const label = descriptor.label
-    const parentId = resolveParentId(child)
-    rowsByRunId.set(String(info.runId), {
-      runId: String(info.runId),
-      id,
-      provider: String(info.provider),
-      ...label !== undefined ? { label } : {},
-      ...parentId !== undefined ? { parentId } : {},
-      startedAt: now(),
-      internal: label !== undefined && INTERNAL_LABELS.includes(label),
-      ...descriptor.mode !== undefined ? { mode: descriptor.mode } : {},
-    })
-  })
-  const offEnd = deps.bus.on('subagent/end', info => {
-    const runId = String(info.runId)
-    const row = rowsByRunId.get(runId)
-    if (row === undefined) return // pruned or never started: a no-op
-    row.endedAt = now()
-    row.stopReason = String(info.stopReason)
+  const release = subscribeLifecycle(deps.bus, {
+    onStart(info: Record<string, unknown>): void {
+      const id = String(info.id)
+      const child = deps.agents?.get?.(id)
+      const descriptor = resolveDescriptor(child)
+      const label = descriptor.label
+      const parentId = resolveParentId(child)
+      rowsByRunId.set(String(info.runId), {
+        runId: String(info.runId),
+        id,
+        provider: String(info.provider),
+        ...label !== undefined ? { label } : {},
+        ...parentId !== undefined ? { parentId } : {},
+        startedAt: now(),
+        internal: label !== undefined && INTERNAL_LABELS.includes(label),
+        ...descriptor.mode !== undefined ? { mode: descriptor.mode } : {},
+      })
+    },
+    onEnd(info: Record<string, unknown>): void {
+      const runId = String(info.runId)
+      const row = rowsByRunId.get(runId)
+      if (row === undefined) return // pruned or never started: a no-op
+      row.endedAt = now()
+      row.stopReason = String(info.stopReason)
+    },
   })
   const prune = (): void => {
     const t = now()
@@ -213,8 +217,7 @@ export function createOneShotLedger(deps: OneShotLedgerDeps): {
         && row.parentId !== undefined)
     },
     dispose(): void {
-      offStart?.()
-      offEnd?.()
+      release()
     },
   }
 }
