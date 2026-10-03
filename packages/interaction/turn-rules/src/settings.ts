@@ -20,12 +20,21 @@ import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 /** The settings namespace carrying the engine flags. */
 export const SETTINGS_NAMESPACE = 'cc-turn-rules' as SettingsNamespace
 
+export interface RepeatReminderSettings {
+  enabled: boolean
+  thresholds: number[]
+  include: string[]
+  exclude: string[]
+  argumentsPreviewChars: number
+}
+
 /** Resolved settings shape. */
 export interface TurnRulesSettings {
   enabled: boolean
   maxResultBytes: number
   regexCacheSize: number
   judgedEnabled: boolean
+  repeatReminder: RepeatReminderSettings
 }
 
 const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) as z<T | undefined>
@@ -36,6 +45,13 @@ const SettingsObject = z.object({
   'max-result-bytes': z.number().default(200_000),
   'regex-cache-size': z.number().default(64),
   judged: opt(z.object({ enabled: z.boolean().default(false) })),
+  'repeat-reminder': opt(z.object({
+    enabled: z.boolean().default(false),
+    thresholds: z.array(z.number()).default([3, 5, 8]),
+    include: z.array(z.string()).default([]),
+    exclude: z.array(z.string()).default([]),
+    'arguments-preview-chars': z.number().default(500),
+  })),
 })
 
 /**
@@ -52,6 +68,7 @@ export const DEFAULT_TURN_RULES_SETTINGS: TurnRulesSettings = {
   maxResultBytes: 200_000,
   regexCacheSize: 64,
   judgedEnabled: false,
+  repeatReminder: { enabled: false, thresholds: [3, 5, 8], include: [], exclude: [], argumentsPreviewChars: 500 },
 }
 
 /**
@@ -83,11 +100,20 @@ export function registerSettings(ctx: Context): (() => TurnRulesSettings) | unde
 function resolveSection(section: Record<string, unknown>): TurnRulesSettings {
   const resolved = SettingsObject(section as unknown as Record<string, never>) as unknown as Record<string, unknown>
   const judged = resolved.judged as Record<string, unknown> | undefined
+  const repeat = (resolved['repeat-reminder'] ?? {}) as Record<string, unknown>
   return {
     enabled: resolved.enabled as boolean,
     maxResultBytes: resolved['max-result-bytes'] as number,
     regexCacheSize: resolved['regex-cache-size'] as number,
     judgedEnabled: judged?.enabled === true,
+    repeatReminder: {
+      enabled: repeat.enabled === true,
+      thresholds: (repeat.thresholds as number[] | undefined) ?? DEFAULT_TURN_RULES_SETTINGS.repeatReminder.thresholds,
+      include: (repeat.include as string[] | undefined) ?? [],
+      exclude: (repeat.exclude as string[] | undefined) ?? [],
+      argumentsPreviewChars: (repeat['arguments-preview-chars'] as number | undefined)
+        ?? DEFAULT_TURN_RULES_SETTINGS.repeatReminder.argumentsPreviewChars,
+    },
   }
 }
 
