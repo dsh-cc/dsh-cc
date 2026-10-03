@@ -99,6 +99,84 @@ function resolveRules(section: Record<string, unknown>): RulesSettings {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Second namespace: edit recovery hint (merged from @dsh-cc/edit-recovery-hint,
+// design doc docs/plans/2026-09-21-edit-fuzzy-matching-and-read-state.md,
+// Track B). Ship-dark, user-layer-only; names carry a RecoveryHint prefix to
+// coexist with the verify namespace in one module.
+// ---------------------------------------------------------------------------
+
+/** The settings namespace carrying the recovery-hint feature flag. */
+export const RECOVERY_HINT_SETTINGS_NAMESPACE = 'cc-edit-recovery-hint' as SettingsNamespace
+
+/** Resolved recovery-hint settings shape. */
+export interface RecoveryHintSettings {
+  enabled: boolean
+}
+
+/** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
+const RecoveryHintSettingsObject = z.object({
+  enabled: z.boolean().default(false),
+})
+
+/** Recovery-hint namespace schema (same z.const(undefined) wrapping convention). */
+export const RecoveryHintSettingsSchema: z<Record<string, unknown>> =
+  opt(RecoveryHintSettingsObject) as unknown as z<Record<string, unknown>>
+
+/** Ship-dark default: the hint is opt-in. */
+export const DEFAULT_RECOVERY_HINT_SETTINGS: RecoveryHintSettings = { enabled: false }
+
+/**
+ * Register the recovery-hint settings namespace (for /config UX and
+ * validation only — the listener reads the raw user file). Returns the live
+ * reader, or `undefined` when the host has no settings provider.
+ */
+export function registerRecoveryHintSettings(ctx: Context): (() => RecoveryHintSettings) | undefined {
+  const settings = ctx.get('settings') as object | undefined
+  if (settings === undefined) return undefined
+  const read = registerNamespaceSafe<Record<string, unknown>>(
+    ctx,
+    RECOVERY_HINT_SETTINGS_NAMESPACE,
+    RecoveryHintSettingsSchema as unknown as z<Record<string, unknown>>,
+  )
+  return () => {
+    try {
+      const value = read()
+      if (value === undefined) return DEFAULT_RECOVERY_HINT_SETTINGS
+      const resolved = RecoveryHintSettingsObject(value as unknown as Record<string, never>) as unknown as Record<string, unknown>
+      return { enabled: resolved.enabled as boolean }
+    } catch {
+      // Malformed live scope → ship-dark defaults; never throw into a hot path.
+      return DEFAULT_RECOVERY_HINT_SETTINGS
+    }
+  }
+}
+
+/**
+ * Read the recovery-hint enabled flag DIRECTLY from `<dshHome>/settings.json`,
+ * bypassing the merged cascade. Fail-soft: absent file, parse error, or a
+ * malformed section yields the ship-dark default (false). Project-scope
+ * values are never read — invisible, not refused.
+ */
+export async function readUserEnabled(dshHome: string): Promise<boolean> {
+  let text: string
+  try {
+    text = await readFile(join(dshHome, 'settings.json'), 'utf8')
+  } catch {
+    return false
+  }
+  let root: unknown
+  try {
+    root = JSON.parse(text)
+  } catch {
+    return false
+  }
+  if (typeof root !== 'object' || root === null) return false
+  const section = (root as Record<string, unknown>)[RECOVERY_HINT_SETTINGS_NAMESPACE]
+  if (typeof section !== 'object' || section === null) return false
+  return (section as Record<string, unknown>).enabled === true
+}
+
 /**
  * Register the settings namespace (for /config UX and validation only —
  * trigger logic reads the raw user file). Returns the live reader, or

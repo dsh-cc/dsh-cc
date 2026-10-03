@@ -10,6 +10,8 @@ import { apply } from '../src/index.ts'
  * Listener-level tests at the `tools/post-execute` boundary with a fake ctx:
  * we capture the listener `apply` registers and drive it directly, so every
  * trigger permutation is observable end-to-end without a full agent-loop rig.
+ * Merged from @dsh-cc/edit-recovery-hint (recovery-wiring.spec.ts): the
+ * recovery listener is registered regardless of the shell service.
  */
 
 const dirs: string[] = []
@@ -46,12 +48,14 @@ function rig(options: { home?: string; dshHomeThrows?: boolean }): Rig {
     }
   }
   apply(ctx as never)
-  const call = ctx.on.mock.calls.find(([event]) => event === 'tools/post-execute') as unknown as [
+  const calls = ctx.on.mock.calls.filter(([event]) => event === 'tools/post-execute') as unknown as [
     string,
     (exec: ToolExecution, result: Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>) => Promise<PostToolDecision>,
-  ]
-  expect(call).toBeTruthy()
-  return { ctx, listener: call[1] }
+  ][]
+  // Without a shell service only the recovery listener exists; with the fake
+  // rig the recovery listener is the LAST post-execute registration.
+  expect(calls.length).toBeGreaterThanOrEqual(1)
+  return { ctx, listener: calls[calls.length - 1]![1] }
 }
 
 function enable(home: string, enabled: boolean): void {
@@ -75,6 +79,14 @@ const nextAccept = (content = NOT_FOUND) => async () =>
 const nextBare = () => async () => ({ kind: 'accept' }) as unknown as PostToolDecision
 
 describe('listener trigger permutations', () => {
+  it('shell-absent: apply mounts exactly one post-execute listener (recovery) and warns; verify listener skipped', () => {
+    const home = tempHome()
+    enable(home, true)
+    const { ctx } = rig({ home })
+    expect(ctx.on.mock.calls.filter(([event]) => event === 'tools/post-execute')).toHaveLength(1)
+    expect(ctx.logger.warn).toHaveBeenCalledWith('post-edit-verify: no shell service on the host context; disabled')
+  })
+
   it('fires on edit + error + multi-line + not-found + enabled; appends hint as additionalContexts', async () => {
     const home = tempHome()
     enable(home, true)

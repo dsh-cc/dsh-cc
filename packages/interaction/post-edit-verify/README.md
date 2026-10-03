@@ -21,6 +21,10 @@ Key `cc-post-edit-verify` in the **user-layer** `settings.json` (the harness-hom
 | `verbose-on-success` | `false` | By default success is near-silent (one-liner only). |
 | `timeout-ms` (per rule) | `60000` | Per-rule timeout, capped at `120000`. |
 
+## Recovery hints
+
+This package also hosts the merged edit-recovery-hint feature: when the `edit` tool fails not-found on a multi-line `old_string`, a fixed static recovery-advice message (anchor to a single-line `old_string`, or split per hunk) is appended to the same tool result as an `additionalContexts` sideband — the tool result content is never rewritten. No shell service is needed, so this listener is mounted even where auto-verify is inert. It is controlled by the separate user-layer-only `cc-edit-recovery-hint` namespace (unchanged from before the merge) and stays **default OFF**.
+
 ## Command environment
 
 Rules run in a **POSIX shell** (`sh` semantics) — no Windows-native syntax. The command runs through the harness ShellExecutor, killed at its timeout; a timed-out or signal-killed run appends nothing (the edit result stays exactly as before). Node one-liners (`node -e "…"`) are a good cross-platform authoring style.

@@ -541,25 +541,25 @@
         {
           "type": "source",
           "path": "packages/preset/cc/agent.cordis.yml",
-          "anchor": "- id: edit-recovery-hint"
+          "anchor": "- id: post-edit-verify"
         },
         {
           "type": "source",
-          "path": "packages/interaction/edit-recovery-hint/src/wiring.ts",
-          "anchor": "ctx.on('tools/post-execute'"
+          "path": "packages/interaction/post-edit-verify/src/recovery-wiring.ts",
+          "anchor": "registerRecoveryListener"
         },
         {
           "type": "test",
-          "path": "packages/interaction/edit-recovery-hint/tests/wiring.spec.ts"
+          "path": "packages/interaction/post-edit-verify/tests/recovery-wiring.spec.ts"
         },
         {
           "type": "test",
-          "path": "packages/interaction/edit-recovery-hint/tests/hint.spec.ts"
+          "path": "packages/interaction/post-edit-verify/tests/hint.spec.ts"
         }
       ],
       "deviation": {
         "kind": "divergent",
-        "summary": "dsh-cc extension (user-layer-only setting cc-edit-recovery-hint, enabled default false): on an edit-tool FS_EDIT_NOT_FOUND failure of a multi-line old_string, a FIXED static recovery-advice message (anchor to a single-line old_string, or split per-hunk) is appended as an additionalContexts entry on the accept decision — same deferContext delivery surface as PostToolUse additionalContext, but triggered in-process via tools/post-execute with no subprocess. Static text only: no tool-output interpolation. No Claude Code equivalent."
+        "summary": "dsh-cc extension (user-layer-only setting cc-edit-recovery-hint, enabled default false): on an edit-tool FS_EDIT_NOT_FOUND failure of a multi-line old_string, a FIXED static recovery-advice message (anchor to a single-line old_string, or split per-hunk) is appended as an additionalContexts entry on the accept decision — same deferContext delivery surface as PostToolUse additionalContext, but triggered in-process via tools/post-execute with no subprocess. Static text only: no tool-output interpolation. No Claude Code equivalent. Hosted inside @dsh-cc/post-edit-verify after the Tier-2 merge."
       }
     },
     "engine.error-streak-surfacing": {

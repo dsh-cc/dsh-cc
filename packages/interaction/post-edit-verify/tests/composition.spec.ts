@@ -207,4 +207,7 @@ describe('post-edit-verify composition (real boot, real shell)', () => {
     const texts = resultTexts(agent)
     expect(texts.some((t) => t.includes('[auto-verify]'))).toBe(false)
   })
+  // NOTE: the shell-inert merge contract (verify listener skipped, recovery
+  // listener always registered) is covered unit-side in recovery-wiring.spec.ts
+  // — introspecting cordis listener internals is not an observable surface.
 })
