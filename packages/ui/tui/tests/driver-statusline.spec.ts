@@ -233,6 +233,13 @@ const activeSection = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+/** Controllable async gate (driver-boot-seed.spec.ts idiom). */
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => { resolve = res })
+  return { promise, resolve }
+}
+
 async function bootActiveDriver(
   executor = makeExecutor(),
   section = activeSection(),
@@ -315,6 +322,56 @@ describe('createDriver custom statusLine wiring', () => {
     expect(statuslineTimeouts).toHaveLength(0)
     setIntervalSpy.mockRestore()
     setTimeoutSpy.mockRestore()
+  })
+
+  it('before the custom command\'s first settle, the built-in line keeps rendering', async () => {
+    const executor = makeExecutor()
+    let release!: (result: FakeRunResult) => void
+    executor.setHandler(() => new Promise<FakeRunResult>((resolve) => { release = resolve }))
+    const { driver } = await bootActiveDriver(executor, activeSection({ padding: 2 }))
+    await vi.advanceTimersByTimeAsync(0)
+    // The armed activation fire has spawned, but nothing landed yet: the
+    // built-in HUD (with the session id) keeps rendering, not the mode row.
+    expect(executor.specs).toHaveLength(1)
+    expect(driver.statusLine).not.toBe(formatModeLine('default'))
+    expect(driver.statusLine).toContain('s-a')
+
+    release({ exitCode: 0, timedOut: false, stdout: { text: 'X\n' }, stderr: { text: '' } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(driver.statusLine).toBe('  X\n' + formatModeLine('default'))
+  })
+
+  it('the activation fire waits for the model seed', async () => {
+    // Real timers from the start: with the seed gate pending, createDriver's
+    // awaitBootFrame parks on a macrotask timer that fake timers never fire.
+    vi.useRealTimers()
+    const gate = deferred<unknown>()
+    const executor = makeExecutor()
+    const { ctx } = makeStatusLineCtx({
+      projections: makeProjections(),
+      settings: makeSettings(activeSection()),
+      executor,
+      // No provider/model on the session → the boot seed awaits the service.
+      createSession: { id: 's-a', createdAt: 1_000_000 },
+    })
+    // Duck-typed async deployment-default service whose settle the test holds,
+    // per driver-boot-seed.spec.ts's seed-gate pattern.
+    const baseGet = ctx.get.bind(ctx)
+    ctx.get = (key: string) => key === 'agentDefaultModel'
+      ? { currentSelection: () => gate.promise }
+      : baseGet(key)
+    const driver = await createDriver(ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
+    const flush = async (): Promise<void> => { await new Promise(res => setTimeout(res, 0)); await new Promise(res => setTimeout(res, 0)) }
+    await flush()
+    // Seed still pending: the armed activation fire must not have spawned.
+    expect(executor.specs).toHaveLength(0)
+
+    gate.resolve({ provider: 'orchestrix', model: 'deepseek-v4-flash' })
+    await flush()
+    expect(executor.specs).toHaveLength(1)
+    const payload = JSON.parse(executor.specs[0]!.stdin!) as Record<string, unknown>
+    expect(payload.model).toEqual({ id: 'deepseek-v4-flash', display_name: 'deepseek-v4-flash' })
+    void driver
   })
 
   it('a tokenUsage projection change re-runs the command with fresh stdin JSON', async () => {
@@ -453,6 +510,9 @@ describe('createDriver custom statusLine wiring', () => {
     // the child's settle is a microtask away.
     executor.setHandler(async () => ({ exitCode: 0, timedOut: false, stdout: { text: 'SECOND\n' }, stderr: { text: '' } }))
     settings.commit(activeSection({ command: 'other.sh' }))
+    // Under the D2 armed fire the activation spawn lands a microtask (or a
+    // resolved-seed .then) after the deactivate→activate commit.
+    await vi.advanceTimersByTimeAsync(0)
     expect(executor.specs).toHaveLength(2)
     await vi.advanceTimersByTimeAsync(0)
     expect(driver.statusLine).toBe('SECOND' + '\n' + formatModeLine('default'))
