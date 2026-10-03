@@ -15,6 +15,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { extractEnabledPluginKeys } from './enabled-plugins.ts'
 import { resolveLocalSettingsDir } from '@dsh-cc/settings-cascade/local-root'
 
 /** One discovered plugin root plus the name used to match marketplace overlays. */
@@ -239,8 +240,7 @@ function enabledKeys(
       scope: 'project',
     },
   ]
-  const state = new Map<string, boolean>()
-  const order: string[] = []
+  const state: Record<string, boolean> = {}
   let projectScoped = false
   for (const file of cascade) {
     const parsed = readJson(file.path)
@@ -248,16 +248,12 @@ function enabledKeys(
     const block = parsed['enabledPlugins']
     if (!isRecord(block)) continue
     if (file.scope === 'project' && Object.keys(block).length > 0) projectScoped = true
-    for (const [key, value] of Object.entries(block)) {
-      if (typeof value !== 'boolean') continue
-      if (!state.has(key)) order.push(key)
-      state.set(key, value)
-    }
+    extractEnabledPluginKeys(state, parsed)
   }
   if (projectScoped) log?.info(`cc-plugin-loader: project-scope enabledPlugins read from cwd ${cwd}`)
   const enabled: string[] = []
-  for (const key of order) {
-    if (state.get(key) !== true) continue
+  for (const key of Object.keys(state)) {
+    if (state[key] !== true) continue
     if (!key.includes('@')) {
       log?.warn(`cc-plugin-loader: skipping bare enabledPlugins key "${key}" (expected name@marketplace)`)
       continue

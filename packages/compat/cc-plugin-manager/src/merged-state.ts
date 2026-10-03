@@ -10,6 +10,7 @@
  * @module @dsh-cc/plugin-manager/merged-state
  */
 
+import { foldEnabledPluginsRaw } from '@dsh-cc/plugin-loader'
 import { claudePluginsStatePaths, pluginsStatePaths, userSettingsReadFiles, type PathInputs } from './paths.ts'
 import { loadInstalledPlugins, loadJsonFile, loadSettingsFile } from './state-store.ts'
 import type { EnabledPlugins, InstallEntry, InstalledPluginsFile, KnownMarketplaceEntry, KnownMarketplacesFile } from './types.ts'
@@ -107,7 +108,7 @@ export async function loadMergedUserEnabledPlugins(deps: PathInputs): Promise<En
   const merged: EnabledPlugins = {}
   for (const file of userSettingsReadFiles(deps)) {
     const settings = await loadSettingsFile(file)
-    Object.assign(merged, settings['enabledPlugins'] ?? {})
+    foldEnabledPluginsRaw(merged, settings['enabledPlugins'] ?? {})
   }
   return merged
 }
