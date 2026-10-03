@@ -379,10 +379,10 @@ capabilities:
       behavioral: full
       ux: partial
     evidence:
-      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: edit-recovery-hint" }
-      - { type: source, path: packages/interaction/edit-recovery-hint/src/wiring.ts, anchor: "ctx.on('tools/post-execute'" }
-      - { type: test, path: packages/interaction/edit-recovery-hint/tests/wiring.spec.ts }
-      - { type: test, path: packages/interaction/edit-recovery-hint/tests/hint.spec.ts }
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: post-edit-verify" }
+      - { type: source, path: packages/interaction/post-edit-verify/src/recovery-wiring.ts, anchor: "registerRecoveryListener" }
+      - { type: test, path: packages/interaction/post-edit-verify/tests/recovery-wiring.spec.ts }
+      - { type: test, path: packages/interaction/post-edit-verify/tests/hint.spec.ts }
     deviation:
       kind: divergent
       summary: >-
@@ -394,6 +394,7 @@ capabilities:
         deferContext delivery surface as PostToolUse additionalContext, but
         triggered in-process via tools/post-execute with no subprocess. Static
         text only: no tool-output interpolation. No Claude Code equivalent.
+        Hosted inside @dsh-cc/post-edit-verify after the Tier-2 merge.
 
   engine.error-streak-surfacing:
     title: Agent-error streak surfacing

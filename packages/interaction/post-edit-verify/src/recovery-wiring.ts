@@ -1,7 +1,9 @@
 /**
- * Live wiring (design doc Track B): the `tools/post-execute` listener that
- * appends the static recovery hint as an `additionalContexts` entry on the
- * accept decision when an edit fails not-found on a multi-line old_string.
+ * Live wiring for the edit recovery hint (design doc
+ * docs/plans/2026-09-21-edit-fuzzy-matching-and-read-state.md, Track B —
+ * merged from @dsh-cc/edit-recovery-hint): the `tools/post-execute` listener
+ * that appends the static recovery hint as an `additionalContexts` entry on
+ * the accept decision when an edit fails not-found on a multi-line old_string.
  * Fail-soft all the way — any failure returns the downstream decision
  * unchanged; a throw here would turn the user's tool result into an error
  * (data loss).
@@ -40,13 +42,6 @@ function hintMessage(): UserMessage {
   })
 }
 
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** Harness-home path resolver, provided by @deepseek-ai/dsh-app-boot at boot. Optional in tests. */
-    dshHomePath?: (...segments: string[]) => string
-  }
-}
-
 /** Guarded dshHome read (context-crusher index.ts pattern): cordis throws on the property access itself. */
 function dshHomeOf(ctx: Context): string | undefined {
   try {
@@ -56,7 +51,7 @@ function dshHomeOf(ctx: Context): string | undefined {
   }
 }
 
-export function registerListener(ctx: Context): void {
+export function registerRecoveryListener(ctx: Context): void {
   ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
     const downstream = await next()
     try {

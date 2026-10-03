@@ -226,15 +226,10 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('post-edit-verify')
     expect(topIds).not.toContain('post-edit-verify')
     expect(configIds.indexOf('post-edit-verify')).toBeGreaterThan(configIds.indexOf('tool-use-summary'))
-    // The edit-recovery-hint row (plan docs/plans/2026-09-21-edit-fuzzy-matching-and-read-state.md,
-    // Track B) publishes no Service (plain plugin) and sits inside the group
-    // IMMEDIATELY after post-edit-verify, with NO new isolate key.
-    expect(configIds).toContain('edit-recovery-hint')
-    expect(topIds).not.toContain('edit-recovery-hint')
-    expect(configIds.indexOf('edit-recovery-hint')).toBe(configIds.indexOf('post-edit-verify') + 1)
     // The turn-rules row (plan docs/plans/2026-09-23-turn-rules.md) publishes
-    // no Service (plain plugin) and sits inside the group directly after
-    // edit-recovery-hint, with NO new isolate key. ORDER TRIPWIRE: it must
+    // no Service (plain plugin) and sits inside the group after
+    // post-edit-verify (which now hosts the merged edit-recovery-hint
+    // feature), with NO new isolate key. ORDER TRIPWIRE: it must
     // sort after the context-crusher row — CCR outermost, turn-rules composed
     // after it, so tool-result matching sees the post-crush text.
     expect(configIds).toContain('turn-rules')
@@ -250,12 +245,13 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds.indexOf('advisor-watchdog')).toBeGreaterThan(configIds.indexOf('turn-rules'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
-    // after edit-recovery-hint, with NO new isolate key. Its post-execute
+    // after post-edit-verify (merged edit-recovery-hint host), with NO new
+    // isolate key. Its post-execute
     // listener is registered WITHOUT prepend so it composes inside the
     // context-crusher's outermost listener (same family as post-edit-verify).
     expect(configIds).toContain('lsp-on-write')
     expect(topIds).not.toContain('lsp-on-write')
-    expect(configIds.indexOf('lsp-on-write')).toBe(configIds.indexOf('edit-recovery-hint') + 1)
+    expect(configIds.indexOf('lsp-on-write')).toBe(configIds.indexOf('post-edit-verify') + 1)
     expect(configIds).toContain('command-plugin')
     expect(configIds).toContain('command-mcp')
     // The serena-first steering row consumes the isolated `mcpConnections`
