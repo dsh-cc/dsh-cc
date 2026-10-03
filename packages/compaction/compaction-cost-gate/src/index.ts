@@ -27,6 +27,7 @@ import { deriveEventMessage, type Session } from '@deepseek-ai/dsh-session'
 import type { PostToolDecision } from '@dsh-cc/tools'
 import type { CompactionEngine, ManualCompactAgentContext } from '@deepseek-ai/dsh-compaction'
 import { setCompactHint, takeCompactHint } from '@dsh-cc/compaction-basic'
+import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { resolvePrice } from '@dsh-cc/command-cost'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
@@ -56,8 +57,7 @@ export { diffTodos } from './todo-diff.ts'
 export { SETTINGS_NAMESPACE, registerCostGateSettings } from './settings.ts'
 export * from './types.ts'
 
-/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
-type HomeFn = (...segments: string[]) => string
+/** dshHomePath seam, read defensively (shared @dsh-cc/sidecar-io primitive). */
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -70,14 +70,6 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The mounted cost gate (present whenever the plugin mounts). */
     compactionCostGate?: CompactionCostGate
-  }
-}
-
-function dshHomeFn(ctx: Context): HomeFn | undefined {
-  try {
-    return ctx.dshHomePath
-  } catch {
-    return undefined
   }
 }
 

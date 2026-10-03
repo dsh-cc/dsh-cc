@@ -11,9 +11,8 @@
  * @module @dsh-cc/reasoning-fold/ledger
  */
 
-import { appendFile, mkdir } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type { StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
+import { appendJsonl } from '@dsh-cc/sidecar-io'
 
 /**
  * Per-call probe record. A LOCAL const inside one `llm/stream` listener
@@ -81,8 +80,7 @@ export async function appendLedgerRow(filePath: string, record: FoldRecord): Pro
       textBytes: record.textBytes,
       ...record.usage === undefined ? {} : { usage: record.usage },
     }
-    await mkdir(dirname(filePath), { recursive: true })
-    await appendFile(filePath, `${JSON.stringify(row)}\n`, 'utf8')
+    await appendJsonl(filePath, row)
   } catch {
     // Best-effort observability; never surface into the model-call waterfall.
   }

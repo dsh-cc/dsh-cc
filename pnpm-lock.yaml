@@ -303,6 +303,10 @@ importers:
         version: link:../tool-use-summary
 
   packages/compaction/compaction-cost-gate:
+    dependencies:
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -409,6 +413,9 @@ importers:
       '@dsh-cc/side-query':
         specifier: workspace:^
         version: link:../../llm-tuning/side-query
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -649,6 +656,9 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1806,34 +1816,6 @@ importers:
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
 
-  packages/interaction/edit-recovery-hint:
-    dependencies:
-      '@dsh-cc/settings-ns':
-        specifier: workspace:^
-        version: link:../../settings/settings-ns
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: link:../../../../deepseek-harness/vendor/cordis
-        version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-llm':
-        specifier: link:../../../../deepseek-harness/packages/llm/llm
-        version: link:../../../../deepseek-harness/packages/llm/llm
-      '@deepseek-ai/dsh-session':
-        specifier: link:../../../../deepseek-harness/packages/core/session
-        version: link:../../../../deepseek-harness/packages/core/session
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../../deepseek-harness/vendor/schemastery
-        version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
-      '@dsh-cc/tools':
-        specifier: workspace:^
-        version: link:../../core/tools
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
-
   packages/interaction/lsp-on-write:
     dependencies:
       '@dsh-cc/session-cwd':
@@ -2090,6 +2072,9 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2317,6 +2302,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../../interaction/command-usage
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2339,6 +2327,15 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+
+  packages/observability/sidecar-io:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
   packages/plugin/cc-codex-bridge: {}
 
@@ -2449,9 +2446,6 @@ importers:
       '@dsh-cc/coordinator':
         specifier: workspace:^
         version: link:../../subagent/coordinator
-      '@dsh-cc/edit-recovery-hint':
-        specifier: workspace:^
-        version: link:../../interaction/edit-recovery-hint
       '@dsh-cc/handoff-store':
         specifier: workspace:^
         version: link:../../subagent/handoff-store

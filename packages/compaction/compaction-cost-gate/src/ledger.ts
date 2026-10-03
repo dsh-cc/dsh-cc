@@ -6,8 +6,8 @@
  */
 
 import { appendFile, mkdir } from 'node:fs/promises'
-import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
+import { projectKeyOf as sharedProjectKeyOf } from '@dsh-cc/sidecar-io'
 
 /** One ledger row (one JSON object per jsonl line). */
 export interface LedgerRow {
@@ -45,9 +45,12 @@ export interface LedgerRow {
 /** Error sink (the plugin passes a warn-logger); never throws. */
 export type LedgerErrorSink = (error: unknown) => void
 
-/** projectKey = 8-hex sha256 of the session cwd (cache-health idiom). */
+/**
+ * projectKey = 8-hex sha256 of the session cwd (cache-health idiom).
+ * Width kept at 8: existing cost-gate ledgers on disk key off 8.
+ */
 export function projectKeyOf(cwd: string): string {
-  return createHash('sha256').update(cwd).digest('hex').slice(0, 8)
+  return sharedProjectKeyOf(cwd, 8)
 }
 
 /**

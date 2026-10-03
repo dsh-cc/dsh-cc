@@ -13,20 +13,18 @@
  * @module @dsh-cc/context-crusher/store
  */
 
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { rmSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { shortHash } from '@dsh-cc/sidecar-io'
 import type { RetrieveError } from './types.ts'
 
 export const STORE_MAX_ENTRIES = 200
 export const STORE_TTL_MS = 3600_000
 const HASH_RE = /^[0-9a-f]{16}$/
 
-/** sha256 hex, first 16 chars — the shared content/project key shape. */
-export function shortHash(input: string): string {
-  return createHash('sha256').update(input, 'utf8').digest('hex').slice(0, 16)
-}
+export { shortHash }
 
 /** Injectable clock signature (tests pass a fake; never sleep in tests). */
 export type NowFn = () => number

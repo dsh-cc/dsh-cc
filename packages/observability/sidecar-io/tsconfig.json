@@ -6,13 +6,5 @@
   },
   "include": [
     "src"
-  ],
-  "references": [
-    {
-      "path": "../../interaction/command-usage"
-    },
-    {
-      "path": "../sidecar-io"
-    }
   ]
 }

@@ -22,6 +22,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { PostToolDecision, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
 import { runSideQuery } from '@dsh-cc/side-query'
+import { dshHomeFn, type HomeFn } from '@dsh-cc/sidecar-io'
 import { appendLedgerRow, loadSummaries, sweepLedgers } from './ledger.ts'
 import { registerTusSettings, type TusSettings } from './settings.ts'
 import { clampSummary, TUS_SYSTEM, tusPrompt } from './summary.ts'
@@ -36,21 +37,12 @@ export { SummaryStore } from './store.ts'
 export { tusFramedSummary, isCrusherStub } from './framing.ts'
 export type { SummaryRow } from './types.ts'
 
-/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
-type HomeFn = (...segments: string[]) => string
+/** dshHomePath seam, read defensively (shared @dsh-cc/sidecar-io primitive). */
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Harness-home path resolver, provided by @deepseek-ai/dsh-app-boot at boot. Optional in tests. */
     dshHomePath?: (...segments: string[]) => string
-  }
-}
-
-function dshHomeFn(ctx: Context): HomeFn | undefined {
-  try {
-    return ctx.dshHomePath
-  } catch {
-    return undefined
   }
 }
 

@@ -13,6 +13,9 @@
     },
     {
       "path": "../../settings/settings-provider"
+    },
+    {
+      "path": "../../observability/sidecar-io"
     }
   ]
 }

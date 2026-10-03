@@ -110,9 +110,6 @@
       "path": "./packages/interaction/post-edit-verify"
     },
     {
-      "path": "./packages/interaction/edit-recovery-hint"
-    },
-    {
       "path": "./packages/interaction/turn-rules"
     },
     {
@@ -144,6 +141,9 @@
     },
     {
       "path": "./packages/observability/cache-health"
+    },
+    {
+      "path": "./packages/observability/sidecar-io"
     },
     {
       "path": "./packages/session/command-cost"

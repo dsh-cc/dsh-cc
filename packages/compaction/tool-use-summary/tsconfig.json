@@ -19,6 +19,9 @@
     },
     {
       "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../observability/sidecar-io"
     }
   ]
 }

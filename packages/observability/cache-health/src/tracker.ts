@@ -14,14 +14,13 @@
 
 import { createHash } from 'node:crypto'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
+import { shortHash } from '@dsh-cc/sidecar-io'
+
+export { shortHash }
 
 /** Injectable hash function signature (tests count calls to verify early exit). */
 export type HashFn = (text: string) => string
 
-/** sha256 hex, first 16 chars — the shared project-key shape (context-crusher idiom). */
-export function shortHash(input: string): string {
-  return createHash('sha256').update(input, 'utf8').digest('hex').slice(0, 16)
-}
 
 /** Default segment hash: sha256 hex. */
 export const sha256Hex: HashFn = (text) => createHash('sha256').update(text, 'utf8').digest('hex')

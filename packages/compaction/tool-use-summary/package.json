@@ -22,7 +22,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@dsh-cc/settings-ns": "workspace:^",
-    "@dsh-cc/side-query": "workspace:^"
+    "@dsh-cc/side-query": "workspace:^",
+    "@dsh-cc/sidecar-io": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",

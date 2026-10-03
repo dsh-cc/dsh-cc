@@ -18,9 +18,10 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { helpable } from '@dsh-cc/command-usage'
+import { dshHomeFn, projectKeyOf } from '@dsh-cc/sidecar-io'
 import { CacheHealthLedger, type LedgerRow } from './ledger.ts'
 import { buildReport, renderReport } from './report.ts'
-import { PrefixTracker, shortHash } from './tracker.ts'
+import { PrefixTracker } from './tracker.ts'
 
 export { CacheHealthLedger, LEDGER_MAX_ROWS, type LedgerRow } from './ledger.ts'
 export {
@@ -47,21 +48,12 @@ export const Config = z.object({
   enabled: z.boolean().default(true),
 })
 
-/** dshHomePath seam, read defensively (copied from context-crusher: cordis throws on property access of a missing service). */
-type HomeFn = (...segments: string[]) => string
+/** dshHomePath seam, read defensively (shared @dsh-cc/sidecar-io primitive). */
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Harness-home path resolver, provided by @deepseek-ai/dsh-app-boot at boot. Optional in tests. */
     dshHomePath?: (...segments: string[]) => string
-  }
-}
-
-function dshHomeFn(ctx: Context): HomeFn | undefined {
-  try {
-    return ctx.dshHomePath
-  } catch {
-    return undefined
   }
 }
 
@@ -86,8 +78,8 @@ export interface CacheHealthDeps {
 }
 
 /** projectKey = shortHash of the session cwd (context-crusher idiom). */
-function projectKeyOf(session: ObservedSession): string {
-  return shortHash(session.header.cwd ?? process.cwd())
+function projectKeyOfSession(session: ObservedSession): string {
+  return projectKeyOf(session.header.cwd ?? process.cwd())
 }
 
 /**
@@ -120,7 +112,7 @@ export function observeRequest(deps: CacheHealthDeps, options: GenerateOptions):
         ? { driftExcerpt: observation.driftExcerpt }
         : {}),
     }
-    deps.ledger.append(projectKeyOf(session), String(session.id), row)
+    deps.ledger.append(projectKeyOfSession(session), String(session.id), row)
   } catch (error) {
     try {
       deps.warn(`cache-health: observation failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -133,7 +125,7 @@ export function observeRequest(deps: CacheHealthDeps, options: GenerateOptions):
 /** Execute `/cache-health` against the invocation's own session ledger. */
 async function execute(invocation: CommandInvocation, ledger: CacheHealthLedger): Promise<CommandResult> {
   const session = invocation.agent.session
-  const projectKey = shortHash(session.header.cwd ?? process.cwd())
+  const projectKey = projectKeyOf(session.header.cwd ?? process.cwd())
   const rows = await ledger.read(projectKey, String(session.id))
   const report = buildReport(rows, session.snapshotEvents())
   return { kind: 'success', text: renderReport(report) }
