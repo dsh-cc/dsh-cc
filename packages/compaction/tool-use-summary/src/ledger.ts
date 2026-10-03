@@ -8,18 +8,14 @@
  * @module @dsh-cc/tool-use-summary/ledger
  */
 
-import { appendFile, mkdir, readdir, readFile, stat, rm, utimes, writeFile } from 'node:fs/promises'
+import { readdir, stat, rm, utimes, writeFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { appendJsonl, readJsonl } from '@dsh-cc/sidecar-io'
 import type { SummaryRow } from './types.ts'
 
 /** Append one row; never throws. */
 export async function appendLedgerRow(filePath: string, row: SummaryRow): Promise<void> {
-  try {
-    await mkdir(dirname(filePath), { recursive: true })
-    await appendFile(filePath, `${JSON.stringify(row)}\n`, 'utf8')
-  } catch {
-    // Best-effort observability; never surface into the tool waterfall.
-  }
+  await appendJsonl(filePath, row)
 }
 
 /**
@@ -32,20 +28,9 @@ export async function appendLedgerRow(filePath: string, row: SummaryRow): Promis
  */
 export async function loadSummaries(dshHome: string, sessionId: string): Promise<Map<string, SummaryRow>> {
   const out = new Map<string, SummaryRow>()
-  let raw: string
-  try {
-    raw = await readFile(join(dshHome, 'tool-use-summary', `${sessionId}.jsonl`), 'utf8')
-  } catch {
-    return out
-  }
-  for (const line of raw.split('\n')) {
-    if (line.trim().length === 0) continue
-    try {
-      const row = JSON.parse(line) as SummaryRow
-      if (typeof row?.callId === 'string') out.set(row.callId, row)
-    } catch {
-      // Truncated tail line: torn final write; skip and keep the prefix.
-    }
+  const rows = await readJsonl<SummaryRow>(join(dshHome, 'tool-use-summary', `${sessionId}.jsonl`))
+  for (const row of rows) {
+    if (typeof row?.callId === 'string') out.set(row.callId, row)
   }
   return out
 }

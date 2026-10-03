@@ -28,6 +28,9 @@
     },
     {
       "path": "../../interaction/transcript-secrets"
+    },
+    {
+      "path": "../../observability/sidecar-io"
     }
   ]
 }

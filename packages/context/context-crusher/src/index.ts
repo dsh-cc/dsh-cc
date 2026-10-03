@@ -22,6 +22,7 @@ import type {} from '@deepseek-ai/dsh-token-meter'
 import type { PostToolDecision, ToolExecution, ToolExecutionResult, ToolRunContext } from '@dsh-cc/tools'
 import { defineTool } from '@dsh-cc/tools'
 import { getSessionCwd } from '@dsh-cc/session-cwd'
+import { dshHomeFn, type HomeFn } from '@dsh-cc/sidecar-io'
 import { resolveConfig, overlaySettings, Config } from './config.ts'
 import { registerSettings } from './settings.ts'
 import { readSecretsSettings, redact, type SecretsSettings } from '@dsh-cc/transcript-secrets'
@@ -69,26 +70,12 @@ export const RETRIEVE_TOOL_DESCRIPTION =
   + 'output. Use it whenever the compressed form is not enough (you need a specific elided line, '
   + 'a full stack trace, or untruncated rows). The original is retained for 1 hour.'
 
-/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
-type HomeFn = (...segments: string[]) => string
+/** dshHomePath seam, read defensively (shared @dsh-cc/sidecar-io primitive). */
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Harness-home path resolver, provided by @deepseek-ai/dsh-app-boot at boot. Optional in tests. */
     dshHomePath?: (...segments: string[]) => string
-  }
-}
-
-/**
- * Read a dsh-home path without throwing when the boot-provided `dshHomePath`
- * resolver is absent — cordis throws on the property access itself (not a
- * plain `undefined`), so the read must be guarded.
- */
-function dshHomeFn(ctx: Context): HomeFn | undefined {
-  try {
-    return ctx.dshHomePath
-  } catch {
-    return undefined
   }
 }
 

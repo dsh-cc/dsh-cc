@@ -23,8 +23,7 @@ import { registerProbeSetting } from './settings.ts'
 export { appendLedgerRow, observeChunk, type FoldRecord, type LedgerRow } from './ledger.ts'
 export { registerProbeSetting, SETTINGS_NAMESPACE, SettingsSchema } from './settings.ts'
 
-/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
-type HomeFn = (...segments: string[]) => string
+import { dshHomeFn } from '@dsh-cc/sidecar-io'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -33,13 +32,6 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-function dshHomeFn(ctx: Context): HomeFn | undefined {
-  try {
-    return ctx.dshHomePath
-  } catch {
-    return undefined
-  }
-}
 
 /**
  * The read-only passthrough listener body. Detached from `apply` for direct
