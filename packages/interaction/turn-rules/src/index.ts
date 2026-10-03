@@ -41,6 +41,7 @@ export {
   TURN_RULES_SOURCE_KIND,
 } from './matcher.ts'
 export { registerListeners, MAX_INJECTIONS } from './wiring.ts'
+export { createRepeatReminderRule, type BuiltinRule } from './builtins.ts'
 
 /**
  * Mount the plugin: register the settings namespace and the three listeners.

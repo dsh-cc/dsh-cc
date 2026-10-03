@@ -11,6 +11,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolExecutionResult, PostToolDecision } from '@dsh-cc/tools'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -18,7 +19,8 @@ import { discoverTurnRules, type TurnRule } from './discovery.ts'
 import { emptyLedger, loadLedger, writeLedger, type TurnRulesLedger } from './ledger.ts'
 import { buildPromptCandidate, buildToolUnit, shouldFire, TURN_RULES_SOURCE_KIND } from './matcher.ts'
 import { createRegexCache, type RegexCache } from './regex-cache.ts'
-import { readUserSettings } from './settings.ts'
+import { createRepeatReminderRule, type BuiltinRule } from './builtins.ts'
+import { readUserSettings, DEFAULT_TURN_RULES_SETTINGS, type TurnRulesSettings } from './settings.ts'
 
 /** Per-session total-injection cap (§6): debug notice, then silence. */
 export const MAX_INJECTIONS = 32
@@ -61,7 +63,7 @@ declare module '@deepseek-ai/cordis' {
 // memory's 'memory' kind precedent).
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'turn-rules': { kind: 'turn-rules' }
+    'turn-rules': { kind: 'turn-rules' } & ContextFormed
   }
 }
 
@@ -89,21 +91,50 @@ export function registerListeners(ctx: Context, rulesOverride?: Promise<TurnRule
   let memoCache: RegexCache | undefined
   const cacheFor = (capacity: number): RegexCache => (memoCache ??= createRegexCache(capacity))
 
+  // The repeat-reminder built-in: one instance per mount, memoized on the
+  // resolved options so a hot settings edit rebuilds it (chains reset) while
+  // unchanged settings keep the chain state across events.
+  let builtin: BuiltinRule | undefined
+  let builtinOptsKey = ''
+  const builtinFor = (opts: TurnRulesSettings['repeatReminder'] | undefined): BuiltinRule => {
+    const resolved = opts ?? DEFAULT_TURN_RULES_SETTINGS.repeatReminder
+    const key = JSON.stringify(resolved)
+    if (builtin === undefined || key !== builtinOptsKey) {
+      builtinOptsKey = key
+      builtin = createRepeatReminderRule({
+        thresholds: resolved.thresholds,
+        include: resolved.include,
+        exclude: resolved.exclude,
+        argumentsPreviewChars: resolved.argumentsPreviewChars,
+      })
+    }
+    return builtin
+  }
+
   ctx.on('tools/post-execute', async (exec: ToolExecution, result: Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>): Promise<PostToolDecision> => {
     const downstream = await next()
+    let composed = downstream
     try {
-      return await onPostExecute(ctx, rules, cacheFor, states, exec, result, downstream)
+      composed = await onPostExecute(ctx, rules, cacheFor, states, exec, result, downstream)
     } catch (error: unknown) {
       // Fail-soft invariant of the seam (CCR precedent): a throw here would
       // turn the user's tool result into an error result (data loss).
       ctx.logger.warn(`turn-rules: degraded to passthrough: ${String(error)}`)
-      return downstream
+    }
+    try {
+      // Built-ins observe both decision shapes (accept AND block) — a denied
+      // call hammered repeatedly is exactly the loop worth breaking (upstream).
+      return await composeBuiltin(ctx, builtinFor, states, exec, result, composed)
+    } catch (error: unknown) {
+      ctx.logger.warn(`turn-rules: built-in degraded to passthrough: ${String(error)}`)
+      return composed
     }
   })
 
   ctx.on('agent/pre-step', async (payload: PreStepPayload, next: () => Promise<PreStepDecision>): Promise<PreStepDecision> => {
     const decision = await next()
     try {
+      if (payload.messages.some(message => message.source?.kind === 'user')) builtinFor(undefined).onUserRestart()
       await onPreStep(ctx, rules, cacheFor, states, payload)
     } catch {
       // Advisory enrichment only; never fail the step.
@@ -185,6 +216,40 @@ async function onPostExecute(
   }
   void writeLedger(home, sessionId, ledgerOf(state))
   return { ...downstream, additionalContexts: [...(downstream.additionalContexts ?? []), ...reminders] }
+}
+
+/**
+ * Coded built-in channel: count the call and, on a threshold hit, append the
+ * reminder to whatever decision shape came back (accept AND block — both carry
+ * additionalContexts). Built-ins share the session's MAX_INJECTIONS cap.
+ */
+async function composeBuiltin(
+  ctx: Context,
+  builtinFor: (opts: TurnRulesSettings['repeatReminder'] | undefined) => BuiltinRule,
+  states: Map<string, SessionState>,
+  exec: ToolExecution,
+  result: Readonly<ToolExecutionResult>,
+  decision: PostToolDecision,
+): Promise<PostToolDecision> {
+  const agent = exec.agent
+  if (agent === undefined || !isTopLevel(agent)) return decision
+  const home = dshHomeOf(ctx)
+  if (home === undefined) return decision
+  const settings = await readUserSettings(home)
+  if (!settings.enabled || !settings.repeatReminder.enabled) return decision
+  const state = await hydrate(home, states, String(agent.session.header.id))
+  if (state.injections >= MAX_INJECTIONS) {
+    countDebug(ctx, 'injection-cap')
+    return decision
+  }
+  const body = builtinFor(settings.repeatReminder).observe(exec, result, ctx)
+  if (body === undefined) return decision
+  state.injections += 1
+  const reminders = [createUserMessage({
+    content: [{ type: 'text', text: body }],
+    source: { kind: TURN_RULES_SOURCE_KIND, form: 'notice', summary: 'repeat-reminder' },
+  })]
+  return { ...decision, additionalContexts: [...(decision.additionalContexts ?? []), ...reminders] }
 }
 
 /** Prompt channel (§4.3): candidate text → matches → agent.inject per fired rule. */
