@@ -3778,6 +3778,12 @@ capabilities:
         unimplemented. External settings.json edits apply at the next boot
         (no file watcher; in-process settings commits react immediately).
         refreshInterval is honored in seconds with a minimum clamp of 1.
+        Before the custom command's first completed run lands (including the
+        boot window while the activation fire waits for the model seed), the
+        built-in status line keeps rendering — so the boot sequence reads
+        built-in-without-model → built-in-with-model → custom — and a
+        completed-but-empty or failed run still degrades to the mode row
+        alone.
 
   ux.statusline-cc-transcript:
     title: CC-shape plaintext transcript mirror for the custom statusline

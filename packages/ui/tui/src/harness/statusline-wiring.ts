@@ -36,7 +36,7 @@ import {
 
 /** Handle driver-hud.ts uses to consult/trigger the custom status line. */
 export type StatusLineSectionHandle = {
-  /** The custom line when active (`' '.repeat(padding) + latest()`); else undefined. */
+  /** The custom line when active AND the command has settled at least once; undefined while the first run is still in flight (the built-in line keeps rendering in that window). */
   override(): string | undefined
   /** A projection unit changed for the live session (debounced trigger). */
   onProjection(key: string): void
@@ -54,11 +54,16 @@ export type StatusLineWiringCtx = {
   selection: ModelSelectionRef
   /** The driver's emit listener set — the wiring rides it as the S1 diff seam. */
   listeners: Set<(state: TuiState) => void>
+  /** The driver agent section's shared, idempotent boot-seed promise; resolves on seed success or failure (wire defensively anyway — the settled continuation can throw). */
+  waitForModel(): Promise<void>
 }
 
 /** Fallback terminal dimensions when stdout is not a TTY. */
 const FALLBACK_COLUMNS = 80
 const FALLBACK_ROWS = 24
+
+/** Cap on the model-seed wait before the activation fire (a stalled seed must never keep the custom lane dark). */
+const ACTIVATION_MODEL_WAIT_CAP_MS = 5_000
 
 export function createStatusLineWiring(
   rt: StatusLineWiringCtx,
@@ -72,6 +77,7 @@ export function createStatusLineWiring(
   let description: StatusLineDescription = { active: false }
   let runner: StatusLineCommand | undefined
   let refreshTimer: ReturnType<typeof setInterval> | undefined
+  let firstFireTimer: ReturnType<typeof setTimeout> | undefined
   let source: (() => unknown) | undefined
   // The session id the runner was last fired for — a /resume-style rebind
   // re-runs only when it actually changed (the boot-time seedHud call must
@@ -181,6 +187,10 @@ export function createStatusLineWiring(
   /** Tear the runner down (deactivation or dispose) and restore the built-in line. */
   function deactivate(reEmit = true): void {
     clearRefreshTimer()
+    if (firstFireTimer !== undefined) {
+      clearTimeout(firstFireTimer)
+      firstFireTimer = undefined
+    }
     unsubscribeEvents?.()
     unsubscribeEvents = undefined
     runner?.dispose()
@@ -206,8 +216,24 @@ export function createStatusLineWiring(
     restartRefreshTimer()
     // Mirror first, then the first frame (immediate fire) reads a ready path.
     bindTranscriptMirror()
-    // Session start runs once, immediately (C4/C5).
-    fire({ immediate: true })
+    // The boot-time activation fire waits for the model seed so its payload
+    // carries model/effort — but capped, and both branches fire (a rejecting
+    // seed promise's settled continuation can emit/throw; the lane must not
+    // die with it). Known wrinkle (N1): a stale armed fire already queued when
+    // deactivate→reactivate happened fires the NEW runner immediate once —
+    // accepted, an identity guard would drop legitimate fires on fast toggles.
+    let firedFirst = false
+    const fireFirst = (): void => {
+      if (firedFirst) return
+      firedFirst = true
+      if (firstFireTimer !== undefined) {
+        clearTimeout(firstFireTimer)
+        firstFireTimer = undefined
+      }
+      fire({ immediate: true })
+    }
+    firstFireTimer = setTimeout(fireFirst, ACTIVATION_MODEL_WAIT_CAP_MS)
+    rt.waitForModel().then(fireFirst, fireFirst)
   }
 
   /** Re-judge the live description; drives the whole activation state machine. */
@@ -265,7 +291,9 @@ export function createStatusLineWiring(
 
   return {
     override(): string | undefined {
-      if (!description.active || runner === undefined) return undefined
+      // Before the first settle the built-in line keeps rendering (D1): a
+      // blank runner state must not shadow the HUD with an empty custom lane.
+      if (!description.active || runner === undefined || !runner.hasSettled()) return undefined
       // Pad each content row (multi-row runner output, plan D2); the
       // client-drawn mode row is never padded (added in driver-hud).
       const pad = ' '.repeat(description.padding)

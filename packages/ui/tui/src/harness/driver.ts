@@ -255,7 +255,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   await agent.awaitBootFrame()
 
   // --- Statusline: custom command wiring + HUD (branch + projections feed) ---
-  const statusline = createStatusLineWiring({ emit, state: () => state, ctx, cwd, current, selection, listeners })
+  const statusline = createStatusLineWiring({ emit, state: () => state, ctx, cwd, current, selection, listeners, waitForModel: agent.waitForModel })
   const hud = createHudSection({
     emit, state: () => state, ctx, cwd, current, selection,
     branchProbe: config.branchProbe ?? gitBranchOf,

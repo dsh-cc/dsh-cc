@@ -40,8 +40,10 @@ export type StatusLineUpdateOptions = {
 export type StatusLineCommand = {
   /** Trigger a (debounced by default) run with a fresh payload. */
   update(config: { command: string }, payload: unknown, options?: StatusLineUpdateOptions): void
-  /** The last settled rows (0–3, '\n'-joined; empty string until a run succeeds). */
+  /** The last settled rows (0–3, '\n'-joined; stays '' until the first completed run lands — see {@link hasSettled}). */
   latest(): string
+  /** False until the first completed run's landing writes state (successful or blank); kills and superseded generations never set it. */
+  hasSettled(): boolean
   /** Abort in-flight, clear all timers, and make later settles no-ops. */
   dispose(): void
 }
@@ -65,6 +67,7 @@ export function createStatusLineCommand(deps: StatusLineCommandDeps): StatusLine
   const stdoutMaxBytes = deps.stdoutMaxBytes ?? DEFAULT_STDOUT_MAX_BYTES
 
   let disposed = false
+  let settled = false
   let generation = 0
   let latestLine = ''
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -80,6 +83,8 @@ export function createStatusLineCommand(deps: StatusLineCommandDeps): StatusLine
 
   /** Record a blank for the current generation and notify. */
   function blank(): void {
+    // One of the two settle funnels: a blank landing counts as settled too.
+    settled = true
     latestLine = ''
     deps.onSettled('')
   }
@@ -150,6 +155,8 @@ export function createStatusLineCommand(deps: StatusLineCommandDeps): StatusLine
           blank()
           return
         }
+        // Second settle funnel: only success-with-content reaches here.
+        settled = true
         deps.onSettled(latestLine)
       },
       () => {
@@ -182,6 +189,10 @@ export function createStatusLineCommand(deps: StatusLineCommandDeps): StatusLine
 
     latest() {
       return latestLine
+    },
+
+    hasSettled() {
+      return settled
     },
 
     dispose() {

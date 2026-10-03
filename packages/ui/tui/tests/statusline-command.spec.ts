@@ -72,6 +72,53 @@ function harness(deps: Partial<StatusLineCommandDeps> = {}): Harness {
 }
 
 describe('statusline command runner', () => {
+  describe('hasSettled', () => {
+    it('is false before any run and while a run is still in flight', async () => {
+      const h = harness()
+      expect(h.runner.hasSettled()).toBe(false)
+      h.runner.update({ command: 'cmd' }, {})
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      expect(h.runs).toHaveLength(1)
+      // Spawned but not settled: still not settled.
+      expect(h.runner.hasSettled()).toBe(false)
+      h.runner.dispose()
+    })
+
+    it('is true after a successful settle', async () => {
+      const h = harness()
+      h.runner.update({ command: 'cmd' }, {})
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      h.runs[0]!.settle(ok('done\n'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(h.runner.hasSettled()).toBe(true)
+      h.runner.dispose()
+    })
+
+    it('is true after a blank/failure settle', async () => {
+      const h = harness()
+      h.runner.update({ command: 'cmd' }, {})
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      h.runs[0]!.settle({ exitCode: 3, timedOut: false, stdout: { text: 'x\n' }, stderr: { text: '' } })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(h.runner.hasSettled()).toBe(true)
+      h.runner.dispose()
+    })
+
+    it('a superseded hung run never sets it — only the replacement good settle does', async () => {
+      const h = harness()
+      h.runner.update({ command: 'slow' }, {})
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      // The first run hangs; a new trigger kills it and lands a fast good run.
+      h.runner.update({ command: 'fast' }, {})
+      expect(h.runner.hasSettled()).toBe(false)
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS)
+      expect(h.runner.hasSettled()).toBe(false)
+      h.runs[1]!.settle(ok('good\n'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(h.runner.hasSettled()).toBe(true)
+      h.runner.dispose()
+    })
+  })
   beforeEach(() => {
     vi.useFakeTimers()
   })
