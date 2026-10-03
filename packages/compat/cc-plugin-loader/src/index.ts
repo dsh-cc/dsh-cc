@@ -40,6 +40,7 @@ export {
   ActorContractGate,
 } from './actor-contract-gate.ts'
 export type { ActorContractSettings } from './actor-contract-gate.ts'
+export { extractEnabledPluginKeys, foldEnabledPluginsRaw } from './enabled-plugins.ts'
 
 export type { CcPluginManifest, CcCommand, CcSkillRef, CcAgentRef, CcMcpServer, ComponentKind, ComponentResult, PluginLoadReport, PluginFlavor } from './types.ts'
 export type { CcPluginCommandInfo, MountedPluginCommand } from './commands.ts'
