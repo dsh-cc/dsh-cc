@@ -461,7 +461,7 @@ describe('agent.cordis.yml composition', () => {
   it('every @dsh-cc loader entry in the launcher bundles is a runtime dependency of its bundle', () => {
     // Loader entries mounted by a bundle's cordis.patch.yml are imported at
     // profile boot — they must be runtime deps of that bundle, not devDeps
-    // (@dsh-cc/settings-migrations shipped this way and broke 0.7.1-rc.1's
+    // (the now-removed @dsh-cc/settings-migrations shipped this way and broke 0.7.1-rc.1's
     // first scratch boot: present in the yml, absent from node_modules).
     const repoRoot = join(dirname(agentCordisPath), '..', '..', '..')
     for (const group of readdirSync(join(repoRoot, 'packages', 'bundle'))) {

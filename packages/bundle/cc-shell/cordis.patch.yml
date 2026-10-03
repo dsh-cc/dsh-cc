@@ -46,11 +46,6 @@
         # patches `tools` with it). Absent env ⇒ undefined, the established semantics.
         mode: !!js process.env.DSH_TOOLS_MODE
 
-    # Settings migrations: apply version-gated settings.json migrations at startup
-    # (equivalent to CC's runMigrations). Empty registry — mechanism only — for now.
-    - id: settings-migrations
-      name: '@dsh-cc/settings-migrations'
-
     # Host-plane first-prompt session titles on the CC cheap lane: stamps
     # resolve('haiku') when configured, else inherits the logged main route
     # (explicit provider+model config in this row would win over the alias).

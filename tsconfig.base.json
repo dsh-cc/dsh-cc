@@ -44,9 +44,6 @@
       "@dsh-cc/settings-cascade/local-root": [
         "./packages/settings/settings-cascade/src/local-root.ts"
       ],
-      "@dsh-cc/settings-migrations": [
-        "./packages/settings/settings-migrations/src/index.ts"
-      ],
       "@dsh-cc/settings-provider": [
         "./packages/settings/settings-provider/src/index.ts"
       ],

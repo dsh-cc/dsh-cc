@@ -26,12 +26,14 @@ import { SpawnPinCapture } from './resume-capture.ts'
 export const PROVIDER_SPAWN = 'spawn'
 
 /**
- * Per-parent admission limit for continuable children (UX plan §3.6): no
- * upstream resident-children cap exists, so the Task tool refuses a new
- * continuable start when the parent already has this many live children —
- * counted as `listChildren` entries with a live running activation in the
- * agents registry (rc.2: the catalog row no longer carries `activity`).
- * A safety valve, not a scheduling policy.
+ * Per-parent admission limit for continuable children (UX plan §3.6). As of
+ * rc.2 the upstream subagent seam caps per-epoch resident activations
+ * (`maxActiveSubagents`, default 8) and fails bare ACTIVATION_LIMIT_REACHED with
+ * no remedy pointer; this cap counts a different thing — cross-epoch live
+ * children (`listChildren` rows with a live running activation; the catalog row
+ * no longer carries `activity`) — so the refusal can name the user-visible
+ * remedy (release_agent / `/agents release`). A safety valve, not a
+ * scheduling policy.
  */
 export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
 

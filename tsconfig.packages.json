@@ -5,9 +5,6 @@
       "path": "./packages/settings/settings-cascade"
     },
     {
-      "path": "./packages/settings/settings-migrations"
-    },
-    {
       "path": "./packages/settings/settings-provider"
     },
     {
