@@ -1,10 +1,11 @@
 # Ephemeral Read-Only Subagents
 
-- **Status**: Approved (two-seat external blind review, r1–r4 converged GO; axis rulings user-confirmed 2026-10-04)
+- **Status**: Approved (two-seat external blind review, r1–r4 converged GO; §3.8/R8 reviewed separately, two rounds, both seats GO; axis rulings user-confirmed 2026-10-04)
 - **Date**: 2026-10-04
 - **Baseline**: v0.8.3 (main `a33c681f` post-merge; probes run against `3ff8de13`)
 - **Scope**: `subagent_fork` dispatch for read-only agent definitions; reaper for
-  one-shot children; capability-manifest parity surface
+  one-shot children; settled write-lane grace-window auto-release (§3.8);
+  capability-manifest parity surface
 
 ## 1. Problem
 
@@ -249,12 +250,123 @@ resume (E9).
     refusal string.
   - Copy pins: `toEqual` on all refusal/notice/failure strings.
 
+### 3.8 Settled write-lane grace-window auto-release (R8)
+
+**Premise (corrected against the intuitive reading).** A settled writer
+already frees its slot AND its resident activation at natural settle (F3c:
+the end event tears the activation down; the session lives; the catalog row
+reads `ready`). The only leftover is the durable catalog row
+(`/agents`-listable, cold-resumable — the retry capability the write lane
+exists to keep) plus the persisted session on disk. This section therefore
+delivers a **bounded continuation window and listing hygiene** — not slot
+reduction, not activation-memory hygiene. `runRelease` cannot implement it:
+a naturally settled writer is registry-absent, and `runRelease`'s
+catalog-hit × registry-miss cell is the documented `not-resident` no-op
+(`release.ts:235-237`; integration T18b). The mechanism is a **tombstone on
+the ready row** — process-local, drain-free, no parent authority.
+
+- **Membership (dispatch-site arm-registry).** At Task continuable dispatch,
+  record `{childId, autoReleaseMs, parentId}` in a process-local
+  arm-registry — recorded BEFORE `collectFirstEpoch`/`startContinuable` is
+  awaited (the foreground collect's first `subagent/end` fires during that
+  await; `startBackground` does not have this race). `subagent/end` for a
+  recorded id arms (or re-arms — a second end replaces the pending timer;
+  arm is idempotent, timers never stack); `subagent/start` for a recorded id
+  cancels the pending timer AND clears the tombstone marker (see below).
+  Start-without-pending-timer is a documented no-op. `INTERNAL_LABELS`
+  filtering is defense-in-depth only — the dispatch-site registry is the
+  primary predicate, so coordinator/epoch-collector/resume-capture
+  continuable children are structurally excluded.
+- **Grace window.** Default **2 hours** (write-lane recovery is precious and
+  in-session-irrecoverable after tombstone; 30 minutes was rejected as
+  inside normal interactive cadence). Per-definition override: frontmatter
+  `autoReleaseMs?: number` with a NON-negative parser — tri-state pinned:
+  absent → default, `0` → disabled (never armed), malformed → loud parse
+  failure (`parsePositiveInt` rejects `<= 0` and must NOT be copied
+  verbatim). Arm-time copy is rendered at settle with the window in it
+  ("session persisted; send_message to <id> can resume it (auto-released
+  after <window> of inactivity)") at BOTH delivery sites — the foreground
+  `outcomeToResult` result and the background/Ctrl+B `subagent-settled`
+  wake (collected epochs drop the wake otherwise). The model that settled
+  the child is the one that will later `send_message`; it needs the
+  deadline in context.
+- **Action on fire.** Re-check the registry first: if the child is live
+  again (running or idle-resident — a continuation raced the fire), SKIP the
+  tombstone and re-arm. Otherwise `markReleased(childId)` extended to cover
+  READY rows — a new `{kind: 'tombstoned'; id}` outcome kind in the release
+  module (the manual `release_agent` path on a naturally settled child
+  keeps its `not-resident` behavior, T18b; manual release on a tombstoned
+  child renders `not-resident` with `releasedEarlier: true` — that copy is
+  pinned so it does not drift). **No drain, no `drainContinuableChildren`,
+  no parent `Agent` authority** — this dissolves the descendant-eviction
+  risk (idle parent with a live grandchild, T18c) and the stale-parent
+  failure class entirely.
+- **Tombstone lifecycle.** The `released` marker set is one-way today; R8
+  adds `clearTombstone(id)`, cleared on the child's `subagent/start` (and
+  equivalently on a gate pass). Without it, the accepted in-flight residual
+  below would silently become permanent retirement.
+- **send_message gate.** The harness `send_message` path does not consult
+  dsh-cc markers — the gate rides the existing `tools/pre-execute` seam on
+  `send_message` reading `arguments.agent_id` (precedented by
+  `resume-pins/src/plugin.ts:296-324`), and the tombstone DENY runs before
+  pin admission (`next()`) so a tombstoned id never gets `persistPass`.
+  A tombstoned id fails cleanly with the "auto-released after inactivity"
+  copy instead of the released-child no-op-turn cold-resume gap.
+- **Accepted residual.** A `send_message` in flight at the exact moment the
+  tombstone lands resolves once more: the child gets one extra epoch, and
+  its `subagent/end` re-arms a fresh window with the tombstone cleared.
+  Non-destructive; accepted and test-pinned.
+- **Resumed sessions.** The arm-registry is process-local and empty after a
+  resume; `listChildren` rows carry no dispatch bit. Eligibility on resume
+  is derived from the resume pin: `resume-capture.ts` writes pins only from
+  the Task dispatch sites (`startBackground`/`collectForeground`), so a
+  ready row is armed-on-resume IFF its resume pin exists and is readable
+  (missing/unreadable → left alone, fail-safe toward retention). The window
+  then runs from resume load time, not last activity — documented. No
+  cross-session cleanup claim: process exit fires nothing.
+- **Timer hygiene.** Every grace timer is `.unref()`'d (a settled writer
+  must never hold the process open); the fire callback is wrapped — any
+  failure logs and does NOT rethrow (fail-open toward retention: skip +
+  log, never tombstone on uncertain state). The one-shot ledger's ended
+  rows prune at 5 minutes, so a 2-hour fire cannot write to the paired
+  row — the tombstone marker state is the record, plus one log line at fire
+  time. No ledger schema change.
+- **`/agents` surface.** Tombstoned rows get the same TAG treatment as
+  released rows (`snapshot.ts:160-165` already tags marker ∧
+  registry-absent) — tagged, still listed (upstream catalog rows are not
+  removable, F14). `BACKGROUND_SECTION_TEXT`'s "use release_agent on stuck
+  children you can discard, not as routine cleanup" bullet is reconciled in
+  the same PR (auto-tombstone is the routine lane; manual release remains
+  the interactive override for RUNNING children).
+- **Test surface additions**: membership (non-registry id never arms;
+  coordinator children never arm); idempotent arm (second end replaces;
+  exactly one timer); tri-state parse; default constant pin; arm-time copy
+  exact strings at both sites; fire (registry-live recheck → skip + re-arm;
+  ready row → `tombstoned` + marker set; send_message gate copy; manual
+  release on natural-settled still `not-resident`, T18b regression pin;
+  manual release on tombstoned renders `releasedEarlier: true`); residual
+  (in-flight send_message at fire → one extra epoch → tombstone cleared →
+  window re-arms); timers (`.unref()` with pending timers; fire-callback
+  failure logs without rethrow); resume arming (pin-eligible row armed,
+  unreadable pin left alone).
+- **File-touch additions**: arm-registry + timer module (new file under
+  `packages/subagent/task/src/`), `release.ts` (tombstone arm + outcome
+  kind + `clearTombstone`), `tools/pre-execute` gate, `types.ts` +
+  `parse.ts` (`autoReleaseMs`, non-negative helper), `snapshot.ts` (tag),
+  R6 copy sites (both), `BACKGROUND_SECTION_TEXT`, tests. Implementation
+  lands after (or with) the R4/R7 ephemeral implementation — parser
+  references are to this spec, not existing code.
+
+
 ## 4. Non-goals
 
 - Capping `fork` sentinel or workflow `agent()` dispatches.
 - A one-shot worktree arm (blocked on the reserved-id seam).
 - Extending `release_agent` to one-shot children.
-- Any change to the write/continuable lane (zero code delta by design).
+- Any change to the write/continuable lane's DISPATCH semantics (zero code
+  delta by design) — §3.8 (grace-window auto-release) is the deliberate
+  carve-out: it changes write-lane RETENTION semantics only, after settle,
+  via the tombstone mechanism.
 
 ## 5. Residual risks
 
@@ -283,6 +395,9 @@ resume (E9).
 3. Reaper module (arm-point, per-run controller, ledger integration) +
    parallel-safety pin.
 4. `/resume` filter + manifest/parity surface.
+5. R8 grace-window auto-release (arm-registry + timer module, tombstone arm
+   in the release module, send_message gate, `autoReleaseMs` parser, surface
+   tags and copy) — after or with slice 3.
 
 ## 8. Review ledger
 
@@ -311,6 +426,32 @@ re-verified by the issuing seat.
   parallel Task dispatch → §3.4 per-run AbortController binding.
 - **r4** (grok: **GO** — "No remaining NO-GO-level hole. Implement from v4.";
   critic seat pre-authorized GO at r2 with its amendments folded).
+- **§3.8 (R8) review, 2026-10-04, two seats** (critic + grok; the codex seat
+  was already recorded interrupted(model-config) above and was not
+  re-dispatched):
+  - **R8 r1** (critic: GO-WITH-AMENDMENTS — event-site membership
+  unimplementable, fire-time race with continuation, 30-min default
+  destroys the recovery lane, resumed children never armed; grok: NO-GO —
+  runRelease on a naturally-settled writer is the documented
+  `not-resident` no-op since natural settle already tears down the
+  activation, so the v1 core action does nothing): the divergence was
+  adjudicated in grok's favor on the evidence (integration T18b,
+  `release.ts:235-237`) — the core mechanism was REPLACED by the
+  ready-row tombstone; membership moved to a dispatch-site arm-registry;
+  fire-time registry recheck added; default raised to 2h with arm-time
+  copy; resume arming added.
+  - **R8 r2** (critic: **GO** — tombstone lifecycle needs `clearTombstone`
+  on start or the accepted residual becomes permanent retirement; grok:
+  **GO on the mechanism** with three one-line rulings): both seats hit the
+  same tombstone-lifecycle point (convergent, folded — `clearTombstone(id)`
+  on `subagent/start`/gate-pass); grok's rulings folded: resume
+  eligibility via the resume pin (pins are written only by the Task
+  dispatch sites), arm-registry records BEFORE `collectFirstEpoch` is
+  awaited (the foreground first-epoch end fires inside that await), and
+  the send_message gate rides the `tools/pre-execute` seam with the deny
+  ordered before pin admission (resume-pins precedent). Critic's minor
+  notes folded: manual-release-on-tombstoned copy pinned;
+  resume-window base = load time, documented.
 
 User rulings: the read/write loss-cost axis and the shunt-writer → persistent
 classification (2026-10-04); reduced-roster closure after the codex seat's
