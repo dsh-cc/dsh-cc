@@ -52,3 +52,13 @@ describe('ccCollectorRegistry root-realm publication', () => {
     expect((ctx as unknown as { root: Context }).root.get('ccCollectorRegistry', false)).toBeUndefined()
   })
 })
+
+describe('ccOneShotLedger root-realm publication (/resume filter seam)', () => {
+  it('publishes the one-shot ledger face; with no runs the one-shot set is empty', async () => {
+    const { ctx, fiber } = await mounted()
+    const service = ctx.get('ccOneShotLedger') as { oneShotChildIds(): ReadonlySet<string> } | undefined
+    expect(service).toBeDefined()
+    expect(service!.oneShotChildIds().size).toBe(0)
+    await fiber.dispose()
+  })
+})

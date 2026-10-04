@@ -142,6 +142,7 @@ function resolveParentId(child: LedgerChildSnapshot | undefined): string | undef
 export function createOneShotLedger(deps: OneShotLedgerDeps): {
   rows(): readonly OneShotLedgerRow[]
   activeFor(parentId: string): readonly OneShotLedgerRow[]
+  markTimedOut(runId: string, stopReason: string): void
   dispose(): void
 } {
   const now = deps.now ?? Date.now
@@ -215,6 +216,16 @@ export function createOneShotLedger(deps: OneShotLedgerDeps): {
         row.parentId === parentId && row.endedAt === undefined
         // Unresolvable parentage is never scoped to any session.
         && row.parentId !== undefined)
+    },
+    /**
+     * §3.4 reaper hook: record a kill-log stop reason on an UNSETTLED row
+     * (a TTL-killed run that produced no `subagent/end` within the bounded
+     * wait). A missing/already-ended row is a no-op — never overwritten.
+     */
+    markTimedOut(runId: string, stopReason: string): void {
+      const row = rowsByRunId.get(runId)
+      if (row === undefined || row.endedAt !== undefined) return
+      row.stopReason = stopReason
     },
     dispose(): void {
       release()

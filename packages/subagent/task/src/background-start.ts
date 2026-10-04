@@ -20,6 +20,7 @@ import type { AgentDefinition, ToolRestriction } from '@dsh-cc/claude-code-agent
 import { cwdOf } from '@dsh-cc/memory'
 import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
 import { collectFirstEpoch, type EpochEventBus } from './epoch-collector.ts'
+import { promoteGraceTier, recordGraceEntry } from './grace-window.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
 
 /** Fresh-child provider: no parent conversation (CC Task default). */
@@ -130,6 +131,12 @@ export type BackgroundRequest = {
   captureDefinition?: AgentDefinition
   /** Capture-only metadata: the atomic model-selector resolution. */
   captureSelector?: DetailedRoute
+  /**
+   * R9: the definition's `autoReleaseMs` override ONLY (resolved at the
+   * tool.ts dispatch site, independent of pin capture) — never a resolved
+   * default. `0` disables arming; identity-checked, never truthy-tested.
+   */
+  autoReleaseMs?: number
 }
 
 /**
@@ -204,6 +211,8 @@ export async function assertLiveCapacity(
   seam: SubagentsLike,
   parent: Agent,
   signal: AbortSignal,
+  /** Lane-specific refusal (the ephemeral branch names one-shot runs); default keeps the D4 continuable literal. */
+  refuse?: (live: number) => Error,
 ): Promise<void> {
   if (typeof seam.listChildren !== 'function') return
   let children: { id: string; mode?: string }[]
@@ -220,7 +229,9 @@ export async function assertLiveCapacity(
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
     // Single runtime literal (D4; T16 pins full equality against exactly it):
     // the copy names the real release path — /agents stop cannot free a slot.
-    throw new Error(
+    throw refuse !== undefined
+      ? refuse(live)
+      : new Error(
       `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
       + 'release_agent on a running child (or /agents release <id> interactively), or '
       + 'let children settle — only running children hold slots, and only '
@@ -290,8 +301,21 @@ export async function collectForeground(
       parentRoute: parent.options,
       toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
       cwd: cwdOf(parent),
+      dispatchTier: 'foreground',
+      ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
     })
   }
+  // R9 grace-window membership: recorded BEFORE the collect await — the
+  // foreground collect's first `subagent/end` fires during that await. Tier
+  // stamped INSIDE this entry point; kill-switched `background: true` pins run
+  // here and stamp foreground for free. `overrideMs` carries the definition
+  // override ONLY (identity check — 0 survives as the disable value).
+  recordGraceEntry({
+    childId: durableChildId,
+    parentId: agent.id,
+    tier: 'foreground',
+    ...(request.autoReleaseMs !== undefined ? { overrideMs: request.autoReleaseMs } : {}),
+  })
   let startFailed = false
   try {
     const outcome = await collectFirstEpoch({
@@ -305,6 +329,16 @@ export async function collectForeground(
       // or abort) every armed foreground collect of this session.
       parentSessionId: agent.id,
       toolCallToken: exec.token !== undefined ? String(exec.token) : randomUUID(),
+      // R9 promotion re-tier: invoked synchronously inside promote() —
+      // cancel-and-replace the pending foreground timer with the background
+      // window, and persist `dispatchTier: 'background'` on the pin (a failed
+      // or skipped update is retention-safe in-process only and logged).
+      onPromoted: () => {
+        promoteGraceTier(durableChildId)
+        if (capture !== undefined && childId !== undefined) {
+          void capture.updateDispatchTier(childId, 'background')
+        }
+      },
       start: async () => {
         try {
           await seam.startContinuable!({
@@ -381,8 +415,23 @@ export async function startBackground(
       parentRoute: parent.options,
       toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
       cwd: cwdOf(parent),
+      dispatchTier: 'background',
+      ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
     })
   }
+  // R9 grace-window membership, tier stamped INSIDE this entry point. With a
+  // preallocated id this lands BEFORE the creation await; without one the id
+  // only exists once `startContinuable` resolves (and no `subagent/end` can
+  // fire before that — startBackground has no collect race).
+  const recordTier = (childId: string): void => {
+    recordGraceEntry({
+      childId,
+      parentId: parent.id,
+      tier: 'background',
+      ...(request.autoReleaseMs !== undefined ? { overrideMs: request.autoReleaseMs } : {}),
+    })
+  }
+  if (childId !== undefined) recordTier(childId)
   let started: ContinuableStart
   try {
     started = await seam.startContinuable!({
@@ -413,6 +462,7 @@ export async function startBackground(
     }
     throw error
   }
+  if (childId === undefined) recordTier(started.childId)
   return {
     text:
       `Background subagent started (agentId: ${started.childId}). It is running in the `

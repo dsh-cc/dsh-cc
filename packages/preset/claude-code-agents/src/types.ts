@@ -106,6 +106,16 @@ export interface AgentDefinition {
   readonly initialPrompt?: string
   /** Whether spawned runs should default to the background. */
   readonly background?: boolean
+  /**
+   * Ephemeral lane override: `true` forces one-shot classification, `false`
+   * forces the continuable lane. When absent, classification derives from the
+   * tool allow list.
+   */
+  readonly ephemeral?: boolean
+  /** Time-to-live for an ephemeral run, in milliseconds. */
+  readonly ephemeralTtlMs?: number
+  /** Grace window after a write-lane child settles before auto-release; `0` disables. */
+  readonly autoReleaseMs?: number
   /** Persistent memory scope. */
   readonly memory?: MemoryScope
   /** Isolation mode; `worktree` requires a provider that supports it. */

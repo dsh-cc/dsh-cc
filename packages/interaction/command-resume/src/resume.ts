@@ -28,6 +28,30 @@ export function formatCreatedAt(createdAt: number): string {
   return new Date(createdAt).toISOString()
 }
 
+/** The header fields the /resume filter needs (structural; real type is the harness SessionRecord). */
+export interface FilterableSessionHeader {
+  id: string
+  parentSession?: string
+}
+
+/**
+ * Ephemeral one-shot children are not resumable lanes: a session is filtered
+ * from `/resume` only when it BOTH has a `parentSession` AND the shared
+ * one-shot ledger (root-realm `ccOneShotLedger` service, published by the
+ * cc-subagent-task plugin) marks its id as a `mode: 'one-shot'` child.
+ * Mechanism note (design 2026-10-04 §3.5): the harness 0.2.0-rc.2
+ * `SubagentStartRequest` carries NO resume-visibility flag, so the
+ * descriptor-flag option does not exist and the ledger-membership fallback
+ * is the implemented mechanism. Residual: ledger rows prune (5 min after
+ * end), so a long-settled ephemeral child can reappear in the listing.
+ */
+export function isEphemeralOneShotSession(
+  header: FilterableSessionHeader,
+  oneShotChildIds: ReadonlySet<string>,
+): boolean {
+  return header.parentSession !== undefined && oneShotChildIds.has(header.id)
+}
+
 /** Render one session line with the fields that are present. */
 export function formatSessionLine(line: SessionLine): string {
   const parts: string[] = [line.id]

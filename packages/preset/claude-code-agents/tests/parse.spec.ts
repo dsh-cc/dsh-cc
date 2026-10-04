@@ -113,6 +113,29 @@ Body`
       .toThrow(/isolation must be one of worktree/)
   })
 
+  it('parses the ephemeral frontmatter fields', () => {
+    const text = '---\ndescription: x\nephemeral: true\nephemeralTtlMs: 900000\nautoReleaseMs: 0\n---\nBody'
+    const agent = parseAgentMarkdown(MD('eph'), text, 'project')
+    expect(agent.ephemeral).toBe(true)
+    expect(agent.ephemeralTtlMs).toBe(900000)
+    expect(agent.autoReleaseMs).toBe(0)
+  })
+
+  it('rejects malformed ephemeral field values loudly', () => {
+    expect(() => parseAgentMarkdown(MD('eph'), '---\ndescription: x\nephemeral: yes\n---\nBody', 'project'))
+      .toThrow(/ephemeral must be a boolean/)
+    expect(() => parseAgentMarkdown(MD('eph'), '---\ndescription: x\nephemeralTtlMs: 0\n---\nBody', 'project'))
+      .toThrow(/ephemeralTtlMs must be a positive integer/)
+    expect(() => parseAgentMarkdown(MD('eph'), '---\ndescription: x\nephemeralTtlMs: -5\n---\nBody', 'project'))
+      .toThrow(/ephemeralTtlMs must be a positive integer/)
+    expect(() => parseAgentMarkdown(MD('eph'), '---\ndescription: x\nephemeralTtlMs: soon\n---\nBody', 'project'))
+      .toThrow(/ephemeralTtlMs must be a positive integer/)
+    expect(() => parseAgentMarkdown(MD('eph'), '---\ndescription: x\nautoReleaseMs: -1\n---\nBody', 'project'))
+      .toThrow(/autoReleaseMs must be a non-negative integer/)
+    expect(() => parseAgentMarkdown(MD('eph'), '---\ndescription: x\nautoReleaseMs: 1.5\n---\nBody', 'project'))
+      .toThrow(/autoReleaseMs must be a non-negative integer/)
+  })
+
   it('throws when description is missing', () => {
     expect(() => parseAgentMarkdown(MD('git'), '---\ntools: [Read]\n---\nBody', 'project'))
       .toThrow(/missing required "description"/)

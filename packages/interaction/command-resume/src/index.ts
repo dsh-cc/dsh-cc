@@ -11,7 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionRecord, SessionTitleObservationResult } from '@deepseek-ai/dsh-session-query'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
-import { formatResumeIndex, type SessionLine } from './resume.ts'
+import { formatResumeIndex, isEphemeralOneShotSession, type SessionLine } from './resume.ts'
 import { helpable } from '@dsh-cc/command-usage'
 
 export const name = 'command-resume'
@@ -35,6 +35,19 @@ function seam(ctx: Context): SessionQuerySeam | undefined {
   return ctx.get('sessionQuery') as SessionQuerySeam | undefined
 }
 
+/**
+ * The optional root-realm one-shot ledger face (published by the
+ * cc-subagent-task plugin as `ccOneShotLedger`); absent → nothing is filtered.
+ */
+interface OneShotLedgerSeam {
+  oneShotChildIds(): ReadonlySet<string>
+}
+
+function oneShotIds(ctx: Context): ReadonlySet<string> {
+  const ledger = ctx.root.get('ccOneShotLedger', false) as OneShotLedgerSeam | undefined
+  return ledger?.oneShotChildIds() ?? new Set<string>()
+}
+
 /** Fold the latest title for one session from a batch observation, if any. */
 function foldTitle(observations: readonly SessionTitleObservationResult[], id: SessionId): string | undefined {
   for (const observation of observations) {
@@ -54,7 +67,11 @@ async function executeResume(ctx: Context, invocation: CommandInvocation): Promi
     return { kind: 'success', text: 'No session-query service is mounted in this composition.' }
   }
   const signal = invocation.signal
-  const records = await sessionQuery.listSessions(signal)
+  const oneShot = oneShotIds(ctx)
+  // Filter ephemeral one-shot children before title work: they are not
+  // resumable lanes (design 2026-10-04 §3.5, ledger-membership mechanism).
+  const records = (await sessionQuery.listSessions(signal))
+    .filter(record => !isEphemeralOneShotSession(record.header, oneShot))
   const ids = records.map(record => record.header.id)
   const observations = await sessionQuery.readTitleSnapshots(ids, signal)
   const lines: SessionLine[] = records.map(record => {

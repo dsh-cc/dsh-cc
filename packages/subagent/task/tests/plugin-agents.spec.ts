@@ -251,7 +251,8 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
       { agent: agentAt(workspace), signal: new AbortController().signal, token: 'tok-1' },
     )
     expect(result.status).toBe('completed')
-    expect(result.text).toBe('REASONED OUTPUT')
+    // R9: the completed foreground copy carries the arm-time grace clause.
+    expect(result.text).toMatch(/^REASONED OUTPUT \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
 
     expect(continuable).toHaveLength(1)
     const request = continuable[0]!

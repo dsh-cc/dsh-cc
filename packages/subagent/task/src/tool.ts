@@ -42,12 +42,13 @@ import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { defineTool } from '@dsh-cc/tools'
 import { cwdOf } from '@dsh-cc/memory'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
-import { applyActorContract } from '@dsh-cc/claude-code-agents'
+import { applyActorContract, classifyEphemeral } from '@dsh-cc/claude-code-agents'
 import { actorContractPatterns, gateCandidates } from './actor-contract-gate.ts'
 import { resolveSpawnEffort, toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex } from './plugin-agents.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
+import { armEphemeralTtl, EPHEMERAL_TTL_MS_DEFAULT, type EphemeralReaperLedger } from './ephemeral-reaper.ts'
 import { preloadDeferredFilterTools, renderPreloadLines, type ToolSearchActivateSeam } from './preload-tools.ts'
 import { sanitizeToolFilter } from './sanitize-filter.ts'
 import {
@@ -58,6 +59,7 @@ import {
   wantsBackground,
   type SubagentsLike,
 } from './background-start.ts'
+import { dispatchEphemeral, EPHEMERAL_BACKGROUND_REJECT, EPHEMERAL_WORKTREE_REJECT, settle } from './ephemeral-dispatch.ts'
 import {
   dispatchWorktreeIsolation,
   mountWorktreeIsolation,
@@ -84,6 +86,14 @@ const DEFAULT_MAX_DEPTH = 3
 
 /** The upstream harness issue that keeps fork children one-shot. */
 const FORK_BACKGROUND_ISSUE = 'deepseek-harness#2124'
+
+export {
+  EPHEMERAL_BACKGROUND_REJECT,
+  EPHEMERAL_PIN_IGNORED_NOTICE,
+  EPHEMERAL_PROMOTION_NOTICE,
+  EPHEMERAL_WORKTREE_REJECT,
+  ephemeralCapacityRefusal,
+} from './ephemeral-dispatch.ts'
 
 /**
  * Tool names this composition keeps restrictable without registering a
@@ -130,6 +140,8 @@ export function registerTaskTool(
   registry: AgentRegistry,
   capture?: SpawnPinCapture,
   pluginIndex: PluginAgentIndex = new PluginAgentIndex(ctx),
+  /** §3.4: the one-shot ledger, armed as the TTL reaper's kill log. */
+  reaperLedger?: EphemeralReaperLedger,
 ): (() => void) | undefined {
   const tools = ctx.get('tools') as {
     register(def: unknown): () => void
@@ -340,6 +352,13 @@ export function registerTaskTool(
           tools,
           warn: message => ctx.logger.warn(message),
         }))
+        // §3.2 ephemeral classification: on the raw translated allow list,
+        // PRE-sanitize (ToolSearch injection must not poison the whitelist).
+        const ephemeral = classifyEphemeral(definition)
+        if (ephemeral) {
+          if (args.run_in_background === true) throw new Error(EPHEMERAL_BACKGROUND_REJECT)
+          if (definition.isolation === 'worktree') throw new Error(EPHEMERAL_WORKTREE_REJECT)
+        }
         // WS-3: `isolation: worktree` definitions create a hardened worktree
         // first and dispatch the child into it (create/adopt/settle/lock live
         // in ./worktree-isolation.ts). Any creation failure refuses the
@@ -353,10 +372,17 @@ export function registerTaskTool(
             maxDepth: DEFAULT_MAX_DEPTH,
             toolFilter,
             agentOptions,
-          }, async request =>
-            wantsBackground(args, definition, disabled)
-              ? await startBackground(seam, request, capture)
-              : await collectForeground(ctx, seam, request, capture, exec))
+          }, async request => {
+            // R9: the definition `autoReleaseMs` override is resolved at the
+            // dispatch site — capture-INDEPENDENT (arm-registry must not
+            // depend on pin capture). Identity check; 0 is the disable value.
+            const withOverride = definition.autoReleaseMs !== undefined
+              ? { ...request, autoReleaseMs: definition.autoReleaseMs }
+              : request
+            return wantsBackground(args, definition, disabled)
+              ? await startBackground(seam, withOverride, capture)
+              : await collectForeground(ctx, seam, withOverride, capture, exec)
+          })
           return preloadText === '' ? isolated : { ...isolated, text: `${isolated.text}\n${preloadText}` }
         }
         const folded = {
@@ -364,6 +390,41 @@ export function registerTaskTool(
           persona: gatedPersona,
           ...(toolFilter !== undefined ? { toolFilter } : {}),
           ...(agentOptions !== undefined ? { agentOptions } : {}),
+          // R9: the definition override only — a resolved default is never
+          // written here (the grace-window module derives defaults itself).
+          ...(definition.autoReleaseMs !== undefined ? { autoReleaseMs: definition.autoReleaseMs } : {}),
+        }
+        if (ephemeral) {
+          // Ephemeral wins over a `background: true` pin (§3.2): foreground
+          // one-shot, with a notice when the pin was silently dropped.
+          // §3.4 TTL reaper: arm ONLY here, keyed by a per-run controller
+          // (the kill identity — never a child id). The request signal
+          // becomes AbortSignal.any([exec.signal, ttlController.signal])
+          // inside dispatchEphemeral, so aborting one run never disturbs a
+          // parallel sibling on the same turn signal.
+          const ttlController = new AbortController()
+          const reaper = armEphemeralTtl({
+            ttlMs: definition.ephemeralTtlMs ?? EPHEMERAL_TTL_MS_DEFAULT,
+            controller: ttlController,
+            agent,
+            parentSessionId: String((agent.session as { id?: unknown } | undefined)?.id ?? ''),
+            label: args.description,
+            ledger: reaperLedger,
+            interrupt: seam,
+            warn: (message: string) => ctx.logger.warn(message),
+          })
+          let result: { text: string; status: 'completed' }
+          try {
+            result = await dispatchEphemeral(seam, folded, {
+              pinIgnored: definition.background === true
+                && args.run_in_background === undefined
+                && !disabled,
+              ttlController,
+            })
+          } finally {
+            reaper.dispose()
+          }
+          return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
         }
         if (wantsBackground(args, definition, disabled)) {
           const result = await startBackground(seam, preparedBackground(folded, capture, definition, routes), capture)
@@ -381,20 +442,3 @@ export function registerTaskTool(
   }
 }
 
-/** Await a run's terminal result and project it onto the tool output shape. */
-async function settle(run: { result: Promise<{ stopReason: string; output?: readonly { type: string; text?: string }[] }> }): Promise<{ text: string; status: 'completed' }> {
-  let result
-  try {
-    result = await run.result
-  } catch (error) {
-    throw new Error(`subagent run failed: ${(error as Error).message}`)
-  }
-  if (result.stopReason !== 'completed') {
-    throw new Error(`subagent run stopped with reason "${result.stopReason}"`)
-  }
-  const text = (result.output ?? [])
-    .filter(block => block.type === 'text')
-    .map(block => block.text ?? '')
-    .join('')
-  return { text, status: 'completed' as const }
-}

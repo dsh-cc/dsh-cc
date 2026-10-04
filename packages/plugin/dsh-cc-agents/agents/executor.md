@@ -2,6 +2,7 @@
 name: executor
 description: Mechanical execution of pre-approved plans — code formatting, simple refactors, boilerplate, renaming, writing tests for existing code, documentation updates, running checks. Prioritizes speed and efficiency. Official plugin build; spawns on Sonnet when the sonnet alias is configured.
 model: sonnet
+autoReleaseMs: 7200000
 tools: [Bash, BashOutput, KillBash, Read, Write, Edit, Glob, Grep, TodoWrite, NotebookEdit, mcp__serena__find_symbol, mcp__serena__get_symbols_overview, mcp__serena__find_referencing_symbols, mcp__serena__search_for_pattern, mcp__serena__replace_symbol_body, mcp__serena__insert_before_symbol, mcp__serena__insert_after_symbol, mcp__serena__rename_symbol, mcp__serena__replace_content, mcp__serena__replace_in_files, mcp__serena__get_diagnostics_for_file, mcp__serena__restart_language_server, handoff_put, handoff_get]
 ---
 

@@ -121,6 +121,16 @@ export interface ResumePin {
   readonly toolFilter: PinToolFilter
   /** Audit metadata only — never enforced at spawn or resume. */
   readonly maxTurns?: number | undefined
+  /**
+   * R9: the delivery tier the dispatch entry point stamped ('foreground' |
+   * 'background'). Absent on legacy pins — read as the 2h fail-safe.
+   */
+  readonly dispatchTier?: 'foreground' | 'background' | undefined
+  /**
+   * R9: the definition `autoReleaseMs` override ONLY (never a resolved
+   * default). `0` is the disable value and must survive the round-trip.
+   */
+  readonly autoReleaseMs?: number | undefined
   readonly workspace: PinWorkspace
   readonly resume: PinResume
   readonly lastNotice?: string | undefined
@@ -150,6 +160,26 @@ function requiredNumber(record: Record<string, unknown>, field: string): number 
   const value = record[field]
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new PinParseError(`missing required number field "${field}"`)
+  }
+  return value
+}
+
+/** R9: optional dispatch-tier enum — malformed (present but not the enum) is a parse error. */
+function optionalDispatchTier(record: Record<string, unknown>): 'foreground' | 'background' | undefined {
+  const value = record['dispatchTier']
+  if (value === undefined) return undefined
+  if (value !== 'foreground' && value !== 'background') {
+    throw new PinParseError('field "dispatchTier" must be "foreground" or "background"')
+  }
+  return value
+}
+
+/** R9: optional finite non-negative integer (`autoReleaseMs`); `0` survives (disable). */
+function optionalNonNegativeInt(record: Record<string, unknown>, field: string): number | undefined {
+  const value = record[field]
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+    throw new PinParseError(`field "${field}" must be a finite non-negative integer`)
   }
   return value
 }
@@ -296,6 +326,11 @@ export function parsePin(text: string): ResumePin {
     effective: parseEffective(record['effective']),
     toolFilter: parseToolFilter(record['toolFilter']),
     maxTurns: record['maxTurns'] === undefined ? undefined : requiredNumber(record, 'maxTurns'),
+    // R9 fields: the closed field set must carry BOTH — every
+    // `PinStore.update` round-trips through this parser, so omitting them
+    // here silently drops the data on the first update.
+    dispatchTier: optionalDispatchTier(record),
+    autoReleaseMs: optionalNonNegativeInt(record, 'autoReleaseMs'),
     workspace: parseWorkspace(record['workspace']),
     resume: parseResume(record['resume']),
     lastNotice: optionalString(record, 'lastNotice'),

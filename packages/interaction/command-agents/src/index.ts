@@ -33,11 +33,16 @@ import {
   runRelease,
   isReleased,
   isReleasing,
+  isTombstoned,
   type ReleaseRegistryLike,
 } from './release.ts'
 
 export const name = 'command-agents'
 export const inject = ['commands', 'subagents', 'agents', 'resumePinStore']
+
+// R8 tombstone surface: re-exported so the subagent-task grace-window mount
+// and tests consume the package face, not the module internals.
+export { isTombstoned, clearTombstone, tombstoneReadyRow } from './release.ts'
 
 /** Duck-typed faces of the injected services (host-plane + realm-interior). */
 interface SubagentsLike {
@@ -79,6 +84,7 @@ function toSnapshotServices(
     pinPath: childId => pinStore.pathFor(childId),
     isReleased: id => isReleased(id),
     isReleasing: id => isReleasing(id),
+    isTombstoned: id => isTombstoned(id),
   }
 }
 

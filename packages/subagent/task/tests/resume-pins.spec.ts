@@ -60,7 +60,7 @@ function writeResearcherDefinition(workspace: string, body = 'RESEARCHER PERSONA
   mkdirSync(join(workspace, '.claude', 'agents'), { recursive: true })
   writeFileSync(
     join(workspace, '.claude', 'agents', 'researcher.md'),
-    `---\nname: researcher\ndescription: reads things\nmodel: sonnet\ntools:\n  - read\n---\n${body}\n`,
+    `---\nname: researcher\ndescription: reads things\nmodel: sonnet\nephemeral: false\ntools:\n  - read\n---\n${body}\n`,
   )
 }
 
@@ -385,7 +385,7 @@ describe('§6 test 7 — changed definition between boots', () => {
     // Comment-only edit: parse-level canonicalization → no notice.
     const ws = join(root, 'workspace')
     writeFileSync(join(ws, '.claude', 'agents', 'researcher.md'),
-      '---\nname: researcher # a yaml comment\ndescription: reads things\nmodel: sonnet\ntools:\n  - read\n---\nRESEARCHER PERSONA MARKER\n')
+      '---\nname: researcher # a yaml comment\ndescription: reads things\nmodel: sonnet\nephemeral: false\ntools:\n  - read\n---\nRESEARCHER PERSONA MARKER\n')
     const d = await boot([textResponse('resumed answer')], root, { reasoning: HIGH_EFFORT, routes: { sonnet: { model: 'mock', reasoningEffort: 'high' } } })
     const quiet = await callTool(d.ctx, 'send_message', { agent_id: agentId, message: 'continue' }, d.parent)
     expect(quiet.isError).toBe(false)
@@ -833,7 +833,7 @@ function writeMarkedDefinition(workspace: string, model: string | undefined): vo
   const modelLine = model === undefined ? '' : `model: ${model}\n`
   writeFileSync(
     join(workspace, '.claude', 'agents', 'researcher.md'),
-    `---\nname: researcher\ndescription: reads things\n${modelLine}tools:\n  - read\n---\nYou are a researcher.\n<!-- actor-contract:start -->\n${CONTRACT_BLOCK}\n<!-- actor-contract:end -->\n`,
+    `---\nname: researcher\ndescription: reads things\n${modelLine}ephemeral: false\ntools:\n  - read\n---\nYou are a researcher.\n<!-- actor-contract:start -->\n${CONTRACT_BLOCK}\n<!-- actor-contract:end -->\n`,
   )
 }
 

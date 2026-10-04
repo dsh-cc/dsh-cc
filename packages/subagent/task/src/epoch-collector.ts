@@ -238,6 +238,16 @@ export interface CollectFirstEpochDeps {
   parentSessionId?: string
   /** The tool-call token — the other half of the registry key (§6). */
   toolCallToken?: string
+  /**
+   * R9: invoked synchronously INSIDE {@link CollectorRegistration.promote} —
+   * not at the outcome site — so a promotion that interleaves with an
+   * in-flight `start()` re-tiers the grace window with cancel-and-replace
+   * semantics at the exact moment promotion happens. A FINISHED collect can
+   * no longer promote (the `settled || promoted` guard), and `settled` flips
+   * only in `finish()` after the pending `start()` completes — so a child end
+   * DURING that await can still be promoted (interleaving (b)).
+   */
+  onPromoted?: () => void
 }
 
 /**
@@ -277,6 +287,12 @@ export async function collectFirstEpoch(deps: CollectFirstEpochDeps): Promise<Ep
       // never re-releases, re-un-suppresses, or re-resolves.
       if (settled || promoted) return
       promoted = true
+      // R9: re-tier the grace window synchronously at the promotion moment.
+      try {
+        deps.onPromoted?.()
+      } catch {
+        // A hook failure must never break promotion (retention-safe).
+      }
       // Release the watch: the runId-matched `subagent/end` arriving later
       // resolves nothing — the epoch is no longer awaited (§6).
       release(childId)

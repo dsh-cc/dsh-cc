@@ -371,7 +371,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
     )
     writeFileSync(
       join(ws, '.claude', 'agents', 'reader.md'),
-      '---\nname: reader\ndescription: read-only child\ntools: [Read]\n---\nREADER PERSONA MARKER\n',
+      '---\nname: reader\ndescription: read-only child\ntools: [Read]\nephemeral: false\n---\nREADER PERSONA MARKER\n',
     )
   }
   // A real Bash tool named like the harness built-in (`bash` — the bridge
