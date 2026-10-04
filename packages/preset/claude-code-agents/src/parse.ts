@@ -141,6 +141,9 @@ function buildAgent(
   const prompt = promptIsOverride ? undefined : optionalString(filePath, 'prompt', frontmatter['prompt'])
   const initialPrompt = optionalString(filePath, 'initialPrompt', frontmatter['initialPrompt'])
   const background = optionalBoolean(filePath, 'background', frontmatter['background'])
+  const ephemeral = optionalBoolean(filePath, 'ephemeral', frontmatter['ephemeral'])
+  const ephemeralTtlMs = parseIntField(filePath, 'ephemeralTtlMs', frontmatter['ephemeralTtlMs'], true)
+  const autoReleaseMs = parseIntField(filePath, 'autoReleaseMs', frontmatter['autoReleaseMs'], false)
   const systemPrompt = prompt ?? promptDefault
   validateMarkerPairing(filePath, systemPrompt)
 
@@ -162,6 +165,9 @@ function buildAgent(
   addOptional(definition, 'maxTurns', maxTurns)
   addOptional(definition, 'initialPrompt', initialPrompt)
   addOptional(definition, 'background', background)
+  addOptional(definition, 'ephemeral', ephemeral)
+  addOptional(definition, 'ephemeralTtlMs', ephemeralTtlMs)
+  addOptional(definition, 'autoReleaseMs', autoReleaseMs)
   addOptional(definition, 'memory', memory)
   addOptional(definition, 'isolation', isolation)
   return definition as unknown as AgentDefinition
@@ -244,6 +250,26 @@ function parsePositiveInt(filePath: string, key: string, value: unknown): number
   if (value === undefined) return undefined
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
     throw new Error(`${filePath}: ${key} must be a positive integer`)
+  }
+  return value
+}
+
+/**
+ * Read an optional integer field. `positive` requires `> 0`
+ * (`ephemeralTtlMs`); otherwise zero is accepted, meaning disabled
+ * (`autoReleaseMs`).
+ */
+function parseIntField(
+  filePath: string,
+  key: string,
+  value: unknown,
+  positive: boolean,
+): number | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || (positive && value === 0)) {
+    throw new Error(
+      `${filePath}: ${key} must be a ${positive ? 'positive' : 'non-negative'} integer`,
+    )
   }
   return value
 }
