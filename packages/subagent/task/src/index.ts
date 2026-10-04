@@ -65,6 +65,14 @@ export { mountAgentCatalog } from './catalog.ts'
 export { createOneShotLedger, DEFAULT_ACTIVE_TTL_MS, DEFAULT_ENDED_TTL_MS, INTERNAL_LABELS } from './one-shot-ledger.ts'
 export type { OneShotLedgerRow } from './one-shot-ledger.ts'
 export { mountSubagentChildNotice, foldChildNotice, CHILD_NOTICE_SOURCE_KIND } from './one-shot-notice.ts'
+export {
+  armEphemeralTtl,
+  EPHEMERAL_TTL_MS_DEFAULT,
+  EPHEMERAL_KILL_OBSERVE_TIMEOUT_MS,
+  EPHEMERAL_TTL_TIMEOUT_STOP_REASON,
+  EPHEMERAL_TTL_KILL_COPY,
+} from './ephemeral-reaper.ts'
+export type { EphemeralReaperLedger, EphemeralTtlDeps } from './ephemeral-reaper.ts'
 
 /**
  * One-shot subagent visibility (memory-recall hardening follow-ups W2a/c):
@@ -75,12 +83,12 @@ export { mountSubagentChildNotice, foldChildNotice, CHILD_NOTICE_SOURCE_KIND } f
  * @param ctx - the plug context.
  * @returns an unmount callback.
  */
-export function mountOneShotVisibility(ctx: Context): () => void {
+export function mountOneShotVisibility(ctx: Context, ledger?: ReturnType<typeof createOneShotLedger>): () => void {
   const agents = ctx.get('agents') as import('./one-shot-ledger.ts').OneShotLedgerDeps['agents']
-  const ledger = createOneShotLedger({ bus: ctx, agents })
-  const offNotice = mountSubagentChildNotice(ctx, ledger)
+  const owned = ledger ?? createOneShotLedger({ bus: ctx, agents })
+  const offNotice = mountSubagentChildNotice(ctx, owned)
   return () => {
-    ledger.dispose()
+    owned.dispose()
     offNotice()
   }
 }
@@ -197,14 +205,18 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
   // One PluginAgentIndex serves both dispatch and catalog; it reads the seam
   // lazily on every call so effect-scoped plugin mounts after apply() are seen.
   const pluginIndex = new PluginAgentIndex(ctx)
-  registerTaskTool(ctx, registry, capture, pluginIndex)
+  // One ledger instance is shared: the §3.4 TTL reaper (kill log) and the
+  // one-shot visibility mount read the same runId-keyed rows.
+  const agents = ctx.get('agents') as import('./one-shot-ledger.ts').OneShotLedgerDeps['agents']
+  const ledger = createOneShotLedger({ bus: ctx, agents })
+  registerTaskTool(ctx, registry, capture, pluginIndex, ledger)
   registerReleaseAgentTool(ctx)
   mountActorContractGate(ctx)
   mountAgentCatalog(ctx, registry, pluginIndex)
   mountBackgroundSection(ctx)
   mountStripWorkspaceInstructions(ctx)
   mountSettledNoticeSuppression(ctx)
-  mountOneShotVisibility(ctx)
+  mountOneShotVisibility(ctx, ledger)
   publishCollectorRegistry(ctx)
 }
 

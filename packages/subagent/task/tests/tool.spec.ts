@@ -22,6 +22,7 @@ import { RELEASE_AGENT_TOOL, registerReleaseAgentTool } from '../src/release-age
 import { markReleasing, resetReleasedMarkers } from '@dsh-cc/command-agents/release'
 import { PinStore } from '@dsh-cc/subagent-resume-pins'
 import { SpawnPinCapture } from '../src/resume-capture.ts'
+import { EPHEMERAL_TTL_KILL_COPY } from '../src/ephemeral-reaper.ts'
 import { BACKGROUND_SECTION_TEXT } from '../src/index.ts'
 import { collectorsForSession } from '../src/epoch-collector.ts'
 import { PLUGIN_AGENT_PROVIDER_BRAND } from '@dsh-cc/plugin-loader'
@@ -1212,6 +1213,70 @@ describe('Task tool', () => {
       expect(result.content[0]!.text).toBe(`Error: ${EPHEMERAL_WORKTREE_REJECT}`)
       expect(runs).toHaveLength(0)
       expect(continuableStarts).toHaveLength(0)
+    })
+
+    it('§3.4 foreground TTL kill surfaces the pinned remedy copy', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'scout', '---\nname: scout\ndescription: S\nephemeral: true\nephemeralTtlMs: 20\ntools:\n  - Read\n---\nBody.\n')
+      const runSignals: AbortSignal[] = []
+      const provider: FakeProvider = {
+        name: 'spawn',
+        capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
+        start: async request => ({
+          result: new Promise(resolve => {
+            const signal = request['signal'] as AbortSignal
+            runSignals.push(signal)
+            // A real TTL kill ends the run non-completed (upstream abort).
+            signal.addEventListener('abort', () => resolve({ stopReason: 'aborted' }), { once: true })
+          }),
+        }),
+      }
+      const { ctx } = await mount({ seamProviders: [provider, capableProvider('fork', COMPLETED)] })
+      reserveNames(ctx, 'read')
+      const result = await call(ctx, { subagent_type: 'scout', description: 'x', prompt: 't' }, agentAt(ws))
+      expect(runSignals).toHaveLength(1)
+      expect(runSignals[0]!.aborted).toBe(true)
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toBe(`Error: ${EPHEMERAL_TTL_KILL_COPY}`)
+    })
+
+    it('§3.4 parallel-safety pin: one run\'s TTL abort must not disturb the sibling run', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'scout', '---\nname: scout\ndescription: S\nephemeral: true\nephemeralTtlMs: 20\n---\nBody.\n')
+      // The sibling gets a far-future TTL: only the FIRST run's timer fires.
+      writeAgent(ws, 'scout-slow', '---\nname: scout-slow\ndescription: S\nephemeral: true\nephemeralTtlMs: 600000\n---\nBody.\n')
+      const runSignals: AbortSignal[] = []
+      const provider: FakeProvider = {
+        name: 'spawn',
+        capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
+        start: async request => ({
+          result: new Promise(resolve => {
+            runSignals.push(request['signal'] as AbortSignal)
+            // Both runs settle only when explicitly released below.
+            released.push(resolve)
+          }),
+        }),
+      }
+      const released: ((value: { stopReason: string; output?: readonly { type: string; text?: string }[] }) => void)[] = []
+      const { ctx } = await mount({ seamProviders: [provider, capableProvider('fork', COMPLETED)] })
+      const first = call(ctx, { subagent_type: 'scout', description: 'x', prompt: 't' }, agentAt(ws))
+      // Let the first dispatch reach `seam.start`, then fire ITS TTL.
+      await vi.waitFor(() => expect(runSignals).toHaveLength(1))
+      await vi.waitFor(() => expect(runSignals[0]!.aborted).toBe(true))
+      expect(runSignals[0]!.aborted).toBe(true)
+      // The sibling dispatches AFTER the first kill, settles completed, and
+      // its own signal stays live: aborting one run's controller (kill
+      // identity) never touches the sibling's request signal.
+      const second = call(ctx, { subagent_type: 'scout-slow', description: 'y', prompt: 't' }, agentAt(ws))
+      await vi.waitFor(() => expect(runSignals).toHaveLength(2))
+      expect(runSignals[1]!.aborted).toBe(false)
+      released[1]!({ stopReason: 'completed', output: [{ type: 'text', text: 'sibling done' }] })
+      const result = await second
+      expect(result.isError).toBe(false)
+      expect(result.content[0]!.text).toContain('sibling done')
+      // The first run never settles (zombie residual): clean it up.
+      released[0]!({ stopReason: 'aborted' })
+      await first.catch(() => {})
     })
 
     it('R6: an interrupt AFTER start names send_message + id as the resume path', async () => {

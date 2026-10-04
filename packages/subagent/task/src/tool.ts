@@ -48,6 +48,7 @@ import { resolveSpawnEffort, toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex } from './plugin-agents.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
+import { armEphemeralTtl, EPHEMERAL_TTL_KILL_COPY, EPHEMERAL_TTL_MS_DEFAULT, type EphemeralReaperLedger } from './ephemeral-reaper.ts'
 import { preloadDeferredFilterTools, renderPreloadLines, type ToolSearchActivateSeam } from './preload-tools.ts'
 import { sanitizeToolFilter } from './sanitize-filter.ts'
 import {
@@ -162,9 +163,15 @@ export async function dispatchEphemeral(
   // tool-search-load a deferred write-capable tool). preloadDeferredFilterTools
   // already ran BEFORE this strip at the dispatch site.
   const { ttlController } = opts
-  const toolFilter = folded.toolFilter !== undefined
-    ? { ...folded.toolFilter, allow: folded.toolFilter.allow?.filter(name => name !== 'ToolSearch') }
-    : undefined
+  const toolFilter = folded.toolFilter === undefined
+    ? undefined
+    // exactOptionalPropertyTypes: drop `allow` entirely when there is none.
+    : {
+      ...folded.toolFilter,
+      ...(folded.toolFilter.allow === undefined
+        ? {}
+        : { allow: folded.toolFilter.allow.filter(name => name !== 'ToolSearch') }),
+    }
   const request = {
     ...folded,
     ...(toolFilter !== undefined ? { toolFilter } : {}),
@@ -173,7 +180,15 @@ export async function dispatchEphemeral(
     ...(ttlController !== undefined ? { signal: AbortSignal.any([folded.signal, ttlController.signal]) } : {}),
   }
   const run = await seam.start(PROVIDER_SPAWN, request)
-  const result = await settle(run)
+  let result
+  try {
+    result = await settle(run)
+  } catch (error) {
+    // §3.4 foreground failure copy: a TTL kill of a foreground-waited child
+    // surfaces with the pinned remedy text (settle throws on non-completed).
+    if (ttlController?.signal.aborted === true) throw new Error(EPHEMERAL_TTL_KILL_COPY)
+    throw error
+  }
   const notes = [
     EPHEMERAL_PROMOTION_NOTICE,
     ...(opts.pinIgnored === true ? [EPHEMERAL_PIN_IGNORED_NOTICE] : []),
@@ -226,6 +241,8 @@ export function registerTaskTool(
   registry: AgentRegistry,
   capture?: SpawnPinCapture,
   pluginIndex: PluginAgentIndex = new PluginAgentIndex(ctx),
+  /** §3.4: the one-shot ledger, armed as the TTL reaper's kill log. */
+  reaperLedger?: EphemeralReaperLedger,
 ): (() => void) | undefined {
   const tools = ctx.get('tools') as {
     register(def: unknown): () => void
@@ -471,11 +488,33 @@ export function registerTaskTool(
         if (ephemeral) {
           // Ephemeral wins over a `background: true` pin (§3.2): foreground
           // one-shot, with a notice when the pin was silently dropped.
-          const result = await dispatchEphemeral(seam, folded, {
-            pinIgnored: definition.background === true
-              && args.run_in_background === undefined
-              && !disabled,
+          // §3.4 TTL reaper: arm ONLY here, keyed by a per-run controller
+          // (the kill identity — never a child id). The request signal
+          // becomes AbortSignal.any([exec.signal, ttlController.signal])
+          // inside dispatchEphemeral, so aborting one run never disturbs a
+          // parallel sibling on the same turn signal.
+          const ttlController = new AbortController()
+          const reaper = armEphemeralTtl({
+            ttlMs: definition.ephemeralTtlMs ?? EPHEMERAL_TTL_MS_DEFAULT,
+            controller: ttlController,
+            agent,
+            parentSessionId: String((agent.session as { id?: unknown } | undefined)?.id ?? ''),
+            label: args.description,
+            ledger: reaperLedger,
+            interrupt: seam,
+            warn: (message: string) => ctx.logger.warn(message),
           })
+          let result: { text: string; status: 'completed' }
+          try {
+            result = await dispatchEphemeral(seam, folded, {
+              pinIgnored: definition.background === true
+                && args.run_in_background === undefined
+                && !disabled,
+              ttlController,
+            })
+          } finally {
+            reaper.dispose()
+          }
           return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
         }
         if (wantsBackground(args, definition, disabled)) {
