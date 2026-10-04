@@ -237,9 +237,30 @@ jobs:
         working-directory: dsh-cc
         run: pnpm check:exports
 
+      # Observability add-on (docs/plans/2026-10-03-ci-test-stability.md §5):
+      # the 25m step cap kills the hang-all case so the upload below still
+      # runs (R4 bounds every touched file at 18m at enforced ceilings); the
+      # tee'd log + junit land in artifacts/ and upload with if: always().
+      # Expected — not guaranteed — on cache-hit runs (measured ~1m pre-step
+      # prefix leaves ~4m slack under the 30m job cap); a cold-cache hung
+      # suite can still lose artifacts (accepted residual, stated in §5).
+      # Default bash shell carries pipefail, so the step exit status stays
+      # vitest's. The junit XML is best-effort (end-of-run writer); the tee'd
+      # log is the expected artifact.
       - name: Unit tests (vitest)
         working-directory: dsh-cc
-        run: pnpm test
+        timeout-minutes: 25
+        run: |
+          mkdir -p artifacts
+          pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit=artifacts/vitest-junit.xml 2>&1 | tee artifacts/vitest.log
+
+      - name: Upload vitest artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-artifacts
+          path: dsh-cc/artifacts/
+          if-no-files-found: ignore
 
       # Informational during the two-green-weeks prove-out (plan §4): tier
       # failures do not block merges until the rule is tightened post-prove-out.
