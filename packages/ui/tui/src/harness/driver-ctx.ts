@@ -129,6 +129,11 @@ export interface DriverHudCtx {
   /** Best-effort git-branch probe for the statusline footer. */
   branchProbe: (dir: string) => Promise<string | undefined>
   /**
+   * Shared mutable branch store (written by refreshBranch, read by the
+   * built-in statusline and by the custom statusline wiring's payload).
+   */
+  branchRef: { value: string | undefined }
+  /**
    * Custom statusLine wiring (statusline-wiring.ts), when created by the
    * driver. `override()` returns the configured command's line while active,
    * or undefined so the built-in HUD stays in charge.

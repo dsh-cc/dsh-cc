@@ -54,7 +54,9 @@ export function createHudSection(rt: DriverHudCtx) {
   // the footer picks it up; a probe superseded by a switch is dropped by the
   // sequence check. The probe never throws; failures just omit the segment.
   // No timer, one probe per (re)bind — zero polling.
-  let branch: string | undefined
+  // Single shared store (branchRef): the custom statusline wiring reads the
+  // same cell for its payload's worktree.branch.
+  const branchRef = rt.branchRef
   let branchSeq = 0
   const refreshBranch = (): void => {
     const seq = ++branchSeq
@@ -62,8 +64,8 @@ export function createHudSection(rt: DriverHudCtx) {
     void Promise.resolve(branchProbe(dir))
       .catch(() => undefined)
       .then(next => {
-        if (seq !== branchSeq || next === branch) return
-        branch = next
+        if (seq !== branchSeq || next === branchRef.value) return
+        branchRef.value = next
         // Same-reference emit: re-notifies subscribers so root re-reads the
         // statusline getter with the fresh branch.
         emit(state())
@@ -203,7 +205,7 @@ export function createHudSection(rt: DriverHudCtx) {
       permissionMode: s.permissionMode,
       ...selection.current === undefined ? {} : { model: selection.current.model },
       ...effort === undefined ? {} : { effort },
-      ...branch === undefined ? {} : { branch },
+      ...branchRef.value === undefined ? {} : { branch: branchRef.value },
       ...s.hud?.contextPercent === undefined ? {} : { contextPercent: s.hud.contextPercent },
       ...s.hud?.contextTokens === undefined ? {} : { contextTokens: s.hud.contextTokens },
       ...s.hud?.tokens === undefined ? {} : { tokens: s.hud.tokens },

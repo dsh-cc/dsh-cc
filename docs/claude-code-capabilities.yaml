@@ -3757,9 +3757,13 @@ capabilities:
         enforced (CC documents no timeout), and no debug-mode failure output
         is logged for the statusline command. The stdin payload omits fields
         with no truthful runtime source: version, output_style.name,
-        worktree, workspace.git_worktree, workspace.repo, session_name,
+        worktree.name, worktree.path, workspace.git_worktree, workspace.repo,
+        session_name,
         prompt_id, fast_mode, thinking, vim, agent, pr,
         cost.total_cost_usd / total_api_duration_ms / total_lines_* —
+        worktree.branch IS emitted, truthfully sourced from the driver's
+        best-effort git-branch probe (omitted while the probe yields
+        undefined) —
         context_window.current_usage IS emitted with CC field names
         (input_tokens / output_tokens / cache_creation_input_tokens /
         cache_read_input_tokens), truthfully sourced from the harness token
@@ -3772,7 +3776,9 @@ capabilities:
         currentUsage context length and is omitted when no occupancy source
         exists. transcript_path points at the dsh-cc-maintained CC-shape
         plaintext transcript mirror when it is ready (see
-        ux.statusline-cc-transcript).
+        ux.statusline-cc-transcript); a live assistant/message usage event
+        flips readiness on fresh sessions too, so the advertisement window
+        starts with the session's first usage report.
         hideVimModeIndicator is parsed but behaviorally inert (no vim mode
         yet); disableAllHooks / allowManagedHooksOnly gating keys are
         unimplemented. External settings.json edits apply at the next boot
@@ -3812,7 +3818,9 @@ capabilities:
         When the custom statusline is active, dsh-cc maintains a CC-shape
         plaintext transcript mirror at $DSH_HOME/tui/cc-transcripts/<sessionId>.jsonl
         (assistant usage lines + user anchor lines, atomic rebuild on
-        bind/rebind, seq-watermarked appends) and the statusline payload's
+        bind/rebind plus a live guarded rebind when an unready mirror sees an
+        assistant/message usage event, seq-watermarked appends) and the
+        statusline payload's
         transcript_path advertises the mirror only once it is ready (>=1 usage
         line), instead of the dsh zstd-compressed private-format session
         artifact that CC-shape consumers cannot parse. The mirror is a filtered

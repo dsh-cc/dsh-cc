@@ -244,11 +244,12 @@ async function bootActiveDriver(
   executor = makeExecutor(),
   section = activeSection(),
   extra: Parameters<typeof makeStatusLineCtx>[0] = {},
+  branchProbe?: (dir: string) => Promise<string | undefined>,
 ) {
   const settings = makeSettings(section)
   const projections = makeProjections()
   const { ctx, emitSessionEvent } = makeStatusLineCtx({ projections, settings, executor, ...extra })
-  const driver = await createDriver(ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
+  const driver = await createDriver(ctx as never, { cwd: '/w/proj', branchProbe: branchProbe ?? (async () => undefined) })
   return { driver, settings, projections, executor, emitSessionEvent }
 }
 
@@ -443,8 +444,10 @@ describe('createDriver custom statusLine wiring', () => {
   })
 
   it('a live session/event appends to the mirror for the bound session and ignores other sessions', async () => {
-    // A session with no usage events at boot has no mirror file; append alone
-    // never creates one (readiness flips only through a rebind).
+    // A session with no usage events at boot has no mirror file; user-event
+    // appends alone never create one. (Assistant usage events DO flip
+    // readiness live via the tap's guarded rebind — covered by the dedicated
+    // fresh-session test below.)
     const bare = await bootActiveDriver()
     await vi.advanceTimersByTimeAsync(0)
     const path = join(tempHome, 'tui', 'cc-transcripts', 's-a.jsonl')
@@ -466,6 +469,101 @@ describe('createDriver custom statusLine wiring', () => {
     const lines = readFileSync(path, 'utf8').trim().split('\n')
     expect(lines.length).toBe(before + 1)
     expect(JSON.parse(lines.at(-1)!)).toMatchObject({ type: 'user', sessionId: 's-a' })
+  })
+
+  it('a live assistant/message usage event flips readiness on a fresh session (lazy rebind)', async () => {
+    const { projections, executor, emitSessionEvent } = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(0)
+    const path = join(tempHome, 'tui', 'cc-transcripts', 's-a.jsonl')
+    expect(existsSync(path)).toBe(false)
+
+    emitSessionEvent('s-a', {
+      type: 'assistant/message',
+      seq: 1,
+      time: 1_700_000_000_000,
+      data: { usage: { inputTokens: 111, outputTokens: 222, cacheReadTokens: 5, cacheWriteTokens: 6 } },
+    })
+    expect(existsSync(path)).toBe(true)
+    const lines = readFileSync(path, 'utf8').trim().split('\n')
+    expect(JSON.parse(lines.at(-1)!).message.usage).toEqual({
+      input_tokens: 111,
+      output_tokens: 222,
+      cache_creation_input_tokens: 6,
+      cache_read_input_tokens: 5,
+    })
+
+    // emitSessionEvent alone does NOT trigger a command fire — the debounced
+    // projection change is the trigger.
+    projections.fire('s-a', 'tokenUsage', usageState(111, 222))
+    await vi.advanceTimersByTimeAsync(300)
+    expect(executor.specs.length).toBeGreaterThanOrEqual(2)
+    const payload = JSON.parse(executor.specs.at(-1)!.stdin!) as Record<string, unknown>
+    expect(payload.transcript_path).toBe(path)
+  })
+
+  it('a fresh session with only live user/message events never creates a mirror nor advertises transcript_path', async () => {
+    const { projections, executor, emitSessionEvent } = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(0)
+    const path = join(tempHome, 'tui', 'cc-transcripts', 's-a.jsonl')
+    emitSessionEvent('s-a', { type: 'user/message', seq: 1, time: 1_700_000_000_000 })
+    emitSessionEvent('s-a', { type: 'user/message', seq: 2, time: 1_700_000_001_000 })
+    expect(existsSync(path)).toBe(false)
+
+    projections.fire('s-a', 'tokenUsage', usageState(10, 20))
+    await vi.advanceTimersByTimeAsync(300)
+    expect(executor.specs.length).toBeGreaterThanOrEqual(2)
+    expect('transcript_path' in (JSON.parse(executor.specs.at(-1)!.stdin!) as Record<string, unknown>)).toBe(false)
+  })
+
+  it('the payload carries worktree.branch when the branch probe resolves; absent when it yields undefined', async () => {
+    const withBranch = await bootActiveDriver(makeExecutor(), activeSection(), {}, async () => 'main')
+    await vi.advanceTimersByTimeAsync(300)
+    const payload = JSON.parse(withBranch.executor.specs.at(-1)!.stdin!) as Record<string, unknown>
+    expect(payload.worktree).toEqual({ branch: 'main' })
+
+    const withoutBranch = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(300)
+    expect('worktree' in (JSON.parse(withoutBranch.executor.specs.at(-1)!.stdin!) as Record<string, unknown>)).toBe(false)
+  })
+
+  it('a late-landing branch probe re-fires the command via the emit-diff (S1 branch diff)', async () => {
+    const gate = deferred<string | undefined>()
+    const { executor } = await bootActiveDriver(makeExecutor(), activeSection(), {}, () => gate.promise)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(executor.specs).toHaveLength(1)
+    expect('worktree' in (JSON.parse(executor.specs[0]!.stdin!) as Record<string, unknown>)).toBe(false)
+
+    gate.resolve('feature-x')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(executor.specs.length).toBeGreaterThanOrEqual(2)
+    const payload = JSON.parse(executor.specs.at(-1)!.stdin!) as Record<string, unknown>
+    expect(payload.worktree).toEqual({ branch: 'feature-x' })
+  })
+
+  it('live events (incl. assistant usage) never resurrect a dead mirror', async () => {
+    const events = [{ type: 'assistant/message', seq: 1, time: 1_700_000_000_000, data: { usage: { inputTokens: 1, outputTokens: 2 } } }]
+    const { projections, executor, emitSessionEvent } = await bootActiveDriver(makeExecutor(), activeSection(), {
+      createSession: { id: 's-a', provider: 'p', model: 'm1', createdAt: 1_000_000, events },
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    // Kill the mirror: removing the whole cc-transcripts dir makes the next
+    // append fail (flag-'a' would otherwise recreate the file) — the module
+    // spec's technique (statusline-cc-transcript.spec.ts:152-166).
+    rmSync(join(tempHome, 'tui', 'cc-transcripts'), { recursive: true, force: true })
+    emitSessionEvent('s-a', { type: 'user/message', seq: 10, time: 1_700_000_001_000 })
+    emitSessionEvent('s-a', {
+      type: 'assistant/message',
+      seq: 11,
+      time: 1_700_000_002_000,
+      data: { usage: { inputTokens: 3, outputTokens: 4, cacheReadTokens: 0, cacheWriteTokens: 0 } },
+    })
+    const path = join(tempHome, 'tui', 'cc-transcripts', 's-a.jsonl')
+    expect(existsSync(path)).toBe(false)
+
+    projections.fire('s-a', 'tokenUsage', usageState(3, 4))
+    await vi.advanceTimersByTimeAsync(300)
+    expect(existsSync(path)).toBe(false)
+    expect('transcript_path' in (JSON.parse(executor.specs.at(-1)!.stdin!) as Record<string, unknown>)).toBe(false)
   })
 
   it('onRebind to a different session id switches the mirror path', async () => {

@@ -56,6 +56,8 @@ export type StatusLineWiringCtx = {
   listeners: Set<(state: TuiState) => void>
   /** The driver agent section's shared, idempotent boot-seed promise; resolves on seed success or failure (wire defensively anyway — the settled continuation can throw). */
   waitForModel(): Promise<void>
+  /** Shared mutable branch store (written by the HUD's refreshBranch). */
+  branchRef: { value: string | undefined }
 }
 
 /** Fallback terminal dimensions when stdout is not a TTY. */
@@ -107,6 +109,17 @@ export function createStatusLineWiring(
     unsubscribeEvents = ctx.on('session/event', (session, event) => {
       // Guard against late events from a disposed/rebound session.
       if (String((session as { id?: unknown })?.id) !== String(current.agent.session.id)) return
+      // Fresh sessions start unready (the boot rebind saw no assistant usage
+      // lines), so the mirror is a no-op until one arrives. When it does,
+      // rebind from the session log UNIONED with the live event (order
+      // independence: the tap may fire before the event lands in
+      // session.events). Rebind is idempotent, refuses to write until an
+      // assistant usage line exists (zeros-shadow invariant), and is
+      // dead-safe after an fs failure.
+      if (!mirror?.isReady() && (event as { type?: unknown })?.type === 'assistant/message') {
+        const log = eventsOf()
+        mirror?.rebind(String(current.agent.session.id), log.includes(event) ? log : [...log, event])
+      }
       mirror?.append(event)
     })
     const eventsOf = (): readonly unknown[] => {
@@ -148,6 +161,7 @@ export function createStatusLineWiring(
       ...(currentUsage === undefined ? {} : { currentUsage }),
       ...(pressure?.contextWindow === undefined ? {} : { contextWindowTokens: pressure.contextWindow }),
       ...(pressure?.pressureTokens === undefined ? {} : { pressureTokens: pressure.pressureTokens }),
+      ...(rt.branchRef.value === undefined ? {} : { worktree: { branch: rt.branchRef.value } }),
       ...(mirror?.isReady() === true && mirror.getPath() !== undefined
         ? { transcriptPath: mirror.getPath()! }
         : {}),
@@ -280,13 +294,16 @@ export function createStatusLineWiring(
   let seenEmit = false
   let lastMode: string | undefined
   let lastSelection: ModelSelectionRef['current']
+  let lastBranch: string | undefined
   rt.listeners.add((_) => {
     const mode = state().permissionMode
     const currentSelection = selection.current
-    if (seenEmit && (mode !== lastMode || currentSelection !== lastSelection)) fire()
+    const branch = rt.branchRef.value
+    if (seenEmit && (mode !== lastMode || currentSelection !== lastSelection || branch !== lastBranch)) fire()
     seenEmit = true
     lastMode = mode
     lastSelection = currentSelection
+    lastBranch = branch
   })
 
   return {
