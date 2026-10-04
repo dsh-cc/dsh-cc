@@ -47,7 +47,7 @@ function writeResearcherDefinition(workspace: string): void {
   mkdirSync(join(workspace, '.claude', 'agents'), { recursive: true })
   writeFileSync(
     join(workspace, '.claude', 'agents', 'researcher.md'),
-    '---\nname: researcher\ndescription: reads things\nmodel: sonnet\ntools:\n  - read\n---\nRESEARCHER PERSONA MARKER\n',
+    '---\nname: researcher\ndescription: reads things\nmodel: sonnet\nephemeral: false\ntools:\n  - read\n---\nRESEARCHER PERSONA MARKER\n',
   )
 }
 

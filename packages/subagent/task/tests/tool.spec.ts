@@ -17,7 +17,7 @@ import ToolRuntime from '@dsh-cc/tools'
 import type { ToolRestriction } from '@dsh-cc/claude-code-agents'
 import { AgentRegistry } from '../src/registry.ts'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
-import { backgroundTasksDisabled, registerTaskTool, TASK_TOOL } from '../src/tool.ts'
+import { backgroundTasksDisabled, EPHEMERAL_BACKGROUND_REJECT, EPHEMERAL_PIN_IGNORED_NOTICE, EPHEMERAL_PROMOTION_NOTICE, EPHEMERAL_WORKTREE_REJECT, MAX_LIVE_CONTINUABLE_CHILDREN, registerTaskTool, TASK_TOOL } from '../src/tool.ts'
 import { RELEASE_AGENT_TOOL, registerReleaseAgentTool } from '../src/release-agent.ts'
 import { markReleasing, resetReleasedMarkers } from '@dsh-cc/command-agents/release'
 import { PinStore } from '@dsh-cc/subagent-resume-pins'
@@ -457,11 +457,14 @@ describe('Task tool', () => {
     const { ctx, runs, continuableStarts } = await mount({ routes })
     reserveNames(ctx, 'read', 'read_image', 'glob', 'grep')
     const result = await call(ctx, { subagent_type: 'explore', description: 'find it', prompt: 'where is X defined?' }, agentAt(ws))
-    expect(result.content[0]!.text).toBe('done')
-    expect(runs).toHaveLength(0)
-    expect(continuableStarts[0]!.request['agentOptions']).toEqual({ provider: 'p', model: 'cheap' })
-    expect(continuableStarts[0]!.request['persona']).toContain('read-only codebase scout')
-    const filter = continuableStarts[0]!.request['toolFilter'] as { allow?: string[] } | undefined
+    expect(result.content[0]!.text).toContain('done')
+    // §3.2: the whitelisted read-only definition dispatches one-shot through seam.start.
+    expect(runs).toHaveLength(1)
+    expect(runs[0]!.provider).toBe('spawn')
+    expect(continuableStarts).toHaveLength(0)
+    expect(runs[0]!.request['agentOptions']).toEqual({ provider: 'p', model: 'cheap' })
+    expect(runs[0]!.request['persona']).toContain('read-only codebase scout')
+    const filter = runs[0]!.request['toolFilter'] as { allow?: string[] } | undefined
     expect(filter?.allow).toEqual(expect.arrayContaining(['read', 'read_image', 'glob', 'grep']))
     expect(filter?.allow?.includes('write')).toBe(false)
     await assertRestrictable(ctx, filter as ToolRestriction)
@@ -473,8 +476,8 @@ describe('Task tool', () => {
     const { ctx, runs, continuableStarts } = await mount({ routes })
     reserveNames(ctx, 'read', 'read_image', 'glob', 'grep')
     await call(ctx, { subagent_type: 'explore', description: 'x', prompt: 't' }, agentAt(ws))
-    expect(runs).toHaveLength(0)
-    expect(continuableStarts[0]!.request['agentOptions']).toBeUndefined()
+    expect(continuableStarts).toHaveLength(0)
+    expect(runs[0]!.request['agentOptions']).toBeUndefined()
   })
 
   it('maps a child failure stopReason to an isError result', async () => {
@@ -788,26 +791,20 @@ describe('Task tool', () => {
       expect(text.toLowerCase()).not.toContain('outputfile')
     })
 
-    it('starts the bundled explore agent in the background with its persona and read-only allow-list', async () => {
+    it('rejects the bundled explore agent with explicit run_in_background: true (ephemeral fail-fast)', async () => {
       const ws = freshWorkspace()
-      const routes = { resolve: (m: string | undefined) => m === 'haiku' ? { provider: 'p', model: 'cheap' } : undefined }
-      const { ctx, runs, continuableStarts } = await mount({ routes })
+      const { ctx, runs, continuableStarts } = await mount()
       reserveNames(ctx, 'read', 'read_image', 'glob', 'grep')
-      await call(ctx, {
+      const result = await call(ctx, {
         subagent_type: 'explore',
         description: 'find it',
         prompt: 'where is X?',
         run_in_background: true,
       }, agentAt(ws))
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toBe(`Error: ${EPHEMERAL_BACKGROUND_REJECT}`)
       expect(runs).toHaveLength(0)
-      expect(continuableStarts[0]!.provider).toBe('spawn')
-      const req = continuableStarts[0]!.request
-      expect(req['persona']).toContain('read-only codebase scout')
-      expect(req['agentOptions']).toEqual({ provider: 'p', model: 'cheap' })
-      const filter = req['toolFilter'] as { allow?: string[] }
-      expect(filter.allow).toEqual(expect.arrayContaining(['read', 'read_image', 'glob', 'grep']))
-      expect(filter.allow?.includes('write')).toBe(false)
-      await assertRestrictable(ctx, filter as ToolRestriction)
+      expect(continuableStarts).toHaveLength(0)
     })
   })
 
@@ -856,14 +853,16 @@ describe('Task tool', () => {
       expect(continuableStarts[0]!.provider).toBe('spawn')
     })
 
-    it('the bundled explore agent stays foreground on omit (no pin)', async () => {
+    it('the bundled explore agent runs one-shot in the foreground on omit (ephemeral wins, no pin)', async () => {
       const ws = freshWorkspace()
       const { ctx, runs, continuableStarts } = await mount()
-      await call(ctx, { subagent_type: 'explore', description: 'find it', prompt: 'where is X?' }, agentAt(ws))
-      expect(runs).toHaveLength(0)
-      expect(continuableStarts).toHaveLength(1)
-      expect(continuableStarts[0]!.provider).toBe('spawn')
-      expect(continuableStarts[0]!.request['persona']).toContain('read-only codebase scout')
+      const result = await call(ctx, { subagent_type: 'explore', description: 'find it', prompt: 'where is X?' }, agentAt(ws))
+      expect(result.content[0]!.text).toContain('done')
+      expect(continuableStarts).toHaveLength(0)
+      expect(runs).toHaveLength(1)
+      expect(runs[0]!.provider).toBe('spawn')
+      expect(runs[0]!.request['persona']).toContain('read-only codebase scout')
+      expect(result.content[0]!.text).toContain(EPHEMERAL_PROMOTION_NOTICE)
     })
 
     it('general-purpose with omit stays foreground (no definition to pin)', async () => {
@@ -1040,7 +1039,7 @@ describe('Task tool', () => {
       const { ctx, runs, continuableStarts } = await mountWithPlugin({
         routes,
         withCapture: false,
-        pluginDefs: [{ systemPrompt: 'You are the plugin researcher.', toolRestriction: { allow: ['read'] }, model: 'opus' }],
+        pluginDefs: [{ systemPrompt: 'You are the plugin researcher.', toolRestriction: { allow: ['read', 'write'] }, model: 'opus' }],
       })
       reserveNames(ctx, 'read')
       const result = await call(ctx, {
@@ -1153,6 +1152,82 @@ describe('Task tool', () => {
       const def = ctx.tools.get(TASK_TOOL) as unknown as { description: string; parameters: { properties: Record<string, { description: string }> } }
       expect(def.description).toMatch(/plugin:agent/)
       expect(def.parameters.properties['subagent_type']!.description).toMatch(/plugin:agent/)
+    })
+  })
+
+  describe('ephemeral dispatch (§3.2 one-shot lane)', () => {
+    it('dispatches a writer (shunt-writer shape) through collectForeground — the continuable path', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'shunt-writer', '---\nname: shunt-writer\ndescription: Writes\n---\nWrite body.\n')
+      const { ctx, runs, continuableStarts } = await mount()
+      const result = await call(ctx, { subagent_type: 'shunt-writer', description: 'x', prompt: 't' }, agentAt(ws))
+      expect(result.content[0]!.text).toBe('done')
+      expect(runs).toHaveLength(0)
+      expect(continuableStarts).toHaveLength(1)
+      expect(continuableStarts[0]!.provider).toBe('spawn')
+    })
+
+    it('dispatches a critic-shaped agent (no tools key, background pin) through startBackground on omit', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'critic', '---\nname: critic\ndescription: Reviews\nbackground: true\n---\nCritic body.\n')
+      const { ctx, runs, continuableStarts } = await mount()
+      await call(ctx, { subagent_type: 'critic', description: 'x', prompt: 't' }, agentAt(ws))
+      expect(runs).toHaveLength(0)
+      expect(continuableStarts).toHaveLength(1)
+      expect(continuableStarts[0]!.provider).toBe('spawn')
+    })
+
+    it('background: true pin + ephemeral + omit → foreground one-shot with the pin-ignored notice', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'pinned-scout', '---\nname: pinned-scout\ndescription: S\nbackground: true\ntools:\n  - Read\n  - Glob\n---\nScout body.\n')
+      const { ctx, runs, continuableStarts } = await mount()
+      reserveNames(ctx, 'read', 'read_image', 'glob', 'grep')
+      const result = await call(ctx, { subagent_type: 'pinned-scout', description: 'x', prompt: 't' }, agentAt(ws))
+      expect(continuableStarts).toHaveLength(0)
+      expect(runs).toHaveLength(1)
+      expect(runs[0]!.provider).toBe('spawn')
+      expect(result.content[0]!.text).toBe(`done\n${EPHEMERAL_PROMOTION_NOTICE} ${EPHEMERAL_PIN_IGNORED_NOTICE}`)
+    })
+
+    it('strips ToolSearch from the sanitized filter on the ephemeral branch (post-sanitize, branch-local)', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'scout', '---\nname: scout\ndescription: S\ntools:\n  - Read\n  - mcp__serena__find_symbol\n---\nScout body.\n')
+      const { ctx, runs } = await mount()
+      reserveNames(ctx, 'read', 'read_image', 'mcp__serena__find_symbol', 'ToolSearch')
+      await call(ctx, { subagent_type: 'scout', description: 'x', prompt: 't' }, agentAt(ws))
+      const filter = runs[0]!.request['toolFilter'] as { allow?: string[] }
+      expect(filter.allow).toContain('read')
+      expect(filter.allow).toContain('mcp__serena__find_symbol')
+      expect(filter.allow).not.toContain('ToolSearch')
+      await assertRestrictable(ctx, filter as ToolRestriction)
+    })
+
+    it('isolation: worktree + ephemeral → fail-fast refusal naming a continuable lane', async () => {
+      const ws = freshWorkspace()
+      writeAgent(ws, 'wts', '---\nname: wts\ndescription: S\ntools:\n  - Read\nisolation: worktree\n---\nBody.\n')
+      const { ctx, runs, continuableStarts } = await mount()
+      reserveNames(ctx, 'read', 'read_image', 'glob', 'grep')
+      const result = await call(ctx, { subagent_type: 'wts', description: 'x', prompt: 't' }, agentAt(ws))
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toBe(`Error: ${EPHEMERAL_WORKTREE_REJECT}`)
+      expect(runs).toHaveLength(0)
+      expect(continuableStarts).toHaveLength(0)
+    })
+
+    it('R6: an interrupt AFTER start names send_message + id as the resume path', async () => {
+      const seamProviders = defaultProviders({ stopReason: 'aborted' })
+      const { ctx } = await mount({ seamProviders })
+      const result = await call(ctx, { description: 'x', prompt: 't' }, agentAt('/any'))
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toMatch(/session persisted; send_message to /)
+    })
+
+    it('R6: a start failure (seam without startContinuable) keeps plain error copy and claims no resumability', async () => {
+      const { ctx } = await mount({ omitStartContinuable: true })
+      const result = await call(ctx, { description: 'x', prompt: 't' }, agentAt('/any'))
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toMatch(/background subagents are unavailable/)
+      expect(result.content[0]!.text).not.toMatch(/session persisted/)
     })
   })
 
@@ -1272,6 +1347,35 @@ describe('Task tool', () => {
       const result = await call(ctx, { description: 'x', prompt: 't', run_in_background: true }, agentAt('/any'))
       expect(result.isError).toBe(false)
         expect(continuableStarts).toHaveLength(1)
+    })
+
+    it('refuses the ephemeral branch with the one-shot-specific copy (mixed 24 continuable + 1 one-shot row)', async () => {
+      const { ctx, runs, continuableStarts } = await mount()
+      withListChildren(ctx, [
+        ...Array.from({ length: 24 }, (_, i) => ({ kind: 'child', id: `child-${i}`, mode: 'continuable' })),
+        { kind: 'child', id: 'one-shot-0', mode: 'one-shot' },
+      ])
+      const ws = freshWorkspace()
+      writeAgent(ws, 'scout', '---\nname: scout\ndescription: S\ntools:\n  - Read\n---\nScout body.\n')
+      const result = await call(ctx, { subagent_type: 'scout', description: 'x', prompt: 't' }, agentWithCtx(ctx, ws))
+      expect(result.isError).toBe(true)
+      expect(result.content[0]!.text).toBe(
+        `Error: ephemeral dispatch refused: 25 ephemeral/one-shot runs in flight (limit `
+        + `${MAX_LIVE_CONTINUABLE_CHILDREN}); one-shot children free their slot on settle — wait `
+        + 'for one to finish. release_agent does not apply: one-shot children are not listable',
+      )
+      expect(result.content[0]!.text).not.toContain('parent has 25 live subagents')
+      expect(runs).toHaveLength(0)
+      expect(continuableStarts).toHaveLength(0)
+    })
+
+    it('the fork sentinel stays unguarded: a fork dispatch succeeds at 25 live children', async () => {
+      const { ctx, runs, continuableStarts } = await mount()
+      withListChildren(ctx, Array.from({ length: 25 }, (_, i) => childRow(`child-${i}`)))
+      const result = await call(ctx, { subagent_type: 'fork', description: 'x', prompt: 't' }, agentWithCtx(ctx))
+      expect(result.isError).toBe(false)
+      expect(runs).toHaveLength(1)
+      expect(continuableStarts).toHaveLength(0)
     })
   })
 

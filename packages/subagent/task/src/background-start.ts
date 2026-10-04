@@ -204,6 +204,8 @@ export async function assertLiveCapacity(
   seam: SubagentsLike,
   parent: Agent,
   signal: AbortSignal,
+  /** Lane-specific refusal (the ephemeral branch names one-shot runs); default keeps the D4 continuable literal. */
+  refuse?: (live: number) => Error,
 ): Promise<void> {
   if (typeof seam.listChildren !== 'function') return
   let children: { id: string; mode?: string }[]
@@ -220,7 +222,9 @@ export async function assertLiveCapacity(
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
     // Single runtime literal (D4; T16 pins full equality against exactly it):
     // the copy names the real release path — /agents stop cannot free a slot.
-    throw new Error(
+    throw refuse !== undefined
+      ? refuse(live)
+      : new Error(
       `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
       + 'release_agent on a running child (or /agents release <id> interactively), or '
       + 'let children settle — only running children hold slots, and only '

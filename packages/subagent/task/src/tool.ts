@@ -38,11 +38,11 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
+import type { AgentDefinition, ToolRestriction } from '@dsh-cc/claude-code-agents'
 import { defineTool } from '@dsh-cc/tools'
 import { cwdOf } from '@dsh-cc/memory'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
-import { applyActorContract } from '@dsh-cc/claude-code-agents'
+import { applyActorContract, classifyEphemeral } from '@dsh-cc/claude-code-agents'
 import { actorContractPatterns, gateCandidates } from './actor-contract-gate.ts'
 import { resolveSpawnEffort, toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
@@ -51,9 +51,12 @@ import { SpawnPinCapture } from './resume-capture.ts'
 import { preloadDeferredFilterTools, renderPreloadLines, type ToolSearchActivateSeam } from './preload-tools.ts'
 import { sanitizeToolFilter } from './sanitize-filter.ts'
 import {
+  assertLiveCapacity,
   backgroundTasksDisabled,
   collectForeground,
+  MAX_LIVE_CONTINUABLE_CHILDREN,
   preparedBackground,
+  PROVIDER_SPAWN,
   startBackground,
   wantsBackground,
   type SubagentsLike,
@@ -84,6 +87,99 @@ const DEFAULT_MAX_DEPTH = 3
 
 /** The upstream harness issue that keeps fork children one-shot. */
 const FORK_BACKGROUND_ISSUE = 'deepseek-harness#2124'
+
+/**
+ * Fail-fast copy: explicit `run_in_background: true` on an ephemeral
+ * (read-only one-shot) definition (§3.2). Names the workflow tool for fan-out.
+ */
+export const EPHEMERAL_BACKGROUND_REJECT =
+  'ephemeral (read-only one-shot) agents cannot run in the background: a one-shot run '
+  + 'returns inline and leaves no durable child to wake from. For fan-out use the '
+  + '`workflow` tool; or run this agent in the foreground (omit run_in_background).'
+
+/**
+ * Fail-fast copy: `isolation: worktree` + ephemeral (§3.2). A one-shot run has
+ * no reserved childId to adopt/settle an isolated worktree against.
+ */
+export const EPHEMERAL_WORKTREE_REJECT =
+  'ephemeral (read-only one-shot) agents cannot use `isolation: worktree`: a one-shot '
+  + 'run has no durable child id to adopt and settle an isolated worktree against. Drop '
+  + '`isolation: worktree` from the definition, or dispatch a continuable agent '
+  + '(foreground or run_in_background) for isolated work.'
+
+/**
+ * Capacity refusal on the ephemeral branch (§3.2): distinguishes one-shot runs
+ * from the continuable D4 literal (which stays byte-identical). One-shot
+ * children free their slot on settle and are not release_agent-releasable.
+ */
+export function ephemeralCapacityRefusal(live: number): Error {
+  return new Error(
+    `ephemeral dispatch refused: ${live} ephemeral/one-shot runs in flight (limit `
+    + `${MAX_LIVE_CONTINUABLE_CHILDREN}); one-shot children free their slot on settle — wait `
+    + 'for one to finish. release_agent does not apply: one-shot children are not listable',
+  )
+}
+
+/** The one-line Ctrl+B note carried on every ephemeral result (§3.2). */
+export const EPHEMERAL_PROMOTION_NOTICE =
+  '(ephemeral one-shot run: no durable child is created; Ctrl+B cannot promote this '
+  + 'foreground wait — it is not in the promotion registry; Esc still aborts it)'
+
+/** The one-line notice when a `background: true` pin was ignored for the lane (§3.2). */
+export const EPHEMERAL_PIN_IGNORED_NOTICE =
+  'the definition\u2019s `background: true` pin was ignored: read-only ephemeral agents always run as a foreground one-shot'
+
+/**
+ * The §3.2 ephemeral (one-shot) foreground dispatch: capacity-guard, then a
+ * one-shot `seam.start(PROVIDER_SPAWN, …)` with the same request fold as
+ * `collectForeground` (persona, toolFilter, agentOptions, maxDepth) and the
+ * `settle()` collector. Slice-3 reaper seam: pass `ttlController` (armed at
+ * dispatch) and the start request signal becomes
+ * `AbortSignal.any([exec.signal, ttlController.signal])` — the caller keeps
+ * ownership of the timer; this function only threads the signal.
+ */
+export async function dispatchEphemeral(
+  seam: SubagentsLike,
+  folded: {
+    label?: string
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    signal: AbortSignal
+    maxDepth?: number
+    persona?: string
+    agentOptions?: Record<string, string>
+    toolFilter?: ToolRestriction
+  },
+  opts: {
+    pinIgnored?: boolean
+    ttlController?: AbortController
+    refuseCapacity?: (live: number) => Error
+  } = {},
+): Promise<{ text: string; status: 'completed' }> {
+  await assertLiveCapacity(seam, folded.parent, folded.signal, opts.refuseCapacity ?? ephemeralCapacityRefusal)
+  // §3.1 ToolSearch strip: branch-local, post-sanitize (the sanitized filter
+  // may have injected ToolSearch; a read-only child must not be able to
+  // tool-search-load a deferred write-capable tool). preloadDeferredFilterTools
+  // already ran BEFORE this strip at the dispatch site.
+  const { ttlController } = opts
+  const toolFilter = folded.toolFilter !== undefined
+    ? { ...folded.toolFilter, allow: folded.toolFilter.allow?.filter(name => name !== 'ToolSearch') }
+    : undefined
+  const request = {
+    ...folded,
+    ...(toolFilter !== undefined ? { toolFilter } : {}),
+    // Slice-3 seam: the reaper arms a per-run controller at dispatch; aborting
+    // it must not cancel the turn signal (Task is concurrency-safe).
+    ...(ttlController !== undefined ? { signal: AbortSignal.any([folded.signal, ttlController.signal]) } : {}),
+  }
+  const run = await seam.start(PROVIDER_SPAWN, request)
+  const result = await settle(run)
+  const notes = [
+    EPHEMERAL_PROMOTION_NOTICE,
+    ...(opts.pinIgnored === true ? [EPHEMERAL_PIN_IGNORED_NOTICE] : []),
+  ]
+  return { ...result, text: `${result.text}\n${notes.join(' ')}` }
+}
 
 /**
  * Tool names this composition keeps restrictable without registering a
@@ -340,6 +436,13 @@ export function registerTaskTool(
           tools,
           warn: message => ctx.logger.warn(message),
         }))
+        // §3.2 ephemeral classification: on the raw translated allow list,
+        // PRE-sanitize (ToolSearch injection must not poison the whitelist).
+        const ephemeral = classifyEphemeral(definition)
+        if (ephemeral) {
+          if (args.run_in_background === true) throw new Error(EPHEMERAL_BACKGROUND_REJECT)
+          if (definition.isolation === 'worktree') throw new Error(EPHEMERAL_WORKTREE_REJECT)
+        }
         // WS-3: `isolation: worktree` definitions create a hardened worktree
         // first and dispatch the child into it (create/adopt/settle/lock live
         // in ./worktree-isolation.ts). Any creation failure refuses the
@@ -364,6 +467,16 @@ export function registerTaskTool(
           persona: gatedPersona,
           ...(toolFilter !== undefined ? { toolFilter } : {}),
           ...(agentOptions !== undefined ? { agentOptions } : {}),
+        }
+        if (ephemeral) {
+          // Ephemeral wins over a `background: true` pin (§3.2): foreground
+          // one-shot, with a notice when the pin was silently dropped.
+          const result = await dispatchEphemeral(seam, folded, {
+            pinIgnored: definition.background === true
+              && args.run_in_background === undefined
+              && !disabled,
+          })
+          return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
         }
         if (wantsBackground(args, definition, disabled)) {
           const result = await startBackground(seam, preparedBackground(folded, capture, definition, routes), capture)

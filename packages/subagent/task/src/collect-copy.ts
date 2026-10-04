@@ -31,7 +31,10 @@ function stopReasonMessage(childId: string, stopReason: string): string {
       if (isReleased(childId) || isReleasing(childId)) {
         return `subagent ${childId} was released (or its release was in flight) while it was being collected; it cannot be continued in this session.`
       }
-      return `subagent ${childId} was interrupted (stopReason "aborted"); it may still be resumed — /agents for status.`
+      // R6 (§3.6): a post-start interrupt has an accepted childId and a
+      // persisted session — the copy may claim resumability and name the
+      // continuation path. Start failures never reach stopReasonMessage.
+      return `subagent ${childId} was interrupted (stopReason "aborted"); it may still be resumed — /agents for status. The child's session persisted; send_message to ${childId} can resume it.`
     default:
       return `subagent ${childId} stopped with reason "${stopReason}".`
   }

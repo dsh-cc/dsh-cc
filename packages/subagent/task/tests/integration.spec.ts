@@ -42,7 +42,7 @@ function workspace(withDefinition = false): string {
   if (withDefinition) {
     writeFileSync(
       join(ws, '.claude', 'agents', 'researcher.md'),
-      '---\nname: researcher\ndescription: reads things\ntools:\n  - read\n---\nRESEARCHER PERSONA MARKER\n',
+      '---\nname: researcher\ndescription: reads things\nephemeral: false\ntools:\n  - read\n---\nRESEARCHER PERSONA MARKER\n',
     )
   }
   return ws
