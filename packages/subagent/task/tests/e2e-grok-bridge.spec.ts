@@ -47,8 +47,148 @@ import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 import { apply as applyTask } from '../src/index.ts'
+
+// TIMEOUT-BUDGET: keep byte-identical across spec files.
+// scale: DSH_TEST_TIMEOUT_SCALE (debug override), else 2 on GitHub Actions, else 1.
+// Must be an integer in [1,4]; anything else → 1. Values >2 exceed what R4 was sized for.
+const raw = Number(process.env.DSH_TEST_TIMEOUT_SCALE ?? (process.env.CI === 'true' ? 2 : 1))
+const scale = Number.isInteger(raw) && raw >= 1 && raw <= 4 ? raw : 1
+
+// --- F1 lifecycle envelope + per-test world disposal (docs/plans/2026-10-03-ci-test-stability.md, F1) ---
+
+vi.setConfig({ hookTimeout: 15_000 }) // flat, unscaled: hooks are teardown; contention does not multiply housekeeping need.
+
+interface Envelope {
+  /** Milliseconds left before the envelope expiry (never negative). */
+  remaining(): number
+  /** Record a timestamped phase marker for the expiry dump (F1.5). */
+  phase(label: string): void
+}
+
+const ENVELOPE_HEADROOM_MS = 30_000
+let activeEnvelope: Envelope | undefined
+let envDump: () => string = () => 'state unavailable (setup incomplete)'
+
+/** One booted (or half-built) per-test world, registered at construction. */
+interface World {
+  ctx: Context
+  parentSessionId: SessionId
+  sealed: boolean
+  /** In-flight start admissions (fork promises), recorded at creation. */
+  inflight: Array<Promise<unknown>>
+}
+const worlds: World[] = []
+
+function registryAgents(world: World): Array<{ id: unknown; cancel: (authority: unknown, opts: unknown) => unknown }> {
+  const agents = (world.ctx as unknown as { agents?: { list?: () => Array<{ id: unknown; cancel: (authority: unknown, opts: unknown) => unknown }> } }).agents
+  try {
+    return agents?.list?.() ?? []
+  } catch {
+    return [] // half-built world: the agents seam was never mounted
+  }
+}
+
+function joinBounded(ps: Array<Promise<unknown>>, deadline: number): Promise<void> {
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) return Promise.resolve()
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, remaining)
+    void Promise.allSettled(ps).then(() => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+}
+
+/**
+ * F1.1: one inner envelope per test, opened BEFORE the body's setup() runs.
+ * envelopeMs = outerMs − 30s, so setup → fork await → polls →
+ * waitNoActivation share a single deadline that always fires 30s before
+ * vitest's outer timer, with a timestamped phase dump (F1.5) instead of the
+ * bare `Test timed out` signature.
+ */
+function withEnvelope<T>(outerMs: number, label: string, body: (env: Envelope) => Promise<T>): Promise<T> {
+  const ms = outerMs - ENVELOPE_HEADROOM_MS
+  const start = Date.now()
+  const phases: string[] = []
+  const env: Envelope = {
+    remaining: () => Math.max(0, ms - (Date.now() - start)),
+    phase: (text: string) => phases.push(`${text} @ +${((Date.now() - start) / 1000).toFixed(2)}s`),
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expiry = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(
+      `envelope expired in "${label}": inner deadline ${ms}ms (outer ${outerMs}ms − ${ENVELOPE_HEADROOM_MS}ms headroom)`
+      + ` elapsed from ${new Date(start).toISOString()} to ${new Date().toISOString()}`
+      + `\nphases: ${phases.join(' | ') || '(none recorded)'}`
+      + `\nworlds: ${JSON.stringify(worlds.map(w => ({ sealed: w.sealed, agents: registryAgents(w).map(a => String(a.id)) })))}`
+      + `\nstate: ${envDump()}`,
+    )), ms)
+  })
+  activeEnvelope = env
+  return Promise.race([
+    body(env).finally(() => {
+      clearTimeout(timer)
+      if (activeEnvelope === env) activeEnvelope = undefined
+    }),
+    expiry,
+  ])
+}
+
+/** Await a promise under an explicit deadline taken from the envelope (F1.1). */
+async function awaitBounded<T>(p: Promise<T>, timeoutMs: number, what: string): Promise<T> {
+  if (timeoutMs <= 0) throw new Error(`${what}: envelope already exhausted (remaining ${timeoutMs}ms)`)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what}: not settled within ${timeoutMs}ms (envelope remaining)`)), timeoutMs)
+  })
+  try {
+    return await Promise.race([p, deadline])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * F1.3: per-test world disposal, in the pinned order seal → bounded-join →
+ * bounded-interrupt → dispose, inside ONE shared teardown window clamped
+ * under the 15s hookTimeout ceiling. Window expiry logs a
+ * `teardown-incomplete` marker line and CONTINUES; the registry is cleared
+ * regardless. Guarantees (D1): no new tool executions/spawns after seal
+ * (seal wraps ctx.tools.execute — the only admission path in this world),
+ * in-flight admissions bounded-joined, bounded interrupt via the live Agent
+ * handles' cancel(), dispose joined to the same window; seal/interrupt/
+ * dispose are tolerated no-ops on half-built worlds.
+ */
+afterEach(async () => {
+  const windowMs = Math.min(4_000 * scale, 13_000)
+  const deadline = Date.now() + windowMs
+  const worldsToDispose = worlds.splice(0)
+  for (const world of worldsToDispose) {
+    // (a) seal: no new spawns/tool executions admitted.
+    world.sealed = true
+    // (b) bounded-join of any in-flight start admission.
+    await joinBounded(world.inflight, deadline)
+    // (c) bounded interrupt of registered live children (tolerated no-op on
+    // an already-settled or half-built agent); the interrupt's drain is
+    // joined by dispose below, itself bounded by the same window.
+    for (const agent of registryAgents(world)) {
+      try {
+        agent.cancel({ kind: 'parent' }, { keepInbox: true })
+      } catch { /* tolerated no-op */ }
+    }
+    // (d) dispose/finalize of the ctx — joined to the SAME window; its own
+    // hang cannot outlive it.
+    await joinBounded([world.ctx.fiber.dispose()], deadline)
+  }
+  // (e) the registry is cleared regardless (splice above); expiry is a
+  // marker, not a teardown precondition.
+  if (Date.now() > deadline) {
+    console.log(`[teardown-incomplete] teardown window ${windowMs}ms exhausted after ${worldsToDispose.length} world(s); registry cleared`)
+  }
+})
 
 const BRIDGE_PLUGIN_DIR = resolve(import.meta.dirname, '../../../plugin/cc-grok-bridge')
 
@@ -114,6 +254,7 @@ const dirs: string[] = []
 afterAll(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }) })
 
 async function waitFor(predicate: () => boolean, timeout = 30_000, dump?: () => string): Promise<void> {
+  activeEnvelope?.phase(`poll entered: ${predicate.toString().slice(0, 80)}`)
   const deadline = Date.now() + timeout
   while (!predicate()) {
     if (Date.now() > deadline) {
@@ -123,8 +264,8 @@ async function waitFor(predicate: () => boolean, timeout = 30_000, dump?: () => 
   }
 }
 
-async function waitNoActivation(ctx: Context, childId: SessionId): Promise<void> {
-  await waitFor(() => ctx.agents.get(childId) === undefined)
+async function waitNoActivation(ctx: Context, childId: SessionId, timeout: number): Promise<void> {
+  await waitFor(() => ctx.agents.get(childId) === undefined, timeout)
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -179,6 +320,11 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
   const dir = mkdtempSync(join(tmpdir(), 'grok-bridge-e2e-'))
   dirs.push(dir)
   const ctx = new Context()
+  // F1.3: registered at CONSTRUCTION, not on completion — an envelope abort
+  // midway through setup still leaves the half-built world inside the
+  // afterEach disposal pass (grok r4-6).
+  const world: World = { ctx, parentSessionId: SessionId('parent'), sealed: false, inflight: [] }
+  worlds.push(world)
   await mountAgentLoopTestDependencies(ctx)
   const persistRoot = mkdtempSync(join(tmpdir(), 'grok-bridge-e2e-persist-'))
   dirs.push(persistRoot)
@@ -221,6 +367,15 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
       return () => { reserved.delete(name) }
     }
   }
+  // F1.3 (a) seal primitive (D1): after seal, new tool executions — and
+  // therefore new spawns/admissions, all of which route through the tools
+  // seam in this composition — are refused on this world.
+  const toolsService = ctx.tools as unknown as { execute: (call: unknown) => Promise<unknown> }
+  const rawExecute = toolsService.execute.bind(toolsService)
+  toolsService.execute = (call: unknown) => {
+    if (world.sealed) return Promise.reject(new Error('world sealed for teardown: new tool execution refused'))
+    return rawExecute(call)
+  }
   applyTask(ctx)
   applyRoutes(ctx, { modelAliases: { opus: { provider: 'mock', model: 'mock' } } })
   // Session workspace = mkdtemp under os.tmpdir(): the repo-path launcher
@@ -250,7 +405,12 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
     async execute(args: { command?: string }) {
       const command = args.command ?? ''
       executedCommands.push(command)
-      const res = spawnSync('bash', ['-c', command], { cwd: ws, encoding: 'utf8' })
+      // F1.6: envelope-clamped via the remainder-with-guard rule — never
+      // spend a deadline that is already empty.
+      const remaining = activeEnvelope !== undefined ? activeEnvelope.remaining() : 60_000
+      const timeout = remaining - 1_000
+      if (timeout <= 1_000) throw new Error(`fixture spawn refused: envelope remaining ${remaining}ms <= 1000ms (fail fast without spawning)`)
+      const res = spawnSync('bash', ['-c', command], { cwd: ws, encoding: 'utf8', timeout })
       const out = [res.stdout, res.stderr].filter(s => s !== '').join('\n')
       return [{ type: 'text', text: out }]
     },
@@ -280,14 +440,26 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
     if (subject !== parent || opts.parkParent === false) return next()
     return { kind: 'reject' as const }
   })
-  return { ctx, parent, adapter, dir, ws, marker, sessionStartRan, mount: bridgeMount! }
+  return { ctx, parent, adapter, dir, ws, marker, sessionStartRan, mount: bridgeMount!, world }
 }
 
 function requestsFor(adapter: MockAdapter, sessionId: string) {
   return adapter.requests.filter(request => String(request.sessionId) === sessionId)
 }
 
-/** The probe hook's captured payloads (one JSON object per line). */
+/**
+ * Provisional read (F1.4): while the owning child may still be live, exactly
+ * ONE unterminated trailing line is tolerated (a torn mid-write read);
+ * completed lines always pass through throwing `JSON.parse`.
+ */
+function provisionalPayloads(marker: string): Array<Record<string, unknown>> {
+  if (!existsSync(marker)) return []
+  const lines = readFileSync(marker, 'utf8').split('\n')
+  if (lines.at(-1) !== '') lines.pop() // the single tolerated unterminated trailing line
+  return lines.filter(l => l.trim() !== '').map(l => JSON.parse(l))
+}
+
+/** TERMINAL read (F1.4): re-parses the whole file strictly — a writer that exits with a truncated final record fails loudly. */
 function payloads(marker: string): Array<Record<string, unknown>> {
   if (!existsSync(marker)) return []
   return readFileSync(marker, 'utf8').split('\n').filter(l => l.trim() !== '').map(l => JSON.parse(l))
@@ -295,7 +467,7 @@ function payloads(marker: string): Array<Record<string, unknown>> {
 
 /** Diagnostic dump for waitFor deadlines. */
 function dumpState(adapter: MockAdapter, marker = ''): () => string {
-  return () => `executed=${JSON.stringify(executedCommands)}${marker !== '' ? ` payloads=${JSON.stringify(payloads(marker))}` : ''} requests=${JSON.stringify(
+  return () => `executed=${JSON.stringify(executedCommands)}${marker !== '' ? ` payloads=${JSON.stringify(provisionalPayloads(marker))}` : ''} requests=${JSON.stringify(
     adapter.requests.map(r => ({ session: String(r.sessionId), results: toolResults(r).map(b => b.text.slice(0, 120)) })),
   )}`
 }
@@ -311,11 +483,13 @@ function gateCanonical(ctx: Context, verdict: 'deny' | 'ask', command: string = 
 }
 
 describe('e2e — grok-review-bridge PreToolUse allow hook through the real plugin', () => {
-  it('M1: canonical call on the main thread is allowed and EXECUTES the launcher (grok-review: marker)', async () => {
+  it('M1: canonical call on the main thread is allowed and EXECUTES the launcher (grok-review: marker)', () => withEnvelope(90_000, 'M1', async env => {
     const { ctx, parent, adapter, marker } = await setup([
       toolCallResponse('r1', 'bash', { command: CANONICAL }),
       textResponse('review attempted'),
     ], { parkParent: false })
+    env.phase('setup-done')
+    envDump = dumpState(adapter, marker)
     parent.followup(createUserMessage({ content: [{ type: 'text', text: 'run the review' }], source: { kind: 'user' } }))
     await parent.whenIdle()
     // Stage 1: the bridge DISPATCHED the Bash PreToolUse payload (the plugin
@@ -324,30 +498,32 @@ describe('e2e — grok-review-bridge PreToolUse allow hook through the real plug
       () => payloads(marker).some(p =>
         p.hook_event_name === 'PreToolUse' && p.tool_name === 'Bash'
         && (p.tool_input as { command?: string })?.command === CANONICAL),
-      30_000,
+      env.remaining(),
       dumpState(adapter, marker),
     )
     // Stage 2: the call executed past the bridge (launcher marker).
     await waitFor(
       () => requestsFor(adapter, 'parent').some(r => toolResults(r).some(b => b.text.includes('grok-review:'))),
-      30_000,
+      env.remaining(),
       dumpState(adapter, marker),
     )
     const result = toolResults(requestsFor(adapter, 'parent').find(r => toolResults(r).some(b => b.text.includes('grok-review:')))).find(b => b.text.includes('grok-review:'))!
     expect(executedCommands).toContain(CANONICAL)
     expect(result.text).toContain('grok-review:')
-  }, 90_000)
+  }), 90_000) // envelope 60_000 < outer 90_000: strict 30s headroom, setup inside the envelope
 
-  it('M4 control: a non-canonical echo is the unchanged passthrough flow (no marker)', async () => {
+  it('M4 control: a non-canonical echo is the unchanged passthrough flow (no marker)', () => withEnvelope(90_000, 'M4', async env => {
     const { parent, adapter, marker } = await setup([
       toolCallResponse('r1', 'bash', { command: 'echo hello' }),
       textResponse('done'),
     ], { parkParent: false })
+    env.phase('setup-done')
+    envDump = dumpState(adapter, marker)
     parent.followup(createUserMessage({ content: [{ type: 'text', text: 'echo' }], source: { kind: 'user' } }))
     await parent.whenIdle()
     await waitFor(
       () => requestsFor(adapter, 'parent').some(r => toolResults(r).length > 0),
-      30_000,
+      env.remaining(),
       dumpState(adapter, marker),
     )
     // The bridge DISPATCHED the Bash payload; the allow hook stayed silent
@@ -360,13 +536,15 @@ describe('e2e — grok-review-bridge PreToolUse allow hook through the real plug
     expect(results.at(-1)!.isError).toBe(false)
     expect(results.at(-1)!.text).toContain('hello')
     expect(executedCommands).toContain('echo hello')
-  }, 90_000)
+  }), 90_000) // envelope 60_000 < outer 90_000: strict 30s headroom, setup inside the envelope
 
-  it('M2: a downstream deny for the canonical call is NEVER flipped by the hook allow', async () => {
+  it('M2: a downstream deny for the canonical call is NEVER flipped by the hook allow', () => withEnvelope(90_000, 'M2', async env => {
     const { ctx, parent, adapter } = await setup([
       toolCallResponse('r1', 'bash', { command: CANONICAL }),
       textResponse('unreachable'),
     ], { parkParent: false })
+    env.phase('setup-done')
+    envDump = dumpState(adapter)
     // Registered AFTER the bridge mount → append order = downstream of the
     // bridge's {prepend:true} listener; a deny short-circuits and the hook
     // allow can never resurrect it.
@@ -375,7 +553,7 @@ describe('e2e — grok-review-bridge PreToolUse allow hook through the real plug
     await parent.whenIdle()
     await waitFor(
       () => requestsFor(adapter, 'parent').some(r => toolResults(r).some(b => b.isError)),
-      30_000,
+      env.remaining(),
       dumpState(adapter),
     )
     const denied = toolResults(requestsFor(adapter, 'parent').find(r => toolResults(r).some(b => b.isError))!)
@@ -383,13 +561,15 @@ describe('e2e — grok-review-bridge PreToolUse allow hook through the real plug
     expect(denied.isError).toBe(true)
     expect(denied.text).not.toContain('grok-review:')
     expect(executedCommands).not.toContain(CANONICAL)
-  }, 90_000)
+  }), 90_000) // envelope 60_000 < outer 90_000: strict 30s headroom, setup inside the envelope
 
-  it('M3: a downstream ask for the canonical call is downgraded to allow (marker present)', async () => {
+  it('M3: a downstream ask for the canonical call is downgraded to allow (marker present)', () => withEnvelope(90_000, 'M3', async env => {
     const { ctx, parent, adapter, marker } = await setup([
       toolCallResponse('r1', 'bash', { command: CANONICAL }),
       textResponse('review attempted'),
     ], { parkParent: false })
+    env.phase('setup-done')
+    envDump = dumpState(adapter, marker)
     gateCanonical(ctx, 'ask')
     parent.followup(createUserMessage({ content: [{ type: 'text', text: 'run the review' }], source: { kind: 'user' } }))
     await parent.whenIdle()
@@ -397,27 +577,36 @@ describe('e2e — grok-review-bridge PreToolUse allow hook through the real plug
     await waitFor(
       () => payloads(marker).some(p =>
         p.hook_event_name === 'PreToolUse' && p.tool_name === 'Bash'),
-      30_000,
+      env.remaining(),
       dumpState(adapter, marker),
     )
     await waitFor(
       () => requestsFor(adapter, 'parent').some(r => toolResults(r).some(b => b.text.includes('grok-review:'))),
-      30_000,
+      env.remaining(),
       dumpState(adapter),
     )
     expect(executedCommands).toContain(CANONICAL)
-  }, 90_000)
+  }), 90_000) // envelope 60_000 < outer 90_000: strict 30s headroom, setup inside the envelope
 
-  it('M5: a tool-restricted child\'s canonical bash call traverses the same hook and is allowed', async () => {
-    const { ctx, parent, adapter, marker } = await setup([
+  it('M5: a tool-restricted child\'s canonical bash call traverses the same hook and is allowed', () => withEnvelope(120_000, 'M5', async env => {
+    const { ctx, parent, adapter, marker, world } = await setup([
       toolCallResponse('c1', 'bash', { command: CANONICAL }),
       textResponse('child done'),
     ], { agentsDir: true })
-    const result = await callTool(ctx, 'subagent_fork', {
+    env.phase('setup-done')
+    envDump = dumpState(adapter, marker)
+    env.phase('fork-dispatched')
+    const forkPromise = callTool(ctx, 'subagent_fork', {
       description: 'child review',
       prompt: 'run the review',
       subagent_type: 'researcher',
     }, parent)
+    // F1.1: the fork promise's rejection is recorded at creation (no floating
+    // promise); afterEach bounded-joins this registration even when the
+    // envelope expires while the bounded await below is still pending.
+    world.inflight.push(forkPromise)
+    const result = await awaitBounded(forkPromise, env.remaining(), 'fork: subagent_fork')
+    env.phase('fork-resolved')
     expect(result.isError).toBe(false)
     // The bridge DISPATCHED the child's bash call to the plugin hook — the
     // probe payload carries the CC caller-identity field (agent_id), which is
@@ -427,42 +616,51 @@ describe('e2e — grok-review-bridge PreToolUse allow hook through the real plug
         p.hook_event_name === 'PreToolUse' && p.tool_name === 'Bash'
         && (p.tool_input as { command?: string })?.command === CANONICAL
         && typeof p.agent_id === 'string' && p.agent_id !== ''),
-      30_000,
+      env.remaining(),
       dumpState(adapter, marker),
     )
     await waitFor(
       () => adapter.requests.some(r => toolResults(r).some(b => b.text.includes('grok-review:'))),
-      30_000,
+      env.remaining(),
       dumpState(adapter),
     )
     const childRequest = adapter.requests.find(r => toolResults(r).some(b => b.text.includes('grok-review:')))
     expect(String(childRequest!.sessionId)).not.toBe('parent')
     expect(executedCommands).toContain(CANONICAL)
-    await waitNoActivation(ctx, SessionId(String(childRequest!.sessionId)))
-  }, 90_000)
+    await waitNoActivation(ctx, SessionId(String(childRequest!.sessionId)), env.remaining())
+  }), 120_000) // envelope 90_000 < outer 120_000: strict 30s headroom, setup inside the envelope
 
-  it('M6 control: a read-only child\'s echo is denied by its toolFilter — never executed, no marker', async () => {
-    const { ctx, parent, adapter } = await setup([
+  it('M6 control: a read-only child\'s echo is denied by its toolFilter — never executed, no marker', () => withEnvelope(120_000, 'M6', async env => {
+    const { ctx, parent, adapter, world } = await setup([
       toolCallResponse('c1', 'bash', { command: 'echo hello' }),
       textResponse('child done'),
     ], { agentsDir: true })
-    const result = await callTool(ctx, 'subagent_fork', {
+    env.phase('setup-done')
+    envDump = dumpState(adapter)
+    env.phase('fork-dispatched')
+    const forkPromise = callTool(ctx, 'subagent_fork', {
       description: 'child echo',
       prompt: 'echo',
       subagent_type: 'reader',
     }, parent)
+    // F1.1: the fork promise's rejection is recorded at creation (no floating
+    // promise); afterEach bounded-joins this registration even when the
+    // envelope expires while the bounded await below is still pending.
+    world.inflight.push(forkPromise)
+    const result = await awaitBounded(forkPromise, env.remaining(), 'fork: subagent_fork')
+    env.phase('fork-resolved')
     expect(result.isError).toBe(false)
     await waitFor(
       () => adapter.requests.some(r => String(r.sessionId) !== 'parent' && toolResults(r).some(b => b.isError)),
-      30_000,
+      env.remaining(),
       dumpState(adapter),
     )
     const childRequest = adapter.requests.find(r => String(r.sessionId) !== 'parent' && toolResults(r).some(b => b.isError))!
     const denied = toolResults(childRequest).find(b => b.isError)!
     expect(denied.text).not.toContain('grok-review:')
     expect(executedCommands).not.toContain('echo hello')
-    await waitNoActivation(ctx, SessionId(String(childRequest!.sessionId)))
-  }, 90_000)
+    await waitNoActivation(ctx, SessionId(String(childRequest!.sessionId)), env.remaining())
+  }), 120_000) // envelope 90_000 < outer 120_000: strict 30s headroom, setup inside the envelope
 })
 
 describe('e2e — grok-review-bridge entry surface: SessionStart context + review command', () => {
@@ -479,10 +677,12 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
     return out
   }
 
-  it('S1: the SessionStart context hook lands the armed canonical block in the parent\'s messages', async () => {
+  it('S1: the SessionStart context hook lands the armed canonical block in the parent\'s messages', () => withEnvelope(90_000, 'S1', async env => {
     const { parent, adapter, sessionStartRan } = await setup([
       textResponse('acknowledged'),
     ], { parkParent: false })
+    env.phase('setup-done')
+    envDump = dumpState(adapter)
     // Side-band first: the SessionStart edge (rc.2 agent/created) fired at
     // all in this assembly
     // (detached witness hook). Then synchronize on the injected block in the
@@ -490,7 +690,7 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
     // lands in inbox.nextStep and becomes a user/message only after step
     // entry, so wait for the inbox before the followup and the FIRST request
     // already carries the block.
-    await waitFor(() => existsSync(sessionStartRan), 30_000, dumpState(adapter))
+    await waitFor(() => existsSync(sessionStartRan), env.remaining(), dumpState(adapter))
     await waitFor(
       () => (parent as unknown as { inbox: { nextStep: Array<{ content: Array<{ type: string; text?: string }> }> } })
         .inbox.nextStep.some(message =>
@@ -498,19 +698,21 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
             && (block.text ?? '').includes('Grok review lane is ARMED')
             && (block.text ?? '').includes(`'${LAUNCHER}'`)
             && (block.text ?? '').includes('--prompt-file'))),
-      30_000,
+      env.remaining(),
       dumpState(adapter),
     )
     parent.followup(createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } }))
     await parent.whenIdle()
     expect(requestTexts(requestsFor(adapter, 'parent').at(0)).join('\n')).toContain('Grok review lane is ARMED')
-  }, 90_000)
+  }), 90_000) // envelope 60_000 < outer 90_000: strict 30s headroom, setup inside the envelope
 
-  it('S2: the mounted /review command renders its template into the parent; the scripted model then issues exactly one canonical call', async () => {
+  it('S2: the mounted /review command renders its template into the parent; the scripted model then issues exactly one canonical call', () => withEnvelope(90_000, 'S2', async env => {
     const { parent, adapter, marker, mount } = await setup([
       toolCallResponse('r1', 'bash', { command: CANONICAL }),
       textResponse('review attempted'),
     ], { parkParent: false })
+    env.phase('setup-done')
+    envDump = dumpState(adapter, marker)
     const review = mount.commands.find(c => c.info.name === 'cc-grok-bridge:review')
     expect(review).toBeDefined()
     // The real seam: the loader's MountedPluginCommand.run substitutes
@@ -519,7 +721,7 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
     expect(result.kind).toBe('success')
     await waitFor(
       () => requestsFor(adapter, 'parent').some(r => toolResults(r).some(b => b.text.includes('grok-review:'))),
-      30_000,
+      env.remaining(),
       dumpState(adapter, marker),
     )
     // The plugin command's rendered template reached the parent (the body's
@@ -530,9 +732,9 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
     expect(payloads(marker).some(p =>
       p.hook_event_name === 'PreToolUse' && p.tool_name === 'Bash'
       && (p.tool_input as { command?: string })?.command === CANONICAL)).toBe(true)
-  }, 90_000)
+  }), 90_000) // envelope 60_000 < outer 90_000: strict 30s headroom, setup inside the envelope
 
-  it('S3 control: a hand-rolled near-miss invocation fails closed (downstream ask stands, no marker)', async () => {
+  it('S3 control: a hand-rolled near-miss invocation fails closed (downstream ask stands, no marker)', () => withEnvelope(90_000, 'S3', async env => {
     // The model free-forms a PATH-trampoline `node` bare name — never
     // byte-equal to the canonical anchor. The hook stays silent for it; the
     // scripted downstream ask for exactly that string then stands (nothing
@@ -542,12 +744,14 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
       toolCallResponse('r1', 'bash', { command: NEAR_MISS }),
       textResponse('unreachable'),
     ], { parkParent: false })
+    env.phase('setup-done')
+    envDump = dumpState(adapter, marker)
     gateCanonical(ctx, 'ask', NEAR_MISS)
     parent.followup(createUserMessage({ content: [{ type: 'text', text: 'run the review' }], source: { kind: 'user' } }))
     await parent.whenIdle()
     await waitFor(
       () => requestsFor(adapter, 'parent').some(r => toolResults(r).some(b => b.isError)),
-      30_000,
+      env.remaining(),
       dumpState(adapter, marker),
     )
     const failed = toolResults(requestsFor(adapter, 'parent').find(r => toolResults(r).some(b => b.isError))!)
@@ -555,5 +759,5 @@ describe('e2e — grok-review-bridge entry surface: SessionStart context + revie
     expect(failed.isError).toBe(true)
     expect(failed.text).not.toContain('grok-review:')
     expect(executedCommands).not.toContain(NEAR_MISS)
-  }, 90_000)
+  }), 90_000) // envelope 60_000 < outer 90_000: strict 30s headroom, setup inside the envelope
 })

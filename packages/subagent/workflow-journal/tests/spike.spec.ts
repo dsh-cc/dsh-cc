@@ -264,18 +264,47 @@ describe('workflow resume journal spike (real worker-thread engine)', () => {
       } as never)
       const result3: WorkflowResult = await run3.result
       expect(result3.stopReason).toBe('completed')
-      // (d) first-miss freezing: exactly the suffix after 'fan 2' reran —
-      // the same arrival order as run 1 from that index on, with the one
-      // edited prompt swapped in and the cached prefix absent.
+      // (d) first-miss freezing: exactly the suffix after 'fan 2' reran live.
+      // Cross-item pipeline interleaving and inter-fan arrival order inside
+      // one parallel() block are engine-owned, so run 3 is asserted on the
+      // guarantees only — not on run 1's exact arrival order.
       const run3Prompts = fixture.spawnProvider.arrivals.slice(spawnsBefore).map(arrival => arrival.promptText)
       // Stage2 prompts embed the live stage1 answer, whose index differs per
       // run — normalize it before comparing against run 1's suffix.
       const normalized = (prompt: string): string => prompt.replace(/^answer-\d+ /, 'answer-* ')
       const expectedSuffix = [...prompts.slice(2)].map(prompt => normalized(prompt === 'fan 2' ? 'fan EDITED' : prompt))
-      expect(run3Prompts.map(normalized)).toEqual(expectedSuffix)
+      // (1) Normalized multiset equality: exact prompt set modulo the
+      // answer-\d+ token, with 'fan 2' → 'fan EDITED' substituted. Order-
+      // insensitive, so a wrong/missing/duplicate prompt is rejected.
+      expect([...run3Prompts.map(normalized)].sort()).toEqual([...expectedSuffix].sort())
+      // (2) Freeze boundary: the first two live prompts are exactly the set
+      // {fan EDITED, fan 3} — no pipeline prompt precedes them (fan-before-
+      // pipeline phase order is script-guaranteed), but fan-internal arrival
+      // order within the parallel block is engine-owned and not asserted.
+      expect([...run3Prompts.slice(0, 2)].sort()).toEqual(['fan 3', 'fan EDITED'].sort())
+      // (3) Per-item stage order (same predicate family as run 1 above):
+      // each pipeline item's stage1 precedes its stage2 in the live suffix.
+      for (const item of ['a', 'b', 'c']) {
+        const firstStage = run3Prompts.indexOf(`stage1 ${item}`)
+        const secondStage = run3Prompts.findIndex(prompt => prompt.endsWith(`stage2 ${item}`) && prompt.includes('answer-'))
+        expect(firstStage).toBeGreaterThanOrEqual(0)
+        expect(secondStage).toBeGreaterThan(firstStage)
+      }
       expect(run3Prompts).toHaveLength(TOTAL - 2)
       expect(run3Prompts).not.toContain('fan 0')
       expect(run3Prompts).not.toContain('fan 1')
+      // (5) Records level, run-3 rows only: exactly ten agent-start rows for
+      // this runId, seqs strictly +1 contiguous (the engine's seq counter is
+      // per-run — WorkflowExecution.started resets — so only relative
+      // contiguity is asserted, not a session-global offset), the two cached
+      // prefix rows carry cached: true, and the live suffix rows carry none.
+      const run3Starts = fixture.records.filter(record => record.type === 'tool-workflow/agent-start' && record.data.runId === run3.id)
+      expect(run3Starts).toHaveLength(TOTAL)
+      for (let i = 1; i < run3Starts.length; i++) {
+        expect(run3Starts[i]!.data.seq).toBe((run3Starts[i - 1]!.data.seq as number) + 1)
+      }
+      expect(run3Starts.slice(0, 2).map(record => record.data.cached)).toEqual([true, true])
+      for (const record of run3Starts.slice(2)) expect(record.data.cached).toBeUndefined()
     } finally {
       await fixture.cleanup()
     }

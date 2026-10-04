@@ -17,6 +17,14 @@ import SubagentRuntime, { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 
+// TIMEOUT-BUDGET: keep byte-identical across spec files.
+// scale: DSH_TEST_TIMEOUT_SCALE (debug override), else 2 on GitHub Actions, else 1.
+// Must be an integer in [1,4]; anything else → 1. Values >2 exceed what R4 was sized for.
+const raw = Number(process.env.DSH_TEST_TIMEOUT_SCALE ?? (process.env.CI === 'true' ? 2 : 1))
+const scale = Number.isInteger(raw) && raw >= 1 && raw <= 4 ? raw : 1
+// Flat, not scaled (R4): 17 tests × 30s = 8.5m of outers, well under the 18m ceiling.
+vi.setConfig({ testTimeout: 30_000 })
+
 /**
  * Full-loop bridge tests: a scripted mock MODEL drives the REAL agent loop + REAL
  * bash executor, and the REAL `dsh-hooks-claude-code` bridge runs REAL shell hook
@@ -66,8 +74,18 @@ async function harnessWithFiber(
   return { ctx, hooks }
 }
 
-function waitForIdle(_ctx: Context, agent: Agent): Promise<void> {
-  return agent.whenIdle()
+/** Bounded delegate wait (class (b)): `agent.whenIdle()` has no deadline of its
+ * own — wrap it in an explicit budget so it joins the per-test R4 sum. */
+async function waitForIdle(_ctx: Context, agent: Agent): Promise<void> {
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      agent.whenIdle(),
+      new Promise((_, reject) => {
+        idleTimer = setTimeout(() => reject(new Error('waitForIdle: agent not idle within budget')), 5_000 * scale)
+      }),
+    ])
+  } finally { clearTimeout(idleTimer) }
 }
 
 function events(agent: Agent): SessionEvent[] {
@@ -80,7 +98,7 @@ function events(agent: Agent): SessionEvent[] {
  * await directly; polling for the observable EFFECT is robust under load, where a
  * single fixed sleep flakes ("async state is not synchronous state").
  */
-async function waitFor(predicate: () => boolean, timeout = 5000, interval = 10): Promise<void> {
+async function waitFor(predicate: () => boolean, timeout = 5_000 * scale, interval = 10): Promise<void> {
   const deadline = Date.now() + timeout
   while (!predicate()) {
     if (Date.now() > deadline) throw new Error('waitFor: condition not met before deadline')

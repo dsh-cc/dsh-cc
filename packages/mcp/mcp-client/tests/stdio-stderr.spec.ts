@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { createTransport } from '@dsh-cc/mcp-client/src/transport.ts'
 import {
@@ -9,10 +9,23 @@ import {
   STDERR_WARN_CAPACITY,
   STDIO_LOG_MAX_BYTES,
   attachStdioStderrDrain,
+  createStdioStderrSink,
   formatStdioStderrForWarn,
   stdioStderrTail,
 } from '@dsh-cc/mcp-client/src/stdio-stderr.ts'
 import type { Config } from '@dsh-cc/mcp-client'
+
+// TIMEOUT-BUDGET: keep byte-identical across spec files.
+// scale: DSH_TEST_TIMEOUT_SCALE (debug override), else 2 on GitHub Actions, else 1.
+// Must be an integer in [1,4]; anything else → 1. Values >2 exceed what R4 was sized for.
+const raw = Number(process.env.DSH_TEST_TIMEOUT_SCALE ?? (process.env.CI === 'true' ? 2 : 1))
+const scale = Number.isInteger(raw) && raw >= 1 && raw <= 4 ? raw : 1
+
+// File outer is flat 30s (R4: worst per-test nesting below is one 5s×scale
+// helper wait, so 30s outer keeps strict headroom at every allowed scale).
+vi.setConfig({ testTimeout: 30_000 })
+
+const SESSION_HEADER = `--- dsh-cc pid ${process.pid}`
 
 function stdioConfig(): Config {
   return {
@@ -93,13 +106,14 @@ describe('createTransport stdio stderr capture', () => {
     logDir = mkdtempSync(join(tmpdir(), 'dsh-mcp-stderr-'))
     const first = createTransport(stdioConfig(), { logDir })
     await first.start()
-    await viWaitForLog(join(logDir, 'srv.log'), 'banner-line')
     await first.close()
 
     const second = createTransport(stdioConfig(), { logDir })
     await second.start()
     try {
-      // Two generations → two headers proves flags: 'a' (never 'w').
+      // Two generations → two headers proves flags: 'a' (never 'w'). The
+      // poll itself certifies the first generation's header was flushed
+      // before close, so no separate pre-close wait is needed (R4 nesting).
       await viWaitForCondition(() => countHeaders() >= 2)
       expect(countHeaders()).toBe(2)
     } finally {
@@ -160,7 +174,11 @@ describe('stdio stderr log rotation', () => {
     const transport = createTransport(childConfig(['banner\n']), { logDir, maxBytes: 64 })
     await transport.start()
     try {
-      await viWaitForCondition(() => existsSync(backupPath()) && readOr(logPath()).includes('banner'))
+      // Predicate covers BOTH asserted files: the fresh header (the
+      // rotation's open-time header flushes asynchronously) and the child
+      // marker; the backup assertion is separately polled below.
+      await viWaitForCondition(() =>
+        readOr(logPath()).includes('banner') && readOr(logPath()).startsWith(SESSION_HEADER))
       expect(readOr(backupPath())).toContain('OLD-MARKER')
       expect(readOr(logPath()).startsWith(`--- dsh-cc pid ${process.pid}`)).toBe(true)
       expect(readOr(logPath())).not.toContain('OLD-MARKER')
@@ -177,7 +195,11 @@ describe('stdio stderr log rotation', () => {
     try {
       // The rename creates .log.1 immediately; the boundary chunk flushes
       // into it asynchronously (the old stream's fd follows the inode).
-      await viWaitForCondition(() => readOr(backupPath()).includes('A'.repeat(10)))
+      // Poll covers BOTH asserted files: the boundary chunk's backup flush
+      // and the fresh generation's asynchronously queued header.
+      await viWaitForCondition(() =>
+        readOr(backupPath()).includes('A'.repeat(10)) &&
+        readOr(logPath()).startsWith(SESSION_HEADER))
       // The pre-existing file had a session header appended when opened; the
       // tally is seeded from the PRE-HEADER size, so a first small chunk
       // still crosses the cap.
@@ -190,7 +212,7 @@ describe('stdio stderr log rotation', () => {
     }
   })
 
-  it('never splits a chunk at the boundary and loses no bytes mid-stream', async () => {
+  it('conserves every byte and both markers under real-pipe delivery', async () => {
     logDir = mkdtempSync(join(tmpdir(), 'dsh-mcp-stderr-'))
     const childBytes = `PRE-MARKER\n${'y'.repeat(120)}POST-MARKER\n`.length
     const transport = createTransport(childConfig(['PRE-MARKER\n', 'y'.repeat(120), 'POST-MARKER\n']), {
@@ -199,42 +221,101 @@ describe('stdio stderr log rotation', () => {
     })
     await transport.start()
     try {
-      await viWaitForCondition(() => readOr(logPath()).includes('POST-MARKER'))
-      await viWaitForCondition(() => readOr(backupPath()).includes('PRE-MARKER'))
+      // A real pipe may coalesce the child's 60ms-spaced writes, so only
+      // invariants hold here: each marker exists SOMEWHERE and no byte is
+      // lost. Routing-placement claims live in the deterministic seam tests
+      // below (F4.2).
+      const somewhere = (needle: string): boolean =>
+        readOr(logPath()).includes(needle) || readOr(backupPath()).includes(needle)
+      await viWaitForCondition(() =>
+        somewhere('PRE-MARKER') && somewhere('POST-MARKER') && somewhere(SESSION_HEADER))
       const backup = readOr(backupPath())
       const fresh = readOr(logPath())
-      expect(backup).toContain('PRE-MARKER')
-      expect(backup).not.toContain('POST-MARKER')
-      expect(fresh).toContain('POST-MARKER')
       // Total bytes conserved: headers + child output, nothing silently dropped.
       expect(backup.length + fresh.length).toBeGreaterThanOrEqual(childBytes)
       // A fresh session header marks the new generation.
-      expect(fresh).toContain(`--- dsh-cc pid ${process.pid}`)
+      expect(fresh).toContain(SESSION_HEADER)
     } finally {
       await transport.close()
     }
   })
 
-  it('rotates exactly once per generation — later chunks append without re-rotating', async () => {
-    logDir = mkdtempSync(join(tmpdir(), 'dsh-mcp-stderr-'))
-    writeFileSync(logPath(), 'x'.repeat(60))
-    const transport = createTransport(childConfig(['A'.repeat(10) + '\n', 'B'.repeat(20), 'C'.repeat(20)]), {
-      logDir,
-      maxBytes: 64,
-    })
-    await transport.start()
-    try {
-      await viWaitForCondition(() => readOr(logPath()).includes('C'))
-      // 'A' was written before the rename but flushes into .1 asynchronously.
-      await viWaitForCondition(() => readOr(backupPath()).includes('A'))
+  describe('deterministic chunk routing (createStdioStderrSink seam)', () => {
+    // Routing placement driven by childConfig's 60ms spacing is timing-
+    // dependent: delayed pipe consumption coalesces writes. Here chunk
+    // boundaries are synthetic inputs into the same production routing the
+    // pipe data handler runs (F4.2, D2: deterministic seam).
+
+    function sink(maxBytes: number): ReturnType<typeof createStdioStderrSink> {
+      return createStdioStderrSink(logPath(), maxBytes)
+    }
+
+    it('routes each synthetic chunk per production rules; never splits a chunk', async () => {
+      writeFileSync(logPath(), 'x'.repeat(60))
+      const s = sink(64)
+      s.write('A'.repeat(10) + '\n') // tally 71 ≥ 64 → rotates; chunk stays in old generation
+      s.write('B'.repeat(20))
+      s.write('C'.repeat(20))
+      await s.close()
       const backup = readOr(backupPath())
       expect(backup).toContain('A')
       expect(backup).not.toContain('B')
       expect(backup).not.toContain('C')
-      expect(readOr(logPath())).toContain('B')
-    } finally {
-      await transport.close()
-    }
+      const fresh = readOr(logPath())
+      expect(fresh).toContain('B')
+      expect(fresh).toContain('C')
+      // One header per generation, exactly once per generation.
+      expect(backup.split(SESSION_HEADER).length - 1).toBe(1)
+      expect(fresh.split(SESSION_HEADER).length - 1).toBe(1)
+    })
+
+    it('POST-MARKER lands in the fresh generation after the boundary chunk', async () => {
+      const s = sink(128)
+      s.write('PRE-MARKER\n')
+      s.write('y'.repeat(120)) // crosses maxBytes; this chunk stays in the old generation
+      s.write('POST-MARKER\n')
+      await s.close()
+      const backup = readOr(backupPath())
+      const fresh = readOr(logPath())
+      expect(backup).toContain('PRE-MARKER')
+      expect(backup).not.toContain('POST-MARKER')
+      expect(fresh).toContain('POST-MARKER')
+      expect(fresh).toContain(SESSION_HEADER)
+      expect(backup.length + fresh.length).toBeGreaterThanOrEqual(
+        `PRE-MARKER\n${'y'.repeat(120)}POST-MARKER\n`.length)
+    })
+
+    it('coalesced delivery loses no bytes and no markers', async () => {
+      const coalesced = `PRE-MARKER\n${'y'.repeat(120)}POST-MARKER\n`
+      const s = sink(128)
+      s.write(coalesced) // one chunk crossing the boundary: never split
+      await s.close()
+      const backup = readOr(backupPath())
+      const fresh = readOr(logPath())
+      expect(backup).toContain('PRE-MARKER')
+      expect(backup).toContain('POST-MARKER')
+      expect(backup.length + fresh.length).toBeGreaterThanOrEqual(coalesced.length)
+      expect(fresh).not.toContain('y'.repeat(10))
+      expect(fresh).toContain(SESSION_HEADER)
+    })
+
+    it('coalesced A/B/C chunk rotates exactly once and keeps B/C out of the backup', async () => {
+      writeFileSync(logPath(), 'x'.repeat(60))
+      const coalesced = 'A'.repeat(10) + '\n' + 'B'.repeat(20) + 'C'.repeat(20)
+      const s = sink(64)
+      s.write(coalesced)
+      await s.close()
+      const backup = readOr(backupPath())
+      const fresh = readOr(logPath())
+      expect(backup).toContain('A')
+      expect(backup).toContain('B')
+      expect(backup).toContain('C')
+      expect(fresh).not.toContain('B')
+      expect(fresh).not.toContain('C')
+      expect(fresh).toContain(SESSION_HEADER)
+      expect(backup.split(SESSION_HEADER).length - 1).toBe(1)
+      expect(fresh.split(SESSION_HEADER).length - 1).toBe(1)
+    })
   })
 
   it('keeps exactly one backup generation — the previous .log.1 is discarded', async () => {
@@ -244,7 +325,11 @@ describe('stdio stderr log rotation', () => {
     const transport = createTransport(childConfig(['banner\n']), { logDir, maxBytes: 64 })
     await transport.start()
     try {
-      await viWaitForCondition(() => readOr(logPath()).includes('banner'))
+      // Predicate covers the asserted backup content; the fresh header is
+      // polled so the startsWith assertion below is already satisfied.
+      await viWaitForCondition(() =>
+        readOr(backupPath()).includes('OLD-MARKER') &&
+        readOr(logPath()).includes('banner'))
       const backup = readOr(backupPath())
       expect(backup).toContain('OLD-MARKER')
       expect(backup).not.toContain('SENTINEL')
@@ -288,7 +373,7 @@ describe('stdio stderr log rotation', () => {
 })
 
 async function viWaitForCondition(check: () => boolean): Promise<void> {
-  const deadline = Date.now() + 5_000
+  const deadline = Date.now() + 5_000 * scale
   while (Date.now() < deadline) {
     if (check()) return
     await new Promise<void>((resolve) => { setTimeout(resolve, 20) })
@@ -297,7 +382,7 @@ async function viWaitForCondition(check: () => boolean): Promise<void> {
 }
 
 async function viWaitForLog(path: string, needle: string): Promise<void> {
-  const deadline = Date.now() + 5_000
+  const deadline = Date.now() + 5_000 * scale
   let lastError: unknown
   while (Date.now() < deadline) {
     try {

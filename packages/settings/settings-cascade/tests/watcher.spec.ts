@@ -8,6 +8,19 @@ import { SettingsConflictError } from '@dsh-cc/settings-provider'
 import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { SettingsCascadeProvider, type Config } from '../src/index.ts'
 
+// TIMEOUT-BUDGET: keep byte-identical across spec files.
+// scale: DSH_TEST_TIMEOUT_SCALE (debug override), else 2 on GitHub Actions, else 1.
+// Must be an integer in [1,4]; anything else → 1. Values >2 exceed what R4 was sized for.
+const raw = Number(process.env.DSH_TEST_TIMEOUT_SCALE ?? (process.env.CI === 'true' ? 2 : 1))
+const scale = Number.isInteger(raw) && raw >= 1 && raw <= 4 ? raw : 1
+
+/** Outer budget for tests whose sequential waits fit a default 15s outer. */
+const OUTER_STD_MS = 15_000
+/** Outer budget for the malformed-JSON test: setup ~2s + 3 scaled waits (5s×scale each) + headroom. */
+const OUTER_MALFORMED_MS = 45_000
+/** Outer budget for the self-write dedup test: setup ~2s + 2 scaled waits (5s×scale each) + headroom. */
+const OUTER_SELF_WRITE_MS = 30_000
+
 // Concurrency gate for `node:fs/promises.readFile`. When armed, the next read
 // hangs in a controlled deferred instead of hitting the disk, letting a test
 // land an external edit between the provider's read and its write. Disarmed
@@ -118,13 +131,13 @@ describe('settings cascade hot reload', () => {
     await writeDoc(userPath(ctx), { 'ui-theme': { theme: 'light' } })
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('light')
-    }, { timeout: 3000 })
-  }, 15000)
+    }, { timeout: 5_000 * scale })
+  }, OUTER_STD_MS)
 
   it('coalesces rapid consecutive writes into few reloads', async () => {
-    // A 2s write-settle window: five awaited writes (each however slow) land
-    // inside it, so the watcher must coalesce them into one reload instead of
-    // firing per write. Deterministic — no wall-clock sleeps.
+    // The 2s write-settle window makes this test deterministic: the watcher
+    // must coalesce the burst into one reload instead of firing per write.
+    // No wall-clock sleeps — completion is observed via the settle drain.
     const ctx = await boot({ watch: { stabilityThresholdMs: 2000 } })
     const scope = theme(ctx)
     const counter = commitCounter(ctx)
@@ -135,7 +148,7 @@ describe('settings cascade hot reload', () => {
     }
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('tone-4')
-    }, { timeout: 3000 })
+    }, { timeout: 5_000 * scale })
     // Let the coalesced reload (and any trailing one) fully land before
     // counting: the operations-chain tail settles when the queue is drained.
     await provider.settled()
@@ -152,8 +165,8 @@ describe('settings cascade hot reload', () => {
     await writeDoc(join(projectDir, '.claude', 'settings.json'), { 'ui-theme': { theme: 'project' } })
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('project')
-    }, { timeout: 3000 })
-  }, 15000)
+    }, { timeout: 5_000 * scale })
+  }, OUTER_STD_MS)
 
   it('keeps the last good document on malformed JSON and recovers on the fix', async () => {
     const ctx = await boot()
@@ -161,19 +174,24 @@ describe('settings cascade hot reload', () => {
     const scope = theme(ctx)
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('light')
-    }, { timeout: 3000 })
+    }, { timeout: 5_000 * scale })
+    const warnSpy = vi.spyOn(ctx.logger, 'warn')
 
     await writeFile(userPath(ctx), '{not json')
-    // The malformed reload fails into the warn-and-keep path; the last good
-    // document stays published.
-    await new Promise(resolve => setTimeout(resolve, 300))
+    // Completion signal, not a hope-sleep: the malformed reload fails into
+    // the queueRefresh catch path, which warns and keeps the last good
+    // document. Waiting for that warn proves the malformed document was
+    // actually processed before we assert the last good state survived.
+    await vi.waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith('settings-cascade: reload failed; keeping the last good document')
+    }, { timeout: 5_000 * scale })
     expect(scope.get().theme).toBe('light')
 
     await writeDoc(userPath(ctx), { 'ui-theme': { theme: 'recovered' } })
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('recovered')
-    }, { timeout: 3000 })
-  }, 15000)
+    }, { timeout: 5_000 * scale })
+  }, OUTER_MALFORMED_MS)
 
   it('does not thrash revisions on its own persisted write', async () => {
     const ctx = await boot()
@@ -181,25 +199,39 @@ describe('settings cascade hot reload', () => {
     await writeDoc(userPath(ctx), { 'ui-theme': { theme: 'seed' } })
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('seed')
-    }, { timeout: 3000 })
+    }, { timeout: 5_000 * scale })
     const counter = commitCounter(ctx)
+    // Dedup-completion seam (D3): each watcher-triggered reload runs exactly
+    // one `load()` on the operation chain. Counting loads after the seed
+    // reload observes that the self-write event ARRIVED and was handled;
+    // the subsequent `settled()` drain proves its publish (and therefore the
+    // dedup verdict) finished. No product-visible hook needed.
+    const providerInternals = ctx.settings as unknown as {
+      load(): Promise<unknown>
+      settled(): Promise<void>
+    }
+    const loadSpy = vi.spyOn(providerInternals, 'load')
     const revisionAt = (): number =>
       (ctx.settings.describe() as Array<{ ns: string; revision: number }>)
         .find(d => d.ns === 'ui-theme')!.revision
 
     await scope.update({ theme: 'darker' })
     expect(scope.get().theme).toBe('darker')
-    const settled = revisionAt()
+    const settledRevision = revisionAt()
 
     // The write's own watcher event reloads the same document: the commit
-    // dedup keeps the revision from bumping again.
-    await new Promise(resolve => setTimeout(resolve, 500))
-    expect(revisionAt()).toBe(settled)
+    // dedup keeps the revision from bumping again. Wait for that reload to
+    // be observed AND for the operation chain to drain before judging.
+    await vi.waitFor(() => {
+      expect(loadSpy.mock.calls.length).toBeGreaterThanOrEqual(1)
+    }, { timeout: 5_000 * scale })
+    await providerInternals.settled()
+    expect(revisionAt()).toBe(settledRevision)
     expect(counter.commits()).toBe(1)
     // Document and persisted user layer converge.
     expect(await readDoc(userPath(ctx))).toMatchObject({ 'ui-theme': { theme: 'darker' } })
     counter.stop()
-  }, 15000)
+  }, OUTER_SELF_WRITE_MS)
 
   it('preserves an external edit that lands during an in-flight persist', async () => {
     const ctx = await boot()
@@ -236,7 +268,7 @@ describe('settings cascade hot reload', () => {
     await writeDoc(userPath(ctx), { 'ui-theme': { theme: 'external' } })
     await vi.waitFor(() => {
       expect(scope.get().theme).toBe('external')
-    }, { timeout: 3000 })
+    }, { timeout: 5_000 * scale })
     expect(revisionAt()).toBe(1)
 
     await expect(
@@ -262,7 +294,11 @@ describe('settings cascade hot reload', () => {
 
     await fiber.dispose()
     await writeDoc(join(home, 'settings.json'), { 'ui-theme': { theme: 'post-dispose' } })
-    await new Promise(resolve => setTimeout(resolve, 400))
+    // Bounded NEGATIVE window, not a completion signal: after dispose the
+    // provider must never reload, and absence cannot be awaited — we can
+    // only observe that nothing fired within this fixed, named window.
+    const TEARDOWN_NEGATIVE_WINDOW_MS = 400
+    await new Promise(resolve => setTimeout(resolve, TEARDOWN_NEGATIVE_WINDOW_MS))
     expect(scope.get()).toEqual({ theme: 'dark', fontSize: 14 })
     expect(counter.commits()).toBe(0)
     counter.stop()

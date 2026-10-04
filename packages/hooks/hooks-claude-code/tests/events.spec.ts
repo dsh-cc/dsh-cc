@@ -1,5 +1,5 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,6 +16,14 @@ import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-app
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 import { defineContentToolFixture } from '@dsh-cc/tools'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
+
+// TIMEOUT-BUDGET: keep byte-identical across spec files.
+// scale: DSH_TEST_TIMEOUT_SCALE (debug override), else 2 on GitHub Actions, else 1.
+// Must be an integer in [1,4]; anything else → 1. Values >2 exceed what R4 was sized for.
+const raw = Number(process.env.DSH_TEST_TIMEOUT_SCALE ?? (process.env.CI === 'true' ? 2 : 1))
+const scale = Number.isInteger(raw) && raw >= 1 && raw <= 4 ? raw : 1
+// Flat, not scaled (R4): 16 tests × 30s = 8m of outers, well under the 18m ceiling.
+vi.setConfig({ testTimeout: 30_000 })
 
 /**
  * Full-loop tests for the expanded observe/interception event set (the 9 events
@@ -64,12 +72,26 @@ async function harness(
   return ctx
 }
 
-async function waitFor(predicate: () => boolean, timeout = 5000, interval = 10): Promise<void> {
+async function waitFor(predicate: () => boolean, timeout = 5_000 * scale, interval = 10): Promise<void> {
   const deadline = Date.now() + timeout
   while (!predicate()) {
     if (Date.now() > deadline) throw new Error('waitFor: condition not met before deadline')
     await new Promise(r => setTimeout(r, interval))
   }
+}
+
+/** Bounded delegate wait (class (b)): `agent.whenIdle()` has no deadline of its
+ * own — wrap it in an explicit budget so it joins the per-test R4 sum. */
+async function waitForIdle(agent: Agent): Promise<void> {
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      agent.whenIdle(),
+      new Promise((_, reject) => {
+        idleTimer = setTimeout(() => reject(new Error('waitForIdle: agent not idle within budget')), 5_000 * scale)
+      }),
+    ])
+  } finally { clearTimeout(idleTimer) }
 }
 
 describe('hooks-claude-code bridge — Setup (first-run approx)', () => {
@@ -84,7 +106,7 @@ describe('hooks-claude-code bridge — Setup (first-run approx)', () => {
     const ctx = await harness(dir, adapter)
     const agent = await ctx.agentLoop.create(SessionId('setup-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    await agent.whenIdle()
+    await waitForIdle(agent)
     await waitFor(() => existsSync(setupMarker))
     expect(existsSync(setupMarker)).toBe(true)
   })
@@ -102,7 +124,7 @@ describe('hooks-claude-code bridge — SessionEnd', () => {
     const ctx = await harness(dir, adapter)
     const agent = await ctx.agentLoop.create(SessionId('end-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    await agent.whenIdle()
+    await waitForIdle(agent)
     // Emit session/disposed directly (the store path is effect-tied); root
     // listeners observe it regardless of the session-scoped carrier.
     ctx.emit(ctx, 'session/disposed', agent.session)
@@ -277,7 +299,7 @@ describe('hooks-claude-code bridge — PostToolUseFailure', () => {
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
     const agent = await ctx.agentLoop.create(SessionId('ptu-ok-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    await agent.whenIdle()
+    await waitForIdle(agent)
     await new Promise(r => setTimeout(r, 150))
     expect(existsSync(ptuMarker)).toBe(false)
   })
@@ -299,7 +321,7 @@ describe('hooks-claude-code bridge — PostToolUseFailure', () => {
     ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'e', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
     const agent = await ctx.agentLoop.create(SessionId('ptu-reg-session'), { provider: 'mock', model: 'mock' })
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-    await agent.whenIdle()
+    await waitForIdle(agent)
     await waitFor(() => existsSync(ptuMarker))
     expect(existsSync(ptuMarker)).toBe(true)
     expect(existsSync(ptuFailMarker)).toBe(false)

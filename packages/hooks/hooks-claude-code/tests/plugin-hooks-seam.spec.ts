@@ -14,6 +14,14 @@ import { defineContentToolFixture } from '@dsh-cc/tools'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 import { MockAdapter, toolCallResponse, textResponse } from '@dsh-cc/agent-loop-mock'
 
+// TIMEOUT-BUDGET: keep byte-identical across spec files.
+// scale: DSH_TEST_TIMEOUT_SCALE (debug override), else 2 on GitHub Actions, else 1.
+// Must be an integer in [1,4]; anything else → 1. Values >2 exceed what R4 was sized for.
+const raw = Number(process.env.DSH_TEST_TIMEOUT_SCALE ?? (process.env.CI === 'true' ? 2 : 1))
+const scale = Number.isInteger(raw) && raw >= 1 && raw <= 4 ? raw : 1
+// Flat, not scaled (R4): 5 tests × 30s = 2.5m of outers, well under the 18m ceiling.
+vi.setConfig({ testTimeout: 30_000 })
+
 /**
  * The plugin hooks seam (plan docs/plans/2026-09-08-plugin-hooks-seam.md): the
  * bridge provides the `hooks` guest seam from @dsh-cc/plugin-loader, merging a
@@ -30,12 +38,26 @@ function dir(): string { const d = mkdtempSync(join(tmpdir(), 'dsh-plugin-hooks-
 function sh(d: string, name: string, body: string): string {
   const p = join(d, name); writeFileSync(p, body); chmodSync(p, 0o755); return p
 }
-async function waitFor(predicate: () => boolean, timeout = 5000, interval = 10): Promise<void> {
+async function waitFor(predicate: () => boolean, timeout = 5_000 * scale, interval = 10): Promise<void> {
   const deadline = Date.now() + timeout
   while (!predicate()) {
     if (Date.now() > deadline) throw new Error('waitFor: condition not met before deadline')
     await new Promise(r => setTimeout(r, interval))
   }
+}
+
+/** Bounded delegate wait (class (b)): `agent.whenIdle()` has no deadline of its
+ * own — wrap it in an explicit budget so it joins the per-test R4 sum. */
+async function waitForIdle(agent: Agent): Promise<void> {
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      agent.whenIdle(),
+      new Promise((_, reject) => {
+        idleTimer = setTimeout(() => reject(new Error('waitForIdle: agent not idle within budget')), 5_000 * scale)
+      }),
+    ])
+  } finally { clearTimeout(idleTimer) }
 }
 
 /** The `hooks` seam shape the bridge provides (structural, like the loader's contract). */
@@ -69,7 +91,7 @@ async function driveToolCall(ctx: Context, adapter: MockAdapter): Promise<{ ran:
   })
   const agent: Agent = await ctx.agentLoop.create(SessionId('seam'), { provider: 'mock', model: 'mock' })
   agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
-  await agent.whenIdle()
+  await waitForIdle(agent)
   return { ran, denied }
 }
 

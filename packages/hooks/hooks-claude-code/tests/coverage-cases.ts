@@ -19,6 +19,15 @@ import SubagentRuntime, { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 
+// TIMEOUT-BUDGET: keep byte-identical across spec files.
+// scale: DSH_TEST_TIMEOUT_SCALE (debug override), else 2 on GitHub Actions, else 1.
+// Must be an integer in [1,4]; anything else → 1. Values >2 exceed what R4 was sized for.
+const raw = Number(process.env.DSH_TEST_TIMEOUT_SCALE ?? (process.env.CI === 'true' ? 2 : 1))
+const scale = Number.isInteger(raw) && raw >= 1 && raw <= 4 ? raw : 1
+// Flat, not scaled (R4): per-file outers are 12/13/9/9 wrapper cases × 30s =
+// 6/6.5/4.5/4.5m (+ trivial afterEach hook ceilings), all under the 18m ceiling.
+vi.setConfig({ testTimeout: 30_000 })
+
 const testToolSignal = new AbortController().signal
 
 /** Targeted branch coverage for the CC bridge: option arms, warn paths, no-agent
@@ -90,13 +99,23 @@ async function harness(configPath: string, adapter: MockAdapter, opts: HarnessOp
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx
 }
-function waitForIdle(_ctx: Context, agent: Agent): Promise<void> {
-  return agent.whenIdle()
+/** Bounded delegate wait (class (b)): `agent.whenIdle()` has no deadline of its
+ * own — wrap it in an explicit budget so it joins the per-test R4 sum. */
+async function waitForIdle(_ctx: Context, agent: Agent): Promise<void> {
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      agent.whenIdle(),
+      new Promise((_, reject) => {
+        idleTimer = setTimeout(() => reject(new Error('waitForIdle: agent not idle within budget')), 5_000 * scale)
+      }),
+    ])
+  } finally { clearTimeout(idleTimer) }
 }
 function events(agent: Agent): SessionEvent[] { return [...agent.session.snapshotEvents()] }
 /** Poll until `predicate` holds or the deadline passes — robust to detached
  * emit-listener hooks firing on a `.then` (a fixed sleep flakes under load). */
-async function waitFor(predicate: () => boolean, timeout = 5000, interval = 10): Promise<void> {
+async function waitFor(predicate: () => boolean, timeout = 5_000 * scale, interval = 10): Promise<void> {
   const deadline = Date.now() + timeout
   while (!predicate()) {
     if (Date.now() > deadline) throw new Error('waitFor: condition not met before deadline')
@@ -129,7 +148,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
       // (its jsonl backend's `locate` is private) — the payload must match.
       expect((await capture(dir())).payload.transcript_path).toBe('')
       expect((await capture()).payload.transcript_path).toBe('')
-    }, 15_000) // Two real agent/hook subprocess loops need process startup and teardown headroom.
+    }, 45_000) // R4 audit: Σ = 2 serial whenIdle waits (2 × 10s CI) < 45s; ≥25s headroom for setup.
 
     it('honors pluginRoot + projectDir substitution and warns on a skipped non-command hook', async () => {
       const d = dir()
@@ -275,7 +294,7 @@ export function defineCoverageCases(group: CoverageGroup): void {
       const write = await capturePreToolCall('write', 'Read|Write')
       expect(write.fired).toBe(true)
       expect(write.payload.tool_name).toBe('Write')
-    }, 15000)
+    }, 45_000) // R4 audit: Σ = 2 serial hook runs, each bounded by the executor's 10s timeoutMs (existing config) < 45s; ≥25s headroom.
 
     it('a CC Bash matcher fires for harness bash; payload uses Bash', async () => {
       const bash = await capturePreToolCall('bash', 'Bash')
