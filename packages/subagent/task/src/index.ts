@@ -218,6 +218,7 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
   mountSettledNoticeSuppression(ctx)
   mountOneShotVisibility(ctx, ledger)
   publishCollectorRegistry(ctx)
+  publishOneShotLedger(ctx, ledger)
 }
 
 /**
@@ -250,4 +251,34 @@ function publishCollectorRegistry(ctx: Context): void {
   ctx.effect(() => () => {
     if (root.get('ccCollectorRegistry', false) === registryService) root.set('ccCollectorRegistry', undefined)
   }, 'cc-subagent-task: clear host-realm ccCollectorRegistry publication on unload')
+}
+
+/**
+ * Publish the shared one-shot ledger as the ROOT-realm `ccOneShotLedger`
+ * service so sibling plugins (the `/resume` filter) can ask which sessions
+ * are ephemeral one-shot children without a package dependency. CcPlugins
+ * pattern, mirroring {@link publishCollectorRegistry}.
+ * @param ctx - the plug context.
+ * @param ledger - the shared runId-keyed ledger.
+ */
+function publishOneShotLedger(ctx: Context, ledger: ReturnType<typeof createOneShotLedger>): void {
+  const root = ctx.root as unknown as {
+    get(key: string, optional?: boolean): unknown
+    provide(key: string, value: unknown): void
+    set(key: string, value: unknown): void
+  }
+  const ledgerService = {
+    /** Child session ids whose latest ledger row reads mode `one-shot`. */
+    oneShotChildIds(): ReadonlySet<string> {
+      return new Set(ledger.rows().filter(row => row.mode === 'one-shot').map(row => row.id))
+    },
+  }
+  if (root.get('ccOneShotLedger', false) === undefined) {
+    root.provide('ccOneShotLedger', ledgerService)
+  } else {
+    root.set('ccOneShotLedger', ledgerService)
+  }
+  ctx.effect(() => () => {
+    if (root.get('ccOneShotLedger', false) === ledgerService) root.set('ccOneShotLedger', undefined)
+  }, 'cc-subagent-task: clear host-realm ccOneShotLedger publication on unload')
 }

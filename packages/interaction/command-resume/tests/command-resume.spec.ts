@@ -9,6 +9,7 @@ import * as commandResume from '@dsh-cc/command-resume'
 import {
   formatResumeIndex,
   formatSessionLine,
+  isEphemeralOneShotSession,
   type SessionLine,
 } from '@dsh-cc/command-resume/resume'
 
@@ -43,6 +44,22 @@ describe('@dsh-cc/command-resume rendering (pure)', () => {
   })
   it('formats a single line, omitting absent fields', () => {
     expect(formatSessionLine({ id: 's', createdAt: 0, live: true, persisted: false })).toContain('- s')
+  })
+})
+
+describe('ephemeral one-shot /resume filter (design 2026-10-04 §3.5)', () => {
+  const oneShot = new Set(['eph-1'])
+
+  it('filters a parented session the ledger marks one-shot', () => {
+    expect(isEphemeralOneShotSession({ id: 'eph-1', parentSession: 'p' }, oneShot)).toBe(true)
+  })
+
+  it('keeps a continuable child session (not in the one-shot set)', () => {
+    expect(isEphemeralOneShotSession({ id: 'cont-1', parentSession: 'p' }, oneShot)).toBe(false)
+  })
+
+  it('keeps root sessions even if an id collides', () => {
+    expect(isEphemeralOneShotSession({ id: 'eph-1' }, oneShot)).toBe(false)
   })
 })
 
@@ -104,6 +121,24 @@ describe('/resume human command', () => {
     const execution = await ctx.commands.execute(agent, '/resume', [], new AbortController().signal)
     expect((execution?.result as { text: string }).text).toContain('- sess-1 — Implement search')
     expect((execution?.result as { text: string }).text).toContain('dsh --resume <sessionId>')
+  })
+
+  it('filters ephemeral one-shot children via the ccOneShotLedger service; keeps continuable children', async () => {
+    const listSessions = async () => [
+      { header: { id: 'eph-1', parentSession: 'sess-0', createdAt: 1_700_000_000_000 }, live: true, persisted: true },
+      { header: { id: 'cont-1', parentSession: 'sess-0', createdAt: 1_700_000_000_000 }, live: true, persisted: true },
+      { header: { id: 'root-1', createdAt: 1_700_000_000_000 }, live: true, persisted: true },
+    ]
+    const readTitleSnapshots = async (ids: readonly string[]) =>
+      ids.map(id => ({ sessionId: id, status: 'fulfilled' as const, value: {} }))
+    const { ctx, agent } = await harness({ listSessions, readTitleSnapshots })
+    // Root-realm publication, as the cc-subagent-task plugin does.
+    ctx.provide('ccOneShotLedger', { oneShotChildIds: () => new Set(['eph-1']) })
+    const execution = await ctx.commands.execute(agent, '/resume', [], new AbortController().signal)
+    const text = (execution?.result as { text: string }).text
+    expect(text).not.toContain('- eph-1')
+    expect(text).toContain('- cont-1')
+    expect(text).toContain('- root-1')
   })
 
   it('renders the switch instruction even with no sessions', async () => {

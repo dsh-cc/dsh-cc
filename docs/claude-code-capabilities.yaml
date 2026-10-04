@@ -2435,6 +2435,53 @@ capabilities:
         absent).
 
   # ── subagents ───────────────────────────────────────────────────────────
+  subagents.ephemeral-agents:
+    title: Ephemeral one-shot subagents (read-only dispatch lane)
+    category: subagents
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. Agent definitions
+        classified read-only (allow-listed tools, or an explicit
+        `ephemeral: true` frontmatter flag) dispatch as EPHEMERAL ONE-SHOT
+        runs: plain `seam.start` spawns with no durable child identity — no
+        resume pin, no /agents catalog row, no /resume listing, no
+        release_agent surface, no Ctrl+B promotion. A process-level runId
+        ledger (shared `subagent/start`/`subagent/end` listener pair, the
+        same instance the epoch collector reads) marks rows mode one-shot
+        and arms a TTL reaper that force-kills a still-running ephemeral
+        child at its ttlMs (default 120s), recording the EPHEMERAL_TTL
+        stopReason on the ledger row; foreground waits surface the kill as
+        "ephemeral child hit its TTL; re-spawn it".
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-task" }
+      - { type: source, path: packages/preset/claude-code-agents/src/ephemeral-classifier.ts }
+      - { type: test, path: packages/preset/claude-code-agents/tests/ephemeral-classifier.spec.ts }
+      - { type: source, path: packages/subagent/task/src/tool.ts, anchor: "classifyEphemeral" }
+      - { type: test, path: packages/subagent/task/tests/tool.spec.ts, anchor: "ephemeral" }
+      - { type: source, path: packages/subagent/task/src/ephemeral-reaper.ts }
+      - { type: test, path: packages/subagent/task/tests/ephemeral-reaper.spec.ts }
+      - { type: source, path: packages/subagent/task/src/one-shot-ledger.ts }
+      - { type: test, path: packages/subagent/task/tests/one-shot-ledger.spec.ts }
+      - { type: source, path: packages/interaction/command-resume/src/resume.ts, anchor: "isEphemeralOneShotSession" }
+      - { type: test, path: packages/interaction/command-resume/tests/command-resume.spec.ts, anchor: "one-shot" }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: no CC counterpart exists. Listing hygiene is
+        mechanism-limited: the harness 0.2.0-rc.2 SubagentStartRequest
+        carries no resume-visibility flag, so /agents hides one-shot rows
+        via the listChildren mode field while /resume filters by
+        parentSession + ccOneShotLedger membership — ledger rows prune
+        (5 min after end), so a long-settled ephemeral child can reappear
+        in /resume.
+
   subagents.isolation:
     title: "Subagent isolation: worktree"
     category: subagents
@@ -2691,6 +2738,21 @@ capabilities:
         CLAUDE.md, and the dsh-cc-agents orchestration skill: one task, one
         instance — send_message continues only the child's current
         assignment, and every new task is a fresh subagent_fork spawn.
+        Ephemeral one-shot lane (see subagents.ephemeral-agents): an
+        allow-listed read-only definition (explore, dsh-cc-guide,
+        shunt-reader, or an explicit `ephemeral: true`) runs as a FOREGROUND
+        ONE-SHOT — a plain `seam.start` spawn with no durable child, no pin,
+        no resume; the definition's `background: true` pin (if any) is
+        ignored with the notice copy "the definition's `background: true`
+        pin was ignored: read-only ephemeral agents always run as a
+        foreground one-shot", an explicit `run_in_background: true`
+        argument is fail-fast rejected ("ephemeral (read-only one-shot)
+        agents cannot run in the background…"), `isolation: worktree` is
+        rejected the same way, and every ephemeral result carries the
+        one-line notice "(ephemeral one-shot run: no durable child is
+        created; Ctrl+B cannot promote this …)" — the Ctrl+B promotion path
+        applies ONLY to continuable foreground collects, never to the
+        ephemeral lane.
 
   # ── mcp ─────────────────────────────────────────────────────────────────
   mcp.client:

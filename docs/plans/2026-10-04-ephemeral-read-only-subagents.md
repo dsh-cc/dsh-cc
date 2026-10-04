@@ -201,6 +201,15 @@ be re-verified in the 0.2.0-rc.2 harness source — not cited).
   a descriptor flag if the harness `seam.start` options can carry one; if
   not, filter by `parentSession` + ledger membership. The implementation
   spike decides; this doc records the chosen mechanism when it does.
+  **Chosen mechanism (slice 4 spike, harness 0.2.0-rc.2):** `SubagentStartRequest`
+  (harness `packages/subagent/subagent/src/types.ts`) carries NO
+  resume-visibility flag, so the descriptor-flag option does not exist; the
+  implemented fallback filters `/resume` by `parentSession` + ledger
+  membership — the cc-subagent-task plugin publishes its shared ledger as
+  the root-realm `ccOneShotLedger` service (`oneShotChildIds()`), and
+  command-resume drops sessions that both have a `parentSession` and appear
+  in that set. Residual: ledger rows prune (5 min after end), so a
+  long-settled ephemeral child can reappear in `/resume`.
 
 ### 3.6 Write-lane failure copy (R6)
 

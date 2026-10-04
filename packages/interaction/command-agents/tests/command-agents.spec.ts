@@ -82,6 +82,16 @@ describe('buildAgentsSnapshot', () => {
     ])
   })
 
+  it('skips one-shot rows: ephemeral children are not /agents-listable (snapshot.ts)', async () => {
+    const services = makeServices([
+      { id: 'eph-1', mode: 'one-shot', label: 'explore' },
+      { id: 'cont-1', mode: 'continuable', label: 'worker' },
+    ])
+    expect(await rows(services)).toEqual([
+      { id: 'cont-1', label: 'worker', residency: 'ready', hasChildren: false, parentId: PARENT, pin: undefined },
+    ])
+  })
+
   it('derives idle: live agent present but not running', async () => {
     const services = makeServices(
       [{ id: 'c2', mode: 'continuable', label: 'worker' }],
