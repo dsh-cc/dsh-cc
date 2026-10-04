@@ -107,8 +107,55 @@ export function attachStdioStderrDrain(
   if (stream === null || stream === undefined) return
   const tail = new BoundedTail(STDERR_TAIL_CAPACITY)
   tails.set(transport, tail)
-  const dir = logDir ?? defaultStdioLogDir()
-  const path = join(dir, `${serverName}.log`)
+  const sink = createStdioStderrSink(join(logDir ?? defaultStdioLogDir(), `${serverName}.log`), maxBytes)
+  stream.on('data', (chunk: Buffer | string) => {
+    const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+    tail.push(bytes.toString('utf8'))
+    sink.write(bytes)
+  })
+  // SDK close() does not destroy the PassThrough; the child's stderr `end`
+  // does. Keep the data listener through SIGTERM grace so the last crash
+  // line lands in both the ring and the file.
+  stream.on('end', () => sink.close())
+}
+
+export interface StdioStderrSink {
+  /** Append one pipe chunk: lazy-open, write, rotate when the tally crosses the cap. */
+  write(chunk: Buffer | string): void
+  /**
+   * End every generation stream; resolves after their fds are closed (all
+   * buffered bytes flushed), so deterministic tests can await it.
+   */
+  close(): Promise<void>
+}
+
+/**
+ * Deterministic seam for the byte-routing/rotation decision: the exact
+ * production routing a live pipe chunk receives, but chunk boundaries are
+ * caller-driven inputs instead of OS-scheduling artifacts (delayed pipe
+ * consumption coalesces 60ms-spaced child writes). `attachStdioStderrDrain`
+ * delegates every `data` event here, so tests drive coalesced or per-chunk
+ * input deterministically without changing production behavior.
+ *
+ * ponytail: rotation is size-based with one backup generation (the previous
+ * `.log.1` is discarded on each rotation); concurrent dsh-cc sessions sharing
+ * a serverName may interleave (session header marks each generation);
+ * WriteStream buffer grows if the disk stalls — log must never block MCP.
+ * Documented rotation edges: (a) bytes buffered in the old stream at rotation
+ * time flush into `.log.1` after the rename — a crash between rename and
+ * flush loses at most one stream buffer; (b) another session holding the
+ * renamed `.log.1` writes into an anonymous inode whose bytes vanish on
+ * close — worst-case extra disk ≈ maxBytes × live sessions. A failed
+ * rotation rename (e.g. `.log.1` is a directory) sets `rotationDisabled` so
+ * appending cannot become a rename-retry storm per chunk; appending then
+ * grows unbounded, which is exactly the pre-rotation worst case.
+ *
+ * INVARIANT: all rotation fs ops (`statSync`/`renameSync`/`createWriteStream`)
+ * are SYNCHRONOUS and run inside `write`. PassThrough `data` events cannot
+ * interleave, and the `end` handler cannot fire mid-rotation; async fs here
+ * would reintroduce real races.
+ */
+export function createStdioStderrSink(path: string, maxBytes: number = STDIO_LOG_MAX_BYTES): StdioStderrSink {
   let rotationDisabled = maxBytes <= 0
   let file: WriteStream | undefined
   // Byte tally for the currently open generation, reset to the just-opened
@@ -117,40 +164,48 @@ export function attachStdioStderrDrain(
   // deliberately NOT counted: the cap governs captured server output, not
   // our bookkeeping lines.
   let tally = 0
-  const rotationActive = (): boolean => !rotationDisabled
-  const open = (): void => {
-    file = openLogFile(path, rotationActive() ? maxBytes : 0, (seed) => { tally = seed })
+  // Resolved when a generation's fd is closed (buffered bytes flushed).
+  let flushes: Promise<unknown>[] = []
+  const endStream = (stream: WriteStream): void => {
+    flushes.push(new Promise((resolve) => { stream.once('close', () => resolve(undefined)); stream.end() }))
   }
-  stream.on('data', (chunk: Buffer | string) => {
-    const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
-    tail.push(bytes.toString('utf8'))
-    if (file === undefined) open() // lazy: a silent server leaves no file
-    if (file === undefined) return
-    file.write(bytes)
-    tally += bytes.length
-    if (!rotationDisabled && tally >= maxBytes) {
-      let renamed = false
-      try {
-        // Rename WHILE the old stream is open: POSIX keeps the open fd on the
-        // inode, so buffered bytes flush into `.log.1` — no loss. The chunk
-        // that crossed the boundary stays in the old file; never split it.
-        renameSync(path, `${path}.1`)
-        renamed = true
-      } catch {
-        // Unrenamable backup path (EISDIR/EPERM/…): stop trying, or every
-        // subsequent chunk retriggers the same doomed rename.
-        rotationDisabled = true
+  const open = (): void => {
+    file = openLogFile(path, rotationDisabled ? 0 : maxBytes, (seed) => { tally = seed })
+  }
+  return {
+    write(chunk) {
+      const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+      if (file === undefined) open() // lazy: a silent server leaves no file
+      if (file === undefined) return
+      file.write(bytes)
+      tally += bytes.length
+      if (!rotationDisabled && tally >= maxBytes) {
+        let renamed = false
+        try {
+          // Rename WHILE the old stream is open: POSIX keeps the open fd on the
+          // inode, so buffered bytes flush into `.log.1` — no loss. The chunk
+          // that crossed the boundary stays in the old file; never split it.
+          renameSync(path, `${path}.1`)
+          renamed = true
+        } catch {
+          // Unrenamable backup path (EISDIR/EPERM/…): stop trying, or every
+          // subsequent chunk retriggers the same doomed rename.
+          rotationDisabled = true
+        }
+        if (renamed) {
+          endStream(file)
+          open()
+        }
       }
-      if (renamed) {
-        file.end()
-        open()
-      }
-    }
-  })
-  // SDK close() does not destroy the PassThrough; the child's stderr `end`
-  // does. Keep the data listener through SIGTERM grace so the last crash
-  // line lands in both the ring and the file.
-  stream.on('end', () => { file?.end(); file = undefined })
+    },
+    close() {
+      if (file !== undefined) endStream(file)
+      file = undefined
+      const done = Promise.all(flushes)
+      flushes = []
+      return done.then(() => undefined)
+    },
+  }
 }
 
 /**
