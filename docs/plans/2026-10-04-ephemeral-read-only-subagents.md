@@ -1,6 +1,6 @@
 # Ephemeral Read-Only Subagents
 
-- **Status**: Approved (two-seat external blind review, r1–r4 converged GO; §3.8/R8 reviewed separately, two rounds, both seats GO; §3.9/R9 two-tier window reviewed three-seat r1–r4, converged GO; axis rulings user-confirmed 2026-10-04)
+- **Status**: Implemented (all five slices; this PR. Two-seat external blind review, r1–r4 converged GO; §3.8/R8 reviewed separately, two rounds, both seats GO; §3.9/R9 two-tier window reviewed three-seat r1–r4, converged GO; axis rulings user-confirmed 2026-10-04)
 - **Date**: 2026-10-04
 - **Baseline**: v0.8.3 (main `a33c681f` post-merge; probes run against `3ff8de13`)
 - **Scope**: `subagent_fork` dispatch for read-only agent definitions; reaper for
