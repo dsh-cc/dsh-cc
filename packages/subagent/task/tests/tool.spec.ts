@@ -315,7 +315,7 @@ describe('Task tool', () => {
   it('spawns a fresh child when subagent_type is omitted', async () => {
     const { ctx, runs, continuableStarts } = await mount()
     const result = await call(ctx, { description: 'do thing', prompt: 'task body' }, agentAt('/any'))
-    expect(result.content[0]!.text).toBe('done')
+    expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
     // Foreground non-fork dispatch now collects the first epoch of a
     // continuable child (Slice 2 collect refit): the one-shot seam.start is
     // fork-only.
@@ -364,7 +364,7 @@ describe('Task tool', () => {
     const routes = { resolve: (m: string | undefined) => m === 'opus' ? { provider: 'orchestrix', model: 'glm-5.2' } : undefined }
     const { ctx, runs, continuableStarts } = await mount({ routes })
     const result = await call(ctx, { subagent_type: 'deep-reasoner', description: 'review', prompt: 'audit the doc' }, agentAt(ws))
-    expect(result.content[0]!.text).toBe('done')
+    expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
     expect(runs).toHaveLength(0)
     expect(continuableStarts[0]!.provider).toBe('spawn')
     const req = continuableStarts[0]!.request
@@ -434,7 +434,7 @@ describe('Task tool', () => {
     writeAgent(ws, 'plain', '---\nname: plain\ndescription: No model\n---\nPlain.\n')
     const { ctx, runs, continuableStarts } = await mount()
     const result = await call(ctx, { subagent_type: 'plain', description: 'x', prompt: 't' }, agentAt(ws))
-    expect(result.content[0]!.text).toBe('done')
+    expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
     expect(runs).toHaveLength(0)
     expect(continuableStarts[0]!.request['persona']).toBe('Plain.')
   })
@@ -497,7 +497,7 @@ describe('Task tool', () => {
     ] })
     const { ctx } = await mount({ seamProviders })
     const result = await call(ctx, { description: 'x', prompt: 't' }, agentAt('/any'))
-    expect(result.content[0]!.text).toBe('answer A answer B')
+    expect(result.content[0]!.text).toMatch(/^answer A answer B \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
   })
 
   it('keeps reserved and registered names in a definition toolFilter', async () => {
@@ -772,8 +772,8 @@ describe('Task tool', () => {
       const explicitFalse = await call(ctx, { description: 'x', prompt: 't', run_in_background: false }, agentAt('/any'))
       // Slice 2 collect refit: both omissions collect the first epoch of a
       // continuable child inline — same continuable substrate as background.
-      expect(omitted.content[0]!.text).toBe('done')
-      expect(explicitFalse.content[0]!.text).toBe('done')
+      expect(omitted.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
+      expect(explicitFalse.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
       expect(runs).toHaveLength(0)
       expect(continuableStarts).toHaveLength(2)
       expect(continuableStarts.every(s => s.provider === 'spawn')).toBe(true)
@@ -827,7 +827,7 @@ describe('Task tool', () => {
       writeAgent(ws, 'scout', '---\nname: scout\ndescription: Pinned to background\nbackground: true\n---\nYou are a pinned scout.\n')
       const { ctx, runs, continuableStarts } = await mount()
       const result = await call(ctx, { subagent_type: 'scout', description: 'pinned', prompt: 't', run_in_background: false }, agentAt(ws))
-      expect(result.content[0]!.text).toBe('done')
+      expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
       expect(runs).toHaveLength(0)
       expect(continuableStarts).toHaveLength(1)
       expect(continuableStarts[0]!.provider).toBe('spawn')
@@ -915,7 +915,7 @@ describe('Task tool', () => {
     it('collects the first epoch inline from the continuable child (no one-shot start)', async () => {
       const { ctx, runs, continuableStarts } = await mount()
       const result = await call(ctx, { description: 'x', prompt: 't' }, agentAt('/any'))
-      expect(result.content[0]!.text).toBe('done')
+      expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
       expect(runs).toHaveLength(0)
       expect(continuableStarts).toHaveLength(1)
       expect(continuableStarts[0]!.request['prompt']).toEqual([{ type: 'text', text: 't' }])
@@ -1011,7 +1011,7 @@ describe('Task tool', () => {
         const { ctx, runs, continuableStarts } = await mount()
         // Pin ignored: omit collects in foreground (inline result).
         const omitted = await call(ctx, { subagent_type: 'scout', description: 'x', prompt: 't' }, agentAt(ws))
-        expect(omitted.content[0]!.text).toBe('done')
+        expect(omitted.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
         expect(runs).toHaveLength(0)
         expect(continuableStarts).toHaveLength(1)
         // Explicit true still honored both ways.
@@ -1020,7 +1020,7 @@ describe('Task tool', () => {
         expect(continuableStarts).toHaveLength(2)
         // Explicit false still foreground.
         const forced = await call(ctx, { subagent_type: 'scout', description: 'x', prompt: 't', run_in_background: false }, agentAt(ws))
-        expect(forced.content[0]!.text).toBe('done')
+        expect(forced.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
         expect(continuableStarts).toHaveLength(3)
       } finally {
         if (prev === undefined) delete process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
@@ -1079,7 +1079,7 @@ describe('Task tool', () => {
         pluginDefs: [{ systemPrompt: 'Foreground plugin.' }],
       })
       const result = await call(ctx, { subagent_type: 'p:researcher', description: 'x', prompt: 't' }, agentAt('/any'))
-      expect(result.content[0]!.text).toBe('done')
+      expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
       expect(runs).toHaveLength(0)
       expect(continuableStarts).toHaveLength(1)
       expect(continuableStarts[0]!.provider).toBe('spawn')
@@ -1162,7 +1162,7 @@ describe('Task tool', () => {
       writeAgent(ws, 'shunt-writer', '---\nname: shunt-writer\ndescription: Writes\n---\nWrite body.\n')
       const { ctx, runs, continuableStarts } = await mount()
       const result = await call(ctx, { subagent_type: 'shunt-writer', description: 'x', prompt: 't' }, agentAt(ws))
-      expect(result.content[0]!.text).toBe('done')
+      expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
       expect(runs).toHaveLength(0)
       expect(continuableStarts).toHaveLength(1)
       expect(continuableStarts[0]!.provider).toBe('spawn')
@@ -1455,15 +1455,22 @@ describe('Task tool', () => {
       expect(BACKGROUND_SECTION_TEXT).not.toContain('cold-resumes on the next `send_message`')
     })
 
-    it('carries the release_agent capacity bullet verbatim', () => {
+    it('carries the reconciled capacity + auto-release bullet (R8/R9)', () => {
       expect(BACKGROUND_SECTION_TEXT).toContain(
         '- A background child holds one of 25 live-child capacity slots while it is running; settled '
-        + 'children free theirs automatically. release_agent <id> evicts a stuck running child\'s resident '
-        + 'activation (and its resident descendants\') one-way: same-session continuation is unavailable '
-        + 'after release; its persisted session survives; eviction is cooperative — a cancel-resistant '
-        + 'turn keeps its slot until it settles. Use it on stuck children you can discard, not as '
-        + 'routine cleanup.',
+        + 'children free theirs automatically. A settled child auto-releases after its inactivity grace '
+        + 'window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` '
+        + 'frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so '
+        + 'send_message promptly if you plan to continue it. release_agent <id> remains the interactive '
+        + 'override for a RUNNING child: it evicts the resident activation (and resident descendants\') '
+        + 'one-way — same-session continuation is unavailable after release; its persisted session survives; '
+        + 'eviction is cooperative — a cancel-resistant turn keeps its slot until it settles.',
       )
+      // R8 reconciliation: auto-tombstone is the routine lane; manual release
+      // is scoped to RUNNING children.
+      expect(BACKGROUND_SECTION_TEXT).toMatch(/auto-releases after its inactivity grace window/)
+      expect(BACKGROUND_SECTION_TEXT).toMatch(/interactive override for a RUNNING child/)
+      expect(BACKGROUND_SECTION_TEXT).not.toContain('not as routine cleanup')
     })
   })
 
@@ -1494,7 +1501,7 @@ describe('Task tool', () => {
       const { ctx } = await mount()
       const result = await call(ctx, { description: 'x', prompt: 't' }, agentWithId('/any', 'parent-s'))
       expect(result.isError).toBe(false)
-      expect(result.content[0]!.text).toBe('done')
+      expect(result.content[0]!.text).toMatch(/^done \(auto-released after 30 minutes of inactivity, expires \d{2}:\d{2}\)$/)
       expect(collectorsForSession('parent-s')).toEqual([])
     })
 

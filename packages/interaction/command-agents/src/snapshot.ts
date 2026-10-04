@@ -97,6 +97,8 @@ export interface SnapshotServices {
    */
   isReleased?(id: string): boolean
   isReleasing?(id: string): boolean
+  /** R8: tombstone markers are read module-direct (same process-local state). */
+  isTombstoned?(id: string): boolean
 }
 
 /**
@@ -162,7 +164,8 @@ export async function buildAgentsSnapshot(
     // marker alone (a live activation is not a released row).
     const released =
       (services.isReleased?.(String(entry.id)) === true ||
-        services.isReleasing?.(String(entry.id)) === true) && residency === 'ready'
+        services.isReleasing?.(String(entry.id)) === true ||
+        services.isTombstoned?.(String(entry.id)) === true) && residency === 'ready'
     list.push({
       id: String(entry.id),
       ...(entry.label !== undefined && entry.label.length > 0 ? { label: entry.label } : {}),

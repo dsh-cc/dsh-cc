@@ -153,6 +153,10 @@ export interface CaptureInput {
   readonly toolFilter?: ToolRestriction | undefined
   /** The session workspace cwd (workspace-identity probe root). */
   readonly cwd: string
+  /** R9: the delivery tier stamped by the dispatch entry point. */
+  readonly dispatchTier?: 'foreground' | 'background' | undefined
+  /** R9: the definition `autoReleaseMs` override ONLY (never a resolved default). */
+  readonly autoReleaseMs?: number | undefined
 }
 
 /**
@@ -267,8 +271,31 @@ export class SpawnPinCapture {
         deny: [...(input.toolFilter?.deny ?? [])],
       },
       ...input.definition?.maxTurns !== undefined ? { maxTurns: input.definition.maxTurns } : {},
+      // R9: the delivery tier + definition override only; absent fields are
+      // omitted (legacy pins read tier-indistinguishable → 2h fail-safe).
+      ...(input.dispatchTier !== undefined ? { dispatchTier: input.dispatchTier } : {}),
+      ...(input.autoReleaseMs !== undefined ? { autoReleaseMs: input.autoReleaseMs } : {}),
       workspace: probeWorkspace(input.cwd),
       resume: { state: 'ok' },
+    }
+  }
+
+  /**
+   * R9 promotion pin persist: rewrite `dispatchTier` to `'background'` on the
+   * child's existing pin (a `PinStore.update` round-trip). Failure is
+   * retention-safe IN-PROCESS only — the in-process grace entry stays correct;
+   * after a restart the stale foreground tier shortens the resumed window to
+   * 30 minutes (§5 residual) — and is logged, never thrown.
+   */
+  async updateDispatchTier(childId: string, tier: 'foreground' | 'background'): Promise<void> {
+    try {
+      this.store.update(childId, draft => {
+        draft.dispatchTier = tier
+      })
+    } catch (error) {
+      this.ctx.logger.warn(
+        `dispatch-tier pin update failed for child ${childId} (in-process grace entry stays correct): ${(error as Error).message}`,
+      )
     }
   }
 

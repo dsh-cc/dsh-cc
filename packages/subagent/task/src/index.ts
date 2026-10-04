@@ -34,6 +34,16 @@ import { createOneShotLedger } from './one-shot-ledger.ts'
 import { mountSubagentChildNotice } from './one-shot-notice.ts'
 import { mountStripWorkspaceInstructions } from './strip-instructions.ts'
 import { mountActorContractGate } from './actor-contract-gate.ts'
+import { armGraceFromPin, mountGraceWindow } from './grace-window.ts'
+import { mountGraceSettledNotice } from './grace-settled-notice.ts'
+import {
+  isTombstoned,
+  tombstoneReadyRow,
+  clearTombstone,
+  isReleased,
+  isReleasing,
+} from '@dsh-cc/command-agents/release'
+import type { ResumePin } from '@dsh-cc/subagent-resume-pins'
 
 export { AgentRegistry } from './registry.ts'
 export { PluginAgentIndex } from './plugin-agents.ts'
@@ -73,6 +83,25 @@ export {
   EPHEMERAL_TTL_KILL_COPY,
 } from './ephemeral-reaper.ts'
 export type { EphemeralReaperLedger, EphemeralTtlDeps } from './ephemeral-reaper.ts'
+export {
+  armGraceFromPin,
+  armGraceWindow,
+  cancelPendingGrace,
+  graceEntryOf,
+  graceWindowClause,
+  graceWindowFromPin,
+  promoteGraceTier,
+  recordGraceEntry,
+  resolveGraceWindowMs,
+  resetGraceWindow,
+  isGraceRecorded,
+  pendingGraceTimers,
+  mountGraceWindow,
+  FOREGROUND_AUTO_RELEASE_MS,
+  BACKGROUND_AUTO_RELEASE_MS,
+} from './grace-window.ts'
+export type { DispatchTier, GraceArmEntry } from './grace-window.ts'
+export { mountGraceSettledNotice } from './grace-settled-notice.ts'
 
 /**
  * One-shot subagent visibility (memory-recall hardening follow-ups W2a/c):
@@ -143,7 +172,7 @@ export const BACKGROUND_SECTION_TEXT = [
   '- `subagent_type: "fork"` cannot run in the background (upstream harness issue #2124); use a',
   '  plain background spawn instead.',
   '- Exiting your session drains every background child\'s in-flight turn (whole-forest teardown); its persisted session survives on disk — a child that settled on its own stays cold-resumable, but a DRAINED child does not resume on the next send_message (known upstream gap; cross-session resume after a drain is unverified).',
-  '- A background child holds one of 25 live-child capacity slots while it is running; settled children free theirs automatically. release_agent <id> evicts a stuck running child\'s resident activation (and its resident descendants\') one-way: same-session continuation is unavailable after release; its persisted session survives; eviction is cooperative — a cancel-resistant turn keeps its slot until it settles. Use it on stuck children you can discard, not as routine cleanup.',
+  '- A background child holds one of 25 live-child capacity slots while it is running; settled children free theirs automatically. A settled child auto-releases after its inactivity grace window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so send_message promptly if you plan to continue it. release_agent <id> remains the interactive override for a RUNNING child: it evicts the resident activation (and resident descendants\') one-way — same-session continuation is unavailable after release; its persisted session survives; eviction is cooperative — a cancel-resistant turn keeps its slot until it settles.',
 ].join('\n')
 
 /**
@@ -216,9 +245,80 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
   mountBackgroundSection(ctx)
   mountStripWorkspaceInstructions(ctx)
   mountSettledNoticeSuppression(ctx)
+  mountGraceSettledNotice(ctx)
   mountOneShotVisibility(ctx, ledger)
+  mountGraceWindowAutoRelease(ctx, capture)
   publishCollectorRegistry(ctx)
   publishOneShotLedger(ctx, ledger)
+  publishReleaseMarkers(ctx)
+}
+
+/**
+ * R8/R9: mount the grace-window listeners (fire dependencies: the live agents
+ * registry for the fire-time liveness recheck, the release-module tombstone
+ * ops, the ctx logger) and derive resume arming from the pin store — a ready
+ * row is armed on resume IFF its resume pin exists and is readable (missing/
+ * unreadable → left alone, fail-safe toward retention). The arm-registry is
+ * process-local and empty before this; the window runs from resume load time
+ * (documented). No cross-session cleanup: process exit fires nothing.
+ * @param ctx - the plug context.
+ * @param capture - the spawn pin capture (its store may be undefined).
+ */
+function mountGraceWindowAutoRelease(ctx: Context, capture: SpawnPinCapture | undefined): void {
+  const off = mountGraceWindow(ctx as never, {
+    agents: ctx.get('agents') as { get(id: string): { status?: string } | undefined } | undefined,
+    tombstone: childId => {
+      tombstoneReadyRow(childId)
+    },
+    clearTombstone: childId => {
+      clearTombstone(childId)
+    },
+    warn: message => ctx.logger?.warn?.(message),
+  })
+  ctx.effect(() => off, 'cc-subagent-task: grace-window lifecycle listeners')
+  // Resume arming (§3.8/§3.9): precedence pin.autoReleaseMs !== undefined →
+  // that value; else pin.dispatchTier === 'foreground' → 30m; else 2h (legacy
+  // pins, both fields absent, read tier-indistinguishable → 2h fail-safe).
+  const store = capture?.store
+  if (store === undefined) return
+  for (const childId of store.ids()) {
+    const pin = store.read(childId)
+    if (pin === undefined || 'kind' in pin) continue // missing/corrupt → leave alone
+    const live = pin as ResumePin
+    if (live.mode !== 'continuable-background') continue
+    if (live.resume?.state !== 'ok') continue
+    // Pin-eligible ready row: armed from resume load time (documented).
+    armGraceFromPin({
+      childId,
+      parentSessionId: live.parentSessionId,
+      dispatchTier: live.dispatchTier,
+      autoReleaseMs: live.autoReleaseMs,
+    })
+  }
+}
+
+/**
+ * Publish the process-local release markers as the ROOT-realm
+ * `ccReleaseMarkers` service so the resume-pins plugin's send_message
+ * pre-execute gate (a sibling that cannot import command-agents) reads the
+ * SAME tombstone state the grace window writes. CcPlugins pattern.
+ * @param ctx - the plug context.
+ */
+function publishReleaseMarkers(ctx: Context): void {
+  const root = ctx.root as unknown as {
+    get(key: string, optional?: boolean): unknown
+    provide(key: string, value: unknown): void
+    set(key: string, value: unknown): void
+  }
+  const markers = { isTombstoned, isReleased, isReleasing }
+  if (root.get('ccReleaseMarkers', false) === undefined) {
+    root.provide('ccReleaseMarkers', markers)
+  } else {
+    root.set('ccReleaseMarkers', markers)
+  }
+  ctx.effect(() => () => {
+    if (root.get('ccReleaseMarkers', false) === markers) root.set('ccReleaseMarkers', undefined)
+  }, 'cc-subagent-task: clear host-realm ccReleaseMarkers publication on unload')
 }
 
 /**

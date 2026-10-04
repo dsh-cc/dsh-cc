@@ -64,6 +64,7 @@ describe('definitionFingerprint', () => {
     ['model', 'model: sonnet', 'model: opus'],
     ['maxTurns', 'maxTurns: 30', 'maxTurns: 50'],
     ['effort', 'effort: high', 'effort: low'],
+    ['autoReleaseMs', 'model: sonnet', 'model: sonnet\nautoReleaseMs: 7200000'],
   ]
 
   for (const [field, from, to] of mutations) {

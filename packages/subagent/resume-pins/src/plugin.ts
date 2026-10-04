@@ -300,6 +300,24 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
     if (exec.name !== 'send_message') return next()
     const target = (exec.arguments as { agent_id?: unknown } | null)?.agent_id
     if (typeof target !== 'string' || target.length === 0) return next()
+    // R8 tombstone gate: BEFORE pin admission (next()) — a tombstoned id
+    // (grace-window auto-release after inactivity) never gets persistPass.
+    // The markers are the process-local release-module state, published by
+    // the subagent-task plugin as the root-realm `ccReleaseMarkers` service
+    // (this plugin cannot import command-agents); absent → pass through.
+    const markers = ctx.get('ccReleaseMarkers', true) as
+      | { isTombstoned?: (id: string) => boolean }
+      | undefined
+    if (markers?.isTombstoned?.(target) === true) {
+      return {
+        kind: 'deny' as const,
+        reason:
+          `[AUTO_RELEASED] Agent ${target} was auto-released after inactivity: its settled `
+          + 'grace window expired and the continuation offer lapsed. Its persisted session '
+          + 'survives on disk, but same-session continuation is closed — spawn a fresh '
+          + 'subagent with subagent_fork to continue the work.',
+      }
+    }
     return serializePerKey(childLocks, target, async () => {
       const found = readPin(target)
       if (found === undefined) return next() // legacy/foreign child: pass through

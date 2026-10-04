@@ -8,6 +8,7 @@
  */
 
 import { isReleased, isReleasing } from '@dsh-cc/command-agents/release'
+import { graceWindowClause } from './grace-window.ts'
 import type { EpochOutcome } from './epoch-collector.ts'
 
 /**
@@ -38,6 +39,19 @@ function stopReasonMessage(childId: string, stopReason: string): string {
     default:
       return `subagent ${childId} stopped with reason "${stopReason}".`
   }
+}
+
+/**
+ * R9: every non-`completed` terminal throws through `stopReasonMessage`, and
+ * the arm-time grace clause rides it too — the parent of a failed writer
+ * needs the deadline at least as much (§3.8 arms on that same
+ * `subagent/end`). Released children are excluded: their copy already says
+ * the child cannot be continued here.
+ */
+function stopReasonWithGrace(childId: string, stopReason: string): string {
+  const base = stopReasonMessage(childId, stopReason)
+  if (stopReason === 'aborted' && (isReleased(childId) || isReleasing(childId))) return base
+  return base + graceWindowClause(childId)
 }
 
 /**
@@ -83,15 +97,18 @@ export function outcomeToResult(
   // A promoted outcome never reaches here (the collect caller returns the
   // async_launched result first); defensively it is an unexpected terminal.
   if (outcome.kind !== 'epoch' || outcome.stopReason !== 'completed') {
-    throw new Error(stopReasonMessage(childId, outcome.kind === 'epoch' ? outcome.stopReason : outcome.kind))
+    throw new Error(stopReasonWithGrace(childId, outcome.kind === 'epoch' ? outcome.stopReason : outcome.kind))
   }
   const text = (outcome.output ?? [])
     .filter(block => block.type === 'text')
     .map(block => block.text ?? '')
     .join('')
+  // R9 arm-time copy: the armed grace clause (window + absolute local expiry,
+  // or "auto-release disabled") rides the completed foreground result.
   return {
     text:
       text
+      + graceWindowClause(childId)
       + (captureWarning !== undefined
         ? `\nresume pin capture failed: ${captureWarning}; this child will resume with legacy semantics`
         : ''),

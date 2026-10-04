@@ -42,6 +42,7 @@ export type ReleaseOutcome =
   | { kind: 'evicted-degraded'; id: string; failure: string; catalogNote: CatalogNote;
       cause?: string /* present iff catalogNote === 'catalog-unreadable' */ }
   | { kind: 'not-resident'; id: string; releasedEarlier: boolean }
+  | { kind: 'tombstoned'; id: string }
   | { kind: 'still-resident'; id: string; drainPending: boolean }
 
 export type ReleaseFailureReason =
@@ -76,6 +77,10 @@ export const DRAIN_OBSERVE_TIMEOUT_MS = 10_000
 
 const releasing = new Set<string>()
 const released = new Set<string>()
+// R8 tombstones: ready rows auto-released by the grace-window fire (no drain,
+// no parent authority). Cleared on the child's `subagent/start` via
+// `clearTombstone`. One-way only while the process lives.
+const tombstoned = new Set<string>()
 
 /** Enter the releasing state (pre-issuance; F12a). */
 export function markReleasing(id: string): void {
@@ -102,10 +107,40 @@ export function isReleasing(id: string): boolean {
   return releasing.has(id)
 }
 
-/** Test-only: clears BOTH sets. */
+// ---------------------------------------------------------------------------
+// R8 tombstone algebra: the auto-release lane. `tombstoneReadyRow` marks a
+// READY (registry-absent, settled) row without any drain; `clearTombstone`
+// runs on the child's `subagent/start` (and equivalently on a gate pass), so
+// an in-flight send_message that lands after the fire gets its one extra
+// epoch and a fresh window (the accepted residual). The `tombstoned` outcome
+// rides the same ReleaseOutcome union so both surfaces can render it.
+// ---------------------------------------------------------------------------
+
+/**
+ * Tombstone a READY row (grace-window fire). Unlike {@link markReleased} this
+ * needs no drain and no releasing transition — the child is already
+ * registry-absent. Returns the outcome kind for the fire log.
+ */
+export function tombstoneReadyRow(id: string): { kind: 'tombstoned'; id: string } {
+  tombstoned.add(id)
+  return { kind: 'tombstoned', id }
+}
+
+/** Clear the tombstone marker (on the child's `subagent/start`). */
+export function clearTombstone(id: string): void {
+  tombstoned.delete(id)
+}
+
+/** Whether the id is currently tombstoned (auto-released after inactivity). */
+export function isTombstoned(id: string): boolean {
+  return tombstoned.has(id)
+}
+
+/** Test-only: clears BOTH sets and the tombstone set. */
 export function resetReleasedMarkers(): void {
   releasing.clear()
   released.clear()
+  tombstoned.clear()
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +268,10 @@ export async function runRelease(deps: {
     throw new ReleaseFailure('catalog-unreadable', catalogUnreadableCopy(id, catalogCause ?? ''))
   }
   if (catalog === 'clean-hit' && preRead.kind === 'absent') {
-    return { kind: 'not-resident', id, releasedEarlier: isReleased(id) }
+    // R8: a tombstoned (auto-released) child is registry-absent too — manual
+    // release on it stays the not-resident no-op with releasedEarlier: true
+    // (T18b parity; the tombstone is the auto lane of the same retirement).
+    return { kind: 'not-resident', id, releasedEarlier: isReleased(id) || isTombstoned(id) }
   }
 
   // A drain row: catalogNote from the matrix.
@@ -420,6 +458,8 @@ export function renderReleaseOutcome(outcome: ReleaseOutcome): string {
       return outcome.releasedEarlier
         ? `Agent ${id} was released earlier in this process and has no resident activation; nothing was evicted.`
         : `Agent ${id} has no resident activation (settled or released); nothing was evicted and no capacity slot is held by it.`
+    case 'tombstoned':
+      return `Agent ${id} was auto-released after inactivity (its settled grace window expired); the catalog row is tombstoned for the rest of this process. Nothing was drained — the child was already settled.`
     case 'still-resident':
       return outcome.drainPending
         ? `Release of agent ${id} is in flight: its turn did not reach idle within 10s (a cancel-resistant turn). The release still completes by itself if the turn ever becomes idle — /agents then marks it [released] — but nothing locally force-evicts a cancel-resistant turn; a process restart is the only hard boundary.`

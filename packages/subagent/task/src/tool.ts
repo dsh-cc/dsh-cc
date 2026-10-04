@@ -473,10 +473,17 @@ export function registerTaskTool(
             maxDepth: DEFAULT_MAX_DEPTH,
             toolFilter,
             agentOptions,
-          }, async request =>
-            wantsBackground(args, definition, disabled)
-              ? await startBackground(seam, request, capture)
-              : await collectForeground(ctx, seam, request, capture, exec))
+          }, async request => {
+            // R9: the definition `autoReleaseMs` override is resolved at the
+            // dispatch site — capture-INDEPENDENT (arm-registry must not
+            // depend on pin capture). Identity check; 0 is the disable value.
+            const withOverride = definition.autoReleaseMs !== undefined
+              ? { ...request, autoReleaseMs: definition.autoReleaseMs }
+              : request
+            return wantsBackground(args, definition, disabled)
+              ? await startBackground(seam, withOverride, capture)
+              : await collectForeground(ctx, seam, withOverride, capture, exec)
+          })
           return preloadText === '' ? isolated : { ...isolated, text: `${isolated.text}\n${preloadText}` }
         }
         const folded = {
@@ -484,6 +491,9 @@ export function registerTaskTool(
           persona: gatedPersona,
           ...(toolFilter !== undefined ? { toolFilter } : {}),
           ...(agentOptions !== undefined ? { agentOptions } : {}),
+          // R9: the definition override only — a resolved default is never
+          // written here (the grace-window module derives defaults itself).
+          ...(definition.autoReleaseMs !== undefined ? { autoReleaseMs: definition.autoReleaseMs } : {}),
         }
         if (ephemeral) {
           // Ephemeral wins over a `background: true` pin (§3.2): foreground

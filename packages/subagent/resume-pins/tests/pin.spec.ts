@@ -129,6 +129,47 @@ describe('tolerant reader', () => {
   })
 })
 
+describe('R9 dispatch tier + autoReleaseMs pin fields', () => {
+  it('round-trips both fields through parsePin/writePin', () => {
+    const pin = completePin({ dispatchTier: 'foreground', autoReleaseMs: 0 })
+    const parsed = parsePin(writePin(pin as never))
+    expect(parsed.dispatchTier).toBe('foreground')
+    expect(parsed.autoReleaseMs).toBe(0)
+  })
+
+  it('omits both fields on a legacy pin (absent, not null)', () => {
+    const pin = completePin()
+    const parsed = parsePin(writePin(pin as never))
+    expect(parsed.dispatchTier).toBeUndefined()
+    expect(parsed.autoReleaseMs).toBeUndefined()
+  })
+
+  it('rejects a malformed dispatchTier with a typed error', () => {
+    const pin = completePin({ dispatchTier: 'sideways' })
+    expect(() => parsePin(JSON.stringify(pin))).toThrow(PinParseError)
+    expect(() => parsePin(JSON.stringify(pin))).toThrow(/dispatchTier/)
+  })
+
+  it('rejects a malformed autoReleaseMs (negative, fractional, non-number)', () => {
+    for (const bad of [-1, 1.5, '60000', null]) {
+      const pin = completePin({ autoReleaseMs: bad })
+      expect(() => parsePin(JSON.stringify(pin))).toThrow(PinParseError)
+    }
+  })
+
+  it('both fields survive a PinStore.update round-trip (closed field set)', () => {
+    const store = new PinStore(tempRoot())
+    const id = '0b6f9c88-1111-4222-8333-444455556666'
+    store.write(parsePin(writePin(completePin({ dispatchTier: 'background', autoReleaseMs: 0 }) as never)))
+    store.update(id, draft => {
+      draft.dispatchTier = 'foreground'
+      draft.lastNotice = 'n'
+    })
+    const after = store.read(id)
+    expect(after).toMatchObject({ dispatchTier: 'foreground', autoReleaseMs: 0 })
+  })
+})
+
 describe('PinStore', () => {
   it('returns undefined for an absent pin and a corrupt sentinel for an unparseable one', () => {
     const store = new PinStore(tempRoot())

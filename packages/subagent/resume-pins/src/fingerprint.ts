@@ -53,6 +53,10 @@ export function definitionFingerprint(def: AgentDefinition, effectivePersona?: s
     maxTurns: def.maxTurns ?? null,
     initialPrompt: def.initialPrompt ?? null,
     background: def.background ?? null,
+    // R9: the definition's autoReleaseMs override joins the definition hash —
+    // it changes the spawn contract (the grace window). dispatchTier is a PIN
+    // field, not a definition field, and does NOT join.
+    autoReleaseMs: def.autoReleaseMs ?? null,
     memory: def.memory ?? null,
     isolation: def.isolation ?? null,
   }
