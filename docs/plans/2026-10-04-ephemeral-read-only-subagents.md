@@ -1,6 +1,6 @@
 # Ephemeral Read-Only Subagents
 
-- **Status**: Approved (two-seat external blind review, r1–r4 converged GO; §3.8/R8 reviewed separately, two rounds, both seats GO; axis rulings user-confirmed 2026-10-04)
+- **Status**: Approved (two-seat external blind review, r1–r4 converged GO; §3.8/R8 reviewed separately, two rounds, both seats GO; §3.9/R9 two-tier window reviewed three-seat r1–r4, converged GO; axis rulings user-confirmed 2026-10-04)
 - **Date**: 2026-10-04
 - **Baseline**: v0.8.3 (main `a33c681f` post-merge; probes run against `3ff8de13`)
 - **Scope**: `subagent_fork` dispatch for read-only agent definitions; reaper for
@@ -267,7 +267,9 @@ the ready row** — process-local, drain-free, no parent authority.
 
 - **Membership (dispatch-site arm-registry).** At Task continuable dispatch,
   record `{childId, autoReleaseMs, parentId}` in a process-local
-  arm-registry — recorded BEFORE `collectFirstEpoch`/`startContinuable` is
+  arm-registry (§3.9 supersedes this record shape to
+  `{childId, parentId, tier, overrideMs?}` — `overrideMs` carries the
+  definition override only, never a resolved default) — recorded BEFORE `collectFirstEpoch`/`startContinuable` is
   awaited (the foreground collect's first `subagent/end` fires during that
   await; `startBackground` does not have this race). `subagent/end` for a
   recorded id arms (or re-arms — a second end replaces the pending timer;
@@ -279,7 +281,10 @@ the ready row** — process-local, drain-free, no parent authority.
   continuable children are structurally excluded.
 - **Grace window.** Default **2 hours** (write-lane recovery is precious and
   in-session-irrecoverable after tombstone; 30 minutes was rejected as
-  inside normal interactive cadence). Per-definition override: frontmatter
+  inside normal interactive cadence). §3.9 (R9) later splits this default by
+  delivery tier — foreground-delivered results arm a 30-minute window,
+  background keeps 2 hours; the rejection above ruled against 30 minutes
+  as the single GLOBAL window, not against the split. Per-definition override: frontmatter
   `autoReleaseMs?: number` with a NON-negative parser — tri-state pinned:
   absent → default, `0` → disabled (never armed), malformed → loud parse
   failure (`parsePositiveInt` rejects `<= 0` and must NOT be copied
@@ -340,8 +345,11 @@ the ready row** — process-local, drain-free, no parent authority.
   the interactive override for RUNNING children).
 - **Test surface additions**: membership (non-registry id never arms;
   coordinator children never arm); idempotent arm (second end replaces;
-  exactly one timer); tri-state parse; default constant pin; arm-time copy
-  exact strings at both sites; fire (registry-live recheck → skip + re-arm;
+  exactly one timer); tri-state parse; default constant pin (superseded by
+  the §3.9 constant pair); arm-time copy
+  exact strings at both sites (superseded by §3.9: the copy carries an
+  absolute expiry and extends to the error path — slice 5 pins the §3.9
+  strings, not these); fire (registry-live recheck → skip + re-arm;
   ready row → `tombstoned` + marker set; send_message gate copy; manual
   release on natural-settled still `not-resident`, T18b regression pin;
   manual release on tombstoned renders `releasedEarlier: true`); residual
@@ -357,10 +365,152 @@ the ready row** — process-local, drain-free, no parent authority.
   lands after (or with) the R4/R7 ephemeral implementation — parser
   references are to this spec, not existing code.
 
+### 3.9 Two-tier auto-release window (R9)
+
+**Premise.** §3.8 arms one window length for every continuable child
+dispatched via Task, regardless of how the result is delivered. The two
+delivery channels have different continuation economics: a foreground
+collect returns the result **inline into the parent's active context** —
+the model that will decide whether to `send_message` the child holds the
+result now, and that decision belongs to the adjacent turns; a background
+child's result arrives as a wake that may sit behind unrelated turns or a
+Ctrl+B long after dispatch. A single window is either too long for the
+former or too short for the latter. R9 splits the window by delivery tier
+(user ruling 2026-10-04; 15–30 min range taken at the conservative upper
+end).
+
+- **Tier resolution.** Tier is stamped INSIDE the dispatch entry point that
+  actually runs — `collectForeground` stamps `'foreground'`,
+  `startBackground` stamps `'background'`. The `tool.ts` dispatch branches
+  funnel into exactly these two entry points, so stamping at the entry
+  point cannot disagree with the branch taken (a parallel parameter could).
+  The `wantsBackground` precedence (explicit arg > kill-switch
+  `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` > definition `background` pin >
+  default) is inherited for free: a kill-switched `background: true` pin
+  runs foreground and stamps foreground. The §3.8 arm-registry record is
+  `{childId, parentId, tier, overrideMs?}`.
+- **Defaults.** `FOREGROUND_AUTO_RELEASE_MS = 1_800_000` (30 minutes) and
+  `BACKGROUND_AUTO_RELEASE_MS = 7_200_000` (2 hours), named constants in
+  the §3.8 arm-registry/timer module; §3.8's singular "default constant
+  pin" is superseded by this pair. Accepted risk, stated plainly: a
+  foreground verify-then-continue chain longer than 30 minutes must use
+  the per-definition override or re-spawn.
+- **Executor exemption (user ruling).** `dsh-cc-agents:executor` is the
+  flagship verify-then-continue writer — AGENTS.md mandates collecting it
+  in the foreground, so the short window lands exactly on its recovery
+  lane. It ships with `autoReleaseMs: 7200000` pinned in its frontmatter
+  (2h), which doubles as the documented mitigation recipe any other
+  verify-then-continue definition can copy.
+- **`autoReleaseMs` override (tri-state unchanged).** The override is
+  resolved from the parsed definition at the Task dispatch site and
+  recorded as `overrideMs` on the arm-registry entry — INDEPENDENT of pin
+  capture (`preparedBackground` returns the request unchanged when no
+  `resumePins` config exists; the arm-registry must not depend on it).
+  Pin capture persists the same override value when present. The stored
+  value is the definition override ONLY — a resolved default
+  (`1_800_000`/`7_200_000`) must never be written as `overrideMs`/pin
+  `autoReleaseMs`; consumers resolve `overrideMs !== undefined ? overrideMs
+  : tierDefault` with an identity check, never truthiness — `0` is the
+  disable value and must survive both tiers and the pin round-trip.
+- **Ctrl+B promotion re-tiers up, synchronously.** `collectFirstEpoch`
+  deps gain an optional `onPromoted?: () => void` hook, invoked
+  synchronously inside `promote()` (`epoch-collector.ts`) — NOT at the
+  outcome site: pre-acceptance promotion during an in-flight
+  `startContinuable` can interleave with `subagent/end` (a fast child
+  settles inside that await; the process-global §3.8 end listener has then
+  ALREADY armed the foreground window — "no pending timer at promotion
+  time" is false and was retracted in review). The hook, passed by
+  `collectForeground`, performs the re-tier with **cancel-and-replace**
+  semantics: cancel any pending timer for the id → set `tier:
+  'background'` → re-derive the window (override if present, else the
+  background default) → if a timer was pending, re-arm immediately from
+  the new window; if not, the later `subagent/end` arms from the mutated
+  entry. Fire and re-arm callbacks always read the CURRENT registry
+  entry, never a duration closed over at arm time. The hook ALSO persists
+  `dispatchTier: 'background'` on the pin (a `SpawnPinCapture` helper
+  over `PinStore.update`); a failed or skipped pin update is
+  retention-safe IN-PROCESS only and logged — the in-process entry stays
+  correct; after a restart the stale foreground tier on the pin shortens
+  the resumed window to 30 minutes (§5 residual, test-pinned). Downward
+  re-tier is structurally impossible (no
+  background→foreground dispatch path).
+- **Arm-time copy carries the actual expiry.** The armed entry records an
+  expiry timestamp (arm time + resolved window). Copy at BOTH delivery
+  sites renders "…(auto-released after <window> of inactivity, expires
+  <HH:MM local>)" — the absolute moment, not just a duration, because
+  arming at `subagent/end` can precede delivery. A `0` override renders
+  "auto-release disabled" in place of the window clause. The error path
+  carries it too: non-`completed` terminals throw through
+  `stopReasonMessage` (`collect-copy.ts`) and the window/expires clause is
+  appended there as well — the parent of a failed writer needs the
+  deadline at least as much (§3.8 arms on that same `subagent/end`). The
+  `subagent-settled` wake copy is rewritten dsh-cc-side (the harness
+  `notifySettlement` surface is not editable; same mechanism class as
+  `one-shot-notice.ts`). One copy formatter serves defaults and overrides
+  alike.
+- **Resume pin.** `CaptureInput` gains the dispatch tier; `build()` records
+  optional `dispatchTier?: 'foreground' | 'background'` and
+  `autoReleaseMs?: number` (the definition override only). **`parsePin`/
+  `writePin` must be taught both fields**: the parser reconstructs a
+  closed field set and silently discards unknowns, and every
+  `PinStore.update` round-trips through it — adding only the interface
+  fields loses the data on the first update. Validation: `dispatchTier`
+  an enum; `autoReleaseMs` a finite non-negative integer; malformed →
+  `PinParseError` → §3.8 unreadable-pin leave-alone. Pin `version` stays
+  1. `mode: 'continuable-background'` keeps its current meaning ("the
+  continuable lane") for BOTH tiers — it never meant background dispatch;
+  `dispatchTier` supersedes it for windowing. Precedence on resume:
+  `pin.autoReleaseMs !== undefined` → that value; else
+  `pin.dispatchTier === 'foreground'` → 30m; else 2h. Legacy pins (both
+  fields absent — today's population is tier-indistinguishable by
+  construction, which is WHY the fail-safe is safe) → 2h, fail-safe
+  toward retention, consistent with §3.8's resume rulings.
+- **Fingerprint contract.** `definitionFingerprint`
+  (`resume-pins/src/fingerprint.ts`) hashes `AgentDefinition` content: the
+  new `autoReleaseMs` frontmatter field joins that hash and
+  `fingerprint.spec.ts` gains mutation rows for it. `dispatchTier` is a
+  PIN field, not a definition field — it does NOT join the definition
+  fingerprint (it round-trips through `parsePin`/`writePin`, already
+  specified).
+- **Everything else in §3.8 is tier-blind by construction**: arm/re-arm
+  idempotence, fire-time registry recheck, tombstone algebra,
+  `clearTombstone`, the `send_message` pre-execute gate, timer hygiene
+  (`.unref()`, fail-open), `/agents` tagging, the 5-minute one-shot ledger
+  prune vs a 30-minute fire. Only the window VALUE derivation changes.
+- **Test surface additions**: tier resolution matrix including the
+  kill-switch (kill-switched `background: true` pin → foreground tier);
+  entry-point stamping (the `tool.ts` dispatch branches → one shared stamp, no
+  parallel parameter); promotion ordering, BOTH interleavings: (a) `promote()` during the
+  pending start → the later `subagent/end` arms the background window
+  directly; (b) `subagent/end` inside the pending start (foreground timer
+  armed) → `promote()` → cancel-and-replace with the background window —
+  plus the collector invariant behind (a) pinned as the code fact it is:
+  a FINISHED collect can no longer promote (`promote()`'s `settled ||
+  promoted` guard, where `settled` flips only in `finish()` after the
+  pending `start()` completes — a child end DURING that await can still
+  be promoted, which is exactly interleaving (b)); promotion pin persist
+  (foreground dispatch → promotion → restart → resume arms 2h) and its
+  failure-skip (restart after a failed persist → resumed window reads
+  30m — the §5 residual); pin round-trip through `store.update` (both fields
+  survive; `0` survives; malformed → `PinParseError` → leave-alone);
+  override recorded with pins disabled; copy pins (30m + expires clause
+  on the completed foreground path, 2h on the background path, disabled
+  copy, error-path clause); executor frontmatter pin present.
+- **File-touch additions**: arm-registry/timer module (entry shape, both
+  constants, cancel-and-replace, expiry timestamp), `epoch-collector.ts`
+  (`onPromoted` dep), `background-start.ts` (stamp at both entry points,
+  hook pass-through), `tool.ts` (override resolution at the dispatch
+  sites), `resume-capture.ts` (`CaptureInput` + `build()` fields),
+  `resume-pins` `pin.ts` (`parsePin`/`writePin`) + `fingerprint.ts` +
+  both specs, `collect-copy.ts` (window clause on the completed AND error
+  paths), the settled-wake rewrite site (`one-shot-notice.ts` class),
+  the executor frontmatter pin, copy tests.
+
 
 ## 4. Non-goals
 
 - Capping `fork` sentinel or workflow `agent()` dispatches.
+- Per-tier `autoReleaseMs` overrides (one knob by design; §3.9).
 - A one-shot worktree arm (blocked on the reserved-id seam).
 - Extending `release_agent` to one-shot children.
 - Any change to the write/continuable lane's DISPATCH semantics (zero code
@@ -377,6 +527,14 @@ the ready row** — process-local, drain-free, no parent authority.
 - **Registry-count coupling**: the capacity guard's derivation is upstream
   behavior (`listChildren` × registry status); a harness change to that
   surface needs a test tripwire.
+- **Foreground 30-minute window (§3.9)**: any foreground write lane beyond
+  the executor exemption whose verify-then-continue chain exceeds its
+  window loses cheap continuation (tombstone, `send_message` gate).
+  Mitigations: the per-definition `autoReleaseMs` recipe (shipped on
+  `executor` at 2h, user ruling), the absolute expiry rendered into copy
+  on BOTH the completed and error paths, and re-spawn. A promotion whose
+  pin persist failed leaves a stale foreground tier on the pin after
+  restart — documented, retention-safe in-process.
 
 ## 6. Open questions (non-blocking)
 
@@ -397,7 +555,9 @@ the ready row** — process-local, drain-free, no parent authority.
 4. `/resume` filter + manifest/parity surface.
 5. R8 grace-window auto-release (arm-registry + timer module, tombstone arm
    in the release module, send_message gate, `autoReleaseMs` parser, surface
-   tags and copy) — after or with slice 3.
+   tags and copy) — after or with slice 3. The §3.9 two-tier delta lands in
+   the same slice (tier on the arm-registry record, promotion re-tier, pin
+   fields) — it has no standalone mechanical surface beyond R8's.
 
 ## 8. Review ledger
 
@@ -455,4 +615,67 @@ re-verified by the issuing seat.
 
 User rulings: the read/write loss-cost axis and the shunt-writer → persistent
 classification (2026-10-04); reduced-roster closure after the codex seat's
-deterministic model-config failure (2026-10-04).
+deterministic model-config failure (2026-10-04); the two-tier window split
+(15–30 min range taken at the upper end) and the executor
+`autoReleaseMs: 7200000` exemption (2026-10-04).
+
+- **§3.9 (R9) review, 2026-10-04, three seats** (critic + grok + codex, all
+  blind to each other; the codex seat ran this time and returned NO-GO):
+  - **R9 r1**: critic GO-WITH-AMENDMENTS (promotion mutates the registry
+    but not the pin — cross-restart divergence; two tier-ish fields on the
+    pin with a lossy `parsePin`; kill-switch matrix cell; entry-point
+    stamping); grok GO-WITH-AMENDMENTS (convergent promotion-timer
+    blocker: pre-acceptance promotion can interleave with `subagent/end`,
+    so "no pending timer at promotion time" is false; `autoReleaseMs` must
+    not freeze a resolved foreground window across promotion; executor
+    verify-then-continue residual unpinned; error-path copy gap;
+    `fingerprint.ts` and copy-site file-touch completeness); codex NO-GO
+    (same promotion-ordering blocker; pin not persisted at promotion;
+    parser lossy — `pin.ts:287` reconstructs a closed field set,
+    `store.ts:110` re-parses every update; override must not depend on
+    capture — `preparedBackground` returns the request unchanged without
+    it; copy shows a duration, not the actual deadline; kill-switch row
+    missing). All findings folded: the re-tier moved into a synchronous
+    `onPromoted` hook invoked inside `promote()` with cancel-and-replace
+    semantics (the "no pending timer" claim retracted as false); the hook
+    persists `dispatchTier: 'background'` on the pin with retention-safe
+    failure; `parsePin`/`writePin`/`fingerprint.ts` named in file-touch
+    with validation and round-trip tests; override resolution moved to
+    the dispatch-site arm-registry record (capture-independent); the
+    copy carries an absolute expiry timestamp and extends to the error
+    path (`stopReasonMessage`); the kill-switch cell entered the matrix;
+    tier stamped inside the two entry points; constants named
+    (`FOREGROUND_AUTO_RELEASE_MS`/`BACKGROUND_AUTO_RELEASE_MS`).
+  - **R9 r2** (critic GO-WITH-AMENDMENTS ×3 one-liners, grok GO with one
+    minor, codex GO-WITH-AMENDMENTS ×2 majors; all folded): grok — the
+    fingerprint line said "both new fields" but `dispatchTier` is a pin
+    (not definition) field, only `autoReleaseMs` joins
+    `definitionFingerprint` → corrected. Codex — the promotion-ordering
+    test contradicted the synchronous hook (a promote-during-start
+    followed by end must arm the background window directly, not
+    "cancel") → tests split into both interleavings with the
+    `settled || promoted` guard named as the code fact behind the
+    end-then-promotion invariant; "retention-safe" qualified to
+    in-process only with the cross-restart 30-minute shortening
+    test-pinned. Critic — "four tool.ts call sites" corrected to
+    "dispatch branches"; §3.8's record shape and copy/default-constant
+    test pins annotated with §3.9 supersessions so slice-5 does not pin
+    the wrong strings or write a resolved default into `autoReleaseMs`.
+    Divergence adjudicated: codex doubted the end-then-promotion
+    invariant; critic verified `promote()`'s `settled || promoted` guard
+    in `epoch-collector.ts` — at r3 codex showed the guard does NOT
+    establish that invariant (`settled` flips only in `finish()` after
+    the pending `start()` completes; an end during that await can still
+    be promoted), so the invariant was restated as "a FINISHED collect
+    cannot promote" and the r2 adjudication corrected here in favor of
+    codex.
+  - **R9 r3** (grok GO with one copy nit — a leftover duplicate
+    "arm-registry —" from the r2 §3.8 insertion, deleted; codex
+    GO-WITH-AMENDMENTS with the finished-vs-ended guard correction
+    above, folded): grok GO stands as its pre-authorization — the nit was
+    mechanical and fixed verbatim; codex's finding is folded and
+    confirmed at r4 below.
+  - **R9 r4** (codex: **GO** — verdict-only confirmation of the
+    finished-vs-ended correction). All three seats converged: critic
+    GO-WITH-AMENDMENTS (three one-liners, folded at r2, pre-authorized),
+    grok GO (r3), codex GO (r4).
