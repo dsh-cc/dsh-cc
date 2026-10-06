@@ -162,11 +162,11 @@ describe('applySessionEvent', () => {
     let state = createInitialState()
     state = enqueue(state, 'hello')
     state = enqueue(state, 'still here')
-    expect(state.queued).toEqual(['hello', 'still here'])
+    expect(state.queued).toEqual([{ text: 'hello' }, { text: 'still here' }])
     state = applySessionEvent(state, { type: 'user/message', data: { text: 'hello', source: { kind: 'user' } } })
     // The fold renders the row only; chip clearing happens synchronously in
     // the driver (flush / Ctrl+S / interrupt / recall), never event-driven.
-    expect(state.queued).toEqual(['hello', 'still here'])
+    expect(state.queued).toEqual([{ text: 'hello' }, { text: 'still here' }])
     expect(state.rows).toEqual([{ kind: 'user', text: 'hello' }])
   })
 
@@ -321,7 +321,7 @@ describe('applySessionEvent', () => {
     it('adds no row for kind user with no text blocks and leaves the queue alone', () => {
       let state = createInitialState()
       state = enqueue(state, '')
-      expect(state.queued).toEqual([''])
+      expect(state.queued).toEqual([{ text: '' }])
       state = applySessionEvent(state, {
         type: 'user/message',
         data: {
@@ -329,7 +329,7 @@ describe('applySessionEvent', () => {
           source: { kind: 'user' },
         },
       })
-      expect(state.queued).toEqual([''])
+      expect(state.queued).toEqual([{ text: '' }])
       expect(state.rows).toEqual([])
     })
 
@@ -340,7 +340,7 @@ describe('applySessionEvent', () => {
         type: 'user/message',
         data: { content: [{ type: 'text', text: '   ' }], source: { kind: 'user' } },
       })
-      expect(state.queued).toEqual(['   '])
+      expect(state.queued).toEqual([{ text: '   ' }])
       expect(state.rows).toEqual([])
     })
   })

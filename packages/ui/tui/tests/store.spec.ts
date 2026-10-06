@@ -65,14 +65,14 @@ function questionState(overrides: Partial<QuestionView> = {}): TuiState {
 describe('queue helpers', () => {
   it('enqueue appends to the queue', () => {
     const state = enqueue(createInitialState(), 'hello')
-    expect(state.queued).toEqual(['hello'])
+    expect(state.queued).toEqual([{ text: 'hello' }])
   })
 
   it('enqueue preserves prior entries (FIFO order)', () => {
     let state = createInitialState()
     state = enqueue(state, 'one')
     state = enqueue(state, 'two')
-    expect(state.queued).toEqual(['one', 'two'])
+    expect(state.queued).toEqual([{ text: 'one' }, { text: 'two' }])
   })
 
   it('dequeue removes the FIRST entry strictly equal to the text', () => {
@@ -81,14 +81,14 @@ describe('queue helpers', () => {
     state = enqueue(state, 'two')
     state = enqueue(state, 'one')
     state = dequeue(state, 'one')
-    expect(state.queued).toEqual(['two', 'one'])
+    expect(state.queued).toEqual([{ text: 'two' }, { text: 'one' }])
   })
 
   it('dequeue is a no-op when the text is absent', () => {
     let state = createInitialState()
     state = enqueue(state, 'one')
     const next = dequeue(state, 'missing')
-    expect(next.queued).toEqual(['one'])
+    expect(next.queued).toEqual([{ text: 'one' }])
     expect(next).toBe(state)
   })
 
@@ -100,20 +100,37 @@ describe('queue helpers', () => {
     expect(state.queued).toEqual([])
   })
 
-  it('popQueued removes and returns the LAST queued entry (LIFO recall)', () => {
+  it('popQueued removes and returns the LAST queued chip (LIFO recall)', () => {
     let state = createInitialState()
     state = enqueue(state, 'one')
     state = enqueue(state, 'two')
     const popped = popQueued(state)
-    expect(popped.text).toBe('two')
-    expect(popped.state.queued).toEqual(['one'])
+    expect(popped.chip?.text).toBe('two')
+    expect(popped.state.queued).toEqual([{ text: 'one' }])
   })
 
-  it('popQueued on an empty queue returns undefined text and the same state reference', () => {
+  it('popQueued on an empty queue returns no chip and the same state reference', () => {
     const state = createInitialState()
     const popped = popQueued(state)
-    expect(popped.text).toBeUndefined()
+    expect(popped.chip).toBeUndefined()
     expect(popped.state).toBe(state)
+  })
+
+  it('a chip parks the images captured with its submission', () => {
+    const png = { path: '/tmp/a-image.png', mediaType: 'image/png' as const, width: 3, height: 2 }
+    const gif = { path: '/tmp/b-image.gif', mediaType: 'image/gif' as const, width: 4, height: 4 }
+    const state = enqueue(createInitialState(), 'look [Image #1 3x2] and [Image #2 4x4]', [png, gif])
+    // Capture order, not registry order: the driver admits them in this order.
+    expect(state.queued).toEqual([{ text: 'look [Image #1 3x2] and [Image #2 4x4]', images: [png, gif] }])
+    expect(popQueued(state).chip?.images).toEqual([png, gif])
+  })
+
+  it('an image-free submission stores no images field at all', () => {
+    // Absent, never []: a text-only chip must equal one parked before images
+    // existed, which is also what makes the driver's `images === undefined`
+    // fast path (no lookup, no await, no notice) reachable.
+    expect(enqueue(createInitialState(), 'plain').queued[0]).toEqual({ text: 'plain' })
+    expect(enqueue(createInitialState(), 'plain', []).queued[0]).toEqual({ text: 'plain' })
   })
 
   it('popQueued does not mutate the original state', () => {
@@ -121,8 +138,8 @@ describe('queue helpers', () => {
     state = enqueue(state, 'one')
     state = enqueue(state, 'two')
     const popped = popQueued(state)
-    expect(state.queued).toEqual(['one', 'two'])
-    expect(popped.state.queued).toEqual(['one'])
+    expect(state.queued).toEqual([{ text: 'one' }, { text: 'two' }])
+    expect(popped.state.queued).toEqual([{ text: 'one' }])
     expect(popped.state).not.toBe(state)
   })
 
@@ -130,14 +147,14 @@ describe('queue helpers', () => {
     const base = createInitialState()
     const enqueued = enqueue(base, 'hello')
     expect(base.queued).toEqual([])
-    expect(enqueued.queued).toEqual(['hello'])
+    expect(enqueued.queued).toEqual([{ text: 'hello' }])
 
     const dequeued = dequeue(enqueued, 'hello')
-    expect(enqueued.queued).toEqual(['hello'])
+    expect(enqueued.queued).toEqual([{ text: 'hello' }])
     expect(dequeued.queued).toEqual([])
 
     const cleared = clearQueue(enqueued)
-    expect(enqueued.queued).toEqual(['hello'])
+    expect(enqueued.queued).toEqual([{ text: 'hello' }])
     expect(cleared.queued).toEqual([])
   })
 

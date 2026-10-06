@@ -63,6 +63,39 @@ export type PermissionRulesLike = {
 }
 
 /**
+ * Structural face of the deployment's `llm` service. Moved here from
+ * state/driver-types.ts (which re-exports it) because that file sits at its
+ * 500-line cap and this one is the catalog of service seams.
+ */
+export type LlmLike = {
+  listProviders(): { id: string }[]
+  listModels(provider: string): Promise<{ provider: string; id: string; name: string }[]>
+  /**
+   * Optional model-metadata lookup: validates reasoning-effort writes, and
+   * carries the image-input capability the §3.7 gate reads. Optional so
+   * existing llm stubs keep working — every effort consumer treats absence as
+   * "unresolvable" and fails closed, while the image gate proceeds
+   * optimistically: an undisclosed capability must not cost the user an image.
+   */
+  resolveModelInfo?(
+    provider: string,
+    model: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    reasoning?: {
+      efforts: readonly { id: string; name: string; description?: string }[]
+      defaultEffort?: string
+    }
+    /**
+     * Accepted request modalities when the adapter discloses them. Absent means
+     * unknown; an explicit list is negative capability for whatever it omits
+     * (dsh-llm types.ts:301) — the only case the §3.7 gate acts on.
+     */
+    inputModalities?: readonly string[]
+  }>
+}
+
+/**
  * The slice of createDriver's closed-over state that the modal pipeline
  * (approvals + questions sharing one FIFO) needs. `state()` returns the CURRENT
  * view-model value — createDriver rebinds `state` on every emit, so the modal
@@ -391,6 +424,15 @@ export interface DriverQueueCtx {
    * failure (warned, never deadlocks submit).
    */
   waitForModel(): Promise<void>
+  /**
+   * Image-input capability of the LIVE route, for the §3.7 gate on an
+   * image-bearing submission. `undefined` means "not resolvable" - no settled
+   * selection, no llm service, no model metadata, or a rejecting lookup - and
+   * every caller then proceeds optimistically (the llm contract: an absent
+   * `inputModalities` is unknown, while an explicit list is authoritative).
+   * `supported: false` carries the model id so the notice can name it.
+   */
+  resolveImageSupport(): Promise<{ model: string; supported: boolean } | undefined>
 }
 
 /**
