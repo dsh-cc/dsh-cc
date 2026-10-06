@@ -34,6 +34,7 @@ import { DOUBLE_PRESS_WINDOW_MS, openSystemUrl, sanitizeWindowTitle, truncateAct
 import { createEditorTheme, createTheme } from './theme.ts'
 import { TranscriptView } from './transcript.ts'
 import { attachWorkflowRow } from '../harness/workflow-row.ts'
+import { createClipboardImageProvider } from '../harness/clipboard-image.ts'
 import { WorkingLine } from './working-line.ts'
 
 import type { BuildRootOptions, RootHandle } from './root-types.ts'
@@ -100,7 +101,15 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 	// every state change so they appear and disappear with the driver state.
 	const overlays = new Container()
 
-	const editor = new Editor(tui, createEditorTheme(theme))
+	// An image paste arrives as an empty bracketed paste, so the editor needs a
+	// reader for it. pi-tui carries no Node platform code (PORTING.md), so the
+	// host injects one here — the same split as the write direction, where the
+	// host owns `openUrl`/copy and the editor owns only the key. The session id
+	// is read per paste, not captured: /resume rebinds it and a stale id would
+	// file a later image under the previous session's bucket.
+	const editor = new Editor(tui, createEditorTheme(theme), {
+		onPasteImage: createClipboardImageProvider({ getSessionId: () => driver.currentSessionId }),
+	})
 	// Seed the editor's ↑/↓ recall from persisted history (oldest first —
 	// addToHistory unshifts, so the last-seeded/newest becomes index 0 and is
 	// recalled on the first ↑ press). The reference is tracked so a /resume
@@ -344,7 +353,7 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 			queueLine.setText(
 				state.queued.length === 0
 					? ''
-					: state.queued.map(text => theme.muted(`⏵ queued: ${text}`)).join('\n'),
+					: state.queued.map(chip => theme.muted(`⏵ queued: ${chip.text}`)).join('\n'),
 			)
 			queueLine.invalidate()
 
