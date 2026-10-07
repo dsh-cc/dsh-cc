@@ -181,6 +181,9 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
       resolveClassifierBackend(ctx, exec, {
         route: host.settingsSection().autoMode?.classifier?.route,
         backend: host.settingsSection().autoMode?.classifier?.backend ?? 'haiku',
+        ...(host.settingsSection().autoMode?.gaugeContextWindow === undefined
+          ? {}
+          : { gaugeContextWindow: host.settingsSection().autoMode!.gaugeContextWindow }),
         warnOnce: policyWarnOnce,
         resolveChatRoute: (e, name) => resolveDetailedRoute(ctx, e, name),
       }),
@@ -234,6 +237,9 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
       resolveProbeBackend(ctx, exec, {
         route: host.settingsSection().autoMode?.probe?.route,
         backend: host.settingsSection().autoMode?.probe?.backend ?? 'haiku',
+        ...(host.settingsSection().autoMode?.gaugeContextWindow === undefined
+          ? {}
+          : { gaugeContextWindow: host.settingsSection().autoMode!.gaugeContextWindow }),
         warnOnce: policyWarnOnce,
         resolveChatRoute: (e, name) => resolveDetailedRoute(ctx, e, name),
       }),

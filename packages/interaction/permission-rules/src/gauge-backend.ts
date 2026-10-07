@@ -17,6 +17,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { readUserSection } from '@dsh-cc/settings-ns'
+import { resolveGaugeContextWindow } from './gauge-adapter.ts'
 import { pickGaugeRouteName, type ClassifierBackend, type PolicyWarn } from './route-policy.ts'
 import type { ClassifierRoute } from './llm-classifier.ts'
 
@@ -24,6 +25,13 @@ import type { ClassifierRoute } from './llm-classifier.ts'
 export const GAUGE_UNRESOLVABLE_KEY = 'permission-rules:gauge-unresolvable'
 const GAUGE_UNRESOLVABLE_MESSAGE =
   'gauge alias is configured but does not resolve to a usable System One route (missing provider record or baseURL); falling back to haiku'
+
+/**
+ * Warn-once key: a known model's registry context window shadows a differing
+ * provider-record value (design doc §4.3). ONE process-global string shared
+ * across models and both lanes, by design.
+ */
+export const GAUGE_WINDOW_MISMATCH_KEY = 'permission-rules:gauge-window-mismatch'
 
 /** One resolved classifier backend for a call: today's chat lane or the System One gauge lane. */
 export type ClassifierBackendRoute =
@@ -47,6 +55,8 @@ export type GaugeBackendDeps = {
   backend: ClassifierBackend
   /** Per-process warn-once emitter (plugin-owned). */
   warnOnce: PolicyWarn
+  /** Explicit window override from `permissions.autoMode.gaugeContextWindow`. */
+  gaugeContextWindow?: number
   /** Today's chat-route resolution, verbatim. */
   resolveChatRoute(exec: ToolExecution, name: string): ClassifierRoute | undefined
 }
@@ -67,7 +77,7 @@ interface GaugeProviderRecord {
 export async function assembleSystemOneBackend(
   ctx: Context,
   exec: ToolExecution,
-  deps: { warnOnce: PolicyWarn },
+  deps: { warnOnce: PolicyWarn; gaugeContextWindow?: number },
 ): Promise<SystemOneInfo | null> {
   // Mirror pre-execute's resolveDetailedRoute: the calling agent's logged
   // request header fills a missing provider/model (half-written routes
@@ -97,12 +107,27 @@ export async function assembleSystemOneBackend(
     return null
   }
 
+  // Per-model window resolution (design doc §4.2): settings override >
+  // measured registry (known models) > provider record > default. The record
+  // is provider-scoped and stale for known models behind one gateway, so the
+  // registry shadows it with a single warn-once (§4.3).
+  const resolution = resolveGaugeContextWindow(model, {
+    ...(deps.gaugeContextWindow === undefined ? {} : { settingsOverride: deps.gaugeContextWindow }),
+    ...(typeof record.contextWindow === 'number' ? { recordValue: record.contextWindow } : {}),
+  })
+  if (resolution.mismatch !== undefined) {
+    deps.warnOnce(
+      GAUGE_WINDOW_MISMATCH_KEY,
+      `gauge model "${model}" has a known context window ${resolution.mismatch.registry}; provider record contextWindow=${resolution.mismatch.record} is ignored — set permissions.autoMode.gaugeContextWindow to override deliberately`,
+    )
+  }
+
   return {
     provider,
     model,
     baseURL,
     ...(await resolveApiKey(ctx, record)),
-    ...(typeof record.contextWindow === 'number' ? { contextWindow: record.contextWindow } : {}),
+    contextWindow: resolution.window,
   }
 }
 

@@ -124,6 +124,16 @@ export interface AutoMode {
    * suspension list. Absent ⇒ `false` (absence-preserving).
    */
   classifyAllShell?: boolean
+  /**
+   * Explicit System One gauge context-window override (design doc
+   * `2026-10-07-gauge-context-window-per-model.md` §4.2/§4.4). Resolution
+   * chain at call time: this key > the built-in per-model measured registry >
+   * provider-record `contextWindow` > the 1024 default. Sentinel-blindness
+   * direction: a value LARGER than the model's real window can silently
+   * truncate verdict inputs (trusted verdict on partial state); when in
+   * doubt, configure low. Absence-preserving.
+   */
+  gaugeContextWindow?: number
   /** LLM risk classifier configuration; absent when the section omits it. */
   classifier?: AutoModeClassifier
   /** Input-layer PI-probe configuration (S7); absent when the section omits it. */
@@ -188,6 +198,10 @@ const AutoModeSectionSchema = z.object({
   environment: z.union([z.array(z.string()), z.const(undefined)]),
   // Union with `undefined` keeps an absent `classifyAllShell` key absent.
   classifyAllShell: z.union([z.boolean(), z.const(undefined)]),
+  // Absence-preserving gauge window override (sentinel-blindness semantics:
+  // too LARGE a value risks silent truncation of verdict inputs — configure
+  // low when in doubt; the resolution chain composes at call time).
+  gaugeContextWindow: z.union([z.number(), z.const(undefined)]),
   // Union with `undefined` keeps an absent `classifier` key absent; a present
   // object resolves through AutoModeClassifierSchema (defaults apply there).
   classifier: z.union([AutoModeClassifierSchema, z.const(undefined)]),

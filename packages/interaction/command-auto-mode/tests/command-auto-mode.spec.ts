@@ -30,6 +30,7 @@ const FIXTURE = {
   allow: ['Installing packages already declared in the repo manifest.'],
   environment: ['Trust corp.internal only'],
   classifyAllShell: true,
+  gaugeContextWindow: 16384,
   classifier: { enabled: true, route: 'glm-flash', timeoutMs: 4000, cacheMaxEntries: 128 },
 }
 
@@ -71,6 +72,7 @@ describe('/auto-mode config', () => {
       timeoutMs: 4000, cacheMaxEntries: 128, auditFullText: false,
     })
     expect(parsed.classifyAllShell).toBe(true)
+    expect(parsed.gaugeContextWindow).toBe(16384)
     expect(parsed.slots.soft_deny.configured).toEqual(['Never run terraform apply'])
     expect(parsed.slots.soft_deny.expanded).toEqual(['Never run terraform apply'])
     expect(parsed.slots.environment.expanded).toEqual(['Trust corp.internal only'])
@@ -87,6 +89,7 @@ describe('/auto-mode config', () => {
     }
     expect(parsed.classifier.enabled).toBe(false)
     expect(parsed.classifyAllShell).toBe(false)
+    expect(parsed.gaugeContextWindow).toBeNull()
     for (const key of ['soft_deny', 'allow', 'environment']) {
       expect(parsed.slots[key]!.configured).toBeNull()
     }
