@@ -33,7 +33,7 @@
     "README.md"
   ],
   "dependencies": {
-    "marked": "18.0.5",
+    "marked": "18.0.11",
     "get-east-asian-width": "1.6.0"
   },
   "devDependencies": {
