@@ -46,6 +46,7 @@ interface AutoModeSection {
   allow?: string[]
   environment?: string[]
   classifyAllShell?: boolean
+  gaugeContextWindow?: number
   classifier?: {
     enabled?: boolean
     route?: string
@@ -112,6 +113,13 @@ export function renderConfig(autoMode: AutoModeSection | undefined, effective?: 
   const payload: Record<string, unknown> = {
     classifier: classifierView,
     classifyAllShell: autoMode?.classifyAllShell === true,
+    // Configured gauge window override (§4.6): rendered UNCONDITIONALLY —
+    // the resolution chain (settings > registry > record > default) composes
+    // at call time in the gauge lane; the command reports the CONFIGURED
+    // value only, same honesty contract as `gaugeAllowThreshold`. Idiom
+    // differs from `classifyAllShell` (a boolean rendered `=== true`): this
+    // is a NUMBER rendered `?? null`.
+    gaugeContextWindow: autoMode?.gaugeContextWindow ?? null,
     slots: {
       soft_deny: slotView(autoMode?.soft_deny, DEFAULT_SOFT_DENY),
       hard_deny: slotView(autoMode?.hard_deny, DEFAULT_HARD_DENY),

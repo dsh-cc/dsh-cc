@@ -43,7 +43,7 @@ describe('permission-rules System One lane with the chat guard mounted', () => {
       warnOnce: createWarnOnce(() => {}),
       resolveChatRoute: (_exec, name) => ({ provider: 'orchestrix', model: name }),
     })
-    expect(backend).toEqual({ backend: 'systemone', provider: 'orchestrix', model: 'llmbox_systemone/laya', baseURL: 'http://127.0.0.1:8080' })
+    expect(backend).toEqual({ backend: 'systemone', provider: 'orchestrix', model: 'llmbox_systemone/laya', baseURL: 'http://127.0.0.1:8080', contextWindow: 1024 })
     const fetchImpl = vi.fn(async () => new Response(OK_BODY, { status: 200 }))
     const prepared = prepareSystemOneInput(exec, { hardDeny: [], softDeny: [], allowExceptions: [], environment: [] })
     const verdict = await classifyViaSystemOne(prepared, backend as { baseURL: string; model: string }, { timeoutMs: 1000, fetchImpl: fetchImpl as unknown as typeof fetch })

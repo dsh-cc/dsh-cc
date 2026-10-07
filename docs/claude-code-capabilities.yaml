@@ -3575,6 +3575,23 @@ capabilities:
         breaker/audit machinery keyed `${provider}/${model}` — the keying
         convention that also fixes cross-restart breaker attribution for
         the classifier's System One lane (PR-B follow-up F1).
+        Gauge context-window per-model slice (2026-10-07): the assumed
+        System One window becomes a MODEL-keyed fact instead of a
+        provider-domain one. New settings key
+        `permissions.autoMode.gaugeContextWindow` (number, optional,
+        autoMode level — both lanes resolve the same gauge alias). The
+        backend assembly resolves the effective window per call via the
+        chain: this settings key > the built-in measured registry
+        (laya=1024 silent-truncation pin; bjev=16384, evidence-probed
+        2026-10-07) > the `llm-pi-ai` provider record `contextWindow`
+        (legacy, applies to unknown model ids only) > the 1024 default.
+        Model ids are prefix-normalized (`llmbox_systemone/bjev` → `bjev`).
+        When the registry shadows a DIFFERING provider-record value, one
+        process-lifetime warn-once
+        (`permission-rules:gauge-window-mismatch`) names the ignored record
+        value and points at the settings key. Oversizing the window is the
+        dangerous direction (silent verdict-input truncation) — configure
+        low when in doubt. CC has no such key — deliberate dsh-cc extension.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

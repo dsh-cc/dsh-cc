@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolExecution } from '@dsh-cc/tools'
-import { resolveClassifierBackend, resolveProbeBackend, GAUGE_UNRESOLVABLE_KEY } from '../src/gauge-backend.ts'
-import { createWarnOnce, resetPolicyWarned } from '../src/route-policy.ts'
+import { resolveClassifierBackend, resolveProbeBackend, GAUGE_UNRESOLVABLE_KEY, GAUGE_WINDOW_MISMATCH_KEY } from '../src/gauge-backend.ts'
+import { resetPolicyWarned, type PolicyWarn } from '../src/route-policy.ts'
 
 /** Minimal ctx face: only `settings` (and a logger) are consulted. The gauge
  * read seam is the describe-based RAW USER OVERRIDE (Q3 bridge), so doubles
@@ -37,12 +37,21 @@ function harness(opts: {
   route?: string
   backend?: 'haiku' | 'auto'
   header?: { provider?: string; model?: string }
+  gaugeContextWindow?: number
 }) {
   const warnings: { key: string; message: string }[] = []
+  // Keyed warn-once double (mirrors createWarnOnce semantics across ALL keys
+  // so mismatch warnings are assertable by key, not just message).
+  const seen = new Set<string>()
   const deps = {
     route: opts.route,
     backend: opts.backend ?? 'auto',
-    warnOnce: createWarnOnce((message) => warnings.push({ key: GAUGE_UNRESOLVABLE_KEY, message })),
+    ...(opts.gaugeContextWindow === undefined ? {} : { gaugeContextWindow: opts.gaugeContextWindow }),
+    warnOnce: ((key: string, message: string) => {
+      if (seen.has(key)) return
+      seen.add(key)
+      warnings.push({ key, message })
+    }) as PolicyWarn,
     resolveChatRoute: (_exec: ToolExecution, name: string) => ({ provider: 'fake', model: name }),
   }
   const ctx = ctxWith(opts.namespaces ?? {})
@@ -70,6 +79,7 @@ describe('resolveClassifierBackend (B2b)', () => {
       model: 'llmbox_systemone/laya',
       baseURL: 'http://127.0.0.1:8080',
       apiKey: 'secret-token',
+      contextWindow: 1024,
     })
     expect(h.warnings).toHaveLength(0)
   })
@@ -132,6 +142,7 @@ describe('resolveClassifierBackend (B2b)', () => {
       provider: 'deepseek',
       model: 'llmbox_systemone/laya',
       baseURL: 'http://127.0.0.1:8080',
+      contextWindow: 1024,
     })
     expect(out).not.toHaveProperty('apiKey')
   })
@@ -153,6 +164,49 @@ describe('resolveClassifierBackend (B2b)', () => {
     const h = harness({})
     const out = await resolveClassifierBackend(ctx, h.exec, h.deps)
     expect(out).toMatchObject({ backend: 'systemone', apiKey: 'from-credentials' })
+  })
+
+  it('gaugeContextWindow settings override wins over the registry', async () => {
+    const h = harness({
+      gaugeContextWindow: 9999,
+      namespaces: { 'model-aliases': gaugeAlias({ model: 'bjev', provider: 'deepseek' }), ...providerRecord() },
+    })
+    const out = await resolveClassifierBackend(h.ctx, h.exec, h.deps)
+    expect(out).toMatchObject({ backend: 'systemone', model: 'bjev', contextWindow: 9999 })
+    expect(h.warnings).toHaveLength(0)
+  })
+
+  it('registry hit: bjev resolves 16384 without a record contextWindow', async () => {
+    const h = harness({
+      namespaces: { 'model-aliases': gaugeAlias({ model: 'bjev', provider: 'deepseek' }), ...providerRecord() },
+    })
+    const out = await resolveClassifierBackend(h.ctx, h.exec, h.deps)
+    expect(out).toMatchObject({ backend: 'systemone', model: 'bjev', contextWindow: 16384 })
+    expect(h.warnings).toHaveLength(0)
+  })
+
+  it('unknown model id: provider record contextWindow passes through (level-3 fallback)', async () => {
+    const h = harness({
+      namespaces: { 'model-aliases': gaugeAlias({ model: 'llmbox_systemone/xyz', provider: 'deepseek' }), ...providerRecord({ contextWindow: 2048 }) },
+    })
+    const out = await resolveClassifierBackend(h.ctx, h.exec, h.deps)
+    expect(out).toMatchObject({ backend: 'systemone', model: 'llmbox_systemone/xyz', contextWindow: 2048 })
+    expect(h.warnings).toHaveLength(0)
+  })
+
+  it('registry shadows a differing record contextWindow: one GAUGE_WINDOW_MISMATCH_KEY warn-once', async () => {
+    const h = harness({
+      namespaces: { 'model-aliases': gaugeAlias({ model: 'bjev', provider: 'deepseek' }), ...providerRecord({ contextWindow: 1024 }) },
+    })
+    const out = await resolveClassifierBackend(h.ctx, h.exec, h.deps)
+    expect(out).toMatchObject({ backend: 'systemone', model: 'bjev', contextWindow: 16384 })
+    expect(h.warnings).toHaveLength(1)
+    expect(h.warnings[0]!.key).toBe(GAUGE_WINDOW_MISMATCH_KEY)
+    expect(h.warnings[0]!.message).toContain('16384')
+    expect(h.warnings[0]!.message).toContain('permissions.autoMode.gaugeContextWindow')
+    // warn-once: a second mismatching resolution stays silent.
+    await resolveClassifierBackend(h.ctx, h.exec, h.deps)
+    expect(h.warnings).toHaveLength(1)
   })
 })
 

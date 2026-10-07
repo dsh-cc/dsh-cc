@@ -131,7 +131,7 @@ export function createSystemOneLane(
         ...(opts.signal === undefined ? {} : { signal: opts.signal }),
         ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
       })
-      deps.debug?.(`[dsh:classifier:raw] gauge ${backend.model} -> ${JSON.stringify(outcome).slice(0, 2048)}`)
+      deps.debug?.(`[dsh:classifier:raw] gauge ${backend.model} @window=${backend.contextWindow} -> ${JSON.stringify(outcome).slice(0, 2048)}`)
       if (outcome.failure !== undefined) {
         return {
           verdict: outcome.verdict,

@@ -34,6 +34,57 @@ export const DEFAULT_GAUGE_ALLOW_THRESHOLD = 0.5
 /** Checkpoint window of the probe-validated deployment (design doc §6.2). */
 export const DEFAULT_GAUGE_CONTEXT_WINDOW = 1024
 
+/**
+ * Measured System One model context windows (2026-10-07 live probe, local
+ * orchestrix gateway; design doc `docs/plans/2026-10-07-gauge-context-window-per-model.md`
+ * §2): laya silently truncates at exactly 1024 tokens (HTTP 200,
+ * `input_tokens` pinned — the sentinel's target hazard), while bjev shows no
+ * pin up to 20,051 observed input tokens, fails loudly with HTTP 422 above
+ * 65,536 tokens, and throws intermittent HTTP 500s from ~17.5k tokens — so
+ * 16384 bounds flake exposure without risking silent truncation.
+ */
+export const GAUGE_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
+  laya: 1024, // silent-truncation pin, replicated 2026-10-07
+  bjev: 16384, // no pin ≤ 20,051 tok; 422 hard limit 65,536; 500-flakes ≳ 17.5k tok
+}
+
+/** Registry keys are bare ids: `llmbox_systemone/bjev` → `bjev`. */
+export function normalizeGaugeModelId(model: string): string {
+  const slash = model.lastIndexOf('/')
+  return slash === -1 ? model : model.slice(slash + 1)
+}
+
+/** How the effective gauge context window was resolved (design doc §4.2). */
+export type GaugeWindowResolution = {
+  window: number
+  source: 'settings' | 'registry' | 'record' | 'default'
+  /** Set when a provider-record value was shadowed by the registry (see §4.3). */
+  mismatch?: { registry: number; record: number }
+}
+
+/**
+ * Resolution chain (design doc §4.2): settings override > measured registry
+ * (known models only, after prefix normalization — `llmbox_systemone/bjev`
+ * and `bjev` are the same model) > provider record > default. A registry hit
+ * that shadows a DIFFERENT provider-record value surfaces the conflict
+ * structurally (`mismatch`) so the caller can warn-once without this pure
+ * function going side-effectful.
+ */
+export function resolveGaugeContextWindow(
+  model: string,
+  opts: { settingsOverride?: number; recordValue?: number },
+): GaugeWindowResolution {
+  if (typeof opts.settingsOverride === 'number') return { window: opts.settingsOverride, source: 'settings' }
+  const registered = GAUGE_MODEL_CONTEXT_WINDOWS[normalizeGaugeModelId(model)]
+  if (registered !== undefined) {
+    return typeof opts.recordValue === 'number' && opts.recordValue !== registered
+      ? { window: registered, source: 'registry', mismatch: { registry: registered, record: opts.recordValue } }
+      : { window: registered, source: 'registry' }
+  }
+  if (typeof opts.recordValue === 'number') return { window: opts.recordValue, source: 'record' }
+  return { window: DEFAULT_GAUGE_CONTEXT_WINDOW, source: 'default' }
+}
+
 function appendSlot(base: string, lines: readonly string[], heading: string): string {
   if (lines.length === 0) return base
   return `${base}\n${heading}: ${lines.join('; ')}`
