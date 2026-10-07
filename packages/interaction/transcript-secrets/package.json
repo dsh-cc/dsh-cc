@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/transcript-secrets",
   "description": "One-way transcript secret redaction: built-in credential regexes, env-name patterns, and the cc-secrets settings reader",
-  "version": "0.9.0-rc.1",
+  "version": "0.9.0-rc.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
