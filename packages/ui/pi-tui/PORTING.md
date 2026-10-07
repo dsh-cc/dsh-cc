@@ -8,6 +8,7 @@ Vendored copy of pi-tui from canonical upstream.
 - **npm cross-check**: `@earendil-works/pi-tui@0.84.3` (published dist of the same line)
 - **Excluded**: `native/` (darwin CoreGraphics helper; the JS path stands alone — on macOS some modifier disambiguation falls back), `test/`, upstream build (`tsgo`, `tsconfig.build.json`, `scripts.*`) — this package builds via the repo's root `tsc -b` like every sibling
 - **Re-vendor protocol**: update SHA + date above; every local edit must append a numbered entry below before commit
+- **Byte-identity gate**: `VENDOR_MANIFEST.json` records the sha256 of every file under `src/` plus the upstream SHA pinned above. `check:vendor-purity` fails on any modified, added, or missing `src/` file, and on a manifest whose upstream SHA disagrees with this file — so an unrecorded local edit to the vendored source cannot pass CI. Regenerating the manifest is a deliberate act: `node scripts/check-vendor-purity.mjs --update-manifest --upstream-sha <new-sha>`, committed together with the new `src/` and the SHA bump above.
 
 ## Local divergences
 
