@@ -3308,6 +3308,7 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "critical deny matrix: patterns × modes × sandbox grants" }
       - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "skips an invalid criticalDeny regex instead of throwing" }
       - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "a wildcard/prefix bypassImmune rule still parses and denies under bypass" }
+      - { type: source, path: packages/core/tools/src/runtime-code.ts, anchor: "serviceAsk" }
     deviation:
       kind: downgrade
       summary: >-
@@ -3592,6 +3593,10 @@ capabilities:
         value and points at the settings key. Oversizing the window is the
         dangerous direction (silent verdict-input truncation) — configure
         low when in doubt. CC has no such key — deliberate dsh-cc extension.
+        The model-facing approval-rejection text is enriched beyond upstream:
+        non-grant denials carry the original ask reason (sanitized, 120-char
+        cap) plus a guidance line naming the outcome a permission decision,
+        not a tool malfunction (packages/core/tools serviceAsk).
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

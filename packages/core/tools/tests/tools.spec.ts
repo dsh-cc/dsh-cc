@@ -703,7 +703,7 @@ describe('ToolRuntime', () => {
 
     const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: { text: 'hi' } })
     expect(result.isError).toBe(true)
-    expect(result.content[0]).toMatchObject({ text: 'Error: needs approval' })
+    expect(result.content[0]).toMatchObject({ text: 'Error: needs approval. This is an environment limitation, not a tool malfunction — do not retry this call in a loop.' })
   })
 
   it('an ask decision with no reason degrades to deny with a default message', async () => {
@@ -714,7 +714,7 @@ describe('ToolRuntime', () => {
 
     const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: { text: 'hi' } })
     expect(result.isError).toBe(true)
-    expect(result.content[0]).toMatchObject({ text: 'Error: tool "echo" requires approval (not yet supported)' })
+    expect(result.content[0]).toMatchObject({ text: 'Error: tool "echo" requires approval (not yet supported). This is an environment limitation, not a tool malfunction — do not retry this call in a loop.' })
   })
 
   describe('ask routing through ctx.approval', () => {
@@ -774,7 +774,35 @@ describe('ToolRuntime', () => {
 
       const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {}, agent: fakeAgent() })
       expect(result.isError).toBe(true)
-      expect(result.content[0]).toMatchObject({ text: 'Error: the user rejected tool "echo"' })
+      expect(result.content[0]).toMatchObject({ text: 'Error: the user rejected tool "echo". This is a permission decision, not a tool malfunction — do not retry the identical call unchanged; ask the user, explain why you need the action, or take a different approach.' })
+    })
+
+    it('weaves the ask reason into the rejection so the model can tell a permission decision from a tool fault', async () => {
+      const ctx = await approvalSetup()
+      ctx.on('approval/request', () => Promise.resolve<ApprovalOutcome>('rejected'))
+      ctx.on('tools/pre-execute', async (_exec, _next): Promise<PreToolDecision> =>
+        ({ kind: 'ask', reason: 'gauge judged ask (P(ask)=0.512)' }))
+
+      const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {}, agent: fakeAgent() })
+      expect(result.isError).toBe(true)
+      const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+      expect(text.startsWith('Error: the user rejected tool "echo"')).toBe(true)
+      expect(text).toContain('(the ask was raised because: gauge judged ask (P(ask)=0.512))')
+      expect(text).toContain('not a tool malfunction')
+    })
+
+    it('sanitizes a raw hook ask reason: control chars folded, capped at 120 chars, single line', async () => {
+      const ctx = await approvalSetup()
+      ctx.on('approval/request', () => Promise.resolve<ApprovalOutcome>('rejected'))
+      const raw = 'line1\nline2' + String.fromCharCode(0) + 'a'.repeat(300)
+      ctx.on('tools/pre-execute', async (_exec, _next): Promise<PreToolDecision> =>
+        ({ kind: 'ask', reason: raw }))
+
+      const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {}, agent: fakeAgent() })
+      const text = result.content[0]?.type === 'text' ? result.content[0].text : ''
+      expect(text).not.toContain('\x00')
+      expect(text).not.toContain('\n')
+      expect(text).toContain('because: line1 line2 ' + 'a'.repeat(107) + '…')
     })
 
     it('denies with the cancellation reason on cancelled', async () => {
@@ -828,7 +856,7 @@ describe('ToolRuntime', () => {
 
       const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {}, agent: fakeAgent() })
       expect(result.isError).toBe(true)
-      expect(result.content[0]).toMatchObject({ text: 'Error: tool "echo" requires approval, but no approval channel is available' })
+      expect(result.content[0]).toMatchObject({ text: 'Error: tool "echo" requires approval, but no approval channel is available. This is an environment limitation, not a tool malfunction — do not retry this call in a loop.' })
     })
 
     it('denies an agent-less execution without asking — nothing to route or audit through', async () => {
@@ -843,7 +871,7 @@ describe('ToolRuntime', () => {
       const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {} })
       expect(asked).toBe(false)
       expect(result.isError).toBe(true)
-      expect(result.content[0]).toMatchObject({ text: 'Error: tool "echo" requires approval, but the call has no agent to route it through' })
+      expect(result.content[0]).toMatchObject({ text: 'Error: tool "echo" requires approval, but the call has no agent to route it through. This is an environment limitation, not a tool malfunction — do not retry this call in a loop.' })
     })
 
     it('turns a rogue outcome from a NON-conforming approval stand-in into an isError result', async () => {
