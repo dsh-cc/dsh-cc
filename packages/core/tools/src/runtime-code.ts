@@ -2,7 +2,10 @@
  * ToolRuntime Code Mode collaborators: the reserved `run_code` transport
  * factory wiring, the ptc-runtime resolver, the code-dispatch log waterfall,
  * and the approval-seam `ask` resolution. Bodies are verbatim moves from the
- * former `ToolRuntime` methods with `this.` → `rt.`.
+ * former `ToolRuntime` methods with `this.` → `rt.`, except `serviceAsk`,
+ * which diverges deliberately: it weaves the ask reason and recovery
+ * guidance into the model-facing denial text (record this divergence at the
+ * next harness-bump diff review).
  * @module
  */
 
@@ -93,6 +96,37 @@ export async function shapeDispatchLog(rt: ToolRuntimeCore, dispatch: CodeDispat
 }
 
 /**
+ * Guidance tail for a permission denial whose cause is environmental (no
+ * approval answerer exists at all). One stable sentence — it ships in every
+ * such denial.
+ */
+const ASK_CHANNEL_GUIDANCE =
+  'This is an environment limitation, not a tool malfunction — do not retry this call in a loop.'
+
+/**
+ * Guidance tail for a USER-driven approval rejection: names the decision
+ * class so a repeated rejection is not misread as a tool outage. One stable
+ * sentence.
+ */
+const ASK_DENIAL_GUIDANCE =
+  'This is a permission decision, not a tool malfunction — do not retry the identical call unchanged; ask the user, explain why you need the action, or take a different approach.'
+
+/**
+ * Model-facing hygiene for an embedded ask reason: the permission-rules
+ * lanes sanitize their own strings, but third-party hook reasons arrive raw —
+ * strip C0 controls/DEL, fold whitespace, cap at 120 chars (ellipsized).
+ */
+function sanitizeAskReason(reason: string): string {
+  const clean = reason.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()
+  return clean.length <= 120 ? clean : `${clean.slice(0, 119)}…`
+}
+
+/** The parenthetical that carries the ask's reason into the denial text. */
+function askRaisedClause(ask: Extract<PreToolDecision, { kind: 'ask' }>): string {
+  return ask.reason === undefined ? '' : ` (the ask was raised because: ${sanitizeAskReason(ask.reason)})`
+}
+
+/**
  * Resolve an `ask` decision to allow/deny through the approval seam. The
  * seam is consumed opportunistically with `ctx.get('approval')` — a
  * deployment that composes no ApprovalService keeps the historical degrade
@@ -101,7 +135,11 @@ export async function shapeDispatchLog(rt: ToolRuntimeCore, dispatch: CodeDispat
  * session to audit to and no UI to route to. Otherwise the outcome maps
  * one-to-one — `allowed-once` proceeds; the three non-grants deny with
  * distinct reasons so the model can tell a human "no" from an absent
- * approval channel.
+ * approval channel. Every non-grant denial weaves the original `ask.reason`
+ * (sanitized, 120-char cap) plus one guidance sentence into the model-facing
+ * text, so a gauge/rule-driven rejection is not misread as a tool fault.
+ * `cancelled` keeps its bare historical text — the user deliberately
+ * interrupted, there is nothing to disambiguate.
  */
 export async function serviceAsk(
   rt: ToolRuntimeCore,
@@ -110,14 +148,17 @@ export async function serviceAsk(
 ): Promise<ToolAskResolution> {
   const approval = rt.ctx.get('approval')
   if (approval === undefined) {
+    const reason = ask.reason === undefined
+      ? `tool "${exec.name}" requires approval (not yet supported)`
+      : sanitizeAskReason(ask.reason)
     return {
-      decision: { kind: 'deny', reason: ask.reason ?? `tool "${exec.name}" requires approval (not yet supported)` },
+      decision: { kind: 'deny', reason: `${reason}. ${ASK_CHANNEL_GUIDANCE}` },
       approvalCancelled: false,
     }
   }
   if (exec.agent === undefined) {
     return {
-      decision: { kind: 'deny', reason: `tool "${exec.name}" requires approval, but the call has no agent to route it through` },
+      decision: { kind: 'deny', reason: `tool "${exec.name}" requires approval, but the call has no agent to route it through${askRaisedClause(ask)}. ${ASK_CHANNEL_GUIDANCE}` },
       approvalCancelled: false,
     }
   }
@@ -132,7 +173,7 @@ export async function serviceAsk(
   switch (outcome) {
     case 'allowed-once': return { decision: { kind: 'allow' }, approvalCancelled: false }
     case 'rejected': return {
-      decision: { kind: 'deny', reason: `the user rejected tool "${exec.name}"` },
+      decision: { kind: 'deny', reason: `the user rejected tool "${exec.name}"${askRaisedClause(ask)}. ${ASK_DENIAL_GUIDANCE}` },
       approvalCancelled: false,
     }
     case 'cancelled': return {
@@ -140,7 +181,7 @@ export async function serviceAsk(
       approvalCancelled: true,
     }
     case 'unavailable': return {
-      decision: { kind: 'deny', reason: `tool "${exec.name}" requires approval, but no approval channel is available` },
+      decision: { kind: 'deny', reason: `tool "${exec.name}" requires approval, but no approval channel is available${askRaisedClause(ask)}. ${ASK_CHANNEL_GUIDANCE}` },
       approvalCancelled: false,
     }
     default: return assertNever(outcome, 'ApprovalOutcome')
