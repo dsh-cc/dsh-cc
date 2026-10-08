@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/plugin-cc-grok-bridge",
-  "version": "0.9.0-rc.2",
+  "version": "0.9.0-rc.3",
   "description": "Official dsh-cc plugin: an approval-free Grok review lane — one canonical, locked-down bash invocation auto-allowed via a PreToolUse hook, with Grok's tool approvals bypassed inside the run while the dsh outer sandbox remains the single write boundary.",
   "type": "module",
   "license": "Apache-2.0",
