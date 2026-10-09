@@ -3,7 +3,7 @@
  * append/read roundtrip, and swallow-on-error semantics.
  */
 
-import { mkdtemp, rm, writeFile, chmod } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, chmod, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -54,5 +54,55 @@ describe('appendJsonl + readJsonl', () => {
     const file = jsonlPath(dir, 'ledger.jsonl')
     await writeFile(file, '{"a":1}\n\nnot json\n{"a":2}\n{"a":')
     expect(await readJsonl<{ a: number }>(file)).toEqual([{ a: 1 }, { a: 2 }])
+  })
+})
+
+describe('appendJsonl repairTail', () => {
+  it('terminates a pre-existing unterminated tail so the new row starts on its own line', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
+    const file = jsonlPath(dir, 'ledger.jsonl')
+    await writeFile(file, '{"a":1}\n{"a":') // unterminated partial tail
+    await appendJsonl(file, { a: 2 }, { repairTail: true })
+    expect(await readJsonl<{ a: number }>(file)).toEqual([{ a: 1 }, { a: 2 }])
+  })
+
+  it('does not add a blank line when the tail is already terminated', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
+    const file = jsonlPath(dir, 'ledger.jsonl')
+    await appendJsonl(file, { a: 1 }, { repairTail: true })
+    await appendJsonl(file, { a: 2 }, { repairTail: true })
+    const raw = await readFile(file, 'utf8')
+    expect(raw).toBe('{"a":1}\n{"a":2}\n')
+    expect(await readJsonl<{ a: number }>(file)).toEqual([{ a: 1 }, { a: 2 }])
+  })
+
+  it('handles two racing first-writes to an absent path', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
+    const file = jsonlPath(dir, 'ledger.jsonl')
+    await Promise.all([
+      appendJsonl(file, { a: 1 }),
+      appendJsonl(file, { a: 2 }),
+    ])
+    // Concurrent appends have no ordering guarantee — assert both rows
+    // landed parseable, not their order.
+    const rows = await readJsonl<{ a: number }>(file)
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.a).sort()).toEqual([1, 2])
+  })
+
+  it('tolerates racing tail repairs onto an unterminated tail (worst case: one skipped line)', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
+    const file = jsonlPath(dir, 'ledger.jsonl')
+    await writeFile(file, '{"a":0}\n{"torn":') // unterminated partial tail
+    await Promise.all([
+      appendJsonl(file, { a: 1 }, { repairTail: true }),
+      appendJsonl(file, { a: 2 }, { repairTail: true }),
+    ])
+    const rows = await readJsonl<{ a?: number }>(file)
+    // Contract: readers skip unparseable lines; valid rows survive. Racing
+    // repairs may interleave, so at most one line (torn head or one merged
+    // row) is unparseable — at least the pre-existing row and one new row.
+    expect(rows.length).toBeGreaterThanOrEqual(2)
+    expect(rows[0]).toEqual({ a: 0 })
   })
 })

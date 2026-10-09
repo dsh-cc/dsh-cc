@@ -79,6 +79,7 @@
     "@dsh-cc/turn-rules": "workspace:^",
     "@dsh-cc/advisor-watchdog": "workspace:^",
     "@dsh-cc/completion-gate": "workspace:^",
+    "@dsh-cc/skill-usage": "workspace:^",
     "@dsh-cc/post-edit-verify": "workspace:^",
     "@dsh-cc/reasoning-fold": "workspace:^",
     "@dsh-cc/progress-rebuild": "workspace:^",

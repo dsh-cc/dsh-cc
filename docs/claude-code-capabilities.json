@@ -4512,6 +4512,56 @@
         "summary": "Loader + base tool-skill, CC paths conditional activation, bundled subset (debug/simplify/batch), and TUI /name routing all work; CC's verify/stuck skills are not ported (ant-only; verify companion files absent)."
       }
     },
+    "skills.usage-telemetry": {
+      "title": "Skill usage telemetry + demote-candidate reporting",
+      "category": "skills",
+      "plane": "preset",
+      "upstream": {
+        "summary": "dsh-cc extension — observe-only `cc-skill-usage` plugin counting every committed skill load (tool form at the `tools/result` emit seam, slash form at persisted skill-invocation user messages) into a per-workspace sidecar ledger under $DSH_HOME/skill-usage/, with an observation-start coverage marker, a `session/created` utility rollup (per-skill loads/sessions/last-loaded, never-loaded learned skills, report-only demote candidates), and a `skills/learned-changed` report invalidator. CC has no equivalent; nothing is appended to session transcripts.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: skill-usage"
+        },
+        {
+          "type": "source",
+          "path": "packages/skill/skill-usage/src/index.ts",
+          "anchor": "registerListeners"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-usage/tests/telemetry.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-usage/tests/integration.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-usage/tests/rollup.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "none"
+      }
+    },
     "subagents.ephemeral-agents": {
       "title": "Ephemeral one-shot subagents (read-only dispatch lane)",
       "category": "subagents",

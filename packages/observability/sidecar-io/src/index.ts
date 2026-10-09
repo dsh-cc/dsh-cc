@@ -7,7 +7,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, open, readFile, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -51,12 +51,33 @@ export function jsonlPath(root: string, ...parts: string[]): string {
 
 /**
  * Append one JSONL row; never throws. Creates the parent directory when
- * missing. Best-effort observability — must never surface into the
- * caller's waterfall.
+ * missing. With `repairTail`, append a missing trailing newline to a
+ * pre-existing non-empty file first (best-effort: a concurrent appender may
+ * interleave, leaving one unparseable line — readers skip it). Best-effort
+ * observability — must never surface into the caller's waterfall.
  */
-export async function appendJsonl(filePath: string, row: unknown): Promise<void> {
+export async function appendJsonl(
+  filePath: string,
+  row: unknown,
+  opts: { repairTail?: boolean } = {},
+): Promise<void> {
   try {
     await mkdir(dirname(filePath), { recursive: true })
+    if (opts.repairTail) {
+      const info = await stat(filePath).catch(() => undefined)
+      if (info && info.size > 0) {
+        const handle = await open(filePath, 'r')
+        try {
+          const buf = Buffer.alloc(1)
+          const read = await handle.read(buf, 0, 1, info.size - 1)
+          if (read.bytesRead === 1 && buf[0] !== 0x0a) {
+            await appendFile(filePath, '\n', 'utf8')
+          }
+        } finally {
+          await handle.close()
+        }
+      }
+    }
     await appendFile(filePath, `${JSON.stringify(row)}\n`, 'utf8')
   } catch {
     // Best-effort observability; never surface into the caller's waterfall.

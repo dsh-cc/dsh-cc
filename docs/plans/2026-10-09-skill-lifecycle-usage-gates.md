@@ -1,12 +1,11 @@
 # Skill lifecycle: usage telemetry + demote-candidate reporting (design)
 
 - Date: 2026-10-09 (v6 revision: same-day delta-round fold)
-- Status: draft v6 — **all three review seats have passed** (critic GO at round
-  6; codex and grok GO at the round-7 micro-confirmation, §8). v3's
-  internal-critic GO was overturned by a code-reconciliation review (round 4),
-  rebuilt through v4→v6 across rounds 5–7. Review gate: satisfied per seat
-  (round 7 was a scope-constrained fold-confirmation of six edits, not a full
-  v6 re-review). **User sign-off pending.** NOT yet implemented.
+- Status: v6 **implemented** — user sign-off given as the implementation
+  go-ahead (2026-10-09); delivered as a four-slice stack on this branch
+  (session-cwd resolver extraction + sidecar-io tail-repair → package core →
+  rollup/demote → registration/gates/integration), stacking on this design
+  PR's branch. Dogfood observations pending (§5).
 - Scope: new package `packages/skill/skill-usage` (name tentative: `@dsh-cc/skill-usage`);
   one additive export in `packages/workspace/session-cwd`; one additive writer
   option in `packages/observability/sidecar-io`; capability manifest row; preset
@@ -737,4 +736,6 @@ cites in question (`:1649-1654`, `:1770-1795`) are orchestrator-verified
 byte-level in the round-6 audit trail. With critic's round-6 GO,
 **all three seats have passed their respective gates**; the convergence curve
 ran architecture blockers (round 4) → mechanism precision (round 5) → fold
-precision (round 6) → zero (round 7). Remaining gate: user sign-off.
+precision (round 6) → zero (round 7). The user sign-off gate closed with the
+implementation go-ahead (2026-10-09); the design is delivered by the
+implementation stack on top of this branch.
