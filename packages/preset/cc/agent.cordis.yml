@@ -621,6 +621,16 @@
     - id: completion-gate
       name: '@dsh-cc/completion-gate'
 
+    # Session config snapshot (plan docs/plans/2026-10-09-session-config-snapshot-event.md):
+    # one JSONL row per Session construction into
+    # $DSH_HOME/config-snapshot/<encodedId>.jsonl — the attribution substrate
+    # (dsh-cc/harness/plugin versions per construction). Publishes no Service
+    # (plain plugin, handoff-store pattern), so it needs no isolate key of its
+    # own; the session/created listener is global and sync-safe, and the async
+    # writer never blocks creation.
+    - id: config-snapshot
+      name: '@dsh-cc/config-snapshot'
+
 # ── parallel rows ──────────────────────────────────────────────────────────
 
 # Claude Code skills from user/project/additional roots.

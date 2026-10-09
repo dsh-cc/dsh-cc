@@ -290,6 +290,35 @@ capabilities:
         runtime-verified completion gate (receipts ledger + evidence nudge +
         lineage lift), default off.
 
+  engine.config-snapshot:
+    title: Session config snapshot (sidecar ledger)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. On every Session
+        construction a sync-safe listener appends one JSONL row to
+        $DSH_HOME/config-snapshot/<encodedId>.jsonl recording the dsh-cc,
+        harness, and plugin versions at that moment — the attribution
+        substrate for version-cohorted forensics (async writer, never blocks
+        creation).
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: partial
+      ux: missing
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: config-snapshot" }
+      - { type: test, path: packages/observability/config-snapshot/tests/integration.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: append-only sidecar ledger with no runtime behavior
+        effect; kill switch (config-snapshot.enabled, default on) disables
+        capture entirely.
+
+
   engine.context-compression:
     title: CCR tool-output compression (context-crusher)
     category: engine
