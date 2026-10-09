@@ -52,18 +52,22 @@ import {
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+// Type-only: declaration-merges the `agentPresets` roster service this plugin
+// composes (§5.2); the runtime service arrives via inject/bundle composition.
+import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 // Side-effect type import: declaration-merges the approval waterfall answered below.
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { supportsAcpImagePrompts } from './content.ts'
 import { AcpMcpConfigError } from './mcp.ts'
 import { AcpModelConfigError } from './model-control.ts'
-import { AcpSession } from './session.ts'
+import { AcpSession, type AcpPresetsService } from './session.ts'
+import { readOwnVersion } from './version.ts'
 
 const DEFAULT_SESSION_LIST_PAGE_SIZE = 100
 
-export const name = 'acp'
+export const name = 'acp-cc'
 /** Core services required by the standard automation controls. */
-export const inject = ['agents', 'llm', 'sessionPersistence', 'sessions']
+export const inject = ['agents', 'llm', 'sessionPersistence', 'sessions', 'agentPresets']
 
 /** Preserve invalid-parameter detail in the SDK wire error message. */
 function invalidParams(detail: string): RequestError {
@@ -81,6 +85,8 @@ export interface AcpConfig {
   provider?: string
   /** Model name for created agents. */
   model?: string
+  /** Agent preset composed into every fresh session (§5.2). */
+  presetId?: string
   /** Maximum summaries returned by one session/list page. */
   sessionListPageSize?: number
   /** Runtime-only transport override; production uses stdio. */
@@ -90,6 +96,7 @@ export interface AcpConfig {
 export const Config: Schema<AcpConfig> = Schema.object({
   provider: Schema.string(),
   model: Schema.string(),
+  presetId: Schema.string().default('cc'),
   sessionListPageSize: Schema.natural().min(1).default(DEFAULT_SESSION_LIST_PAGE_SIZE),
 })
 
@@ -102,6 +109,11 @@ export function apply(ctx: Context, config: AcpConfig): void {
   // ACP handlers execute outside this plugin's injection scope, so capture the
   // injected service during apply rather than reading it lazily in a callback.
   const persistence = ctx.sessionPersistence
+  // Captured during apply like `persistence`: ACP handlers run outside this
+  // plugin's injection scope, and the preset roster is composed into every
+  // session in setup (§5.2).
+  const presets: AcpPresetsService = ctx.agentPresets
+  const presetId = config.presetId ?? 'cc'
   const logger = ctx.logger
   const sessionListPageSize = resolveSessionListPageSize(config.sessionListPageSize)
   const sessions = new Map<SessionId, AcpSession>()
@@ -183,7 +195,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
       imagePromptEnabled = await supportsAcpImagePrompts(ctx, config.provider, config.model)
       return {
         protocolVersion: PROTOCOL_VERSION,
-        agentInfo: { name: 'deepseek-harness-acp', version: '0.0.1' },
+        agentInfo: { name: 'dsh-cc', version: await readOwnVersion() },
         agentCapabilities: {
           mcpCapabilities: { http: true },
           promptCapabilities: { image: imagePromptEnabled, audio: false, embeddedContext: false },
@@ -201,10 +213,8 @@ export function apply(ctx: Context, config: AcpConfig): void {
       assertOpen()
       validateWorkspaceParams(params)
       const sessionId = brandString<SessionId>(randomUUID())
-      // No preset composition: the ACP bundle keeps the model-facing rows in
-      // the host plane, so this agent reads them from the global layer. A
-      // deployment that configures a roster has to join one here first
-      // (@deepseek-ai/dsh-agent-preset-registry README, "Composing a child agent").
+      // The preset composition itself happens inside AcpSession.create's
+      // setup — preset → model control → MCP (§5.2, TUI driver.ts order).
       let record: AcpSession
       try {
         record = await AcpSession.create(ctx, {
@@ -213,6 +223,8 @@ export function apply(ctx: Context, config: AcpConfig): void {
           mcpServers: params.mcpServers,
           agentOptions: agentOptions(config),
           fallbackSelection: initialSelection(config),
+          presetId,
+          presets,
           signal,
           notify,
         })
@@ -264,6 +276,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
             mcpServers: params.mcpServers ?? [],
             agentOptions: agentOptions(config),
             fallbackSelection: initialSelection(config),
+            presets,
             signal,
             notify,
           })
@@ -379,7 +392,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
     Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,
     Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>,
   )
-  const app = createAcpAgentApp({ name: 'deepseek-harness-acp' })
+  const app = createAcpAgentApp({ name: 'dsh-cc' })
     .onRequest(methods.agent.initialize, ({ params }) => implementation.initialize(params))
     .onRequest(methods.agent.authenticate, async ({ params }) => {
       await implementation.authenticate(params)

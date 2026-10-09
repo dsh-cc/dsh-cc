@@ -29,6 +29,7 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
+import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import * as AcpPlugin from '../src/index.ts'
 import type { AcpConfig } from '../src/index.ts'
 
@@ -207,6 +208,8 @@ export interface BridgeHarness {
   sessionUpdates: { sessionId: string; update: CapturedUpdate }[]
   permissionRequests: RequestPermissionRequest[]
   persistenceRoot: string
+  /** Agent presets the bridge composed, in mount order (spy preset, §5.2 tests). */
+  presetMounts: { presetId: string | undefined }[]
   onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse
   onSessionUpdateError: (() => void) | undefined
   registerCatalogProvider: (provider: string) => () => void
@@ -229,6 +232,8 @@ export async function makeBridgeHarness(options: {
   imageCapable?: boolean
   attachments?: boolean
   persistenceRoot?: string
+  /** Preset ids the spy roster accepts; anything else throws like the real registry. */
+  knownPresets?: string[]
 } = {}): Promise<BridgeHarness> {
   const adapter = new MockAdapter(options.script ?? [], options.imageCapable === true)
   const ctx = new Context()
@@ -250,6 +255,24 @@ export async function makeBridgeHarness(options: {
   const agentStream: Stream = ndJsonStream(agentToClient.writable, clientToAgent.readable)
   const clientStream: Stream = ndJsonStream(clientOutput, agentToClient.readable)
 
+  // Spy preset roster: the real registry composes loader trees (§5.1 row B);
+  // the bridge tests only need mount observability, so a recording stub with
+  // the real projection registered stands in.
+  const presetMounts: { presetId: string | undefined }[] = []
+  const knownPresets = options.knownPresets ?? ['cc']
+  ctx.provide('agentPresets', {
+    mount: async (_agentCtx: unknown, presetId?: string) => {
+      if (presetId === undefined || !knownPresets.includes(presetId)) {
+        throw new Error(`Unknown agent preset: ${String(presetId)}`)
+      }
+      presetMounts.push({ presetId })
+    },
+  } as never)
+  // The registry registers this projection in production; the spy rig
+  // registers the definition directly so resume reads the recorded identity
+  // exactly as the composed bundle does (§5.2).
+  ctx.sessionProjections.register(agentPresetProjectionDefinition)
+
   const updates: CapturedUpdate[] = []
   const sessionUpdates: { sessionId: string; update: CapturedUpdate }[] = []
   const permissionRequests: RequestPermissionRequest[] = []
@@ -261,6 +284,7 @@ export async function makeBridgeHarness(options: {
     sessionUpdates,
     permissionRequests,
     persistenceRoot,
+    presetMounts,
     onPermission: () => ({ outcome: { outcome: 'cancelled' } }),
     onSessionUpdateError: undefined,
     registerCatalogProvider: provider => ctx.llm.registerAdapter([provider], new MockAdapter([], false, provider)),

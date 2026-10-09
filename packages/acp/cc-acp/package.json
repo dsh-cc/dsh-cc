@@ -51,6 +51,7 @@
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
     "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-agent-preset-registry": "link:../../../../deepseek-harness/packages/preset/agent-preset-registry",
     "@deepseek-ai/dsh-attachment": "link:../../../../deepseek-harness/packages/attachment/attachment",
     "@deepseek-ai/dsh-brand": "link:../../../../deepseek-harness/packages/util/brand",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",

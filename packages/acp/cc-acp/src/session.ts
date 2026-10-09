@@ -29,12 +29,18 @@ interface ContinuableDrain {
   drainContinuableDescendants(parents: readonly Agent[]): Promise<void>
 }
 
+/** The preset-registry seam composed into every ACP session (§5.2). */
+export interface AcpPresetsService {
+  mount(agentCtx: Context, presetId?: string): Promise<unknown>
+}
+
 /** Inputs shared by fresh and resumed ACP session construction. */
 interface AcpSessionBuildOptions {
   cwd: string
   mcpServers: readonly McpServer[]
   agentOptions: AgentOptions
   fallbackSelection: ModelSelection | undefined
+  presets: AcpPresetsService
   signal: AbortSignal
   notify: (notification: SessionNotification) => Promise<void>
 }
@@ -42,6 +48,8 @@ interface AcpSessionBuildOptions {
 /** Fresh ACP session construction inputs. */
 export interface CreateAcpSessionOptions extends AcpSessionBuildOptions {
   sessionId: SessionId
+  /** Agent preset composed into this session and stamped into its header. */
+  presetId: string
 }
 
 /** Persisted ACP session construction inputs. */
@@ -131,10 +139,18 @@ export class AcpSession {
     const modelControl = new AcpModelControl(ctx.llm, options.fallbackSelection)
     const handle = await ctx.agents.create({
       sessionId: options.sessionId,
-      meta: { cwd: options.cwd },
+      // §5.2 (docs/plans/2026-10-09-acp-m2-own-plugin.md): the create header
+      // records the composed preset identity (frozen creation fact, copied
+      // into the header by agents.create — core/session/src/index.ts:1058).
+      meta: { cwd: options.cwd, agentPreset: options.presetId },
       agentOptions: options.agentOptions,
       signal: options.signal,
       setup: async (agentCtx) => {
+        // §5.2: preset → model control → MCP (TUI precedent driver.ts:100-103 —
+        // the preset mounts before model-selection listeners; MCP mounts
+        // plugins immediately so it goes last). Mount failures propagate and
+        // fail session/new loudly.
+        await options.presets.mount(agentCtx, options.presetId)
         modelControl.install(agentCtx)
         await mountAcpMcpServers(agentCtx, options.mcpServers, options.cwd)
       },
@@ -155,6 +171,19 @@ export class AcpSession {
       agentOptions: options.agentOptions,
       signal: options.signal,
       setup: async (agentCtx, agent) => {
+        // §5.2: resume composes the *recorded* preset identity, read through
+        // the `agentPreset` session projection (registered by the preset
+        // registry; stateOf access mirrors command-permissions/index.ts:95).
+        // The create header is a frozen fact and ResumeAgentOptions has no
+        // meta, so resume never re-stamps; `config.presetId` applies to fresh
+        // creates only. Recorded null/undefined → stay presetless; a recorded
+        // id missing from the roster throws from mount() and fails
+        // session/resume loudly.
+        const projections = ctx.get('sessionProjections') as
+          | { stateOf(session: Agent['session'], key: string): unknown }
+          | undefined
+        const recorded = projections?.stateOf(agent.session, 'agentPreset')
+        if (typeof recorded === 'string') await options.presets.mount(agentCtx, recorded)
         modelControl = new AcpModelControl(
           ctx.llm,
           selectionFor(agent.session.requestHeader(), options.fallbackSelection),

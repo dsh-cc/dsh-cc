@@ -71,6 +71,9 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
         version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
+        version: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
       '@deepseek-ai/dsh-attachment':
         specifier: link:../../../../deepseek-harness/packages/attachment/attachment
         version: link:../../../../deepseek-harness/packages/attachment/attachment
