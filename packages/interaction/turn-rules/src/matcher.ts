@@ -11,6 +11,7 @@ export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'memory',
   'cc-subagent-children',
   'cc-workflow-completion',
+  'progress-rebuild',
   'turn-rules',
   'advisor',
 ]

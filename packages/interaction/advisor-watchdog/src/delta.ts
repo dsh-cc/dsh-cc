@@ -27,6 +27,7 @@ export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'cc-workflow-completion',
   'turn-rules',
   'plugin',
+  'progress-rebuild',
   'advisor',
 ]
 
