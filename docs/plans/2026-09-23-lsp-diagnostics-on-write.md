@@ -1,6 +1,6 @@
 # LSP diagnostics-on-write via the running serena language servers
 
-**Status:** **Shipped-candidate** — critic cold review round 2 (2026-09-23)
+**Status:** **Shipped** — PR #136 (merged 2026-09-24). Critic cold review round 2 (2026-09-23)
 incorporated (GO-WITH-AMENDMENTS): omp fact drift corrected, harness
 citations re-attributed to in-repo @dsh-cc/tools, callTool wiring pinned to
 connection.ts/registry seams, runtime tool-name set pinned (incl. capitalized

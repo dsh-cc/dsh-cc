@@ -1,7 +1,7 @@
 # Structured progress state + post-compact context rebuild (design)
 
 - Date: 2026-10-09
-- Status: draft v8 (final) — 10 review rounds; all seats GO on the shipped text (codex r8, grok r9-full + r10-delta). Implemented in PR #216 (presubmit green); dogfood + default-ON graduation pending.
+- Status: draft v8 (final) — 10 review rounds; all seats GO on the shipped text (codex r8, grok r9-full + r10-delta). Implemented — PR #216 (merged 2026-10-09); dogfood started 2026-10-09 (user-layer enabled); default-ON graduation pending.
 - Scope: new package `packages/context/progress-rebuild`; capability manifest row; preset registration. Read-only consumption of session events + one injection path. No compaction-engine changes; no upstream harness modifications required — round 3 adds one dependency on EXISTING upstream exports (`@deepseek-ai/dsh-goal`'s pure fold, §3.2), which is a read of already-shipped code, not an upstream ask.
 - Sources: Effective Harnesses (initializer/progress-log/handoff protocol against one-shotting and premature completion), Harness Design (context reset + structured handoff artifact beats in-place compaction under context anxiety), Remember-Don't-Re-read (typed runtime state instead of prompt replay: 24,465→2,492 tokens on 15-step runs), SLA (restricted role context rebuilt by the harness). Calibrated by Coding Harness Study/Malena: the win here is *continuity at compaction boundaries*, not more scaffolding.
 

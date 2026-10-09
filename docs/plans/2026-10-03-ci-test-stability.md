@@ -2,7 +2,7 @@
 
 Status: **Approved — six-round blind-review arc closed (critic GO at r5;
 codex GO at r6; grok GO at r6; full ledger in §8); user sign-off granted
-2026-10-03. Implementation per §7.**
+2026-10-03. Implemented — design PR #191 + implementation PR #192 (both merged 2026-10-04, shipped in v0.8.3).**
 
 (Draft history: v1 `.scratch/design-ci-test-stability-v1.md` — r1 object;
 v2 `.scratch/design-ci-test-stability-v2.md` — r2 object;

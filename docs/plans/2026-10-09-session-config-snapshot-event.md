@@ -1,7 +1,7 @@
 # Session config snapshot (config-in-trace substrate) (design)
 
 - Date: 2026-10-09
-- Status: draft v7 — sidecar pivot (user-directed); ALL review seats GO (internal critic round 4 + external dual-seat blind review rounds 5-8); user sign-off pending. NOT yet implemented.
+- Status: draft v7 — sidecar pivot (user-directed); ALL review seats GO (internal critic round 4 + external dual-seat blind review rounds 5-8); Implemented — PR #218 (merged 2026-10-09); the design's only TEST-PENDING (child-session firing) was settled by the integration test.
 - Scope: new package `packages/observability/config-snapshot` (`@dsh-cc/config-snapshot`), plain cordis plugin (handoff-store precedent: no Service subclass, no isolate key); preset service-group row + capability manifest row + README trio, same commit; composition test pin bumped deliberately. A sidecar JSONL ledger under `<dshHome>/config-snapshot/<sessionId>.jsonl`, one row per Session construction. No harness-upstream dependency in v1; append-only data with no runtime behavior effect.
 
 ## 1. Problem

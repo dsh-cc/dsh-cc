@@ -1,6 +1,6 @@
 # Static reasoning-effort defaults for one-shot side queries
 
-Status: reviewed — four rounds, three blind lanes, converged GO in round 4 (ledger in §12). Implementation pending. Date: 2026-10-05.
+Status: reviewed — four rounds, three blind lanes, converged GO in round 4 (ledger in §12). Implemented — PR #200 (merged 2026-10-07). Date: 2026-10-05.
 
 ## 1. Problem
 

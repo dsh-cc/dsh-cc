@@ -1,6 +1,6 @@
 # Memory structured-report lane: deterministic permission exemption + single bounded dream retry
 
-**Status:** **Implemented** — PR #132 (2026-09-24, open). Review provenance:
+**Status:** **Implemented** — PR #132 (merged 2026-09-24). Review provenance:
 critic cold review round 1 (2026-09-24) applied:
 retry restricted to `failed` outcomes only (`killed` never respawns), retry
 block gets its own try/catch → outcome-failed + rollbackLock so it can never

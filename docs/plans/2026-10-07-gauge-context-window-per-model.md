@@ -1,7 +1,7 @@
 # gauge context window per-model adaptation (design)
 
 - Date: 2026-10-07
-- Status: internal critic passed (2 rounds, round-2 verdict GO after the §7 correction absorbed); user sign-off pending; NOT yet implemented.
+- Status: internal critic passed (2 rounds, round-2 verdict GO after the §7 correction absorbed); implemented — PR #207 (merged 2026-10-07).
 - Scope: `packages/interaction/permission-rules` + `packages/settings/settings-cascade` + `packages/interaction/command-auto-mode` + capability manifest. Docs-only PR first; no behavior change for unconfigured deployments.
 
 ## 1. Background and problem

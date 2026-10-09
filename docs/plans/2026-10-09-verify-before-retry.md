@@ -1,7 +1,7 @@
 # Verify-before-retry for mutating tool calls (design)
 
 - Date: 2026-10-09
-- Status: **Implemented** — package `packages/interaction/retry-attendant`, preset row before hooks-claude-code, capability manifest `engine.verify-before-retry` (this PR). Design review: internal critic GO (4 rounds); codex/grok external blind review both GO-WITH-AMENDMENTS, folded through v5.2 (two delta rounds each; cross-seat sibling-remedy adjudication in §8); user sign-off 2026-10-09.
+- Status: **Implemented** — package `packages/interaction/retry-attendant`, preset row before hooks-claude-code, capability manifest `engine.verify-before-retry` (merged as PR #215, 2026-10-09). Design review: internal critic GO (4 rounds); codex/grok external blind review both GO-WITH-AMENDMENTS, folded through v5.2 (two delta rounds each; cross-seat sibling-remedy adjudication in §8); user sign-off 2026-10-09.
 - Scope: new package `packages/interaction/retry-attendant`; capability manifest row; preset registration. No harness-upstream dependency. No edits to `post-edit-verify` (boundary in §2).
 - Sources: Verified Tool Calls (arXiv 2608.02645): non-atomic tool failures fall into four classes (timeout-after-dispatch, delayed visibility, partial success, stale conflict) where the observed response is not a reliable proxy for the effect; verify the postcondition before retrying; ablation showed the verification-only variant captures most of the gain (duplicate side effects 20–72% → ~0 with the full wrapper).
 
