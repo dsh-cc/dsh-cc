@@ -2975,6 +2975,40 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
 
+  packages/skill/skill-usage:
+    dependencies:
+      '@dsh-cc/handoff-store':
+        specifier: workspace:^
+        version: link:../../subagent/handoff-store
+      '@dsh-cc/session-cwd':
+        specifier: workspace:^
+        version: link:../../workspace/session-cwd
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/settings-provider':
+        specifier: workspace:^
+        version: link:../../settings/settings-provider
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/subagent/coordinator:
     devDependencies:
       '@deepseek-ai/cordis':
