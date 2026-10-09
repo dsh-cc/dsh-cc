@@ -178,8 +178,21 @@ Listener B: on `session/event` where `event.type === 'compaction/end'`:
    into this change.) Separately, the shadow's own allowlist (§3.2) —
    not any of these denylists — is what protects `lastUserTs`/`lastUserText`
    from self-pollution.
-4. Append `session.append('progress-rebuild/injected', { bytes, sections })` for
-   dogfood measurement (module augmentation pattern as in sister designs).
+4. Dogfood measurement goes to a **sidecar file**, NOT a session event:
+   one JSON line appended to `$DSH_HOME/progress-rebuild/<sessionId>.jsonl`
+   (`{ ts, bytes, sections }`; `dshHome` absent → no-op, precedent
+   `packages/subagent/handoff-store/src/index.ts:57`; `mkdir recursive`
+   before `appendFile`). Rationale (implementation-round finding, 2026-11):
+   `Session.append` of a custom event type would poison the log under
+   harness 0.2.0-rc.x persistence — the JSONL backend hard-rejects event
+   types outside the upstream catalog that are not marked `ignorable`
+   (harness `packages/session/session-persistence/src/storage-contract.ts:69-80`),
+   `Session.append` has no production-side `ignorable` channel (harness
+   `packages/core/session/src/index.ts:722-773`), and with this feature
+   default-ON every compacted session would become un-resumable. Sidecar is
+   the established pivot for exactly this landmine (session-config-snapshot
+   precedent). This also retires the earlier deferred-append note — no
+   `session.append` happens on this path at all.
 
 ### 3.4 Interaction with in-flight machinery
 
@@ -290,7 +303,8 @@ every `verified` line is generated from an event, and the section header says so
    landing in `inbox.nextStep`
    (`packages/hooks/hooks-claude-code/tests/bridge.spec.ts:336-340` assertion
    pattern); a `compaction/end` carrying an `error` field produces NO
-   injection.
+   injection; each injection appends exactly one line to the sidecar file
+   (§3.3 step 4).
 5. Regression: injected content never re-triggers listeners that filter
    injected sources — membership of `'progress-rebuild'` asserted at each of
    the three §3.3 denylist sites individually (`recall.ts:204`, turn-rules
@@ -421,5 +435,19 @@ not re-run reads that the brief already answered (spot-check by transcript).
   operations + tombstone, F4→registry resolution, F5→error-skip, allowlist
   lastUserTs, deprecated-reader exclusion all re-checked against current
   code with no new contradictions.
+- Implementation round (2026-11-12, during slice-1 development): the dogfood
+  `session.append('progress-rebuild/injected', …)` in §3.3 step 4 was found
+  to poison the session log under harness 0.2.0-rc.x persistence — the JSONL
+  backend hard-rejects custom event types not marked `ignorable` on
+  open(read|write) (`packages/session/session-persistence/src/storage-contract.ts:69-80`),
+  and `Session.append` has no production-side `ignorable` channel — with this
+  feature default-ON, every compacted session would become un-resumable
+  (same landmine as the gauge `permission/classifier` rows; the
+  session-config-snapshot design already pivoted to a sidecar for exactly
+  this). Amendment: dogfood measurement pivoted to a sidecar file
+  (`$DSH_HOME/progress-rebuild/<sessionId>.jsonl`, §3.3 step 4), the
+  SessionEventMap augmentation dropped (MessageSourceMap kind retained).
+  This finding survived review rounds 1-5 uncaught and was surfaced by the
+  implementation pass — recorded per honest-attribution rule.
 
 (filled per review round — verdict, findings, dispositions with in-text anchors)
