@@ -6214,6 +6214,82 @@
         "summary": "Pending vs CC: git writes to the shared `.git` (worktree add/remove, branch ops) require a sandbox escalation; the auto-allow interim was evaluated and rejected — the approval payload carries no command identity and an argv0 gate is exploitable via `git -c core.fsmonitor=<cmd>`."
       }
     },
+    "ux.image-paste": {
+      "title": "Clipboard image paste",
+      "category": "ux",
+      "plane": "host",
+      "upstream": {
+        "summary": "Pasting an image into the prompt attaches it to the message; Claude Code reads the OS pasteboard itself, because a bracketed paste carries no clipboard-type information.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/common-workflows",
+            "retrieved": "2026-10-05"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/ui/pi-tui/src/components/editor.ts",
+          "anchor": "requestPastedImage"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/clipboard-image.ts",
+          "anchor": "createClipboardImageProvider"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/clipboard-readers.ts",
+          "anchor": "selectClipboardReaders"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/harness/image-submit.ts",
+          "anchor": "admitSubmitImages"
+        },
+        {
+          "type": "source",
+          "path": "packages/ui/tui/src/components/root-bash.ts",
+          "anchor": "attachBashMode"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/editor-image-paste.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/clipboard-image.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/image-submit.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/ui/tui/tests/driver-image-submit.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "An image paste arrives as an EMPTY bracketed paste (0x1b[200~ immediately followed by 0x1b[201~): bracketed paste is a text protocol with no clipboard-type information, so the terminal reports that a paste happened and has no payload to send. Upstream pi-tui gates its paste branch on pasteContent.length > 0, so the empty case was discarded with no user-visible signal; the vendored editor detects it, calls an injected EditorOptions.onPasteImage, and inserts an atomic [Image #N WxH] marker reusing the [paste #N] grammar. The editor never touches the platform or the filesystem - the host injects the reader, mirroring how copySelection is injected for the write direction - and the host spills the bytes to $DSH_HOME/tui/uploads/<sessionId>/<sha256>-image.<ext> (0600) at paste time, so a marker stays bound to the bytes actually pasted even if the clipboard changes afterwards. At submit the markers are admitted through ctx.get('attachments').saveImage into durable {type:'image', attachment} blocks in the user message content, the canonical sequence already used by dsh-commands admitCommandAttachments; a hand-built ref would fail the provider's digest verification. Images are stripped from the outgoing text whenever the submission carried any, resolved or not, so a bare marker never reaches the model as prose naming an image it did not receive. macOS (AppKit NSPasteboard via osascript/JXA, public.png with a public.tiff fallback), Linux (wl-paste, then xclip) and Windows (Get-Clipboard -Format Image) readers are selected by platform, each best-effort; the Windows and Linux readers are written from documented APIs and are UNEXECUTED in this environment. Every failure path - unsupported platform, absent helper binary, empty or non-image pasteboard, decode error, unwritable cache dir, absent attachments service, rejected save - returns undefined, preserves the user's typed text, and surfaces at most one existing-style notice, so an unsupported paste still behaves exactly as it did before this surface existed. Remaining gaps: an image-only submission (paste, no words) sends image blocks with no text block, and the transcript fold keys its user row on text, so that turn renders no user row; images captured into a `!` shell line or a queued plugin command are dropped, since a command line is not a prompt and both paths flatten non-text input."
+      }
+    },
     "ux.output-styles": {
       "title": "Output styles",
       "category": "ux",

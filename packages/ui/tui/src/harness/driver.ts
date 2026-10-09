@@ -405,6 +405,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     persistResumeTarget: persistResumeTargetAndIndex,
     setMarkedContent: agent.setMarkedContent,
     waitForModel: agent.waitForModel,
+    resolveImageSupport: agent.resolveImageSupport,
   } satisfies DriverQueueCtx)
   actions.flushQueue = () => queue.flushQueue()
 

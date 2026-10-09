@@ -3,6 +3,7 @@
  * and the aggregate TuiState. Pure types — no reducer logic lives here.
  * @module @dsh-cc/tui/store/views
  */
+import type { PastedImage } from '@dsh-cc/pi-tui'
 import type { FileDiff } from '../tool-card.ts'
 import type { TurnAnchor } from '../working-line.ts'
 import type { ProviderPanelState } from './provider-panel.ts'
@@ -352,6 +353,26 @@ export const WORKTREE_EXIT_OPTION_COUNT = 3
  */
 export type ProviderPanelView = ProviderPanelState
 
+/**
+ * One outbox chip: a submission parked because the agent was busy.
+ *
+ * `text` is the composer text exactly as submitted, image markers included, so
+ * the chip reads as the user typed it and a recalled chip is faithful. `images`
+ * are the clipboard images captured with THAT submission, in marker order: they
+ * have to ride with the chip, because the spilled files behind the markers are
+ * only reachable through the editor's registry, which a later paste or a submit
+ * has already cleared (plan 3.5).
+ */
+export interface QueuedChip {
+  readonly text: string
+  /**
+   * Absent - never empty - for a text-only submission: an empty array would
+   * make a chip that carries nothing differ from one parked before this
+   * feature existed, in every equality assertion on `queued`.
+   */
+  readonly images?: readonly PastedImage[]
+}
+
 export interface TuiState {
   rows: TranscriptRow[]
   draft: string
@@ -373,11 +394,11 @@ export interface TuiState {
   permissionPicker?: PermissionPickerView
   sessionSwitcher?: SessionSwitcherView
   /**
-   * Outbox of texts submitted while the agent was busy: rendered as pending
+   * Outbox of submissions parked while the agent was busy: rendered as pending
    * chips, flushed into the next turn on durable `turn/end` (or injected
    * immediately via Ctrl+S). Idle submits bypass the outbox entirely.
    */
-  queued: readonly string[]
+  queued: readonly QueuedChip[]
   /** Whether thinking rows render expanded (Ctrl+O). Collapsed by default. */
   thinkingExpanded: boolean
   /**

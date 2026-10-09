@@ -38,33 +38,125 @@ function isPasteMarker(segment: string): boolean {
 	return segment.length >= 10 && PASTE_MARKER_SINGLE.test(segment);
 }
 
+/** Regex matching image markers like `[Image #1]` or `[Image #2 1552x1012]`. */
+const IMAGE_MARKER_REGEX = /\[Image #(\d+)( (\d+)x(\d+))?\]/g;
+
+/** Non-global version for single-segment testing. */
+const IMAGE_MARKER_SINGLE = /^\[Image #(\d+)( (\d+)x(\d+))?\]$/;
+
+/**
+ * Check if a segment is an image marker (i.e. was merged by segmentWithMarkers).
+ * Deliberately not folded into isPasteMarker: PASTE_MARKER_SINGLE doubles as the
+ * paste-marker detector in handleBackspace, whose branch renumbers the paste
+ * registry. Image IDs are stable and must not enter that path.
+ */
+function isImageMarker(segment: string): boolean {
+	return segment.length >= 10 && IMAGE_MARKER_SINGLE.test(segment);
+}
+
+/**
+ * Check if a segment is an atomic marker of either kind. Word-wrap and
+ * word-navigation only need "one marker, not prose"; which registry owns it
+ * stays with the specific predicates above.
+ */
+function isAtomicMarker(segment: string): boolean {
+	return isPasteMarker(segment) || isImageMarker(segment);
+}
+
+/**
+ * A clipboard image captured at paste time and already spilled to disk by the
+ * host. The editor never touches the platform or the filesystem: it only holds
+ * this handle and the marker text that refers to it.
+ */
+export interface PastedImage {
+	/** Absolute path of the spilled cache file (implementation detail; never rendered). */
+	path: string;
+	mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+	width: number;
+	height: number;
+}
+
+/**
+ * Marker text for a captured image, e.g. `[Image #1 1552x1012]`.
+ *
+ * Dimensions render only when the reader measured the image (both positive).
+ * A reader that cannot decode a size (e.g. a TIFF pasteboard fallback) still
+ * yields a usable marker, so the pair is optional rather than required.
+ */
+export function formatImageMarker(imageId: number, size: { width: number; height: number }): string {
+	const hasDimensions = size.width > 0 && size.height > 0;
+	return hasDimensions ? `[Image #${imageId} ${size.width}x${size.height}]` : `[Image #${imageId}]`;
+}
+
+/**
+ * Image marker IDs present in `text`, in text order and without repeats.
+ * A repeated ID is reachable by killing a line that holds a marker and yanking
+ * it back; one cache file must not be attached twice.
+ */
+export function parseImageMarkerIds(text: string): number[] {
+	const ids: number[] = [];
+	for (const match of text.matchAll(IMAGE_MARKER_REGEX)) {
+		const id = Number.parseInt(match[1]!, 10);
+		if (!ids.includes(id)) ids.push(id);
+	}
+	return ids;
+}
+
+/**
+ * Images still referenced by `text`, in the order their markers appear there
+ * (not the order they were pasted in). A marker whose registry entry is gone -
+ * undone, deleted, or recalled from history after the session that captured it
+ * - contributes nothing.
+ */
+export function collectReferencedImages(text: string, images: ReadonlyMap<number, PastedImage>): PastedImage[] {
+	const result: PastedImage[] = [];
+	for (const id of parseImageMarkerIds(text)) {
+		const image = images.get(id);
+		if (image) result.push(image);
+	}
+	return result;
+}
+
 /**
  * A segmenter that wraps Intl.Segmenter and merges graphemes that fall
  * within paste markers into single atomic segments.  This makes cursor
  * movement, deletion, word-wrap, etc. treat paste markers as single units.
  *
- * Only markers whose numeric ID exists in `validIds` are merged.
+ * Only markers whose numeric ID exists in `validIds` (paste) or
+ * `validImageIds` (image) are merged.
  */
 function segmentWithMarkers(
 	text: string,
 	baseSegmenter: Intl.Segmenter,
 	validIds: Set<number>,
+	validImageIds: Set<number>,
 ): Iterable<Intl.SegmentData> {
-	// Fast path: no paste markers in the text or no valid IDs.
-	if (validIds.size === 0 || !text.includes("[paste #")) {
+	// Fast path: no markers in the text or no valid IDs.
+	const hasPasteMarker = validIds.size > 0 && text.includes("[paste #");
+	const hasImageMarker = validImageIds.size > 0 && text.includes("[Image #");
+	if (!hasPasteMarker && !hasImageMarker) {
 		return baseSegmenter.segment(text);
 	}
 
-	// Find all marker spans with valid IDs.
+	// Find all marker spans with valid IDs. The two ID spaces are disjoint
+	// registries, so each scan is independent; the spans are then sorted by
+	// position because the walk below assumes a start-ordered list and the
+	// second scan appends out of order.
 	const markers: Array<{ start: number; end: number }> = [];
 	for (const m of text.matchAll(PASTE_MARKER_REGEX)) {
 		const id = Number.parseInt(m[1]!, 10);
 		if (!validIds.has(id)) continue;
 		markers.push({ start: m.index, end: m.index + m[0].length });
 	}
+	for (const m of text.matchAll(IMAGE_MARKER_REGEX)) {
+		const id = Number.parseInt(m[1]!, 10);
+		if (!validImageIds.has(id)) continue;
+		markers.push({ start: m.index, end: m.index + m[0].length });
+	}
 	if (markers.length === 0) {
 		return baseSegmenter.segment(text);
 	}
+	markers.sort((a, b) => a.start - b.start);
 
 	// Build merged segment list.
 	const baseSegments = baseSegmenter.segment(text);
@@ -146,7 +238,7 @@ export function wordWrapLine(line: string, maxWidth: number, preSegmented?: Intl
 		const grapheme = seg.segment;
 		const gWidth = visibleWidth(grapheme);
 		const charIndex = seg.index;
-		const isWs = !isPasteMarker(grapheme) && isWhitespaceChar(grapheme);
+		const isWs = !isAtomicMarker(grapheme) && isWhitespaceChar(grapheme);
 
 		// Overflow check before advancing.
 		if (currentWidth + gWidth > maxWidth) {
@@ -195,12 +287,12 @@ export function wordWrapLine(line: string, maxWidth: number, preSegmented?: Intl
 		// or at a boundary where either side is CJK (CJK allows breaking
 		// between any adjacent characters).
 		const next = segments[i + 1];
-		if (isWs && next && (isPasteMarker(next.segment) || !isWhitespaceChar(next.segment))) {
+		if (isWs && next && (isAtomicMarker(next.segment) || !isWhitespaceChar(next.segment))) {
 			wrapOppIndex = next.index;
 			wrapOppWidth = currentWidth;
 		} else if (!isWs && next && !isWhitespaceChar(next.segment)) {
-			const isCjk = !isPasteMarker(grapheme) && cjkBreakRegex.test(grapheme);
-			const nextIsCjk = !isPasteMarker(next.segment) && cjkBreakRegex.test(next.segment);
+			const isCjk = !isAtomicMarker(grapheme) && cjkBreakRegex.test(grapheme);
+			const nextIsCjk = !isAtomicMarker(next.segment) && cjkBreakRegex.test(next.segment);
 			if (isCjk || nextIsCjk) {
 				wrapOppIndex = next.index;
 				wrapOppWidth = currentWidth;
@@ -221,11 +313,13 @@ interface EditorState {
 	cursorCol: number;
 }
 
-/** Undo snapshot: editor text state plus the paste registry. */
+/** Undo snapshot: editor text state plus the paste and image registries. */
 interface EditorSnapshot {
 	state: EditorState;
 	pastes: Map<number, string>;
 	pasteCounter: number;
+	images: Map<number, PastedImage>;
+	imageCounter: number;
 }
 
 interface LayoutLine {
@@ -242,6 +336,15 @@ export interface EditorTheme {
 export interface EditorOptions {
 	paddingX?: number;
 	autocompleteMaxVisible?: number;
+	/**
+	 * Host-injected clipboard image reader, called for an empty bracketed paste.
+	 * An image paste carries no payload (bracketed paste is a text protocol with
+	 * no clipboard-type information), so only the host can read the pasteboard.
+	 * Resolves to the captured image, or undefined when the pasteboard holds no
+	 * image. Rejection is treated exactly like undefined - see readPastedImage -
+	 * so a platform without a reader simply leaves this unset.
+	 */
+	onPasteImage?: () => Promise<PastedImage | undefined>;
 }
 
 const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
@@ -337,6 +440,24 @@ export class Editor implements Component, Focusable {
 	private pastes: Map<number, string> = new Map();
 	private pasteCounter: number = 0;
 
+	// Image paste tracking, keyed by the marker ID rendered in the composer.
+	// The counter never resets and IDs are never renumbered (unlike pastes):
+	// markers survive in prompt history as literal text, so reusing an ID could
+	// bind a recalled `[Image #1]` to a later, unrelated image.
+	private images: Map<number, PastedImage> = new Map();
+	private imageCounter: number = 0;
+
+	// Invalidates an in-flight clipboard read once the content it was started
+	// against is replaced. Mirrors autocompleteStartToken: handleInput() is
+	// synchronous, so the marker is applied only if the token still matches
+	// when the reader settles.
+	private imagePasteToken: number = 0;
+
+	// Images resolved for the submission currently inside onSubmit. submitValue()
+	// resets the composer before invoking the callback, so getImages() - which
+	// reads the live text - would otherwise report nothing on the submit path.
+	private submittingImages: PastedImage[] = [];
+
 	// Bracketed paste mode buffering
 	private pasteBuffer: string = "";
 	private isInPaste: boolean = false;
@@ -369,11 +490,13 @@ export class Editor implements Component, Focusable {
 	public onSubmit?: (text: string) => void;
 	public onChange?: (text: string) => void;
 	public disableSubmit: boolean = false;
+	private onPasteImage?: () => Promise<PastedImage | undefined>;
 
 	constructor(tui: TUI, theme: EditorTheme, options: EditorOptions = {}) {
 		this.tui = tui;
 		this.theme = theme;
 		this.borderColor = theme.borderColor;
+		this.onPasteImage = options.onPasteImage;
 		const paddingX = options.paddingX ?? 0;
 		this.paddingX = Number.isFinite(paddingX) ? Math.max(0, Math.floor(paddingX)) : 0;
 		const maxVisible = options.autocompleteMaxVisible ?? 5;
@@ -385,9 +508,19 @@ export class Editor implements Component, Focusable {
 		return new Set(this.pastes.keys());
 	}
 
-	/** Segment text with paste-marker awareness, only merging markers with valid IDs. */
+	/** Set of currently valid image IDs, for marker-aware segmentation. */
+	private validImageIds(): Set<number> {
+		return new Set(this.images.keys());
+	}
+
+	/** Segment text with marker awareness, only merging markers with valid IDs. */
 	private segment(text: string, mode: "word" | "grapheme"): Iterable<Intl.SegmentData> {
-		return segmentWithMarkers(text, mode === "word" ? wordSegmenter : graphemeSegmenter, this.validPasteIds());
+		return segmentWithMarkers(
+			text,
+			mode === "word" ? wordSegmenter : graphemeSegmenter,
+			this.validPasteIds(),
+			this.validImageIds(),
+		);
 	}
 
 	getPaddingX(): number {
@@ -730,6 +863,13 @@ export class Editor implements Component, Focusable {
 				const pasteContent = this.pasteBuffer.substring(0, endIndex);
 				if (pasteContent.length > 0) {
 					this.handlePaste(pasteContent);
+				} else if (this.onPasteImage) {
+					// An image paste arrives as an empty bracketed paste: the terminal
+					// reports that a paste happened but has no payload to send, because
+					// bracketed paste is a text protocol without clipboard-type
+					// information. Only the host can read the pasteboard, so the read
+					// is injected and the marker lands when it settles.
+					this.requestPastedImage(this.onPasteImage);
 				}
 				this.isInPaste = false;
 				const remaining = this.pasteBuffer.substring(endIndex + 6);
@@ -1086,6 +1226,21 @@ export class Editor implements Component, Focusable {
 		return this.state.lines.join("\n");
 	}
 
+	/**
+	 * Images referenced by the composer text, in marker order.
+	 *
+	 * Inside the onSubmit callback this reports the images resolved for the
+	 * submission being dispatched: submitValue() has already reset the composer
+	 * by then, so it hands the captured list over instead of re-reading a text
+	 * that no longer exists. Outside that callback the live text is the source
+	 * of truth - a marker deleted from it, or undone away, drops its image.
+	 */
+	getImages(): PastedImage[] {
+		// A copy, to match collectReferencedImages: callers get their own array.
+		if (this.submittingImages.length > 0) return [...this.submittingImages];
+		return collectReferencedImages(this.getText(), this.images);
+	}
+
 	private expandPasteMarkers(text: string): string {
 		let result = text;
 		for (const [pasteId, pasteContent] of this.pastes) {
@@ -1122,6 +1277,9 @@ export class Editor implements Component, Focusable {
 		}
 		this.pastes.clear();
 		this.pasteCounter = 0;
+		this.images.clear();
+		// The content an in-flight clipboard read was started against is gone.
+		this.imagePasteToken += 1;
 		this.setTextInternal(normalized);
 	}
 
@@ -1256,6 +1414,68 @@ export class Editor implements Component, Focusable {
 		}
 	}
 
+	/**
+	 * Start the host's clipboard read for an empty bracketed paste.
+	 * handleInput() must stay synchronous, so this only captures the promise;
+	 * the marker is applied later by readPastedImage().
+	 */
+	private requestPastedImage(reader: () => Promise<PastedImage | undefined>): void {
+		// Captured, not incremented: a second paste must not invalidate the
+		// first read. Two pastes are two images, and dropping one of them
+		// silently would reintroduce the bug this path exists to fix.
+		const startToken = this.imagePasteToken;
+		void this.readPastedImage(startToken, reader);
+	}
+
+	/**
+	 * Await the injected reader and insert the marker only if the capture is
+	 * still current.
+	 *
+	 * Every failure degrades to a silent no-op - no image on the pasteboard, a
+	 * platform with no reader, a read or decode failure - matching what an
+	 * unsupported paste does today. The try/catch also keeps a rejection from
+	 * escaping this detached async frame as an unhandled rejection, which would
+	 * be strictly worse than the silent drop it replaces.
+	 */
+	private async readPastedImage(
+		startToken: number,
+		reader: () => Promise<PastedImage | undefined>,
+	): Promise<void> {
+		let image: PastedImage | undefined;
+		try {
+			image = await reader();
+		} catch {
+			return;
+		}
+		// The token is bumped by setText() and submitValue(), the two paths that
+		// replace the composer content; a read that outlives what it was started
+		// against must not write into the replacement. Intervening typing is
+		// deliberately not invalidating: the marker belongs at the live cursor,
+		// exactly where the synchronous paste paths insert. Rejected: comparing
+		// the text snapshot instead, which would discard a capture the user
+		// pasted and then typed around.
+		if (startToken !== this.imagePasteToken || !image) return;
+		this.insertImageMarker(image);
+		// No input event follows an async settle, so nothing else would repaint.
+		this.tui.requestRender();
+	}
+
+	/**
+	 * Register the image and insert its marker as one undoable step (one Ctrl+Z
+	 * removes the whole marker, never a slice of it).
+	 *
+	 * The registry write precedes the text so that any observer of onChange()
+	 * sees a marker that already resolves. The undo snapshot pushed inside
+	 * insertTextAtCursor therefore also holds the entry, so undoing leaves an
+	 * entry whose marker is gone; that is inert, because getImages() reads the
+	 * text and the ID is never reused for a different image.
+	 */
+	private insertImageMarker(image: PastedImage): void {
+		const imageId = ++this.imageCounter;
+		this.images.set(imageId, image);
+		this.insertTextAtCursor(formatImageMarker(imageId, image));
+	}
+
 	private handlePaste(pastedText: string): void {
 		this.cancelAutocomplete();
 		this.exitHistoryBrowsing();
@@ -1364,16 +1584,34 @@ export class Editor implements Component, Focusable {
 		this.cancelAutocomplete();
 		const result = this.expandPasteMarkers(this.state.lines.join("\n")).trim();
 
+		// Resolve the submission's images while the text still holds the markers.
+		// Rejected: invoking onSubmit() before the reset instead, which is the
+		// other way to make them observable - that would expose the pre-submit
+		// composer to every existing consumer of the callback.
+		const submissionImages = collectReferencedImages(this.state.lines.join("\n"), this.images);
+
 		this.state = { lines: [""], cursorLine: 0, cursorCol: 0 };
 		this.pastes.clear();
 		this.pasteCounter = 0;
+		this.images.clear();
+		// A read settling after submit must not write into the cleared composer.
+		this.imagePasteToken += 1;
 		this.exitHistoryBrowsing();
 		this.scrollOffset = 0;
 		this.undoStack.clear();
 		this.lastAction = null;
 
 		if (this.onChange) this.onChange("");
-		if (this.onSubmit) this.onSubmit(result);
+
+		// Scoped to the callback: the images belong to the submission in flight,
+		// not to the (now empty) composer. The finally keeps a throwing submit
+		// handler from leaking them into the next submission.
+		this.submittingImages = submissionImages;
+		try {
+			if (this.onSubmit) this.onSubmit(result);
+		} finally {
+			this.submittingImages = [];
+		}
 	}
 
 	private handleBackspace(): void {
@@ -1392,6 +1630,7 @@ export class Editor implements Component, Focusable {
 			const lastGrapheme = graphemes[graphemes.length - 1];
 			const graphemeLength = lastGrapheme ? lastGrapheme.segment.length : 1;
 			const isPastedSegmented = PASTE_MARKER_SINGLE.exec(lastGrapheme.segment);
+			const isImageSegmented = IMAGE_MARKER_SINGLE.exec(lastGrapheme.segment);
 
 			if (isPastedSegmented) {
 				// This contains the id part e.g 4 from [paste #4 +123 lines]
@@ -1416,6 +1655,12 @@ export class Editor implements Component, Focusable {
 						return `[paste #${x - 1}${suffixGroup}]`;
 					}),
 				);
+			} else if (isImageSegmented) {
+				// The marker is gone with the grapheme below, so discard its image
+				// with it. Nothing is renumbered: image IDs are stable keys, so a
+				// gap is harmless, and the paste-style shift would rewrite IDs
+				// this registry is keyed by.
+				this.images.delete(Number(isImageSegmented[1]));
 			}
 
 			line = this.state.lines[this.state.cursorLine] || "";
@@ -1792,6 +2037,10 @@ export class Editor implements Component, Focusable {
 			const firstGrapheme = graphemes[0];
 			const graphemeLength = firstGrapheme ? firstGrapheme.segment.length : 1;
 
+			// Deleting a marker discards its image, same rule as backspace.
+			const isImageSegmented = firstGrapheme ? IMAGE_MARKER_SINGLE.exec(firstGrapheme.segment) : null;
+			if (isImageSegmented) this.images.delete(Number(isImageSegmented[1]));
+
 			const before = currentLine.slice(0, this.state.cursorCol);
 			const after = currentLine.slice(this.state.cursorCol + graphemeLength);
 			this.state.lines[this.state.cursorLine] = before + after;
@@ -1986,7 +2235,7 @@ export class Editor implements Component, Focusable {
 		this.setCursorCol(
 			findWordBackward(currentLine, this.state.cursorCol, {
 				segment: (text) => this.segment(text, "word"),
-				isAtomicSegment: isPasteMarker,
+				isAtomicSegment: isAtomicMarker,
 			}),
 		);
 	}
@@ -2113,7 +2362,13 @@ export class Editor implements Component, Focusable {
 	}
 
 	private pushUndoSnapshot(): void {
-		this.undoStack.push({ state: this.state, pastes: this.pastes, pasteCounter: this.pasteCounter });
+		this.undoStack.push({
+			state: this.state,
+			pastes: this.pastes,
+			pasteCounter: this.pasteCounter,
+			images: this.images,
+			imageCounter: this.imageCounter,
+		});
 	}
 
 	private undo(): void {
@@ -2123,6 +2378,8 @@ export class Editor implements Component, Focusable {
 		Object.assign(this.state, snapshot.state);
 		this.pastes = snapshot.pastes;
 		this.pasteCounter = snapshot.pasteCounter;
+		this.images = snapshot.images;
+		this.imageCounter = snapshot.imageCounter;
 		this.lastAction = null;
 		this.preferredVisualCol = null;
 		if (this.onChange) {
@@ -2180,7 +2437,7 @@ export class Editor implements Component, Focusable {
 		this.setCursorCol(
 			findWordForward(currentLine, this.state.cursorCol, {
 				segment: (text) => this.segment(text, "word"),
-				isAtomicSegment: isPasteMarker,
+				isAtomicSegment: isAtomicMarker,
 			}),
 		);
 	}

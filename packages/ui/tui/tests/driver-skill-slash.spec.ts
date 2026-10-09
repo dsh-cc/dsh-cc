@@ -141,7 +141,7 @@ describe('createDriver skill slash submit routing', () => {
     await driver.submit('/unknown-skill')
     expect(agent.steer).not.toHaveBeenCalled()
     expect(agent.followup).not.toHaveBeenCalled()
-    expect(driver.state.queued).toEqual(['/unknown-skill'])
+    expect(driver.state.queued).toEqual([{ text: '/unknown-skill' }])
   })
 
   it('bare /permissions still opens the picker without followup', async () => {

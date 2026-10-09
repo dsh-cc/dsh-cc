@@ -37,11 +37,10 @@ import {
 import type { CatalogEntry } from '../model-catalog.ts'
 import type {
   AgentDefaultModelLike,
-  LlmLike,
   ShellExecutorLike,
   ToolsLike,
 } from '../state/driver-types.ts'
-import type { DriverAgentCtx, DriverSessionEventsCtx } from './driver-ctx.ts'
+import type { DriverAgentCtx, DriverSessionEventsCtx, LlmLike } from './driver-ctx.ts'
 import { applyStreamFrame } from '../assistant-stream.ts'
 import type { AssistantStreamFrame } from '@deepseek-ai/dsh-agent'
 
@@ -158,6 +157,13 @@ export function attachSessionEvents(rt: DriverSessionEventsCtx): void {
  */
 export interface AgentSection {
   resolveEfforts(provider: string, model: string): Promise<readonly { id: string; name: string }[] | undefined>
+  /**
+   * Image-input capability of the live route (plan §3.7), or `undefined` when
+   * it cannot be resolved. Lives here because the lookup is the same
+   * `ctx.get('llm').resolveModelInfo` seam {@link AgentSection.resolveEfforts}
+   * already owns - the queue section must not grow a second llm lookup.
+   */
+  resolveImageSupport(): Promise<{ model: string; supported: boolean } | undefined>
   stalePair(captured: { provider: string; model: string }): boolean
   seedDefaultModel(reset?: boolean): Promise<void>
   /**
@@ -218,6 +224,36 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
     try {
       const info = await llm.resolveModelInfo(provider, model)
       return info.reasoning === undefined ? undefined : info.reasoning.efforts
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * Image-input capability of the live selection's route: `undefined` when the
+   * route or the capability is unknown (no settled selection yet, no llm
+   * service, no `resolveModelInfo` on it, a rejecting lookup, or metadata that
+   * omits `inputModalities` - which the llm contract defines as "unknown",
+   * dsh-llm types.ts:301). Every one of those proceeds optimistically: refusing
+   * a submission on a guess would cost the user a real image on every adapter
+   * that does not disclose modalities.
+   *
+   * Only an explicit modality list is authoritative, and only its explicit
+   * omission of `image` is a negative verdict. Without this gate an image on
+   * such a route throws LlmError(UNSUPPORTED_CONTENT) in provider request
+   * assembly (dsh-llm-deepseek prepareImages), failing the whole turn.
+   */
+  const resolveImageSupport = async (): Promise<{ model: string; supported: boolean } | undefined> => {
+    const route = selection.current
+    if (route === undefined) return undefined
+    const llm = ctx.get('llm') as LlmLike | undefined
+    if (llm?.resolveModelInfo === undefined) return undefined
+    try {
+      const info = await llm.resolveModelInfo(route.provider, route.model)
+      if (info.inputModalities === undefined) return undefined
+      // The model id, not the display name: it is what /model and the HUD show
+      // for the route the user is actually on.
+      return { model: route.model, supported: info.inputModalities.includes('image') }
     } catch {
       return undefined
     }
@@ -390,6 +426,7 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
 
   return {
     resolveEfforts,
+    resolveImageSupport,
     stalePair,
     seedDefaultModel,
     waitForModel,
