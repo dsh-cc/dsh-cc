@@ -243,6 +243,13 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('advisor-watchdog')
     expect(topIds).not.toContain('advisor-watchdog')
     expect(configIds.indexOf('advisor-watchdog')).toBeGreaterThan(configIds.indexOf('turn-rules'))
+    // The progress-rebuild row (design
+    // docs/plans/2026-10-09-structured-progress-and-post-compact-rebuild.md)
+    // publishes no Service (plain plugin) and sits inside the group at the
+    // cc-services tail, after advisor-watchdog, with NO new isolate key.
+    expect(configIds).toContain('progress-rebuild')
+    expect(topIds).not.toContain('progress-rebuild')
+    expect(configIds.indexOf('progress-rebuild')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
     // after post-edit-verify (merged edit-recovery-hint host), with NO new
