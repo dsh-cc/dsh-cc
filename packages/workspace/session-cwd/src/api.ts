@@ -9,6 +9,7 @@
 
 import { isAbsolute, resolve } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Session } from '@deepseek-ai/dsh-session'
 import { appendWorktreeEntered } from './events.ts'
 import { sessionCwdStore, type SessionCwdStore } from './state.ts'
 
@@ -21,6 +22,42 @@ export interface SessionCwdOptions {
 }
 
 /**
+ * Shared resolution body for the session-cwd resolvers: live store overlay →
+ * durable `worktree/entered` fold → session header cwd → caller fallback →
+ * `undefined`. Contains the resolution body's grandfathered
+ * `session.snapshotEvents()` call (upstream deprecation: new calls prohibited).
+ * @param session - the session whose cwd is being resolved.
+ * @param options - store and fallback overrides.
+ * @returns the absolute session cwd, or `undefined` when nothing records one.
+ */
+function resolveSessionCwd(
+  session: Pick<Agent['session'], 'id' | 'header' | 'snapshotEvents'>,
+  options: SessionCwdOptions = {},
+): string | undefined {
+  const { store = sessionCwdStore, fallback } = options
+  const sessionId = String(session.id)
+  return store.resolve(sessionId, session.snapshotEvents())
+    ?? session.header.cwd
+    ?? fallback
+}
+
+/**
+ * Read the authoritative session working directory for a session directly.
+ * Resolution order: the live store overlay, the durable `worktree/entered`
+ * fold, the session header cwd, then the caller's fallback — no
+ * `process.cwd()` fallback, so "unresolvable" stays observable (`undefined`).
+ * @param session - the session whose cwd is being read.
+ * @param options - store and fallback overrides.
+ * @returns the absolute session cwd, or `undefined` when unresolvable.
+ */
+export function getSessionCwdForSession(
+  session: Session,
+  options: SessionCwdOptions = {},
+): string | undefined {
+  return resolveSessionCwd(session, options)
+}
+
+/**
  * Read the authoritative session working directory. Resolution order: the
  * live store overlay, the durable `worktree/entered` fold, the session
  * header cwd, then the caller's fallback (defaulting to the process cwd).
@@ -29,11 +66,7 @@ export interface SessionCwdOptions {
  * @returns the absolute session cwd.
  */
 export function getSessionCwd(agent: Agent, options: SessionCwdOptions = {}): string {
-  const { store = sessionCwdStore, fallback } = options
-  const sessionId = String(agent.session.id)
-  return store.resolve(sessionId, agent.session.snapshotEvents())
-    ?? agent.session.header.cwd
-    ?? fallback
+  return resolveSessionCwd(agent.session, options)
     ?? process.cwd()
 }
 
