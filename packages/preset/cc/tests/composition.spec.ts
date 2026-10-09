@@ -286,6 +286,14 @@ describe('agent.cordis.yml composition', () => {
     expect(topIds).not.toContain('tool-web-fetch')
     expect(topIds).toContain('memory-consolidation')
 
+    // The config-snapshot row (plan docs/plans/2026-10-09-session-config-snapshot-event.md)
+    // publishes no Service (plain plugin, handoff-store pattern) and sits
+    // inside the group at the cc-services tail, after advisor-watchdog, with
+    // NO new isolate key.
+    expect(configIds).toContain('config-snapshot')
+    expect(topIds).not.toContain('config-snapshot')
+    expect(configIds.indexOf('config-snapshot')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
+
     // tool-web row: fetch is disabled here — web_fetch comes from the
     // cc-services tool-web-fetch row instead.
     const toolWeb = doc.find((r) => r.id === 'tool-web')!

@@ -161,6 +161,9 @@
       "@dsh-cc/cache-health/report": [
         "./packages/observability/cache-health/src/report.ts"
       ],
+      "@dsh-cc/config-snapshot": [
+        "./packages/observability/config-snapshot/src/index.ts"
+      ],
       "@dsh-cc/command-cost": [
         "./packages/session/command-cost/src/index.ts"
       ],
