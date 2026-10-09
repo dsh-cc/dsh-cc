@@ -260,6 +260,36 @@ capabilities:
         breaker; the fuse pauses the feature with one model-visible notice
         pointing at manual /compact.
 
+  engine.completion-gate:
+    title: Completion gate (opt-in runtime-verified completion)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. An opt-in gate at
+        agent/turn-stopping that withholds the completion while declared
+        completion claims lack verified evidence, delivering an evidence
+        nudge instead, and keeps a per-session receipts ledger with lineage
+        lift. Ships dark (cc-completion-gate.enabled: false).
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: completion-gate" }
+      - { type: source, path: packages/interaction/completion-gate/src/wiring.ts }
+      - { type: source, path: packages/interaction/completion-gate/src/evaluate.ts }
+      - { type: test, path: packages/interaction/completion-gate/tests/evaluate.spec.ts }
+      - { type: test, path: packages/interaction/completion-gate/tests/smoke.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: no CC counterpart exists. An opt-in
+        runtime-verified completion gate (receipts ledger + evidence nudge +
+        lineage lift), default off.
+
   engine.context-compression:
     title: CCR tool-output compression (context-crusher)
     category: engine
