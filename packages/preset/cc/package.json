@@ -80,7 +80,8 @@
     "@dsh-cc/advisor-watchdog": "workspace:^",
     "@dsh-cc/completion-gate": "workspace:^",
     "@dsh-cc/post-edit-verify": "workspace:^",
-    "@dsh-cc/reasoning-fold": "workspace:^"
+    "@dsh-cc/reasoning-fold": "workspace:^",
+    "@dsh-cc/retry-attendant": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
