@@ -276,6 +276,14 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('progress-rebuild')
     expect(topIds).not.toContain('progress-rebuild')
     expect(configIds.indexOf('progress-rebuild')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
+    // The skill-usage row (plan docs/plans/2026-10-09-skill-lifecycle-usage-gates.md §3.1)
+    // publishes no Service (plain plugin) and sits inside the group at the
+    // cc-services tail, after progress-rebuild, with NO new isolate key.
+    // ORDER TRIPWIRE: tail placement keeps the emit-seam composition
+    // reviewable (the row only observes `tools/result`/`session/event`).
+    expect(configIds).toContain('skill-usage')
+    expect(topIds).not.toContain('skill-usage')
+    expect(configIds.indexOf('skill-usage')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
     // after post-edit-verify (merged edit-recovery-hint host), with NO new
