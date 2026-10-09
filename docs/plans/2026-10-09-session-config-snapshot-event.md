@@ -106,10 +106,10 @@ Listener: `ctx.on('session/created', (session) => …, { global: true })`.
 
 - Firing: `session/created` is announced by `SessionStore.announce`
   (`core/session/src/index.ts:1133-1161`) once per entered session. Whether it
-  fires for child/subagent sessions is TEST-PENDING, settled ONLY by the
-  §5 item 4 integration test (the spawn-suite listeners are cancel-path
-  assertions that expect NO event — `subagent-spawn-in-process.spec.ts:196-208`
-  — and are not evidence of firing).
+  fires for child/subagent sessions was TEST-PENDING; **SETTLED by the §5
+  item 4 integration test (implementation, 2026-10-09): it DOES fire for
+  child sessions** — the subagent leg captured `delegationDepth: 1`,
+  `parentSession`, and `origin: 'subagent'` on the child's own sidecar row.
 - Visibility: `{ global: true }`, not the plain style. Every invariant-FILE
   `session/created` listener in both repos uses `{ global: true }` (dsh-cc
   `packages/hooks/hook-protocol/src/invariant.ts:87-88`; harness copy at
@@ -462,7 +462,7 @@ Observability, never on a behavior path:
    Boot a session with the plugin ⇒ exactly one row in
    `<dshHome>/config-snapshot/<encodedId>.jsonl`; DISPOSE the live handle
    before resuming (resume takes exclusive write ownership; disposal
-   precedent `agent-loop/tests/resume.spec.ts:609-616`); resume ⇒ a second
+   precedent `agent-loop/tests/resume.spec.ts:609-616`; implementation note: a freshly created session has zero stored events and disposing it rolls the session back (log deleted), so the resume leg must first run one stored turn via `agent.followup(...)` to idle before dispose — the resume itself still goes through `ctx.agents.resume({ resumeSessionId })`). Resume ⇒ a second
    row in the same file with a distinct `seq` (`appendedAt` may tie, §3.4); spawn a subagent ⇒ the
    child session's own file carries a row with `delegationDepth: 1` and
    `parentSession` set. Assertions run only after a bounded settle (drain the
