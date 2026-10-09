@@ -406,6 +406,16 @@
     - id: context-crusher
       name: '@dsh-cc/context-crusher'
 
+    # The verify-before-retry attendant (plan docs/plans/2026-10-09-verify-before-retry.md):
+    # plain plugin, no Service, no new isolate key. Its pre-execute listener is
+    # prepend:true, and cordis prepend unshifts — the later-registered prepend
+    # listener is OUTERMOST — so this row MUST sit BEFORE the hooks-claude-code
+    # row: hooks' later prepend must land outside retry-attendant so a user
+    # PreToolUse hook allow/ask can override the attendant's ask (§3.4 of the
+    # plan). The order tripwire is pinned by packages/preset/cc/tests/composition.spec.ts.
+    - id: retry-attendant
+      name: '@dsh-cc/retry-attendant'
+
     # The hook bridge: runs the Claude Code hooks.json / settings hook config
     # on the harness interception seams and provides the `hooks` seam plugin
     # hooks merge through. Must mount BEFORE cc-shell-glue: the glue's

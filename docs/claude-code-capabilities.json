@@ -1504,6 +1504,53 @@
         "summary": "Anthropic-internal or vendor-bound features; no design asset and out of parity scope."
       }
     },
+    "engine.verify-before-retry": {
+      "title": "Verify-before-retry attendant (ambiguity-aware retry confirmation)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "CC has no equivalent surface — a model retrying an identical bash or write call after an ambiguous (timed-out, partial, silenced) outcome simply re-executes. The attendant is a dsh-cc extension: on a repeat of the same effect digest after a recorded ambiguous class, the tools/pre-execute listener converts the call into an approval ask (escalation), and on the FIRST ambiguous outcome it appends class-specific guidance as an additionalContexts entry (M1).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "divergent"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: retry-attendant"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/retry-attendant/src/wiring.ts",
+          "anchor": "registerListeners"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/retry-attendant/tests/wiring.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/retry-attendant/tests/interplay.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension (user-layer-only setting retry-attendant, enabled default false): classifies ambiguous tool outcomes into effect classes (bash-timeout/promotion, git-mutation, write-partial, mcp mutation), deduplicates per effect digest, and on an identical retry re-asks for confirmation via the tools/pre-execute waterfall (prepend:true, composed inside user PreToolUse hooks). Design doc docs/plans/2026-10-09-verify-before-retry.md. Hosted inside @dsh-cc/retry-attendant."
+      }
+    },
     "engine.voice": {
       "title": "Voice",
       "category": "engine",

@@ -1,0 +1,50 @@
+{
+  "fragility": "Value-field shapes are schema-pinned (tool-bash output oneOf); rendered markers are wording-sensitive. Cross-tree drift is caught by grepping the upstream construction points (tool-bash/src/render.ts:53,77-83,106-117; tool-bash-persistent/src/index.ts:21,355; packages/core/tools/src/abort-utils.ts:116-124) at harness-bump time. Value triggers: 'promoted'/'foreground' match the success value's kind; sandboxDenied matches value.sandbox.denied === true. Outcome 'error-or-nonzero-exit' = isError OR a success value {kind:'foreground', exitCode:number !== 0} (null exitCode does NOT match).",
+  "classes": [
+    {
+      "class": "bash-timeout",
+      "tools": ["bash", "pwsh"],
+      "value": [
+        { "kind": "promoted" },
+        { "kind": "foreground", "timedOut": true }
+      ],
+      "markers": ["[timed out after", "[still running after", "[Command timed out or OOM]"],
+      "guidance": "The command may have partially applied before timing out (or still runs as a background job). Verify the intended postcondition (e.g. re-check files/processes, read job state) before re-running it."
+    },
+    {
+      "class": "bash-sandbox-denied",
+      "tools": ["bash", "pwsh"],
+      "value": [
+        { "sandboxDenied": true }
+      ],
+      "markers": ["[sandbox: file access denied", "[sandbox: the sandbox runner itself failed"],
+      "guidance": "Sandbox denial: a file effect was refused mid-run (partial effects possible) or the runner itself failed (nothing ran). Check the result marker; verify state before re-running with wider permissions."
+    },
+    {
+      "class": "git-mutation",
+      "tools": ["bash", "pwsh"],
+      "head": { "first": "git", "second": ["commit", "push", "reset", "rebase", "merge", "cherry-pick", "am", "checkout", "switch"] },
+      "outcome": "error-or-nonzero-exit",
+      "guidance": "Git mutations are not atomic with respect to retries. Run a read-only `git status`/`git log` check first."
+    },
+    {
+      "class": "pkg-install",
+      "tools": ["bash", "pwsh"],
+      "head": { "firstRe": "^(pnpm|npm|yarn|bun)$", "second": ["install", "add", "remove"] },
+      "outcome": "error-or-nonzero-exit",
+      "guidance": "Package installs mutate node_modules progressively. Check `node_modules`/lockfile state before re-running; a partial install is usually resumable."
+    },
+    {
+      "class": "mcp-mutation",
+      "toolPrefix": "mcp__",
+      "outcome": "error",
+      "guidance": "If this call mutated remote state, verify before retrying; read-only calls can be retried freely."
+    },
+    {
+      "class": "write-partial",
+      "tools": ["write", "edit"],
+      "outcome": "error-not-excluded",
+      "guidance": "The write may be partial. Read the target path before retrying."
+    }
+  ]
+}

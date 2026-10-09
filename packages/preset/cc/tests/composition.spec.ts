@@ -243,6 +243,18 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('advisor-watchdog')
     expect(topIds).not.toContain('advisor-watchdog')
     expect(configIds.indexOf('advisor-watchdog')).toBeGreaterThan(configIds.indexOf('turn-rules'))
+    // The retry-attendant row (plan docs/plans/2026-10-09-verify-before-retry.md)
+    // publishes no Service (plain plugin, advisor-watchdog pattern) and sits
+    // inside the group between context-crusher and hooks-claude-code, with NO
+    // new isolate key. ORDER TRIPWIRE: its pre-execute listener is registered
+    // with prepend:true and cordis prepend unshifts (later-registered prepend
+    // listener = OUTERMOST), so it must sort BEFORE the hooks-claude-code row —
+    // hooks' later prepend lands outside retry-attendant so a user PreToolUse
+    // hook allow/ask can override the attendant's ask.
+    expect(configIds).toContain('retry-attendant')
+    expect(topIds).not.toContain('retry-attendant')
+    expect(configIds.indexOf('retry-attendant')).toBeGreaterThan(configIds.indexOf('context-crusher'))
+    expect(configIds.indexOf('retry-attendant')).toBeLessThan(configIds.indexOf('hooks-claude-code'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
     // after post-edit-verify (merged edit-recovery-hint host), with NO new
