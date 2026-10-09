@@ -10,6 +10,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only import: also loads the dsh-session module augmentation that
+// declares the scoped `session/created` event on the cordis Events map.
+import type { Session } from '@deepseek-ai/dsh-session'
 import {
   onSessionCreated,
   registerEnabledReader,
@@ -74,9 +77,9 @@ export function apply(ctx: Context): () => void {
     },
     debug,
   }
-  const dispose = ctx.on('session/created', (session: Parameters<typeof onSessionCreated>[1]) => {
+  const dispose = ctx.on('session/created', (session: Session) => {
     onSessionCreated(deps, session)
-  }, { global: true }) as unknown as (() => void) | undefined
+  }, { global: true })
   return () => {
     try {
       dispose?.()

@@ -17,7 +17,6 @@ import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import { encodeSegment } from './encode.ts'
 import { SCHEMA_VERSION, type SnapshotPluginRow, type SnapshotRow } from './row.ts'
-import { SidecarWriter } from './writer.ts'
 import { readOwnVersion } from './version.ts'
 
 /** Kill-switch settings namespace (§3.6), kebab convention. */
@@ -200,6 +199,7 @@ export interface SidecarWriterLike {
  */
 export async function assembleAndAppend(deps: SnapshotDeps, capture: CaptureFields): Promise<void> {
   if (!deps.enabled()) return
+  if (deps.home === undefined) return // no-op per §3.3 when no home is resolvable
   const dshCc = await readOwnVersion()
   const harness = normalizeHarnessVersion(deps.get('harnessVersion'))
   const preset = { id: presetIdOf(deps.get('agentPresets')) }

@@ -51,6 +51,7 @@
     "@dsh-cc/compaction-micro": "workspace:^",
     "@dsh-cc/context-crusher": "workspace:^",
     "@dsh-cc/coordinator": "workspace:^",
+    "@dsh-cc/config-snapshot": "workspace:^",
     "@dsh-cc/hooks-claude-code": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/memory-consolidation": "workspace:^",

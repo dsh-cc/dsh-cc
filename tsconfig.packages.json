@@ -143,6 +143,9 @@
       "path": "./packages/observability/cache-health"
     },
     {
+      "path": "./packages/observability/config-snapshot"
+    },
+    {
       "path": "./packages/observability/sidecar-io"
     },
     {

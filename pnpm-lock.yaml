@@ -2364,6 +2364,9 @@ importers:
       '@deepseek-ai/dsh-subagent-spawn-in-process':
         specifier: link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process
         version: link:../../../../deepseek-harness/packages/subagent/subagent-spawn-in-process
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
@@ -2480,6 +2483,9 @@ importers:
       '@dsh-cc/compaction-micro':
         specifier: workspace:^
         version: link:../../compaction/compaction-micro
+      '@dsh-cc/config-snapshot':
+        specifier: workspace:^
+        version: link:../../observability/config-snapshot
       '@dsh-cc/context-crusher':
         specifier: workspace:^
         version: link:../../context/context-crusher
