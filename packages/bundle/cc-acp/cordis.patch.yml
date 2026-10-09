@@ -1,0 +1,127 @@
+# Agent Client Protocol surface for the `acp` profile. Host-plane swap only:
+# disable the host copies of agent-plane rows (same list as cc-tui, minus the
+# tui-specific parts) so the CC preset owns tools. The hmr lane stays off via
+# the retained @deepseek-ai/dsh-acp-app bundle's explicit `hmr disabled` row —
+# the base predicate only disables hmr when NO profile is active, so this
+# bundle must not (and cannot) re-disable it. Insert the preset roster
+# (default: cc) and the ACP protocol driver; swap the harness acp plugin.
+#
+# Must NOT touch: tools (cc-shell remounts tools-cc), settings /
+# permission-rules (cc-permissions), user-questions, HTTP/webserver rows.
+
+# ── agent plane moves behind the CC preset ─────────────────────────────────
+# Disabling rather than deleting is deliberate: the base is shared.
+
+- id: tool-bash
+  disabled: true
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-jobs
+  disabled: true
+
+- id: tool-fs
+  disabled: true
+
+- id: tool-fs-search
+  disabled: true
+
+- id: tool-str-replace-editor
+  disabled: true
+
+- id: skill-filesystem
+  disabled: true
+
+- id: tool-skill
+  disabled: true
+
+- id: tool-goal
+  disabled: true
+
+- id: plan-mode
+  disabled: true
+
+- id: compaction-basic
+  disabled: true
+
+- id: command-compact
+  disabled: true
+
+- id: tool-result-pruner
+  disabled: true
+
+- id: tool-subagent-control
+  disabled: true
+
+- id: tool-subagent-list-agents
+  disabled: true
+
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
+  disabled: true
+
+- id: workflow-worker-thread
+  disabled: true
+
+- id: tool-workflow
+  disabled: true
+
+- id: tool-ralph
+  disabled: true
+
+- id: agent-instructions
+  disabled: true
+
+- id: tool-todo
+  disabled: true
+
+- id: tool-web
+  disabled: true
+
+- insert:
+    # Harness >=0.1.7-rc.2 agent-preset architecture (G15): the registry owns
+    # the roster and the declaration row below IS the cc roster. The
+    # composition is carried by reference: the file-backed include row mounts
+    # @dsh-cc/preset-cc/agent.cordis.yml from the profile's node_modules (a
+    # hard dependency of @dsh-cc/bundle-acp), keeping that tested file the
+    # single source of the cc composition. Same block as cc-tui.
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
+      config:
+        default: cc
+
+    - id: preset-cc
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: cc
+        name: CC mode
+        description: Full Standard-mode capability, plus the Claude Code surface — .claude plugin directories, Claude hooks, slash commands, persistent memory, output styles, and fetch-enabled Web tools.
+        order: 5
+        plugins:
+          - id: cc-composition
+            name: '@deepseek-ai/cordis-plugin-include'
+            config:
+              path: node_modules/@dsh-cc/preset-cc/agent.cordis.yml
+
+    - id: acp-cc
+      name: '@dsh-cc/acp'
+      inject: [acpAppStartup]
+      config:
+        presetId: 'cc'
+        # Optional route override — uncomment and set to pin the model plane:
+        # provider: !!js process.env.DSH_CC_PROVIDER
+        # model: !!js process.env.DSH_CC_MODEL
+
+# Swap of the harness @deepseek-ai/dsh-acp plugin (P3-proven). This row only
+# exists because the dsh-acp-app bundle stays in the floor: the `acp` row is
+# inserted by acp-app, not dsh-base, so disabling by ID replaces it.
+- id: acp
+  disabled: true
+
+# bundle-shell's CC title provider would pay a title-model call per session;
+# the ACP lane does not consume titles.
+- id: session-title-llm-cc
+  disabled: true

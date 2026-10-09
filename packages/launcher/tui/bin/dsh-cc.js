@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { bootstrapCommand, BOOTSTRAP_STAMP, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, healDecision, interceptResume, parseLocalConfig, parseWorktreeFlag, parseWorktreeRef, planWorktree, planWorktreeRef, prFetchRefs, readBootstrapVersion, remoteHost, PROFILE, readBuildInfo, repoRootFromCommonDir, runStoreHeal, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal, writeBootstrapStamp } from '../bootstrap.mjs'
+import { bootstrapCommand, BOOTSTRAP_STAMP, ACP_PROFILE, ACP_BUNDLES, acpBundleSpec, devStoreRestoreDecision, dshUnavailableMessage, existingWorktreeDecision, formatVersionLabel, healDecision, interceptResume, parseLocalConfig, parseWorktreeFlag, parseWorktreeRef, planWorktree, planWorktreeRef, prFetchRefs, readBootstrapVersion, remoteHost, PROFILE, readBuildInfo, repoRootFromCommonDir, runStoreHeal, runStoreRestore, sanitizeInheritedEnv, slugRetryDecision, spawnEnv, symlinkedPath, versionGate, worktreeAddArgv, worktreeEnv, worktreeIdentityRefusal, writeBootstrapStamp } from '../bootstrap.mjs'
 import { readWorktreeSettings, resolveBaseRef, sweepWorktrees, SWEEP_CAP_MS, worktreeReuseReset, worktreeSettingsPaths } from '../worktree-lifecycle.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -27,6 +27,78 @@ if (process.argv.includes('--version') || process.argv.includes('-V')) {
   console.log(formatVersionLabel(ownVersion, buildInfo))
   process.exit(0)
 }
+
+// `dsh-cc acp [...]` — the Agent Client Protocol lane (design
+// 2026-10-09-acp-m2-own-plugin §5.1). Dispatched BEFORE any TUI-specific
+// processing (worktree parsing, interceptResume, DSH_CC_* env): stdout
+// belongs to the ACP NDJSON protocol, so bootstrap/install output goes to
+// stderr only, the branch never consumes stdin, and the child dsh inherits
+// stdio so the protocol flows through.
+if (process.argv[2] === 'acp') {
+  const restArgs = process.argv.slice(3)
+  const acpSpecFor = name => acpBundleSpec(name, ownVersion)
+  const acpProfileDir = join(home, 'profiles', ACP_PROFILE)
+  const acpExisted = existsSync(join(acpProfileDir, 'package.json'))
+  const acpAdd = bootstrapCommand(acpExisted, ownVersion, { profile: ACP_PROFILE, bundles: ACP_BUNDLES, specFor: acpSpecFor })
+  if (acpAdd !== undefined) {
+    console.error(`dsh-cc: initializing profile "${ACP_PROFILE}"…`)
+    const acpGate = versionGate(() => spawnSync('dsh', ['--version'], { encoding: 'utf8' }))
+    if (acpGate.warning) console.error(acpGate.warning)
+    if (!acpGate.ok) {
+      console.error(acpGate.message)
+      process.exit(1)
+    }
+    const installed = spawnSync('dsh', acpAdd, { encoding: 'utf8', stdio: 'inherit' })
+    if (installed.error) {
+      console.error(dshUnavailableMessage())
+      process.exit(1)
+    }
+    if (installed.status !== 0) {
+      console.error(`dsh-cc: plugin install failed. Retry:\n  dsh ${acpAdd.join(' ')}`)
+      process.exit(installed.status ?? 1)
+    }
+    writeBootstrapStamp(join(acpProfileDir, BOOTSTRAP_STAMP), ownVersion)
+  }
+  // Same converge/restore machinery as the TUI path, with the ACP floor list
+  // and specifiers; all of it logs to stderr.
+  const acpBuildInfo = readBuildInfo(join(acpProfileDir, 'node_modules', '@dsh-cc', 'dsh-cc-build.json'))
+  const acpRestore = devStoreRestoreDecision(acpBuildInfo, ownVersion)
+  const acpConvergeOpts = { bundles: ACP_BUNDLES, specFor: acpSpecFor }
+  if (acpRestore !== null) {
+    const restored = runStoreRestore(acpProfileDir, ownVersion, acpConvergeOpts)
+    if (restored.restored) writeBootstrapStamp(join(acpProfileDir, BOOTSTRAP_STAMP), ownVersion)
+  } else {
+    const heal = healDecision({
+      profileExists: acpExisted && acpAdd === undefined,
+      stampVersion: readBootstrapVersion(join(acpProfileDir, BOOTSTRAP_STAMP)),
+      ownVersion,
+      buildInfo: acpBuildInfo,
+    })
+    if (heal !== null) runStoreHeal(acpProfileDir, ownVersion, { from: heal.from, ...acpConvergeOpts })
+  }
+  // Never run TUI arg processing on this path: restArgs pass through as-is.
+  const acpEnv = sanitizeInheritedEnv({ ...process.env })
+  acpEnv.NODE_ENV ??= 'production'
+  acpEnv.DSH_CC_PROFILE = ACP_PROFILE
+  const acpChild = spawn('dsh', ['--profile', ACP_PROFILE, ...restArgs], {
+    env: spawnEnv(acpEnv, home),
+    stdio: 'inherit',
+  })
+  acpChild.on('error', (error) => {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT') {
+      console.error(dshUnavailableMessage())
+      process.exit(1)
+    }
+    throw error
+  })
+  acpChild.on('exit', (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal)
+      return
+    }
+    process.exit(code ?? 0)
+  })
+} else {
 const profileExisted = existsSync(join(profileDir, 'package.json'))
 const add = bootstrapCommand(profileExisted, ownVersion)
 if (add !== undefined) {
@@ -336,3 +408,4 @@ child.on('exit', (code, signal) => {
   }
   process.exit(code ?? 0)
 })
+}
