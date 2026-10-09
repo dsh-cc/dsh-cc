@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/config-snapshot",
   "description": "Session config snapshot sidecar ledger \u2014 per-Session-construction attribution substrate",
-  "version": "0.9.0-rc.3",
+  "version": "0.9.0-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

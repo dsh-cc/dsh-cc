@@ -601,6 +601,16 @@
     - id: advisor-watchdog
       name: '@dsh-cc/advisor-watchdog'
 
+    # Completion gate (plan docs/plans/2026-10-09-runtime-verified-completion.md):
+    # an opt-in verified-completion gate that withholds turn-stopping
+    # completion while required evidence is missing (evidence nudge instead),
+    # keeping a per-session receipts ledger with lineage lift. Publishes no
+    # Service (plain plugin, turn-rules pattern), so it needs no isolate key.
+    # DEFAULT OFF (cc-completion-gate.enabled=false). ORDER: after
+    # advisor-watchdog (cc-services tail).
+    - id: completion-gate
+      name: '@dsh-cc/completion-gate'
+
     # Session config snapshot (plan docs/plans/2026-10-09-session-config-snapshot-event.md):
     # one JSONL row per Session construction into
     # $DSH_HOME/config-snapshot/<encodedId>.jsonl — the attribution substrate

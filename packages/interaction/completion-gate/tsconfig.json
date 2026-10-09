@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib",
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src",
+    "src/**/*.json"
+  ],
+  "references": [
+    {
+      "path": "../../settings/settings-provider"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../core/tools"
+    }
+  ]
+}

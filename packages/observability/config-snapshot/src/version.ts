@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 /** Compile-time fallback when `package.json` cannot be located in a bundled deploy. */
-export const FALLBACK_VERSION = '0.9.0-rc.3'
+export const FALLBACK_VERSION = '0.9.0-rc.4'
 
 /**
  * Read this package's own version from its `package.json`, falling back to the

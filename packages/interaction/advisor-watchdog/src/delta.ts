@@ -28,6 +28,7 @@ export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'turn-rules',
   'plugin',
   'advisor',
+  'completion-gate',
 ]
 
 /** This plugin's own injected source kind (MessageSourceMap augmentation in wiring.ts). */

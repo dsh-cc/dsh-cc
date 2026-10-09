@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { encodeSegment } from '../src/encode.ts'
 import { selectRow, type SnapshotRow } from '../src/row.ts'
+import { FALLBACK_VERSION } from '../src/version.ts'
 
 function rowOf(sessionId: string, seq: number, appendedAt: number): SnapshotRow {
   return {
@@ -13,7 +14,7 @@ function rowOf(sessionId: string, seq: number, appendedAt: number): SnapshotRow 
     seq,
     bootId: 'boot',
     appendedAt,
-    dshCc: '0.9.0-rc.3',
+    dshCc: FALLBACK_VERSION,
     harness: null,
     preset: { id: null },
     plugins: [],

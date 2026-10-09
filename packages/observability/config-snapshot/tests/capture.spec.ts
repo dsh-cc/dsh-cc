@@ -12,6 +12,7 @@ import { drain, onSessionCreated, resolveHome, type SnapshotDeps } from '../src/
 import { SidecarWriter } from '../src/writer.ts'
 import { encodeSegment } from '../src/encode.ts'
 import { SCHEMA_VERSION, selectRow, type SnapshotRow } from '../src/row.ts'
+import { FALLBACK_VERSION } from '../src/version.ts'
 import type { Context } from '@deepseek-ai/cordis'
 
 let tmpRoot: string
@@ -99,7 +100,7 @@ describe('capture (§5 item 1)', () => {
       sessionId: 'session-1',
       seq: 1,
       bootId: 'test-boot',
-      dshCc: '0.9.0-rc.3',
+      dshCc: FALLBACK_VERSION,
       harness: null,
       preset: { id: null },
       plugins: [],
