@@ -110,6 +110,9 @@
       "path": "./packages/interaction/post-edit-verify"
     },
     {
+      "path": "./packages/interaction/retry-attendant"
+    },
+    {
       "path": "./packages/interaction/turn-rules"
     },
     {
