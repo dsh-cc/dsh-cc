@@ -1,7 +1,7 @@
 # Verify-before-retry for mutating tool calls (design)
 
 - Date: 2026-10-09
-- Status: **Implemented** — package `packages/interaction/retry-attendant`, preset row before hooks-claude-code, capability manifest `engine.verify-before-retry` (this PR). Design review: internal critic GO (4 rounds); codex/grok external blind review both GO-WITH-AMENDMENTS, folded through v5.2 (two delta rounds each; cross-seat sibling-remedy adjudication in §8); user sign-off 2026-11-11.
+- Status: **Implemented** — package `packages/interaction/retry-attendant`, preset row before hooks-claude-code, capability manifest `engine.verify-before-retry` (this PR). Design review: internal critic GO (4 rounds); codex/grok external blind review both GO-WITH-AMENDMENTS, folded through v5.2 (two delta rounds each; cross-seat sibling-remedy adjudication in §8); user sign-off 2026-10-09.
 - Scope: new package `packages/interaction/retry-attendant`; capability manifest row; preset registration. No harness-upstream dependency. No edits to `post-edit-verify` (boundary in §2).
 - Sources: Verified Tool Calls (arXiv 2608.02645): non-atomic tool failures fall into four classes (timeout-after-dispatch, delayed visibility, partial success, stale conflict) where the observed response is not a reliable proxy for the effect; verify the postcondition before retrying; ablation showed the verification-only variant captures most of the gain (duplicate side effects 20–72% → ~0 with the full wrapper).
 
@@ -15,7 +15,7 @@ re-run after it actually committed (double commit), a file copy repeated over a
 partial target. The observed failure tells the agent nothing about which world it
 is in, and nothing in dsh-cc today tells the agent to check before retrying.
 
-Probe-verified facts (2026-11-11 refresh, this worktree + linked
+Probe-verified facts (2026-10-09 refresh, this worktree + linked
 `deepseek-harness` tree — the "upstream-unverifiable" hedges of v3 are now
 resolved):
 
@@ -666,7 +666,7 @@ grammar fixed (git/status etc. are second tokens); §5 gate name corrected to
 `check:size`; §5.1 contract test pins the `old_string was not found in`
 anchor.
 
-**Round 3 — fresh adversarial critic pass (2026-11-11), orchestrator-verified
+**Round 3 — fresh adversarial critic pass (2026-10-09), orchestrator-verified
 against the linked harness tree.** Verdict: **GO-WITH-AMENDMENTS**; 8 findings,
 7 adopted as v4 amendments, F7 kept as implementation-pinned. Headline changes:
 - **F1 (WRONG, HIGH)** — the v3 M1 trigger (`isError` + error-message text)
@@ -723,7 +723,7 @@ listDigest precedent, hook-protocol module augmentation, preset/composition
 registration shape, interaction→interaction test-dependency precedent
 (advisor-watchdog), `engine.*` manifest category.
 
-**Round 4 — critic delta on v4 (2026-11-11, send_message continuation of the
+**Round 4 — critic delta on v4 (2026-10-09, send_message continuation of the
 round-3 seat).** Verdict: **GO** with D1–D3 folded before implementation;
 nothing NO-GO-level. All 8 round-3 folds verified present and faithful in the
 v4 text; all four marker strings (`[timed out after`, `[Command timed out or
@@ -763,7 +763,7 @@ the cordis prepend relative order among same-priority listeners (asserted by
 `tool-bash/src/index.ts:97`); pre-execute inject vs post-result FIFO ordering
 (§5.3 pin test).
 
-**Round 4 confirmation (2026-11-11, same critic seat).** Verdict: **CONFIRM** —
+**Round 4 confirmation (2026-10-09, same critic seat).** Verdict: **CONFIRM** —
 the D1–D3 folds carry the intended pins (fold direction in §3.3, mechanism in
 §5.4(b), derived order in §5.4(c)); the override set {allow, ask, passthrough →
 our ask; deny/cancel pass through} is correct per `register-events.ts:123-124`
@@ -772,7 +772,7 @@ misattribution). One optional polish adopted: the §3.3 pseudocode now shows
 the non-escalation path (`return downstream` when no live entry matches) so
 "delegate-first" cannot be read as escalation-only.
 
-**Round 5 — codex external blind review (2026-11-11, canonical bridge lane,
+**Round 5 — codex external blind review (2026-10-09, canonical bridge lane,
 65k tokens).** Verdict: **GO-WITH-AMENDMENTS**; 6 findings (2 HIGH, 3 MEDIUM,
 1 LOW), all orchestrator-verified then folded into v5:
 - **C1 (HIGH)** — the approval-absent fallback as written could erase an
@@ -804,7 +804,7 @@ Codex explicitly confirmed the two-branch timeout thesis, the delegate-first
 fold shape, FS_AMBIGUOUS_EDIT propagation, MessageSourceMap augmentation, and
 session-identity keying.
 
-**Round 6 — grok external blind review (2026-11-11, canonical bridge lane,
+**Round 6 — grok external blind review (2026-10-09, canonical bridge lane,
 39 turns).** Verdict: **GO-WITH-AMENDMENTS**; 14 findings (3 HIGH, 6 MEDIUM,
 5 LOW) plus four open questions, all orchestrator-verified (cordis unshift,
 inject/inbox order, win32 pwsh preset, hint anchors re-checked against source)
@@ -871,7 +871,7 @@ then folded into v5:
   v5 text (§3.3 digest projection, §3.2 precedence block, §3.3 clear rule,
   §3.2 tool set).
 
-**Round 5 delta — codex confirmation on v5 (2026-11-11, `--last` thread).**
+**Round 5 delta — codex confirmation on v5 (2026-10-09, `--last` thread).**
 Verdict: **C1 CONFIRM; C5 refined once more.** The C1 preserve-downstream
 fold matches the intended disposition. Two further real issues on the
 attempt-semantics block, both folded (v5.1):
@@ -890,7 +890,7 @@ attempt-semantics block, both folded (v5.1):
 codex's proposed sibling remedy (await-the-pending-resolution-then-reevaluate)
 was **not** adopted as-is — see the cross-seat adjudication note below.
 
-**Round 6 delta — grok confirmation on v5 (2026-11-11, `--last` thread).**
+**Round 6 delta — grok confirmation on v5 (2026-10-09, `--last` thread).**
 Verdict: **G2/G3 folds confirmed; the sibling clause was the sole NO-GO**;
 fold it and this seat is CONFIRM. Grok independently flagged the same
 execution-level race codex did (pass-through returns a non-delegating auto
