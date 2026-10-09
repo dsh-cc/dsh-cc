@@ -1,7 +1,7 @@
 # Structured progress state + post-compact context rebuild (design)
 
 - Date: 2026-10-09
-- Status: draft v5 — rounds 1-2 internal critic GO; round 3 code-truth verification (dual-lane) GO-WITH-AMENDMENTS, adopted in v4; round 4 delta GO-WITH-AMENDMENTS, adopted in v5; round 5 same-seat micro-confirmation **GO**. User sign-off pending. NOT yet implemented. Default-ON decision taken by the user 2026-11-12 (§3.5).
+- Status: **implemented — PR #211 (pending merge)**. Rounds 1-2 internal critic GO; round 3 code-truth verification (dual-lane) GO-WITH-AMENDMENTS, adopted in v4; round 4 delta GO-WITH-AMENDMENTS, adopted in v5; round 5 same-seat micro-confirmation **GO**; default-ON user decision 2026-11-12 (§3.5); implementation delivered 2026-11-12 (§8 implementation-round entry). Flip to the standard `Implemented — PR #211 (merged <date>)` form on merge.
 - Scope: new package `packages/context/progress-rebuild`; capability manifest row; preset registration. Read-only consumption of session events + one injection path. No compaction-engine changes; no harness-upstream dependency.
 - Sources: Effective Harnesses (initializer/progress-log/handoff protocol against one-shotting and premature completion), Harness Design (context reset + structured handoff artifact beats in-place compaction under context anxiety), Remember-Don't-Re-read (typed runtime state instead of prompt replay: 24,465→2,492 tokens on 15-step runs), SLA (restricted role context rebuilt by the harness). Calibrated by Coding Harness Study/Malena: the win here is *continuity at compaction boundaries*, not more scaffolding.
 
@@ -322,7 +322,8 @@ every `verified` line is generated from an event, and the section header says so
 7. Gates: capabilities manifest + parity, README trio, check:size,
    composition pin, check-spec-deps.
 
-Dogfood (config-is-prompt): observe `progress-rebuild/injected` rows after real
+Dogfood (config-is-prompt): observe the sidecar rows — one JSON line per
+injection in `$DSH_HOME/progress-rebuild/<sessionId>.jsonl` — after real
 compactions; expected observable = the first model step after compaction does
 not re-run reads that the brief already answered (spot-check by transcript).
 
@@ -448,6 +449,12 @@ not re-run reads that the brief already answered (spot-check by transcript).
   (`$DSH_HOME/progress-rebuild/<sessionId>.jsonl`, §3.3 step 4), the
   SessionEventMap augmentation dropped (MessageSourceMap kind retained).
   This finding survived review rounds 1-5 uncaught and was surfaced by the
-  implementation pass — recorded per honest-attribution rule.
+  implementation pass — recorded per honest-attribution rule. A second
+  implementation-pin: `agent.inject` itself records an inbox-splice session
+  append, so the whole injection path runs in a `queueMicrotask` to leave the
+  publishing append's reentry window (live-verified during slice 2).
+  Delivered 2026-11-12 as PR #211 (slices: derivation core / wiring +
+  denylists + sidecar / registration battery); local gates green,
+  presubmit in flight.
 
 (filled per review round — verdict, findings, dispositions with in-text anchors)
