@@ -163,23 +163,32 @@ if (tagExistsRemote) fail(`tag '${tag}' already exists on origin`);
 
 const planned = planReleaseVersionWrites(ROOT, argVersion);
 
-// FALLBACK_VERSION (command-version/version.ts) is the display value used when
-// package.json is unreadable at runtime — keep it in lockstep with the release,
-// and fail loudly if the constant ever moves/renames rather than shipping stale.
-const FALLBACK_REL = "packages/interaction/command-version/src/version.ts";
-const fallbackPath = join(ROOT, FALLBACK_REL);
-const fallbackSrc = readFileSync(fallbackPath, "utf8");
+// FALLBACK_VERSION constants (command-version + config-snapshot) are the
+// display values used when package.json is unreadable at runtime — keep each
+// in lockstep with the release, and fail loudly if a constant ever
+// moves/renames rather than shipping stale.
+const FALLBACK_FILES = [
+  { rel: "packages/interaction/command-version/src/version.ts" },
+  { rel: "packages/observability/config-snapshot/src/version.ts" },
+];
 const fallbackRe = /export const FALLBACK_VERSION = (['"])([^'"]+)\1/;
-const fallbackFrom = fallbackSrc.match(fallbackRe)?.[2];
-if (fallbackFrom === undefined) {
-  fail(`could not locate FALLBACK_VERSION in ${FALLBACK_REL} — update release.mjs alongside it`);
-}
+const fallbacks = FALLBACK_FILES.map(({ rel }) => {
+  const path = join(ROOT, rel);
+  const src = readFileSync(path, "utf8");
+  const from = src.match(fallbackRe)?.[2];
+  if (from === undefined) {
+    fail(`could not locate FALLBACK_VERSION in ${rel} — update release.mjs alongside it`);
+  }
+  return { rel, path, src, from };
+});
 
 console.log(`  [${label}] planned version writes (${planned.length}):`);
 for (const p of planned) {
   console.log(`    ${p.name}: ${p.from} -> ${p.to}  (${join("..", p.path).replace(join("..", ROOT), ".")})`);
 }
-console.log(`    FALLBACK_VERSION: ${fallbackFrom} -> ${argVersion}  (${FALLBACK_REL})`);
+for (const f of fallbacks) {
+  console.log(`    FALLBACK_VERSION: ${f.from} -> ${argVersion}  (${f.rel})`);
+}
 console.log(`  [${label}] commit message: chore(release): ${tag}`);
 
 if (dryRun) {
@@ -194,11 +203,13 @@ for (const p of planned) {
   json.version = argVersion;
   writeFileSync(p.path, `${JSON.stringify(json, null, 2)}\n`, "utf8");
 }
-writeFileSync(
-  fallbackPath,
-  fallbackSrc.replace(fallbackRe, (_m, q) => `export const FALLBACK_VERSION = ${q}${argVersion}${q}`),
-  "utf8",
-);
+for (const f of fallbacks) {
+  writeFileSync(
+    f.path,
+    f.src.replace(fallbackRe, (_m, q) => `export const FALLBACK_VERSION = ${q}${argVersion}${q}`),
+    "utf8",
+  );
+}
 
 git("add", "-A");
 git("commit", "-m", `chore(release): ${tag}`);

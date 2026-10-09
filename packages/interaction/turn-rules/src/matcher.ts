@@ -13,6 +13,7 @@ export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'cc-workflow-completion',
   'turn-rules',
   'advisor',
+  'completion-gate',
   'progress-rebuild',
 ]
 

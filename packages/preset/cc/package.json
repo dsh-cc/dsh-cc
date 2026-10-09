@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/preset-cc",
   "description": "dsh CC mode agent preset: composition-only package mounting the Claude Code surface",
-  "version": "0.9.0-rc.3",
+  "version": "0.9.0-rc.4",
   "type": "module",
   "repository": {
     "type": "git",
@@ -51,6 +51,7 @@
     "@dsh-cc/compaction-micro": "workspace:^",
     "@dsh-cc/context-crusher": "workspace:^",
     "@dsh-cc/coordinator": "workspace:^",
+    "@dsh-cc/config-snapshot": "workspace:^",
     "@dsh-cc/hooks-claude-code": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/memory-consolidation": "workspace:^",
@@ -77,9 +78,11 @@
     "@dsh-cc/lsp-on-write": "workspace:^",
     "@dsh-cc/turn-rules": "workspace:^",
     "@dsh-cc/advisor-watchdog": "workspace:^",
+    "@dsh-cc/completion-gate": "workspace:^",
     "@dsh-cc/post-edit-verify": "workspace:^",
     "@dsh-cc/reasoning-fold": "workspace:^",
-    "@dsh-cc/progress-rebuild": "workspace:^"
+    "@dsh-cc/progress-rebuild": "workspace:^",
+    "@dsh-cc/retry-attendant": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",

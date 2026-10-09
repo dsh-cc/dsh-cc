@@ -28,6 +28,7 @@ export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'turn-rules',
   'plugin',
   'advisor',
+  'completion-gate',
   'progress-rebuild',
 ]
 

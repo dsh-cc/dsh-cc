@@ -243,6 +243,32 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('advisor-watchdog')
     expect(topIds).not.toContain('advisor-watchdog')
     expect(configIds.indexOf('advisor-watchdog')).toBeGreaterThan(configIds.indexOf('turn-rules'))
+    // The completion-gate row (plan docs/plans/2026-10-09-runtime-verified-completion.md)
+    // publishes no Service (plain plugin) and sits inside the group at the
+    // cc-services tail, after advisor-watchdog, with NO new isolate key.
+    // DEFAULT OFF (cc-completion-gate.enabled=false).
+    expect(configIds).toContain('completion-gate')
+    expect(topIds).not.toContain('completion-gate')
+    expect(configIds.indexOf('completion-gate')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
+    // The completion-gate row (plan docs/plans/2026-10-09-runtime-verified-completion.md)
+    // publishes no Service (plain plugin) and sits inside the group at the
+    // cc-services tail, after advisor-watchdog, with NO new isolate key.
+    // DEFAULT OFF (cc-completion-gate.enabled=false).
+    expect(configIds).toContain('completion-gate')
+    expect(topIds).not.toContain('completion-gate')
+    expect(configIds.indexOf('completion-gate')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
+    // The retry-attendant row (plan docs/plans/2026-10-09-verify-before-retry.md)
+    // publishes no Service (plain plugin, advisor-watchdog pattern) and sits
+    // inside the group between context-crusher and hooks-claude-code, with NO
+    // new isolate key. ORDER TRIPWIRE: its pre-execute listener is registered
+    // with prepend:true and cordis prepend unshifts (later-registered prepend
+    // listener = OUTERMOST), so it must sort BEFORE the hooks-claude-code row —
+    // hooks' later prepend lands outside retry-attendant so a user PreToolUse
+    // hook allow/ask can override the attendant's ask.
+    expect(configIds).toContain('retry-attendant')
+    expect(topIds).not.toContain('retry-attendant')
+    expect(configIds.indexOf('retry-attendant')).toBeGreaterThan(configIds.indexOf('context-crusher'))
+    expect(configIds.indexOf('retry-attendant')).toBeLessThan(configIds.indexOf('hooks-claude-code'))
     // The progress-rebuild row (design
     // docs/plans/2026-10-09-structured-progress-and-post-compact-rebuild.md)
     // publishes no Service (plain plugin) and sits inside the group at the
@@ -285,6 +311,14 @@ describe('agent.cordis.yml composition', () => {
     expect(topIds).not.toContain('hooks-claude-code')
     expect(topIds).not.toContain('tool-web-fetch')
     expect(topIds).toContain('memory-consolidation')
+
+    // The config-snapshot row (plan docs/plans/2026-10-09-session-config-snapshot-event.md)
+    // publishes no Service (plain plugin, handoff-store pattern) and sits
+    // inside the group at the cc-services tail, after advisor-watchdog, with
+    // NO new isolate key.
+    expect(configIds).toContain('config-snapshot')
+    expect(topIds).not.toContain('config-snapshot')
+    expect(configIds.indexOf('config-snapshot')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
 
     // tool-web row: fetch is disabled here — web_fetch comes from the
     // cc-services tool-web-fetch row instead.
