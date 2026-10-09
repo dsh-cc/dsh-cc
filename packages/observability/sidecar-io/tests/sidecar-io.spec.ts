@@ -83,7 +83,11 @@ describe('appendJsonl repairTail', () => {
       appendJsonl(file, { a: 1 }),
       appendJsonl(file, { a: 2 }),
     ])
-    expect(await readJsonl<{ a: number }>(file)).toEqual([{ a: 1 }, { a: 2 }])
+    // Concurrent appends have no ordering guarantee — assert both rows
+    // landed parseable, not their order.
+    const rows = await readJsonl<{ a: number }>(file)
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.a).sort()).toEqual([1, 2])
   })
 
   it('tolerates racing tail repairs onto an unterminated tail (worst case: one skipped line)', async () => {
