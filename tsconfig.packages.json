@@ -116,6 +116,9 @@
       "path": "./packages/interaction/advisor-watchdog"
     },
     {
+      "path": "./packages/context/progress-rebuild"
+    },
+    {
       "path": "./packages/interaction/lsp-on-write"
     },
     {

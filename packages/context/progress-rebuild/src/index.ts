@@ -16,6 +16,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { registerDelivery } from './delivery.ts'
 import { DEFAULT_PROGRESS_REBUILD_SETTINGS, registerSettings } from './settings.ts'
+import type { ProgressRebuildSettings } from './settings.ts'
 import { progressRebuildProjection } from './state.ts'
 
 export {

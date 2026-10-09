@@ -98,7 +98,10 @@ export function registerDelivery(
   // Listener B (§3.3 step 1): the compaction/end trigger with the path split.
   ctx.on('session/event', (session: Session, event: SessionEvent) => {
     try {
-      if (event.type !== 'compaction/end') return
+      // `compaction/end` is declared by the compaction plugin's augmentation
+      // (not the core session map) — compare as a widened string (the
+      // register-events.ts:277-283 in-repo precedent).
+      if ((event.type as string) !== 'compaction/end') return
       const settings = readSettings()
       if (!settings.enabled) return
       // Skip failed compactions FIRST: nothing was amputated, so no resume
@@ -172,7 +175,7 @@ export function registerDelivery(
       if (message.source?.kind !== 'progress-rebuild' || typeof message.id !== 'string') return
       const path = pathStash.get(message.id)
       if (path === undefined) return
-      const text = (event.data as { content?: { type?: unknown; text?: unknown }[] }).content
+      const text = ((event.data as unknown) as { content?: { type?: unknown; text?: unknown }[] }).content
         ?.find((block) => block?.type === 'text')?.text
       if (typeof text !== 'string') return
       const payload: ProgressRebuildInjectedEventData = {
