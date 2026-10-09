@@ -4268,6 +4268,52 @@
         "summary": "A failed resume-identity verification warns and stays in the launch directory; CC additionally re-binds the session into the launch dir and clears the persisted binding, which needs the upstream `resume({ meta })` cwd-override seam (plan §11.3)."
       }
     },
+    "sessions.progress-rebuild": {
+      "title": "Structured progress state + post-compact context rebuild",
+      "category": "sessions",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. Derives a typed per-session progress brief from session events (goal canonical fold, todo/write snapshot, verified bash receipts, last user message) as a registered session projection, and on a successful compaction/end re-injects the brief into the first model request built after the compaction boundary. Ships dark (progress-rebuild.enabled: false).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: progress-rebuild"
+        },
+        {
+          "type": "source",
+          "path": "packages/context/progress-rebuild/src/index.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/context/progress-rebuild/src/settings.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/preset/cc/tests/composition.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: no CC counterpart exists. A structured handoff artifact at compaction boundaries — typed progress state re-injection instead of prose history replay — via the session-projection mandatory seam and path-split post-compact delivery."
+      }
+    },
     "memory.claude-md-imports": {
       "title": "CLAUDE.md @path imports",
       "category": "memory",

@@ -122,6 +122,9 @@
       "path": "./packages/interaction/completion-gate"
     },
     {
+      "path": "./packages/context/progress-rebuild"
+    },
+    {
       "path": "./packages/interaction/lsp-on-write"
     },
     {

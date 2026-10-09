@@ -81,6 +81,7 @@
     "@dsh-cc/completion-gate": "workspace:^",
     "@dsh-cc/post-edit-verify": "workspace:^",
     "@dsh-cc/reasoning-fold": "workspace:^",
+    "@dsh-cc/progress-rebuild": "workspace:^",
     "@dsh-cc/retry-attendant": "workspace:^"
   },
   "devDependencies": {

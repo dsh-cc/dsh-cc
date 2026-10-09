@@ -748,6 +748,67 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/context/progress-rebuild:
+    dependencies:
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: link:../../../../deepseek-harness/packages/core/agent-loop
+        version: link:../../../../deepseek-harness/packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-compaction':
+        specifier: link:../../../../deepseek-harness/packages/compaction/compaction
+        version: link:../../../../deepseek-harness/packages/compaction/compaction
+      '@deepseek-ai/dsh-goal':
+        specifier: link:../../../../deepseek-harness/packages/goal/goal
+        version: link:../../../../deepseek-harness/packages/goal/goal
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-persistence-jsonl':
+        specifier: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
+        version: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+        version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+      '@deepseek-ai/dsh-token-meter':
+        specifier: link:../../../../deepseek-harness/packages/llm/token-meter
+        version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/agent-loop-mock':
+        specifier: workspace:^
+        version: link:../../test-support/agent-loop-mock
+      '@dsh-cc/settings-provider':
+        specifier: workspace:^
+        version: link:../../settings/settings-provider
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/core/tool-append-order:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -2593,6 +2654,9 @@ importers:
       '@dsh-cc/post-edit-verify':
         specifier: workspace:^
         version: link:../../interaction/post-edit-verify
+      '@dsh-cc/progress-rebuild':
+        specifier: workspace:^
+        version: link:../../context/progress-rebuild
       '@dsh-cc/prompt-suggest':
         specifier: workspace:^
         version: link:../../interaction/prompt-suggest
@@ -5262,6 +5326,9 @@ packages:
     peerDependencies:
       zod: ^3.25.28 || ^4
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
@@ -6975,5 +7042,7 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@4.5.4):
     dependencies:
       zod: 4.5.4
+
+  zod@4.4.3: {}
 
   zod@4.5.4: {}

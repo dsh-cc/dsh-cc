@@ -250,6 +250,13 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('completion-gate')
     expect(topIds).not.toContain('completion-gate')
     expect(configIds.indexOf('completion-gate')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
+    // The completion-gate row (plan docs/plans/2026-10-09-runtime-verified-completion.md)
+    // publishes no Service (plain plugin) and sits inside the group at the
+    // cc-services tail, after advisor-watchdog, with NO new isolate key.
+    // DEFAULT OFF (cc-completion-gate.enabled=false).
+    expect(configIds).toContain('completion-gate')
+    expect(topIds).not.toContain('completion-gate')
+    expect(configIds.indexOf('completion-gate')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
     // The retry-attendant row (plan docs/plans/2026-10-09-verify-before-retry.md)
     // publishes no Service (plain plugin, advisor-watchdog pattern) and sits
     // inside the group between context-crusher and hooks-claude-code, with NO
@@ -262,6 +269,13 @@ describe('agent.cordis.yml composition', () => {
     expect(topIds).not.toContain('retry-attendant')
     expect(configIds.indexOf('retry-attendant')).toBeGreaterThan(configIds.indexOf('context-crusher'))
     expect(configIds.indexOf('retry-attendant')).toBeLessThan(configIds.indexOf('hooks-claude-code'))
+    // The progress-rebuild row (design
+    // docs/plans/2026-10-09-structured-progress-and-post-compact-rebuild.md)
+    // publishes no Service (plain plugin) and sits inside the group at the
+    // cc-services tail, after advisor-watchdog, with NO new isolate key.
+    expect(configIds).toContain('progress-rebuild')
+    expect(topIds).not.toContain('progress-rebuild')
+    expect(configIds.indexOf('progress-rebuild')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
     // after post-edit-verify (merged edit-recovery-hint host), with NO new
