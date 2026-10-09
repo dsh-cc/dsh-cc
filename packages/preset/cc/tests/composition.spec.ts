@@ -243,6 +243,16 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('advisor-watchdog')
     expect(topIds).not.toContain('advisor-watchdog')
     expect(configIds.indexOf('advisor-watchdog')).toBeGreaterThan(configIds.indexOf('turn-rules'))
+    // The progress-rebuild row (plan docs/plans/2026-10-09-structured-progress-
+    // and-post-compact-rebuild.md) publishes no Service (plain plugin) and
+    // sits inside the cc-services group after advisor-watchdog, with NO new
+    // isolate key. ORDER TRIPWIRE: it must sort after the advisor-watchdog
+    // row — both are cc-services-tail plain plugins; progress-rebuild's own
+    // injected kind is denylisted, so the seam is order-insensitive, but the
+    // physical row order keeps it reviewable.
+    expect(configIds).toContain('progress-rebuild')
+    expect(topIds).not.toContain('progress-rebuild')
+    expect(configIds.indexOf('progress-rebuild')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
     // after post-edit-verify (merged edit-recovery-hint host), with NO new

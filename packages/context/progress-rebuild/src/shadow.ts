@@ -83,7 +83,7 @@ function textOf(content: readonly { type: string; text?: string }[]): string {
  */
 export function applyEvent(shadow: ShadowState, event: SessionEvent): ShadowState {
   const next = clone(shadow)
-  switch (event.type) {
+  switch (event.type as string) {
     case 'goal/change': {
       // Pin 3: discriminate on `operation` BEFORE touching `.goal` — the
       // `clear` tombstone carries NO `goal` member.
@@ -105,7 +105,7 @@ export function applyEvent(shadow: ShadowState, event: SessionEvent): ShadowStat
           break
         case 'complete':
         case 'clear':
-          next.goal = undefined
+          delete next.goal
           break
       }
       return next

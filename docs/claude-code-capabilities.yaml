@@ -658,6 +658,43 @@ capabilities:
         vs PostToolUse `updatedToolOutput`. Default off; burst labeling via
         debounce-ms, tail-only capture bounded by max-output-bytes.
 
+  engine.progress-rebuild:
+    title: Post-compaction progress rebuild (derived progress brief injection)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. A plain plugin riding
+        the session/event firehose keeps a per-session shadow state (goal
+        edits, todo snapshots, verified shell receipts parsed from exit-code
+        markers, last real user instruction) and, after each successful
+        compaction/end, injects a small derived progress brief into the live
+        agent via agent.inject() with source kind 'progress-rebuild' so the
+        post-compact turn keeps its bearings. Settings namespace
+        progress-rebuild (enabled / max-lines / include-verified); one
+        sidecar JSON line per injection under
+        $DSH_HOME/progress-rebuild/<sessionId>.jsonl; never appends its own
+        session-event type.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: progress-rebuild" }
+      - { type: source, path: packages/context/progress-rebuild/src/index.ts }
+      - { type: source, path: packages/context/progress-rebuild/src/shadow.ts }
+      - { type: test, path: packages/context/progress-rebuild/tests/integration.spec.ts }
+      - { type: test, path: packages/context/progress-rebuild/tests/shadow.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: no CC counterpart exists. A deterministic
+        (model-free) post-compaction brief derived from session events on
+        the firehose seam, delivered by a resolve-time agent.inject() with
+        an injected source kind and a sidecar dogfood path.
+
   engine.prompt-suggest:
     title: Next-prompt suggestion
     category: engine

@@ -2513,6 +2513,9 @@ importers:
       '@dsh-cc/post-edit-verify':
         specifier: workspace:^
         version: link:../../interaction/post-edit-verify
+      '@dsh-cc/progress-rebuild':
+        specifier: workspace:^
+        version: link:../../context/progress-rebuild
       '@dsh-cc/prompt-suggest':
         specifier: workspace:^
         version: link:../../interaction/prompt-suggest

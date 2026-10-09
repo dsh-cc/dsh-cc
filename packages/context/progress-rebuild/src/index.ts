@@ -35,6 +35,7 @@ export const name = 'cc-progress-rebuild'
 /** Agents registry structural seam (`ctx.get('agents')?.get(id)`, register-events.ts:222 shape). */
 interface AgentsLike {
   get?(id: unknown): Agent | undefined
+  inject?(message: unknown): void
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -98,7 +99,7 @@ export function apply(ctx: Context): void {
         // §3.3 step 1: the FAILED compaction path also appends compaction/end
         // with an `error` field — never inject after a failed compaction.
         if ((event.data as { error?: unknown }).error !== undefined) return
-        const agents = (ctx.get('agents') as AgentsLike | undefined)?.get(session.id)
+        const agents = ctx.get('agents')?.get(session.id) as AgentsLike | undefined
         if (agents === undefined) {
           ctx.logger.debug(`progress-rebuild: no live agent for session ${sessionId}; skipping injection`)
           return
@@ -107,7 +108,7 @@ export function apply(ctx: Context): void {
         if (!settings.enabled) return
         const shadow = shadows.get(sessionId) ?? createShadow()
         const brief = renderBrief(shadow, { maxLines: settings.maxLines, includeVerified: settings.includeVerified })
-        agents.inject(createUserMessage({ content: [{ type: 'text', text: brief }], source: { kind: 'progress-rebuild' } }))
+        agents.inject?.(createUserMessage({ content: [{ type: 'text', text: brief }], source: { kind: 'progress-rebuild' } }))
         // Sidecar measurement, fully detached (handoff-store precedent);
         // dshHome absent → no-op. NO session.append on this path (types.ts).
         const home = dshHomeFn(ctx)
