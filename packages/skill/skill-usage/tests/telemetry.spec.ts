@@ -127,7 +127,7 @@ describe('skill-usage telemetry listeners', () => {
     const registrations: string[] = []
     const ctx = { logger: { debug: vi.fn() }, on: vi.fn((event: string) => { registrations.push(event) }), get: () => undefined, dshHomePath: () => '/x' }
     apply(ctx as never)
-    expect(registrations).toEqual(['tools/result', 'session/event'])
+    expect(registrations).toEqual(['tools/result', 'session/event', 'session/created', 'skills/learned-changed'])
   })
 
   it('tool form: writes a shape-correct row and propagates provider', async () => {

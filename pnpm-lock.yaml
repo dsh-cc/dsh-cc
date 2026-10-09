@@ -2989,6 +2989,9 @@ importers:
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
+      '@dsh-cc/skill-loader':
+        specifier: workspace:^
+        version: link:../skill-claude-code
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis

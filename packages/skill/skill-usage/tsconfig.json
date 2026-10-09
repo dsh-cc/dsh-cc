@@ -12,6 +12,9 @@
       "path": "../../observability/sidecar-io"
     },
     {
+      "path": "../../skill/skill-claude-code"
+    },
+    {
       "path": "../../subagent/handoff-store"
     },
     {

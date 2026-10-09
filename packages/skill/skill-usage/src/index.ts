@@ -20,6 +20,7 @@ import { cwdProjectKey } from '@dsh-cc/handoff-store'
 import { getSessionCwdForSession } from '@dsh-cc/session-cwd'
 import { dshHomeFn, projectKeyOf } from '@dsh-cc/sidecar-io'
 import { commitLoad, debug } from './ledger.ts'
+import { registerRollup } from './rollup.ts'
 import { registerSettings } from './settings.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -65,8 +66,9 @@ export {
 export function apply(ctx: Context): void {
   // /config UX + validation + rollup-time cascade knobs; the per-event gate
   // reads the raw user file instead (§3.5).
-  registerSettings(ctx)
+  const readSettings = registerSettings(ctx)
   registerListeners(ctx)
+  registerRollup(ctx, readSettings)
 }
 
 /**
