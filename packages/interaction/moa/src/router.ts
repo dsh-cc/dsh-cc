@@ -113,8 +113,11 @@ export type { TierResolution }
 /** The routing decision for one turn. */
 interface Decision {
   tier: number
-  /** Status-row text for the decision (§3.1: a classify is NEVER silent). */
+  /** Status-row text (§3.1: a classify is NEVER silent). */
   row: string
+  /** True for moa-escalation openings: NO router-side queued row — the typed
+   * followup the judge woke IS the escalation status row (§3.5 single-row). */
+  suppressRow?: boolean
 }
 
 export interface RequestRouter {
@@ -304,15 +307,14 @@ export function createRequestRouter(
       // §6 adjudication: arming still gates overrides — an explicit /model
       // this session (disarmed machine) passes through unmodified even for
       // moa-escalation openings; classify is still skipped.
-      const { originSeq, fromTier, toTier } = opening.source as {
-        originSeq: number
-        fromTier: number
-        toTier: number
-      }
+      const { originSeq } = opening.source as { originSeq: number }
       if (!arming.isArmed()) return undefined
       const floor = bookkeeping.floorFor(originSeq)
       if (floor === undefined) return undefined
-      return { tier: floor, row: `moa: ${tierAt(fromTier) ?? fromTier} → ${tierAt(toTier) ?? toTier}` }
+      // §3.5 conformance change (S4): the router does NOT queue the
+      // `moa: from → to` row — the typed followup the judge woke IS the
+      // escalation status row; a queued duplicate would render two rows.
+      return { tier: floor, row: '', suppressRow: true }
     }
     // Genuine-user gate: classify only genuine user turns.
     if (opening.source?.kind !== 'user') return undefined
@@ -355,7 +357,7 @@ export function createRequestRouter(
         // Status row queued (delivered at the next pre-step decision, see
         // pendingRows): mid-waterfall inject is NOT used — it wakes a
         // continuation turn and breaks the P3a firings==steps contract.
-        if (decision !== undefined) queueNotice(decision.row, decision.tier)
+        if (decision !== undefined && !decision.suppressRow) queueNotice(decision.row, decision.tier)
         return applied
       }
       if (turnTier !== undefined && turnTier.turn === payload.turn) {

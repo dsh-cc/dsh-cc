@@ -17,7 +17,8 @@ import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { readUserSection } from '@dsh-cc/settings-ns'
 import { ArmingMachine } from './arming.ts'
 import { createOpeningCapture } from './capture.ts'
-import { createRequestRouter, validateArming, type ArmingValidation, type RouterDeps } from './router.ts'
+import { createAcceptanceJudge, type JudgeDeps } from './judge.ts'
+import { createRequestRouter, validateArming, type ArmingValidation, type RequestRouter, type RouterDeps } from './router.ts'
 import { DEFAULT_MOA_SETTINGS, registerSettings, type MoaSettings } from './settings.ts'
 import { EscalationBookkeeping } from './state.ts'
 
@@ -29,6 +30,7 @@ export { MOA_ESCALATION_KIND, isMoaEscalationMessage, EscalationBookkeeping, typ
 export { moaNoticeSource } from './provenance.ts'
 export { createOpeningCapture, CAPTURE_CAPACITY } from './capture.ts'
 export { createRequestRouter, validateArming, textOf, requestHeaderOf, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type MoaRouteBackend } from './router.ts'
+export { createAcceptanceJudge, ACCEPT_QUESTION, type AcceptanceJudge, type JudgeDeps } from './judge.ts'
 
 /** What the wiring slice consumes. */
 export interface MoaCore {
@@ -38,6 +40,8 @@ export interface MoaCore {
   arming: ArmingMachine
   /** Per-session escalation bookkeeping (§4). */
   bookkeeping: EscalationBookkeeping
+  /** The routing slice's router handle (tier decisions + pair record). */
+  router?: RequestRouter
 }
 
 let core: MoaCore | undefined
@@ -93,10 +97,18 @@ export function apply(ctx: Context): void {
   }
 
   const capture = createOpeningCapture()
+  liveCapture = capture
   ctx.on('agent/pre-step', capture.listener as never)
   const router = createRequestRouter(core, { validation, deps: buildDeps(ctx, capture.getCapturedOpening) })
+  core.router = router
   ctx.on('agent/pre-step', router.preStepListener as never)
   ctx.on('agent/request', router.listener)
+  // Acceptance judge (§3.3/§3.4): capture-only `agent/turn-stopping`
+  // listener — capture inputs synchronously, dispatch the judge DETACHED
+  // (never blocks the waterfall; wakes the retry via agent.followup).
+  const judgeDeps = buildJudgeDeps(ctx)
+  const judge = createAcceptanceJudge(core, { validation, deps: judgeDeps })
+  ctx.on('agent/turn-stopping', judge.listener as never)
 }
 
 /** The `ccModelRoutes` service, read defensively (cordis throws when absent). */
@@ -106,6 +118,40 @@ function optionalRoutes(ctx: Context): ModelRoutes | undefined {
   } catch {
     return undefined
   }
+}
+
+/** Wire the judge's host seams off the plug context (§3.3/§3.4). */
+function buildJudgeDeps(ctx: Context): JudgeDeps {
+  return {
+    getCapturedOpening: (turnId) => getMoaCapture()?.getCapturedOpening(turnId),
+    tierFor: (turnId) => core?.router?.tierFor(turnId),
+    routes: () => optionalRoutes(ctx),
+    resolveBackend: (route) => {
+      try {
+        const raw = readUserSection((ctx as { settings?: unknown }) as never, 'llm-pi-ai')
+        const record = (raw?.providers as Record<string, { baseURL?: unknown } | undefined> | undefined)?.[route.provider ?? '']
+        const baseURL = typeof record?.baseURL === 'string' && record.baseURL.length > 0 ? record.baseURL : undefined
+        return baseURL === undefined ? undefined : { baseURL }
+      } catch {
+        return undefined
+      }
+    },
+    routingLedgerPath: () => {
+      const home = dshHomeFn(ctx)
+      return home === undefined ? undefined : home('moa', 'routing.jsonl')
+    },
+    acceptanceLedgerPath: () => {
+      const home = dshHomeFn(ctx)
+      return home === undefined ? undefined : home('moa', 'acceptance.jsonl')
+    },
+    logger: ctx.logger,
+  }
+}
+
+/** The live opening capture (set in apply; test seam for the judge deps). */
+let liveCapture: ReturnType<typeof createOpeningCapture> | undefined
+function getMoaCapture(): ReturnType<typeof createOpeningCapture> | undefined {
+  return liveCapture
 }
 
 /** Wire the router's host seams off the plug context. */

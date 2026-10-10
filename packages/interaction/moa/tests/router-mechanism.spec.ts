@@ -2,8 +2,9 @@
  * Router mechanism tests (listener-level, fake rig): turn-id trigger +
  * step reuse, §6 arming precedence (explicit /model → zero override,
  * re-arm on return to boot default), retry-turn routing contract
- * (moa-escalation opening → skip classify + live floor override, arming
- * still gates), last-element capture fixture, current-turn-text-not-history
+ * (moa-escalation opening → skip classify + live floor override + NO
+ * router-side escalation row (§3.5 single-row, S4), arming still gates),
+ * last-element capture fixture, current-turn-text-not-history
  * pin, status row delivery, side-car route record, effort re-validation
  * degrade, and mount-time arming validation (window fail → unarmed).
  */
@@ -141,6 +142,14 @@ describe('moa router mechanism', () => {
     const rows = await readJsonl<{ type: string }>(ledger)
     expect(rows).toHaveLength(0) // the floor path does not log a route row
     expect(rig.router.tierFor(10)).toBe(2)
+    // §3.5 conformance (S4): a moa-escalation opening queues NO router-side
+    // escalation status row — the typed followup the judge woke IS the
+    // escalation row. (Any delivered notice is unrelated, e.g. the rig's
+    // effort-reset notice.)
+    const delivered = (await rig.router.preStepListener({}, async () => ({ kind: 'continue', messages: [] }))) as {
+      messages: { source?: { summary?: string } }[]
+    }
+    expect(delivered.messages.filter((m) => (m.source?.summary ?? '').includes('→'))).toHaveLength(0)
 
     // §6 adjudication: an explicit /model (disarmed) passes through even for
     // moa-escalation openings — classify still skipped.

@@ -26,6 +26,9 @@ declare module '@deepseek-ai/dsh-llm' {
       originSeq: number
       fromTier: number
       toTier: number
+      /** TUI visibility (§3.5): rendered as a notice row, not human input. */
+      form?: 'notice'
+      summary?: string
     }
   }
 }
