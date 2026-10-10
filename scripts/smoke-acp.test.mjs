@@ -15,13 +15,22 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Floor mirrors the launcher's ACP bundle list.
 const deps = floorDependencies(repoRoot);
-assert.deepEqual(Object.keys(deps), ["@deepseek-ai/dsh-acp-app", "@dsh-cc/bundle-permissions", "@dsh-cc/bundle-shell", "@dsh-cc/bundle-acp"]);
+assert.deepEqual(Object.keys(deps), ["@deepseek-ai/dsh-acp-app", "@dsh-cc/bundle-permissions", "@dsh-cc/bundle-shell", "@dsh-cc/bundle-acp", "@dsh-cc/preset-cc"]);
+// Harness-owned packages must never be floor copies — a second dsh-scope module
+// instance makes the roster standing scope invisible to ScopedLayers (kScope is a
+// module-local Symbol) and collapses scoped registrations onto the global layer.
+assert.ok(!("@deepseek-ai/dsh-agent-preset-registry" in deps));
+assert.ok(!("@deepseek-ai/dsh-agent-preset" in deps));
+assert.ok(!("@deepseek-ai/cordis-plugin-include" in deps));
 assert.equal(deps["@deepseek-ai/dsh-acp-app"], ACP_APP_PIN);
 for (const name of Object.keys(deps)) {
   if (!name.startsWith("@dsh-cc/")) continue;
   assert.ok(deps[name].startsWith("link:"), `${name} must link into this worktree`);
   assert.ok(existsSync(deps[name].slice(5)), `${deps[name]} exists`);
-  assert.ok(existsSync(join(deps[name].slice(5), "cordis.patch.yml")), `${name} carries its bundle patch`);
+  // Bundles carry the patch; preset-cc is the content anchor the include row reads.
+  if (name.startsWith("@dsh-cc/bundle-")) {
+    assert.ok(existsSync(join(deps[name].slice(5), "cordis.patch.yml")), `${name} carries its bundle patch`);
+  }
 }
 // dsh-base must never become a profile dependency.
 assert.ok(!("@deepseek-ai/dsh-base" in deps));

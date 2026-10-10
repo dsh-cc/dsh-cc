@@ -35,6 +35,18 @@ const dryRun = process.argv.includes("--dry-run");
 const overlayIdx = process.argv.indexOf("--overlay");
 const overlayPath = overlayIdx >= 0 ? process.argv[overlayIdx + 1] : undefined;
 const credentialsLink = process.argv.includes("--credentials-link");
+// Full mode additionally keys the acp-cc row's model route from the shell env
+// (same DSH_CC_PROVIDER/DSH_CC_MODEL contract the launcher's bundle patch
+// documents); the roster persona interpolates {{model}}, so a prompt without
+// a resolved route fails assembly.
+const overlayRoute =
+  overlayPath === undefined
+    ? undefined
+    : { provider: process.env.DSH_CC_PROVIDER, model: process.env.DSH_CC_MODEL };
+if (overlayRoute !== undefined && (!overlayRoute.provider || !overlayRoute.model)) {
+  console.error("full mode needs DSH_CC_PROVIDER + DSH_CC_MODEL (the acp-cc row's model route)");
+  process.exit(2);
+}
 
 /** Repo dir of an @dsh-cc/bundle-* package name, e.g. @dsh-cc/bundle-acp → packages/bundle/acp. */
 export function pkgDir(repoRoot, name) {
@@ -43,13 +55,23 @@ export function pkgDir(repoRoot, name) {
   return join(repoRoot, "packages", "bundle", `cc-${short.slice("bundle-".length)}`);
 }
 
-/** Profile-floor dependencies: pinned harness rc + link: into this worktree.
+/** Profile-floor dependencies: pinned acp-app + link: into this worktree.
  *
- * pnpm does NOT materialize the dependency closure of a link: target, so the
- * runtime deps the published bundle installs from its versioned dependencies
- * must be declared here explicitly — otherwise the include-row path
- * (node_modules/@dsh-cc/preset-cc/agent.cordis.yml) and the
- * registry/agent-preset plugin names miss in the floor and session/new dies.
+ * Harness-owned runtime packages (the preset registry/declaration, the
+ * include loader — anything sharing dsh-scope's module-global kScope Symbol)
+ * must NOT become floor dependencies. A floor copy coexists with the ambient
+ * dsh installation's copy, and module-global state splits by realpath: the
+ * roster's standing scope gets tagged by whichever copy the registry row
+ * resolves to, while dsh-system-prompt's ScopedLayers reads another — the tag
+ * becomes invisible, scoped registrations fall onto the global layer and
+ * collide ('deployment:persona-prefix' etc.; live-verified 2026-10-10, see
+ * the PR-B commit chain for the full root-cause ledger). All harness packages
+ * must resolve from ONE tree — for this smoke, the ambient dsh build.
+ *
+ * pnpm does NOT materialize the dependency closure of a link: target — only
+ * the content anchor the include row reads by floor-relative path
+ * (node_modules/@dsh-cc/preset-cc/agent.cordis.yml) needs an explicit entry,
+ * and preset-cc is dsh-cc-owned so a link: copy is module-identity-safe.
  */
 export function floorDependencies(repoRoot) {
   const deps = {};
@@ -58,11 +80,9 @@ export function floorDependencies(repoRoot) {
     if (name === "@deepseek-ai/dsh-acp-app") deps[name] = ACP_APP_PIN;
     else deps[name] = `link:${pkgDir(repoRoot, name)}`;
   }
-  // link: closure (mirrors @dsh-cc/bundle-acp's published dependencies):
+  // link: closure proxy for the published bundle's @dsh-cc/preset-cc dep (the
+  // include row reads the file by floor-relative path; module-identity-safe).
   deps["@dsh-cc/preset-cc"] = `link:${join(repoRoot, "packages", "preset", "cc")}`;
-  deps["@deepseek-ai/dsh-agent-preset-registry"] = "0.2.0-rc.2";
-  deps["@deepseek-ai/dsh-agent-preset"] = "0.2.0-rc.2";
-  deps["@deepseek-ai/cordis-plugin-include"] = "1.0.9";
   return deps;
 }
 
@@ -107,8 +127,12 @@ const floor = {
 };
 writeFileSync(join(floorDir, "package.json"), JSON.stringify(floor, null, 2) + "\n");
 if (overlayPath !== undefined) {
-  // Full mode: provider overlay becomes the floor's user-layer patch.
+  // Full mode: provider overlay becomes the floor's user-layer patch, plus the
+  // acp-cc row's model route keyed from DSH_CC_PROVIDER/DSH_CC_MODEL.
+  const route = `\n# smoke-full model route (from DSH_CC_PROVIDER/DSH_CC_MODEL env)\n- id: acp-cc\n  config:\n    provider: !!js '${JSON.stringify(overlayRoute.provider)}'\n    model: !!js '${JSON.stringify(overlayRoute.model)}'\n`;
   copyFileSync(overlayPath, join(floorDir, "cordis.patch.yml"));
+  const appended = readFileSync(join(floorDir, "cordis.patch.yml"), "utf8") + route;
+  writeFileSync(join(floorDir, "cordis.patch.yml"), appended);
 }
 if (credentialsLink) {
   symlinkSync(join(process.env.HOME ?? "/dev/null", ".dsh", ".credentials.yaml"), join(home, ".credentials.yaml"));

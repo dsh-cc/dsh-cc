@@ -25,4 +25,4 @@ In registration order:
 ## Notes
 
 - Must NOT touch: `tools` (cc-shell remounts tools-cc), `settings`/`permission-rules` (cc-permissions), `user-questions`, HTTP/webserver rows.
-- The `@deepseek-ai/dsh-agent-preset-registry`, `@deepseek-ai/dsh-agent-preset`, and `@deepseek-ai/cordis-plugin-include` rows resolve from this package's dependencies — a packed profile floor installs them with the bundle rather than relying on ambient resolution.
+- The `@deepseek-ai/dsh-agent-preset-registry`, `@deepseek-ai/dsh-agent-preset`, and `@deepseek-ai/cordis-plugin-include` rows resolve **ambiently from the dsh installation** and must never become floor/bundle dependency copies: a second realpath for these packages splits module-global state (dsh-scope's `kScope` is a module-local Symbol), which collapses roster standing-scope registrations onto the global layer and fails the preset mount (live root-cause 2026-10-10). This mirrors bundle-tui: harness-owned runtime packages stay ambient, and only dsh-cc-owned packages (`@dsh-cc/acp`, `@dsh-cc/preset-cc` — the include row's file-path anchor) are hard dependencies.

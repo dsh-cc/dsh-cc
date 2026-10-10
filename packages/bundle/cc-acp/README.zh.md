@@ -25,4 +25,4 @@ bundle:
 ## 备注
 
 - 不得触碰：`tools`（cc-shell 重新挂载 tools-cc）、`settings`/`permission-rules`（cc-permissions）、`user-questions`、HTTP/webserver 行。
-- `@deepseek-ai/dsh-agent-preset-registry`、`@deepseek-ai/dsh-agent-preset` 与 `@deepseek-ai/cordis-plugin-include` 行由本包的 dependencies 解析——打包后的 profile floor 会随 bundle 一起安装它们，而不是依赖环境中的间接解析。
+- `@deepseek-ai/dsh-agent-preset-registry`、`@deepseek-ai/dsh-agent-preset` 与 `@deepseek-ai/cordis-plugin-include` 行一律由 dsh 安装树**环境化解析**，绝不可成为 floor/bundle 的依赖副本：这些包一旦存在第二个 realpath，模块级全局状态即分裂（dsh-scope 的 `kScope` 是模块局部 Symbol），roster standing scope 的注册会塌落到全局层、导致 preset 挂载失败（2026-10-10 活体根因实证）。这与 bundle-tui 同款惯例：harness 自有运行时包走环境化解析，只有 dsh-cc 自有的包（`@dsh-cc/acp`、`@dsh-cc/preset-cc`——include 行的文件路径锚点）才是硬依赖。
