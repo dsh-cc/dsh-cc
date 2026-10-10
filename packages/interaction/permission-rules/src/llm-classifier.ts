@@ -170,9 +170,13 @@ export function classificationKey(
   environment: readonly string[] = [],
   contextDigest?: string,
   hardDeny: readonly string[] = [],
+  // Underspec→ASK detector flag (design doc §3.0b): a dedicated trailing
+  // param — never overload contextDigest — so flag toggles rotate the key.
+  ambiguityAsk?: boolean,
 ): string {
   const parts = [toolName, renderedInput, listDigest(softDeny), listDigest(allowExceptions), listDigest(environment), listDigest(hardDeny)]
   if (contextDigest !== undefined) parts.push(contextDigest)
+  if (ambiguityAsk === true) parts.push('ambiguity')
   return sha256(parts.join('|'))
 }
 

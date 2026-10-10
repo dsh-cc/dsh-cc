@@ -51,6 +51,12 @@ export interface ClassifierAuditEventData {
   probabilities?: Record<string, number>
   /** System One gauge lane only (§4.4): the gateway's entropy-normalized confidence scalar. */
   confidence?: number
+  /**
+   * System One gauge lane only (underspec→ASK detector, design doc §3.3): the
+   * ambiguity question's answer; absent when the flag is off, the question
+   * was dropped (budget/no task), or the row is a failure/stale-mode outcome.
+   */
+  ambiguity?: 'specified' | 'underspecified'
   latencyMs: number
   cacheHit: boolean
 }

@@ -55,6 +55,8 @@ export type SystemOneClassification = {
   cacheHit: boolean
   probabilities?: Record<string, number>
   confidence?: number
+  /** The underspec detector's answer (design doc §3.1); absent when not asked. */
+  ambiguity?: 'specified' | 'underspecified'
 }
 
 /** The stage-side faces the branch folds through (no session state held here). */
@@ -76,6 +78,10 @@ export type SystemOneSliceOpts = {
   gaugeAllowEvidence: boolean | undefined
   /** The merged allow rules the evidence collector pre-filters (waterfall's view). */
   allowEvidenceRules?: readonly PermissionRule[]
+  /** Underspec→ASK detector flag (design doc §3.4; default OFF). */
+  ambiguityAsk?: boolean
+  /** The visible task text for the ambiguity question (§3.1a); '' when unavailable. */
+  task?: string
 }
 
 /** The gauge lane: memoized verdict LRU + wire call, per-stage (rebuild drops it). */
@@ -83,7 +89,7 @@ export type SystemOneLane = {
   classify(
     exec: ToolExecution,
     backend: SystemOneBackendInfo,
-    opts: { slots: GaugeSlots; allowThreshold: number; timeoutMs: number; signal?: AbortSignal },
+    opts: { slots: GaugeSlots; allowThreshold: number; timeoutMs: number; signal?: AbortSignal; ambiguityAsk?: boolean; task?: string },
   ): Promise<SystemOneClassification>
 }
 
@@ -99,7 +105,10 @@ export function createSystemOneLane(
       // F1 single render site: prepareSystemOneInput IS the render — the
       // token-budgeted state doubles as this lane's classifier input and
       // the verdict-LRU key. Chat lanes can never collide with these keys.
-      const prepared = prepareSystemOneInput(exec, opts.slots, backend.contextWindow)
+      const prepared = prepareSystemOneInput(exec, opts.slots, backend.contextWindow, {
+        ...(opts.ambiguityAsk === true ? { ambiguityAsk: true } : {}),
+        ...(opts.task === undefined ? {} : { task: opts.task }),
+      })
       const input = prepared.state
       const digest = createHash('sha256').update(input).digest('hex')
       const key = classificationKey(
@@ -110,7 +119,13 @@ export function createSystemOneLane(
         opts.slots.environment,
         undefined,
         opts.slots.hardDeny,
+        opts.ambiguityAsk === true,
       )
+      // Two-phase budget drop observability (design doc §3.1b): the drop is
+      // indistinguishable from flag-off in the event stream, so log one line.
+      if (opts.ambiguityAsk === true && typeof opts.task === 'string' && opts.task.length > 0 && prepared.questions.ambiguity === undefined) {
+        deps.debug?.(`[dsh:classifier:raw] gauge ${backend.model} ambiguity question dropped for token budget @window=${backend.contextWindow}`)
+      }
       const cached = cache.get(key)
       if (cached !== undefined) {
         return {
@@ -147,7 +162,7 @@ export function createSystemOneLane(
           cacheHit: false,
         }
       }
-      cache.set(key, { verdict: outcome.verdict, reason: outcome.reason, ...(outcome.probabilities === undefined ? {} : { probabilities: outcome.probabilities }), ...(outcome.confidence === undefined ? {} : { confidence: outcome.confidence }) })
+      cache.set(key, { verdict: outcome.verdict, reason: outcome.reason, ...(outcome.probabilities === undefined ? {} : { probabilities: outcome.probabilities }), ...(outcome.confidence === undefined ? {} : { confidence: outcome.confidence }), ...(outcome.ambiguity === undefined ? {} : { ambiguity: outcome.ambiguity }) })
       return {
         verdict: outcome.verdict,
         reason: outcome.reason,
@@ -161,6 +176,7 @@ export function createSystemOneLane(
         cacheHit: false,
         ...(outcome.probabilities === undefined ? {} : { probabilities: outcome.probabilities }),
         ...(outcome.confidence === undefined ? {} : { confidence: outcome.confidence }),
+        ...(outcome.ambiguity === undefined ? {} : { ambiguity: outcome.ambiguity }),
       }
     },
   }
@@ -214,6 +230,8 @@ export async function systemOneEscalate(
     slots,
     allowThreshold: opts.gaugeAllowThreshold ?? DEFAULT_GAUGE_ALLOW_THRESHOLD,
     timeoutMs: opts.timeoutMs,
+    ...(opts.ambiguityAsk === true ? { ambiguityAsk: true } : {}),
+    ...(opts.task === undefined ? {} : { task: opts.task }),
     ...(exec.signal === undefined ? {} : { signal: exec.signal }),
   })
   if (faces.modeOf(exec) !== modeBefore) {
@@ -230,24 +248,33 @@ export async function systemOneEscalate(
     return undefined
   }
   faces.breaker.record(sessionIdOf(exec), routeKey, verdict.failure, { exec, route })
+  // Underspec→ASK merge (design doc §3.2): applied BEFORE event assembly so
+  // the audit row records the FINAL verdict/reason. Never converts ask or
+  // touches deny paths — escalation is allow→ask only.
+  const escalated = opts.ambiguityAsk === true
+    && verdict.ambiguity === 'underspecified'
+    && verdict.verdict === 'allow'
+  const finalVerdict = escalated ? 'ask' as const : verdict.verdict
+  const finalReason = escalated ? 'target/scope under-specified (underspec detector)' : verdict.reason
   if (session !== undefined) {
     const audit: ClassifierAuditEventData = {
       tool: verdict.tool,
       digest: verdict.digest,
       ...(opts.auditFullText === true ? { input: verdict.input } : {}),
-      verdict: verdict.verdict,
+      verdict: finalVerdict,
       ...(exec.callId === undefined ? {} : { callId: exec.callId }),
       ...(verdict.failure === undefined ? {} : { failure: verdict.failure }),
       route: routeKey,
       provider: backend.provider,
       model: backend.model,
-      reason: sanitizeReason(verdict.reason),
+      reason: sanitizeReason(finalReason),
       ...(verdict.probabilities === undefined ? {} : { probabilities: verdict.probabilities }),
       ...(verdict.confidence === undefined ? {} : { confidence: verdict.confidence }),
+      ...((opts.ambiguityAsk === true && verdict.ambiguity !== undefined) ? { ambiguity: verdict.ambiguity } : {}),
       latencyMs: verdict.latencyMs,
       cacheHit: verdict.cacheHit,
     }
     faces.audit(session, audit)
   }
-  return verdict.verdict === 'allow' ? 'allow' : { kind: 'ask', reason: verdict.reason }
+  return finalVerdict === 'allow' ? 'allow' : { kind: 'ask', reason: finalReason }
 }

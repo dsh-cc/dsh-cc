@@ -1037,3 +1037,94 @@ describe('auto-stage × System One gauge lane (B2b)', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Underspec→ASK detector slice (design doc 2026-10-09 §3.4/§5.1/§5.5)
+// ---------------------------------------------------------------------------
+
+const AMB_ALLOW_UNDERSPECIFIED = {
+  model: 'laya-rl-agent',
+  answers: {
+    verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 } },
+    ambiguity: { type: 'choice', choice: 'underspecified' },
+  },
+  usage: { input_tokens: 83, output_tokens: 0 },
+}
+
+/** Minimal session stand-in: taskOf only reads snapshotEvents (fold's userIntent). */
+function sessionWithIntent(text: string): Session {
+  return {
+    header: { id: 's-amb' },
+    snapshotEvents: () => [
+      { type: 'user/message', data: { content: [{ type: 'text', text }], source: { kind: 'user' } } },
+    ],
+  } as unknown as Session
+}
+
+describe('underspec→ASK slice (readSlice + gaugeBuiltRaw)', () => {
+  function lastAudit(h: Harness): ClassifierAuditEventData {
+    const calls = (h.deps.audit as ReturnType<typeof vi.fn>).mock.calls as Array<[Session, ClassifierAuditEventData]>
+    return calls.at(-1)![1]
+  }
+
+  function gaugeFetch(bodies: Array<{ questions: unknown }>): typeof fetch {
+    return vi.fn(async (_url: unknown, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body) as { questions: unknown })
+      return Response.json(structuredClone(AMB_ALLOW_UNDERSPECIFIED))
+    }) as unknown as typeof fetch
+  }
+
+  it('§5.1: ambiguityAsk absent in settings ⇒ consumption default false (no escalation); present true ⇒ escalated to ask with the detector reason', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true } } }
+    h.deps.fetchImpl = gaugeFetch([])
+    h.deps.resolveRoute = () => ({ backend: 'systemone' as const, provider: 'deepseek', model: 'llmbox_systemone/laya', baseURL: 'http://x' })
+    const stage = createAutoStage(h.deps)
+    const session = sessionWithIntent('delete the one file')
+    expect(await stage.maybeEscalate(decided(), exec({ session }))).toBe('allow')
+    const off = lastAudit(h)
+    expect(off.verdict).toBe('allow')
+    expect('ambiguity' in off).toBe(false)
+
+    // Flag ON on the same stage (lazy re-read, no rebuild): raw rotates, the
+    // question is asked, the allow verdict escalates. Identical exec (same
+    // command + task) ⇒ the only key delta is the flag marker, so a
+    // cacheHit:false here proves the key rotated rather than a stale hit.
+    h.settings.value = { autoMode: { classifier: { enabled: true, ambiguityAsk: true } } }
+    const out = await stage.maybeEscalate(decided(), exec({ session }))
+    expect(out).toEqual({ kind: 'ask', reason: 'target/scope under-specified (underspec detector)' })
+    const on = lastAudit(h)
+    expect(on.verdict).toBe('ask')
+    expect(on.ambiguity).toBe('underspecified')
+    expect(on.cacheHit).toBe(false) // the flag toggle rotated the key (no stale cache hit)
+  })
+
+  it('gaugeBuiltRaw own stamp: a chat-lane call after a slice change cannot mask the gauge lane rebuild', async () => {
+    const h = harness()
+    h.settings.value = { autoMode: { classifier: { enabled: true, ambiguityAsk: true } } }
+    const bodies: Array<{ questions: unknown }> = []
+    h.deps.fetchImpl = gaugeFetch(bodies)
+    let useGauge = true
+    h.deps.resolveRoute = () => useGauge
+      ? { backend: 'systemone' as const, provider: 'deepseek', model: 'llmbox_systemone/laya', baseURL: 'http://x' }
+      : { backend: 'chat' as const, route: { provider: 'p', model: 'm' } }
+    const stage = createAutoStage(h.deps)
+    const session = sessionWithIntent('delete the one file')
+    await stage.maybeEscalate(decided(), exec({ session }))
+    await stage.maybeEscalate(decided(), exec({ session }))
+    expect(bodies.length).toBe(1) // verdict LRU hit on the second gauge call
+    // A slice change (timeoutMs; gauge-irrelevant) rotates `raw`. A chat-lane
+    // call runs FIRST and stamps the chat classifier's own build raw — with
+    // the old shared stamp this masked the gauge lane's lazy invalidation and
+    // the stale cache survived.
+    h.settings.value = { autoMode: { classifier: { enabled: true, ambiguityAsk: true, timeoutMs: 9000 } } }
+    useGauge = false
+    await stage.maybeEscalate(decided(), exec({ session, args: { command: 'pwd' } }))
+    expect(h.streams).toBe(1)
+    useGauge = true
+    await stage.maybeEscalate(decided(), exec({ session }))
+    // The gauge lane was rebuilt (own stamp compare) ⇒ cache dropped ⇒ wire call.
+    expect(bodies.length).toBe(2)
+    expect(bodies[1]!.questions).toHaveProperty('ambiguity')
+  })
+})
