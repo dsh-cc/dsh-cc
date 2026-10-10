@@ -3489,6 +3489,8 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S4 hybrid verdict space (listener delivery + trip)" }
       - { type: source, path: packages/interaction/permission-rules/src/return-check.ts, anchor: "summarizeChildHandoff" }
       - { type: test, path: packages/interaction/permission-rules/tests/subagent-return-check.spec.ts }
+      - { type: test, path: packages/interaction/permission-rules/tests/gauge-stage.spec.ts, anchor: "underspec→ASK: merge rule (§5.2 truth table)" }
+      - { type: test, path: packages/interaction/permission-rules/tests/gauge-adapter.spec.ts, anchor: "prepareSystemOneInput ambiguity slot" }
       - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S6/D9 outbound" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "pipeline: structured_output in auto mode (design §5.2)" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "config caveat (design §4.1)" }
@@ -3786,6 +3788,15 @@ capabilities:
         non-grant denials carry the original ask reason (sanitized, 120-char
         cap) plus a guidance line naming the outcome a permission decision,
         not a tool malfunction (packages/core/tools serviceAsk).
+        Underspec→ASK detector slice (2026-10-09): `permissions.autoMode.classifier.ambiguityAsk`
+        (boolean, default off) adds a second `ambiguity` choice question to the
+        gauge lane's System One call whenever a bounded task text (folded from
+        human user messages via `foldClassifierContext`) is available; an
+        `underspecified` target/scope answer escalates allow→ask with reason
+        "target/scope under-specified (underspec detector)" (merge truth table
+        in gauge-stage), and the `permission/classifier` audit event carries an
+        optional `ambiguity` field. CC has no such key — deliberate dsh-cc
+        extension.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

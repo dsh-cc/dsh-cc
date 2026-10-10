@@ -46,6 +46,31 @@ describe('systemoneDecide', () => {
     if (result.ok) expect(Object.keys(result.answers)).toEqual(['verdict'])
   })
 
+  it('wire-shape: two-question request sends verbatim question names and parses answers by name (client transport/parse contract only)', async () => {
+    const twoQuestions: Record<string, SystemOneQuestion> = {
+      ...QUESTIONS,
+      ambiguity: { type: 'choice', instructions: 'Judge scope.', criteria: { specified: 'named', underspecified: 'vague' } },
+    }
+    const body = JSON.stringify({
+      model: 'laya-rl-agent',
+      answers: {
+        verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9 }, confidence: 0.8 },
+        ambiguity: { type: 'choice', choice: 'underspecified', probabilities: { specified: 0.1, underspecified: 0.9 }, confidence: 0.7 },
+        ambiguitY: { type: 'choice', choice: 'specified', probabilities: { specified: 1 }, confidence: 1 },
+      },
+      usage: { input_tokens: 20, output_tokens: 0 },
+    })
+    const fetchImpl = jsonFetch(200, body)
+    const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: twoQuestions, timeoutMs: 1000, fetchImpl })
+    const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    expect(Object.keys(JSON.parse(call[1].body as string).questions)).toEqual(['verdict', 'ambiguity'])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.answers.verdict).toMatchObject({ choice: 'allow' })
+    expect(result.answers.ambiguity).toMatchObject({ choice: 'underspecified' })
+    expect(result.answers['ambiguitY']).toMatchObject({ choice: 'specified' })
+  })
+
   it('400 envelope maps to non-retryable error with status and body prefix', async () => {
     const body = '{"error":{"type":"invalid_request_error","message":"model must be \\"laya\\""}}'
     const result = await systemoneDecide({ baseURL: 'http://x', model: 'bogus/not-a-model', state: {}, questions: QUESTIONS, timeoutMs: 1000, fetchImpl: jsonFetch(400, body) })
