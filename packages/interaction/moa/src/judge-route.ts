@@ -81,10 +81,22 @@ export function resolveJudgeRoute(
       return { ok: false, reason: `moa.judgeRoute alias "${setting}" does not resolve to a concrete route` }
     }
     route = resolved
-  } else if (setting !== undefined) {
+  } else if (setting != null && typeof setting === 'object') {
+    // Explicit object form. Guard the shape: a malformed setting (e.g. an
+    // explicit JSON `null`, which schemastery passes through verbatim) must
+    // degrade to a warn-once unarmed state, never throw into the waterfall
+    // or the mount path (validateArming promises "never an exception").
+    if (setting.provider === undefined || setting.model === undefined) {
+      return { ok: false, reason: `moa.judgeRoute object form requires provider and model` }
+    }
     route = setting
-  } else {
+  } else if (setting == null) {
+    // Unset — including an explicit JSON `null`, which schemastery passes
+    // through verbatim: null means "no value" for an optional key, same as
+    // absence. Falls to the default bjev route.
     route = DEFAULT_JUDGE_ROUTE
+  } else {
+    return { ok: false, reason: `moa.judgeRoute has an unsupported shape (${typeof setting})` }
   }
   const window = resolveWindow(route)
   if (window < opts.budgetTokens) {
