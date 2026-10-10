@@ -119,6 +119,9 @@
       "path": "./packages/interaction/advisor-watchdog"
     },
     {
+      "path": "./packages/interaction/moa"
+    },
+    {
       "path": "./packages/interaction/lsp-on-write"
     },
     {
