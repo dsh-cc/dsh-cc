@@ -27,4 +27,21 @@ describe('judge route resolution (§3.6)', () => {
     expect(resolveContextWindow({ provider: 'llmbox_systemone', model: 'llmbox_systemone/laya' })).toBe(1024)
     expect(normalizeModelId('llmbox_systemone/bjev')).toBe('bjev')
   })
+
+  // Regression (found live, 2026-10-10): an explicit JSON `null` for the
+  // optional `moa.judge-route` key is passed through verbatim by schemastery
+  // and used to throw a TypeError at the mount-time validateArming call and
+  // inside every classifyOnce turn (unguarded), breaking the plugin mount and
+  // the agent/request waterfall. Null means "unset" — it must fall back to
+  // the default bjev route and never throw.
+  it('an explicit JSON null falls back to the default route (never throws)', () => {
+    const out = resolveJudgeRoute(null as never, { budgetTokens: 4000, resolveWindow: () => 16384 })
+    expect(out).toEqual({ ok: true, route: DEFAULT_JUDGE_ROUTE, window: 16384 })
+  })
+
+  it('a malformed object form is refused with ok:false, not a TypeError', () => {
+    const out = resolveJudgeRoute({ model: 'bjev' } as never, { budgetTokens: 4000, resolveWindow: () => 16384 })
+    expect(out).toMatchObject({ ok: false })
+    expect((out as { reason: string }).reason).toContain('provider and model')
+  })
 })

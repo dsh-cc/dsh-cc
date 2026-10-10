@@ -121,7 +121,7 @@ function resolveSection(section: Record<string, unknown>): MoaSettings {
     },
     // Ceiling 3 enforced at read time (§3.4), not schema time (see module doc).
     maxEscalations: asInt(resolved['max-escalations'], 1, MAX_ESCALATIONS_CEILING),
-    judgeRoute: resolved['judge-route'] as JudgeRouteSetting | undefined,
+    judgeRoute: (resolved['judge-route'] ?? undefined) as JudgeRouteSetting | undefined,
     classifyBudgetTokens: asInt(resolved['classify-budget-tokens'], 4000, Number.MAX_SAFE_INTEGER),
     callBudgetMs: asInt(resolved['call-budget-ms'], 8000, Number.MAX_SAFE_INTEGER),
   }
