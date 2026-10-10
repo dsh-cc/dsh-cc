@@ -507,6 +507,39 @@ capabilities:
         Not an upstream CC surface: a dsh-cc extension. The paused notice is a
         plugin-source next-step user message (model-visible by design).
 
+  engine.moa:
+    title: Moa tiered cascade routing (classify user turns to effort tiers, optional judge + escalation)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. Tiered cascade
+        routing over the four lane aliases: classify genuine user turns to
+        sketch/draft/blueprint/masterplan, then an optional acceptance judge
+        with effect-free retry at +1 tier on rejection; ships dark
+        (moa.enabled: false), gated by moa.* settings, with a moa-private
+        System One budget/breaker and side-car JSONL ledgers under
+        <dshHome>/moa/.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: moa" }
+      - { type: source, path: packages/interaction/moa/src/router.ts }
+      - { type: source, path: packages/interaction/moa/src/judge.ts }
+      - { type: test, path: packages/interaction/moa/tests/router-probe.spec.ts }
+      - { type: test, path: packages/interaction/moa/tests/judge-loop.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: no CC counterpart exists. A tiered cascade router
+        (classify-first over the four lane aliases, optional acceptance
+        judge, effect-free +1-tier escalation retry) shipped as a dark,
+        settings-gated preset plugin with side-car JSONL ledgers.
+
   engine.notebook-edit:
     title: NotebookEdit
     category: engine

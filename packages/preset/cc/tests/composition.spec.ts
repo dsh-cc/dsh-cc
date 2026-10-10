@@ -243,6 +243,16 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds).toContain('advisor-watchdog')
     expect(topIds).not.toContain('advisor-watchdog')
     expect(configIds.indexOf('advisor-watchdog')).toBeGreaterThan(configIds.indexOf('turn-rules'))
+    // The moa row (plan docs/plans/2026-10-09-moa-tiered-cascade-routing.md)
+    // publishes no Service (plain plugin, turn-rules/advisor-watchdog
+    // pattern) and sits inside the group after advisor-watchdog, with NO new
+    // isolate key. ORDER TRIPWIRE: last of the interaction overlays — no
+    // functional coupling with advisor-watchdog, but the row order keeps the
+    // composition reviewable and puts moa's status rows after advisor
+    // verdicts in the same turn-stopping window.
+    expect(configIds).toContain('moa')
+    expect(topIds).not.toContain('moa')
+    expect(configIds.indexOf('moa')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
     // The lsp-on-write row (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md)
     // publishes no Service (plain plugin) and sits inside the group directly
     // after post-edit-verify (merged edit-recovery-hint host), with NO new

@@ -116,6 +116,9 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/systemone':
+        specifier: workspace:^
+        version: link:../../llm-tuning/systemone
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2518,6 +2521,9 @@ importers:
       '@dsh-cc/memory-consolidation':
         specifier: workspace:^
         version: link:../../memory/memory-consolidation
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../../interaction/moa
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
