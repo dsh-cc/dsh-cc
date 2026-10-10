@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The CC shell **host-plane infra** bundle. This package carries the pieces that are genuinely host-level — the tools-registry swap with deferred-name support — plus the `cc-shell-glue` plugin *code* (the glue code still lives here, but its mount action is performed by the CC preset, not this bundle's patch). All agent-facing composition — tool-search, skill loader, memory, coordinator, worktree/sleep/notebook/structured-output tools, the 19 slash commands, the hook bridge, output-style rendering — moved to the [`@dsh-cc/preset-cc`](../../preset/cc/README.md) composition package, so it can be isolated per preset instead of leaking into every mode.
+The CC shell **host-plane infra** bundle. This package carries the pieces that are genuinely host-level — the tools-registry swap with deferred-name support — plus the `cc-shell-glue` plugin *code* (the glue code still lives here, but its mount action is performed by the CC preset, not this bundle's patch). All agent-facing composition — tool-search, skill loader, memory, coordinator, worktree/sleep/notebook/structured-output tools, the 21 slash commands, the hook bridge, output-style rendering — moved to the [`@dsh-cc/preset-cc`](../../preset/cc/README.md) composition package, so it can be isolated per preset instead of leaking into every mode.
 
 ## What it does
 

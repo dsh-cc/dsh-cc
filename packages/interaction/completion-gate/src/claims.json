@@ -1,0 +1,32 @@
+[
+  {
+    "id": "tests-green",
+    "phrase": "\\btests?\\s+(?:all\\s+)?(?:pass(?:ed|es)?|are\\s+green|succeeded)\\b|presubmit\\s+green\\b",
+    "tool": "bash",
+    "head": "\\b(test|vitest|presubmit|check)\\b"
+  },
+  {
+    "id": "commit",
+    "phrase": "\\bcommitted\\b|\\bcommit\\s+created\\b|\\blanded\\b",
+    "tool": "bash",
+    "head": "^\\s*git\\s+(?:-C\\s+\\S+\\s+)?(commit|merge|cherry-pick)\\b"
+  },
+  {
+    "id": "push-pr",
+    "phrase": "\\bpushed\\b|\\bopened\\s+PR\\b|\\bPR\\s+#\\d+",
+    "tool": "bash",
+    "head": "^\\s*(?:git\\s+(?:-C\\s+\\S+\\s+)?push|gh\\s+pr\\s+create)\\b"
+  },
+  {
+    "id": "build",
+    "phrase": "\\bbuild(?:ing)?\\s+succeeded\\b|\\btsc\\s+clean\\b|\\btypechecks?\\s+pass\\b",
+    "tool": "bash",
+    "head": "\\btsc\\b|\\bbuild\\b(?!:)",
+    "headDeny": "^\\s*(docker|podman)\\s+build|(?:^|\\s)--watch(?:\\s|$)|(?:^|\\s)-w(?:\\s|$)"
+  },
+  {
+    "id": "vague-done",
+    "phrase": "fixed|resolved|done",
+    "tool": "bash"
+  }
+]

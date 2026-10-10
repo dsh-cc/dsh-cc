@@ -28,6 +28,14 @@ Claude Code 的 `Task` 工具允许主代理按 `subagent_type`（如 `deep-reas
    - `persona` = 定义的 `systemPrompt`（作为 child 的系统段下发），先经过按模型门控的 actor-contract 块处理（见下）；
    - 任务文本作为 child 的**首条 user message**；
    - `agentOptions` = 来自 `ctx.get('ccModelRoutes').resolve(def.model)` 的别名解析结果 `{ provider?, model? }`（只透传解析到值的 provider/model 字段，绝不破坏按字段继承）；
+   ##### 按模型门控的 actor-contract 块
+
+   定义可以编写 `<!-- actor-contract:start -->` … `<!-- actor-contract:end -->` 块。
+   在派发时（以及 worktree 隔离 persona 上），只有当解析出的路由模型 id（无 routes
+   服务可解析时为原始 `model:` token）匹配 `actor-contract.models` settings 命名空间中的
+   某个 pattern 时才保留该块（默认 `['glm-*']`；`[]` 关闭契约；`['*']` 一律应用）。
+   marker 行绝不进入提示词；`model:` 未设置（继承）的定义是 fail-closed 的——块被剥离。
+
    - `toolFilter` = 定义的 `toolRestriction`（allow/deny），**消毒**掉本组合已不再注册的工具名；
    - `maxDepth` = 3（与 harness 默认一致；可配置）。
 4. **其它不含冒号的类型**（工作区内找不到）→ **报错结果**，附带本工作区可用类型清单（或说明本工作区未定义任何 agent）；类型含 `:` 时提示带冒号感知的线索。

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { getSessionCwd, setSessionCwd } from '../src/api.ts'
+import { getSessionCwd, getSessionCwdForSession, setSessionCwd } from '../src/api.ts'
 import { SessionCwdStore } from '../src/state.ts'
 import { foldSessionCwd } from '../src/events.ts'
 
@@ -22,6 +22,15 @@ function agent(headerCwd?: string, store = new SessionCwdStore()): Agent {
     },
   }
   return fake as unknown as Agent
+}
+
+/**
+ * Create the inner `Session` behind the agent fixture, so the session-facing
+ * API can be tested against the same event-sourced state. The header cwd is
+ * passed via a header-shaped object when provided.
+ */
+function sessionOf(agentFace: Agent): Session {
+  return agentFace.session as unknown as Session
 }
 
 describe('setSessionCwd', () => {
@@ -75,5 +84,18 @@ describe('getSessionCwd', () => {
     const a = agent()
     expect(getSessionCwd(a, { fallback: '/tmp/fallback' })).toBe('/tmp/fallback')
     expect(getSessionCwd(a)).toBe(process.cwd())
+  })
+})
+
+describe('getSessionCwdForSession', () => {
+  it('prefers the folded worktree event cwd over the header cwd', () => {
+    const a = agent('/tmp/header')
+    setSessionCwd(a, '/tmp/worktree')
+    expect(getSessionCwdForSession(sessionOf(a))).toBe('/tmp/worktree')
+  })
+
+  it('returns undefined when nothing is recorded (no process-cwd fallback)', () => {
+    const a = agent()
+    expect(getSessionCwdForSession(sessionOf(a))).toBeUndefined()
   })
 })

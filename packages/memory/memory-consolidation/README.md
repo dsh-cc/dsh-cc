@@ -72,7 +72,9 @@ Load the plugin with `@dsh-cc/memory-consolidation`. Configuration:
 | `minHours` | `24` | minimum hours between consolidations |
 | `minSessions` | `5` | minimum new transcripts to consolidate |
 | `lockStaleMs` | `3_600_000` | lock holder stale window |
+| `pressureCooldownMinutes` | `60` | minimum minutes between forced (pressure) dreams |
 | `subagentProviderName` | `fork` | one-shot provider for the forks |
+| `sessionsRoot` | `<DSH_HOME>/sessions` | session store root the gates scan |
 
 ```ts
 import consolidation from '@dsh-cc/memory-consolidation'

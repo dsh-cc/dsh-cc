@@ -366,6 +366,94 @@
         "summary": "Not an upstream CC surface: a dsh-cc extension. Expected busy/cancelled compaction failures are ledgered as skips, never counted by the breaker; the fuse pauses the feature with one model-visible notice pointing at manual /compact."
       }
     },
+    "engine.completion-gate": {
+      "title": "Completion gate (opt-in runtime-verified completion)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. An opt-in gate at agent/turn-stopping that withholds the completion while declared completion claims lack verified evidence, delivering an evidence nudge instead, and keeps a per-session receipts ledger with lineage lift. Ships dark (cc-completion-gate.enabled: false).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: completion-gate"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/completion-gate/src/wiring.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/completion-gate/src/evaluate.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/completion-gate/tests/evaluate.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/completion-gate/tests/smoke.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: no CC counterpart exists. An opt-in runtime-verified completion gate (receipts ledger + evidence nudge + lineage lift), default off."
+      }
+    },
+    "engine.config-snapshot": {
+      "title": "Session config snapshot (sidecar ledger)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. On every Session construction a sync-safe listener appends one JSONL row to $DSH_HOME/config-snapshot/<encodedId>.jsonl recording the dsh-cc, harness, and plugin versions at that moment — the attribution substrate for version-cohorted forensics (async writer, never blocks creation).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: config-snapshot"
+        },
+        {
+          "type": "test",
+          "path": "packages/observability/config-snapshot/tests/integration.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: append-only sidecar ledger with no runtime behavior effect; kill switch (config-snapshot.enabled, default on) disables capture entirely."
+      }
+    },
     "engine.context-compression": {
       "title": "CCR tool-output compression (context-crusher)",
       "category": "engine",
@@ -1552,6 +1640,53 @@
       "deviation": {
         "kind": "non-goal",
         "summary": "Anthropic-internal or vendor-bound features; no design asset and out of parity scope."
+      }
+    },
+    "engine.verify-before-retry": {
+      "title": "Verify-before-retry attendant (ambiguity-aware retry confirmation)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "CC has no equivalent surface — a model retrying an identical bash or write call after an ambiguous (timed-out, partial, silenced) outcome simply re-executes. The attendant is a dsh-cc extension: on a repeat of the same effect digest after a recorded ambiguous class, the tools/pre-execute listener converts the call into an approval ask (escalation), and on the FIRST ambiguous outcome it appends class-specific guidance as an additionalContexts entry (M1).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "divergent"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: retry-attendant"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/retry-attendant/src/wiring.ts",
+          "anchor": "registerListeners"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/retry-attendant/tests/wiring.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/retry-attendant/tests/interplay.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension (user-layer-only setting retry-attendant, enabled default false): classifies ambiguous tool outcomes into effect classes (bash-timeout/promotion, git-mutation, write-partial, mcp mutation), deduplicates per effect digest, and on an identical retry re-asks for confirmation via the tools/pre-execute waterfall (prepend:true, composed inside user PreToolUse hooks). Design doc docs/plans/2026-10-09-verify-before-retry.md. Hosted inside @dsh-cc/retry-attendant."
       }
     },
     "engine.voice": {
@@ -4183,6 +4318,52 @@
         "summary": "A failed resume-identity verification warns and stays in the launch directory; CC additionally re-binds the session into the launch dir and clears the persisted binding, which needs the upstream `resume({ meta })` cwd-override seam (plan §11.3)."
       }
     },
+    "sessions.progress-rebuild": {
+      "title": "Structured progress state + post-compact context rebuild",
+      "category": "sessions",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. Derives a typed per-session progress brief from session events (goal canonical fold, todo/write snapshot, verified bash receipts, last user message) as a registered session projection, and on a successful compaction/end re-injects the brief into the first model request built after the compaction boundary. Ships dark (progress-rebuild.enabled: false).",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: progress-rebuild"
+        },
+        {
+          "type": "source",
+          "path": "packages/context/progress-rebuild/src/index.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/context/progress-rebuild/src/settings.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/preset/cc/tests/composition.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: no CC counterpart exists. A structured handoff artifact at compaction boundaries — typed progress state re-injection instead of prose history replay — via the session-projection mandatory seam and path-split post-compact delivery."
+      }
+    },
     "memory.claude-md-imports": {
       "title": "CLAUDE.md @path imports",
       "category": "memory",
@@ -4379,6 +4560,56 @@
       "deviation": {
         "kind": "downgrade",
         "summary": "Loader + base tool-skill, CC paths conditional activation, bundled subset (debug/simplify/batch), and TUI /name routing all work; CC's verify/stuck skills are not ported (ant-only; verify companion files absent)."
+      }
+    },
+    "skills.usage-telemetry": {
+      "title": "Skill usage telemetry + demote-candidate reporting",
+      "category": "skills",
+      "plane": "preset",
+      "upstream": {
+        "summary": "dsh-cc extension — observe-only `cc-skill-usage` plugin counting every committed skill load (tool form at the `tools/result` emit seam, slash form at persisted skill-invocation user messages) into a per-workspace sidecar ledger under $DSH_HOME/skill-usage/, with an observation-start coverage marker, a `session/created` utility rollup (per-skill loads/sessions/last-loaded, never-loaded learned skills, report-only demote candidates), and a `skills/learned-changed` report invalidator. CC has no equivalent; nothing is appended to session transcripts.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: skill-usage"
+        },
+        {
+          "type": "source",
+          "path": "packages/skill/skill-usage/src/index.ts",
+          "anchor": "registerListeners"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-usage/tests/telemetry.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-usage/tests/integration.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-usage/tests/rollup.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "none"
       }
     },
     "subagents.ephemeral-agents": {

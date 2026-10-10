@@ -42,6 +42,10 @@ repeatGap: 10                   # 重新武装前的轮次间隔；默认 10
 | `max-result-bytes` | `200000` | 匹配单元的 UTF-8 截断上限。 |
 | `regex-cache-size` | `64` | 编译正则 LRU 容量。 |
 | `judged.enabled` | `false` | 第二阶段 LLM 评判规则；默认关闭。 |
+| `repeat-reminder.enabled` | `false` | 内置提醒：同一顶层代理连续 N 次完全相同的调用（同工具 + 规范化参数）时触发。 |
+| `repeat-reminder.thresholds` | `[3, 5, 8]` | 触发提醒的连续次数。 |
+| `repeat-reminder.include` / `repeat-reminder.exclude` | `[]` | 工具名通配（允许 `*`）；exclude 优先于 include。 |
+| `repeat-reminder.arguments-preview-chars` | `500` | 提醒文本中参数预览的字符数。 |
 
 ## 形态
 

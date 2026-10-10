@@ -65,6 +65,7 @@ dsh web
 
 | dsh-cc 版本 | 验证过的 dsh 版本 |
 | --- | --- |
+| v0.9.0-rc.1 – v0.9.0-rc.4 | 0.2.0-rc.2 |
 | v0.8.3-rc.1 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
@@ -73,16 +74,18 @@ dsh web
 
 没有强制上限，但只有表中的配对经过 CI 验证；用比验证版本更新的 dsh 运行旧版 dsh-cc 是未经测试的组合。当 dsh-cc 新版提升对应的 dsh 版本时，请先升级 dsh，再升级 dsh-cc。
 
-两个包各自独立发版，两侧的 `@latest` 不一定互为验证过的配对——升级任意一侧后，请对照本表确认。
+两个包各自独立发版，两侧的 `@latest` 不一定互为验证过的配对，升级任意一侧后请对照本表确认。
 
 维护者注意：验证用的 pin 记录在 `.github/workflows/presubmit.yml`（`DSH_HARNESS_REF`），启动器下限在 `packages/launcher/tui/bootstrap.mjs`（`MIN_DSH_VERSION`）；任一变化时请同步更新本表。
 
 ### 可选：官方插件
 
-上面的 bundle 就是快速开始的全部内容。仓库内建的 `dsh-cc` 插件市场另有两个按需安装的官方插件，提供预配置的子代理通道：
+上面的 bundle 就是快速开始的全部内容。仓库内建的 `dsh-cc` 插件市场另有四个按需安装的官方插件，提供预配置的子代理通道和外部模型桥接：
 
-- **`dsh-cc-agents`** — `dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）、`dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）、`dsh-cc-agents:marathon`（长程、不明确或全仓级别的复杂任务，走 `fable` 别名）三个子代理，外加两个路由 skill（挑 agent 的 `dsh-cc-agents-orchestration` 与数据分析编排的 `data-analysis`）和可选的 serena 代码智能 hooks（仅在完成 serena 初始化的仓库上启用）。
-- **`dsh-cc-shunt`** — PreToolUse 门禁，把批量文件阅读和样板代码生成重定向到廉价通道的 worker 子代理，让大文件语料不进入主上下文（配置 `haiku` 别名才能真正省 token）。
+- **`dsh-cc-agents`**：`dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）、`dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）、`dsh-cc-agents:marathon`（长程、不明确或全仓级别的复杂任务，走 `fable` 别名）三个子代理，外加两个路由 skill（挑 agent 的 `dsh-cc-agents-orchestration` 与数据分析编排的 `data-analysis`）和可选的 serena 代码智能 hooks（仅在完成 serena 初始化的仓库上启用）。
+- **`dsh-cc-shunt`**：PreToolUse 门禁，把批量文件阅读和样板代码生成重定向到廉价通道的 worker 子代理，让大文件语料不进入主上下文（配置 `haiku` 别名才能真正省 token）。
+- **`cc-codex-bridge`**：免审批的 Codex 救援通道。PreToolUse hook 只放行一种固定形态的 Codex 调用，卡住的会话可以直接把任务交给 Codex，不需要人工确认。
+- **`cc-grok-bridge`**：同一模式的 Grok 评审通道，固定调用形态自动放行，外部 Grok 评审不用每次审批。
 
 在会话内安装：
 
@@ -92,7 +95,7 @@ dsh web
 /plugin install dsh-cc-shunt@dsh-cc
 ```
 
-`/plugin install` 会替你写入 `enabledPlugins` 标记；安装后重启会话以加载新的 agents 和 hooks。后续更新分两步：先 `/plugin marketplace update dsh-cc` 重新拉取市场，再 `/plugin update <id>` 更新插件。各插件自己的 README（[agents](packages/plugin/dsh-cc-agents/README.md)、[shunt](packages/plugin/dsh-cc-shunt/README.md)）覆盖配置项与已知限制。
+`/plugin install` 会替你写入 `enabledPlugins` 标记；安装后重启会话以加载新的 agents 和 hooks。后续更新分两步：先 `/plugin marketplace update dsh-cc` 重新拉取市场，再 `/plugin update <id>` 更新插件。各插件自己的 README（[agents](packages/plugin/dsh-cc-agents/README.md)、[shunt](packages/plugin/dsh-cc-shunt/README.md)、[cc-codex-bridge](packages/plugin/cc-codex-bridge/README.md)、[cc-grok-bridge](packages/plugin/cc-grok-bridge/README.md)）覆盖配置项与已知限制。
 
 ## 为什么选择 dsh-cc？
 
@@ -267,7 +270,7 @@ inherit             -> 继承主 Agent 路由
 | `opus` / `blueprint` | `glm-5.3` |
 | `sonnet` / `draft` | `glm-5.3-flash` |
 | `haiku` / `sketch` | `deepseek-v4-flash-0731` |
-| `gauge` | `jev`（System One 决策车道——输出类型化判定，非生成用途） |
+| `gauge` | `jev`（System One 决策车道，输出类型化判定，非生成用途） |
 | `architect` | 继承主线程模型 |
 
 这只是项目自身的真实配置，不是强制默认值。用户可以映射到 DeepSeek Harness 部署支持的其他模型。
@@ -286,7 +289,7 @@ Claude Code 是完整的编程 Agent 产品。`dsh-cc` 则把许多熟悉的交�
 
 ### 与模型/API Router 相比
 
-`dsh-cc` 不只是切换模型的代理层。它扩展的是整个 Agent 运行时和开发体验，包括 UI、命令、工具、记忆、子代理、hooks、MCP、权限、会话和 worktree 工作流。
+模型路由代理只负责切换模型。`dsh-cc` 扩展的是整个 Agent 运行时和开发体验，包括 UI、命令、工具、记忆、子代理、hooks、MCP、权限、会话和 worktree 工作流。
 
 ## CC Mode
 
@@ -329,7 +332,7 @@ profile 仍然是普通的 dsh 组合。自定义覆盖可以放在：
 
 与 Claude Code checkout 共享的项目 `.claude/settings.json` 文件可以直接使用；如果同时存在 camelCase 的 `statusLine` 和 dsh 原生的 kebab 风格 `statusline` 键，dsh 原生键优先。
 
-命令会在 stdin 上收到与 Claude Code 兼容的 JSON 会话负载（契约见 [CC statusline 文档](https://code.claude.com/docs/en/statusline)）；dsh-cc 只提供能真实取到来源的字段。命令 stdout 的前几行（最多 3 行）会成为状态栏内容（ANSI 转义原样透传）；失败或输出为空时渲染为空白行。命令会在会话启动/恢复、新消息、mode 和模型变化时重新运行（命令本身变化时立即运行），此外还按 `refreshInterval` 定时器运行，单位为**秒**（最小值 1）。脚本的环境中会带上 `COLUMNS`/`LINES`。
+命令会在 stdin 上收到与 Claude Code 兼容的 JSON 会话负载（契约见 [CC statusline 文档](https://code.claude.com/docs/en/statusline)）；dsh-cc 只提供能真实取到来源的字段。命令 stdout 的前几行（最多 3 行）会成为状态栏内容（ANSI 转义原样透传）；失败或输出为空时渲染为空白行。命令会在会话启动/恢复、新消息、mode 和模型变化时重新运行，此外还按 `refreshInterval` 定时器运行，单位为**秒**（最小值 1）。脚本的环境中会带上 `COLUMNS`/`LINES`。
 
 当前限制：最多渲染输出的前 3 行（CC 会渲染每一行）。settings 文件会被监听并热更新，运行中会话之外对 `settings.json` 的修改无需重启即生效；当 `command` 本身变化时，状态栏命令会立刻重新运行。
 
@@ -349,7 +352,7 @@ packages/
   interaction/    斜杠命令、权限规则、交互类插件
   mcp/            MCP 客户端与配置
   hooks/          hook 协议与 CC 桥接
-  core/           工具注册表、ToolSearch、NotebookEdit、StructuredOutput、Sleep、workflow
+  core/           工具注册表、ToolSearch、NotebookEdit、StructuredOutput、Sleep、workflow、web-fetch
   skill/          SKILL.md 支持
   preset/         CC agent preset 与 agent 资产兼容
   compat/         plugin 加载器与管理器、模型别名、output styles
@@ -358,9 +361,9 @@ packages/
   subagent/       coordinator、task 工具、handoff store、resume pins
   compaction/     压缩分层、成本门、工具调用摘要
   session/        会话命令（cost、export、stats、learn）与会话取证
-  context/        可逆的工具输出压缩（context-crusher）
+  context/        可逆的工具输出压缩（context-crusher）与压缩后进度重建
   llm-tuning/     reasoning-fold 与 side-query
-  observability/  cache-health observer
+  observability/  cache-health observer、配置快照 sidecar、共享 sidecar IO
   plugin/         仓内市场的第一方插件
   test-support/   共享测试基建与评测 harness（不发布）
   bundle/         可安装的 profile bundle

@@ -22,7 +22,7 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-`dsh-cc` requires `dsh` **>= 0.2.0-rc.2**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-29), and the launcher enforces the floor at bootstrap. This floor tracks the development line — per-release pairings are listed in the table below.
+`dsh-cc` requires `dsh` **>= 0.2.0-rc.2**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-29), and the launcher enforces the floor at bootstrap. This floor tracks the development line; per-release pairings are listed in the table below.
 
 Already have `dsh` **>= 0.2.0-rc.2**? Install only the launcher:
 
@@ -38,7 +38,7 @@ npm install -g @dsh-cc/cli@latest
 dsh-cc
 ```
 
-On the first launch after an upgrade, the launcher re-runs the profile's bundle install at the new version (recorded in `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`), so the profile converges automatically — no manual step. A failed reconcile (e.g. network, or the fresh release still inside npm/pnpm's minimum-release-age window) warns and boots anyway, retrying on the next launch. Dev-synced profiles (via `scripts/sync-local-profile.sh`) are never reconciled by the launcher; they follow the dev-restore flow instead.
+On the first launch after an upgrade, the launcher re-runs the profile's bundle install at the new version (recorded in `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`), so the profile converges automatically, with no manual step. A failed reconcile (e.g. network, or the fresh release still inside npm/pnpm's minimum-release-age window) warns and boots anyway, retrying on the next launch. Dev-synced profiles (via `scripts/sync-local-profile.sh`) are never reconciled by the launcher; they follow the dev-restore flow instead.
 
 The launcher creates and boots the CC-oriented `tui` profile. To compose the profile explicitly instead:
 
@@ -65,6 +65,7 @@ Each dsh-cc release is developed and CI-verified against one DeepSeek Harness (`
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
+| v0.9.0-rc.1 – v0.9.0-rc.4 | 0.2.0-rc.2 |
 | v0.8.3-rc.1 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
@@ -73,16 +74,18 @@ Each dsh-cc release is developed and CI-verified against one DeepSeek Harness (`
 
 There is no enforced upper bound, but only the listed pairing is CI-verified; running dsh-cc against a dsh newer than its verified version is untested territory. When a new dsh-cc release moves to a newer dsh version, upgrade dsh first, then dsh-cc.
 
-The two packages ship on independent schedules, so `@latest` on one side is not necessarily the verified partner of `@latest` on the other — check this table after upgrading either package.
+The two packages ship on independent schedules, so `@latest` on one side is not necessarily the verified partner of `@latest` on the other; check this table after upgrading either package.
 
 Maintainers: the verified pin lives in `.github/workflows/presubmit.yml` (`DSH_HARNESS_REF`) and the launcher floor in `packages/launcher/tui/bootstrap.mjs` (`MIN_DSH_VERSION`); update this table when either changes.
 
 ### Optional: official plugins
 
-The bundles above are the whole quick start. Two optional official plugins — shipped through the repo's `dsh-cc` marketplace — add preconfigured subagent lanes:
+The bundles above are the whole quick start. Four optional official plugins, shipped through the repo's `dsh-cc` marketplace, add preconfigured subagent lanes and external model bridges:
 
-- **`dsh-cc-agents`** — the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias), `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias), and `dsh-cc-agents:marathon` (long-horizon or repo-wide complexity, `fable` alias) subagents, plus two routing skills (`dsh-cc-agents-orchestration` for picking an agent, `data-analysis` for analysis tasks) and optional serena code-intelligence hooks (gated on serena-onboarded repos).
-- **`dsh-cc-shunt`** — PreToolUse gates that redirect bulk file reads and boilerplate generation to cheap-lane worker subagents, keeping large file corpora out of the main context (configure a `haiku` alias for real token savings).
+- **`dsh-cc-agents`**: the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias), `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias), and `dsh-cc-agents:marathon` (long-horizon or repo-wide complexity, `fable` alias) subagents, plus two routing skills (`dsh-cc-agents-orchestration` for picking an agent, `data-analysis` for analysis tasks) and optional serena code-intelligence hooks (gated on serena-onboarded repos).
+- **`dsh-cc-shunt`**: PreToolUse gates that redirect bulk file reads and boilerplate generation to cheap-lane worker subagents, keeping large file corpora out of the main context (configure a `haiku` alias for real token savings).
+- **`cc-codex-bridge`**: an approval-free Codex rescue lane. A PreToolUse hook auto-allows exactly one canonical, locked-down Codex invocation per session run, so a stuck session can hand a task to Codex without a permission checkpoint.
+- **`cc-grok-bridge`**: the same pattern for a Grok review lane; one canonical invocation is auto-allowed so external Grok review passes need no per-run approval.
 
 Install them inside a session:
 
@@ -92,7 +95,7 @@ Install them inside a session:
 /plugin install dsh-cc-shunt@dsh-cc
 ```
 
-`/plugin install` flips the `enabledPlugins` flag for you; restart the session so the new agents and hooks are picked up. To update later, re-pull the marketplace and then update the plugin: `/plugin marketplace update dsh-cc`, then `/plugin update <id>`. Each plugin's own README ([agents](packages/plugin/dsh-cc-agents/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md)) covers configuration and known limits.
+`/plugin install` flips the `enabledPlugins` flag for you; restart the session so the new agents and hooks are picked up. To update later, re-pull the marketplace and then update the plugin: `/plugin marketplace update dsh-cc`, then `/plugin update <id>`. Each plugin's own README ([agents](packages/plugin/dsh-cc-agents/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md), [cc-codex-bridge](packages/plugin/cc-codex-bridge/README.md), [cc-grok-bridge](packages/plugin/cc-grok-bridge/README.md)) covers configuration and known limits.
 
 ## Why developers use dsh-cc
 
@@ -107,17 +110,24 @@ Install them inside a session:
 
 `dsh-cc` is developed with `dsh-cc` itself. The repository's current setup routes work across Kimi, GLM, and DeepSeek models, plus a System One decision lane for the typed-approval `gauge` alias; see [Dogfooding dsh-cc](#dogfooding-dsh-cc) for the concrete mapping.
 
+## Who is this for?
+
+- Developers who want to use DeepSeek Harness directly as an everyday coding agent;
+- Teams that already have `.claude/` project assets and want to keep reusing agents, skills, hooks, and project memory;
+- Users who want to pick Kimi, GLM, DeepSeek, or other models per task instead of being tied to a single vendor;
+- Plugin authors who want to compose or extend an agent's permissions, tools, memory, subagents, and UI rather than maintain a product fork.
+
 ## Compatibility at a glance
 
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 22 | 4 | 2 |
+| Engine subsystems | 11 | 25 | 4 | 2 |
 | Hook events | 10 | 7 | 4 | 0 |
 | Command surface | 21 | 10 | 1 | 1 |
-| Sessions and context | 0 | 1 | 1 | 0 |
+| Sessions and context | 0 | 2 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
-| Skills | 1 | 1 | 0 | 0 |
+| Skills | 2 | 1 | 0 | 0 |
 | Subagents | 0 | 4 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 6 | 0 | 0 |
@@ -168,7 +178,7 @@ Use `/mcp` to inspect and manage MCP connections.
 
 #### Optional: Serena code intelligence
 
-When your MCP configuration connects a [Serena](https://github.com/oraios/serena) server, dsh-cc automatically takes advantage of it: the system prompt steers toward Serena's symbol tools for code questions, and the bundled `explore` subagent gains read-only symbol retrieval (`find_symbol`, `find_referencing_symbols`, `get_symbols_overview`). Serena is strictly optional — without it, sessions behave identically through the built-in Read/Grep tools, minus the steering hints.
+When your MCP configuration connects a [Serena](https://github.com/oraios/serena) server, dsh-cc automatically takes advantage of it: the system prompt steers toward Serena's symbol tools for code questions, and the bundled `explore` subagent gains read-only symbol retrieval (`find_symbol`, `find_referencing_symbols`, `get_symbols_overview`). Serena is strictly optional; without it, sessions behave identically through the built-in Read/Grep tools, minus the steering hints.
 
 Install Serena once so a local `serena` binary is on `PATH`:
 
@@ -197,7 +207,7 @@ Avoid launching it via `uvx --from git+…`: every server start would write `~/.
 
 Claude Code-style hooks can react to session, prompt, tool, permission, compaction, task, and subagent lifecycle events. Command and HTTP executors are supported, with additional prompt/agent executors available behind configuration gates.
 
-This repository ships a tracked `hooks.json` (the CC preset loads it from the launch cwd) carrying the repo-development hooks. The serena code-intelligence hooks ship with the official `dsh-cc-agents` plugin (gated; they fire here because this repo is serena-onboarded) and require `serena-hooks` on `PATH` — see [Local development](#local-development).
+This repository ships a tracked `hooks.json` (the CC preset loads it from the launch cwd) carrying the repo-development hooks. The serena code-intelligence hooks ship with the official `dsh-cc-agents` plugin (gated; they fire here because this repo is serena-onboarded) and require `serena-hooks` on `PATH`; see [Local development](#local-development).
 
 See the [parity matrix](docs/cc-parity-matrix.md) for the currently bridged event set.
 
@@ -241,7 +251,7 @@ The TUI also provides terminal-oriented interactions such as todo inspection, ap
 
 ### First-run onboarding
 
-On a fresh install with no model configured, the boot seed settles with no default route and the TUI opens the provider panel automatically: pick a preset, paste your API key (stored only in the credential store), and set the default model — then you are ready to go. Dismissing the panel with `Esc` only skips it for the current session; the flow is re-offered on the next boot. To opt out permanently, set `cc-onboarding.suppressed: true` under the user settings namespace in `~/.dsh/settings.json`, and re-arm any time with `/onboard`. Non-interactive (non-TTY) runs never trigger the flow and keep the plain "No model configured" notice.
+On a fresh install with no model configured, the boot seed settles with no default route and the TUI opens the provider panel automatically: pick a preset, paste your API key (stored only in the credential store), set the default model, and you are ready to go. Dismissing the panel with `Esc` only skips it for the current session; the flow is re-offered on the next boot. To opt out permanently, set `cc-onboarding.suppressed: true` under the user settings namespace in `~/.dsh/settings.json`, and re-arm any time with `/onboard`. Non-interactive (non-TTY) runs never trigger the flow and keep the plain "No model configured" notice.
 
 ## Use the models you want
 
@@ -277,7 +287,7 @@ Aliases are configuration, not hard-coded vendor bindings. This lets you preserv
 | `opus` / `blueprint` | `glm-5.3` |
 | `sonnet` / `draft` | `glm-5.3-flash` |
 | `haiku` / `sketch` | `deepseek-v4-flash-0731` |
-| `gauge` | `jev` (System One decision lane — typed verdicts, not generative) |
+| `gauge` | `jev` (System One decision lane: typed verdicts, not generative) |
 | `architect` | inherit (main thread) |
 
 This is a real project configuration rather than a required default: users can map the aliases to any provider/model combination supported by their DeepSeek Harness deployment.
@@ -296,7 +306,7 @@ A small number of upstream packages are vendored where the required extension po
 
 ### vs. model/API routers
 
-This is not just a model-routing proxy. It extends the agent runtime and developer experience itself: UI, commands, tools, memory, subagents, hooks, MCP, permissions, sessions, and worktree workflows.
+A model-routing proxy only switches models. `dsh-cc` extends the agent runtime and developer experience itself: UI, commands, tools, memory, subagents, hooks, MCP, permissions, sessions, and worktree workflows.
 
 ## CC Mode
 
@@ -341,9 +351,9 @@ On the `tui` profile, you can replace the built-in bottom status line with your 
 
 Project `.claude/settings.json` files shared with a Claude Code checkout work as-is; if both a camelCase `statusLine` and a dsh-native kebab `statusline` key are present, the dsh-native key wins.
 
-The command receives a Claude Code-compatible JSON session payload on stdin (the [CC statusline docs](https://code.claude.com/docs/en/statusline) describe the contract); dsh-cc supplies only the fields it can source truthfully. Its stdout's first lines (up to 3) become the status line (ANSI escapes are passed through); a failure or empty output renders a blank line. The command reruns on session boot/resume, new messages, mode and model changes — and immediately when the command itself changes — plus on the `refreshInterval` timer, which is in **seconds** (minimum 1). Scripts get `COLUMNS`/`LINES` in their environment.
+The command receives a Claude Code-compatible JSON session payload on stdin (the [CC statusline docs](https://code.claude.com/docs/en/statusline) describe the contract); dsh-cc supplies only the fields it can source truthfully. Its stdout's first lines (up to 3) become the status line (ANSI escapes are passed through); a failure or empty output renders a blank line. The command reruns on session boot/resume, new messages, mode and model changes, plus on the `refreshInterval` timer, which is in **seconds** (minimum 1). Scripts get `COLUMNS`/`LINES` in their environment.
 
-Current limits: only the first 3 output rows are rendered (CC renders every row). Settings files are hot-reloaded, so `settings.json` edits made outside the running session apply without a restart — and when the `command` itself changes, the status line re-runs it immediately.
+Current limits: only the first 3 output rows are rendered (CC renders every row). Settings files are hot-reloaded, so `settings.json` edits made outside the running session apply without a restart; when the `command` itself changes, the status line re-runs it immediately.
 
 ## Compatibility and known limits
 
@@ -365,7 +375,7 @@ packages/
   interaction/    slash commands, permission rules, interaction plugins
   mcp/            MCP client and configuration
   hooks/          hook protocol and CC bridge
-  core/           tool registry, ToolSearch, NotebookEdit, StructuredOutput, Sleep, workflow
+  core/           tool registry, ToolSearch, NotebookEdit, StructuredOutput, Sleep, workflow, web-fetch
   skill/          SKILL.md support
   preset/         CC agent preset and agent compatibility
   compat/         plugin loader and manager, model aliases, output styles
@@ -374,9 +384,9 @@ packages/
   subagent/       coordinator, task tool, handoff store, resume pins
   compaction/     compaction tiers, cost gate, tool-use summaries
   session/        session commands (cost, export, stats, learn) and forensics
-  context/        reversible tool-output compression (context-crusher)
+  context/        reversible tool-output compression (context-crusher) and post-compact progress rebuild
   llm-tuning/     reasoning-fold and side-query
-  observability/  cache-health observer
+  observability/  cache-health observer, config snapshot sidecar, shared sidecar IO
   plugin/         first-party plugins of the in-repo marketplace
   test-support/   shared test fixtures and eval harnesses (not published)
   bundle/         installable profile bundles
@@ -386,7 +396,7 @@ packages/
 
 Most packages are normal out-of-repo dsh plugins.
 
-A few packages vendor upstream code when the required changes need private or internal extension points rather than composition. These currently include the tools registry, MCP client, hook protocol, and Claude Code hook bridge — mounted at runtime under distinct package names while preserving the expected service interfaces — plus the pi-tui terminal renderer under `ui/`, whose purity is enforced by `check:vendor-purity`.
+A few packages vendor upstream code when the required changes need private or internal extension points rather than composition. These currently include the tools registry, MCP client, hook protocol, and Claude Code hook bridge (mounted at runtime under distinct package names while preserving the expected service interfaces), plus the pi-tui terminal renderer under `ui/`, whose purity is enforced by `check:vendor-purity`.
 
 ## Local development
 
@@ -400,13 +410,13 @@ pnpm test
 
 ### Serena (`serena-hooks` on PATH)
 
-The serena code-intelligence hooks — a PreToolUse remind nudge after a burst of raw reads/greps, plus SessionEnd cleanup of the per-session hook state — ship with the official `dsh-cc-agents` plugin (see its README's *Serena hooks* section for the gating contract). They fire in this repo because it is serena-onboarded (`.serena/project.yml` is tracked) once the plugin is enabled and the binary is on `PATH`:
+The serena code-intelligence hooks (a PreToolUse remind nudge after a burst of raw reads/greps, plus SessionEnd cleanup of the per-session hook state) ship with the official `dsh-cc-agents` plugin (see its README's *Serena hooks* section for the gating contract). They fire in this repo because it is serena-onboarded (`.serena/project.yml` is tracked) once the plugin is enabled and the binary is on `PATH`:
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-That pin provides `serena`, `serena-agent`, and `serena-hooks`. The plugin's gate wrappers pin hook state into the project (`SERENA_HOME=<repo>/.serena`): serena's default state dir (`~/.serena/hook_data`) is outside the session sandbox's writable surface, and serena swallows the failure — without the pin the remind counter never persists and the hooks silently no-op. State lands in `.serena/hook_data/` (gitignored), per session id, and is removed when the session is disposed.
+That pin provides `serena`, `serena-agent`, and `serena-hooks`. The plugin's gate wrappers pin hook state into the project (`SERENA_HOME=<repo>/.serena`): serena's default state dir (`~/.serena/hook_data`) is outside the session sandbox's writable surface, and serena swallows the failure; without the pin the remind counter never persists and the hooks silently no-op. State lands in `.serena/hook_data/` (gitignored), per session id, and is removed when the session is disposed.
 
 The repo's own tracked `hooks.json` keeps only repo-development hooks that reference `scripts/hooks/` (post-edit diagnostics nudge, serena failure watchdog).
 
@@ -426,7 +436,7 @@ returns the profile to the store bundles.
 
 To prove the production bundle set actually boots in a user-grade
 environment (fresh `DSH_HOME`, harness-healed fallback, pseudo-TTY, no LLM
-calls) — the same gate presubmit and publish run:
+calls), run the same gate presubmit and publish use:
 
 ```sh
 pnpm smoke:profile-boot

@@ -18,6 +18,8 @@ Claude Code-style five-level settings cascade provider for `ctx.settings`. Five 
 | `policy.remoteSettings` | Hosted policy settings; highest policy priority | none |
 | `policy.systemPath` | System-level managed settings file | none |
 | `policy.userPath` | User-writable managed settings file | none |
+| `watch.stabilityThresholdMs` | How long a file must stay unchanged before its watcher event fires (chokidar `awaitWriteFinish` write-settle) | `100` |
+| `watch.pollIntervalMs` | How often a settling file is polled for further changes | `10` |
 
 Defaulting is one explicit `resolveSpec(config)` step.
 

@@ -21,11 +21,11 @@ import {
   type BoundaryListenerConfig,
 } from './listener.ts'
 import { sessionCwdStore, type SessionCwdStore } from './state.ts'
-import { getSessionCwd, setSessionCwd, type SessionCwdOptions } from './api.ts'
+import { getSessionCwd, getSessionCwdForSession, setSessionCwd, type SessionCwdOptions } from './api.ts'
 
 export { WORKTREE_ENTERED_EVENT, foldSessionCwd, appendWorktreeEntered, type WorktreeEnteredEventData } from './events.ts'
 export { SessionCwdStore, sessionCwdStore, foldSessionCwdState, reduceSessionCwdState, EMPTY_SESSION_CWD_STATE, type SessionCwdState } from './state.ts'
-export { getSessionCwd, setSessionCwd, type SessionCwdOptions } from './api.ts'
+export { getSessionCwd, getSessionCwdForSession, setSessionCwd, type SessionCwdOptions } from './api.ts'
 export {
   registerSessionCwdBoundary,
   boundaryDecision,
@@ -76,6 +76,8 @@ export const sessionCwd = {
   get(agent: Agent, options?: SessionCwdOptions): string {
     return getSessionCwd(agent, options)
   },
+  /** Read the session cwd directly from a session, without the `process.cwd()` fallback. */
+  getForSession: getSessionCwdForSession,
   /** Change the session working directory (durable `worktree/entered` event). */
   set(agent: Agent, path: string, options?: SessionCwdOptions): void {
     setSessionCwd(agent, path, options)

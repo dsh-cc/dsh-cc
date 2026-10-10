@@ -1,6 +1,6 @@
 # Reasoning-Tier Reference Surface: `$level` syntax, classifier lane wiring, precedence table
 
-Date: 2026-09-21. Status: **Implemented** (PR pending). Origin: ZCode design borrow analysis
+Date: 2026-09-21. Status: **Implemented** (PR #108, commit d407ff1b). Origin: ZCode design borrow analysis
 (zai-org/ZCode @ 872ad960). Design-review record: first draft **rejected** in cold
 review — its premise (no effort field, no session selection object) was stale; dsh-cc and
 the harness have since shipped most of it. This is the slim rewrite against HEAD,

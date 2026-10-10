@@ -58,6 +58,36 @@ JSON 读失败与缺失的 `installPath` 会跳过而不是抛错。项目/local
 
 `hooks` 与 `mcp` seam 在本包内没有 harness 自有的服务；希望挂载这些组件的部署应提供 guest seam，否则它们会被报告为 `skipped`。dsh 的宿主接线现已提供 `mcp` seam：cc-shell glue 内置提供 `mcp` seam（`cc-shell/src/mcpSeam.ts`，即 `cc-mcp-seam` 子插件），因此在发布的部署中插件的 `mcpServers` 会真正挂载（见 docs/plans/2026-09-07-plugin-mcp-seam.md）。`hooks` 仍依赖宿主提供。
 
+## Cursor 方言
+
+Cursor 插件走与 CC 插件相同的加载管线——同一个宽容解析器加上按方言分支的 key，而不是第二个加载器。方言差异是清单候选外加少量逐组件的规范化；每个被降级或被忽略的字段都会作为加载报告上的 warning 呈现。
+
+**清单候选。** 插件根目录按顺序探测：`.claude-plugin/plugin.json` → `.cursor-plugin/plugin.json` → 顶层 `plugin.json`。命中即停。两种方言清单同时存在时使用 CC 的那份，报告带 warning `cursor manifest ignored: cc manifest takes precedence`。方言（`cc` 或 `cursor`）记录在解析后的清单和加载报告上。
+
+**Cursor 特有行为：**
+
+- **Rules** —— `rules/*.mdc` 文件（声明路径或默认 `rules/` 目录）经 `rules` guest seam 解析并挂载：cc-shell 桥为每个插件渲染一个合并的 `cc:plugin-rules` system-prompt 段（`alwaysApply` 为静态，glob scope 的为条件指令；每插件 4000 字符预算，超限显式截断）。seam 缺失时按 skipped 统计并告警。
+- **Hooks** —— camelCase 的 Cursor 事件经 `hooks.ts` 中经过验证的方言表映射；cursor 线上格式条目（`{command, matcher?, loop_limit?}`）转为 CC matcher 组，`${CURSOR_PLUGIN_ROOT}` 展开为插件根目录：
+
+  | Cursor 事件 | CC 事件 |
+  |---|---|
+  | `sessionStart` | `SessionStart` |
+  | `sessionEnd` | `SessionEnd` |
+  | `preToolUse` | `PreToolUse` |
+  | `postToolUse` | `PostToolUse` |
+  | `postToolUseFailure` | `PostToolUseFailure` |
+  | `subagentStart` | `SubagentStart` |
+  | `subagentStop` | `SubagentStop` |
+  | `beforeSubmitPrompt` | `UserPromptSubmit` |
+  | `preCompact` | `PreCompact` |
+  | `stop` | `Stop` |
+
+  未映射的事件（`beforeShellExecution`、`afterShellExecution`、`beforeMCPExecution`、`beforeReadFile`、`afterFileEdit`、`afterAgentResponse`、`afterAgentThought`、Tab 与 app hook）跳过并告警；`loop_limit` 会告警。
+- **Commands** —— cursor 方言下 `.txt` 文件以纯文本形式挂载（除 `.md` 之外）。
+- **MCP** —— 插件根目录的 `mcp.json` 是默认发现来源（无需清单声明）；`mcpServers` 接受 Cursor 的数组形式。server env 中未解析的 `${VAR}` 只使该 server 失败，并给出指名的 warning。
+- **Glob 路径** —— `dir/**` 递归展开目录；其他 glob 形式跳过并告警。
+- **仅告警字段** —— `minClientVersions`（不强制 client 版本门控）和 `variables`（不提示输入；用环境变量设置值）作为 warning 呈现，其余被忽略。
+
 ## 技能语义接线
 
 在技能挂载之上，本包是把 `skill-claude-code` 的 metadata 转成可执行注册的 consumer：

@@ -1,6 +1,7 @@
 # CCR Deferred Externalization: send full output twice, swap on the third request
 
-Date: 2026-09-20. Status: design — two reviews passed with amendments, all baked in.
+Date: 2026-09-20. Status: implemented (PR #90, commit 705f5867). Design record: two reviews passed
+with amendments, all baked in.
 Second (pre-implementation, code-grounded) review: GO-WITH-AMENDMENTS — B1 cache-safety
 test claims rewritten (the cited test was vacuous), M1 `eventSeq` dropped from the
 resident entry (unknowable at insertion time), M2 subagent-exclusion rationale corrected,

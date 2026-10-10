@@ -59,7 +59,9 @@ job 状态反映真实结局：非 completed 的 `stopReason`、缺失/非法的
 | `minHours` | `24` | 两次整合间的最小间隔小时数 |
 | `minSessions` | `5` | 需要整合的最小新 transcript 数 |
 | `lockStaleMs` | `3_600_000` | 锁持有者过期窗口 |
+| `pressureCooldownMinutes` | `60` | 两次强制（压力）dream 之间的最小间隔分钟数 |
 | `subagentProviderName` | `fork` | fork 使用的一次性 provider |
+| `sessionsRoot` | `<DSH_HOME>/sessions` | 门扫描的会话存储根目录 |
 
 ```ts
 import consolidation from '@dsh-cc/memory-consolidation'

@@ -406,6 +406,16 @@
     - id: context-crusher
       name: '@dsh-cc/context-crusher'
 
+    # The verify-before-retry attendant (plan docs/plans/2026-10-09-verify-before-retry.md):
+    # plain plugin, no Service, no new isolate key. Its pre-execute listener is
+    # prepend:true, and cordis prepend unshifts — the later-registered prepend
+    # listener is OUTERMOST — so this row MUST sit BEFORE the hooks-claude-code
+    # row: hooks' later prepend must land outside retry-attendant so a user
+    # PreToolUse hook allow/ask can override the attendant's ask (§3.4 of the
+    # plan). The order tripwire is pinned by packages/preset/cc/tests/composition.spec.ts.
+    - id: retry-attendant
+      name: '@dsh-cc/retry-attendant'
+
     # The hook bridge: runs the Claude Code hooks.json / settings hook config
     # on the harness interception seams and provides the `hooks` seam plugin
     # hooks merge through. Must mount BEFORE cc-shell-glue: the glue's
@@ -601,6 +611,50 @@
     - id: advisor-watchdog
       name: '@dsh-cc/advisor-watchdog'
 
+    # Completion gate (plan docs/plans/2026-10-09-runtime-verified-completion.md):
+    # an opt-in verified-completion gate that withholds turn-stopping
+    # completion while required evidence is missing (evidence nudge instead),
+    # keeping a per-session receipts ledger with lineage lift. Publishes no
+    # Service (plain plugin, turn-rules pattern), so it needs no isolate key.
+    # DEFAULT OFF (cc-completion-gate.enabled=false). ORDER: after
+    # advisor-watchdog (cc-services tail).
+    - id: completion-gate
+      name: '@dsh-cc/completion-gate'
+
+    # Session config snapshot (plan docs/plans/2026-10-09-session-config-snapshot-event.md):
+    # one JSONL row per Session construction into
+    # $DSH_HOME/config-snapshot/<encodedId>.jsonl — the attribution substrate
+    # (dsh-cc/harness/plugin versions per construction). Publishes no Service
+    # (plain plugin, handoff-store pattern), so it needs no isolate key of its
+    # own; the session/created listener is global and sync-safe, and the async
+    # writer never blocks creation.
+    - id: config-snapshot
+      name: '@dsh-cc/config-snapshot'
+
+    # Progress rebuild (design docs/plans/2026-10-09-structured-progress-and-
+    # post-compact-rebuild.md): derives a typed per-session progress brief
+    # from session events (goal fold, todo snapshot, verified bash receipts,
+    # last user message) and re-injects it into the first model request after
+    # a successful compaction/end. Publishes no Service (plain plugin), so it
+    # needs no isolate key. DEFAULT OFF (progress-rebuild.enabled). ORDER:
+    # after advisor-watchdog, at the cc-services tail — read-only observer +
+    # one bounded injection, no composition dependency on any earlier row.
+    - id: progress-rebuild
+      name: '@dsh-cc/progress-rebuild'
+    # Skill-usage telemetry (plan docs/plans/2026-10-09-skill-lifecycle-usage-gates.md):
+    # an observe-only listener set counting committed skill loads (tool form
+    # at the `tools/result` emit seam, slash form at persisted
+    # skill-invocation user messages) into a per-workspace sidecar ledger
+    # under $DSH_HOME/skill-usage/, plus a `session/created` utility rollup
+    # and a `skills/learned-changed` invalidator. Publishes no Service (plain
+    # plugin, handoff-store pattern), so it needs no isolate key of its own;
+    # it consumes the root-realm `skills` service and appends NOTHING to
+    # session transcripts (§3.6). DEFAULT ON (cc-skill-usage.enabled). ORDER:
+    # at the cc-services tail, after progress-rebuild — physical row order
+    # keeps the emit-seam composition reviewable.
+    - id: skill-usage
+      name: '@dsh-cc/skill-usage'
+
     # Moa tiered cascade routing (plan
     # docs/plans/2026-10-09-moa-tiered-cascade-routing.md): an opt-in pipeline
     # that classifies genuine user turns to sketch/draft/blueprint/masterplan,
@@ -609,11 +663,11 @@
     # pattern), so it needs no isolate key. DEFAULT OFF (moa.enabled), with a
     # moa-private System One budget/breaker and side-car JSONL ledgers under
     # <dshHome>/moa/. ORDER TRIPWIRE: last of the interaction overlays — no
-    # functional coupling with advisor-watchdog (advisor reviews llm/stream
-    # windows; moa classifies user text pre-LLM and judges post-turn), the
-    # physical row order keeps both listeners' composition reviewable and
-    # stable, and puts moa's status rows after advisor verdicts in the same
-    # turn-stopping window.
+    # functional coupling with advisor-watchdog/completion-gate (advisor
+    # reviews llm/stream windows; moa classifies user text pre-LLM and judges
+    # post-turn), the physical row order keeps the listeners' composition
+    # reviewable and puts moa's status rows after advisor verdicts in the
+    # same turn-stopping window.
     - id: moa
       name: '@dsh-cc/moa'
 

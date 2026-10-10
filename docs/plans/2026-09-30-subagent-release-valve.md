@@ -1,6 +1,6 @@
 # Subagent release valve: model-facing `release_agent` + `/agents release`
 
-Status: **Approved — seven-round blind-review arc closed (critic & grok seats convergent; grok scored GO at round 7; critic pre-authorized GO upon the two r7 folds, both landed; codex seat: full findings through r3 (incl. its verified critical), interrupted twice (bridge crash signature) and quota-windowed once, then reduced by explicit user decision). Implementation per §7.**
+Status: **Approved — seven-round blind-review arc closed (critic & grok seats convergent; grok scored GO at round 7; critic pre-authorized GO upon the two r7 folds, both landed; codex seat: full findings through r3 (incl. its verified critical), interrupted twice (bridge crash signature) and quota-windowed once, then reduced by explicit user decision). Implemented — PR #179 (merged 2026-09-30, shipped in v0.8.2).**
 
 (Draft history: v1 `.scratch/design-subagent-release-valve-v1.md` · v2
 `.scratch/design-subagent-release-valve-v2-reviewed.md` · v3

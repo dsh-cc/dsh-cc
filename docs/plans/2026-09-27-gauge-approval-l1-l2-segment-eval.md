@@ -1,9 +1,9 @@
 # Gauge approval-rate L1/L2: shell segment evaluation and suspension recalibration
 
 - Date: 2026-09-27 (v6, review complete)
-- Status: **Reviewed — both lanes green** (critic SHIP at round 5; codex SHIP WITH FIXES at
-  round 5, its single fix folded verbatim). Implementation: PR #164 (L2) + PR #165 (L1,
-  stacked). Implementation-time corrections in §10.
+- Status: **Implemented** (PRs #164 (L2) and #165 (L1, stacked); commits ad6484a0
+  and 95297585). Review record: both lanes green (critic SHIP at round 5; codex SHIP WITH FIXES at
+  round 5, its single fix folded verbatim). Implementation-time corrections in §10.
 - Adjudication ledger: §9.
 - Input evidence: production session-audit decomposition 2026-09-20 → 27 (5,626
   `permission/classifier` events; gauge lane 395, ask rate 83.5%; ≈2% allow at steady

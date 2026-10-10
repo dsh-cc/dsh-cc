@@ -1,6 +1,7 @@
 # Plan-mode switching via the `/plan` command channel
 
-Status: design, reviewed direction; implementation pending.
+Status: implemented (plan switching routes through the `/plan` command channel;
+TUI `packages/ui/tui/src/harness/driver-mode.ts`, `packages/interaction/command-permissions/src/plan-phase.ts`; see §9.4).
 Owner surface: `@dsh-cc/command-permissions`, `@dsh-cc/tui`.
 
 ## 1. Problem
@@ -16,10 +17,10 @@ Three write entry points are affected by the first defect, one by the second:
 
 | Surface | Code path | Today |
 |---|---|---|
-| TUI Shift+Tab | `cyclePermissionMode` → `applyMode` (`packages/ui/tui/src/harness/driver.ts:2055`, `:1306`) | errors, no switch |
-| TUI permission picker | `permissionPickerSubmit` → `runHarness('/permissions <id>')` (`driver.ts:2216-2231`) | errors, no switch (via host command) |
+| TUI Shift+Tab | `cyclePermissionMode` → `applyMode` (`packages/ui/tui/src/harness/driver-mode.ts`) | errors, no switch |
+| TUI permission picker | `permissionPickerSubmit` → `runHarness('/permissions <id>')` (`packages/ui/tui/src/harness/driver-pickers.ts`, `runHarness` in `driver-run-local.ts`) | errors, no switch (via host command) |
 | Browser popupSelect | client decoration submits `/permissions <id>` (`packages/interaction/command-permissions/src/client/index.ts`, `onSelect`) | errors, no switch (via host command) |
-| (latent) leave plan via cycle | `applyMode` non-plan branch, `planMode?.set(agent, false)` (`driver.ts:1318-1319`) | silently skipped |
+| (latent) leave plan via cycle | `applyMode` non-plan branch, `planMode?.set(agent, false)` (`packages/ui/tui/src/harness/driver-mode.ts`) | silently skipped |
 
 ## 2. Root cause
 
@@ -32,7 +33,7 @@ provided under an isolated key is invisible to every `ctx.get` outside that
 subtree — it resolves to `undefined`, no throw.
 
 Both broken call sites do exactly that: `ctx.get('planMode')` from the
-host-plane TUI driver context (`driver.ts:1308`) and from the preset-scope
+host-plane TUI driver context (`driver-mode.ts`) and from the preset-scope
 host command context (`command-permissions/src/index.ts:91`). Meanwhile the
 tui profile's patch disables the host-plane `plan-mode` row by design
 (`packages/bundle/cc-tui/cordis.patch.yml:43-44`, mirroring dsh-web-app), so
@@ -93,7 +94,7 @@ transitively:
   (`command-permissions/src/index.ts:90-105`) — fixing this one heals the
   picker, the browser popup, and typed `/permissions …`, because all three
   already submit `/permissions <mode>` through the command channel.
-- TUI `applyMode` (`driver.ts:1306-1327`) — the Shift+Tab path.
+- TUI `applyMode` (`packages/ui/tui/src/harness/driver-mode.ts`) — the Shift+Tab path.
 
 ## 5. Core abstraction: the plan phase
 
@@ -180,7 +181,7 @@ Hard rules:
 - `signal`: pass `invocation.signal` when present, else a fresh
   `AbortController().signal` (mirrors the TUI's existing call shape).
 
-### 6.2 TUI `applyMode` (`driver.ts:1306-1327`)
+### 6.2 TUI `applyMode` (`packages/ui/tui/src/harness/driver-mode.ts`)
 
 The write becomes async; rapid Shift+Tab presses must not interleave exits
 and engine switches. Serialize per driver instance:
@@ -207,13 +208,13 @@ applyModeInner(mode):
 
 Supporting changes:
 
-- `runHarness(line)` (`driver.ts:1818-1829`) returns a tri-state
+- `runHarness(line)` (`packages/ui/tui/src/harness/driver-run-local.ts`) returns a tri-state
   `Promise<CommandResult | undefined | null>`: `null` = no command registry
   (today's `No command registry is mounted.` notice, unchanged);
   `undefined` = registry present but the line matched no command (callers
   map it to the not-mounted notice); otherwise the `CommandResult`, whose
   non-empty text is echoed as a status row exactly as today. The picker
-  call site (`driver.ts:2231`) ignores the return — behavior unchanged.
+  call site (`driver-pickers.ts`) ignores the return — behavior unchanged.
 - Serialization is per-driver and covers only the Shift+Tab writer. The
   picker and typed `/permissions …` bypass `modeWrites` deliberately: every
   host-command execution re-derives the phase guard at dispatch time,
@@ -224,11 +225,11 @@ Supporting changes:
   do not grow a second queue.
 - Delete `PlanModeLike` and both `ctx.get('planMode')` reads.
 - Delete the optimistic `emit(setPermissionMode(state, 'plan'))` in the plan
-  branch: the display already re-folds on `plan/mode` (`driver.ts:1065-1067`
-  → `liveMode`, `driver.ts:573-576`), so an idle enter flips the statusline
+  branch: the display already re-folds on `plan/mode` (the transcript fold in
+  `packages/ui/tui/src/transcript.ts` → `liveMode`), so an idle enter flips the statusline
   when the event lands, and a queued enter stays truthful until the pre-step
   commit — the echoed "applies from the next step" row narrates the wait.
-- `cyclePermissionMode` (`driver.ts:2055-2060`) and the `Driver` interface
+- `cyclePermissionMode` (`packages/ui/tui/src/harness/driver-mode.ts`) and the `Driver` interface
   stay synchronous (fire-and-forget into `modeWrites`); input/root callers
   unchanged.
 
@@ -328,10 +329,9 @@ the root context (`command-permissions/tests/command-permissions.spec.ts:42`)
 
 ## 10. Text and docs touch-ups
 
-- `permission-rules/src/index.ts:469` error text:
-  `use planMode.set or /permissions plan` → `use /plan or /permissions plan`
-  (`planMode.set` is unreachable outside the realm; the message currently
-  sends a future author down the same broken road).
+- [Done] `permission-rules` error text (`permission-rules/src/mode.ts:191`):
+  now reads `use /plan or /permissions plan` (the `planMode.set` wording is
+  gone; `planMode.set` is unreachable outside the realm).
 - `command-permissions` module docstring (`index.ts:1-26`): the write path
   sentence now reads: engine modes route through `setMode`; `plan` routes
   through the `/plan` command channel.
@@ -355,12 +355,12 @@ the root context (`command-permissions/tests/command-permissions.spec.ts:42`)
 - **Pending-state statusline affordance.** During a queued entry the
   statusline truthfully shows the pre-switch mode. A "→ plan" pending hint
   sourced from the same projection (the driver's existing projection-read
-  pattern, cf. `driver.ts:1782-1787` for `tokenUsage`) is polish for a later
+  pattern, cf. `driver-hud.ts` for `tokenUsage`) is polish for a later
   slice.
 - **Upstream noop-enter wording.** `/plan` while entering already answers
   "Entering plan mode (applies from the next step)." — relayed verbatim by
   design; the common active case is pre-empted by §6.1's no-op branch.
 - **Cycle gating for `bypassPermissions`.** Observed in passing: Shift+Tab
   can reach bypass without the picker's `BYPASS_CONFIRMATION` gate
-  (`driver.ts:2055-2060` never passes `bypassDisabled`). Pre-existing,
+  (`packages/ui/tui/src/harness/driver-mode.ts` never passes `bypassDisabled`). Pre-existing,
   orthogonal; file separately.

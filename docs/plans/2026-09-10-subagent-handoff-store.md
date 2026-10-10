@@ -1,6 +1,6 @@
 # Subagent Handoff Store
 
-Date: 2026-09-10. Status: implemented (PR pending) as of 2026-09-10 —
+Date: 2026-09-10. Status: implemented (PR #36, commit 225f6f24) as of 2026-09-10 —
 critic cold review passed with
 amendments (6 items: tool-whitelist blocking fix, flat globally-unique id
 store, store-primitive sharing deferred, config trimmed to enabled+

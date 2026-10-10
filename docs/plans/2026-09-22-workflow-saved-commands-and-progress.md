@@ -1,6 +1,6 @@
 # Workflow saved commands and progress observability
 
-Date: 2026-09-22. Status: **Proposed**. Origin: dynamic-workflow three-way
+Date: 2026-09-22. Status: **Implemented** (PR #119, commit 73c20e28). Origin: dynamic-workflow three-way
 investigation. Depends on: `2026-09-22-workflow-cc-parity-core.md` (name
 resolution, save locations, prompt section). Optional synergy:
 `2026-09-22-workflow-resume-journal.md` (journal as the per-agent evidence

@@ -40,6 +40,10 @@ Key `cc-turn-rules` in the **user-layer** `settings.json` (the harness-home file
 | `max-result-bytes` | `200000` | UTF-8 truncation cap for the matching unit. |
 | `regex-cache-size` | `64` | Compiled-regex LRU capacity. |
 | `judged.enabled` | `false` | Phase-2 LLM-judged rules; flagged off. |
+| `repeat-reminder.enabled` | `false` | Built-in reminder on N consecutive identical calls (same tool + canonical args). |
+| `repeat-reminder.thresholds` | `[3, 5, 8]` | Run lengths that fire a reminder. |
+| `repeat-reminder.include` / `repeat-reminder.exclude` | `[]` | Tool-name wildcards (`*` allowed); exclude wins over include. |
+| `repeat-reminder.arguments-preview-chars` | `500` | Arguments preview length in the reminder text. |
 
 ## Shape
 

@@ -1,6 +1,6 @@
 # @dsh-cc/token-efficiency
 
-Token-efficiency eval harness for dsh-cc: fixed corpus, frozen acceptance gate, and a comparator (plan `docs/plans/2026-09-20-token-efficiency-eval-harness.md`). Slice A ships the redactor and corpus loader only.
+Token-efficiency eval harness for dsh-cc: fixed corpus, frozen acceptance gate, and a comparator (plan `docs/plans/2026-09-20-token-efficiency-eval-harness.md`). The redactor, corpus loader, replay metrics, mock-tier runner, acceptance gate, and CLI are implemented; the live tier remains manual-only.
 
 ## Tier semantics
 
@@ -29,7 +29,7 @@ Raw session logs are never committed; the redactor (`src/redactor.ts`) produces 
 - `run [--gate <path>] [--corpus <dir>] [--write-baseline <path>]` — folds every replay task's fixture; prints one line per task vector (tokens, cost, counters) and the footer. `--write-baseline` writes `{foldedAt, ref: $TOKEN_EFFICIENCY_BASELINE_REF ?? 'unpinned', vectors}`.
 - `check [--gate <path>] [--corpus <dir>]` — gate + baseline load, candidate fold, per-task verdicts, per-task usage-coverage lines, footer. Exit 1 on parse failure, capability regression, definition change, counter-expectation miss, or missing candidate/baseline vector; exit 2 on usage error.
 
-Non-replay tasks are skipped with a one-line deferral notice; the mock-script runner is a later slice.
+Non-replay (mock-script) tasks run through the mock-tier runner described below; only live-tier runs stay manual.
 
 Every run ends with the footer:
 

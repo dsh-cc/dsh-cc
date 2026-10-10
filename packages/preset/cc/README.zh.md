@@ -22,6 +22,7 @@ DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`mi
 
 - **Web UI**：预设选择器里选「CC mode」；或
 - **settings**：`~/.dsh/settings.json` → `"agent-preset-registry": { "selectedDefault": "cc" }`。
+- **TUI**：`dsh --profile tui`（或 `dsh-cc`）启动终端界面，并以本 preset 为默认。
 
 ## Known limits（已知限制）
 

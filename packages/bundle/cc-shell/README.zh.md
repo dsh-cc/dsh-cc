@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-CC 壳层的 **host-plane infra** 组合包。本包承载真正属于宿主层的部件——带 deferred-name 支持的 tools 注册表替换——以及 `cc-shell-glue` 插件的*代码*（glue 代码仍住在这里，但挂载动作由 CC preset 执行，而非本包的 patch）。所有 agent-face 组合——tool-search、skill loader、memory、coordinator、worktree/sleep/notebook/structured-output 工具、19 个斜杠命令、hook 桥、output-style 渲染——都已迁至 [`@dsh-cc/preset-cc`](../../preset/cc/README.md) 组合包，以便按 preset 隔离，而不是泄漏进每个模式。
+CC 壳层的 **host-plane infra** 组合包。本包承载真正属于宿主层的部件——带 deferred-name 支持的 tools 注册表替换——以及 `cc-shell-glue` 插件的*代码*（glue 代码仍住在这里，但挂载动作由 CC preset 执行，而非本包的 patch）。所有 agent-face 组合——tool-search、skill loader、memory、coordinator、worktree/sleep/notebook/structured-output 工具、21 个斜杠命令、hook 桥、output-style 渲染——都已迁至 [`@dsh-cc/preset-cc`](../../preset/cc/README.md) 组合包，以便按 preset 隔离，而不是泄漏进每个模式。
 
 ## 作用
 

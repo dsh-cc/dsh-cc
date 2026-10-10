@@ -113,10 +113,22 @@
       "path": "./packages/interaction/post-edit-verify"
     },
     {
+      "path": "./packages/interaction/retry-attendant"
+    },
+    {
       "path": "./packages/interaction/turn-rules"
     },
     {
       "path": "./packages/interaction/advisor-watchdog"
+    },
+    {
+      "path": "./packages/interaction/completion-gate"
+    },
+    {
+      "path": "./packages/context/progress-rebuild"
+    },
+    {
+      "path": "./packages/skill/skill-usage"
     },
     {
       "path": "./packages/interaction/moa"
@@ -147,6 +159,9 @@
     },
     {
       "path": "./packages/observability/cache-health"
+    },
+    {
+      "path": "./packages/observability/config-snapshot"
     },
     {
       "path": "./packages/observability/sidecar-io"

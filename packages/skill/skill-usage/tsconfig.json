@@ -1,0 +1,30 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../observability/sidecar-io"
+    },
+    {
+      "path": "../../skill/skill-claude-code"
+    },
+    {
+      "path": "../../subagent/handoff-store"
+    },
+    {
+      "path": "../../workspace/session-cwd"
+    },
+    {
+      "path": "../../settings/settings-provider"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    }
+  ]
+}

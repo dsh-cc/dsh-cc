@@ -1,6 +1,7 @@
 # Edit Tool Fuzzy Matching and the Read-State Delta
 
-Date: 2026-09-21. Status: **Proposed**. Origin: ZCode design borrow analysis
+Date: 2026-09-21. Status: **Partially implemented.** Track B shipped as PR #104
+(commit 878a0f04) behind `cc-edit-recovery-hint`; items remain unimplemented. Origin: ZCode design borrow analysis
 (zai-org/ZCode @ 872ad960). Design-review record: first draft **amended** in cold review
 — it wrongly claimed the harness has no read-state structure (it has
 `fs-observation-policy`) and placed the dsh-cc mitigation on a hook point that cannot

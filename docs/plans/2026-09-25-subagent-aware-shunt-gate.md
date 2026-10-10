@@ -1,6 +1,6 @@
 # Subagent-aware shunt gate: CC-parity caller identity and the subagent exemption
 
-**Status:** **Design — five review rounds applied (critic; Codex SHIP-WITH-FIXES; reviewer rounds 2/3/4/5, each code-verified before application; 2026-09-25).** Identity transport is CC's own `agent_id` field, keyed on a *live* in-process subagent set (add at start, delete at end); `agent_type` stays a constant parity gap in this PR.
+**Status:** **Implemented (PRs #154 and #155; e2e coverage in PR #156, commit 03648f4d).** Design record: five review rounds applied (critic; Codex SHIP-WITH-FIXES; reviewer rounds 2/3/4/5, each code-verified before application; 2026-09-25). Identity transport is CC's own `agent_id` field, keyed on a *live* in-process subagent set (add at start, delete at end); `agent_type` stays a constant parity gap in this PR.
 
 **Date:** 2026-09-25
 
