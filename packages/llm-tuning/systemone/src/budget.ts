@@ -20,7 +20,7 @@
  * the unchanged `isTruncated` sentinel (today's safe behavior), never past
  * it. Base64/dense-alnum payloads are a documented underestimation class.
  *
- * @module @dsh-cc/permission-rules/systemone-budget
+ * @module @dsh-cc/systemone/budget
  */
 
 /** Request envelope + state JSON keys; the question is counted separately. */

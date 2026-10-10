@@ -104,6 +104,9 @@
       "path": "./packages/llm-tuning/side-query"
     },
     {
+      "path": "./packages/llm-tuning/systemone"
+    },
+    {
       "path": "./packages/interaction/prompt-suggest"
     },
     {

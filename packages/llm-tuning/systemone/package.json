@@ -1,0 +1,29 @@
+{
+  "name": "@dsh-cc/systemone",
+  "description": "Shared System One decision-model client (native transport with bounded 429 retry) and script-aware token-budget helpers, consumed by permission-rules and other harness features",
+  "version": "0.9.0-rc.3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/llm-tuning/systemone"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { systemoneDecide } from '../src/systemone-client.ts'
-import type { SystemOneQuestion } from '../src/systemone-client.ts'
+import { systemoneDecide } from '../src/client.ts'
+import type { SystemOneQuestion } from '../src/client.ts'
 
 // Verbatim T1 probe envelope (2026-09-25-gauge-system-one-probe-evidence.md).
 const T1_BODY = '{"model":"laya-rl-agent","answers":{"verdict":{"type":"choice","choice":"allow","probabilities":{"allow":0.5015,"ask":0.2658,"deny":0.2327},"confidence":0.0555,"action":{"act_probability":1}}},"usage":{"input_tokens":83,"output_tokens":0}}'

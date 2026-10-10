@@ -9,8 +9,8 @@ import {
   prepareSystemOneInput,
 } from '../src/gauge-adapter.ts'
 import type { GaugeSlots } from '../src/gauge-adapter.ts'
-import type { SystemOneAnswer } from '../src/systemone-client.ts'
-import { estimateSystemOneTokens } from '../src/systemone-budget.ts'
+import type { SystemOneAnswer } from '@dsh-cc/systemone'
+import { estimateSystemOneTokens } from '@dsh-cc/systemone'
 
 const SLOTS: GaugeSlots = {
   hardDeny: ['rm -rf on home', 'chmod 777 /'],

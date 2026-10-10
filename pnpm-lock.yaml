@@ -1907,6 +1907,9 @@ importers:
       '@dsh-cc/settings-provider':
         specifier: workspace:^
         version: link:../../settings/settings-provider
+      '@dsh-cc/systemone':
+        specifier: workspace:^
+        version: link:../../llm-tuning/systemone
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2106,6 +2109,12 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
+  packages/llm-tuning/systemone:
+    devDependencies:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))

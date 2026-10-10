@@ -40,6 +40,7 @@
     "@deepseek-ai/dsh-shell": ">=0.2.0-rc.2",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/systemone": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/dsh-user-approval": ">=0.2.0-rc.2",
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
@@ -63,6 +64,7 @@
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "link:../../workspace/session-cwd",
     "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/systemone": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {
