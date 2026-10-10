@@ -45,6 +45,7 @@ import type { ClassifierBackendRoute } from './gauge-backend.ts'
 import type { AutoModeSettings } from './settings-schema.ts'
 import { DEFAULT_ALLOW_EXCEPTIONS, DEFAULT_ENVIRONMENT, DEFAULT_HARD_DENY, expandSlot } from './slots.ts'
 import { createContextBundler } from './context-bundle.ts'
+import { foldClassifierContext } from './transcript.ts'
 import type { DecidedCall } from './decide.ts'
 import type { PermissionMode, PermissionRule } from './types.ts'
 import {
@@ -159,6 +160,8 @@ interface AutoModeSlice {
   gaugeAllowThreshold: number | undefined
   /** Fix B opt-out (absence-preserving; the gauge stage consumes default ON). */
   gaugeAllowEvidence: boolean | undefined
+  /** Underspec→ASK detector flag (absence-preserving; consumption default OFF). */
+  ambiguityAsk: boolean
   secondPass: boolean
   /** S5/D10: audit the raw classifier input when this flag is on. */
   auditFullText: boolean
@@ -183,6 +186,7 @@ function readSlice(settings: { autoMode?: AutoModeSettings }): AutoModeSlice {
     backend: classifier?.backend ?? 'haiku',
     gaugeAllowThreshold: classifier?.gaugeAllowThreshold,
     gaugeAllowEvidence: classifier?.gaugeAllowEvidence,
+    ambiguityAsk: classifier?.ambiguityAsk === true,
     secondPass: classifier?.secondPass === true,
     auditFullText: classifier?.auditFullText === true,
     enabled: classifier?.enabled === true,
@@ -263,13 +267,19 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
 
   /** The gauge lane (verdict LRU + wire call), memoized like the chat classifier. */
   let gaugeLane: SystemOneLane | undefined
+  /**
+   * The gauge lane's OWN build stamp (round-4 fix, design doc §3.0): sharing
+   * `builtRaw` let a chat-lane `ensureClassifier` call stamp the new raw and
+   * mask the gauge lane's lazy invalidation — a stale lane + cache survived.
+   */
+  let gaugeBuiltRaw = slice.raw
   const ensureGaugeLane = (): SystemOneLane => {
-    if (gaugeLane !== undefined && builtRaw === slice.raw) return gaugeLane
+    if (gaugeLane !== undefined && gaugeBuiltRaw === slice.raw) return gaugeLane
     gaugeLane = createSystemOneLane(slice.cacheMaxEntries, {
       ...(deps.debug === undefined ? {} : { debug: deps.debug }),
       ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
     })
-    builtRaw = slice.raw
+    gaugeBuiltRaw = slice.raw
     return gaugeLane
   }
 
@@ -300,6 +310,17 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
     const session = exec.agent?.session
     if (session === undefined) return
     breaker.seed(String(session.header.id), () => foldClassifiers(session.snapshotEvents()), routeKey, { exec, route })
+  }
+
+  /**
+   * The visible task text for the underspec detector (design doc §3.1a): the
+   * transcript fold's `userIntent` — the same seam the chat lane's bundler
+   * uses. Session absent ⇒ '' (the detector goes inert for that call).
+   */
+  const taskOf = (exec: ToolExecution): string => {
+    const session = exec.agent?.session
+    if (session === undefined) return ''
+    return foldClassifierContext(session.snapshotEvents(), { readOnlyTools: deps.readOnlyTools }).userIntent
   }
 
   return {
@@ -359,6 +380,8 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
           ...(deps.allowEvidenceRules === undefined ? {} : { allowEvidenceRules: deps.allowEvidenceRules() }),
           timeoutMs: slice.timeoutMs,
           auditFullText: slice.auditFullText,
+          ambiguityAsk: slice.ambiguityAsk,
+          ...(slice.ambiguityAsk ? { task: taskOf(exec) } : {}),
         })
       }
       const route: ClassifierRoute | undefined = backendInfo.route

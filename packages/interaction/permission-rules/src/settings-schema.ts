@@ -57,6 +57,12 @@ export interface AutoModeClassifierSettings {
    * (≤8192 chars by construction) in addition to the digest.
    */
   auditFullText?: boolean
+  /**
+   * Underspec→ASK detector (default FALSE, absence-preserving): the gauge
+   * System One lane adds the ambiguity question and escalates
+   * allow→ask on `underspecified` (design doc §3.4).
+   */
+  ambiguityAsk?: boolean
 }
 
 /** `permissions.autoMode.probe` — the plugin-local hand-mirror of the shared AutoModeProbe schema (S7/W3). */
@@ -255,6 +261,8 @@ const autoModeClassifierSchema = z.object({
   gaugeAllowThreshold: z.union([z.number(), z.const(undefined)]),
   // Absence-preserving (gauge evidence fold; the stage owns the `true` default).
   gaugeAllowEvidence: z.union([z.boolean(), z.const(undefined)]),
+  // Absence-preserving (underspec→ASK detector; consumption default `false`).
+  ambiguityAsk: z.union([z.boolean(), z.const(undefined)]),
   timeoutMs: z.number().default(8000),
   cacheMaxEntries: z.number().default(256),
 })
