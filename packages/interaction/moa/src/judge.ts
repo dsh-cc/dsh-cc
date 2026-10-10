@@ -24,7 +24,7 @@ import { resolveJudgeRoute } from './judge-route.ts'
 import { MOA_ESCALATION_KIND } from './state.ts'
 import { TIER_ALIASES, tierAt } from './tiers.ts'
 import type { MoaCore } from './index.ts'
-import type { ArmingValidation } from './router.ts'
+import type { ArmingValidation, EnsureArmed } from './router.ts'
 
 /** Same crop marker contract as the router (§3.3). */
 const CROP_MARKER = '[…truncated…]'
@@ -101,7 +101,7 @@ interface LogEvent {
 
 export function createAcceptanceJudge(
   core: MoaCore,
-  opts: { validation: ArmingValidation; deps: JudgeDeps },
+  opts: { validation: ArmingValidation; deps: JudgeDeps; ensureArmed?: EnsureArmed | undefined },
 ): AcceptanceJudge {
   const { arming, bookkeeping } = core
   const deps = opts.deps
@@ -133,9 +133,14 @@ export function createAcceptanceJudge(
    * flag (§3.3: would-this-turn-have-been-escalatable). Conditions: armed +
    * routed turn + effect-free + retries left + below the masterplan ceiling.
    */
+  const isValidated = (): boolean => {
+    // Late-settling services: retry the arm pass before gating (no-op once armed).
+    if (!opts.validation.ok) opts.ensureArmed?.()
+    return opts.validation.ok
+  }
   const isEscalatable = (snap: JudgeSnapshot, effectFree: boolean): boolean =>
+    isValidated() &&
     arming.isArmed() &&
-    opts.validation.ok &&
     snap.fromTier >= 0 && // the turn ran under moa routing
     effectFree &&
     snap.fromTier < TIER_ALIASES.length - 1 && // hard ceiling: masterplan
@@ -227,8 +232,9 @@ export function createAcceptanceJudge(
         budgetTokens: settings.classifyBudgetTokens,
       })
       const backend = judgeRoute.ok ? deps.resolveBackend?.(judgeRoute.route) : undefined
-      if (!judgeRoute.ok || backend === undefined) {
-        failure = judgeRoute.ok ? 'no backend' : judgeRoute.reason
+      const judgeModel = judgeRoute.ok ? judgeRoute.route.model : undefined
+      if (!judgeRoute.ok || backend === undefined || judgeModel === undefined) {
+        failure = !judgeRoute.ok ? judgeRoute.reason : backend === undefined ? 'no backend' : 'judge route has no model'
       } else {
         const receiptsPart = snap.receipts.length === 0 ? '' : `\n\nTool receipts:\n${snap.receipts}`
         const state = capMiddleToTokenBudget(
@@ -239,10 +245,9 @@ export function createAcceptanceJudge(
         const result = await systemoneDecide({
           baseURL: backend.baseURL,
           ...(backend.apiKey === undefined ? {} : { apiKey: backend.apiKey }),
-          // Bare model id (gateway contract) — see the router's classify site.
-          // Resolution guarantees model on the ok branch (alias/object/default
-          // forms all require it); the router classify site mirrors this.
-          model: judgeRoute.route.model ?? 'llmbox_systemone/bjev',
+          // Wire model == route.model (never provider-prefixed, never a
+          // hardcoded fallback) — see the router's classify site.
+          model: judgeModel,
           state,
           questions: { accept: ACCEPT_QUESTION },
           timeoutMs: settings.callBudgetMs,

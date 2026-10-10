@@ -25,7 +25,7 @@ import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-
 import { createOpeningCapture } from '../src/capture.ts'
 import { createRequestRouter, textOf, type RouterDeps } from '../src/router.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore } from '../src/index.ts'
-import { noticeOpening, userOpening } from './rig.ts'
+import { GAUGE_ROUTE, noticeOpening, routes as tierRoutes, userOpening } from './rig.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -84,7 +84,7 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
     classifyStates.push((JSON.parse(String(init?.body)) as { state: string }).state)
     return new Response(
       JSON.stringify({
-        model: 'llmbox_systemone/bjev',
+        model: GAUGE_ROUTE.model,
         answers: { route: { type: 'choice', choice: 'draft', probabilities: options.probabilities ?? DRAFT_PROBABILITIES } },
         usage: { input_tokens: 100, output_tokens: 5 },
       }),
@@ -93,7 +93,7 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
   }
   const deps: RouterDeps = {
     getCapturedOpening: capture.getCapturedOpening,
-    routes: () => ({ resolve: (alias: string) => ({ provider: 'mock', model: `tier-${alias}` }) }) as never,
+    routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
   }

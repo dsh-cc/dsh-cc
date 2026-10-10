@@ -18,18 +18,18 @@ import { readUserSection } from '@dsh-cc/settings-ns'
 import { ArmingMachine } from './arming.ts'
 import { createOpeningCapture } from './capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from './judge.ts'
-import { createRequestRouter, validateArming, type ArmingValidation, type RequestRouter, type RouterDeps } from './router.ts'
+import { createRequestRouter, validateArming, type ArmingValidation, type EnsureArmed, type RequestRouter, type RouterDeps } from './router.ts'
 import { registerSettings, type MoaSettings } from './settings.ts'
 import { EscalationBookkeeping } from './state.ts'
 
 export { SETTINGS_NAMESPACE, DEFAULT_MOA_SETTINGS, MAX_ESCALATIONS_CEILING, registerSettings, type MoaSettings, type JudgeRouteObject, type JudgeRouteSetting } from './settings.ts'
 export { ArmingMachine, type RequestPair, type DisarmReason } from './arming.ts'
 export { TIER_ALIASES, TIER_COUNT, resolveTiers, tierAt, nextTierUp, type TierResolution } from './tiers.ts'
-export { DEFAULT_JUDGE_ROUTE, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
+export { DEFAULT_JUDGE_ALIAS, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
 export { MOA_ESCALATION_KIND, isMoaEscalationMessage, EscalationBookkeeping, type EscalationState } from './state.ts'
 export { moaNoticeSource } from './provenance.ts'
 export { createOpeningCapture, CAPTURE_CAPACITY } from './capture.ts'
-export { createRequestRouter, validateArming, textOf, requestHeaderOf, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type MoaRouteBackend } from './router.ts'
+export { createRequestRouter, validateArming, textOf, requestHeaderOf, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
 export { createAcceptanceJudge, ACCEPT_QUESTION, type AcceptanceJudge, type JudgeDeps } from './judge.ts'
 
 /** What the wiring slice consumes. */
@@ -91,11 +91,13 @@ export const name = 'cc-moa'
  * BEFORE the vendored settings provider (and app-level services) settle, so
  * `read()` at mount time may still report defaults. Both the settings
  * registration (settings.ts, deferred via `ctx.inject` inside
- * `registerNamespaceSafe`) and the arm/validation pass here therefore retry
- * once the `settings` service arrives, mutating the shared `validation`
- * object the router/judge closures read per firing — a frozen
- * "moa disabled" verdict at mount would otherwise disarm the feature for
- * the whole process lifetime.
+ * `registerNamespaceSafe`) and the arm/validation pass here therefore retry:
+ * on `ctx.inject(['settings', 'ccModelRoutes'])` and again right before the
+ * router/judge `validation.ok` gate, until validation succeeds — mutating the
+ * shared `validation` object the router/judge closures read per firing. No
+ * failure reason is final: a frozen verdict at mount (disabled, routes
+ * unavailable, or a ladder that is degenerate only until the alias overlay
+ * mounts) would otherwise disarm the feature for the whole process lifetime.
  * @param ctx - the plug context (agent-scoped when mounted per agent).
  */
 export function apply(ctx: Context): void {
@@ -105,33 +107,56 @@ export function apply(ctx: Context): void {
   const validation: ArmingValidation = { ok: false, reason: 'moa disabled' }
   core = { readSettings: read, arming, bookkeeping: new EscalationBookkeeping(), armingValidation: validation }
 
-  /** Arm + validate; idempotent (a structural reject does not retry). */
-  const tryArm = (): void => {
-    if (validation.reason !== 'moa disabled') return
+  /**
+   * Arm + validate until it succeeds. Every not-yet-ok state is retryable:
+   * settings may still be defaults, `ccModelRoutes` may be absent, and the
+   * alias overlay may not be mounted yet (a temporarily degenerate ladder or
+   * an unresolved `gauge` default). Once ok, it is a no-op. Each distinct
+   * failure reason warns once (no spam from the per-firing retry).
+   */
+  const warnedReasons = new Set<string>()
+  const tryArm: EnsureArmed = () => {
+    if (validation.ok) return
     const settings = read()
-    if (!settings.enabled) return
+    if (!settings.enabled) {
+      // Leave unarmed but retryable: a later enable (hot reload) re-runs this.
+      validation.reason = 'moa disabled'
+      return
+    }
     // Routes resolve lazily: `ccModelRoutes` is an app-level service that is
     // also absent during the preset sweep (capturing it at mount would pin
     // undefined for the process lifetime).
     const routes = optionalRoutes(ctx)
-    arming.arm()
     const result = validateArming({ settings, routes, logger: ctx.logger })
-    if (!result.ok) ctx.logger.warn(`moa: not armed — ${result.reason}`)
-    validation.ok = result.ok
-    // 'armed' marks the decision final for the retry guard below.
-    validation.reason = result.reason ?? 'armed'
+    if (!result.ok) {
+      const reason = result.reason ?? 'unknown'
+      if (!warnedReasons.has(reason)) {
+        warnedReasons.add(reason)
+        ctx.logger.warn(`moa: not armed — ${reason}`)
+      }
+      validation.ok = false
+      validation.reason = reason
+      return
+    }
+    arming.arm()
+    validation.ok = true
+    validation.reason = 'armed'
   }
   tryArm()
   try {
-    ctx.inject(['settings'], tryArm)
+    // Fires once BOTH services are present (and again if either is
+    // re-provided); the router/judge also call tryArm before their gate, so
+    // callback ordering vs the deferred settings registration cannot
+    // permanently miss.
+    ctx.inject(['settings', 'ccModelRoutes'], tryArm)
   } catch {
-    // Caller fiber already unloading: the mount-time attempt above is final.
+    // Caller fiber already unloading: the per-firing ensureArmed still runs.
   }
 
   const capture = createOpeningCapture()
   liveCapture = capture
   ctx.on('agent/pre-step', capture.listener as never)
-  const router = createRequestRouter(core, { validation, deps: buildDeps(ctx, capture.getCapturedOpening) })
+  const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps: buildDeps(ctx, capture.getCapturedOpening) })
   core.router = router
   ctx.on('agent/pre-step', router.preStepListener as never)
   ctx.on('agent/request', router.listener)
@@ -139,7 +164,7 @@ export function apply(ctx: Context): void {
   // listener — capture inputs synchronously, dispatch the judge DETACHED
   // (never blocks the waterfall; wakes the retry via agent.followup).
   const judgeDeps = buildJudgeDeps(ctx)
-  const judge = createAcceptanceJudge(core, { validation, deps: judgeDeps })
+  const judge = createAcceptanceJudge(core, { validation, ensureArmed: tryArm, deps: judgeDeps })
   ctx.on('agent/turn-stopping', judge.listener as never)
 }
 
