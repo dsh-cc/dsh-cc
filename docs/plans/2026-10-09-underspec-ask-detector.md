@@ -1,7 +1,7 @@
 # Under-specified target → ASK detector for gauge (design)
 
 - Date: 2026-10-09
-- Status: draft v6 — external three-seat review converged (round 5 delta confirmations: critic GO, codex GO-WITH-CHANGES, grok GO-WITH-CHANGES, all residuals folded). User sign-off pending per the repo gating order. NOT yet implemented.
+- Status: implemented (this PR) — design v6 (three-seat external review converged). Three-slice implementation landed with tests and gates green. Dogfood pending: enable via `permissions.autoMode.classifier.ambiguityAsk` (default OFF).
 - Scope: `packages/interaction/permission-rules` only (gauge adapter, gauge stage, stage merge, settings schema, classifier key helper) + capability manifest evidence rows + transcript event additive field. The PI probe lane (`probe-systemone.ts` / `pi-probe.ts`) shares only the System One gateway and is NOT touched. No new package. Default OFF (opt-in dogfood).
 - Sources: UnderSpecBench (under underspecified instructions, action-boundary violations run 55.8–67.8%; blast-radius prompting barely helps — *asking must be a first-class action*), SafetySentry (EXECUTE/ASK/REFUSE ternary gate — dsh-cc auto-mode already implements it; this design adds a second, orthogonal question on the same gate).
 
@@ -629,3 +629,25 @@ slot, zero extra requests.
   against the pre-fix interleave and is defense-in-depth after it.
   - Status: draft v6 — three-seat external review converged; user
     sign-off pending (the last open gate).
+- Implementation (2026-10, this PR; user sign-off received with the
+  instruction to decompose, implement via executor, update this status,
+  and open the PR):
+  three-slice executor delivery — slice 1 adapter core
+  (`buildAmbiguityQuestion`, the `{ambiguityAsk, task}` options bag, task
+  slot with a 400-CHAR cap via a char-unit middle-elision helper — the
+  token-unit helper cannot express the specified cap, two-phase budget
+  drop, pinned total extraction idiom); slice 2 stage wiring (the lane
+  classify-opts hop, merge-before-assembly, gaugeBuiltRaw own stamp,
+  `taskOf` over `foldClassifierContext`, settings key + type mirror,
+  audit event field) — the orchestrator verification round caught one
+  fidelity gap beyond the executor's tests: the event's `ambiguity` field
+  was value-gated only, now flag-gated per §3.3's "absent when the flag
+  is off"; slice 3 wire-shape guard (two named answers + typo decoy
+  against the client parse loop) + README bilingual clause + capability
+  manifest evidence rows + parity regen. Verification: 837 package tests
+  green, `tsc -b --force`, `check:capabilities`, `check:parity`,
+  `check:size`, `check:spec-deps` all green; the full-workspace run was
+  flake-free except two timeout-type failures in the documented
+  hooks-claude-code load cluster (untouched files, isolated reruns
+  green, members swapped across runs — accepted per the known signature).
+  Dogfood: pending (the flag ships default OFF; observables per §5).
