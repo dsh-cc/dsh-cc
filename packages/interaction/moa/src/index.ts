@@ -18,18 +18,18 @@ import { readUserSection } from '@dsh-cc/settings-ns'
 import { ArmingMachine } from './arming.ts'
 import { createOpeningCapture } from './capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from './judge.ts'
-import { createRequestRouter, validateArming, type ArmingValidation, type RequestRouter, type RouterDeps } from './router.ts'
-import { DEFAULT_MOA_SETTINGS, registerSettings, type MoaSettings } from './settings.ts'
+import { createRequestRouter, validateArming, type ArmingValidation, type EnsureArmed, type RequestRouter, type RouterDeps } from './router.ts'
+import { registerSettings, type MoaSettings } from './settings.ts'
 import { EscalationBookkeeping } from './state.ts'
 
 export { SETTINGS_NAMESPACE, DEFAULT_MOA_SETTINGS, MAX_ESCALATIONS_CEILING, registerSettings, type MoaSettings, type JudgeRouteObject, type JudgeRouteSetting } from './settings.ts'
 export { ArmingMachine, type RequestPair, type DisarmReason } from './arming.ts'
 export { TIER_ALIASES, TIER_COUNT, resolveTiers, tierAt, nextTierUp, type TierResolution } from './tiers.ts'
-export { DEFAULT_JUDGE_ROUTE, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
+export { DEFAULT_JUDGE_ALIAS, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
 export { MOA_ESCALATION_KIND, isMoaEscalationMessage, EscalationBookkeeping, type EscalationState } from './state.ts'
 export { moaNoticeSource } from './provenance.ts'
 export { createOpeningCapture, CAPTURE_CAPACITY } from './capture.ts'
-export { createRequestRouter, validateArming, textOf, requestHeaderOf, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type MoaRouteBackend } from './router.ts'
+export { createRequestRouter, validateArming, textOf, requestHeaderOf, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
 export { createAcceptanceJudge, ACCEPT_QUESTION, type AcceptanceJudge, type JudgeDeps } from './judge.ts'
 
 /** What the wiring slice consumes. */
@@ -42,6 +42,12 @@ export interface MoaCore {
   bookkeeping: EscalationBookkeeping
   /** The routing slice's router handle (tier decisions + pair record). */
   router?: RequestRouter
+  /**
+   * The live arming validation (mutated in place by the settings-arrival
+   * retry below). Observability seam for wiring tests; the router and judge
+   * closures read this same object every firing.
+   */
+  armingValidation?: ArmingValidation
 }
 
 let core: MoaCore | undefined
@@ -80,26 +86,77 @@ export const name = 'cc-moa'
  * Arming validation (§3.7/§3.6) runs at mount when enabled: a degenerate
  * ladder or a failing judge-route window check leaves the feature unarmed
  * with ONE warn (the router additionally gates every classify on it).
+ *
+ * Mount-order race (live-traced 2026-10-10): the cc preset sweep mounts
+ * BEFORE the vendored settings provider (and app-level services) settle, so
+ * `read()` at mount time may still report defaults. Both the settings
+ * registration (settings.ts, deferred via `ctx.inject` inside
+ * `registerNamespaceSafe`) and the arm/validation pass here therefore retry:
+ * on `ctx.inject(['settings', 'ccModelRoutes'])` and again right before the
+ * router/judge `validation.ok` gate, until validation succeeds — mutating the
+ * shared `validation` object the router/judge closures read per firing. No
+ * failure reason is final: a frozen verdict at mount (disabled, routes
+ * unavailable, or a ladder that is degenerate only until the alias overlay
+ * mounts) would otherwise disarm the feature for the whole process lifetime.
  * @param ctx - the plug context (agent-scoped when mounted per agent).
  */
 export function apply(ctx: Context): void {
-  const read = registerSettings(ctx) ?? (() => DEFAULT_MOA_SETTINGS)
+  const read = registerSettings(ctx)
   if (core !== undefined) return
   const arming = new ArmingMachine(() => read().enabled)
-  core = { readSettings: read, arming, bookkeeping: new EscalationBookkeeping() }
+  const validation: ArmingValidation = { ok: false, reason: 'moa disabled' }
+  core = { readSettings: read, arming, bookkeeping: new EscalationBookkeeping(), armingValidation: validation }
 
-  const routes = optionalRoutes(ctx)
-  let validation: ArmingValidation = { ok: false, reason: 'moa disabled' }
-  if (read().enabled) {
+  /**
+   * Arm + validate until it succeeds. Every not-yet-ok state is retryable:
+   * settings may still be defaults, `ccModelRoutes` may be absent, and the
+   * alias overlay may not be mounted yet (a temporarily degenerate ladder or
+   * an unresolved `gauge` default). Once ok, it is a no-op. Each distinct
+   * failure reason warns once (no spam from the per-firing retry).
+   */
+  const warnedReasons = new Set<string>()
+  const tryArm: EnsureArmed = () => {
+    if (validation.ok) return
+    const settings = read()
+    if (!settings.enabled) {
+      // Leave unarmed but retryable: a later enable (hot reload) re-runs this.
+      validation.reason = 'moa disabled'
+      return
+    }
+    // Routes resolve lazily: `ccModelRoutes` is an app-level service that is
+    // also absent during the preset sweep (capturing it at mount would pin
+    // undefined for the process lifetime).
+    const routes = optionalRoutes(ctx)
+    const result = validateArming({ settings, routes, logger: ctx.logger })
+    if (!result.ok) {
+      const reason = result.reason ?? 'unknown'
+      if (!warnedReasons.has(reason)) {
+        warnedReasons.add(reason)
+        ctx.logger.warn(`moa: not armed — ${reason}`)
+      }
+      validation.ok = false
+      validation.reason = reason
+      return
+    }
     arming.arm()
-    validation = validateArming({ settings: read(), routes, logger: ctx.logger })
-    if (!validation.ok) ctx.logger.warn(`moa: not armed — ${validation.reason}`)
+    validation.ok = true
+    validation.reason = 'armed'
+  }
+  tryArm()
+  try {
+    // Fires once BOTH services are present (and again if either is
+    // re-provided); the router/judge also call tryArm before their gate, so
+    // callback ordering vs the deferred settings registration cannot
+    // permanently miss.
+    ctx.inject(['settings', 'ccModelRoutes'], tryArm)
+  } catch {
+    // Caller fiber already unloading: the per-firing ensureArmed still runs.
   }
 
   const capture = createOpeningCapture()
   liveCapture = capture
   ctx.on('agent/pre-step', capture.listener as never)
-  const router = createRequestRouter(core, { validation, deps: buildDeps(ctx, capture.getCapturedOpening) })
+  const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps: buildDeps(ctx, capture.getCapturedOpening) })
   core.router = router
   ctx.on('agent/pre-step', router.preStepListener as never)
   ctx.on('agent/request', router.listener)
@@ -107,7 +164,7 @@ export function apply(ctx: Context): void {
   // listener — capture inputs synchronously, dispatch the judge DETACHED
   // (never blocks the waterfall; wakes the retry via agent.followup).
   const judgeDeps = buildJudgeDeps(ctx)
-  const judge = createAcceptanceJudge(core, { validation, deps: judgeDeps })
+  const judge = createAcceptanceJudge(core, { validation, ensureArmed: tryArm, deps: judgeDeps })
   ctx.on('agent/turn-stopping', judge.listener as never)
 }
 
@@ -120,22 +177,43 @@ function optionalRoutes(ctx: Context): ModelRoutes | undefined {
   }
 }
 
+/**
+ * Resolve a System One backend (baseURL) for `route` from the user-layer
+ * `llm-pi-ai` provider records via the settings service's describe face
+ * (gauge-backend precedent, permission-rules/src/gauge-backend.ts).
+ *
+ * Bug-fix note (2026-10-10): both call sites previously passed the *cordis
+ * context* where this helper expects the settings *service* — an `as never`
+ * cast hid the mismatch, `readUserSection` saw no `describe`, and every
+ * classify/judge call fail-opened with "no backend baseURL" in production.
+ * The wiring tests pin the real path.
+ */
+export function resolveSystemOneBackend(
+  settings: { describe?: () => ReadonlyArray<{ ns?: unknown; user?: unknown }> } | undefined,
+  route: { provider?: string | undefined },
+): { baseURL: string } | undefined {
+  const raw = readUserSection(settings, 'llm-pi-ai')
+  const record = (raw?.providers as Record<string, { baseURL?: unknown } | undefined> | undefined)?.[route.provider ?? '']
+  const baseURL = typeof record?.baseURL === 'string' && record.baseURL.length > 0 ? record.baseURL : undefined
+  return baseURL === undefined ? undefined : { baseURL }
+}
+
+/** The settings service, read defensively (absent during the preset sweep). */
+function optionalSettings(ctx: Context): { describe?: () => ReadonlyArray<{ ns?: unknown; user?: unknown }> } | undefined {
+  try {
+    return ctx.get('settings') as { describe?: () => ReadonlyArray<{ ns?: unknown; user?: unknown }> } | undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Wire the judge's host seams off the plug context (§3.3/§3.4). */
 function buildJudgeDeps(ctx: Context): JudgeDeps {
   return {
     getCapturedOpening: (turnId) => getMoaCapture()?.getCapturedOpening(turnId),
     tierFor: (turnId) => core?.router?.tierFor(turnId),
     routes: () => optionalRoutes(ctx),
-    resolveBackend: (route) => {
-      try {
-        const raw = readUserSection((ctx as { settings?: unknown }) as never, 'llm-pi-ai')
-        const record = (raw?.providers as Record<string, { baseURL?: unknown } | undefined> | undefined)?.[route.provider ?? '']
-        const baseURL = typeof record?.baseURL === 'string' && record.baseURL.length > 0 ? record.baseURL : undefined
-        return baseURL === undefined ? undefined : { baseURL }
-      } catch {
-        return undefined
-      }
-    },
+    resolveBackend: (route) => resolveSystemOneBackend(optionalSettings(ctx), route),
     routingLedgerPath: () => {
       const home = dshHomeFn(ctx)
       return home === undefined ? undefined : home('moa', 'routing.jsonl')
@@ -156,7 +234,6 @@ function getMoaCapture(): ReturnType<typeof createOpeningCapture> | undefined {
 
 /** Wire the router's host seams off the plug context. */
 function buildDeps(ctx: Context, getCapturedOpening: RouterDeps['getCapturedOpening']): RouterDeps {
-  const routes = optionalRoutes(ctx)
   let llm: { resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<{ reasoning?: { efforts: readonly { id: unknown }[] } }> } | undefined
   try {
     llm = (ctx as { llm?: unknown }).llm as typeof llm
@@ -165,20 +242,14 @@ function buildDeps(ctx: Context, getCapturedOpening: RouterDeps['getCapturedOpen
   }
   return {
     getCapturedOpening,
-    routes: () => routes,
+    // Lazy: `ccModelRoutes` is an app-level service absent during the preset
+    // sweep — resolving per use (not capturing at mount) keeps the judge
+    // alias path alive once the service settles.
+    routes: () => optionalRoutes(ctx),
     // Provider connection facts from the user-layer `llm-pi-ai` section
     // (gauge-backend precedent): the judge route's provider record must
     // carry a baseURL or the classify fail-opens with a warn-once.
-    resolveBackend: (route: ResolvedRoute) => {
-      try {
-        const raw = readUserSection((ctx as { settings?: unknown }) as never, 'llm-pi-ai')
-        const record = (raw?.providers as Record<string, { baseURL?: unknown } | undefined> | undefined)?.[route.provider ?? '']
-        const baseURL = typeof record?.baseURL === 'string' && record.baseURL.length > 0 ? record.baseURL : undefined
-        return baseURL === undefined ? undefined : { baseURL }
-      } catch {
-        return undefined
-      }
-    },
+    resolveBackend: (route: ResolvedRoute) => resolveSystemOneBackend(optionalSettings(ctx), route),
     // Advertised efforts for the effort re-validation (§3.2): the harness
     // adapter-owned metadata via `llm.resolveModelInfo` — the smallest host
     // read equivalent to the TUI's rt.resolveEfforts.

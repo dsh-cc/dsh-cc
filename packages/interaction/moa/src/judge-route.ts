@@ -1,9 +1,13 @@
 /**
  * Judge route resolution (design §3.6): resolve the System One route for
- * classify/judge calls. Default is an explicit object-form bjev route
- * (`llmbox_systemone/bjev`, probe-pinned in permission-rules gauge config);
- * `moa.judgeRoute` may name an alias (resolved via `ModelRoutes`) or be an
- * explicit object-form route used as-is.
+ * classify/judge calls. The default is the `gauge` lane ALIAS
+ * (`DEFAULT_JUDGE_ALIAS`), resolved via `ModelRoutes` — code never ships a
+ * concrete provider/model id. `moa.judgeRoute` may name another alias
+ * (resolved via `ModelRoutes`) or be an explicit user-configured object-form
+ * route used as-is. When the default alias does not resolve to a concrete
+ * System One route (routes service absent, aliases not loaded yet, or `gauge`
+ * still inheriting a chat peer), resolution fails and the feature stays
+ * unarmed — a route is never invented.
  *
  * Window check (§3.6): the route is accepted only if its resolved context
  * window ≥ `classifyBudgetTokens` — a 1024-window laya route fail-opens every
@@ -21,16 +25,17 @@
 import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
 import type { JudgeRouteSetting } from './settings.ts'
 
-/** Default judge route (§3.6, probe-pinned provider/model spelling). */
-export const DEFAULT_JUDGE_ROUTE: Readonly<ResolvedRoute> = {
-  provider: 'llmbox_systemone',
-  model: 'bjev',
-  protocol: 'systemone',
-}
+/**
+ * Default judge alias (§3.6 gauge path). Alias only — no hardcoded model id:
+ * the concrete route is whatever the user's `gauge` lane resolves to.
+ */
+export const DEFAULT_JUDGE_ALIAS = 'gauge'
 
 /**
  * Measured System One context windows (2026-10-07 live probe; see the gauge
- * adapter for the full evidence). Keys are bare model ids.
+ * adapter for the full evidence). Keys are bare model ids. This is a
+ * MEASUREMENT lookup for whatever route an alias resolved to — it is never
+ * used to pick or invent a route.
  */
 export const MOA_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   laya: 1024,
@@ -40,7 +45,7 @@ export const MOA_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
 /** Fallback window for unknown model ids. */
 export const MOA_DEFAULT_CONTEXT_WINDOW = 16384
 
-/** Bare-id normalization: `llmbox_systemone/bjev` → `bjev` (gauge precedent). */
+/** Bare-id normalization: `gateway/model` → `model` (gauge precedent). */
 export function normalizeModelId(model: string): string {
   const slash = model.lastIndexOf('/')
   return slash === -1 ? model : model.slice(slash + 1)
@@ -62,7 +67,8 @@ export type JudgeRouteResolution =
 
 /**
  * Resolve the judge route (§3.6). Order: explicit object form as-is; alias
- * string via `ModelRoutes`; default bjev route when unconfigured. The route
+ * string via `ModelRoutes`; the `gauge` default alias via `ModelRoutes` when
+ * unconfigured (must resolve to a `protocol: 'systemone'` route). The route
  * passes only when `resolveContextWindow(route) >= budgetTokens`.
  */
 export function resolveJudgeRoute(
@@ -93,8 +99,20 @@ export function resolveJudgeRoute(
   } else if (setting == null) {
     // Unset — including an explicit JSON `null`, which schemastery passes
     // through verbatim: null means "no value" for an optional key, same as
-    // absence. Falls to the default bjev route.
-    route = DEFAULT_JUDGE_ROUTE
+    // absence. Falls to the default ALIAS — never a hardcoded route.
+    if (opts.modelRoutes === undefined) {
+      return { ok: false, reason: `default judge alias "${DEFAULT_JUDGE_ALIAS}" cannot resolve: ccModelRoutes service unavailable` }
+    }
+    const resolved = opts.modelRoutes.resolve(DEFAULT_JUDGE_ALIAS)
+    if (resolved === undefined || resolved.provider === undefined || resolved.model === undefined) {
+      return { ok: false, reason: `default judge alias "${DEFAULT_JUDGE_ALIAS}" does not resolve to a concrete route` }
+    }
+    // An unconfigured `gauge` lane inherits its chat peer (haiku): that is
+    // not a System One model, so it cannot serve classify/judge calls.
+    if (resolved.protocol !== 'systemone') {
+      return { ok: false, reason: `default judge alias "${DEFAULT_JUDGE_ALIAS}" is not a System One route; configure the gauge lane or moa.judge-route` }
+    }
+    route = resolved
   } else {
     return { ok: false, reason: `moa.judgeRoute has an unsupported shape (${typeof setting})` }
   }

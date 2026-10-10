@@ -17,11 +17,19 @@ import { textOf } from '../src/router.ts'
 /** Boot-default pair the rig's fake request header reports. */
 export const BOOT_PAIR = { provider: 'mock', model: 'mock' }
 
+/**
+ * The fake `gauge` System One route the default judge alias resolves to. The
+ * model carries a gateway-style prefix on purpose: the wire field must equal
+ * it verbatim — never re-prefixed with the provider.
+ */
+export const GAUGE_ROUTE: ResolvedRoute = { provider: 'gw', model: 'gw/judge-model', protocol: 'systemone' }
+
 /** The four-tier fake resolver: every alias resolves to a distinct model. */
 export const routes = (): {
   resolve: (alias: string | undefined) => ResolvedRoute | undefined
 } => ({
-  resolve: (alias) => (alias === undefined ? { ...BOOT_PAIR } : { provider: 'mock', model: `tier-${alias}` }),
+  resolve: (alias) =>
+    alias === undefined ? { ...BOOT_PAIR } : alias === 'gauge' ? { ...GAUGE_ROUTE } : { provider: 'mock', model: `tier-${alias}` },
 })
 
 /** Probabilities with `draft` the argmax. */
@@ -33,6 +41,8 @@ export interface Rig {
   router: ReturnType<typeof createRequestRouter>
   /** One entry per System One call: the parsed request state. */
   classifyStates: string[]
+  /** One entry per System One call: the wire `model` field (gateway contract). */
+  classifyModels: string[]
   fetchError: Error | undefined
   /** Texts of every injected notice row, in order. */
   injected: { text: string; source: unknown }[]
@@ -69,6 +79,7 @@ export function makeRig(options: RigOptions = {}): Rig {
   core.arming.arm()
   const capture = createOpeningCapture()
   const classifyStates: string[] = []
+  const classifyModels: string[] = []
   const injected: { text: string; source: unknown }[] = []
   const warnings: string[] = []
   let fetchError = options.failFetch
@@ -78,11 +89,12 @@ export function makeRig(options: RigOptions = {}): Rig {
 
   const fetchImpl: typeof fetch = async (_url, init) => {
     if (fetchError !== undefined) throw fetchError
-    const body = JSON.parse(String(init?.body)) as { state: string }
+    const body = JSON.parse(String(init?.body)) as { state: string; model?: string }
     classifyStates.push(body.state)
+    classifyModels.push(body.model ?? '<missing>')
     return new Response(
       JSON.stringify({
-        model: 'llmbox_systemone/bjev',
+        model: GAUGE_ROUTE.model,
         answers: { route: { type: 'choice', choice: 'draft', probabilities: options.probabilities ?? DRAFT_PROBABILITIES } },
         usage: { input_tokens: options.inputTokens ?? 100, output_tokens: 5 },
       }),
@@ -118,6 +130,7 @@ export function makeRig(options: RigOptions = {}): Rig {
     capture,
     router,
     classifyStates,
+    classifyModels,
     get fetchError() {
       return fetchError
     },

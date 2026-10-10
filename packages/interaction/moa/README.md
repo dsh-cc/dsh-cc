@@ -16,6 +16,6 @@ costs nothing. Subagents/forks are never overlaid.
 | `acceptance.shadow` | `false` | run the judge, log verdicts only |
 | `acceptance.tau` | `0.7` | reject when `P(acceptable) < tau` |
 | `max-escalations` | `1` | per-message escalation ceiling (read-time clamp to 3) |
-| `judge-route` | `llmbox_systemone/bjev` | alias or `{provider, model, protocol}` |
+| `judge-route` | alias `gauge` | alias or `{provider, model, protocol}`; unset → the `gauge` lane alias (must resolve to a System One route, else moa stays unarmed) |
 | `classify-budget-tokens` | `4000` | classify input budget |
 | `call-budget-ms` | `8000` | per-message cascade deadline |
