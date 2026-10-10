@@ -222,7 +222,7 @@ cc-shell (and the routes service), so in CC mode the fix is always active.
 
 ## dsh-cc lanes
 
-Five extra builtin names sit alongside the Claude Code family. They are
+Six extra builtin names sit alongside the Claude Code family. They are
 configuration, not a second settings namespace. Unconfigured, each lane
 except `architect` follows its CC peer, so a deployment that already maps
 `haiku` does not need a duplicate `sketch` entry:

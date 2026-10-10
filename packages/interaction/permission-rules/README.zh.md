@@ -74,7 +74,7 @@ await ctx.plugin(PermissionRules, {
 - `evaluatePermission(input)`——为一次调用收敛 `PermissionDecision`（`allow` / `deny` / `ask` / `passthrough`），给定工具、subject、规则集、模式与豁免标志。无需挂载插件即可预览某规则会命中什么。
 - `mergeRuleSets(...sets)`——按来源优先级合并规则集。
 - `foldPermissionMode(events)`、`foldResumeSandbox(events)`、`setPermissionMode(session, mode, resumeSandbox?)`——读写持久的 `permission/mode` 覆盖。`setPermissionMode` 拒绝 `plan` 与未知模式；其他插件可用 `foldPermissionMode` 折叠某会话的记录模式。
-- `assessBashCommand(command, patterns?)`——对 shell 命令做风险分级（`LOW`/`HIGH`）。
+- `assessBashCommand(command, patterns?, mediumPatterns?)`——对 shell 命令做风险分级（`LOW`/`MEDIUM`/`HIGH`；`patterns` 替换 HIGH 默认集，`mediumPatterns` 替换 MEDIUM 默认集）。
 - `assessFilePath(filePath, opts)`——对文件写入做风险分级（`LOW`/`MEDIUM`/`HIGH`）。
 - `PERMISSION_MODES`、`SOURCE_PRIORITY`——封闭词汇表。
 

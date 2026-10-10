@@ -32,10 +32,11 @@ One cordis plugin (`apply`) with:
   (absence included) to every resumed turn, whatever resumed it;
 - **`tools/post-execute`** notice prefixing on `send_message` and
   `[resume-pin]` state / definition-change annotations on `list_agents`;
-- the **`subagents-resume` settings namespace** (kebab-case) with the policy
-  knobs `onUnavailableModel`, `onDefinitionChanged`, `onWorkspaceChanged`
-  (`resume-with-notice` defaults, `block` opt-in, `route-current` fallback for
-  the model route; the always-block conditions have no safe fallback).
+- the **`subagents-resume` settings namespace** (camelCase keys) with the policy
+  knobs `onUnavailableModel` (defaults to `block`; `route-current` is the
+  opt-in fallback for the model route) and `onDefinitionChanged` /
+  `onWorkspaceChanged` (both default to `resume-with-notice`; `block` is the
+  opt-in; the always-block conditions have no safe fallback).
 
 Zero-op when unmounted: pins are simply unread and behavior is the legacy
 behavior. Only pinned children are affected; a missing pin is a legacy/foreign

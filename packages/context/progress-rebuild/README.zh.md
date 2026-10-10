@@ -2,8 +2,6 @@
 
 English | [中文](README.zh.md)
 
-（中文说明，与英文版实质等价。）
-
 结构化进度状态 + 压缩后上下文重建。一个注册的**会话投影**从已提交的会话事件派生每会话的类型化进度状态——goal 走上游 canonical `applyGoalProjection` 折叠（喂全部事件，含 `clear` 墓碑与 goal 轮次计数）、最新 `todo/write` 快照、已验证的 bash 执行回执、以及最近一条真实用户消息。在**成功的** `compaction/end` 上，派生简报被投递进**压缩边界后构建的第一个模型请求**：turn 内压缩走 `agent/pre-step` 决策拼接（同一步的请求），空闲压缩走延迟的持久 `agent.inject`（可跨持久化+恢复存活，由用户下一轮认领）。**默认关闭**（`progress-rebuild.enabled: false`，暗发布）。
 
 ## 工作方式

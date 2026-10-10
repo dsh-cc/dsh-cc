@@ -31,6 +31,17 @@ Namespace `cc-context-compression` (settings overlay re-read on every use; confi
 | `min-bytes` | `8192` | Minimum size before eligibility (token-meter tokens; the key keeps its legacy name). |
 | `min-savings-ratio` | `0.4` | Minimum token saving fraction. |
 | `protected-tools` | over-inclusive default list | Tools never crushed. |
+| `reducer-enabled` | `false` | Evidence-preserving reducer master flag: eligible results go through a cheap-model side query instead of stub truncation (§3.2). |
+| `reducer-commands` | over-inclusive default list | Regex sources matched against the bash invocation command line to decide reducer eligibility; an invalid pattern is dropped, an empty list falls back to the defaults. |
+| `reducer-max-input-tokens` | `30000` | Head/tail truncation threshold (tokens) for reducer input. |
+| `reducer-min-savings-ratio` | `0.5` | Minimum size-gain ratio the reducer output must show to be applied. |
+| `reducer-max-tokens` | `1024` | Side-query output token cap. |
+| `reducer-timeout-ms` | `10000` | Side-query wall-clock budget in ms. |
+| `reducer-alias` | `haiku` | Cheap-lane alias used for the side query. |
+| `defer-requests` | `0` | Deferred externalization: eligible results enter the session unmodified and swap to the standard stub after this many counted main-loop sends; `0` disables deferral. |
+| `defer-margin` | `1.5` | Suffix-cost gate multiplier for the deferred swap. |
+| `defer-max-age-ms` | `1800000` | Sweep age (ms) for deferred residents that never swapped. |
+| `defer-urgency-tokens` | unset (inactive) | Window-pressure override distance in tokens: when the session estimate comes within this distance of the model window, residents swap regardless of the gate. Inactive without a window source. |
 
 ## foldCounters convention
 

@@ -34,6 +34,14 @@ const config: Config = {
 
 hook **本身**会在 agent 的会话工作区中运行：对 agent scope 点，桥接会将会话 `cwd`（`session/new.cwd`）作为 hook 进程工作目录，因此 hook 的 `pwd`／相对路径／marker 作用于用户项目树，而非服务器启动目录。
 
+## Executor kinds
+
+配置解析器接受全部四种 CC executor kind，运行器按 `type` 分发：
+
+- **`command`** —— shell 执行器（经 `ctx.shell`），与之前一致。
+- **`http`** —— 把 hook 输入 JSON POST 到 `hook.url`，将 HTTP 响应映射到与 command hook 相同的退出码契约（200 的 body 会按结构化 stdout 解析，因此 200 + `permissionDecision:deny` 的 body 同样会阻塞）。header 值可以插值 `$VAR`/`${VAR}`，但只允许 hook 的 `allowedEnvVars`（与 `httpAllowedEnvVars` 配置取交集）里列出的名字，其他引用替换为空字符串。`allowedHttpHookUrls` 限制目标（`*` 通配；缺省/为空 = 不限制）。
+- **`prompt`** 与 **`agent`** —— fork 一个一次性 `subagents` 子代理：hook 输入 JSON 经 `$ARGUMENTS` 嵌入 hook 的 `prompt` 模板（模板未含占位符时在空行后追加），fork 的文本输出按与 command hook 相同的结构化输出词汇解析（`hookSpecificOutput.permissionDecision`、`additionalContext`、`continue`、`stopReason`、`systemMessage`、顶层 `approve`/`block` 等）；解析失败视为非阻塞的空输出，fork 的 `stopReason:'error'` 会以非阻塞 hook 错误呈现。`model`（如设置）经 `ccModelRoutes` alias 服务解析并映射到 fork 的 `agentOptions`；省略 `model` 时默认走低价车道 `resolve('haiku')`（配置的 haiku alias，未配置则继承）；`model: inherit`、未配置的内置 alias、或 `ccModelRoutes` 服务缺失都省略 `agentOptions`（继承父路由）。这两类执行器**默认关闭**：需要 `enablePromptHooks: true` / `enableAgentHooks: true` 才会运行，否则跳过并警告（沿用旧的安全默认值）。每 hook `timeout` 不会应用到 fork，由父操作的 signal 管控。没有 `subagents` 服务或父 agent 可用时，它们降级为带警告的 no-op。fork 余量不足时：临时子代理会像任何 Task 调用一样重新进入循环，所以 `prompt`/`agent` hook 的开销是一次模型请求而非一个 shell 进程。在 cc preset 中，本插件行位于 `cc-services` isolate group 内，fork 的模型解析才能看见 `ccModelRoutes`。
+
 ## Hook 点 → 类型化 Decision
 
 | CC hook | Harness 点 | 映射 |

@@ -1,6 +1,6 @@
 # @dsh-cc/token-efficiency
 
-dsh-cc 的 token 效率评测装置：固定语料库、冻结验收门槛与比较器（计划见 `docs/plans/2026-09-20-token-efficiency-eval-harness.md`）。Slice A 仅交付 redactor 与语料加载器。
+dsh-cc 的 token 效率评测装置：固定语料库、冻结验收门槛与比较器（计划见 `docs/plans/2026-09-20-token-efficiency-eval-harness.md`）。redactor、语料加载器、replay 指标、mock 档位运行器、验收门槛与 CLI 均已实现；live 档位仍仅限手工运行。
 
 ## Tier 语义
 
@@ -29,7 +29,7 @@ dsh-cc 的 token 效率评测装置：固定语料库、冻结验收门槛与比
 - `run [--gate <path>] [--corpus <dir>] [--write-baseline <path>]` — 折叠每个 replay 任务的 fixture；逐任务打印一行向量（tokens、cost、counters）及页脚。`--write-baseline` 写出 `{foldedAt, ref: $TOKEN_EFFICIENCY_BASELINE_REF ?? 'unpinned', vectors}`。
 - `check [--gate <path>] [--corpus <dir>]` — 加载门槛与 baseline、折叠候选、逐任务判定、逐任务 usage 覆盖率、页脚。解析失败、capability 回归、定义变更、counter 期望不满足、候选/baseline 向量缺失时退出 1；参数错误退出 2。
 
-非 replay 任务被跳过并打印一行延迟提示；mock-script 运行器属于后续 slice。
+非 replay（mock-script）任务通过下文描述的 mock 档位运行器执行；只有 live 档位保持手工运行。
 
 每次运行都以页脚结尾：
 

@@ -18,6 +18,8 @@
 | `policy.remoteSettings` | 托管策略设置；策略最高优先级 | 无 |
 | `policy.systemPath` | 系统级托管设置文件 | 无 |
 | `policy.userPath` | 用户可写的托管设置文件 | 无 |
+| `watch.stabilityThresholdMs` | 文件保持不变多久后才触发监听事件（chokidar `awaitWriteFinish` 写入沉降） | `100` |
+| `watch.pollIntervalMs` | 沉降中的文件以多长间隔被轮询以继续变化 | `10` |
 
 默认值解析是一步显式的 `resolveSpec(config)`。
 

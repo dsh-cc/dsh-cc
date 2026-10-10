@@ -1,7 +1,7 @@
 # Permission grant synthesis + rule hygiene
 
 - Date: 2026-09-23
-- Status: approved (critic round 2: approve-with-changes, all edits applied)
+- Status: implemented (PR #120, commit 3a507d0e). Review record: approved (critic round 2: approve-with-changes, all edits applied)
 - Worktree branch: `worktree-permission-per-tool-capability-grants`
 
 ## Background
