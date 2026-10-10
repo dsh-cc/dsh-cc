@@ -239,7 +239,10 @@ export function createAcceptanceJudge(
         const result = await systemoneDecide({
           baseURL: backend.baseURL,
           ...(backend.apiKey === undefined ? {} : { apiKey: backend.apiKey }),
-          model: `${judgeRoute.route.provider}/${judgeRoute.route.model}`,
+          // Bare model id (gateway contract) — see the router's classify site.
+          // Resolution guarantees model on the ok branch (alias/object/default
+          // forms all require it); the router classify site mirrors this.
+          model: judgeRoute.route.model ?? 'llmbox_systemone/bjev',
           state,
           questions: { accept: ACCEPT_QUESTION },
           timeoutMs: settings.callBudgetMs,

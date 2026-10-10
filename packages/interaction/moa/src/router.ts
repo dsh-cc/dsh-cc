@@ -250,7 +250,12 @@ export function createRequestRouter(
     const result = await systemoneDecide({
       baseURL: backend.baseURL,
       ...(backend.apiKey === undefined ? {} : { apiKey: backend.apiKey }),
-      model: `${judge.route.provider}/${judge.route.model}`,
+      // Bare model id (gateway contract): the route's model already carries
+      // the gateway prefix (llmbox_systemone/bjev) — provider-prefixing here
+      // produced a 400 "not a configured systemone model" on every call
+      // (live-traced 2026-10-10; gauge-adapter precedent passes it bare).
+      // Resolution guarantees model on the ok branch; mirror of the judge site.
+      model: judge.route.model ?? 'llmbox_systemone/bjev',
       state,
       questions: { route: ROUTING_QUESTION },
       timeoutMs: settings.callBudgetMs,
