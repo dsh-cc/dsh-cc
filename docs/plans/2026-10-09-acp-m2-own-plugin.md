@@ -294,6 +294,41 @@ did NOT validate this create-path `mount()` form (r1 finding) — the PR-B
 gate covers it with a composed-session test asserting model routing + MCP
 visibility + the header stamp.
 
+**Implementation true-up (live acceptance, 2026-10-10 — supersedes parts of
+§5.1's deps note and the mount-in-setup form above):**
+
+1. *Join form.* `mount()` inside the create setup re-applied roster rows in
+   the composed profile during live acceptance, and the final form is the
+   P2b-proven one: `meta.agentPreset` stamp at create + a serial
+   `agent/created` listener in `@dsh-cc/acp` calling
+   `agentPresets.select(agent, headerStamp)`. Resume joins through the same
+   listener (`agent/created` fires for resumed agents) reading the stamp from
+   the frozen header. `select()` never re-composes the roster — the registry
+   activates the roster once into its standing scope at declaration time and
+   `select` only re-audits (`retain`→`diagnostic`) and binds scope keys.
+2. *Roster composition failure we actually hit.* Floor-installed npm copies
+   of harness-owned runtime packages (`dsh-agent-preset-registry` /
+   `dsh-agent-preset` / `cordis-plugin-include`) split module-global state by
+   realpath: `dsh-scope`'s `kScope` is a module-local `Symbol`, so the
+   registry's standing-scope tags were invisible to `dsh-system-prompt`'s
+   `ScopedLayers` (ambient copy), roster registrations collapsed onto the
+   global layer, and boot broke the definition (`record.broken`) on
+   `deployment:persona-prefix` (registered unconditionally by
+   `dsh-system-prompt`'s constructor, non-empty via acp-app's persona
+   override) and `permissions` (bundle-permissions' host row). Fix (in
+   `@dsh-cc/bundle-acp` and the smoke floor): harness-owned runtime packages
+   resolve ambiently from the one dsh installation tree, never from floor
+   copies — exactly how bundle-tui and the production TUI floor already work
+   (bundle-tui's only dep is `@dsh-cc/tui`; the production floor carries no
+   harness registry packages at all). bundle-acp's deps are therefore
+   `@dsh-cc/acp` + `@dsh-cc/preset-cc` only; the review-era "declare
+   registry/agent-preset/include as hard deps" guidance is retracted as
+   load-bearing-wrong.
+3. *Surfacing.* A roster standing-mount failure is non-fatal at boot
+   (`record.broken` + stderr warn) and fails loudly at the join
+   (`agent-preset/invalid`); the wire's `error.data.details` carries the
+   audit lines (the SDK masks the top-level message as "Internal error").
+
 ### 5.3 Branding and identity
 
 `agentInfo: {name: 'dsh-cc', version: <own package version>}` (read from the

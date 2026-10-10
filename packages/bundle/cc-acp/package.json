@@ -1,0 +1,35 @@
+{
+  "name": "@dsh-cc/bundle-acp",
+  "version": "0.9.0-rc.3",
+  "description": "Agent Client Protocol bundle for the dsh acp profile: host-plane swap to the CC preset + the @dsh-cc/acp protocol driver over dsh-base and dsh-acp-app",
+  "type": "module",
+  "files": [
+    "cordis.patch.yml"
+  ],
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/bundle/cc-acp"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@dsh-cc/acp": "workspace:^",
+    "@dsh-cc/preset-cc": "workspace:^"
+  },
+  "devDependencies": {
+    "js-yaml": "^4.0.9",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

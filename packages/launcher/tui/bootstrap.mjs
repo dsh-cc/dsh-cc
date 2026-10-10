@@ -14,6 +14,35 @@ export const BUNDLES = [
   '@dsh-cc/bundle-tui',
 ]
 
+/** Profile name for the ACP (`dsh-cc acp`) lane. */
+export const ACP_PROFILE = 'cc-acp'
+/**
+ * Floor bundle list for the ACP lane. dsh-base resolves from the
+ * installation (tui precedent: not a profile dependency); dsh-acp-app stays
+ * in the floor carrying the startup latch + hmr/system-prompt rows.
+ */
+export const ACP_BUNDLES = [
+  '@deepseek-ai/dsh-base',
+  '@deepseek-ai/dsh-acp-app',
+  '@dsh-cc/bundle-permissions',
+  '@dsh-cc/bundle-shell',
+  '@dsh-cc/bundle-acp',
+]
+/** Exact pin for dsh-acp-app: its npm latest is a fossil, never bare-install it. */
+export const ACP_APP_PIN = '0.2.0-rc.2'
+
+/**
+ * Install specifier for an ACP floor bundle. dsh-base is passed bare (it
+ * resolves from the dsh installation, never becomes a profile dependency);
+ * dsh-acp-app is pinned to the harness release; @dsh-cc bundles follow the
+ * launcher version scheme, like the TUI path.
+ */
+export function acpBundleSpec(name, version) {
+  if (name === '@deepseek-ai/dsh-base') return name
+  if (name === '@deepseek-ai/dsh-acp-app') return `${name}@${ACP_APP_PIN}`
+  return `${name}@${version}`
+}
+
 /**
  * Scan dsh-cc args for resume-mode flags and translate them into the env
  * contract the TUI plugin consumes. Collection is order-independent: all
@@ -138,10 +167,12 @@ export function spawnEnv(env, dshHome) {
 /**
  * @param {boolean} profileExists
  * @param {string} version
+ * @param {{ profile?: string, bundles?: string[], specFor?: (name: string) => string }} [opts]
  */
-export function bootstrapCommand(profileExists, version) {
+export function bootstrapCommand(profileExists, version, { profile = PROFILE, bundles = BUNDLES, specFor } = {}) {
   if (profileExists) return undefined
-  return ['plugin', '--profile', PROFILE, 'add', ...BUNDLES.map(name => `${name}@${version}`)]
+  const spec = specFor ?? (name => `${name}@${version}`)
+  return ['plugin', '--profile', profile, 'add', ...bundles.map(spec)]
 }
 
 // --- worktree support (--worktree) ------------------------------------------
@@ -692,7 +723,8 @@ export function devStoreRestoreDecision(info, ownVersion) {
  * @returns {{ restored: boolean, reason?: string, from?: string, to?: string }>}
  */
 export function runStoreRestore(profileDir, ownVersion, deps = {}) {
-  const { spawnSyncImpl = spawnSync, log = console.error, now = Date.now } = deps
+  const { spawnSyncImpl = spawnSync, log = console.error, now = Date.now, bundles = BUNDLES, specFor } = deps
+  const spec = specFor ?? (name => `${name}@${ownVersion}`)
   const scope = join(profileDir, 'node_modules', '@dsh-cc')
   const backup = `${scope}.__dev-restore-backup`
   const lock = join(profileDir, 'node_modules', '.dsh-cc-restore.lock')
@@ -775,7 +807,7 @@ export function runStoreRestore(profileDir, ownVersion, deps = {}) {
     setAside = true
 
     // 4. Re-materialize from the registry, same command surface as first boot.
-    const result = spawnSyncImpl('dsh', ['plugin', '--profile', profileName, 'add', ...BUNDLES.map(n => `${n}@${ownVersion}`)], {
+    const result = spawnSyncImpl('dsh', ['plugin', '--profile', profileName, 'add', ...bundles.map(spec)], {
       stdio: 'inherit',
       env: spawnEnv(sanitizeInheritedEnv(process.env), home),
     })
@@ -896,7 +928,8 @@ export function writeBootstrapStamp(stampPath, ownVersion, log = console.error) 
  * @returns {{ healed: boolean, reason?: 'locked' | 'plugin-add-failed' }}
  */
 export function runStoreHeal(profileDir, ownVersion, options = {}) {
-  const { from, spawnSyncImpl = spawnSync, log = console.error, now = Date.now } = options
+  const { from, spawnSyncImpl = spawnSync, log = console.error, now = Date.now, bundles = BUNDLES, specFor } = options
+  const spec = specFor ?? (name => `${name}@${ownVersion}`)
   const lock = join(profileDir, HEAL_LOCK)
   const stamp = join(profileDir, BOOTSTRAP_STAMP)
   const home = dirname(dirname(profileDir))
@@ -929,7 +962,7 @@ export function runStoreHeal(profileDir, ownVersion, options = {}) {
       }
     }
 
-    const result = spawnSyncImpl('dsh', ['plugin', '--profile', profileName, 'add', ...BUNDLES.map(n => `${n}@${ownVersion}`)], {
+    const result = spawnSyncImpl('dsh', ['plugin', '--profile', profileName, 'add', ...bundles.map(spec)], {
       stdio: 'inherit',
       env: spawnEnv(sanitizeInheritedEnv(process.env), home),
     })

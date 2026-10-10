@@ -130,6 +130,40 @@ upstream_dependencies:
 
 capabilities:
   # ── engine ──────────────────────────────────────────────────────────────
+  engine.acp-front-end:
+    title: dsh-cc acp subcommand (Agent Client Protocol front-end lane)
+    category: engine
+    plane: host
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. The `dsh-cc acp`
+        subcommand bootstraps and launches a `cc-acp` profile that speaks the
+        Agent Client Protocol (NDJSON over stdio) for editor integration
+        (e.g. Zed): agentInfo branding `dsh-cc`, the CC preset composition
+        mounted via the @dsh-cc/bundle-acp profile bundle (single tool plane,
+        hmr off), single-prompt admission, and launcher bootstrap
+        (fresh/warm/upgrade/heal/restore).
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/bundle/cc-acp/cordis.patch.yml, anchor: "- id: acp-cc" }
+      - { type: source, path: packages/launcher/tui/bootstrap.mjs, anchor: "ACP_BUNDLES" }
+      - { type: test, path: packages/launcher/tui/tests/acp.spec.ts }
+      - { type: test, path: packages/acp/cc-acp/tests/preset-composition.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: no CC counterpart exists. A second front-end lane
+        beside the TUI, mounted via the cc-acp profile bundle (bundle rows in
+        packages/bundle/cc-acp/cordis.patch.yml, not agent.cordis.yml preset
+        rows), ported from the upstream harness `acp` plugin with
+        DIVERGENCE.md-tracked divergences (branding, create-path preset
+        stamp, resume-reads-projection, setup order).
+
   engine.advisor-watchdog:
     title: Advisor watchdog (opt-in second model reviewing every turn)
     category: engine
