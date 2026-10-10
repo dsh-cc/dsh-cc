@@ -11,11 +11,20 @@ upstream behavior is listed here with its design reference
    `'acp'`). Replaces the upstream Cordis plugin identity so the CC plugin
    does not collide with the upstream row.
 
-2. **Preset composition seam** (§5.2): `inject` gains `'agentPresets'`; the
-   roster service is captured in `apply()` next to `persistence` and threaded
-   into `AcpSession.create`/`resume` options (`AcpPresetsService`).
-   Upstream had no preset composition at all ("No preset composition" comment
-   removed from `newSession`).
+2. **Preset composition seam** (§5.2, **revised 2026-10-09 after live
+   acceptance**): the roster is resolved in `apply()` via plain
+   `ctx.get('agentPresets')` (absent → loud throw) and threaded into
+   `AcpSession.create`/`resume` options (`AcpPresetsService`). The original
+   form declared `inject: ['agentPresets']` — **wrong**: cordis re-composes an
+   injected service in the consuming plugin's own scope, re-applying the
+   preset-cc declaration row and double-registering the roster (persona +
+   command collisions; boot-time `record.broken`, surfacing only at
+   session/new). Evidence chain: five-step floor A/B (acp-app removal,
+   bundle-tui swap, acp-cc row disable, inject override) pinned the trigger;
+   the TUI's `preset.ts` rosterOf pattern and the upstream `subagents`
+   duck-type are the precedents for non-inject service access. Upstream had
+   no preset composition at all ("No preset composition" comment removed from
+   `newSession`).
 
 3. **`presetId` config** (§5.2): `AcpConfig`/`Config` gain optional
    `presetId: Schema.string().default('cc')`, resolved in `apply()` and passed

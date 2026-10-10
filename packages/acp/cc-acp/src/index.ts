@@ -53,7 +53,8 @@ import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 // Type-only: declaration-merges the `agentPresets` roster service this plugin
-// composes (§5.2); the runtime service arrives via inject/bundle composition.
+// composes (§5.2); the runtime service arrives via bundle composition and is
+// read with ctx.get() — never inject (see the inject comment).
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 // Side-effect type import: declaration-merges the approval waterfall answered below.
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -67,7 +68,12 @@ const DEFAULT_SESSION_LIST_PAGE_SIZE = 100
 
 export const name = 'acp-cc'
 /** Core services required by the standard automation controls. */
-export const inject = ['agents', 'llm', 'sessionPersistence', 'sessions', 'agentPresets']
+// Inject deliberately mirrors the upstream set WITHOUT 'agentPresets':
+// cordis re-composes an injected service in this plugin's own scope, which
+// re-applies the preset-cc row and double-registers the roster (live-acceptance
+// finding, 2026-10-09). The roster is resolved via ctx.get() in apply instead —
+// the TUI preset.ts rosterOf pattern / the upstream `subagents` duck-type.
+export const inject = ['agents', 'llm', 'sessionPersistence', 'sessions']
 
 /** Preserve invalid-parameter detail in the SDK wire error message. */
 function invalidParams(detail: string): RequestError {
@@ -109,10 +115,45 @@ export function apply(ctx: Context, config: AcpConfig): void {
   // ACP handlers execute outside this plugin's injection scope, so capture the
   // injected service during apply rather than reading it lazily in a callback.
   const persistence = ctx.sessionPersistence
-  // Captured during apply like `persistence`: ACP handlers run outside this
-  // plugin's injection scope, and the preset roster is composed into every
-  // session in setup (§5.2).
-  const presets: AcpPresetsService = ctx.agentPresets
+  // Resolved during apply like `persistence` is captured (ACP handlers run
+  // outside this plugin's injection scope, so a lazy ctx.get() inside a
+  // handler could miss the service). Unlike `persistence` it is NOT
+  // inject-declared (see the inject comment above) — plain ctx.get at apply
+  // time reads the already-activated registry without re-composing it.
+  const roster = ctx.get('agentPresets')
+  if (roster === undefined) {
+    throw new Error(
+      'acp-cc requires an agent-preset registry in the composition (the cc-acp profile provides it via @dsh-cc/bundle-acp row B)',
+    )
+  }
+  const presets: AcpPresetsService = roster
+  // §5.2 revised (live acceptance 2026-10-09): join stamped agents via the
+  // serial `agent/created` event + registry select() instead of mounting in
+  // the create setup. Guards: only agents whose frozen session header
+  // records OUR presetId (the create stamp — subagent forks inherit the same
+  // stamp but arrive already composed via child-agent parentage and are
+  // skipped), and only agents not already bound. Select appends the
+  // model-visible `agent-preset/selected` event; the serial event awaits the
+  // join before the create call returns (no first-prompt race — the P2b
+  // probe verified this form live).
+  ctx.on('agent/created', (payload: { agent?: unknown }) => {
+    const agent = payload?.agent as
+      | { session?: { header?: { agentPreset?: string } }; ctx?: Context }
+      | undefined
+    // Join the RECORDED stamp (create stamps config.presetId; resumed
+    // sessions carry their original stamp) — presetless agents are skipped.
+    const stamped = agent?.session?.header?.agentPreset
+    if (typeof stamped !== 'string' || stamped === '' || agent?.ctx === undefined) return undefined
+    if (presets.composedPreset(agent.ctx) !== undefined) return undefined
+    return presets
+      .select(agent as never, stamped)
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        throw new Error(
+          `acp-cc failed to join preset ${stamped}: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      })
+  })
   const presetId = config.presetId ?? 'cc'
   const logger = ctx.logger
   const sessionListPageSize = resolveSessionListPageSize(config.sessionListPageSize)

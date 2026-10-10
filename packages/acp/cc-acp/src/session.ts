@@ -32,6 +32,10 @@ interface ContinuableDrain {
 /** The preset-registry seam composed into every ACP session (§5.2). */
 export interface AcpPresetsService {
   mount(agentCtx: Context, presetId?: string): Promise<unknown>
+  /** Compose a preset into a published agent, appending `agent-preset/selected`. */
+  select(agent: Agent, presetId: string): Promise<string>
+  /** The preset a live agent already uses, if bound. */
+  composedPreset(ctx: Context): string | undefined
 }
 
 /** Inputs shared by fresh and resumed ACP session construction. */
@@ -146,11 +150,15 @@ export class AcpSession {
       agentOptions: options.agentOptions,
       signal: options.signal,
       setup: async (agentCtx) => {
-        // §5.2: preset → model control → MCP (TUI precedent driver.ts:100-103 —
-        // the preset mounts before model-selection listeners; MCP mounts
-        // plugins immediately so it goes last). Mount failures propagate and
-        // fail session/new loudly.
-        await options.presets.mount(agentCtx, options.presetId)
+        // §5.2, revised after live acceptance (2026-10-09): the preset join
+        // moved OUT of the create setup — mount() inside setup double-applies
+        // the roster rows in the composed profile (persona/command
+        // double-registration surfacing at session/new). The join now runs
+        // on the serial `agent/created` event via registry select() in
+        // index.ts (the live-verified P2b form; select also appends the
+        // model-visible `agent-preset/selected` event). Setup keeps the
+        // remaining order: model control, then MCP (mounts plugins
+        // immediately, so it goes last).
         modelControl.install(agentCtx)
         await mountAcpMcpServers(agentCtx, options.mcpServers, options.cwd)
       },
@@ -171,19 +179,12 @@ export class AcpSession {
       agentOptions: options.agentOptions,
       signal: options.signal,
       setup: async (agentCtx, agent) => {
-        // §5.2: resume composes the *recorded* preset identity, read through
-        // the `agentPreset` session projection (registered by the preset
-        // registry; stateOf access mirrors command-permissions/index.ts:95).
-        // The create header is a frozen fact and ResumeAgentOptions has no
-        // meta, so resume never re-stamps; `config.presetId` applies to fresh
-        // creates only. Recorded null/undefined → stay presetless; a recorded
-        // id missing from the roster throws from mount() and fails
-        // session/resume loudly.
-        const projections = ctx.get('sessionProjections') as
-          | { stateOf(session: Agent['session'], key: string): unknown }
-          | undefined
-        const recorded = projections?.stateOf(agent.session, 'agentPreset')
-        if (typeof recorded === 'string') await options.presets.mount(agentCtx, recorded)
+        // §5.2, revised after live acceptance (2026-10-09): the preset join
+        // runs on the serial `agent/created` event (index.ts) for resumed
+        // agents too — it joins the RECORDED header stamp, so a presetless
+        // session stays presetless and an unrecorded id fails loudly
+        // through select(). Resume therefore only re-installs model control
+        // and MCP here.
         modelControl = new AcpModelControl(
           ctx.llm,
           selectionFor(agent.session.requestHeader(), options.fallbackSelection),

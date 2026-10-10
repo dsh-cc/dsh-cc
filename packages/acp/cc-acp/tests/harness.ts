@@ -260,6 +260,7 @@ export async function makeBridgeHarness(options: {
   // the real projection registered stands in.
   const presetMounts: { presetId: string | undefined }[] = []
   const knownPresets = options.knownPresets ?? ['cc']
+  const composedAgents = new WeakSet<object>()
   ctx.provide('agentPresets', {
     mount: async (_agentCtx: unknown, presetId?: string) => {
       if (presetId === undefined || !knownPresets.includes(presetId)) {
@@ -267,6 +268,21 @@ export async function makeBridgeHarness(options: {
       }
       presetMounts.push({ presetId })
     },
+    // §5.2 revised: the create-path join runs on agent/created + select()
+    // (see src/index.ts). The spy records the join like a mount and dedupes
+    // by agent; composedPreset reports nothing pre-composed so the
+    // listener's already-composed guard always proceeds in tests.
+    select: async (agent: object, presetId: string) => {
+      if (!knownPresets.includes(presetId)) {
+        throw new Error(`Unknown agent preset: ${String(presetId)}`)
+      }
+      if (!composedAgents.has(agent)) {
+        composedAgents.add(agent)
+        presetMounts.push({ presetId })
+      }
+      return presetId
+    },
+    composedPreset: () => undefined,
   } as never)
   // The registry registers this projection in production; the spy rig
   // registers the definition directly so resume reads the recorded identity
