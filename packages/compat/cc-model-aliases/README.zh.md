@@ -123,7 +123,7 @@ alias 的查找顺序：**settings overlay → config 默认 → builtin fallbac
 
 ## dsh-cc lane
 
-五个额外 builtin 名与 Claude Code 家族并列，不是第二套 settings 命名空间。未配置时，除 `architect` 外每个 lane 跟随其 CC 对标，因此已经映射了 `haiku` 的部署不必再写一份 `sketch`：
+六个额外 builtin 名与 Claude Code 家族并列，不是第二套 settings 命名空间。未配置时，除 `architect` 外每个 lane 跟随其 CC 对标，因此已经映射了 `haiku` 的部署不必再写一份 `sketch`：
 
 | Lane | 角色 | 未配置时的对标 |
 |---|---|---|

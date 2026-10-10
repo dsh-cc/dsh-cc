@@ -27,6 +27,6 @@
 
 ## 已知限制与延后工作
 
-- 没有交互式菜单 UI、信任对话框、`details/eval/init/prune/tag/validate` 子命令、`managed` 作用域或孤儿清扫（CC 形状对齐范围见 `docs/plans/2026-09-06-plugin-management.md`）。
+- 没有交互式菜单 UI、信任对话框、`details/eval/init/prune/tag/validate` 子命令、`managed` 作用域或孤儿清扫（CC 形状对齐范围见 `docs/plans/2026-09-07-plugin-management.md`）。
 - `extraKnownMarketplaces` 的 user 作用域声明写入 `~/.dsh/settings.json`；删除仅存在于 claude 文件中的声明对 dsh-cc 自身视图是 no-op（无人读取），claude 文件保持不动。
 - 没有批量迁移命令（`/plugin migrate`）；有用户需求时再议。

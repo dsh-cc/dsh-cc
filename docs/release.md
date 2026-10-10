@@ -100,6 +100,8 @@ workflow 校验 `vX.Y.Z` 必须落在 `origin/main` 上的提交。推完去 Act
 2026-09-12:harness 锚点已迁移至 0.1.5-rc.1(`DSH_HARNESS_REF=1ef9c1fa9a`),
 相关 peer 下限同步提高至 `>= 0.1.5-rc.1`。
 
+[Superseded: the current harness anchor is 0.2.0-rc.2 (`DSH_HARNESS_REF=c1b47e41fcd5`, see `.github/workflows/presubmit.yml`).]
+
 ## token 轮换
 
 granular token 最长 1 年。到期前在 npmjs 生成新 token 并替换 GitHub secret;

@@ -28,10 +28,10 @@
   每个恢复的轮次，无论由谁恢复；
 - **`tools/post-execute`** 在 `send_message` 上加通知前缀，并在 `list_agents` 上
   附注 `[resume-pin]` 状态与定义变化；
-- **`subagents-resume` 设置 namespace**（kebab-case），提供策略开关
-  `onUnavailableModel`、`onDefinitionChanged`、`onWorkspaceChanged`
-  （默认 `resume-with-notice`，可选 `block`，模型路由的兜底为 `route-current`；
-  always-block 条件没有安全回退）。
+- **`subagents-resume` 设置 namespace**（键名为 camelCase），提供策略开关
+  `onUnavailableModel`（默认 `block`；模型路由的可选兜底为 `route-current`）与
+  `onDefinitionChanged` / `onWorkspaceChanged`（两者默认 `resume-with-notice`，
+  可选 `block`；always-block 条件没有安全回退）。
 
 未挂载时零开销：pin 只是不被读取，行为与旧版一致。只有钉存过的子代理受影响；
 缺 pin 即旧版/外来子代理（直接放行），发往存活 Activation 的同 epoch steer 投递不受影响。

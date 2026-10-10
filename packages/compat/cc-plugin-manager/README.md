@@ -27,6 +27,6 @@ The resolution chain is: explicit `dshHome` → explicit `claudeHome` (legacy si
 
 ## Known limits and deferred work
 
-- No interactive menu UI, trust dialogs, `details/eval/init/prune/tag/validate` subcommands, `managed` scope, or orphan sweeping (CC-shape parity scope: `docs/plans/2026-09-06-plugin-management.md`).
+- No interactive menu UI, trust dialogs, `details/eval/init/prune/tag/validate` subcommands, `managed` scope, or orphan sweeping (CC-shape parity scope: `docs/plans/2026-09-07-plugin-management.md`).
 - `extraKnownMarketplaces` user-scope declarations write to `~/.dsh/settings.json`; removing one that exists only in the claude file is a no-op for dsh-cc's own view (nothing reads it) and leaves the claude file untouched.
 - No bulk migration command (`/plugin migrate`); revisit on user demand.

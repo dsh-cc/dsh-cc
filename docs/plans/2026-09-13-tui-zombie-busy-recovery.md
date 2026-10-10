@@ -1,6 +1,6 @@
 # TUI Zombie-Busy Recovery + Recall Late-Inject Guard
 
-Date: 2026-09-13. Status: plan, critic-approved (cold review: GO with 4
+Date: 2026-09-13. Status: implemented (PR #56, commit 5728e7a0). Plan record: critic-approved (cold review: GO with 4
 amendments, all adopted inline). Trigger: incident session
 `tui-0fc1fcae-2572-44a9-adfa-9ab40f8a7889`.
 

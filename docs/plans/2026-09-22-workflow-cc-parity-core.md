@@ -1,6 +1,6 @@
 # Dynamic workflows: CC-parity core — source resolution, inline meta, async launch, completion wake
 
-Date: 2026-09-22. Status: **Proposed**. Origin: dynamic-workflow three-way
+Date: 2026-09-22. Status: **Implemented** (PR #116, commit 49aa57a8). Origin: dynamic-workflow three-way
 investigation (Claude Code docs, zcode dynamic-workflow packages, deepseek-harness
 workflow packages). Sibling documents: `2026-09-22-workflow-resume-journal.md`
 (resume/replay slice) and `2026-09-22-workflow-saved-commands-and-progress.md`

@@ -31,6 +31,17 @@ CCR（Compress-Cache-Retrieve）可逆的工具输出压缩。一个 `tools/post
 | `min-bytes` | `8192` | 参与压缩的最小尺寸（按 token 度量；键名保留旧称）。 |
 | `min-savings-ratio` | `0.4` | 最小 token 节省比例。 |
 | `protected-tools` | 过宽的默认列表 | 永不压缩的工具。 |
+| `reducer-enabled` | `false` | 证据保留型 reducer 总开关：合格结果经廉价模型的侧查询压缩，而非桩截断（§3.2）。 |
+| `reducer-commands` | 过宽的默认列表 | 与 bash 调用命令行匹配的正则源，决定 reducer 资格；非法模式被丢弃，空列表回退默认值。 |
+| `reducer-max-input-tokens` | `30000` | reducer 输入的头/尾截断阈值（token）。 |
+| `reducer-min-savings-ratio` | `0.5` | 应用 reducer 输出所需的最小尺寸收益比例。 |
+| `reducer-max-tokens` | `1024` | 侧查询输出 token 上限。 |
+| `reducer-timeout-ms` | `10000` | 侧查询的挂钟时间预算（毫秒）。 |
+| `reducer-alias` | `haiku` | 侧查询使用的廉价 lane 别名。 |
+| `defer-requests` | `0` | 延迟外化：合格结果先原样进入会话，在累计这么多次主循环发送后换成标准桩；`0` 表示禁用延迟。 |
+| `defer-margin` | `1.5` | 延迟换出的后缀成本闸门乘数。 |
+| `defer-max-age-ms` | `1800000` | 从未换出的驻留项的清扫时限（毫秒）。 |
+| `defer-urgency-tokens` | 未设置（不激活） | 窗口压力覆盖距离（token）：会话估算距模型窗口不足该距离时，驻留项无视闸门直接换出；没有窗口来源时不激活。 |
 
 ## foldCounters 约定
 

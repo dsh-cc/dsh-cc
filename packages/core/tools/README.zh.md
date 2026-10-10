@@ -62,6 +62,15 @@ tools:
 - 确切签名与顺序与运行时一同定义在 `src/` 中。
 - MCP 服务器：每个服务器使用一个插件；发现工具后，使用服务器的 schema 调用 `ctx.tools.register()`。
 
+### CC 工具名翻译（`cc-names`）
+
+harness 以自己的名字注册全局工具（多为小写：`read`、`bash`、`web_fetch`；少数大写：`NotebookEdit`、`Sleep`），而 Claude Code 配置作者写的是 CC 名（`Read`、`Bash`、`WebFetch`）。`tools.restrict()` 严格校验名字，遇到未知名会抛出，所以 CC 名必须在入口边界翻译——绝不能拿原始名做比较或 restrict：
+
+- `CC_TO_HARNESS_TOOLS` —— 一对多的映射（如 `Read` → `read` + `read_image`，因为 harness 把图片读取从 `read` 中拆了出去）。
+- `translateToolNames(names, policy, onDiagnostic?)` —— 用于即将进入 `restrict()` 的 allow/deny 清单。`strict`（agent frontmatter，加载期）让未知名原样通过，使 `restrict()` 用自己的错误响亮地失败；`lenient`（技能激活，用户/模型驱动的数据）丢弃未知名并给出诊断，一个不剩时返回 `undefined`——被丢弃的名字绝不能杀死会话。括号里的 arg-spec（`Bash(git status)`）被剥成裸名，有意放宽为名字级门禁。
+- `ccToolAliases(name)` / 基于 `ccToolAliases` 的匹配 —— 用于比较场景（权限规则、hook matcher）：把 CC 名与 harness `exec.name` 的每个别名对照，`Bash(...)` 和 `bash(...)` 规则都能生效；别名只用于匹配，绝不写回限制。
+- `ccCanonicalToolName(name)` —— 面向 CC 的 payload（如 hook 的 `tool_name`）使用的 CC 名；无 CC 别名时返回输入本身。
+
 ### 类型化工具参数 schema
 
 第一方插件作者可以使用本包导出的 `defineTool()` 辅助函数定义类型化工具参数 schema：
