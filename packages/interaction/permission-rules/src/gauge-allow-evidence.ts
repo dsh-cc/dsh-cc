@@ -17,7 +17,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { ruleMatchesTool } from './matchers.ts'
 import { foldSessionAllows } from './session-allowlist.ts'
-import { estimateSystemOneTokens } from './systemone-budget.ts'
+import { estimateSystemOneTokens } from '@dsh-cc/systemone'
 import type { PermissionRule, PermissionRuleSource } from './types.ts'
 
 /** User-originated scopes only; projectSettings/config/curated excluded (B1/F2). */

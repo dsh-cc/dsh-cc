@@ -122,7 +122,7 @@ Install them inside a session:
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 24 | 4 | 2 |
+| Engine subsystems | 11 | 25 | 4 | 2 |
 | Hook events | 10 | 7 | 4 | 0 |
 | Command surface | 21 | 10 | 1 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |

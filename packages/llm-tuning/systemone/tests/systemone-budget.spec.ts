@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, MIN_STATE_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from '../src/systemone-budget.ts'
+import { S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, MIN_STATE_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from '../src/budget.ts'
 
 describe('estimateSystemOneTokens', () => {
   // Calibration fixtures (2026-09-25, orchestrix /v1/systemone, laya-rl-agent).

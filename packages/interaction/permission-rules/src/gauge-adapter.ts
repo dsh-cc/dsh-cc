@@ -8,9 +8,9 @@
  * @module @dsh-cc/permission-rules/gauge-adapter
  */
 
-import type { SystemOneAnswer, SystemOneFailure, SystemOneQuestion, SystemOneUsage } from './systemone-client.ts'
-import { systemoneDecide } from './systemone-client.ts'
-import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from './systemone-budget.ts'
+import type { SystemOneAnswer, SystemOneFailure, SystemOneQuestion, SystemOneUsage } from '@dsh-cc/systemone'
+import { systemoneDecide } from '@dsh-cc/systemone'
+import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from '@dsh-cc/systemone'
 
 /**
  * Corpus-derived default (scripts/gauge-corpus.json + eval-gauge.mjs; run

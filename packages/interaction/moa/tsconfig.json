@@ -12,19 +12,13 @@
       "path": "../../settings/settings-provider"
     },
     {
-      "path": "../../core/tools"
-    },
-    {
-      "path": "../../workspace/session-cwd"
+      "path": "../../settings/settings-ns"
     },
     {
       "path": "../../compat/cc-model-aliases"
     },
     {
       "path": "../../llm-tuning/systemone"
-    },
-    {
-      "path": "../../settings/settings-ns"
     }
   ]
 }

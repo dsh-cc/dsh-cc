@@ -104,6 +104,9 @@
       "path": "./packages/llm-tuning/side-query"
     },
     {
+      "path": "./packages/llm-tuning/systemone"
+    },
+    {
       "path": "./packages/interaction/prompt-suggest"
     },
     {
@@ -126,6 +129,9 @@
     },
     {
       "path": "./packages/skill/skill-usage"
+    },
+    {
+      "path": "./packages/interaction/moa"
     },
     {
       "path": "./packages/interaction/lsp-on-write"

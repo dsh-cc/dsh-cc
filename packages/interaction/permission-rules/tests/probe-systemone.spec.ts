@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { probeNoulOnce } from '../src/probe-systemone.ts'
-import { estimateSystemOneTokens } from '../src/systemone-budget.ts'
+import { estimateSystemOneTokens } from '@dsh-cc/systemone'
 
 const INFO = { provider: 'p', model: 'm', baseURL: 'http://x' }
 

@@ -13,8 +13,8 @@ import {
   SYSTEMONE_429_RETRY_BUDGET_MS,
   parseRetryAfterMs,
   systemoneDecide,
-} from '../src/systemone-client.ts'
-import type { SystemOneQuestion } from '../src/systemone-client.ts'
+} from '@dsh-cc/systemone'
+import type { SystemOneQuestion } from '@dsh-cc/systemone'
 import { classifyViaSystemOne, prepareSystemOneInput } from '../src/gauge-adapter.ts'
 
 const OK_BODY = '{"model":"laya-rl-agent","answers":{"verdict":{"type":"choice","choice":"allow","probabilities":{"allow":0.9,"ask":0.05,"deny":0.05},"confidence":0.8}},"usage":{"input_tokens":83,"output_tokens":0}}'

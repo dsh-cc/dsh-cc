@@ -1,6 +1,6 @@
 # moa — Tiered Cascade Routing for the Main Conversation
 
-Status: Design — live probes passed (P0–P6b, pre-registered gates); three-lane blind review converged (r1–r7, final verdicts critic GO / codex GO / grok GO, ledger in §11); user sign-off pending. Implementation not started.
+Status: Implemented — live probes passed (P0–P6b, pre-registered gates); three-lane blind review converged (r1–r7, final verdicts critic GO / codex GO / grok GO, ledger in §11); user sign-off on the design received. Implementation shipped in PR #225 (default OFF, ships dark); calibration loop pending (§7).
 
 **Terminology**: this is *tiered cascade routing* (FrugalGPT/RouteLLM family: classify → cheapest sufficient tier → escalate on rejection), not Mixture-of-Agents (parallel fan-out + aggregation). `moa` is only the internal feature name.
 

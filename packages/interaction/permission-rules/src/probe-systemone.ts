@@ -15,8 +15,8 @@
  */
 
 import { DEFAULT_GAUGE_CONTEXT_WINDOW, isTruncated } from './gauge-adapter.ts'
-import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from './systemone-budget.ts'
-import { systemoneDecide } from './systemone-client.ts'
+import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from '@dsh-cc/systemone'
+import { systemoneDecide } from '@dsh-cc/systemone'
 
 /** Assembled System One connection facts (shared with gauge-backend.ts). */
 export type SystemOneInfo = {

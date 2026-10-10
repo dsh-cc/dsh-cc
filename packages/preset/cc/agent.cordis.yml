@@ -655,6 +655,22 @@
     - id: skill-usage
       name: '@dsh-cc/skill-usage'
 
+    # Moa tiered cascade routing (plan
+    # docs/plans/2026-10-09-moa-tiered-cascade-routing.md): an opt-in pipeline
+    # that classifies genuine user turns to sketch/draft/blueprint/masterplan,
+    # with an optional acceptance judge and effect-free escalation retry at
+    # +1 tier. Publishes no Service (plain plugin, turn-rules/advisor-watchdog
+    # pattern), so it needs no isolate key. DEFAULT OFF (moa.enabled), with a
+    # moa-private System One budget/breaker and side-car JSONL ledgers under
+    # <dshHome>/moa/. ORDER TRIPWIRE: last of the interaction overlays — no
+    # functional coupling with advisor-watchdog/completion-gate (advisor
+    # reviews llm/stream windows; moa classifies user text pre-LLM and judges
+    # post-turn), the physical row order keeps the listeners' composition
+    # reviewable and puts moa's status rows after advisor verdicts in the
+    # same turn-stopping window.
+    - id: moa
+      name: '@dsh-cc/moa'
+
 # ── parallel rows ──────────────────────────────────────────────────────────
 
 # Claude Code skills from user/project/additional roots.

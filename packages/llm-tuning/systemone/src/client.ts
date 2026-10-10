@@ -19,7 +19,7 @@
  *
  * Never throws: every failure mode maps to a tagged `SystemOneResult`.
  *
- * @module @dsh-cc/permission-rules/systemone-client
+ * @module @dsh-cc/systemone/client
  */
 
 /**
