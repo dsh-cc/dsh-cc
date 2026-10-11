@@ -26,6 +26,7 @@ import { lastBucketsOf, tokensOf } from './usage-view.ts'
 import { createStatusLineCommand, type StatusLineCommand } from './statusline-command.ts'
 import { buildStatusLinePayload } from './statusline-payload.ts'
 import { createCcTranscriptMirror, type CcTranscriptMirror } from './statusline-cc-transcript.ts'
+import { subscribeMoaTier, type MoaTierRef } from './statusline-moa.ts'
 import {
   STATUSLINE_SECTION_SCHEMA,
   STATUSLINE_SETTINGS_NAMESPACE,
@@ -58,6 +59,8 @@ export type StatusLineWiringCtx = {
   waitForModel(): Promise<void>
   /** Shared mutable branch store (written by the HUD's refreshBranch). */
   branchRef: { value: string | undefined }
+  /** Shared mutable moa routing-tier store (written by the statusline-moa tap). */
+  moaRef: MoaTierRef
 }
 
 /** Fallback terminal dimensions when stdout is not a TTY. */
@@ -89,6 +92,15 @@ export function createStatusLineWiring(
   // users without a statusline never write files.
   let mirror: CcTranscriptMirror | undefined
   let unsubscribeEvents: (() => void) | undefined
+  // Moa tier tap: lives for the wiring's whole lifetime (the built-in footer
+  // reads the ref even while the custom lane is inactive). On a change: a
+  // same-reference emit (refreshBranch's idiom) re-notifies subscribers so the
+  // built-in footer re-renders from the ref, and fire() re-runs the custom
+  // command with a fresh payload (the onProjection trigger, mirrored here).
+  const unsubscribeMoa = subscribeMoaTier(ctx, current, rt.moaRef, () => {
+    emit(state())
+    fire()
+  })
 
   /**
    * Bind the transcript mirror to the CURRENT session: subscribe the live
@@ -162,6 +174,7 @@ export function createStatusLineWiring(
       ...(pressure?.contextWindow === undefined ? {} : { contextWindowTokens: pressure.contextWindow }),
       ...(pressure?.pressureTokens === undefined ? {} : { pressureTokens: pressure.pressureTokens }),
       ...(rt.branchRef.value === undefined ? {} : { worktree: { branch: rt.branchRef.value } }),
+      ...(rt.moaRef.value === undefined ? {} : { moa: { tier: rt.moaRef.value } }),
       ...(mirror?.isReady() === true && mirror.getPath() !== undefined
         ? { transcriptPath: mirror.getPath()! }
         : {}),
@@ -299,6 +312,9 @@ export function createStatusLineWiring(
     const mode = state().permissionMode
     const currentSelection = selection.current
     const branch = rt.branchRef.value
+    // Moa disarm: a MODEL change (not a reasoning-effort change — the same
+    // ref object is replaced for either) invalidates the routed tier.
+    if (seenEmit && lastSelection?.model !== currentSelection?.model) rt.moaRef.value = undefined
     if (seenEmit && (mode !== lastMode || currentSelection !== lastSelection || branch !== lastBranch)) fire()
     seenEmit = true
     lastMode = mode
@@ -323,12 +339,15 @@ export function createStatusLineWiring(
       const sessionId = String(current.agent.session.id)
       if (sessionId === boundSessionId) return
       boundSessionId = sessionId
+      // A new session starts unrouted: drop the previous session's tier.
+      rt.moaRef.value = undefined
       // Rebind the transcript mirror to the NEW session before firing so the
       // re-run's payload advertises the new session's mirror, not the old one.
       if (mirror !== undefined && runner !== undefined) bindTranscriptMirror()
       if (runner !== undefined) fire()
     },
     dispose(): void {
+      unsubscribeMoa()
       deactivate(false)
     },
   }
