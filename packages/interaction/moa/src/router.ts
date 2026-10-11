@@ -33,6 +33,7 @@ import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
 import { appendJsonl } from '@dsh-cc/sidecar-io'
 import { capMiddleToTokenBudget, systemoneDecide } from '@dsh-cc/systemone'
 import { resolveJudgeRoute } from './judge-route.ts'
+import { isSubagentAgent } from './agent-scope.ts'
 import { moaNoticeSource } from './provenance.ts'
 import { isMoaEscalationMessage } from './state.ts'
 import { TIER_ALIASES, tierAt } from './tiers.ts'
@@ -367,6 +368,13 @@ export function createRequestRouter(
     listener: async (payload, next) => {
       // Fast bail: the §3.1 zero-overhead default-off contract.
       if (!core.readSettings().enabled) return next()
+      // Subagent scope: moa routes the main conversation only. A spawned
+      // agent's model comes from its declared alias (resolved by the spawn
+      // path into agentOptions), so its requests pass through unclassified
+      // and unoverridden — and its turn numbering restarts at 1, so letting
+      // a child through would also reset the sticky-turn tracking and feed
+      // the arming machine a foreign header pair (see agent-scope.ts).
+      if (isSubagentAgent(payload.agent)) return next()
       const isNewTurn = payload.turn !== lastSeenTurn
       if (isNewTurn) {
         // Step-1 trigger pin: see the module doc — `payload.turn` change, NOT
@@ -394,9 +402,15 @@ export function createRequestRouter(
     // Pre-step delivery for queued status rows: appended to the decision's
     // messages (mcpReadyNotice.ts:161 precedent — form 'notice' + summary),
     // one row per queued notice, then pass through.
-    preStepListener: async (_payload, next) => {
+    preStepListener: async (payload: { agent?: unknown }, next) => {
       const decision = await next()
       if (pendingRows.length === 0) return decision
+      // A subagent's pre-step never delivers the root's queued status row:
+      // the Task tool that spawned the child runs during the root's turn,
+      // so the child's first pre-step would otherwise win the splice — both
+      // injecting a moa row into the child's transcript and silencing the
+      // root's own classify notice (see agent-scope.ts).
+      if (isSubagentAgent(payload.agent)) return decision
       const shape = decision as { kind?: string; messages?: UserMessage[] }
       if (shape.kind === 'reject' || shape.messages === undefined) return decision
       const rows = pendingRows.splice(0)
