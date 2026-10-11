@@ -5425,6 +5425,10 @@
         },
         {
           "type": "test",
+          "path": "packages/compat/cc-plugin-loader/tests/skills.spec.ts"
+        },
+        {
+          "type": "test",
           "path": "packages/bundle/cc-shell/tests/mcp-seam.spec.ts"
         },
         {
@@ -5442,7 +5446,7 @@
       ],
       "deviation": {
         "kind": "divergent",
-        "summary": "Discovery presents the dual-home merged view: the Claude home ($CLAUDE_CONFIG_DIR / ~/.claude) stays read-visible for Claude Code compatibility while the dsh home ($DSH_HOME / ~/.dsh) is the write root, merged per key with dsh-wins. The fork is one-way (real Claude Code sees only its own home) and ids dsh has taken over stop tracking later claude-side changes; a claudeHome-alone caller keeps legacy single-root behavior."
+        "summary": "Discovery presents the dual-home merged view: the Claude home ($CLAUDE_CONFIG_DIR / ~/.claude) stays read-visible for Claude Code compatibility while the dsh home ($DSH_HOME / ~/.dsh) is the write root, merged per key with dsh-wins. The fork is one-way (real Claude Code sees only its own home) and ids dsh has taken over stop tracking later claude-side changes; a claudeHome-alone caller keeps legacy single-root behavior. Skill naming diverges at the registry key: a plugin skill mounts under its directory-derived name, and when that directory is not a valid registry name dsh-cc falls back to the SKILL.md frontmatter `name`. That shape is a manifest listing the skill root directly (`\"skills\": [\"./\"]`), which resolves to the versioned install directory `<cache>/<marketplace>/<plugin>/<version>`; the registry grammar admits neither the version-shaped basename nor CC's `${pluginName}:${basename}` key (CC applies no grammar check at all), so the fallback name is a dsh-cc-side name rather than CC's key."
       }
     },
     "plugins.management": {

@@ -90,14 +90,15 @@ export async function mountSkills(options: MountSkillsOptions): Promise<{ dispos
       tally.addFailed(`could not parse skill "${file.name}"`)
       continue
     }
-    if (!isSkillName(file.name)) {
-      tally.addFailed(`skill "${file.name}" has an invalid registry name`)
+    const { parsed, body } = loaded
+    const name = resolveSkillName(file, parsed)
+    if (!isSkillName(name)) {
+      tally.addFailed(`skill "${file.name}" has no valid registry name (frontmatter name: ${declaredSkillName(parsed) ?? 'absent'})`)
       continue
     }
-    const { parsed, body } = loaded
     const metadata = toMetadata(parsed)
     const definition: SkillDefinition = {
-      name: file.name,
+      name,
       description: parsed.description,
       ...parsed.whenToUse !== undefined ? { whenToUse: parsed.whenToUse } : {},
       invocation: ccInvocation(parsed),
@@ -194,6 +195,31 @@ async function skillsInRoot(root: string): Promise<PluginSkillFile[]> {
     found.push({ name: entry.name, path, directory })
   }
   return found
+}
+
+/** The frontmatter `name`, when the parsed skill actually declares a string. */
+function declaredSkillName(parsed: CcPluginFrontmatter): string | undefined {
+  const value: unknown = parsed.name
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+/**
+ * Registry name for one discovered skill.
+ *
+ * The directory-derived name wins whenever it is already a valid skill name
+ * (the CC convention: a plugin skill's identity is its directory). A root
+ * whose basename cannot be a registry name falls back to the frontmatter
+ * `name`. That shape is reachable whenever a manifest lists a skill root
+ * directly -- `"skills": ["./"]` makes the plugin root itself the skill, and
+ * the install path is versioned (`<cache>/<marketplace>/<plugin>/3.1.0`), so
+ * the basename is a version; any non-kebab directory hits it too. CC keys such
+ * a skill `${pluginName}:${basename}` with no grammar check, so a fallback
+ * name is a dsh-cc-side name rather than CC's key, and a collision with
+ * another plugin's skill is resolved first-wins by the registry.
+ */
+function resolveSkillName(file: PluginSkillFile, parsed: CcPluginFrontmatter): string {
+  if (isSkillName(file.name)) return file.name
+  return declaredSkillName(parsed) ?? file.name
 }
 
 async function isReadable(path: string): Promise<boolean> {
