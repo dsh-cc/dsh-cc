@@ -12,6 +12,8 @@ export interface StatusLineInput {
   model?: string
   /** Selected reasoning effort for the active model (omitted = provider default). */
   effort?: string
+  /** Moa routing tier alias for the current turn (omitted = moa off or no route yet). */
+  moa?: string
   /** Git branch of the session cwd (best-effort boot probe; omitted when unknown). */
   branch?: string
   /** Context occupancy percent, 0-100 (rounded here when fractional). */
@@ -96,6 +98,7 @@ export function formatStatusLine(input: StatusLineInput, opts?: { width?: number
     ]
     if (input.model !== undefined && input.model.length > 0) parts.push(input.model)
     if (input.effort !== undefined && input.effort.length > 0) parts.push(`effort: ${input.effort}`)
+    if (input.moa !== undefined && input.moa.length > 0) parts.push(`moa:${input.moa}`)
     if (input.contextPercent !== undefined) {
       const percent = Math.max(0, Math.min(100, Math.round(input.contextPercent)))
       const tokens = input.contextTokens

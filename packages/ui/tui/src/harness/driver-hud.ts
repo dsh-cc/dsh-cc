@@ -206,6 +206,7 @@ export function createHudSection(rt: DriverHudCtx) {
       ...selection.current === undefined ? {} : { model: selection.current.model },
       ...effort === undefined ? {} : { effort },
       ...branchRef.value === undefined ? {} : { branch: branchRef.value },
+      ...rt.moaRef.value === undefined ? {} : { moa: rt.moaRef.value },
       ...s.hud?.contextPercent === undefined ? {} : { contextPercent: s.hud.contextPercent },
       ...s.hud?.contextTokens === undefined ? {} : { contextTokens: s.hud.contextTokens },
       ...s.hud?.tokens === undefined ? {} : { tokens: s.hud.tokens },

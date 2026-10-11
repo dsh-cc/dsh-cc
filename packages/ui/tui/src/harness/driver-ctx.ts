@@ -26,6 +26,7 @@ import type { CatalogEntry } from '../model-catalog.ts'
 import type { ModalEntry } from './driver-modal.ts'
 import type { OnboardingGate } from './onboarding.ts'
 import type { StatusLineSectionHandle } from './statusline-wiring.ts'
+import type { MoaTierRef } from './statusline-moa.ts'
 import type { SessionEventLike, ToolPresenters } from '../transcript.ts'
 
 /**
@@ -133,6 +134,11 @@ export interface DriverHudCtx {
    * built-in statusline and by the custom statusline wiring's payload).
    */
   branchRef: { value: string | undefined }
+  /**
+   * Shared mutable moa routing-tier store (written by the statusline-moa tap,
+   * read by the built-in statusline and the custom wiring's payload).
+   */
+  moaRef: MoaTierRef
   /**
    * Custom statusLine wiring (statusline-wiring.ts), when created by the
    * driver. `override()` returns the configured command's line while active,

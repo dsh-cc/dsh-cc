@@ -44,6 +44,7 @@
     "@dsh-cc/command-permissions": "workspace:^",
     "@dsh-cc/command-usage": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
+    "@dsh-cc/moa": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/permission-rules": "workspace:^",
     "@dsh-cc/pi-tui": "workspace:^",

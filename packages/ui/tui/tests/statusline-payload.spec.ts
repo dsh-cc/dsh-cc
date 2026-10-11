@@ -116,6 +116,17 @@ describe('exceeds_200k_tokens (context length: currentUsage-derived, else pressu
   })
 })
 
+describe('moa (additive non-CC key)', () => {
+  it('carries the moa tier when the view supplies one', () => {
+    const payload = buildStatusLinePayload(view({ moa: { tier: 'draft' } }))
+    expect(payload.moa).toEqual({ tier: 'draft' })
+  })
+
+  it('drops the moa field entirely when unset', () => {
+    expect('moa' in buildStatusLinePayload(view())).toBe(false)
+  })
+})
+
 describe('cost.total_duration_ms', () => {
   it('derives from the session createdAt, not the bind time', () => {
     // bind→now is 5s, session createdAt→now is 105s: the session clock wins.

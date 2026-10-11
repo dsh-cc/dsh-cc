@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
+import { createStatusLineWiring } from '@dsh-cc/tui/harness/statusline-wiring.ts'
 import { formatModeLine } from '@dsh-cc/tui/statusline.ts'
 
 /**
@@ -739,5 +740,132 @@ describe('createDriver custom statusLine wiring', () => {
     const { driver } = await bootActiveDriver(executor, activeSection({ padding: 3 }))
     await vi.advanceTimersByTimeAsync(0)
     expect(driver.statusLine).toBe(formatModeLine('default'))
+  })
+
+  it('a moa routing notice event surfaces moa:<alias> in the built-in footer and the payload', async () => {
+    const { driver, emitSessionEvent, executor } = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(driver.statusLine).not.toContain('moa:')
+    expect(JSON.parse(executor.specs[0]!.stdin!)).not.toHaveProperty('moa')
+
+    emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'moa: routed → draft', tier: 1 } },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    // The custom command re-ran on the change and its payload carries the tier.
+    const payload = JSON.parse(executor.specs.at(-1)!.stdin!) as Record<string, unknown>
+    expect(payload.moa).toEqual({ tier: 'draft' })
+  })
+
+  it('a moa routing notice event surfaces moa:<alias> in the built-in footer', async () => {
+    // Bare driver (no settings/executor): the built-in lane is in charge.
+    const bare = makeStatusLineCtx({ projections: makeProjections() })
+    const driver = await createDriver(bare.ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
+    expect(driver.statusLine).not.toContain('moa:')
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'moa: routed → draft', tier: 1 } },
+    })
+    expect(driver.statusLine).toContain('moa:draft')
+    await driver.dispose()
+  })
+
+  it('a moa event from another session (or without a tier) is ignored', async () => {
+    const { driver, emitSessionEvent, executor } = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(0)
+
+    emitSessionEvent('s-other', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'x', tier: 2 } },
+    })
+    // Tier-less moa notice: the free-form summary is never parsed.
+    emitSessionEvent('s-a', {
+      type: 'user/message', seq: 2, time: 1_700_000_001_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'moa: routed → blueprint' } },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(driver.statusLine).not.toContain('moa:')
+    expect(JSON.parse(executor.specs.at(-1)!.stdin!)).not.toHaveProperty('moa')
+  })
+
+  it('a model selection change clears the moa segment; an effort-only change does not (wiring-level emit-diff)', async () => {
+    // The driver rig does not expose the selection ref, so the clear rules are
+    // pinned at the wiring level: drive the emit-diff listener the wiring
+    // registers on rt.listeners directly.
+    const { ctx, eventHandlers } = makeStatusLineCtx({ projections: makeProjections() })
+    const selection: { current?: { provider?: string; model?: string; reasoningEffort?: string } } = {
+      current: { provider: 'p', model: 'm1' },
+    }
+    const current = {
+      agent: {
+        session: {
+          id: 's-a',
+          header: { createdAt: 1_000_000 },
+          events: [],
+          snapshotEvents() { return this.events },
+        },
+      },
+    }
+    const listeners = new Set<(s: unknown) => void>()
+    const moaRef = { value: 'draft' as string | undefined }
+    const wiring = createStatusLineWiring({
+      emit: () => {},
+      state: () => ({ permissionMode: 'default' }),
+      ctx: ctx as never,
+      cwd: '/w/proj',
+      current,
+      selection,
+      listeners,
+      waitForModel: async () => {},
+      branchRef: { value: undefined },
+      moaRef,
+    } as never)
+    expect(eventHandlers.length).toBe(1) // the moa tap is subscribed at construction
+
+    // First emit: seenEmit seeding — no clear.
+    for (const listener of [...listeners]) listener({})
+    expect(moaRef.value).toBe('draft')
+
+    // Effort-only change: same model → the ref survives.
+    selection.current = { provider: 'p', model: 'm1', reasoningEffort: 'high' }
+    for (const listener of [...listeners]) listener({})
+    expect(moaRef.value).toBe('draft')
+
+    // Model change: the routed tier is invalidated.
+    selection.current = { provider: 'p', model: 'm2', reasoningEffort: 'high' }
+    for (const listener of [...listeners]) listener({})
+    expect(moaRef.value).toBeUndefined()
+    wiring.dispose()
+  })
+
+  it('the moa tap follows rebinds: events from the new session id land, old ones are dropped', async () => {
+    // Bare driver (no settings/executor): the built-in lane is in charge.
+    const bare = makeStatusLineCtx({
+      projections: makeProjections(),
+      resumeSessions: { 's-b': { id: 's-b', cwd: '/w/proj' } },
+    })
+    const driver = await createDriver(bare.ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
+
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'x', tier: 1 } },
+    })
+    expect(driver.statusLine).toContain('moa:draft')
+
+    await driver.switchSession('s-b')
+    // The rebind cleared the old session's tier; the s-a event id is now foreign.
+    expect(driver.statusLine).not.toContain('moa:')
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 2, time: 1_700_000_001_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'x', tier: 2 } },
+    })
+    expect(driver.statusLine).not.toContain('moa:')
+    bare.emitSessionEvent('s-b', {
+      type: 'user/message', seq: 3, time: 1_700_000_002_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'x', tier: 3 } },
+    })
+    expect(driver.statusLine).toContain('moa:masterplan')
+    await driver.dispose()
   })
 })

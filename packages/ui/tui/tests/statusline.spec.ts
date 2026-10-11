@@ -92,6 +92,29 @@ describe('formatStatusLine', () => {
     })).toBe('/tmp · x · default · m1 · shift+tab · /quit')
   })
 
+  it('renders the moa tier segment right after effort', () => {
+    expect(formatStatusLine({
+      cwd: '/tmp',
+      sessionId: 'x',
+      permissionMode: 'default',
+      model: 'm1',
+      effort: 'high',
+      moa: 'draft',
+      busy: false,
+    })).toBe('/tmp · x · default · m1 · effort: high · moa:draft · shift+tab · /quit')
+  })
+
+  it('omits the moa segment when unset or empty', () => {
+    expect(formatStatusLine({
+      cwd: '/tmp',
+      sessionId: 'x',
+      permissionMode: 'default',
+      model: 'm1',
+      moa: '',
+      busy: false,
+    })).toBe('/tmp · x · default · m1 · shift+tab · /quit')
+  })
+
   it('renders context percent between model and tokens', () => {
     expect(formatStatusLine({
       cwd: '/tmp',
