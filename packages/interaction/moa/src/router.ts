@@ -151,6 +151,8 @@ export function createRequestRouter(
   /** The provider/model pair moa last applied (arming self-feedback guard). */
   let lastAppliedPair: { provider: string; model: string } | undefined
   const effortCache = new Map<string, readonly string[] | undefined>()
+  /** (provider, model, effort) triples already warned about (§3.2 warn-once). */
+  const effortWarned = new Set<string>()
 
   const warn = (message: string): void => deps.logger?.warn(message)
 
@@ -229,7 +231,13 @@ export function createRequestRouter(
     }
     // Unsupported carried effort → degrade exactly like applyModelSwitch
     // (driver-pickers.ts:98-119): bare pair (drop the effort field) + notice.
-    queueNotice(`Effort "${carried}" not supported by ${model}; reset to default.`)
+    // Warn-once per (provider, model, effort): the pair is process-stable,
+    // so a per-turn repeat would spam the status rows every routed turn.
+    const warnKey = `${provider}\u0000${model}\u0000${carried}`
+    if (!effortWarned.has(warnKey)) {
+      effortWarned.add(warnKey)
+      queueNotice(`Effort "${carried}" not supported by ${model}; reset to default.`)
+    }
     return { provider, model } as LlmCallConfig
   }
 

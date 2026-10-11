@@ -226,4 +226,28 @@ describe('moa router mechanism', () => {
     const kept = await fire(rig2, 1, 1)
     expect(kept).toMatchObject({ model: 'tier-draft', reasoningEffort: 'max' })
   })
+
+  it('effort re-validation: the unsupported-effort notice is warn-once per (model, effort) pair', async () => {
+    const rig = makeRig()
+    rig.setResolveEfforts(async () => ['low'])
+    await rig.seedCapture(1, [userOpening('go')])
+    await rig.seedCapture(2, [userOpening('go again')])
+    await fire(rig, 1, 1)
+    await fire(rig, 2, 1)
+    const drain = async (): Promise<string[]> => {
+      const decision = (await rig.router.preStepListener({}, async () => ({ kind: 'continue', messages: [] }))) as {
+        messages: { source: { summary?: string } }[]
+      }
+      return decision.messages.map((m) => m.source.summary ?? '')
+    }
+    const first = await drain()
+    expect(first.filter((s) => s.includes('Effort "max" not supported by tier-draft'))).toHaveLength(1)
+    // Second routed turn on the same pair: degrades again (bare pair) but
+    // queues NO repeat notice — per-turn repeats spammed every routed turn
+    // (2026-10-11 dogfood).
+    const applied = await fire(rig, 1, 1)
+    expect(applied.reasoningEffort).toBeUndefined()
+    const second = await drain()
+    expect(second.filter((s) => s.includes('Effort "max" not supported by tier-draft'))).toHaveLength(0)
+  })
 })

@@ -232,14 +232,23 @@ function getMoaCapture(): ReturnType<typeof createOpeningCapture> | undefined {
   return liveCapture
 }
 
-/** Wire the router's host seams off the plug context. */
-function buildDeps(ctx: Context, getCapturedOpening: RouterDeps['getCapturedOpening']): RouterDeps {
-  let llm: { resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<{ reasoning?: { efforts: readonly { id: unknown }[] } }> } | undefined
+/** The `llm` service, read defensively (cordis throws on `ctx.llm` without inject). */
+function optionalLlm(ctx: Context): {
+  resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<{ reasoning?: { efforts: readonly { id: unknown }[] } }>
+} | undefined {
   try {
-    llm = (ctx as { llm?: unknown }).llm as typeof llm
+    return ctx.get('llm') as ReturnType<typeof optionalLlm> | undefined
   } catch {
-    llm = undefined
+    return undefined
   }
+}
+
+/**
+ * Wire the router's host seams off the plug context. Exported for the wiring
+ * regression specs (the lazy-`llm` seam cannot be pinned through `apply`
+ * without a live preset boot).
+ */
+export function buildDeps(ctx: Context, getCapturedOpening: RouterDeps['getCapturedOpening']): RouterDeps {
   return {
     getCapturedOpening,
     // Lazy: `ccModelRoutes` is an app-level service absent during the preset
@@ -252,16 +261,19 @@ function buildDeps(ctx: Context, getCapturedOpening: RouterDeps['getCapturedOpen
     resolveBackend: (route: ResolvedRoute) => resolveSystemOneBackend(optionalSettings(ctx), route),
     // Advertised efforts for the effort re-validation (§3.2): the harness
     // adapter-owned metadata via `llm.resolveModelInfo` — the smallest host
-    // read equivalent to the TUI's rt.resolveEfforts.
-    ...(llm === undefined
-      ? {}
-      : {
-          resolveEfforts: (provider: string, model: string, signal: AbortSignal) =>
-            llm.resolveModelInfo(provider, model, signal).then(
-              (info) => info.reasoning?.efforts.map((level) => String(level.id)),
-              () => undefined,
-            ),
-        }),
+    // read equivalent to the TUI's rt.resolveEfforts. Resolved LAZILY per
+    // call: an eager apply-time `ctx.llm` access throws in cordis without
+    // `inject: ['llm']` (live-probed 2026-10-11: "cannot get property llm
+    // without inject"), which silently unwired effort validation for the
+    // process lifetime and degraded every tier-routed turn.
+    resolveEfforts: (provider: string, model: string, signal: AbortSignal) => {
+      const llm = optionalLlm(ctx)
+      if (llm === undefined) return Promise.resolve(undefined)
+      return llm.resolveModelInfo(provider, model, signal).then(
+        (info) => info.reasoning?.efforts.map((level) => String(level.id)),
+        () => undefined,
+      )
+    },
     // Route log (§7 R1): a SIDE-CAR JSONL ledger, NOT a session event —
     // unknown non-ignorable session event types poison session resume
     // (repo red line). One file per process under <dshHome>/moa/.

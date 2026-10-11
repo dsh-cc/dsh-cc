@@ -28,7 +28,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { makeRig, BOOT_PAIR, GAUGE_ROUTE } from './rig.ts'
-import { apply, resetMoaCore, getMoaCore, resolveSystemOneBackend } from '../src/index.ts'
+import { apply, resetMoaCore, getMoaCore, resolveSystemOneBackend, buildDeps } from '../src/index.ts'
 
 /** A describe-shaped settings service double (settings-ns `DescribeFace`). */
 function fakeSettingsService(sections: Record<string, unknown>): {
@@ -198,6 +198,35 @@ describe('moa wiring (apply) — mount-order race', () => {
     rig.arrive({}, healthyRoutes)
     expect(getMoaCore().readSettings().enabled).toBe(false)
     expect(getMoaCore().armingValidation).toEqual({ ok: false, reason: 'moa disabled' })
+  })
+})
+
+describe("buildDeps resolveEfforts — lazy llm service (F, 2026-10-11 dogfood)", () => {
+  it('resolves the llm service per call, not at apply time', async () => {
+    const rig = makeLateCtx()
+    // The live trap (pool-lib probe 2026-10-11): an eager apply-time `ctx.llm`
+    // access throws "cannot get property llm without inject" in a real boot —
+    // buildDeps must never touch the service property, and must find the
+    // service through `ctx.get` lazily so a late arrival still wires effort
+    // validation.
+    const deps = buildDeps(rig.ctx as never, () => undefined)
+    // No llm service yet: fail soft (undefined efforts, the router keeps its
+    // degrade semantics) — and never throw.
+    await expect(deps.resolveEfforts?.('p', 'm1', new AbortController().signal)).resolves.toBeUndefined()
+    // The service arrives late (base layer settles after the preset sweep).
+    rig.services.set('llm', {
+      resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'off' }, { id: 'high' }, { id: 'max' }] } }),
+    })
+    await expect(deps.resolveEfforts?.('p', 'm1', new AbortController().signal)).resolves.toEqual(['off', 'high', 'max'])
+  })
+
+  it('maps resolveModelInfo rejections to undefined (fail-open, never a throw)', async () => {
+    const rig = makeLateCtx()
+    rig.services.set('llm', {
+      resolveModelInfo: async () => { throw new Error('catalog down') },
+    })
+    const deps = buildDeps(rig.ctx as never, () => undefined)
+    await expect(deps.resolveEfforts?.('p', 'm1', new AbortController().signal)).resolves.toBeUndefined()
   })
 })
 
