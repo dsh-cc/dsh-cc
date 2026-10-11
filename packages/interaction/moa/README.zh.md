@@ -15,6 +15,6 @@
 | `acceptance.shadow` | `false` | 运行 judge，仅记录结论 |
 | `acceptance.tau` | `0.7` | `P(acceptable) < tau` 时拒绝 |
 | `max-escalations` | `1` | 每条消息的升级上限（读取时钳制为 3） |
-| `judge-route` | `llmbox_systemone/bjev` | 别名或 `{provider, model, protocol}` |
+| `judge-route` | 别名 `gauge` | 别名或 `{provider, model, protocol}`；未设置时用 `gauge` 通道别名（须解析为 System One 路由，否则 moa 保持未启用） |
 | `classify-budget-tokens` | `4000` | 分类输入预算 |
 | `call-budget-ms` | `8000` | 每条消息的级联截止时间 |

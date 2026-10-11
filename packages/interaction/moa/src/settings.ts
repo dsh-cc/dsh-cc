@@ -78,10 +78,17 @@ const SettingsObject = z.object({
   'call-budget-ms': z.number().min(1).default(8000),
 })
 
-/** Register the namespace for /config UX + validation; returns the live reader. */
-export function registerSettings(ctx: Context): (() => MoaSettings) | undefined {
-  const settings = ctx.get('settings') as object | undefined
-  if (settings === undefined) return undefined
+/**
+ * Register the namespace for /config UX + validation; returns the live reader.
+ *
+ * No absent-service pre-check: during the real cc preset sweep the settings
+ * provider has not settled yet (mount-order race, live-traced 2026-10-10), and
+ * a naive `ctx.get('settings') === undefined → undefined` here made every
+ * later read fall back to ship defaults forever. `registerNamespaceSafe`
+ * owns that race itself (it defers registration to the provider's injectable
+ * arrival), so the pre-check only ever suppressed its rescue.
+ */
+export function registerSettings(ctx: Context): () => MoaSettings {
   const read = registerNamespaceSafe<Record<string, unknown>>(
     ctx,
     SETTINGS_NAMESPACE,

@@ -75,6 +75,14 @@ export interface ArmingValidation {
   reason?: string
 }
 
+/**
+ * Re-run the arm/validate pass when not yet armed (mount-order race: the
+ * settings / `ccModelRoutes` / alias overlay may all settle after mount).
+ * Optional; the router and judge call it right before their `validation.ok`
+ * gate so callback ordering can never permanently miss.
+ */
+export type EnsureArmed = () => void
+
 /** Minimal structural view of the `agent/request` payload this module needs. */
 export interface RequestPayload {
   agent: Pick<Agent, 'inject' | 'session'>
@@ -130,7 +138,7 @@ export interface RequestRouter {
 
 export function createRequestRouter(
   core: MoaCore,
-  opts: { validation: ArmingValidation; deps: RouterDeps },
+  opts: { validation: ArmingValidation; deps: RouterDeps; ensureArmed?: EnsureArmed | undefined },
 ): RequestRouter {
   const { arming, bookkeeping } = core
   const deps = opts.deps
@@ -236,6 +244,9 @@ export function createRequestRouter(
       budgetTokens: settings.classifyBudgetTokens,
     })
     if (!judge.ok) return undefined
+    // Resolution guarantees a model on the ok branch; if it somehow does not,
+    // fail open rather than substitute a model string.
+    if (judge.route.model === undefined) return undefined
     const backend = deps.resolveBackend?.(judge.route)
     if (backend === undefined) {
       if (!backendWarned) {
@@ -250,7 +261,11 @@ export function createRequestRouter(
     const result = await systemoneDecide({
       baseURL: backend.baseURL,
       ...(backend.apiKey === undefined ? {} : { apiKey: backend.apiKey }),
-      model: `${judge.route.provider}/${judge.route.model}`,
+      // Wire model == route.model, exactly as the alias/route configured it —
+      // never `${provider}/${model}` (provider-prefixing produced a 400 "not a
+      // configured systemone model", live-traced 2026-10-10) and never a
+      // hardcoded fallback (checked non-undefined above).
+      model: judge.route.model,
       state,
       questions: { route: ROUTING_QUESTION },
       timeoutMs: settings.callBudgetMs,
@@ -333,6 +348,7 @@ export function createRequestRouter(
     ) {
       arming.observeRequestModel({ provider: header?.provider, model: header?.model })
     }
+    if (!opts.validation.ok) opts.ensureArmed?.()
     if (!arming.isArmed() || !opts.validation.ok) return undefined
     const decided = await classifyOnce(payload, opening)
     return decided

@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import { createRequestRouter, validateArming, type RouterDeps } from '../src/router.ts'
 import { MOA_MODEL_CONTEXT_WINDOWS } from '../src/judge-route.ts'
-import { escalationOpening, makeRig, noticeOpening, userOpening, type Rig } from './rig.ts'
+import { escalationOpening, makeRig, noticeOpening, routes as tierRoutes, userOpening, type Rig } from './rig.ts'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -172,7 +172,7 @@ describe('moa router mechanism', () => {
   it('mount-time validation: judge-route window fail → unarmed (validateArming), warn-once shape', async () => {
     const warn: string[] = []
     const logger = { warn: (m: string) => warn.push(m) }
-    const routes = () => ({ resolve: (alias: string) => ({ provider: 'mock', model: `tier-${alias}` }) }) as never
+    const routes = () => tierRoutes() as never
     // A laya judge route (1024 window) against a 4000-token classify budget
     // fails the §3.6 window check → the feature stays unarmed.
     const failing = validateArming({

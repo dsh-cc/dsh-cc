@@ -22,6 +22,7 @@ import { createOpeningCapture } from '../src/capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { createRequestRouter, type ArmingValidation, type RequestRouter, type RouterDeps } from '../src/router.ts'
 import { ArmingMachine, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
+import { routes as tierRoutes, GAUGE_ROUTE } from './rig.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -102,7 +103,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
       classifyStates.push(body.state)
       return new Response(
         JSON.stringify({
-          model: 'llmbox_systemone/bjev',
+          model: GAUGE_ROUTE.model,
           answers: { route: { type: 'choice', choice: 'draft', probabilities: ROUTE_PROBABILITIES } },
           usage: { input_tokens: 100, output_tokens: 5 },
         }),
@@ -119,7 +120,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
     const p = options.pAccept ?? 0.2
     return new Response(
       JSON.stringify({
-        model: 'llmbox_systemone/bjev',
+        model: GAUGE_ROUTE.model,
         answers: { accept: { type: 'choice', choice: 'acceptable', probabilities: { acceptable: p, unacceptable: 1 - p } } },
         usage: { input_tokens: 100, output_tokens: 5 },
       }),
@@ -128,7 +129,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   }
   const routerDeps: RouterDeps = {
     getCapturedOpening: capture.getCapturedOpening,
-    routes: () => ({ resolve: (alias: string) => ({ provider: 'mock', model: `tier-${alias}` }) }) as never,
+    routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
   }
@@ -139,7 +140,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   const judgeDeps: JudgeDeps = {
     getCapturedOpening: capture.getCapturedOpening,
     tierFor: (turnId) => router.tierFor(turnId),
-    routes: () => ({ resolve: (alias: string) => ({ provider: 'mock', model: `tier-${alias}` }) }) as never,
+    routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
     routingLedgerPath: () => join(root, 'moa', 'routing.jsonl'),

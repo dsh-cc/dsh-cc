@@ -16,7 +16,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { createOpeningCapture } from '../src/capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
-import { userOpening } from './rig.ts'
+import { GAUGE_ROUTE, routes as tierRoutes, userOpening } from './rig.ts'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -104,7 +104,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     const p = options.pAccept ?? 0.2
     return new Response(
       JSON.stringify({
-        model: 'llmbox_systemone/bjev',
+        model: GAUGE_ROUTE.model,
         answers: { accept: { type: 'choice', choice: 'acceptable', probabilities: { acceptable: p, unacceptable: 1 - p } } },
         usage: { input_tokens: 100, output_tokens: 5 },
       }),
@@ -114,7 +114,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
   const deps: JudgeDeps = {
     getCapturedOpening: (turnId) => capture.getCapturedOpening(turnId),
     tierFor: () => options.tier ?? 1,
-    routes: () => ({ resolve: (alias: string) => ({ provider: 'mock', model: `tier-${alias}` }) }) as never,
+    routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
     routingLedgerPath: () => routingLedger,
