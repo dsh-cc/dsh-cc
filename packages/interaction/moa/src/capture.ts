@@ -23,6 +23,7 @@
  */
 
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import { isSubagentAgent } from './agent-scope.ts'
 
 /** Maximum simultaneously-captured turns. */
 export const CAPTURE_CAPACITY = 8
@@ -31,6 +32,8 @@ export const CAPTURE_CAPACITY = 8
 export interface PreStepPayload {
   messages: readonly UserMessage[]
   turn: number
+  /** The subject agent, injected by the harness agent-events dispatcher. */
+  readonly agent?: unknown
 }
 
 export interface OpeningCapture {
@@ -47,6 +50,12 @@ export function createOpeningCapture(): OpeningCapture {
   const captured = new Map<number, UserMessage>()
   return {
     listener: async (payload, next) => {
+      // Subagent pre-steps never claim a turn slot: child turn numbers
+      // restart at 1, so an unguarded child would first-come-first-served
+      // claim (or shadow) the ROOT's slot for that turn number and the
+      // router would then classify the root's request from the child's
+      // opening (see agent-scope.ts).
+      if (isSubagentAgent(payload.agent)) return next()
       if (!captured.has(payload.turn)) {
         const opening = payload.messages[payload.messages.length - 1]
         if (opening !== undefined) {

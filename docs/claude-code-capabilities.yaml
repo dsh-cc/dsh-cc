@@ -623,15 +623,22 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: moa" }
       - { type: source, path: packages/interaction/moa/src/router.ts }
       - { type: source, path: packages/interaction/moa/src/judge.ts }
+      - { type: source, path: packages/interaction/moa/src/agent-scope.ts }
       - { type: test, path: packages/interaction/moa/tests/router-probe.spec.ts }
       - { type: test, path: packages/interaction/moa/tests/judge-loop.spec.ts }
+      - { type: test, path: packages/interaction/moa/tests/subagent-scope.spec.ts }
     deviation:
       kind: divergent
       summary: >-
         dsh-cc extension: no CC counterpart exists. A tiered cascade router
         (classify-first over the four lane aliases, optional acceptance
         judge, effect-free +1-tier escalation retry) shipped as a dark,
-        settings-gated preset plugin with side-car JSONL ledgers.
+        settings-gated preset plugin with side-car JSONL ledgers. Routing
+        scope is main-session turns only: subagent sessions (any
+        `origin: 'subagent'` or positive `delegationDepth` header, including
+        fork-type children and resumed child sessions driven interactively)
+        are never classified, overlaid, or judged — a spawned agent's model
+        stays whatever its declaration resolved to at spawn.
 
   engine.notebook-edit:
     title: NotebookEdit

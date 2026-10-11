@@ -21,6 +21,7 @@ import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
 import { appendJsonl } from '@dsh-cc/sidecar-io'
 import { capMiddleToTokenBudget, systemoneDecide } from '@dsh-cc/systemone'
 import { resolveJudgeRoute } from './judge-route.ts'
+import { isSubagentAgent } from './agent-scope.ts'
 import { MOA_ESCALATION_KIND } from './state.ts'
 import { TIER_ALIASES, tierAt } from './tiers.ts'
 import type { MoaCore } from './index.ts'
@@ -336,6 +337,10 @@ export function createAcceptanceJudge(
         const act = settings.acceptance.enabled === true
         const shadow = !act && settings.acceptance.shadow === true
         if (!act && !shadow) return
+        // Subagent scope: never judge a spawned agent's turns — they are not
+        // moa-routed, and their answers are instruments of the main
+        // conversation, not cascade output (see agent-scope.ts).
+        if (isSubagentAgent(payload.agent)) return
         const captured = capture(payload)
         if (captured === undefined || captured.snap.fromTier < 0) return
         const eligible = isEscalatable(captured.snap, captured.effectFree)

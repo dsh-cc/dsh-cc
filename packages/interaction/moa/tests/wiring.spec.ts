@@ -285,3 +285,42 @@ describe('rig sanity', () => {
     expect(BOOT_PAIR).toEqual({ provider: 'mock', model: 'mock' })
   })
 })
+
+describe('moa wiring (apply) — subagent scope', () => {
+  /** Fire one mounted listener (request or pre-step) with an explicit payload. */
+  const mounted = (rig: ReturnType<typeof makeLateCtx>, event: string): ((payload: unknown, next: () => Promise<unknown>) => Promise<unknown>) =>
+    rig.listeners.find((l) => l.event === event)?.fn as (payload: unknown, next: () => Promise<unknown>) => Promise<unknown>
+
+  it('a subagent request through the apply-mounted router disarms nothing and consumes no root turn', async () => {
+    resetMoaCore()
+    const rig = makeLateCtx()
+    apply(rig.ctx as never)
+    rig.arrive({ moa: { enabled: true } }, healthyRoutes)
+    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+
+    const request = mounted(rig, 'agent/request')
+    const capture = mounted(rig, 'agent/pre-step')
+    const next = async (): Promise<unknown> => ({ provider: 'mock', model: 'mock', messages: [] })
+    const rootAgent = { session: { requestHeader: () => ({ config: { ...BOOT_PAIR } }) }, inject: () => {} }
+    // The child reports a FOREIGN pair — an unguarded child request would
+    // observe it and disarm the machine for the rest of the session.
+    const subAgent = {
+      session: { header: { origin: 'subagent' }, requestHeader: () => ({ config: { provider: 'foreign', model: 'child-model' } }) },
+      inject: () => {},
+    }
+    const childResolved = (await request({ agent: subAgent, turn: 1, step: 1, signal: new AbortController().signal }, next)) as {
+      model?: string
+    }
+    expect(childResolved.model).toBe('mock') // passthrough, no override
+    expect(getMoaCore().arming.isArmed()).toBe(true) // foreign pair NOT observed
+    expect(rig.warnings).toEqual([]) // no classify attempt fired for the child
+
+    // The root's own turn-1 request is still a NEW turn (the child's
+    // same-numbered request did not consume it) and reaches judge-backend
+    // resolution — which, with no llm-pi-ai user section in this rig,
+    // fail-opens with the warn-once backend row.
+    await capture({ turn: 1, messages: [{ role: 'user', content: [{ type: 'text', text: 'root prompt' }], source: { kind: 'user' } }] }, async () => ({}))
+    await request({ agent: rootAgent, turn: 1, step: 1, signal: new AbortController().signal }, next)
+    expect(rig.warnings.some((w) => w.includes('no System One backend'))).toBe(true)
+  })
+})
