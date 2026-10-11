@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { SkillDefinition } from '@deepseek-ai/dsh-skill'
 import { parsePluginManifest } from '../src/manifest.ts'
@@ -64,6 +65,86 @@ describe('mountSkills', () => {
         subagentsPresent: true,
       })
       expect(tally.result().failed).toBe(1)
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('falls back to the frontmatter name when the skill root basename is not a valid registry name', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      // A versioned plugin install directory: `"skills": ["./"]` makes the
+      // plugin root itself the skill directory, so the directory-derived name
+      // is the version, `3.1.0`. Frontmatter mirrors a real single-skill
+      // release: block-scalar description plus unknown license/metadata keys.
+      await writeFileAt(root, '3.1.0/SKILL.md', [
+        '---',
+        'name: prose-cleanup',
+        'description: |',
+        '  Rewrite AI-sounding text so it reads like the writer without changing',
+        '  what it says.',
+        'license: MIT',
+        'metadata:',
+        '  version: "3.1.0"',
+        '---',
+        '',
+        'Rewrite AI-sounding text so it reads like the writer.',
+      ].join('\n'))
+      const defs: SkillDefinition[] = []
+      const ctx = makeContext()
+      const { tally } = await mountSkills({
+        ctx,
+        pluginRoot: join(root, '3.1.0'),
+        manifest: manifest({ skills: ['./'] }),
+        skills: { register: (d) => { defs.push(d as unknown as SkillDefinition); return () => {} } },
+        subagentsPresent: true,
+      })
+      expect(tally.result().failed).toBe(0)
+      expect(tally.result().loaded).toBe(1)
+      expect(defs.map(def => def.name)).toEqual(['prose-cleanup'])
+      expect(defs[0]?.description).toContain('Rewrite AI-sounding text')
+      expect(defs[0]?.content).toContain('Rewrite AI-sounding text')
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('falls back to the frontmatter name for a non-kebab skill directory', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, 'My_Skill/SKILL.md', ['---', 'name: my-skill', 'description: x', '---', '', 'Body.'].join('\n'))
+      const defs: SkillDefinition[] = []
+      const ctx = makeContext()
+      const { tally } = await mountSkills({
+        ctx,
+        pluginRoot: root,
+        manifest: manifest({ skills: ['./My_Skill'] }),
+        skills: { register: (d) => { defs.push(d as unknown as SkillDefinition); return () => {} } },
+        subagentsPresent: true,
+      })
+      expect(tally.result().loaded).toBe(1)
+      expect(defs.map(def => def.name)).toEqual(['my-skill'])
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('still fails a root skill with no valid name in the directory or the frontmatter', async () => {
+    const { root, dispose } = await tempPluginRoot()
+    try {
+      await writeFileAt(root, '3.1.0/SKILL.md', ['---', 'description: x', '---', '', 'Body.'].join('\n'))
+      const ctx = makeContext()
+      const { tally } = await mountSkills({
+        ctx,
+        pluginRoot: join(root, '3.1.0'),
+        manifest: manifest({ skills: ['./'] }),
+        skills: { register: () => () => {} },
+        subagentsPresent: true,
+      })
+      const result = tally.result()
+      expect(result.failed).toBe(1)
+      expect(result.reasons[0]).toContain('3.1.0')
+      expect(result.reasons[0]).toContain('absent')
     } finally {
       await dispose()
     }
