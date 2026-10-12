@@ -170,8 +170,14 @@ describe('sanitizer wiring (§7.2 static pins)', () => {
   }
 
   it('tui driver withSelection co-locates the sanitizer', () => {
-    const file = join(HERE, '../../../ui/tui/src/harness/driver.ts')
-    assertColocated(file, readFileSync(file, 'utf8'))
+    // driver.ts (at the 500-line size cap) delegates to a wiring helper; the
+    // co-location pin therefore targets the helper, plus the driver using it.
+    const driver = join(HERE, '../../../ui/tui/src/harness/driver.ts')
+    const driverSource = readFileSync(driver, 'utf8')
+    expect(driverSource, 'driver.ts delegates to the co-located wiring helper').toContain('installModelSelectionWithSanitizer(agentCtx, selection)')
+    const wiring = join(HERE, '../../../ui/tui/src/harness/model-selection-wiring.ts')
+    const wiringSource = readFileSync(wiring, 'utf8')
+    assertColocated(wiring, wiringSource)
   })
 
   it('acp model-control install co-locates the sanitizer', () => {

@@ -7,9 +7,9 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { installModelSelection, type Agent, type AgentHandle, type AgentSetup, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import { type Agent, type AgentHandle, type AgentSetup, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { installModelSelectionSanitizer } from '@dsh-cc/moa/sanitizer'
+import { installModelSelectionWithSanitizer } from './model-selection-wiring.ts'
 import { composePreset } from './preset.ts'
 import { bootBannerRows } from './boot-banner.ts'
 import { createSessionsSection } from './driver-sessions.ts'
@@ -101,11 +101,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const presetSetup = composition.setup
   const withSelection: AgentSetup = async (agentCtx, agent) => {
     if (presetSetup !== undefined) await presetSetup(agentCtx, agent)
-    installModelSelection(agentCtx, selection)
-    // Co-located sanitizer (effective-model-truth §5.1): later-with-prepend →
-    // outermost agent/pre-step listener; drops phantom model-selection notices
-    // while moa overlays the boot selection.
-    installModelSelectionSanitizer(agentCtx, selection)
+    installModelSelectionWithSanitizer(agentCtx, selection)
   }
 
   const agentOptions = config.provider !== undefined && config.model !== undefined
