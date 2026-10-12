@@ -15,9 +15,10 @@
  * classification entirely and apply the live origin-seq tier floor (§3.4).
  *
  * §6 precedence: the arming machine observes the LIVE pre-override request
- * pair (session request header, which moa never writes) FIRST; a disarmed
- * machine (explicit `/model` this session) means zero override — including
- * for `moa-escalation` openings (explicit /model > moa overlay).
+ * pair (post-`next()` resolved config, always BEFORE the `withTier` overlay
+ * — via `observeLiveSelection`, see runtime-state.ts); a disarmed machine
+ * (explicit `/model` this session) means zero override — including for
+ * `moa-escalation` openings (explicit /model > moa overlay).
  *
  * All failures fail-open to the live selection: the listener never throws,
  * and the System One result is validated structurally (error-finish, empty
@@ -35,6 +36,7 @@ import { capMiddleToTokenBudget, systemoneDecide } from '@dsh-cc/systemone'
 import { resolveJudgeRoute } from './judge-route.ts'
 import { isSubagentAgent } from './agent-scope.ts'
 import { moaNoticeSource } from './provenance.ts'
+import { observeLiveSelection, pairOf } from './runtime-state.ts'
 import { isMoaEscalationMessage } from './state.ts'
 import { TIER_ALIASES, tierAt } from './tiers.ts'
 import type { MoaCore, MoaSettings } from './index.ts'
@@ -149,8 +151,6 @@ export function createRequestRouter(
   // turn-change trigger; `turnTier` holds the whole-turn override.
   let lastSeenTurn: number | undefined
   let turnTier: { turn: number; tier: number } | undefined
-  /** The provider/model pair moa last applied (arming self-feedback guard). */
-  let lastAppliedPair: { provider: string; model: string } | undefined
   const effortCache = new Map<string, readonly string[] | undefined>()
   /** (provider, model, effort) triples already warned about (§3.2 warn-once). */
   const effortWarned = new Set<string>()
@@ -216,7 +216,6 @@ export function createRequestRouter(
     if (route === undefined) return resolved
     const provider = route.provider as string
     const model = route.model as string
-    lastAppliedPair = { provider, model }
     const carried = (resolved as { reasoningEffort?: unknown }).reasoningEffort
     if (typeof carried !== 'string' || carried.length === 0) {
       return { ...resolved, provider, model }
@@ -342,21 +341,6 @@ export function createRequestRouter(
     }
     // Genuine-user gate: classify only genuine user turns.
     if (opening.source?.kind !== 'user') return undefined
-    // §6 R6 pin: observe the LIVE pre-override pair FIRST. The session
-    // request header is the user/boot selection — EXCEPT that the harness
-    // re-stamps the header from the previous request's RESOLVED config, so
-    // our own overlay pair shows up there next turn (self-feedback). When
-    // the header pair is exactly what moa applied last, skip the observe:
-    // it carries no user intent, and observing it would disarm the machine.
-    const header = requestHeaderOf(payload.agent)
-    if (
-      lastAppliedPair === undefined ||
-      header === undefined ||
-      header.provider !== lastAppliedPair.provider ||
-      header.model !== lastAppliedPair.model
-    ) {
-      arming.observeRequestModel({ provider: header?.provider, model: header?.model })
-    }
     if (!opts.validation.ok) opts.ensureArmed?.()
     if (!arming.isArmed() || !opts.validation.ok) return undefined
     const decided = await classifyOnce(payload, opening)
@@ -366,8 +350,15 @@ export function createRequestRouter(
   return {
     tierFor: (turnId: number) => (turnTier !== undefined && turnTier.turn === turnId ? turnTier.tier : undefined),
     listener: async (payload, next) => {
-      // Fast bail: the §3.1 zero-overhead default-off contract.
-      if (!core.readSettings().enabled) return next()
+      // Fast bail: the §3.1 zero-overhead default-off contract — still zero
+      // classification and zero overlay, but the boot baseline is ALWAYS
+      // captured (effective-model-truth §5.2 part 1; ship-dark sessions that
+      // later enable share one baseline).
+      if (!core.readSettings().enabled) {
+        const resolved = await next()
+        if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved))
+        return resolved
+      }
       // Subagent scope: moa routes the main conversation only. A spawned
       // agent's model comes from its declared alias (resolved by the spawn
       // path into agentOptions), so its requests pass through unclassified
@@ -384,20 +375,33 @@ export function createRequestRouter(
         const decision = await decide(payload)
         if (decision !== undefined) turnTier = { turn: payload.turn, tier: decision.tier }
         const resolved = await next()
+        // Always-on arming observe (effective-model-truth §5.2 part 3): the
+        // resolved pair is PRE-overlay by construction (withTier runs strictly
+        // after), so the old header self-feedback trap is structurally
+        // impossible. Idempotent; every request.
+        observeLiveSelection(pairOf(resolved))
+        if (!arming.isArmed() || !opts.validation.ok) return resolved
         const applied =
           decision === undefined ? resolved : await withTier(resolved, decision.tier, payload.signal)
         // Status row queued (delivered at the next pre-step decision, see
         // pendingRows): mid-waterfall inject is NOT used — it wakes a
         // continuation turn and breaks the P3a firings==steps contract.
-        if (decision !== undefined && !decision.suppressRow) queueNotice(decision.row, decision.tier)
+        if (decision !== undefined && !decision.suppressRow) {
+          // Row upgrade (effective-model-truth §5.3 queueRow format): the
+          // effective model id rides along as TEXT only in PR-1.
+          const routeModel = tierRoute(decision.tier)?.model
+          queueNotice(routeModel === undefined ? decision.row : `${decision.row} (${routeModel})`, decision.tier)
+        }
         return applied
       }
+      const resolved = await next()
+      observeLiveSelection(pairOf(resolved))
+      if (!arming.isArmed() || !opts.validation.ok) return resolved
       if (turnTier !== undefined && turnTier.turn === payload.turn) {
         // P1: every step of a classified turn carries the override.
-        const resolved = await next()
         return withTier(resolved, turnTier.tier, payload.signal)
       }
-      return next()
+      return resolved
     },
     // Pre-step delivery for queued status rows: appended to the decision's
     // messages (mcpReadyNotice.ts:161 precedent — form 'notice' + summary),

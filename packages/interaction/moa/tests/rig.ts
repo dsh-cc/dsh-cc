@@ -11,6 +11,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
 import { createOpeningCapture } from '../src/capture.ts'
+import { setRuntimeCore } from '../src/runtime-state.ts'
 import { createRequestRouter, type ArmingValidation, type RequestPayload, type RouterDeps } from '../src/router.ts'
 import { textOf } from '../src/router.ts'
 
@@ -77,6 +78,9 @@ export function makeRig(options: RigOptions = {}): Rig {
     bookkeeping: new EscalationBookkeeping(),
   }
   core.arming.arm()
+  // The router observes through the shared runtime-state singletons; point
+  // them at THIS rig's machine/validation (apply() does this in production).
+  setRuntimeCore({ arming: core.arming, validation: options.validation ?? { ok: true } })
   const capture = createOpeningCapture()
   const classifyStates: string[] = []
   const classifyModels: string[] = []
@@ -155,8 +159,11 @@ export function makeRig(options: RigOptions = {}): Rig {
       signal: new AbortController().signal,
       ...((pair === undefined ? {} : { headerPairOverride: pair }) as never),
     }),
+    // Fake "resolved config": the pre-overlay selection, i.e. the header pair
+    // (matches the real harness, where the resolved config carries the
+    // selection until moa's withTier overrides AFTER the observe).
     next: async () =>
-      ({ provider: 'mock', model: 'mock', messages: [], reasoningEffort: 'max' }) as unknown as LlmCallConfig,
+      ({ provider: headerPair.provider, model: headerPair.model, messages: [], reasoningEffort: 'max' }) as unknown as LlmCallConfig,
     setHeaderPair: (pair) => {
       headerPair = pair
     },

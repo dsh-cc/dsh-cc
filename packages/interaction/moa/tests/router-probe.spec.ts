@@ -24,6 +24,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { createOpeningCapture } from '../src/capture.ts'
 import { createRequestRouter, textOf, type RouterDeps } from '../src/router.ts'
+import { setRuntimeCore } from '../src/runtime-state.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore } from '../src/index.ts'
 import { GAUGE_ROUTE, noticeOpening, routes as tierRoutes, userOpening } from './rig.ts'
 
@@ -74,6 +75,9 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
     bookkeeping: new EscalationBookkeeping(),
   }
   core.arming.arm()
+  // Production parity: the router observes via the shared runtime-state
+  // singletons (apply() populates them; the rig mirrors that here).
+  setRuntimeCore({ arming: core.arming, validation: { ok: true } })
   const capture = createOpeningCapture()
   agent.ctx.on('agent/pre-step', capture.listener as never)
 

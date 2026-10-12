@@ -8,6 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionConfigOption, SessionConfigValueId } from '@agentclientprotocol/sdk'
 import { installModelSelection, type ModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, type LlmCallConfig, type LlmRuntime } from '@deepseek-ai/dsh-llm'
+import { installModelSelectionSanitizer } from '@dsh-cc/moa/sanitizer'
 
 const MODEL_CONFIG_ID = 'model'
 const REASONING_CONFIG_ID = 'reasoning_effort'
@@ -61,6 +62,10 @@ export class AcpModelControl {
    */
   install(agentCtx: Context): void {
     installModelSelection(agentCtx, this.selection)
+    // Co-located sanitizer (effective-model-truth §5.1): later-with-prepend →
+    // outermost agent/pre-step listener; drops phantom model-selection notices
+    // while moa overlays the boot selection.
+    installModelSelectionSanitizer(agentCtx, this.selection)
   }
 
   /**

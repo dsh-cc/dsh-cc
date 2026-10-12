@@ -14,12 +14,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import { createRequestRouter, validateArming, type RouterDeps } from '../src/router.ts'
+import { resetRuntimeCore } from '../src/runtime-state.ts'
 import { MOA_MODEL_CONTEXT_WINDOWS } from '../src/judge-route.ts'
 import { escalationOpening, makeRig, noticeOpening, routes as tierRoutes, userOpening, type Rig } from './rig.ts'
 
 const dirs: string[] = []
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  resetRuntimeCore()
 })
 
 function tempDir(): string {
@@ -97,7 +99,8 @@ describe('moa router mechanism', () => {
     // (the rig's fake next() carries reasoningEffort 'max' and no efforts
     // resolver → the carried effort degrades and queues its own notice).
     expect(decision.messages).toHaveLength(2)
-    expect(decision.messages.some((m) => m.source.kind === 'moa' && (m.source as { summary?: string }).summary === 'moa: routed → draft')).toBe(true)
+    // Row upgrade (§5.3 queueRow format): the effective model id rides along.
+    expect(decision.messages.some((m) => m.source.kind === 'moa' && (m.source as { summary?: string }).summary === 'moa: routed → draft (tier-draft)')).toBe(true)
     expect(decision.messages.every((m) => m.source.kind === 'moa' && m.source.form === 'notice')).toBe(true)
   })
 
@@ -113,21 +116,34 @@ describe('moa router mechanism', () => {
     expect(typeof rows[0].latencyMs).toBe('number')
   })
 
-  it('R6: explicit /model this session → zero override (disarmed); /model back to boot default → re-armed', async () => {
+  it('R6 (PR-1 shape): explicit /model → zero override (disarmed); back to boot default re-arms', async () => {
+    // PR-1 sequencing (effective-model-truth §5.2): classification still runs
+    // at decide() BEFORE the post-`next()` observe, so on THIS rig (no
+    // sanitizer pre-step publish) a switch turn is classified once and then
+    // NOT applied, and the return-to-boot turn re-arms at the observe without
+    // overlaying until the NEXT turn. With the sanitizer installed
+    // (production), the pre-step observe disarms/re-arms BEFORE classify, so
+    // neither lag exists there.
     const rig = makeRig()
-    // Turn 1 at the boot default: observe → armed, classify, override.
+    // Turn 1 at the boot default: armed, classify, override.
     await rig.seedCapture(1, [userOpening('first')])
     expect((await fire(rig, 1, 1)).model).toBe('tier-draft')
-    // Turn 2 with an explicit /model pair: machine disarms → pass-through.
+    // Turn 2 with an explicit /model pair: classified (PR-1 artifact), then
+    // the observe disarms → pass-through, zero override.
     rig.setHeaderPair({ provider: 'mock', model: 'custom-model' })
     await rig.seedCapture(2, [userOpening('second')])
-    expect((await fire(rig, 2, 1)).model).toBe('mock') // zero override
-    expect(rig.classifyStates).toHaveLength(1) // no classify while disarmed
-    // Turn 3 back at the boot default: re-arms (§3.1 row 4).
+    expect((await fire(rig, 2, 1)).model).toBe('custom-model') // zero override
+    expect(rig.classifyStates).toHaveLength(2) // PR-1: the switch turn still classified
+    // Turn 3 back at the boot default: the observe re-arms (§3.1 row 4) but
+    // the transition turn itself runs unoverlaid (no sanitizer pre-step here).
     rig.setHeaderPair({ provider: 'mock', model: 'mock' })
     await rig.seedCapture(3, [userOpening('third')])
-    expect((await fire(rig, 3, 1)).model).toBe('tier-draft')
-    expect(rig.classifyStates).toHaveLength(2)
+    expect((await fire(rig, 3, 1)).model).toBe('mock')
+    expect(rig.classifyStates).toHaveLength(2) // disarmed → no classify
+    // Turn 4: re-armed → overlay again.
+    await rig.seedCapture(4, [userOpening('fourth')])
+    expect((await fire(rig, 4, 1)).model).toBe('tier-draft')
+    expect(rig.classifyStates).toHaveLength(3)
   })
 
   it('retry-turn routing contract: moa-escalation opening → skip classify + live floor override; disarmed → pass through', async () => {
@@ -154,6 +170,7 @@ describe('moa router mechanism', () => {
     // §6 adjudication: an explicit /model (disarmed) passes through even for
     // moa-escalation openings — classify still skipped.
     const disarmed = makeRig()
+    disarmed.core.arming.noteBootPair({ provider: 'mock', model: 'mock' })
     disarmed.core.arming.observeRequestModel({ provider: 'mock', model: 'mock' })
     disarmed.core.arming.observeRequestModel({ provider: 'mock', model: 'custom' }) // explicit /model
     disarmed.core.bookkeeping.recordFloor(5, 2)

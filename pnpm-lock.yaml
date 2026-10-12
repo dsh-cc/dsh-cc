@@ -58,6 +58,9 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: 1.4.0
         version: 1.4.0(zod@4.5.4)
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../../interaction/moa
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis

@@ -53,19 +53,31 @@ export class ArmingMachine {
     if (this.reason === undefined) this.armed = true
   }
 
+  /**
+   * First-wins boot-baseline capture (effective-model-truth design §5.2
+   * part 1): the first non-undefined pair wins, never overwritten.
+   * UNCONDITIONAL — runs regardless of `moa.enabled` so a ship-dark session
+   * that later enables still shares one baseline. ALL captures go through
+   * this; `observeRequestModel` no longer assigns `bootDefault` itself.
+   */
+  noteBootPair(pair: RequestPair | undefined): void {
+    if (pair === undefined) return
+    if (this.bootDefault === undefined) this.bootDefault = { ...pair }
+  }
+
   /** Observe one genuine main-agent request model (pre-override). */
   observeRequestModel(pair: RequestPair): void {
     if (!this.isEnabled()) return
-    // Hot-reload row: enabled flipped true at runtime → arm from this turn.
+    // Hot-reload row: enabled flipped true at runtime → arm from this turn,
+    // then FALL THROUGH to the boot-default comparison below (an early
+    // return would let a hot-enabled machine observe an off-boot pair
+    // without ever disarming — round-5 finding).
     if (!this.armed && this.reason === undefined) {
       this.armed = true
-      this.bootDefault = { ...pair }
-      return
     }
-    if (this.bootDefault === undefined) {
-      this.bootDefault = { ...pair }
-      return
-    }
+    // Defensive guard (round-5): the baseline is set exclusively via
+    // `noteBootPair`; an undefined one must not crash the comparison.
+    if (this.bootDefault === undefined) return
     if (same(pair, this.bootDefault)) {
       if (this.reason !== undefined) {
         // /model back to boot default: the user explicitly returned to

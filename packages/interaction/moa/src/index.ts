@@ -15,11 +15,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
 import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { readUserSection } from '@dsh-cc/settings-ns'
+import { isSubagentAgent } from './agent-scope.ts'
 import { ArmingMachine } from './arming.ts'
 import { createOpeningCapture } from './capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from './judge.ts'
 import { createRequestRouter, validateArming, type ArmingValidation, type EnsureArmed, type RequestRouter, type RouterDeps } from './router.ts'
 import { registerSettings, type MoaSettings } from './settings.ts'
+import { observeLiveSelection, readPublishedSelection, resetRuntimeCore, setRuntimeCore } from './runtime-state.ts'
 import { EscalationBookkeeping } from './state.ts'
 
 export { SETTINGS_NAMESPACE, DEFAULT_MOA_SETTINGS, MAX_ESCALATIONS_CEILING, registerSettings, type MoaSettings, type JudgeRouteObject, type JudgeRouteSetting } from './settings.ts'
@@ -64,6 +66,7 @@ export function getMoaCore(): MoaCore {
 /** Test seam: drop the singleton (between tests / on hot reload). */
 export function resetMoaCore(): void {
   core = undefined
+  resetRuntimeCore()
 }
 
 /** Cordis plugin id. */
@@ -106,6 +109,9 @@ export function apply(ctx: Context): void {
   const arming = new ArmingMachine(() => read().enabled)
   const validation: ArmingValidation = { ok: false, reason: 'moa disabled' }
   core = { readSettings: read, arming, bookkeeping: new EscalationBookkeeping(), armingValidation: validation }
+  // Shared runtime state (effective-model-truth §5.2): the sanitizer's
+  // accessors read these singletons without importing the apply() path.
+  setRuntimeCore({ arming, validation })
 
   /**
    * Arm + validate until it succeeds. Every not-yet-ok state is retryable:
@@ -155,7 +161,21 @@ export function apply(ctx: Context): void {
 
   const capture = createOpeningCapture()
   liveCapture = capture
-  ctx.on('agent/pre-step', capture.listener as never)
+  // First-registered moa pre-step listener (the capture listener): observe
+  // the sanitizer's published FROZEN selection FIRST (effective-model-truth
+  // §5.2 part 2 — before anything else, subagent-guarded), then the mount-race
+  // ensureArmed retry. Listener order and the sanitizer's outermost
+  // `{ prepend: true }` registration (registered at agent creation, see
+  // driver.ts / model-control.ts) pin P-B.
+  const observeAndCapture = async (payload: { agent?: unknown }, next: () => Promise<unknown>): Promise<unknown> => {
+    if (!isSubagentAgent(payload.agent)) {
+      const live = readPublishedSelection(payload.agent)
+      if (live?.model !== undefined) observeLiveSelection(live)
+    }
+    if (!validation.ok) tryArm()
+    return capture.listener(payload as never, next)
+  }
+  ctx.on('agent/pre-step', observeAndCapture as never)
   const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps: buildDeps(ctx, capture.getCapturedOpening) })
   core.router = router
   ctx.on('agent/pre-step', router.preStepListener as never)

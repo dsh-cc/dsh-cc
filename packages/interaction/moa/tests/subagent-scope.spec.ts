@@ -127,7 +127,7 @@ describe('moa subagent scope (router)', () => {
     await rig.seedCapture(3, [userOpening('root turn three')])
     const root = (await rig.router.listener(rig.payload(3, 1), rig.next)) as { model?: string }
     expect(rig.core.arming.isArmed()).toBe(false)
-    expect(root.model).toBe('mock') // zero override while disarmed
+    expect(root.model).toBe('child-model') // zero override while disarmed (pass-through = the resolved pair)
   })
 
   it('root regression: an agent whose session header carries no origin still routes', async () => {
