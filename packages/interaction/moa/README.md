@@ -19,3 +19,22 @@ costs nothing. Subagents/forks are never overlaid.
 | `judge-route` | alias `gauge` | alias or `{provider, model, protocol}`; unset → the `gauge` lane alias (must resolve to a System One route, else moa stays unarmed) |
 | `classify-budget-tokens` | `4000` | classify input budget |
 | `call-budget-ms` | `8000` | per-message cascade deadline |
+
+## Truthful model bookkeeping
+
+While moa overlays a tier on the boot selection, two things would otherwise
+lie about which model is serving the session:
+
+- **Phantom notices filtered.** The harness re-emits
+  `[model changed: …]` notices on nearly every step under the overlay,
+  claiming a continuation model the overlay will NOT serve. A co-located
+  sanitizer (`@dsh-cc/moa/sanitizer`, registered right after the harness's
+  `installModelSelection` in the TUI driver and the ACP model control) drops
+  exactly those rows: only when the overlay is active on the boot selection.
+  Every other state — moa disabled, disarmed, validation-failed, or no moa at
+  all — passes harness notices through byte-identical.
+- **`/model` is honored under the overlay (escape hatch).** A mid-session
+  `/model` away from the boot selection disarms moa before the next turn is
+  classified: the wire serves your selection, no status row is emitted, and
+  switching back to the boot selection re-arms moa from the next turn.
+  Previously the switch was silently ignored while overlaid.
