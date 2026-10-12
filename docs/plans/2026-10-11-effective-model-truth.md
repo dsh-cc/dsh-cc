@@ -1,6 +1,6 @@
 # effective-model-truth — Make the Harness's Model Bookkeeping Match the Wire Under Per-Request Overlays
 
-Status: Design v4 (post round-3 review). Defect evidence live (2026-10-11, session `tui-5f6c2347`, §2); rounds 1–3 also surfaced and fixed a **pre-existing moa arming bug** (§5.2) and, in round 3, a **lifecycle error in this very document** (the step order is claim → assemble → pre-step → request, not pre-step → assemble — §5.3, source-verified) which drove the classification seam redesign. Round verdicts in §11. User has ratified the subpath host `@dsh-cc/moa/sanitizer`.
+Status: Design v5 (post round-4 review). Defect evidence live (2026-10-11, session `tui-5f6c2347`, §2); rounds 1–4 also surfaced and fixed a **pre-existing moa arming bug** (§5.2), a **lifecycle error in this document** (round 3: the step order is claim → assemble → pre-step → request — §2, source-verified) which drove the classification seam redesign, and a **frozen-snapshot window** (round 4: the sanitizer publishes `selection.assembled`, not `selection.current` — §5.1). Round verdicts in §11. User has ratified the subpath host `@dsh-cc/moa/sanitizer`.
 
 ## 1. Goal and scope
 
@@ -69,7 +69,7 @@ installModelSelectionSanitizer(agentCtx: Context, selection: ModelSelectionRef):
 
 ```
 preStep(payload, next):
-  publishLiveSelection(payload.agent, selection.current)   // BEFORE next(), subagent-guarded — inner listeners read it (§5.2)
+  publishLiveSelection(payload.agent, selection.assembled)  // BEFORE next(), subagent-guarded — the FROZEN snapshot for this step (see below); inner listeners read it (§5.2)
   const decision = await next()                            // inner chain, incl. moa's observe (may disarm/re-arm) + harness notice append
   if (decision === undefined || decision.kind === 'reject' || decision.messages === undefined) return decision
   const active = moaOverlayActive()                       // = validation.ok && arming.isArmed(); false (never throws) when the plugin is not applied
@@ -79,6 +79,8 @@ preStep(payload, next):
   if (!drop) return decision
   return { ...decision, messages: decision.messages.filter(m => m.source?.kind !== 'model-selection') }
 ```
+
+**The publish source is `selection.assembled`, deliberately NOT `selection.current`** (round-4 challenge, adopted). A `/model` switch whose async effort validation resolves mid-assembly (driver-pickers.ts `applyModelSwitch`) leaves `assembled` frozen on the pre-switch pair for that step; publishing `current` would disarm at pre-step (releasing a notice naming the frozen pair) while the request-time observe of the same frozen pair re-arms and overlays — a false notice plus an un-honored switch for one step. Publishing the frozen `assembled` makes the whole step self-consistent (persona variables, arming observes, and the request all read the same pair); the switch is adopted at the NEXT assembly, which is the harness's own documented snapshot semantics. The publish carries `selection.assembled.reasoningEffort` as well — it is the only source of the carried effort reachable from moa's assemble listener (§5.3).
 
 **Drop rule: `drop iff moa's overlay is active AND pair(selection.assembled) == the moa boot pair`; pass through otherwise.**
 
@@ -92,9 +94,9 @@ preStep(payload, next):
 
 **The bug (round-1 BLOCKER, code-verified).** `decide()` (`router.ts:339-356`) feeds `arming.observeRequestModel` the **stale session request header**, guarded by "skip the observe when `header == lastAppliedPair`". In the armed steady state the header always equals the overlay pair — `buildRequest` logs the post-overlay resolved config (`agent-loop/src/agent.ts:612-633` writes `request/header` after the waterfall), and `applyModelSwitch` writes ONLY the in-memory selection (`driver-pickers.ts:98-119`, no session append). So the guard skips the observe forever, `/model` never disarms moa while overlaid, and the user's explicit choice is silently overridden. This contradicts `arming.ts`'s own module doc ("this machine always sees the user's live selection (pre-override), never moa's own overlay").
 
-**Fix, part 1 — one unconditional boot baseline, with a specified caller.** The arming machine gains `noteBootPair(pair)` (first non-undefined pair wins; never overwritten; UNCONDITIONAL — runs regardless of `moa.enabled`). A shared helper `observeLiveSelection(pair)` = `noteBootPair(pair); if (isEnabled()) observeRequestModel(pair)` is called from exactly two places, both subagent-guarded: (a) moa's pre-step listener reading the sanitizer's published live selection (part 2), and (b) the request listener after `await next()` (part 3). The disabled fast-bail in every request-listener shape therefore becomes `const resolved = await next(); if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved)); return resolved` — still zero classification and zero overlay, but the baseline is always captured, including ship-dark sessions that later enable.
+**Fix, part 1 — one unconditional boot baseline, with specified callers, and no competing capture.** The arming machine gains `noteBootPair(pair)` (first non-undefined pair wins; never overwritten; UNCONDITIONAL — runs regardless of `moa.enabled`), and `observeRequestModel` LOSES its own two `bootDefault` assignments (`arming.ts:60-63` hot-reload row and `:65-67` first-observe row) — the hot-reload row now only sets `armed = true`; ALL captures go through `noteBootPair` (otherwise the observe would clobber a previously noted baseline, round-4 finding). A shared helper `observeLiveSelection(pair)` = `noteBootPair(pair); if (isEnabled()) observeRequestModel(pair)` is called from exactly three places, all subagent-guarded: (a) moa's pre-step listener reading the sanitizer's published frozen selection (part 2), (b) the request listener after `await next()` (part 3), and (c) moa's assemble listener, which notes the harness-written selection variables BEFORE evaluating its gate (§5.3) — this is what keeps the session's very FIRST assembly from failing on an undefined boot pair (round-4 finding: both other callers run after the first assembly). The disabled fast-bail in every request-listener shape therefore becomes `const resolved = await next(); if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved)); return resolved` — still zero classification and zero overlay, but the baseline is always captured, including ship-dark sessions that later enable.
 
-**Fix, part 2 — observe the live selection at pre-step, before anything else.** The sanitizer's outer pre-step half publishes `selection.current`'s pair into the shared moa runtime state BEFORE `next()`; moa's `agent/pre-step` listener then does, as its FIRST act (subagent-guarded before touching shared state):
+**Fix, part 2 — observe the step's frozen selection at pre-step, before anything else.** The sanitizer's outer pre-step half publishes `selection.assembled`'s pair (+ its `reasoningEffort`) into the shared moa runtime state BEFORE `next()`; moa's `agent/pre-step` listener then does, as its FIRST act (subagent-guarded before touching shared state):
 
 ```
 if (!isSubagentAgent(payload.agent)) {
@@ -104,7 +106,7 @@ if (!isSubagentAgent(payload.agent)) {
 if (!opts.validation.ok) opts.ensureArmed?.()            // per-firing retry for the mount race (index.ts:117-154)
 ```
 
-This makes arming transitions visible before classification: switch-away disarms before any classify; switch-back re-arms before any classify.
+Because the published pair is the frozen `selection.assembled` (§5.1), the pre-step observe and the request-time observe see the SAME pair — no disarm/re-arm churn within a step, and a mid-assembly `/model` cannot flip the machine underneath the step (round-4 challenge, adopted). Arming transitions are still visible before classification: a switch that landed before this step's assembly refreshes `assembled` at :272, so the pre-step observe sees it.
 
 **Fix, part 3 — delete the header observe; keep a request-time observe as the always-on guarantee.** Remove the header read and the self-feedback guard from `decide()`. In the `agent/request` listener, after `await next()` and BEFORE `withTier`, on EVERY request (idempotent): `if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved))`. The observed pair is pre-overlay by construction (moa applies `withTier` strictly after), so the old self-feedback trap is structurally impossible. Retained because it keeps the arming truth correct in deployments without the sanitizer.
 
@@ -137,19 +139,25 @@ The moa-escalation retry path in classification keeps its `if (!arming.isArmed()
 const assembled = await next()
 const agent = context.agent                                  // absent on diagnostic assemblies → fail-open below
 const selectionVars = pairOf(assembled.variables)            // the harness's just-written selection pair
+if (agent !== undefined && !isSubagentAgent(agent) && selectionVars !== undefined) noteBootPair(selectionVars)  // FIRST (round-4: before the gate; the session's first assembly)
+if (!opts.validation.ok) opts.ensureArmed?.()               // BEFORE the gate (round-4: recovery must precede the validation check)
 const gate =
   core.readSettings().enabled && opts.validation.ok &&
   agent !== undefined && !isSubagentAgent(agent) &&
   selectionVars !== undefined && moaBootDefault() !== undefined && sameFields(selectionVars, moaBootDefault())
 if (!gate) return assembled                                  // fail-open: persona states the selection
-const tier = await tierForTurn(contextTurn)                  // sticky per turn; classifies (System One, bounded by call-budget-ms) on the turn's first assemble; fail-open → undefined
+const turn = currentClaimedTurn()                            // the LAST turn seen by the agent/inbox/claimed listener (round-4: AssembleContext has no turn field — scope/signal/agent only)
+const { tier, classifiedNow, suppressRow } = await tierForTurn(turn)   // sticky per turn; classifies (System One, bounded by call-budget-ms) on the turn's first assembly; fail-open → tier undefined
 if (tier === undefined) return assembled                     // classification failed → persona states the selection, request clause 6 serves it — consistent
-queueRow(`moa: routed → ${TIER_ALIASES[tier]} (${tierPair.model})`, tier)   // delivered at the pre-step splice immediately following this assembly — the SAME step the overlay serves
-return { ...assembled, variables: { ...assembled.variables, ...tierRouteVariables(tier, carriedEffort) } }
+if (classifiedNow && !suppressRow) queueRow(`moa: routed → ${TIER_ALIASES[tier]} (${tierPair.model})`, tier)   // round-4: once per routing decision; escalation retries keep their suppression
+return { ...assembled, variables: { ...assembled.variables, ...tierRouteVariables(tier, publishedEffort) } }
 ```
 
+- `currentClaimedTurn()` reads the shared runtime state, updated by the `agent/inbox/claimed` listener (whose payload carries `turn` and which provably precedes the assembly it feeds). Agent-bearing assemblies not tied to a step (diagnostics) simply re-derive the last-claimed turn — a benign rewrite, since `tierForTurn` is sticky. The turn source must be subagent-guarded on write.
+- `publishedEffort` is the effort half of the sanitizer's published frozen `selection.assembled` (§5.1) — the only reachable carried-effort source from the plugin's assemble listener, which holds no `ModelSelectionRef` (round-4 finding).
+- The escalation retry path inside `tierForTurn` uses the SAME gate condition (not a bare `arming.isArmed()` — at assemble time the machine may still reflect the previous step's state; `selectionVars == boot` is the operative invariant, round-4 finding) and preserves its `suppressRow` semantics.
 - **The gate is simultaneously the classify gate and the persona gate** — one condition, evaluated once, so the persona and the wire cannot disagree about WHETHER an overlay applies. `selectionVars == boot` implies the arming machine is (or is about to be re-) armed per the §3.1 truth table: the only disarm reason is a selection off the boot pair, and the pre-step observe (§5.2 part 2) formalizes the re-arm before the request's clause 5. On a switch-away step the harness variables already carry the new selection → gate false → no classify (no wasted call), persona = new selection = what clause 5 will serve.
-- `tierRouteVariables(tier, carriedEffort)` is a SHARED PURE helper extracted from `withTier`'s pair/effort computation: reads the effort cache read-only (no `resolveEfforts` at assemble — no signal), never queues notices. `carriedEffort` = `selection.assembled.reasoningEffort` (the harness writes only `provider`/`model` into variables — the effort lives on the snapshot). **On an effort-cache miss, still write the tier PAIR and omit the effort** (the pair is known synchronously; only the effort is uncertain) — the wire's `withTier` may still keep the effort after its own fetch; the resulting one-step effort-only divergence is a documented residual (§9).
+- `tierRouteVariables(tier, carriedEffort)` is a SHARED PURE helper extracted from `withTier`'s pair/effort computation: reads the effort cache read-only (no `resolveEfforts` at assemble — no signal), never queues notices. **On an effort-cache miss, still write the tier PAIR and omit the effort** (the pair is known synchronously; only the effort is uncertain) — the wire's `withTier` may still keep the effort after its own fetch; the resulting one-step effort-only divergence is a documented residual (§9).
 - Classification latency moves into the assemble waterfall — the SAME serial position it occupies today (inside the request waterfall at step 1): total step-1 latency is unchanged. Timeout/failure fails open: no tier → persona states the selection AND request clause 6 serves the selection — truthful both ways.
 - P3a: classification remains a hand-built side-query (no `sessionId`), never re-enters `agent/request`; firings == steps unchanged.
 - The pre-step listener reduces to: subagent bail → observe (§5.2 part 2) → `ensureArmed` → pendingRows splice (row delivery — now landing in the SAME step as the overlay, since the row is queued during assemble and spliced by the immediately following pre-step).
@@ -202,7 +210,7 @@ Extend the existing moa statusline channel (PR #233: `packages/ui/tui/src/harnes
 - Residuals (accepted, each bounded):
   - Switch-back transition notice: the re-armed state drops the harness's (true-for-one-turn) "→ boot" notice; the persona and statusline carry the truth.
   - Effort on a cold cache: the persona writes the tier pair but omits the effort while the wire's `withTier` may keep it — one step of pair-correct/effort-unequal divergence on the first request of a new tier pair.
-  - A `/model` landing between a step's assemble and its request: the persona reflects the pre-switch state for that one step; clause 5 already serves the new selection.
+  - A `/model` resolving mid-assembly (the frozen-snapshot window, §5.1): the switch is adopted at the NEXT assembly; during the gap the wire serves the frozen pair and the persona states the same frozen pair — the publish, both observes, the notice filter, and the request all read the frozen pair, so no false notice and no split surfaces (round-4 challenge folded into the publish design).
   - A future non-moa overlay gets no persona truth and no notice filtering unless it adopts the same boot-pair invariant.
   - Classification failure/timeout: persona states the selection and the wire serves the selection — truthful, but the turn runs unrouted (cost, not truth).
 
@@ -229,3 +237,13 @@ Extend the existing moa statusline channel (PR #233: `packages/ui/tui/src/harnes
 - codex MINOR (P-D still described the v2 un-routed transition turn) — folded; P-D now requires the transition turn to be classified and overlaid.
 - critic NIT (clause-5 "drop rows for this turn" has no mechanism) — folded: clear `pendingRows` explicitly (§5.2 clause 5).
 - User ratified the subpath host during round 3 (§5.5 updated).
+
+**Round 4 (v4 → v5).** codex NO-GO (adjudication CONFIRM; folds #1–#4 OK; 5 MAJOR + 1 MINOR), critic GWC (adjudication CONFIRM with its own source re-verification; 2 MAJOR + 1 NIT), grok NO-GO (adjudication CHALLENGE — accepted; folds #2–#5, #7 OK; fold #1 PROBLEM, fold #6 PROBLEM; 2 MAJOR + 1 MINOR). Adjudication of the challenge: grok identified a narrow real window — a `/model` whose async effort validation resolves during the assemble await leaves `selection.assembled` frozen on the pre-switch pair; publishing `selection.current` (v4) would disarm at pre-step, release a notice naming the frozen pair, then re-arm at the request's observe of the same frozen pair and overlay — one false notice plus an un-honored switch. ACCEPTED; the publish source is now the frozen `selection.assembled` (§5.1), which also resolves codex's MINOR (residual reworded, §9). The two CONFIRMs stand for the main ordering claim — the challenge refined a sub-case, not the ordering. Folds:
+
+- Baseline capture (codex M1 / grok fold-#1, both valid): `noteBootPair` now has THREE callers, the earliest being the assemble listener BEFORE its gate (the session's first assembly no longer fails on an undefined boot pair); `observeRequestModel` loses its own `bootDefault` assignments (grok: the hot-reload row would clobber the noted baseline — `arming.ts:60-63` assigned unconditionally).
+- `contextTurn` source (codex M4 / critic M1 / grok NEW MINOR — three-seat hit): the turn comes from runtime state updated by the `agent/inbox/claimed` listener (payload carries `turn`, precedes the assembly); `AssembleContext` has no turn field.
+- Row gating (codex M5 / critic M2 / grok NEW MAJOR-1 — three-seat hit): the row queues only on the turn's FIRST classification (`classifiedNow`), escalation retries keep `suppressRow`.
+- `ensureArmed` before the assemble gate (codex M3): recovery must precede the `validation.ok` check that the gate reads.
+- Retry floor gate (codex M2): the escalation-retry path uses the shared gate condition (`selectionVars == boot`), not a bare `isArmed()` that lags at assemble time.
+- `carriedEffort` source (grok fold-#6): the publish carries `selection.assembled.reasoningEffort` — the only reachable effort source from the plugin's assemble listener.
+- Verification provenance note (advisory, adopted): round-4 findings were adjudicated by lifecycle traces against the source-anchored ordering plus direct reads of `arming.ts`/`agent.ts`/`model-selection.ts`; no finding was accepted on the seat's word alone, and the one challenge was resolved by adopting the challenger's prescription rather than rebutting it.
