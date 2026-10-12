@@ -38,7 +38,19 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     maxJournalBytes: resolved.maxJournalBytes ?? 8_388_608,
     warn: message => ctx.logger.warn(message),
   })
-  const unregister = ctx.subagents.registerProvider(provider)
+  // Two standing preset mounts (agent.cordis.yml / agent.vwa.cordis.yml in packages/preset/cc/) run
+  // this apply() in one runtime and share the host-plane provider map; register-if-absent is
+  // load-bearing — the harness throws DUPLICATE_PROVIDER on a second registration of the same name.
+  // The getProvider check and registerProvider run back-to-back with no await so the guard stays atomic.
+  let unregister: (() => void) | undefined
+  const prior = ctx.subagents.getProvider(provider.name)
+  if (prior === undefined) {
+    unregister = ctx.subagents.registerProvider(provider)
+  } else if (prior instanceof CcWorkflowJournalProvider) {
+    ctx.logger.info('cc-workflow-journal: provider already registered by a sibling preset mount; reusing it')
+  } else {
+    ctx.logger.warn('cc-workflow-journal: provider name taken by a foreign provider; deferring')
+  }
   try {
     const { removed } = sweepExpiredSessionDirs(join(resolveDshHome(), 'workflows', 'runs'), resolved.sweepTtlMs ?? 86_400_000)
     if (removed.length > 0) ctx.logger.info(`cc-workflow-journal: swept ${removed.length} expired session journal director${removed.length === 1 ? 'y' : 'ies'}`)
@@ -46,7 +58,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     ctx.logger.warn(`cc-workflow-journal: boot sweep failed: ${String(error)}`)
   }
   return () => {
-    unregister()
+    unregister?.()
     return provider.disposeAllJournals().catch(error => {
       ctx.logger.warn(`cc-workflow-journal: journal disposal failed: ${String(error)}`)
     })
