@@ -93,16 +93,18 @@ export function tierFor(turnId: number): number | undefined {
   return turnTier !== undefined && turnTier.turn === turnId ? turnTier.tier : undefined
 }
 
-/** Queued status rows, delivered by the next main-agent pre-step (§3.1). */
-const pendingRows: { text: string; tier?: number }[] = []
+/** Queued status rows, delivered by the next main-agent pre-step (§3.1).
+ * `model` (when present) is the effective model id the overlay resolves to
+ * (effective-model-truth §5.4 — carried on the notice source). */
+const pendingRows: { text: string; tier?: number; model?: string }[] = []
 
 /** Queue one status row (called from the assemble waterfall). */
-export function queueMoaRow(text: string, tier?: number): void {
-  pendingRows.push({ text, ...(tier === undefined ? {} : { tier }) })
+export function queueMoaRow(text: string, tier?: number, model?: string): void {
+  pendingRows.push({ text, ...(tier === undefined ? {} : { tier }), ...(model === undefined ? {} : { model }) })
 }
 
 /** Drain the queued rows (the pre-step splice). */
-export function spliceMoaRows(): { text: string; tier?: number }[] {
+export function spliceMoaRows(): { text: string; tier?: number; model?: string }[] {
   return pendingRows.splice(0)
 }
 

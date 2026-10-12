@@ -426,6 +426,7 @@ export function createRequestRouter(
             ? `moa: routed → ${TIER_ALIASES[decision.tier]}`
             : `moa: routed → ${TIER_ALIASES[decision.tier]} (${pair.model})`,
           decision.tier,
+          pair?.model,
         )
       }
       // Persona writes provider/model ONLY — never effort (§5.3, round-5).
@@ -452,7 +453,7 @@ export function createRequestRouter(
         messages: [
           ...shape.messages,
           ...rows.map((row) =>
-            createUserMessage({ content: [{ type: 'text', text: row.text }], source: moaNoticeSource(row.text, row.tier) }),
+            createUserMessage({ content: [{ type: 'text', text: row.text }], source: moaNoticeSource(row.text, row.tier, row.model) }),
           ),
         ],
       }

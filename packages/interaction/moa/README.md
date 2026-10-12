@@ -38,3 +38,15 @@ lie about which model is serving the session:
   classified: the wire serves your selection, no status row is emitted, and
   switching back to the boot selection re-arms moa from the next turn.
   Previously the switch was silently ignored while overlaid.
+- **Persona states the effective model.** The moa assemble listener rewrites
+  the system-prompt `provider`/`model` variables to the resolved tier pair
+  (never an effort field) whenever the overlay applies; on any fail-open
+  (classification failure/timeout, off-boot selection, disabled) the
+  harness's own selection variables pass through untouched — the prompt and
+  the wire always agree.
+- **Statusline shows the effective pair.** While an overlay is active the
+  statusline renders `<model-id> ◂ <tier-alias>` (e.g.
+  `deepseek-v4.1-flash ◂ sketch`) instead of the bare tier alias — both in
+  the built-in footer and the custom-command payload (`moa: {tier, model}`).
+  A true switch-away clears the segment; the plain selection shows whenever
+  no overlay is serving.

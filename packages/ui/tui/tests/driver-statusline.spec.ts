@@ -771,6 +771,54 @@ describe('createDriver custom statusLine wiring', () => {
     await driver.dispose()
   })
 
+  it('a moa notice carrying the effective model renders <model> ◂ <tier> in the built-in footer (§7.6)', async () => {
+    const bare = makeStatusLineCtx({ projections: makeProjections() })
+    const driver = await createDriver(bare.ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: {
+        source: {
+          kind: 'moa', form: 'notice', summary: 'moa: routed → sketch (deepseek-v4.1-flash)', tier: 0, model: 'deepseek-v4.1-flash',
+        },
+      },
+    })
+    expect(driver.statusLine).toContain('moa:deepseek-v4.1-flash ◂ sketch')
+    await driver.dispose()
+  })
+
+  it('a moa notice carrying the effective model puts {tier, model} in the payload (§7.6)', async () => {
+    const { emitSessionEvent, executor } = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(0)
+    emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: {
+        source: {
+          kind: 'moa', form: 'notice', summary: 'moa: routed → sketch (deepseek-v4.1-flash)', tier: 0, model: 'deepseek-v4.1-flash',
+        },
+      },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    const payload = JSON.parse(executor.specs.at(-1)!.stdin!) as { moa?: { tier?: string; model?: string } }
+    expect(payload.moa).toEqual({ tier: 'sketch', model: 'deepseek-v4.1-flash' })
+  })
+
+  it('a TRUE model-selection switch-away notice clears the moa segment (the disarm signal, §5.4)', async () => {
+    const bare = makeStatusLineCtx({ projections: makeProjections() })
+    const driver = await createDriver(bare.ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'moa: routed → draft', tier: 1, model: 'tier-draft' } },
+    })
+    expect(driver.statusLine).toContain('moa:tier-draft ◂ draft')
+    // A switch-away notice (sanitizer-kept, i.e. true) clears the stale tier.
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 2, time: 1_700_000_001_000,
+      data: { source: { kind: 'model-selection', summary: 'm1 → m2' } as never },
+    })
+    expect(driver.statusLine).not.toContain('moa:')
+    await driver.dispose()
+  })
+
   it('a moa event from another session (or without a tier) is ignored', async () => {
     const { driver, emitSessionEvent, executor } = await bootActiveDriver()
     await vi.advanceTimersByTimeAsync(0)
@@ -808,7 +856,7 @@ describe('createDriver custom statusLine wiring', () => {
       },
     }
     const listeners = new Set<(s: unknown) => void>()
-    const moaRef = { value: 'draft' as string | undefined }
+    const moaRef = { value: { tier: 'draft' } as { tier: string; model?: string } | undefined }
     const wiring = createStatusLineWiring({
       emit: () => {},
       state: () => ({ permissionMode: 'default' }),
@@ -825,12 +873,12 @@ describe('createDriver custom statusLine wiring', () => {
 
     // First emit: seenEmit seeding — no clear.
     for (const listener of [...listeners]) listener({})
-    expect(moaRef.value).toBe('draft')
+    expect(moaRef.value).toEqual({ tier: 'draft' })
 
     // Effort-only change: same model → the ref survives.
     selection.current = { provider: 'p', model: 'm1', reasoningEffort: 'high' }
     for (const listener of [...listeners]) listener({})
-    expect(moaRef.value).toBe('draft')
+    expect(moaRef.value).toEqual({ tier: 'draft' })
 
     // Model change: the routed tier is invalidated.
     selection.current = { provider: 'p', model: 'm2', reasoningEffort: 'high' }

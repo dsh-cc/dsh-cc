@@ -53,6 +53,21 @@ A visible indicator is part of v1: a status row on every classify (`moa: routed 
 
 ### 3.2 Routing classification
 
+> **Amendment (2026-10-12, effective-model-truth PR-2 §5.3).** The seam
+> described below moved: capture now happens at `agent/inbox/claimed`
+> (synchronous per-message emit at claim — per turn the LAST claimed message
+> wins), and classification + persona variables + the status row run in an
+> OUTER `system-prompt/assemble` listener after `await next()` (the only
+> pre-persona async seam; `agent/inbox/claimed` is synchronous and
+> `AssembleContext` has no turn field, so the turn comes from the capture
+> store). The request waterfall keeps only the arming observe and the
+> `withTier` overlay, keyed by the sticky per-turn tier. The turn-id trigger,
+> input-capture, state-contract, escalation-floor, and fail-open semantics
+> below are unchanged; see `docs/plans/2026-10-11-effective-model-truth.md`
+> §5.2–§5.3 for the authoritative listener shapes.
+>
+> The original request-time seam text is retained below for the record.
+
 - Seam: `agent/request` waterfall listener, registered agent-scoped (main agent only), alongside the existing overlay precedents (`cc-model-aliases/src/service.ts:106-109`, resume-pins).
 - Timing: classify once per user turn, at the turn's **first** `agent/request` — identified by a turn-id change (`payload.turn` not yet seen), NOT by `payload.step === 0`: the first dispatched request of a turn carries `step: 1` (harness `agent.ts` stores phase `step: 0` at turn open, then dispatches `phase.step + 1` — grok r4, source-verified; a step===0 gate would never fire and routing would silently never run); all later steps of the turn reuse the tier (P1 verified per-step override).
 - **Input capture (pinned, grok r5, source-verified)**: at `agent/request` time the current turn's user messages are NOT yet in session history — `prepareRequest` (harness `agent.ts:408`, which emits `agent/request` at `:577`) runs BEFORE the accepted `user/message` batch is appended (`:419-421`), and neither waterfall sees them in history. A capture-only `agent/pre-step` listener (payload carries `messages: claimed` + turn/step, `agent.ts:277` — **erratum, 2026-10-11**: `agent.ts:277` lists the *emitter* args; listeners receive the *fused* payload, which the harness agent-events dispatcher (`dispatch.ts` `fused`) enriches with the subject `agent` — the seam `memory/recall.ts` already guards on. The capture map is keyed by turn-id alone, so subagent pre-steps must be guarded out by `agent.session.header` provenance or a child's turn numbering shadows the root's slots) records, on the turn's **first** pre-step, `turn-id →` the **last element of `payload.messages`** (grok r6: `inbox.claim` (`inbox.ts:109-111`) appends the single next-turn message after every pending next-step message, so a queued leading notice — e.g. an `agent/created` inject — may precede it in the batch; the opening message is the batch's LAST element, not its first) — synchronous, no LLM call. The `agent/request` listener reads THAT capture, never session history, to (a) decide classify-vs-`tierFloor` and (b) build the classify state. Reading session history there would classify the previous turn's text — or nothing on the first turn.
