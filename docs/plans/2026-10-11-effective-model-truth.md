@@ -1,6 +1,6 @@
 # effective-model-truth — Make the Harness's Model Bookkeeping Match the Wire Under Per-Request Overlays
 
-Status: Design v6 (post round-5 review). Defect evidence live (2026-10-11, session `tui-5f6c2347`, §2); rounds 1–5 also surfaced and fixed a **pre-existing moa arming bug** (§5.2), a **lifecycle error in this document** (round 3: the step order is claim → assemble → pre-step → request — §2, source-verified) which drove the classification seam redesign, a **frozen-snapshot window** (round 4: the sanitizer publishes `selection.assembled`, not `selection.current` — §5.1), and an **over-engineered persona-effort mechanism** (round 5: deleted — the persona renders no effort, §5.3). Round verdicts in §11. User has ratified the subpath host `@dsh-cc/moa/sanitizer`.
+Status: Design v7 — three-lane blind review CONVERGED (2026-10-11/12: seven rounds; final verdicts critic GO (r6) / codex GO (r6 GWC → r7 micro-confirm GO) / grok GO (r6 GWC → r7 micro-confirm GO); ledger in §11). User sign-off pending. Defect evidence live (session `tui-5f6c2347`, §2); the review also fixed a pre-existing moa arming bug (§5.2), a lifecycle error in this document (round 3: the step order is claim → assemble → pre-step → request — §2, source-verified) which drove the classification seam redesign, a frozen-snapshot window (round 4: the sanitizer publishes `selection.assembled`, not `selection.current` — §5.1), and an over-engineered persona-effort mechanism (round 5: deleted — the persona renders no effort, §5.3).
 
 ## 1. Goal and scope
 
