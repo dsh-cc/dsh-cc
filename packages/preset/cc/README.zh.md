@@ -2,11 +2,11 @@
 
 [English](README.md) | 中文
 
-DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`minimal` 等之外的第 5 个 agent preset。它在完整标准 preset 之上组合出 Claude Code 行为面——Claude hooks、磁盘上的 CC 插件目录、斜杠命令、memory、CC 输出样式、CC 风格 WebFetch。本包**纯配置**：无 TS 运行时代码，只有 `agent.cordis.yml`（平铺的 agent 组合 entry list）加 `preset.yml` 元数据。
+DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`minimal` 等之外的第 5 个 agent preset。它在完整标准 preset 之上组合出 Claude Code 行为面——Claude hooks、磁盘上的 CC 插件目录、斜杠命令、memory、CC 输出样式、CC 风格 WebFetch。本包**纯配置**：无 TS 运行时代码，只有 preset 组合（薄包装 `agent.cordis.yml` / `agent.vwa.cordis.yml` 覆盖共享行体 `agent.shared.cordis.yml`）加 `preset.yml` 元数据。
 
 ## 作用
 
-- **完整标准基底**。`agent.cordis.yml` 以标准 `standard` preset 的逐字拷贝开头（16 个基座行），CC 模式会话因此具备标准编码 agent 的全部能力。
+- **完整标准基底**。`agent.shared.cordis.yml`（cc 与 vwa 两个包装共同 include 的共享行体）以标准 `standard` preset 的逐字拷贝开头（16 个基座行），CC 模式会话因此具备标准编码 agent 的全部能力。
 - **作用域化的 CC 表面**。`cc rows` 段挂载 Claude Code 对齐插件——hook 桥（30 个 hook 事件中的 18 个）、CC 插件目录 glue、`ToolSearch`、memory 与 consolidation、输出样式、coordinator、21 个斜杠命令，以及 worktree/sleep/notebook/structured-output 与 git 工具。WebFetch:stock `tool-web` 以 `fetch: false` 运行，搜索超时沿用 60s;`web_fetch` 由 cc-services 里的 `tool-web-fetch` 行（`@dsh-cc/tool-web-fetch`，可选 `prompt` 在廉价 lane 上摘要）替代。fetch 执行器是 dsh-base 自带的 stock provider（DNS 钉定、逐跳仅公网），CC 出口上限由 cc-shell patch 重述；工具层会把 `http:` URL 升级为 `https:`（CC 对齐）；没有 `haiku` 路由时，可选 `prompt` 会在任何 fetch 之前硬失败。
 - **会话标题与 `/rename`**。cc-shell bundle 用 `@dsh-cc/session-title-provider` 替换原生 `session-title-llm` 宿主行——first-prompt 标题提供方，配置了 `haiku` 廉价通道时盖印该路由（否则继承主路由）；本 preset 还挂载 `@dsh-cc/command-rename`，`/rename <title>` 即可固定用户标题。
 - **隔离的服务 realm**。承载服务的行（工具搜索、microcompactor、插件注册表、MCP 连接、hook-bridge 状态、插件 MCP seam）放进 `cc-services` 组并带七个必需的 `isolate` 键，发布到 entry-local realm 而非进程全局 root realm（否则会触发 preset 挂载门禁）。
@@ -34,7 +34,7 @@ DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`mi
 
 ## 链接
 
-- 源组合：`agent.cordis.yml`（基座 + `cc rows`）
+- 源组合：`agent.cordis.yml`（persona）→ `agent.shared.cordis.yml`（基座 + `cc rows`）；VWA 孪生：`agent.vwa.cordis.yml`
 - 元数据：`preset.yml`
 - 行来源：`packages/bundle/cc-shell/cordis.patch.yml`
 - 组合契约：`tests/composition.spec.ts`

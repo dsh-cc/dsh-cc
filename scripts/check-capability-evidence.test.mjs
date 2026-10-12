@@ -353,6 +353,48 @@ m.capabilities["sessions.resume"].evidence = [
     console.log("anchor-on-url OK (rejected)");
   }
 
+  // 4b) I10 for the preset include closure (VWA split
+  // docs/plans/2026-10-12-verifiable-workspace-agent.md §3.2c): an anchor for
+  // PRESET_YML is matched against the include-closure expansion of that file,
+  // not just its wrapper text.
+  {
+    const SHARED = "packages/preset/cc/agent.shared.cordis.yml";
+    const PRESET_WRAPPER =
+      "- id: cc-shared\n" +
+      "  name: '@deepseek-ai/cordis-plugin-include'\n" +
+      "  config:\n" +
+      "    path: ./agent.shared.cordis.yml\n";
+    // Positive: the anchor lives only in the included file → no I10 error.
+    {
+      const m = baseManifest();
+      const dir = writeFixture(dump(m), [
+        ["packages/sessions/tests/resume.spec.ts", "test {}\n"],
+        [PRESET, PRESET_WRAPPER],
+        [SHARED, "  -sessions-resume:\n"],
+      ]);
+      assert.deepEqual(
+        errorsOf(checkCapabilityManifest(dir, "docs.yaml")),
+        [],
+        "anchor in an included file must be found through the closure",
+      );
+      console.log("preset include-closure anchor OK (positive)");
+    }
+    // Negative: the closure lacks the anchor → I10 error names the preset path.
+    {
+      const m = baseManifest();
+      const dir = writeFixture(dump(m), [
+        ["packages/sessions/tests/resume.spec.ts", "test {}\n"],
+        [PRESET, PRESET_WRAPPER],
+        [SHARED, "nothing here\n"],
+      ]);
+      const errs = errorsOf(checkCapabilityManifest(dir, "docs.yaml"));
+      assert.equal(errs.length, 1, JSON.stringify(errs, null, 2));
+      assert.equal(errs[0].rule, "I10");
+      assert.ok(errs[0].message.includes(PRESET));
+      console.log("preset include-closure anchor OK (negative rejected)");
+    }
+  }
+
   // 5) Freshness (I8): a stale retrieved date → WARNING, never an error.
   {
     const m = baseManifest();

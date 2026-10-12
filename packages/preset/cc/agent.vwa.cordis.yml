@@ -1,0 +1,20 @@
+# BEGIN dsh-cc header
+# dsh-cc "VWA mode" agent preset declaration (VWA split
+# docs/plans/2026-10-12-verifiable-workspace-agent.md §3.1): the shared row
+# body lives in agent.shared.cordis.yml (included below); this file adds only
+# the VWA persona. Co-located include paths resolve relative to the including
+# file, so the inner path is `./agent.shared.cordis.yml`.
+# END dsh-cc header
+- id: vwa-shared
+  name: '@deepseek-ai/cordis-plugin-include'
+  config:
+    path: ./agent.shared.cordis.yml
+
+# The VWA persona, shadowing the deployment default for this agent. Lives ONLY
+# here and in agent.cordis.yml — a second persona row in one scope fails
+# section registration ("already registered in this scope").
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    prefix: >-
+      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}. VWA mode turns the agent toward verifiable workspace deliverables — technical documents, research artifacts. Verifiable claims in documents should carry 〔src:ws:<path>#La-Lb〕 markers citing workspace files.

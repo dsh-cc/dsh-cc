@@ -2,11 +2,11 @@
 
 English | [中文](README.zh.md)
 
-The **CC 模式** (CC mode) agent preset for the DeepSeek Harness (dsh): the fifth agent preset alongside the stock `standard`, `minimal`, and the other built-ins. It composes the Claude Code surface — Claude hooks, on-disk CC plugin directories, slash commands, memory, CC output styles, and CC-style WebFetch — on top of the complete standard preset. This package is **composition-only**: no TypeScript runtime code, just `agent.cordis.yml` (the flatted agent entry list) plus `preset.yml` metadata.
+The **CC 模式** (CC mode) agent preset for the DeepSeek Harness (dsh): the fifth agent preset alongside the stock `standard`, `minimal`, and the other built-ins. It composes the Claude Code surface — Claude hooks, on-disk CC plugin directories, slash commands, memory, CC output styles, and CC-style WebFetch — on top of the complete standard preset. This package is **composition-only**: no TypeScript runtime code, just the preset composition (thin wrappers `agent.cordis.yml` / `agent.vwa.cordis.yml` over the shared row body `agent.shared.cordis.yml`) plus `preset.yml` metadata.
 
 ## What it does
 
-- **A full standard-mode baseline.** `agent.cordis.yml` opens with a verbatim copy of the stock `standard` preset (the 16 baseline rows), so a CC-mode session keeps every capability of the standard coding agent.
+- **A full standard-mode baseline.** `agent.shared.cordis.yml` (the shared row body included by both the cc and vwa wrappers) opens with a verbatim copy of the stock `standard` preset (the 16 baseline rows), so a CC-mode session keeps every capability of the standard coding agent.
 - **A scoped CC surface.** The `cc rows` section mounts the Claude Code parity plugins — hook bridge (18 of 30 hook events), CC plugin-directory glue, `ToolSearch`, memory + consolidation, output styles, the coordinator, 21 slash commands, and the worktree/sleep/notebook/structured-output and git tools. WebFetch: stock `tool-web` runs with `fetch: false` and the 60s search timeout carried forward; `web_fetch` is replaced by the cc-services `tool-web-fetch` row (`@dsh-cc/tool-web-fetch`, optional `prompt` summarized on the cheap lane). The fetch executor is the stock dsh-base provider (DNS-pinned, public-only per hop) with CC egress caps restated in the cc-shell patch, and the tool upgrades `http:` URLs to `https:` (CC parity); an optional prompt without the `haiku` route hard-fails before any fetch.
 - **Session titles and `/rename`.** The cc-shell bundle swaps the stock `session-title-llm` host row for `@dsh-cc/session-title-provider`, a first-prompt title provider that stamps the `haiku` cheap lane when configured (else it inherits the main route), and this preset mounts `@dsh-cc/command-rename` so `/rename <title>` pins a user title.
 - **Isolated service realms.** Service-bearing rows (tool search, microcompactor, plugin registry, MCP connections, hook-bridge status, plugin MCP seam) live inside the `cc-services` group with the seven required `isolate` keys, so they publish into an entry-local realm instead of the process-global root realm (which would trip the preset mount gate).
@@ -39,7 +39,7 @@ updating packages.
 
 ## Links
 
-- Source composition: `agent.cordis.yml` (baseline + `cc rows`)
+- Source composition: `agent.cordis.yml` (persona) → `agent.shared.cordis.yml` (baseline + `cc rows`); VWA twin: `agent.vwa.cordis.yml`
 - Metadata: `preset.yml`
 - Origin rows: `packages/bundle/cc-shell/cordis.patch.yml`
 - Composition contract: `tests/composition.spec.ts`

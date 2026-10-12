@@ -1,0 +1,867 @@
+# BEGIN dsh-cc header
+# vendored from @deepseek-ai/dsh@0.1.1-rc.2 config/agent-presets/standard/agent.cordis.yml
+# source: config/agent-presets/standard/agent.cordis.yml (deepseek-harness install)
+#
+# This file is the dsh "CC mode" agent preset composition. The baseline below
+# is a verbatim copy of the standard preset; the `cc rows` section appended at
+# the bottom carries the CC surface rows scoped to this preset (they previously
+# lived in the cc-shell global patch, see
+# $R/packages/bundle/cc-shell/cordis.patch.yml).
+#
+# After upgrading dsh upstream, re-diff this baseline against the new standard
+# preset (the drift gate in tests/composition.spec.ts automates this) and fold
+# in any upstream changes.
+# END dsh-cc header
+# The `standard` agent preset: the full coding agent, mounted once per process.
+#
+# This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
+# standing scope; every session naming it joins by scope parentage, so the
+# tools and prompt sections registered here cover each joined agent while a
+# session's own state stays keyed per Session/Agent inside the plugins. The
+# host composition (`base.cordis.yml` + `web.cordis.yml`) keeps everything a
+# preset must not own: the registries themselves, the sandbox and approval
+# stack, persistence, and the model route.
+#
+# A service row here MUST sit inside a group carrying an `isolate` realm.
+# Without one it publishes into the root realm, where it is process-global —
+# another preset publishing the same name collides, and a host reader would
+# resolve one preset's instance for every session; the preset mount rejects
+# that. `true` means an entry-local realm: this standing mount's own
+# private instance, apart from every other preset's. (A shared label does NOT
+# pool instances — `provide()` throws on the second registration under the
+# same realm symbol; labels join REALMS, and are not what this file needs.)
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+# `shell-env` stays in the HOST composition: `apps/cli/src/web.ts` injects it to
+# publish `DSH_WEB_URL`/`DSH_WEB_MODE`, and a host row that injects a service is
+# the criterion for host-plane ownership — injection resolves before any session
+# exists, so there is no agent to key by. Behind a preset realm those variables
+# never reached the model's shell at all. Both shell tools consume the host
+# registry from here; their executors (`bash-sandbox`/`pwsh-sandbox`) are
+# host-plane too.
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+# Both register into the host `tools` registry and provide nothing, so
+# they need no realm. The `fs` service and its policy stay in the host.
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── background jobs ────────────────────────────────────────────────────────
+
+# Only the model-facing controls. The task REGISTRY stays on the host plane:
+# its producers sit outside any realm this file could put it in — `tool-bash`
+# above resolves it with `ctx.get`, and an entry-local realm here is invisible
+# to every sibling row, so `run_in_background` would answer "background jobs
+# unavailable" while these controls sat in the catalog. The registry is keyed by
+# owning agent anyway, so one host instance serves every session. What a preset
+# chooses is whether its agent can collect and stop background work at all.
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+# The skill REGISTRY lives in the host composition and is layered per scope:
+# these rows register into THIS preset's layer of it, so they need no realm.
+# `skill-filesystem` contributes local-root discovery for agents on this preset, and
+# `tool-skill` gives them the catalog and loader; the merged catalog also
+# carries whatever the deployment registered globally (repository plugins).
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── goals ───────────────────────────────────────────────────────────────────
+
+# Only the model-facing tool. The goal SERVICE, its session driver, and the
+# `/goal` command stay on the host plane: the Gateway serves the goal domain as
+# Remote endpoints whose receiver comes from a generated descriptor, so it
+# resolves `goals` on the host and an entry-local realm here would hide it. The
+# registry is keyed by session anyway, so one host instance serves every
+# session. What a preset chooses is whether its agent can call the goal tool.
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+# ── plan mode ───────────────────────────────────────────────────────────────
+
+# Plan state is per-agent by nature, so an entry-local realm is not a
+# workaround here — it is the correct lifetime.
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+# `compaction-basic` reads `toolResultPrune` through `ctx.get`, so the pruner must
+# share this realm rather than sit outside it.
+#
+# The engine and the command are CC replacements for the upstream rows: the
+# engine subclass folds a per-agent `/compact [instructions]` hint into the
+# summarizer input; the command forwards the free-text argument as that hint
+# instead of rejecting arguments.
+#
+# `tokenMeter` is deliberately NOT in this realm: the meter stays on the HOST
+# plane, and the rows here resolve that one instance. It takes no configuration,
+# keys every fold by Session, and owns the context-meter projection units the
+# browser reads for every session — behind a realm those units would come and go
+# with whichever presets happen to be mounted. What a preset chooses is whether
+# its agent compacts at all, which is `compaction-basic` below.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+    compactionCostGate: true
+  config:
+    - id: compaction-basic
+      name: '@dsh-cc/compaction-basic'
+
+    # Cost-gated plan-step compaction (plan docs/plans/2026-09-20-cost-gated-plan-step-compaction.md):
+    # arms on completed todo_write transitions, and at the agent/status idle
+    # seam calls compactNow on the latched root session only when projected
+    # input-token savings beat the cache rewrite plus unamortized debt.
+    # Ships dark: settings namespace `cc-compaction-cost-gate` (enabled:
+    # false, mode: 'dry-run'). The compaction service is NOT injected (cordis
+    # strict-read); it is read through the guarded optional accessor, so a
+    # failed engine mount degrades to ledger+warn instead of killing the gate.
+    # Because a scoped get() cannot cross an isolate boundary, the gate MUST
+    # share this realm — the same rule as toolResultPrune above.
+    - id: compaction-cost-gate
+      name: '@dsh-cc/compaction-cost-gate'
+
+    - id: command-compact
+      name: '@dsh-cc/command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── delegation and workflows ────────────────────────────────────────────────
+
+# The `subagents` registry and its spawn/fork backends live in the HOST
+# composition: the registry is a process singleton whose cross-session queries
+# the api-proxy serves to the browser, and a provider name may only be
+# registered once. This preset contributes the delegation TOOLS, which resolve
+# that host registry.
+#
+# `workflows` is different — nothing outside an agent reads it — so every row
+# that reaches it shares one entry-local realm here, and a consumer left
+# outside would resolve a host registry this preset does not populate.
+#
+# `tool-subagent-report` is GONE upstream: there is no report tool anymore.
+# Workers return outcomes to their parent with the host-plane
+# `tool-subagent-control` send_message tool (addressed to the parent's session
+# id), and settlement reaches the parent as the subagent manager's
+# `subagent-settled` notice. `tool-subagent-control` stays host-plane for the
+# same reason as the registry: its tools resolve `ctx.subagents.sendMessage` /
+# interrupt state on the host plane, not a tool this agent registers locally.
+#
+# `tool-subagent` and `tool-subagent-fork` (the harness spawn/fork Task tools)
+# are DISABLED here — the CC Task tool is provided by the `tool-task` row in
+# the cc-services group instead. That replacement Task now implements the
+# continuable loop itself: `run_in_background: true` starts a durable
+# background child on the spawn provider, and send_message /
+# list_agents / interrupt_agent operate on its returned agentId. The harness
+# rows stay disabled. Note for future readers: the disabled
+# `tool-subagent-fork` row's `backgroundMode: continuable` config is inert
+# while the row is disabled, and fork children remain foreground one-shot
+# until upstream harness issue #2124 resolves.
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+    # @dsh-cc/tool-workflow publishes its run registry as a preset service; a
+    # preset service must sit behind this realm (smoke:profile-boot enforces).
+    ccWorkflowRunRegistry: true
+  config:
+    - id: tool-subagent-control
+      name: '@deepseek-ai/dsh-tool-subagent-control'
+
+    - id: tool-subagent-list-agents
+      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+
+    - id: tool-subagent
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: spawn
+        toolName: subagent
+        backgroundMode: continuable
+
+    - id: tool-subagent-fork
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: fork
+        toolName: subagent_fork
+        backgroundMode: continuable
+
+    # Production dsh does not install these optional providers. Install the
+    # matching Bundle in this Profile and restart the Host, then copy this
+    # preset and remove `disabled` from the matching tool row. Host availability
+    # alone grants no tool.
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: codex
+        toolName: subagent_codex
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    # The journal provider wraps spawn and journals workflow children for
+    # same-session resume replay (frozen-until-first-miss).
+    - id: subagent-workflow-journal
+      name: '@dsh-cc/workflow-journal'
+
+    # 0.1.7-rc.2: the worker-thread engine package was deleted upstream and
+    # replaced by the sandboxed Node PTC executor (workflow-ptc). The
+    # cc-workflow-journal provider wrap is unchanged — only the engine row
+    # moved. Prerequisites (ptc-runtime + fs/subprocess/sandbox) mount in the
+    # host base bundle.
+    - id: workflow-ptc
+      name: '@deepseek-ai/dsh-workflow-ptc'
+      config:
+        provider: cc-workflow-journal
+
+    # Harness adapter row superseded by @dsh-cc/tool-workflow: both register the
+    # `workflow` tool name, and the harness `tools` registry throws
+    # "already registered" on duplicates, so the harness row must stay disabled.
+    - id: tool-workflow          # harness adapter; superseded by @dsh-cc/tool-workflow
+      name: '@deepseek-ai/dsh-tool-workflow'
+      disabled: true
+
+    - id: tool-workflow-cc
+      name: '@dsh-cc/tool-workflow'
+
+    - id: tool-ralph
+      name: '@deepseek-ai/dsh-tool-ralph'
+      config:
+        subagentProvider: spawn
+        maxRounds: 64
+
+# ── remaining model-facing rows ─────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+# The `web` service and its search provider stay in the host composition; only
+# the model-facing tool is per-session.
+#
+# Moved in from the cc-shell global swap. fetch is still disabled here because
+# `@dsh-cc/tool-web-fetch` inside cc-services owns the model-facing tool
+# (adds the optional `prompt` and upgrades http: URLs to https: before the
+# seam). The HTTP executor is the stock `@deepseek-ai/dsh-web-fetch-http`
+# provider from dsh-base, with CC egress caps restated in cc-shell's patch.
+# A prompt without the `haiku` route hard-fails.
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: false
+    searchTimeoutMs: 60000
+
+# ── cc rows ─────────────────────────────────────────────────────────────────
+
+# The CC surface rows, scoped to this preset. They previously lived in the
+# cc-shell global patch ($R/packages/bundle/cc-shell/cordis.patch.yml) and are
+# moved here so they no longer leak into every agent preset that mounts the
+# global host composition.
+
+# Service rows MUST sit in a group with an `isolate` realm: mounting this preset
+# rejects any row that publishes a cordis Service into the root realm
+# (PresetMountError / leakedServices). The isolate keys below are all required —
+# the glue dynamically attaches mcp-client as a sub-fiber, and `Context.extend`
+# inherits the group's isolate map down the prototype chain, so without
+# `mcpConnections` isolated here it would publish into the root realm and break
+# the preset. The command rows and the `memory` / `hooks-claude-code` consumers
+# must live INSIDE the group: they `ctx.get('ccModelRoutes')` (and
+# `ctx.get('mcpConnections')`), which resolve to nothing outside the isolated
+# realm. `ccPlugins` is deliberately NOT isolated: the glue publishes it into
+# the ROOT realm from the root fiber (see CcPluginsService in
+# @dsh-cc/bundle-shell) so host-plane siblings — the TUI driver and /help
+# — can resolve it; isolating the name here would shadow that publication and
+# break in-group resolution too. `mcp` (the plugin MCP seam) IS isolated:
+# only in-group loader fibers `ctx.get('mcp')`; a root-realm provide would
+# trip leakedServices (the providing fiber is the cc-mcp-seam child, inside
+# the preset mount). `hooks` (the plugin hooks seam) IS isolated like `mcp`:
+# only in-group loader fibers ctx.get('hooks'); the providing fiber is
+# hooks-claude-code, inside this group — a root-realm provide would trip
+# leakedServices.
+# The bridge's second provide, `hookRun` (WorktreeCreate / WorktreeRemove
+# invocation; docs/plans/2026-09-14-cc-worktree-parity.md WS-6), is
+# deliberately NOT isolated, mirroring `ccPlugins`: its consumer
+# (tool-git-worktree) mounts top-level, outside this group's realm — and like
+# ccPlugins it is provided from the ROOT fiber (see the bridge's root-provide
+# in @dsh-cc/hooks-claude-code), because a plain in-realm provide here would
+# publish a preset fiber's service into the root realm and trip the preset
+# leakedServices gate (agent-preset/invalid at mount).
+- id: cc-services
+  name: cordis:group
+  group: true
+  isolate:
+    toolSearch: true
+    microcompactor: true
+    ccModelRoutes: true
+    resumePinStore: true
+    mcpConnections: true
+    hookBridgeStatus: true
+    mcp: true
+    hooks: true
+    # The plugin rules seam (cursor-plugin plan PR-B S5): provided by
+    # cc-shell-glue (inside this group) via the awaited child-plugin provide
+    # idiom, like mcp/hooks; the loader's mountRules consults it, and the
+    # consolidated `cc:plugin-rules` prompt section renders its entries.
+    rules: true
+    contextCrusher: true
+    # The actor-contract model gate (docs/plans/2026-09-21-subagent-actor-contract-prompts.md):
+    # published by cc-subagent-task inside this group; an un-isolated provide
+    # trips the preset mount guard (process-global service from a preset row).
+    ccActorContractGate: true
+  config:
+    # ToolSearch: model-called search that activates deferred tools per scope.
+    - id: tool-search
+      name: '@dsh-cc/tool-search'
+
+    # Model-free staleness microcompaction (auto: false by default).
+    - id: compaction-micro
+      name: '@dsh-cc/compaction-micro'
+
+    # CCR tool-output compression (plan docs/plans/2026-09-10-ccr-tool-output-compression.md):
+    # a `tools/post-execute` listener registered with `prepend: true`, composed
+    # post-`next()`, plus the agent-visible `context_retrieve` tool (listener +
+    # tool host, no consumed service of its own — but it mounts a Service, so it
+    # shares this realm via the `contextCrusher` isolate key above). MUST sit
+    # BEFORE the hooks-claude-code row: waterfall listeners dispatch
+    # outermost-first in registration order, and the crusher must be outermost
+    # so its post-`next()` compression wraps the bridge's PostToolUse fold (the
+    # bridge sees the original bytes; the committed result carries the
+    # compressed form). The order tripwire is pinned by
+    # packages/context/context-crusher/tests/composition.spec.ts.
+    - id: context-crusher
+      name: '@dsh-cc/context-crusher'
+
+    # The verify-before-retry attendant (plan docs/plans/2026-10-09-verify-before-retry.md):
+    # plain plugin, no Service, no new isolate key. Its pre-execute listener is
+    # prepend:true, and cordis prepend unshifts — the later-registered prepend
+    # listener is OUTERMOST — so this row MUST sit BEFORE the hooks-claude-code
+    # row: hooks' later prepend must land outside retry-attendant so a user
+    # PreToolUse hook allow/ask can override the attendant's ask (§3.4 of the
+    # plan). The order tripwire is pinned by packages/preset/cc/tests/composition.spec.ts.
+    - id: retry-attendant
+      name: '@dsh-cc/retry-attendant'
+
+    # The hook bridge: runs the Claude Code hooks.json / settings hook config
+    # on the harness interception seams and provides the `hooks` seam plugin
+    # hooks merge through. Must mount BEFORE cc-shell-glue: the glue's
+    # CcPluginsService.mountAll probes ctx.get('hooks') at boot, so the bridge
+    # must have provided it first. Nothing between glue and bridge consumes
+    # bridge services at mount time (command-doctor reads hookBridgeStatus
+    # lazily at invocation), and the bridge's interception listeners use
+    # prepend:true, so ordering vs permission-rules is compose-order-insensitive.
+    - id: hooks-claude-code
+      name: '@dsh-cc/hooks-claude-code'
+      # Tracked root-level hook config (serena code-intelligence plan Phase 0).
+      # Relative configPath resolves against the process launch cwd, so a
+      # worktree session started at the worktree root loads it by construction.
+      config:
+        configPath: hooks.json
+
+    # CC plugins on disk (agents/skills/commands/hooks/mcp servers) plus the
+    # base agent preset dirs and .mcp.json server wiring — see the glue plugin.
+    - id: cc-shell-glue
+      name: '@dsh-cc/bundle-shell'
+
+    - id: command-plugin
+      name: '@dsh-cc/command-plugin'
+
+    - id: command-mcp
+      name: '@dsh-cc/command-mcp'
+
+    # Serena-first prompt steering: while a serena MCP server is ready
+    # (registry-only, live detection over the isolated `mcpConnections`
+    # above), the registered `serena-first` section (order 105) renders the
+    # policy paragraph and the assemble waterfall rewrites the upstream
+    # `tool:read` / `tool:grep` texts (replace-not-mutate, `{ prepend: true }`).
+    # Publishes no Service, so it needs no isolate key of its own;
+    # `systemPrompt` resolves through the group via the prototype chain.
+    # `serverName` config (default 'serena') drives detection and every
+    # emitted `mcp__<serverName>__*` name.
+    - id: serena-first
+      name: '@dsh-cc/serena-first'
+
+    # /doctor reads ccModelRoutes, mcpConnections, and hookBridgeStatus, so it
+    # shares the group realm.
+    - id: command-doctor
+      name: '@dsh-cc/command-doctor'
+
+    # cc-model-routes owns the model-aliases settings namespace and resolver;
+    # tool-task provides the CC Task tool (subagent_type dispatch over
+    # per-workspace .claude/agents) and reserves the names 'subagent'/'workflow'.
+    - id: cc-model-routes
+      name: '@dsh-cc/model-aliases'
+
+    # Resume pins (plan docs/plans/2026-09-04-subagent-resume-pins.md §4.10):
+    # one PinStore + the resume gate/overlay/policy per mounted preset, exposed
+    # as the `resumePinStore` service (isolated above, like ccModelRoutes). The
+    # pins root COLOCATES with the session-persistence root: the harness base
+    # patch mounts the jsonl backend at `!!js dshHomePath('sessions')`, and this
+    # `!!js` expression resolves `dshHomePath` the same way at entry activation
+    # (app-boot provides it on the root ctx before the config tree mounts), so
+    # pins always sit next to the durable sessions they pin. Must mount BEFORE
+    # tool-task: the Task plugin's spawn capture prefers this service store.
+    - id: cc-resume-pins
+      name: '@dsh-cc/subagent-resume-pins'
+      config:
+        pinsRoot: !!js dshHomePath('sessions', 'resume-pins')
+
+    - id: tool-task
+      name: '@dsh-cc/subagent-task'
+
+    # /agents: query/control surface for continuable background children
+    # (plan docs/plans/2026-09-05-continuable-background-ux.md §3.2). Mounts
+    # INSIDE cc-services (F8): the read-only snapshot joins the realm-interior
+    # resumePinStore with the host-plane subagents/agents registries, then
+    # republishes the snapshot as the ROOT-realm `ccAgents` service (CcPlugins
+    # pattern) so the TUI local-slash path consumes the SAME snapshot. Must
+    # mount AFTER cc-resume-pins.
+    - id: command-agents
+      name: '@dsh-cc/command-agents'
+
+    # Memory and the hook bridge consume `ctx.get('ccModelRoutes')` at spawn
+    # time (recall small-fast lane / hook model resolution), so they share this
+    # realm. memory-consolidation stays OUTSIDE: its forks must keep inheriting
+    # the parent route. memory still publishes no cordis Service;
+    # hooks-claude-code now provides `hookBridgeStatus` (for /doctor), which is
+    # isolated on this group's isolate map — both stay mount-legal under the
+    # leakedServices gate only because they sit INSIDE the group.
+    - id: memory
+      name: '@dsh-cc/memory'
+
+    # Replaces the stock dsh-tool-web web_fetch (fetch: false above): adds the
+    # optional `prompt`, summarized on the cheap lane when the haiku alias is
+    # configured; degrades to raw converted text + notice otherwise.
+    - id: tool-web-fetch
+      name: '@dsh-cc/tool-web-fetch'
+
+    # manage_skill tool (plan docs/plans/2026-09-23-learned-skills.md §4.4):
+    # create/update/delete/list over the shared learned-skill store under
+    # $DSH_HOME/learned-skills/. Publishes no Service (plain plugin,
+    # handoff-store pattern), so it needs no isolate key of its own; it
+    # consumes the root-realm `skills` service and reads settings at call time.
+    - id: tool-manage-skill
+      name: '@dsh-cc/tool-manage-skill'
+
+    # Subagent handoff store (plan docs/plans/2026-09-10-subagent-handoff-store.md):
+    # the handoff_put / handoff_get tool pair over a content-addressed store
+    # under $DSH_HOME/handoff/<projectKey>/. Publishes no Service (plain plugin,
+    # memory pattern), so it needs no isolate key of its own; state is entirely
+    # on disk (TTL 24h + 500-entry disk-based LRU swept on put), so spawned
+    # children in separate processes see the same store.
+    - id: handoff-store
+      name: '@dsh-cc/handoff-store'
+
+    # Stage-0 reasoning-fold probe (plan docs/plans/2026-09-10-reasoning-fold-deepseek.md):
+    # a READ-ONLY `llm/stream` listener byte-counting reasoning vs text deltas
+    # into $DSH_HOME/reasoning-fold/<sessionId>.jsonl. Publishes no Service
+    # (plain plugin, handoff-store pattern), so it needs no isolate key of its
+    # own; the listener never rewrites the chunk stream (LEDGER-ONLY).
+    - id: reasoning-fold
+      name: '@dsh-cc/reasoning-fold'
+
+    # Tool Use Summary pipeline (plan docs/plans/2026-09-15-side-queries.md §5):
+    # a fire-and-forget cheap-lane digest of every large tool result, keyed by
+    # callId in $DSH_HOME/tool-use-summary/<sessionId>.jsonl and consumed at
+    # compaction time (compaction-micro placeholder upgrade; §5.4). Publishes
+    # no Service (plain plugin, handoff-store pattern), so it needs no isolate
+    # key of its own; the `tools/post-execute` listener is registered WITHOUT
+    # prepend so the context-crusher stays the outermost listener (§5.6), and
+    # every fault degrades to a ledger row — never into the waterfall.
+    - id: tool-use-summary
+      name: '@dsh-cc/tool-use-summary'
+
+    # Post-edit auto-verify (plan docs/plans/2026-09-20-post-edit-auto-verify.md):
+    # after an accepted edit/write result, runs a user-declared fast verification
+    # command (user-layer setting only) and appends its `[auto-verify]` outcome to
+    # the SAME tool result, saving a model round-trip on failure. Also hosts
+    # the merged edit-recovery-hint feature (plan
+    # docs/plans/2026-09-21-edit-fuzzy-matching-and-read-state.md, Track B):
+    # on an edit-tool not-found failure of a multi-line `old_string`, it
+    # appends a FIXED static recovery-advice message to the accept decision as
+    # an `additionalContexts` entry (model-visible sideband; the tool result
+    # content is never rewritten). User-layer-only setting, ship-dark by
+    # default (cc-edit-recovery-hint). Publishes no
+    # Service (plain plugin), so it needs no isolate key of its own; the
+    # `tools/post-execute` listener is registered WITHOUT prepend so it composes
+    # inside context-crusher's outermost post-execute listener.
+    - id: post-edit-verify
+      name: '@dsh-cc/post-edit-verify'
+
+    # LSP diagnostics-on-write (plan docs/plans/2026-09-23-lsp-diagnostics-on-write.md):
+    # after a successful edit/write/NotebookEdit, pulls the touched file's
+    # diagnostics from the running serena language servers via the
+    # mcpConnections registry (one uncached tools/call, never the tools
+    # waterfall) and appends the `[lsp]` block to the SAME tool result.
+    # Settings-gated, dark by default (cc-lsp-on-write.enabled, user layer).
+    # Publishes no Service (plain plugin), so it needs no isolate key; the
+    # `tools/post-execute` listener is registered WITHOUT prepend so it
+    # composes inside context-crusher's outermost post-execute listener.
+    # ORDER: after post-edit-verify, same post-execute composition family.
+    - id: lsp-on-write
+      name: '@dsh-cc/lsp-on-write'
+
+    # Turn rules (plan docs/plans/2026-09-23-turn-rules.md): a non-interrupting
+    # rule engine — trigger-bearing cursor-plugin rules pay zero context until
+    # their regex matches a completed tool call/result or a user prompt, then
+    # the body is injected as an advisory reminder (additionalContexts sideband
+    # on the accept, or an attributed agent.inject at the prompt seam; the
+    # result content is never rewritten). Publishes no Service (plain plugin),
+    # so it needs no isolate key. The `tools/post-execute` listener is
+    # registered WITHOUT prepend and this row sits after the context-crusher
+    # row: CCR outermost, turn-rules composed after it, so matching sees the
+    # post-crush text the model will actually receive.
+    - id: turn-rules
+      name: '@dsh-cc/turn-rules'
+
+    # Next-prompt suggestion (plan docs/plans/2026-09-15-side-queries.md §7): an
+    # agent/turn-stopping fire-and-forget cheap-lane prediction of the user's
+    # next message, stored in a module-level registry the TUI autocomplete
+    # provider reads in-process (same-process assumption). Publishes no Service
+    # (plain plugin, reasoning-fold pattern) so it needs no isolate key of its
+    # own; DEFAULT OFF (cc-prompt-suggest.enabled) — disabled sessions make
+    # zero adapter calls and the TUI surfaces zero suggestion items.
+    - id: prompt-suggest
+      name: '@dsh-cc/prompt-suggest'
+
+    # Advisor watchdog (plan docs/plans/2026-09-23-advisor-watchdog.md): an
+    # opt-in second model that keeps per-session snapshots of the newest
+    # qualifying llm/stream request and, at each agent/turn-stopping, reviews
+    # the window since its cursor via a one-shot runSideQuery on a cheap lane,
+    # injecting severity-tiered advisory notes at resolve time with source
+    # kind 'advisor'. Publishes no Service (plain plugin, turn-rules pattern),
+    # so it needs no isolate key. DEFAULT OFF (cc-advisor.enabled). ORDER:
+    # after turn-rules — turn-rules' prompt matcher must see the un-advised
+    # prompt (advisor text is denylisted from the matcher's candidate, but
+    # physical row order keeps the seam reviewable).
+    - id: advisor-watchdog
+      name: '@dsh-cc/advisor-watchdog'
+
+    # Completion gate (plan docs/plans/2026-10-09-runtime-verified-completion.md):
+    # an opt-in verified-completion gate that withholds turn-stopping
+    # completion while required evidence is missing (evidence nudge instead),
+    # keeping a per-session receipts ledger with lineage lift. Publishes no
+    # Service (plain plugin, turn-rules pattern), so it needs no isolate key.
+    # DEFAULT OFF (cc-completion-gate.enabled=false). ORDER: after
+    # advisor-watchdog (cc-services tail).
+    - id: completion-gate
+      name: '@dsh-cc/completion-gate'
+
+    # Moa tiered cascade routing (plan
+    # docs/plans/2026-10-09-moa-tiered-cascade-routing.md): an opt-in pipeline
+    # that classifies genuine user turns to sketch/draft/blueprint/masterplan,
+    # with an optional acceptance judge and effect-free escalation retry at
+    # +1 tier. Publishes no Service (plain plugin, turn-rules/advisor-watchdog
+    # pattern), so it needs no isolate key. DEFAULT OFF (moa.enabled), with a
+    # moa-private System One budget/breaker and side-car JSONL ledgers under
+    # <dshHome>/moa/. ORDER TRIPWIRE: last of the interaction overlays — no
+    # functional coupling with advisor-watchdog/completion-gate (advisor
+    # reviews llm/stream windows; moa classifies user text pre-LLM and judges
+    # post-turn), the physical row order keeps the listeners' composition
+    # reviewable and puts moa's status rows after advisor verdicts in the
+    # same turn-stopping window.
+    - id: moa
+      name: '@dsh-cc/moa'
+
+    # Session config snapshot (plan docs/plans/2026-10-09-session-config-snapshot-event.md):
+    # one JSONL row per Session construction into
+    # $DSH_HOME/config-snapshot/<encodedId>.jsonl — the attribution substrate
+    # (dsh-cc/harness/plugin versions per construction). Publishes no Service
+    # (plain plugin, handoff-store pattern), so it needs no isolate key of its
+    # own; the session/created listener is global and sync-safe, and the async
+    # writer never blocks creation.
+    - id: config-snapshot
+      name: '@dsh-cc/config-snapshot'
+
+    # Progress rebuild (design docs/plans/2026-10-09-structured-progress-and-
+    # post-compact-rebuild.md): derives a typed per-session progress brief
+    # from session events (goal fold, todo snapshot, verified bash receipts,
+    # last user message) and re-injects it into the first model request after
+    # a successful compaction/end. Publishes no Service (plain plugin), so it
+    # needs no isolate key. DEFAULT OFF (progress-rebuild.enabled). ORDER:
+    # after advisor-watchdog, at the cc-services tail — read-only observer +
+    # one bounded injection, no composition dependency on any earlier row.
+    - id: progress-rebuild
+      name: '@dsh-cc/progress-rebuild'
+    # Skill-usage telemetry (plan docs/plans/2026-10-09-skill-lifecycle-usage-gates.md):
+    # an observe-only listener set counting committed skill loads (tool form
+    # at the `tools/result` emit seam, slash form at persisted
+    # skill-invocation user messages) into a per-workspace sidecar ledger
+    # under $DSH_HOME/skill-usage/, plus a `session/created` utility rollup
+    # and a `skills/learned-changed` invalidator. Publishes no Service (plain
+    # plugin, handoff-store pattern), so it needs no isolate key of its own;
+    # it consumes the root-realm `skills` service and appends NOTHING to
+    # session transcripts (§3.6). DEFAULT ON (cc-skill-usage.enabled). ORDER:
+    # at the cc-services tail, after progress-rebuild — physical row order
+    # keeps the emit-seam composition reviewable.
+    - id: skill-usage
+      name: '@dsh-cc/skill-usage'
+
+# ── parallel rows ──────────────────────────────────────────────────────────
+
+# Claude Code skills from user/project/additional roots.
+- id: skill-claude-code
+  name: '@dsh-cc/skill-loader'
+
+- id: memory-consolidation
+  name: '@dsh-cc/memory-consolidation'
+
+# Render CLAUDE.md-style output styles to the system prompt.
+- id: cc-output-styles
+  name: '@dsh-cc/output-styles'
+
+# Coordinator mode: DSH_COORDINATOR_MODE=1 or config enabled.
+- id: coordinator
+  name: '@dsh-cc/coordinator'
+
+# `schedule` moved to the HOST plane at harness 0.1.7 (see
+# cc-shell/cordis.patch.yml): the rc.2 service class injects
+# sessionController, absent from tui profiles — a preset-scope row parks the
+# agent mount forever.
+
+- id: session-cwd
+  name: '@dsh-cc/session-cwd'
+
+- id: tool-git-worktree
+  name: '@dsh-cc/tool-git-worktree'
+
+- id: tool-sleep
+  name: '@dsh-cc/tool-sleep'
+
+# NotebookEdit: edits Jupyter notebook (.ipynb) cells over the ctx.fs seam
+# with CC's replace/insert/delete, cell addressing, and read-before-write gate.
+- id: tool-notebook-edit
+  name: '@dsh-cc/tool-notebook-edit'
+
+# StructuredOutput: non-interactive structured-final-response channel, registered
+# only when the deployment declares a schema (CC's SyntheticOutputTool).
+- id: tool-structured-output
+  name: '@dsh-cc/tool-structured-output'
+
+# ── CC parity slash commands ───────────────────────────────────────────────
+
+# CacheHealth: passive prompt-cache prefix-stability observer; /cache-health
+# joins its own llm/stream observation ledger with provider-metered cache
+# usage from session events (detector-only, no request rewriting).
+- id: cache-health
+  name: '@dsh-cc/cache-health'
+
+# AutoModeConfig: /auto-mode introspection for the LLM risk-classifier slots
+# (defaults + effective trusted-scoped slice); no model call, no session write.
+- id: command-auto-mode
+  name: '@dsh-cc/command-auto-mode'
+
+- id: command-cost
+  name: '@dsh-cc/command-cost'
+  config:
+    # Composition decides pricing → the package schema stays strict. The preset
+    # ships a starter table of official published list prices (USD per 1M
+    # tokens), collected 2026-09-10 from the vendor pricing pages; deployments
+    # whose billing differs should override the whole modelTable. No '*'
+    # wildcard column on purpose: unmatched models report "no price
+    # configured" instead of a misleading zero cost. A runtime id with a route
+    # prefix (e.g. `llmbox_ant/glm-5.3`) matches the bare model row via suffix
+    # matching.
+    modelTable:
+      # DeepSeek (api-docs.deepseek.com/quick_start/pricing); cache write is
+      # not billed separately → cacheWrite 0.
+      - model: deepseek-v4-flash-0731
+        inputPerMTok: 0.28
+        outputPerMTok: 0.42
+        cacheReadPerMTok: 0.04
+        cacheWritePerMTok: 0
+      - model: deepseek-v4-flash
+        inputPerMTok: 0.28
+        outputPerMTok: 0.42
+        cacheReadPerMTok: 0.04
+        cacheWritePerMTok: 0
+      - model: deepseek-v4-pro
+        inputPerMTok: 0.56
+        outputPerMTok: 1.68
+        cacheReadPerMTok: 0.08
+        cacheWritePerMTok: 0
+      # GLM (docs.z.ai/guides/overview/pricing); cached-input storage is
+      # limited-time free → cacheWrite 0. glm-5.3-flash uses list prices, not
+      # the 50%-off promo.
+      - model: glm-5.3
+        inputPerMTok: 1.4
+        outputPerMTok: 4.4
+        cacheReadPerMTok: 0.26
+        cacheWritePerMTok: 0
+      - model: glm-5.2
+        inputPerMTok: 1.4
+        outputPerMTok: 4.4
+        cacheReadPerMTok: 0.26
+        cacheWritePerMTok: 0
+      - model: glm-5.1
+        inputPerMTok: 1.4
+        outputPerMTok: 4.4
+        cacheReadPerMTok: 0.26
+        cacheWritePerMTok: 0
+      - model: glm-5
+        inputPerMTok: 1.0
+        outputPerMTok: 3.2
+        cacheReadPerMTok: 0.2
+        cacheWritePerMTok: 0
+      - model: glm-4.7
+        inputPerMTok: 0.6
+        outputPerMTok: 2.2
+        cacheReadPerMTok: 0.11
+        cacheWritePerMTok: 0
+      - model: glm-4.6
+        inputPerMTok: 0.6
+        outputPerMTok: 2.2
+        cacheReadPerMTok: 0.11
+        cacheWritePerMTok: 0
+      - model: glm-4.5
+        inputPerMTok: 0.6
+        outputPerMTok: 2.2
+        cacheReadPerMTok: 0.11
+        cacheWritePerMTok: 0
+      - model: glm-5.3-flash
+        inputPerMTok: 0.15
+        outputPerMTok: 0.50
+        cacheReadPerMTok: 0.03
+        cacheWritePerMTok: 0
+      # Kimi (kimi.ai kimi-k3 pricing page).
+      - model: kimi-k3
+        inputPerMTok: 3.00
+        outputPerMTok: 15.00
+        cacheReadPerMTok: 0.30
+        cacheWritePerMTok: 0
+
+- id: command-export
+  name: '@dsh-cc/command-export'
+
+- id: command-stats
+  name: '@dsh-cc/command-stats'
+
+- id: command-status
+  name: '@dsh-cc/command-status'
+
+- id: command-memory
+  name: '@dsh-cc/command-memory'
+
+- id: command-skills
+  name: '@dsh-cc/command-skills'
+
+# Plain command plugin (plan docs/plans/2026-09-23-small-picks-batch.md C5):
+# publishes no Service, so it needs no isolate key of its own — it registers
+# into the shared `commands` registry like the other command rows above.
+- id: command-commit-split
+  name: '@dsh-cc/command-commit-split'
+
+- id: command-help
+  name: '@dsh-cc/command-help'
+
+- id: command-config
+  name: '@dsh-cc/command-config'
+
+- id: command-permissions
+  name: '@dsh-cc/command-permissions'
+
+- id: command-version
+  name: '@dsh-cc/command-version'
+
+- id: command-release-notes
+  name: '@dsh-cc/command-release-notes'
+
+- id: command-diff
+  name: '@dsh-cc/command-diff'
+
+- id: command-init
+  name: '@dsh-cc/command-init'
+
+- id: command-learn
+  name: '@dsh-cc/command-learn'
+
+- id: command-tasks
+  name: '@dsh-cc/command-tasks'
+
+- id: command-resume
+  name: '@dsh-cc/command-resume'
+
+- id: command-rename
+  name: '@dsh-cc/command-rename'
+
+- id: command-branch
+  name: '@dsh-cc/command-branch'
+
+# Cache-stable tool ordering: remembers each scope's last emitted tool-name
+# sequence on the system-prompt/assemble waterfall and appends newly appeared
+# tools (ToolSearch activations, MCP registrations) lexicographically at the
+# tail, so an activation extends the request prefix instead of shifting every
+# tool after the insertion point. cordis waterfall is outermost-first and the
+# outermost listener has the final say, so the plugin registers its assemble
+# listener with `prepend` to stay outermost regardless of row position; the
+# row itself stays last because the composition drift gate expects cc rows at
+# the bottom (the Item 6 L0 prefix-stability e2e is the sentinel).
+# Publishes no Service, so it needs no isolate realm.
+- id: tool-append-order
+  name: '@dsh-cc/tool-append-order'

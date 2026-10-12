@@ -19,10 +19,68 @@
  * Exit codes are the CLI's job; this module never calls process.exit.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { join, isAbsolute } from "node:path";
+import { dirname, join, isAbsolute } from "node:path";
 import { createRequire } from "node:module";
 
 const PRESET_YML = "packages/preset/cc/agent.cordis.yml";
+const INCLUDE_PLUGIN_NAME = "@deepseek-ai/cordis-plugin-include";
+
+/**
+ * Text the I10 literal-anchor check reads for an evidence path. For
+ * PRESET_YML — a thin include wrapper since the VWA split
+ * (docs/plans/2026-10-12-verifiable-workspace-agent.md §3.2c) — this is the
+ * include-closure expansion: include rows' `config.path` resolved relative to
+ * the INCLUDING file, nested includes recursively, cycle-guarded; only
+ * explicitly referenced files, no wildcards. A referenced file that is
+ * missing or unparseable degrades to being skipped, so the check behaves
+ * exactly as before the split for anything it can read.
+ */
+export function presetEvidenceText(rootDir, relPath) {
+  const yaml = loadYaml();
+  // The preset yml carries `!!js` expressions that must NOT evaluate here;
+  // stub the tag so parsing stays side-effect-free.
+  const jsStub = new yaml.Type("tag:yaml.org,2002:js", {
+    kind: "scalar",
+    resolve: () => true,
+    construct: () => "",
+  });
+  const schema = yaml.DEFAULT_SCHEMA.extend([jsStub]);
+
+  const collectIncludePaths = (node, out) => {
+    if (Array.isArray(node)) {
+      for (const child of node) collectIncludePaths(child, out);
+    } else if (node && typeof node === "object") {
+      if (node.name === INCLUDE_PLUGIN_NAME && typeof node.config?.path === "string")
+        out.push(node.config.path);
+      for (const value of Object.values(node)) collectIncludePaths(value, out);
+    }
+  };
+
+  const parts = [];
+  const seen = new Set();
+  const walk = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    let text;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      return;
+    }
+    parts.push(text);
+    let doc;
+    try {
+      doc = yaml.load(text, { schema });
+    } catch {
+      return;
+    }
+    const includePaths = [];
+    collectIncludePaths(doc, includePaths);
+    for (const p of includePaths) walk(join(dirname(file), p));
+  };
+  walk(join(rootDir, relPath));
+  return parts.join("\n");
+}
 const BEHAVIORAL = new Set(["full", "partial", "divergent", "missing"]);
 const UX = new Set(["full", "partial", "missing"]);
 const DEVIATIONS = new Set(["none", "downgrade", "divergent", "upstream-blocked", "non-goal"]);
@@ -137,7 +195,9 @@ function checkEvidence(manifest, id, cap, dims, diags, rootDir) {
       // I10: literal substring occurrence in the cited repo file.
       let content = "";
       try {
-        content = readFileSync(abs, "utf8");
+        content = ev.path === PRESET_YML
+          ? presetEvidenceText(rootDir, ev.path)
+          : readFileSync(abs, "utf8");
       } catch {
         diag(diags, "error", "evidence", id, `${at}: cannot read ${ev.path}`);
         continue;

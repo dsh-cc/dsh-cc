@@ -109,6 +109,19 @@
             config:
               path: node_modules/@dsh-cc/preset-cc/agent.cordis.yml
 
+    - id: preset-vwa
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: vwa
+        name: VWA mode
+        description: CC mode plus verifiable deliverable receipts for documents and research artifacts.
+        order: 6
+        plugins:
+          - id: vwa-composition
+            name: '@deepseek-ai/cordis-plugin-include'
+            config:
+              path: node_modules/@dsh-cc/preset-cc/agent.vwa.cordis.yml
+
     - id: tui
       name: '@dsh-cc/tui'
       inject: [agents]

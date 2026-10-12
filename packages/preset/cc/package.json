@@ -10,6 +10,8 @@
   },
   "files": [
     "agent.cordis.yml",
+    "agent.shared.cordis.yml",
+    "agent.vwa.cordis.yml",
     "preset.yml",
     "README.md",
     "README.zh.md"

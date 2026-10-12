@@ -9,11 +9,43 @@ const includePkg = req.resolve('@deepseek-ai/cordis-plugin-include/package.json'
 const yaml = createRequire(includePkg)('js-yaml') as typeof import('js-yaml')
 
 const agentCordisPath = new URL('../agent.cordis.yml', import.meta.url).pathname
+const sharedCordisPath = new URL('../agent.shared.cordis.yml', import.meta.url).pathname
+const vwaCordisPath = new URL('../agent.vwa.cordis.yml', import.meta.url).pathname
 const presetYmlPath = new URL('../preset.yml', import.meta.url).pathname
 const pkgJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
-const yamlText = readFileSync(agentCordisPath, 'utf8')
-const doc = yaml.load(yamlText, { schema: entryListSchema }) as any[]
+// The shared row body (VWA split, docs/plans/2026-10-12-verifiable-workspace-agent.md
+// §3.1): the vendored-from header, the baseline rows, and the cc rows all live
+// here; agent.cordis.yml / agent.vwa.cordis.yml are thin wrappers adding only
+// their persona row via an include. yamlText below is the shared file — the
+// drift gate and the raw-text tripwires read its segments.
+const yamlText = readFileSync(sharedCordisPath, 'utf8')
+
+/**
+ * Expand the include closure of a preset composition file into ONE row list:
+ * include rows (name '@deepseek-ai/cordis-plugin-include') are replaced by the
+ * rows of the referenced file, whose `config.path` resolves relative to the
+ * INCLUDING file's directory (co-located files use `./`). Nested includes
+ * recurse, cycle-guarded; only explicitly referenced files are read.
+ */
+function expandIncludes(file: string, seen = new Set<string>()): any[] {
+  const real = realpathSync(file)
+  if (seen.has(real)) throw new Error(`include cycle at ${file}`)
+  seen.add(real)
+  const rows = yaml.load(readFileSync(file, 'utf8'), { schema: entryListSchema }) as any[]
+  const out: any[] = []
+  for (const row of rows) {
+    if (row.name === '@deepseek-ai/cordis-plugin-include' && typeof row.config?.path === 'string') {
+      out.push(...expandIncludes(join(dirname(file), row.config.path), seen))
+    } else {
+      out.push(row)
+    }
+  }
+  return out
+}
+
+// The cc surface, unchanged: wrapper rows (persona) plus the shared closure.
+const doc = expandIncludes(agentCordisPath)
 
 const BASE_IDS = [
   'persona', 'agent-instructions', 'tool-bash', 'tool-pwsh', 'tool-fs',
@@ -670,6 +702,60 @@ describe('cc declaration row (packages/bundle/cc-tui/cordis.patch.yml)', () => {
   })
 })
 
+describe('agent.vwa.cordis.yml composition', () => {
+  const vwaDoc = expandIncludes(vwaCordisPath)
+
+  it('expands the include closure to the shared body plus exactly one persona row', () => {
+    // The include row is replaced by the shared body; the only VWA-local row
+    // is the persona (a second persona row in one scope fails section
+    // registration, so the shared body carries none).
+    expect(vwaDoc.filter((r) => r.id === 'persona').length).toBe(1)
+    expect(vwaDoc.some((r) => r.name === '@deepseek-ai/cordis-plugin-include')).toBe(false)
+    for (const baseId of BASE_IDS) {
+      expect(vwaDoc.map((r) => r.id)).toContain(baseId)
+    }
+    const ids = vwaDoc.map((r) => r.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('carries the verifiable-deliverable persona prefix', () => {
+    const persona = vwaDoc.find((r) => r.id === 'persona')!
+    const prefix = (persona.config as { prefix: string }).prefix
+    expect(prefix).toContain('{{model}}')
+    expect(prefix).toContain('{{cwd}}')
+    expect(prefix).toContain('verifiable workspace deliverables')
+    expect(prefix).toContain('〔src:ws:<path>#La-Lb〕')
+  })
+})
+
+describe('vwa declaration row (packages/bundle/cc-tui/cordis.patch.yml)', () => {
+  const patch = yaml.load(
+    readFileSync(new URL('../../../bundle/cc-tui/cordis.patch.yml', import.meta.url), 'utf8'),
+    { schema: entryListSchema },
+  ) as any[]
+
+  it('declares vwa right after preset-cc with order 6 and the vwa composition include', () => {
+    const rows = flattenInserts(patch)
+    const ids = rows.map((r) => r.id)
+    // Hard rule: a new row must never restate an existing id — duplicate ids
+    // silently collapse last-wins with no error.
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids.indexOf('preset-vwa')).toBe(ids.indexOf('preset-cc') + 1)
+    const row = rows.find((r) => r.id === 'preset-vwa')
+    expect(row?.name).toBe('@deepseek-ai/dsh-agent-preset')
+    expect(row?.config?.id).toBe('vwa')
+    expect(row?.config?.name).toBe('VWA mode')
+    expect(row?.config?.order).toBe(6)
+    expect(row?.config?.plugins).toEqual([
+      {
+        id: 'vwa-composition',
+        name: '@deepseek-ai/cordis-plugin-include',
+        config: { path: 'node_modules/@dsh-cc/preset-cc/agent.vwa.cordis.yml' },
+      },
+    ])
+  })
+})
+
 describe('version comparison (drift-gate floor binding)', () => {
   it('orders rc releases numerically, not lexicographically', () => {
     expect(cmpVersion('0.1.0-rc.10', '0.1.0-rc.2')).toBeGreaterThan(0)
@@ -701,9 +787,12 @@ function flattenInserts(rows: unknown): any[] {
  * preset, keyed by row id. Anything not listed must match upstream exactly.
  */
 const DRIFT_ALLOWANCE: Record<string, string> = {
-  // Upstream carries the working-directory clause as a separate `suffix`;
+  // The persona row left the shared body in the VWA split: it now lives only
+  // in the per-preset wrappers (agent.cordis.yml / agent.vwa.cordis.yml),
+  // since a second persona row in one scope fails section registration.
+  // Upstream renders the working-directory clause as a separate `suffix`;
   // cc folds both clauses into one `prefix` (same rendered text).
-  persona: 'suffix folded into prefix',
+  persona: 'wrapper-only row (suffix folded into prefix)',
   // The /goal command stays host-plane in cc (the tool row is mounted here).
   'command-goal': 'host-plane row, not part of the agent composition',
   // Upstream-only surfaces cc does not ship.
