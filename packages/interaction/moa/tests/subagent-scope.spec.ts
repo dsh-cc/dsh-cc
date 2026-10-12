@@ -18,10 +18,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import { isSubagentAgent } from '../src/agent-scope.ts'
-import { createOpeningCapture } from '../src/capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
 import { textOf, type RequestPayload } from '../src/router.ts'
+import { captureClaimed, currentClaimedTurn, getCapturedOpening, noteClaimedTurn, resetRuntimeCore } from '../src/runtime-state.ts'
 import { makeRig, userOpening, routes as tierRoutes, GAUGE_ROUTE, type Rig } from './rig.ts'
 
 const dirs: string[] = []
@@ -88,6 +88,12 @@ describe('moa subagent scope (predicate)', () => {
   })
 })
 
+/** Fire one full PR-2 step for the root agent: assemble → request. */
+async function fireStep(rig: Rig, turn: number): Promise<{ model?: string }> {
+  await rig.assemble(turn)
+  return (await rig.router.listener(rig.payload(turn, 1), rig.next)) as { model?: string }
+}
+
 describe('moa subagent scope (router)', () => {
   it('a subagent request passes through unclassified and unoverridden, and writes no ledger row', async () => {
     const rig = makeRig({ ledger: join(tempDir(), 'routing.jsonl') })
@@ -103,12 +109,11 @@ describe('moa subagent scope (router)', () => {
   it('a subagent request must not consume the root turn: the same-numbered root turn still classifies', async () => {
     const rig = makeRig()
     // The child runs its turn 1 while the root is ON turn 1 — child turn
-    // numbers restart at 1. Without the guard the child request would set
-    // lastSeenTurn=1 and the root's own first request would silently skip
-    // classification as a "same turn" continuation.
+    // numbers restart at 1. Without the guard the child request would reset
+    // the sticky-turn tracking and shadow the root's capture slot.
     await rig.seedCapture(1, [userOpening('ROOT TURN ONE')])
     await fireSubagent(rig, 1)
-    const root = (await rig.router.listener(rig.payload(1, 1), rig.next)) as { model?: string }
+    const root = await fireStep(rig, 1)
     expect(rig.classifyStates).toEqual(['ROOT TURN ONE'])
     expect(root.model).toBe('tier-draft')
   })
@@ -117,7 +122,7 @@ describe('moa subagent scope (router)', () => {
     const rig = makeRig()
     // Boot pair observed first, so the machine's boot default is BOOT_PAIR.
     await rig.seedCapture(1, [userOpening('root turn one')])
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await fireStep(rig, 1)
     // The child reports a FOREIGN pair (an explicit child model override) —
     // observing it would disarm the machine for the root's later turns.
     await fireSubagent(rig, 2)
@@ -125,30 +130,31 @@ describe('moa subagent scope (router)', () => {
     // Control: the SAME foreign pair observed on a root request disarms.
     rig.setHeaderPair({ provider: 'foreign', model: 'child-model' })
     await rig.seedCapture(3, [userOpening('root turn three')])
-    const root = (await rig.router.listener(rig.payload(3, 1), rig.next)) as { model?: string }
+    const root = await fireStep(rig, 3)
     expect(rig.core.arming.isArmed()).toBe(false)
-    expect(root.model).toBe('mock') // zero override while disarmed
+    expect(root.model).toBe('child-model') // zero override while disarmed (pass-through = the resolved pair)
   })
 
   it('root regression: an agent whose session header carries no origin still routes', async () => {
     const rig = makeRig()
     await rig.seedCapture(3, [userOpening('root as usual')])
-    const root = (await rig.router.listener(rig.payload(3, 1), rig.next)) as { model?: string }
+    const root = await fireStep(rig, 3)
     expect(rig.classifyStates).toEqual(['root as usual'])
     expect(root.model).toBe('tier-draft')
   })
 })
 
 describe('moa subagent scope (capture)', () => {
-  it('a subagent pre-step never claims a turn slot; the same-numbered root pre-step still captures', async () => {
+  it('a subagent claim never writes the shared capture map; the same-numbered root claim still captures', async () => {
     const rig = makeRig()
-    await rig.capture.listener(
-      { messages: [userOpening('child prompt')], turn: 1, agent: { session: { header: { ...subagentHeader } } } } as never,
-      async () => ({}),
-    )
-    expect(rig.capture.getCapturedOpening(1)).toBeUndefined()
+    const subAgent = { session: { header: { ...subagentHeader } } }
+    captureClaimed(subAgent, userOpening('child prompt'), 1)
+    noteClaimedTurn(subAgent, 1)
+    expect(getCapturedOpening(1)).toBeUndefined()
+    expect(currentClaimedTurn()).toBeUndefined()
     await rig.seedCapture(1, [userOpening('root prompt')])
-    expect(textOf(rig.capture.getCapturedOpening(1) as never)).toBe('root prompt')
+    expect(textOf(getCapturedOpening(1) as never)).toBe('root prompt')
+    expect(currentClaimedTurn()).toBe(1)
   })
 
   it('a subagent pre-step never consumes the root’s queued status row', async () => {
@@ -157,7 +163,7 @@ describe('moa subagent scope (capture)', () => {
     // queued row (no effort-degrade notice alongside it).
     rig.setResolveEfforts(async () => ['max'])
     await rig.seedCapture(1, [userOpening('ROOT TURN ONE')])
-    await rig.router.listener(rig.payload(1, 1), rig.next) // classifies → queues 'moa: routed → draft'
+    await fireStep(rig, 1) // classifies → queues 'moa: routed → draft'
     const nextDecision = async (): Promise<{ kind: string; messages: unknown[] }> => ({ kind: 'enter', messages: [] })
     const child = (await rig.router.preStepListener({ agent: { session: { header: { ...subagentHeader } } } } as never, nextDecision)) as {
       messages?: unknown[]
@@ -213,11 +219,11 @@ describe('moa subagent scope (judge)', () => {
     const arming = new ArmingMachine(() => settings.enabled)
     arming.arm()
     const core: MoaCore = { readSettings: () => settings, arming, bookkeeping: new EscalationBookkeeping() }
-    const capture = createOpeningCapture()
+    resetRuntimeCore()
     const session: FakeSession = { events: [], id: 'session-1', seq: 0 }
     const acceptStates: string[] = []
     const deps: JudgeDeps = {
-      getCapturedOpening: (turnId) => capture.getCapturedOpening(turnId),
+      getCapturedOpening: (turnId) => getCapturedOpening(turnId),
       tierFor: () => 1,
       routes: () => tierRoutes() as never,
       resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
@@ -240,7 +246,8 @@ describe('moa subagent scope (judge)', () => {
 
     // A completed, effect-free, eligible turn — without the guard this judge
     // WOULD run on it.
-    await capture.listener({ messages: [userOpening('child prompt')], turn: 1 } as never, async () => ({}))
+    captureClaimed(undefined, userOpening('child prompt'), 1)
+    noteClaimedTurn(undefined, 1)
     session.events.push(
       { seq: 0, type: 'user/message', data: { content: [{ type: 'text', text: 'child prompt' }], source: { kind: 'user' } } },
       { seq: 1, type: 'assistant/message', data: { turn: 1, message: { content: [{ type: 'text', text: 'child answer' }] } } },
@@ -256,7 +263,8 @@ describe('moa subagent scope (judge)', () => {
     // Control: the identical turn under a root agent IS judged.
     const rootSession: FakeSession = { events: session.events.slice(), id: 'session-2', seq: session.seq }
     const root = judgeAgent(rootSession)
-    await capture.listener({ messages: [userOpening('root prompt')], turn: 2 } as never, async () => ({}))
+    captureClaimed(undefined, userOpening('root prompt'), 2)
+    noteClaimedTurn(undefined, 2)
     rootSession.events.push(
       { seq: 2, type: 'user/message', data: { content: [{ type: 'text', text: 'root prompt' }], source: { kind: 'user' } } },
       { seq: 3, type: 'assistant/message', data: { turn: 2, message: { content: [{ type: 'text', text: 'root answer' }] } } },

@@ -157,6 +157,19 @@ const DRIFT_ALLOWANCE: Record<
       "const app = createAcpAgentApp({ name: 'deepseek-harness-acp' })",
     ],
   },
+  'src/model-control.ts': {
+    why: 'CC-only (not upstream drift): co-located model-selection notice sanitizer registration (dsh-cc effective-model-truth PR-1, design §5.1) immediately after the installModelSelection call',
+    ccOnly: [
+      // NOTE: keep the import statement on ONE line — a trailing bare from
+      // keyword makes check-spec-deps mis-parse the next string literal.
+      "import { installModelSelectionSanitizer } from '@dsh-cc/moa/sanitizer'",
+      '// Co-located sanitizer (effective-model-truth §5.1): later-with-prepend →',
+      '// outermost agent/pre-step listener; drops phantom model-selection notices',
+      '// while moa overlays the boot selection.',
+      'installModelSelectionSanitizer(agentCtx, this.selection)',
+    ],
+    upstreamOnly: [],
+  },
   'src/session.ts': {
     why: 'DIVERGENCE.md 2, 4, 5 — presets seam, create meta stamp + setup order, resume projection mount',
     // ponytail: bare '}' and '},' entries are scoped to this file's allowance

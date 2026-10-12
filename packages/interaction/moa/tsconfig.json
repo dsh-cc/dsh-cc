@@ -19,6 +19,9 @@
     },
     {
       "path": "../../llm-tuning/systemone"
+    },
+    {
+      "path": "../../observability/sidecar-io"
     }
   ]
 }

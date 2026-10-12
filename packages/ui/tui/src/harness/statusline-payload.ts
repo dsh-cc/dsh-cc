@@ -41,11 +41,13 @@ export type StatusLinePayloadView = {
   /** Worktree descriptor carried by the session, when present. */
   worktree?: { name?: string; path?: string; branch?: string }
   /**
-   * Moa routing tier alias for the current turn. Additive non-CC key
-   * (deviation recorded like `version` above): external CC consumers ignore
-   * unknown keys; omitted when moa is off or no route has landed yet.
+   * Moa routing tier for the current turn: the tier alias plus, when known,
+   * the effective model id the overlay resolves to (effective-model-truth
+   * §5.4). Additive non-CC key (deviation recorded like `version` above):
+   * external CC consumers ignore unknown keys; omitted when moa is off or no
+   * route has landed yet.
    */
-  moa?: { tier: string }
+  moa?: { tier: string; model?: string }
   /** Git worktree name (mirrors the worktree descriptor's name). */
   gitWorktree?: string
   /** Uncached input-token total (context-window total). */
@@ -151,7 +153,10 @@ export function buildStatusLinePayload(view: StatusLinePayloadView): Record<stri
     effort: compact({ level: view.effort }),
     worktree: view.worktree === undefined ? undefined : compact(view.worktree),
     // Non-CC additive key (see the view doc): dropped when unset.
-    moa: view.moa === undefined ? undefined : compact({ tier: view.moa.tier }),
+    moa:
+      view.moa === undefined
+        ? undefined
+        : compact({ tier: view.moa.tier, ...(view.moa.model === undefined ? {} : { model: view.moa.model }) }),
   }
   return compact(payload) ?? {}
 }

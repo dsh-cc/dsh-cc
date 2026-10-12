@@ -920,11 +920,23 @@
         {
           "type": "test",
           "path": "packages/interaction/moa/tests/subagent-scope.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/moa/tests/sanitizer.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/moa/tests/sanitizer-order.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/moa/tests/arming.spec.ts"
         }
       ],
       "deviation": {
         "kind": "divergent",
-        "summary": "dsh-cc extension: no CC counterpart exists. A tiered cascade router (classify-first over the four lane aliases, optional acceptance judge, effect-free +1-tier escalation retry) shipped as a dark, settings-gated preset plugin with side-car JSONL ledgers. Routing scope is main-session turns only: subagent sessions (any `origin: 'subagent'` or positive `delegationDepth` header, including fork-type children and resumed child sessions driven interactively) are never classified, overlaid, or judged — a spawned agent's model stays whatever its declaration resolved to at spawn."
+        "summary": "dsh-cc extension: no CC counterpart exists. A tiered cascade router (classify-first over the four lane aliases, optional acceptance judge, effect-free +1-tier escalation retry) shipped as a dark, settings-gated preset plugin with side-car JSONL ledgers. Routing scope is main-session turns only: subagent sessions (any `origin: 'subagent'` or positive `delegationDepth` header, including fork-type children and resumed child sessions driven interactively) are never classified, overlaid, or judged — a spawned agent's model stays whatever its declaration resolved to at spawn. A co-located model-selection notice sanitizer (tui driver + acp model-control) drops the harness's phantom `[model changed: …]` notices whenever the moa overlay is active on its boot selection (otherwise pass-through, byte-identical harness behavior), and a mid-session `/model` now disarms moa under the overlay (previously silently ignored) until the selection returns to the boot pair."
       }
     },
     "engine.notebook-edit": {

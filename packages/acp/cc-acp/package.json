@@ -24,7 +24,8 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.4.0"
+    "@agentclientprotocol/sdk": "1.4.0",
+    "@dsh-cc/moa": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",

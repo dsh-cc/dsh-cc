@@ -7,8 +7,9 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { installModelSelection, type Agent, type AgentHandle, type AgentSetup, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import { type Agent, type AgentHandle, type AgentSetup, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { installModelSelectionWithSanitizer } from './model-selection-wiring.ts'
 import { composePreset } from './preset.ts'
 import { bootBannerRows } from './boot-banner.ts'
 import { createSessionsSection } from './driver-sessions.ts'
@@ -100,7 +101,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const presetSetup = composition.setup
   const withSelection: AgentSetup = async (agentCtx, agent) => {
     if (presetSetup !== undefined) await presetSetup(agentCtx, agent)
-    installModelSelection(agentCtx, selection)
+    installModelSelectionWithSanitizer(agentCtx, selection)
   }
 
   const agentOptions = config.provider !== undefined && config.model !== undefined
@@ -255,7 +256,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   await agent.awaitBootFrame()
 
   // --- Statusline: custom command wiring + HUD (branch + projections feed) ---
-  const branchRef = { value: undefined as string | undefined }, moaRef = { value: undefined as string | undefined }, statusline = createStatusLineWiring({ emit, state: () => state, ctx, cwd, current, selection, listeners, waitForModel: agent.waitForModel, branchRef, moaRef })
+  const branchRef = { value: undefined as string | undefined }, moaRef = { value: undefined as { tier: string; model?: string } | undefined }, statusline = createStatusLineWiring({ emit, state: () => state, ctx, cwd, current, selection, listeners, waitForModel: agent.waitForModel, branchRef, moaRef })
   const hud = createHudSection({
     emit, state: () => state, ctx, cwd, current, selection, branchRef, moaRef,
     branchProbe: config.branchProbe ?? gitBranchOf,

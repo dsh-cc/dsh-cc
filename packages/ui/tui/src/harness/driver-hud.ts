@@ -37,6 +37,7 @@ import {
   type TokenUsageStateLike,
 } from '../state/driver-types.ts'
 import { formatModeLine, formatStatusLine } from '../statusline.ts'
+import { renderMoaTier } from './statusline-moa.ts'
 import { truncateToWidth } from '@dsh-cc/pi-tui'
 import type { DriverHudCtx } from './driver-ctx.ts'
 
@@ -206,7 +207,10 @@ export function createHudSection(rt: DriverHudCtx) {
       ...selection.current === undefined ? {} : { model: selection.current.model },
       ...effort === undefined ? {} : { effort },
       ...branchRef.value === undefined ? {} : { branch: branchRef.value },
-      ...rt.moaRef.value === undefined ? {} : { moa: rt.moaRef.value },
+      ...(() => {
+        const moa = renderMoaTier(rt.moaRef.value)
+        return moa === undefined ? {} : { moa }
+      })(),
       ...s.hud?.contextPercent === undefined ? {} : { contextPercent: s.hud.contextPercent },
       ...s.hud?.contextTokens === undefined ? {} : { contextTokens: s.hud.contextTokens },
       ...s.hud?.tokens === undefined ? {} : { tokens: s.hud.tokens },

@@ -18,3 +18,26 @@
 | `judge-route` | 别名 `gauge` | 别名或 `{provider, model, protocol}`；未设置时用 `gauge` 通道别名（须解析为 System One 路由，否则 moa 保持未启用） |
 | `classify-budget-tokens` | `4000` | 分类输入预算 |
 | `call-budget-ms` | `8000` | 每条消息的级联截止时间 |
+
+## 如实的模型记账
+
+当 moa 在 boot 选择上覆盖某个档位时，以下两处原本会谎报实际服务的模型：
+
+- **过滤幻影通知。** 覆盖生效时，harness 几乎每一步都会重发
+  `[model changed: …]` 通知，声称会话将继续使用一个覆盖层并不会
+  服务的模型。共置的 sanitizer（`@dsh-cc/moa/sanitizer`，在 TUI driver
+  与 ACP model control 中紧跟 harness 的 `installModelSelection` 注册）
+  会精确丢弃这些行：仅当覆盖在 boot 选择上激活时。其余一切状态 ——
+  moa 关闭、已解除武装、校验失败、或根本没有 moa —— 通知原样透传。
+- **覆盖期间 `/model` 依然生效（逃生舱）。** 会话中途 `/model`
+  切换离开 boot 选择会在下一轮分类之前解除 moa 的武装：线路按你的
+  选择服务、不再发出状态行；切回 boot 选择后从下一轮重新武装。
+  此前该切换在覆盖期间会被静默忽略。
+- **系统提示声明实际模型。** 只要覆盖生效，moa 的 assemble 监听器会把
+  系统提示的 `provider`/`model` 变量改写为解析后的档位对（绝不写 effort
+  字段）；任何 fail-open 路径（分类失败/超时、偏离 boot 选择、已禁用）
+  都保留 harness 自己的选择变量 —— 提示与线路始终一致。
+- **状态栏显示实际配对。** 覆盖生效时，状态栏渲染
+  `<模型 id> ◂ <档位别名>`（例如 `deepseek-v4.1-flash ◂ sketch`），
+  而非裸档位别名 —— 内置底栏与自定义命令负载（`moa: {tier, model}`）
+  皆如此。真实切换离开时清空该段；无覆盖时显示普通选择。

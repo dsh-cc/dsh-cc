@@ -3,10 +3,14 @@
  * step reuse, §6 arming precedence (explicit /model → zero override,
  * re-arm on return to boot default), retry-turn routing contract
  * (moa-escalation opening → skip classify + live floor override + NO
- * router-side escalation row (§3.5 single-row, S4), arming still gates),
- * last-element capture fixture, current-turn-text-not-history
+ * router-side escalation row (§3.5 single-row, S4), shared-gate gating),
+ * last-claimed-message capture fixture, current-turn-text-not-history
  * pin, status row delivery, side-car route record, effort re-validation
  * degrade, and mount-time arming validation (window fail → unarmed).
+ *
+ * PR-2 shape (effective-model-truth §5.3): classification runs at the
+ * `system-prompt/assemble` seam (sticky per turn in runtime-state); the
+ * request listener only observes and applies the stored tier.
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -14,12 +18,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import { createRequestRouter, validateArming, type RouterDeps } from '../src/router.ts'
+import { getCapturedOpening, resetRuntimeCore, tierFor } from '../src/runtime-state.ts'
 import { MOA_MODEL_CONTEXT_WINDOWS } from '../src/judge-route.ts'
 import { escalationOpening, makeRig, noticeOpening, routes as tierRoutes, userOpening, type Rig } from './rig.ts'
 
 const dirs: string[] = []
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  resetRuntimeCore()
 })
 
 function tempDir(): string {
@@ -28,8 +34,13 @@ function tempDir(): string {
   return dir
 }
 
-/** Fire the router listener with the rig's fake agent; return the resolved config. */
+/**
+ * Fire one full step in PR-2 order: assemble (classify + persona + row),
+ * then the request listener (observe + overlay). Returns the resolved
+ * config the wire would carry.
+ */
 async function fire(rig: Rig, turn: number, step = 1): Promise<{ provider?: string; model?: string; reasoningEffort?: unknown }> {
+  await rig.assemble(turn)
   return (await rig.router.listener(rig.payload(turn, step), rig.next)) as {
     provider?: string
     model?: string
@@ -46,7 +57,7 @@ describe('moa router mechanism', () => {
     expect(rig.classifyStates).toEqual(['CURRENT TURN TEXT']) // exactly one classify
     expect(first.model).toBe('tier-draft')
     expect(second.model).toBe('tier-draft') // P1: same override on step 2
-    expect(rig.router.tierFor(1)).toBe(1)
+    expect(tierFor(1)).toBe(1)
   })
 
   it('the classify trigger is the TURN-ID change, not step===0: the first dispatched request carries step 1', async () => {
@@ -66,10 +77,10 @@ describe('moa router mechanism', () => {
     expect(rig.classifyStates).toHaveLength(2)
   })
 
-  it('capture: the claimed batch [leading notice, user message] exposes the LAST element; classify state is the CURRENT turn text, never history', async () => {
+  it('capture: the claimed batch [leading notice, user message] exposes the LAST claimed message; classify state is the CURRENT turn text, never history', async () => {
     const rig = makeRig()
     await rig.seedCapture(1, [noticeOpening('[queued] agent created'), userOpening('CURRENT TURN TEXT')])
-    const opening = rig.capture.getCapturedOpening(1)
+    const opening = getCapturedOpening(1)
     expect(opening?.source).toMatchObject({ kind: 'user' })
     await fire(rig, 1, 1)
     expect(rig.classifyStates).toEqual(['CURRENT TURN TEXT'])
@@ -81,8 +92,8 @@ describe('moa router mechanism', () => {
     for (let turn = 1; turn <= 9; turn++) {
       await rig.seedCapture(turn, [userOpening(`t${turn}`)])
     }
-    expect(rig.capture.getCapturedOpening(1)).toBeUndefined()
-    expect(rig.capture.getCapturedOpening(9)?.source).toMatchObject({ kind: 'user' })
+    expect(getCapturedOpening(1)).toBeUndefined()
+    expect(getCapturedOpening(9)?.source).toMatchObject({ kind: 'user' })
   })
 
   it('status row on classify: queued and delivered by the pre-step listener as a moa notice message', async () => {
@@ -97,7 +108,8 @@ describe('moa router mechanism', () => {
     // (the rig's fake next() carries reasoningEffort 'max' and no efforts
     // resolver → the carried effort degrades and queues its own notice).
     expect(decision.messages).toHaveLength(2)
-    expect(decision.messages.some((m) => m.source.kind === 'moa' && (m.source as { summary?: string }).summary === 'moa: routed → draft')).toBe(true)
+    // Row upgrade (§5.3 queueRow format): the effective model id rides along.
+    expect(decision.messages.some((m) => m.source.kind === 'moa' && (m.source as { summary?: string }).summary === 'moa: routed → draft (tier-draft)')).toBe(true)
     expect(decision.messages.every((m) => m.source.kind === 'moa' && m.source.form === 'notice')).toBe(true)
   })
 
@@ -113,20 +125,28 @@ describe('moa router mechanism', () => {
     expect(typeof rows[0].latencyMs).toBe('number')
   })
 
-  it('R6: explicit /model this session → zero override (disarmed); /model back to boot default → re-armed', async () => {
+  it('R6 (PR-2 shape): explicit /model → zero override AND zero classify (the assemble gate fails on the new selection); back to boot re-arms', async () => {
     const rig = makeRig()
-    // Turn 1 at the boot default: observe → armed, classify, override.
+    // Turn 1 at the boot default: armed, classify, override.
     await rig.seedCapture(1, [userOpening('first')])
     expect((await fire(rig, 1, 1)).model).toBe('tier-draft')
-    // Turn 2 with an explicit /model pair: machine disarms → pass-through.
+    // Turn 2 with an explicit /model pair: the harness variables at assemble
+    // already carry the NEW selection → the shared §5.3 gate fails → NO
+    // classify (no wasted call) and the persona states the selection; the
+    // request's observe disarms → clause 5 pass-through.
     rig.setHeaderPair({ provider: 'mock', model: 'custom-model' })
     await rig.seedCapture(2, [userOpening('second')])
-    expect((await fire(rig, 2, 1)).model).toBe('mock') // zero override
-    expect(rig.classifyStates).toHaveLength(1) // no classify while disarmed
-    // Turn 3 back at the boot default: re-arms (§3.1 row 4).
+    expect((await fire(rig, 2, 1)).model).toBe('custom-model') // zero override
+    expect(rig.classifyStates).toHaveLength(1) // PR-2: the switch turn does NOT classify
+    // Turn 3 back at the boot default: the assemble gate re-passes but the
+    // machine is still disarmed at tierForTurn → fail-open (no classify).
     rig.setHeaderPair({ provider: 'mock', model: 'mock' })
     await rig.seedCapture(3, [userOpening('third')])
-    expect((await fire(rig, 3, 1)).model).toBe('tier-draft')
+    expect((await fire(rig, 3, 1)).model).toBe('mock')
+    expect(rig.classifyStates).toHaveLength(1)
+    // Turn 4: re-armed (turn 3's observe) → overlay again.
+    await rig.seedCapture(4, [userOpening('fourth')])
+    expect((await fire(rig, 4, 1)).model).toBe('tier-draft')
     expect(rig.classifyStates).toHaveLength(2)
   })
 
@@ -141,7 +161,7 @@ describe('moa router mechanism', () => {
     expect(rig.warnings).toEqual([])
     const rows = await readJsonl<{ type: string }>(ledger)
     expect(rows).toHaveLength(0) // the floor path does not log a route row
-    expect(rig.router.tierFor(10)).toBe(2)
+    expect(tierFor(10)).toBe(2)
     // §3.5 conformance (S4): a moa-escalation opening queues NO router-side
     // escalation status row — the typed followup the judge woke IS the
     // escalation row. (Any delivered notice is unrelated, e.g. the rig's
@@ -152,13 +172,17 @@ describe('moa router mechanism', () => {
     expect(delivered.messages.filter((m) => (m.source?.summary ?? '').includes('→'))).toHaveLength(0)
 
     // §6 adjudication: an explicit /model (disarmed) passes through even for
-    // moa-escalation openings — classify still skipped.
+    // moa-escalation openings — classify still skipped. The rig's fake wire
+    // serves the user's explicit pair, so the request-time observe keeps the
+    // machine disarmed and clause 5 passes the pair through untouched.
     const disarmed = makeRig()
+    disarmed.core.arming.noteBootPair({ provider: 'mock', model: 'mock' })
     disarmed.core.arming.observeRequestModel({ provider: 'mock', model: 'mock' })
     disarmed.core.arming.observeRequestModel({ provider: 'mock', model: 'custom' }) // explicit /model
+    disarmed.setHeaderPair({ provider: 'mock', model: 'custom' })
     disarmed.core.bookkeeping.recordFloor(5, 2)
     await disarmed.seedCapture(10, [escalationOpening('the first answer was rejected', 5, 1, 2)])
-    expect((await fire(disarmed, 10, 1)).model).toBe('mock')
+    expect((await fire(disarmed, 10, 1)).model).toBe('custom')
     expect(disarmed.classifyStates).toHaveLength(0)
   })
 
@@ -231,9 +255,7 @@ describe('moa router mechanism', () => {
     const rig = makeRig()
     rig.setResolveEfforts(async () => ['low'])
     await rig.seedCapture(1, [userOpening('go')])
-    await rig.seedCapture(2, [userOpening('go again')])
     await fire(rig, 1, 1)
-    await fire(rig, 2, 1)
     const drain = async (): Promise<string[]> => {
       const decision = (await rig.router.preStepListener({}, async () => ({ kind: 'continue', messages: [] }))) as {
         messages: { source: { summary?: string } }[]
@@ -242,10 +264,11 @@ describe('moa router mechanism', () => {
     }
     const first = await drain()
     expect(first.filter((s) => s.includes('Effort "max" not supported by tier-draft'))).toHaveLength(1)
-    // Second routed turn on the same pair: degrades again (bare pair) but
+    // A second routed turn on the same pair: degrades again (bare pair) but
     // queues NO repeat notice — per-turn repeats spammed every routed turn
     // (2026-10-11 dogfood).
-    const applied = await fire(rig, 1, 1)
+    await rig.seedCapture(2, [userOpening('go again')])
+    const applied = await fire(rig, 2, 1)
     expect(applied.reasoningEffort).toBeUndefined()
     const second = await drain()
     expect(second.filter((s) => s.includes('Effort "max" not supported by tier-draft'))).toHaveLength(0)

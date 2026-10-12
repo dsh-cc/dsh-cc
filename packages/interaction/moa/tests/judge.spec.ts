@@ -13,14 +13,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
-import { createOpeningCapture } from '../src/capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
+import { captureClaimed, getCapturedOpening, noteClaimedTurn, resetRuntimeCore } from '../src/runtime-state.ts'
 import { GAUGE_ROUTE, routes as tierRoutes, userOpening } from './rig.ts'
 
 const dirs: string[] = []
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  resetRuntimeCore()
 })
 function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'moa-judge-'))
@@ -78,7 +79,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
   arming.arm()
   const bookkeeping = new EscalationBookkeeping()
   const core: MoaCore = { readSettings: () => settings, arming, bookkeeping }
-  const capture = createOpeningCapture()
+  resetRuntimeCore()
   const session: FakeSession = { events: [], id: 'session-1', seq: 0 }
   const followed: { text: string; source: unknown }[] = []
   const acceptStates: string[] = []
@@ -112,7 +113,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     )
   }
   const deps: JudgeDeps = {
-    getCapturedOpening: (turnId) => capture.getCapturedOpening(turnId),
+    getCapturedOpening: (turnId) => getCapturedOpening(turnId),
     tierFor: () => options.tier ?? 1,
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
@@ -147,7 +148,9 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     acceptanceLedger,
     bookkeeping,
     seed: async (turn, messages) => {
-      await capture.listener({ messages, turn } as never, async () => ({}))
+      // The claimed emit is per-message; the LAST claimed message wins (§5.3).
+      for (const message of messages) captureClaimed(undefined, message as UserMessage, turn)
+      noteClaimedTurn(undefined, turn)
     },
     stop: (turn) => {
       judge.listener({ agent: fakeAgent, turn, signal: new AbortController().signal } as never)

@@ -122,6 +122,11 @@ describe('moa (additive non-CC key)', () => {
     expect(payload.moa).toEqual({ tier: 'draft' })
   })
 
+  it('carries the effective model id alongside the tier when known (effective-model-truth §5.4)', () => {
+    const payload = buildStatusLinePayload(view({ moa: { tier: 'sketch', model: 'deepseek-v4.1-flash' } }))
+    expect(payload.moa).toEqual({ tier: 'sketch', model: 'deepseek-v4.1-flash' })
+  })
+
   it('drops the moa field entirely when unset', () => {
     expect('moa' in buildStatusLinePayload(view())).toBe(false)
   })

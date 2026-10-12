@@ -15,9 +15,10 @@
  * classification entirely and apply the live origin-seq tier floor (§3.4).
  *
  * §6 precedence: the arming machine observes the LIVE pre-override request
- * pair (session request header, which moa never writes) FIRST; a disarmed
- * machine (explicit `/model` this session) means zero override — including
- * for `moa-escalation` openings (explicit /model > moa overlay).
+ * pair (post-`next()` resolved config, always BEFORE the `withTier` overlay
+ * — via `observeLiveSelection`, see runtime-state.ts); a disarmed machine
+ * (explicit `/model` this session) means zero override — including for
+ * `moa-escalation` openings (explicit /model > moa overlay).
  *
  * All failures fail-open to the live selection: the listener never throws,
  * and the System One result is validated structurally (error-finish, empty
@@ -35,6 +36,21 @@ import { capMiddleToTokenBudget, systemoneDecide } from '@dsh-cc/systemone'
 import { resolveJudgeRoute } from './judge-route.ts'
 import { isSubagentAgent } from './agent-scope.ts'
 import { moaNoticeSource } from './provenance.ts'
+import {
+  clearMoaRows,
+  currentClaimedTurn,
+  getCapturedOpening,
+  getTurnTier,
+  moaBootDefault,
+  noteBootPair,
+  observeLiveSelection,
+  pairOf,
+  queueMoaRow,
+  sameFields,
+  setTurnTier,
+  spliceMoaRows,
+  type TurnTier,
+} from './runtime-state.ts'
 import { isMoaEscalationMessage } from './state.ts'
 import { TIER_ALIASES, tierAt } from './tiers.ts'
 import type { MoaCore, MoaSettings } from './index.ts'
@@ -50,8 +66,6 @@ export interface MoaRouteBackend {
 
 /** Injected seams; every one is optional and degrades to fail-open. */
 export interface RouterDeps {
-  /** The pre-step capture read (never session history, §3.2). */
-  getCapturedOpening(turnId: number): UserMessage | undefined
   /** The `ccModelRoutes` service accessor; absence fail-opens + warns once. */
   routes?: (() => ModelRoutes | undefined) | undefined
   /** System One gateway facts for a resolved judge route. */
@@ -119,22 +133,17 @@ export function validateArming(opts: {
 import { resolveTiers as resolveTiersOf, type TierResolution } from './tiers.ts'
 export type { TierResolution }
 
-/** The routing decision for one turn. */
-interface Decision {
-  tier: number
-  /** Status-row text (§3.1: a classify is NEVER silent). */
-  row: string
-  /** True for moa-escalation openings: NO router-side queued row — the typed
-   * followup the judge woke IS the escalation status row (§3.5 single-row). */
-  suppressRow?: boolean
-}
-
 export interface RequestRouter {
   listener(payload: RequestPayload, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>
-  /** Pre-step delivery for queued status rows (mount AFTER the capture). */
+  /** Pre-step delivery for queued status rows (mount AFTER the observe listener). */
   preStepListener(payload: unknown, next: () => Promise<unknown>): Promise<unknown>
-  /** The decided tier for a turn, or undefined (escalation slice seam). */
-  tierFor(turnId: number): number | undefined
+  /**
+   * The §5.3 classification seam: an OUTER `system-prompt/assemble` listener
+   * (plugin-apply registration t0 < agent creation t1). Classifies the
+   * turn's opening once (sticky in runtime-state), writes the truthful
+   * persona variables, and queues the status row.
+   */
+  assembleListener(assembly: unknown, context: unknown, next: () => Promise<unknown>): Promise<unknown>
 }
 
 export function createRequestRouter(
@@ -145,29 +154,20 @@ export function createRequestRouter(
   const deps = opts.deps
   let backendWarned = false
   let routesWarned = false
-  // Turn state: single slot per §3.2 (critic r5). `lastSeenTurn` drives the
-  // turn-change trigger; `turnTier` holds the whole-turn override.
-  let lastSeenTurn: number | undefined
-  let turnTier: { turn: number; tier: number } | undefined
-  /** The provider/model pair moa last applied (arming self-feedback guard). */
-  let lastAppliedPair: { provider: string; model: string } | undefined
   const effortCache = new Map<string, readonly string[] | undefined>()
   /** (provider, model, effort) triples already warned about (§3.2 warn-once). */
   const effortWarned = new Set<string>()
 
   const warn = (message: string): void => deps.logger?.warn(message)
 
-  const tierRoute = (tier: number): ResolvedRoute | undefined => {
-    const alias = tierAt(tier)
-    const route = alias === undefined ? undefined : deps.routes?.()?.resolve(alias)
-    if (route === undefined || route.provider === undefined || route.model === undefined) {
-      if (!routesWarned) {
-        routesWarned = true
-        warn(`moa: tier route for "${alias ?? tier}" unresolved; failing open to the live selection`)
-      }
-      return undefined
+  /** The tier's provider/model pair, with the unresolved-route warn-once. */
+  const tierRoutePair = (tier: number): { provider: string; model: string } | undefined => {
+    const pair = tierRouteVariables(tier, deps.routes?.())
+    if (pair === undefined && !routesWarned) {
+      routesWarned = true
+      warn(`moa: tier route for "${tierAt(tier) ?? tier}" unresolved; failing open to the live selection`)
     }
-    return route
+    return pair
   }
 
   /** One side-car route record (§7 R1, mirrored as a JSONL side-car row). */
@@ -187,65 +187,51 @@ export function createRequestRouter(
   }
 
   /**
-   * Status-row delivery (§3.1 — a classify is NEVER silent): rows are QUEUED
-   * and appended to the NEXT `agent/pre-step` decision's messages
-   * (mcpReadyNotice precedent). A mid-waterfall `agent.inject` wakes a
-   * continuation turn right after the current one settles (observed live: an
-   * extra `agent/request` firing), which would violate the pre-registered P3a
-   * contract (firings == step count); a pre-step decision append lands the
-   * row inside a step batch without waking the loop.
-   */
-  const pendingRows: { text: string; tier?: number }[] = []
-  const queueNotice = (text: string, tier?: number): void => {
-    pendingRows.push({ text, ...(tier === undefined ? {} : { tier }) })
-  }
-
-  /**
    * Apply the tier override AFTER `next()` (shallow copy, never in place —
    * cc-model-aliases service.ts:106-109 precedent), with effort
    * re-validation degrading exactly like `applyModelSwitch`
    * (driver-pickers.ts:98-119): unsupported carried effort → bare pair +
-   * notice row.
+   * notice row. The pair half is the shared `tierRouteVariables` helper;
+   * the effort half (cache + resolveEfforts + degradation row) is wire-only.
    */
   const withTier = async (
     resolved: LlmCallConfig,
     tier: number,
     signal: AbortSignal,
   ): Promise<LlmCallConfig> => {
-    const route = tierRoute(tier)
-    if (route === undefined) return resolved
-    const provider = route.provider as string
-    const model = route.model as string
-    lastAppliedPair = { provider, model }
+    const pair = tierRoutePair(tier)
+    if (pair === undefined) return resolved
     const carried = (resolved as { reasoningEffort?: unknown }).reasoningEffort
     if (typeof carried !== 'string' || carried.length === 0) {
-      return { ...resolved, provider, model }
+      return { ...resolved, provider: pair.provider, model: pair.model }
     }
-    const key = `${provider}\u0000${model}`
+    const key = `${pair.provider}\u0000${pair.model}`
     let efforts = effortCache.get(key)
     if (efforts === undefined && !effortCache.has(key)) {
-      efforts = await deps.resolveEfforts?.(provider, model, signal).catch(() => undefined)
+      efforts = await deps.resolveEfforts?.(pair.provider, pair.model, signal).catch(() => undefined)
       effortCache.set(key, efforts)
     }
     if (efforts !== undefined && efforts.includes(carried)) {
-      return { ...resolved, provider, model, reasoningEffort: ReasoningEffortId(carried) }
+      return { ...resolved, provider: pair.provider, model: pair.model, reasoningEffort: ReasoningEffortId(carried) }
     }
     // Unsupported carried effort → degrade exactly like applyModelSwitch
     // (driver-pickers.ts:98-119): bare pair (drop the effort field) + notice.
     // Warn-once per (provider, model, effort): the pair is process-stable,
     // so a per-turn repeat would spam the status rows every routed turn.
-    const warnKey = `${provider}\u0000${model}\u0000${carried}`
+    const warnKey = `${pair.provider}\u0000${pair.model}\u0000${carried}`
     if (!effortWarned.has(warnKey)) {
       effortWarned.add(warnKey)
-      queueNotice(`Effort "${carried}" not supported by ${model}; reset to default.`)
+      queueMoaRow(`Effort "${carried}" not supported by ${pair.model}; reset to default.`)
     }
-    return { provider, model } as LlmCallConfig
+    return { provider: pair.provider, model: pair.model } as LlmCallConfig
   }
 
+  /** One System One classify for a turn's opening; undefined = fail-open. */
   const classifyOnce = async (
-    payload: RequestPayload,
+    turn: number,
+    signal: AbortSignal,
     opening: UserMessage,
-  ): Promise<Decision | undefined> => {
+  ): Promise<number | undefined> => {
     const settings = core.readSettings()
     const routes = deps.routes?.()
     const judge = resolveJudgeRoute(settings.judgeRoute, {
@@ -278,12 +264,12 @@ export function createRequestRouter(
       state,
       questions: { route: ROUTING_QUESTION },
       timeoutMs: settings.callBudgetMs,
-      signal: payload.signal,
+      signal,
       ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
     })
     const latencyMs = now() - startedAt
     if (!result.ok) {
-      await logRoute({ turnId: payload.turn, latencyMs, truncated: false, failure: result.failure })
+      await logRoute({ turnId: turn, latencyMs, truncated: false, failure: result.failure })
       return undefined
     }
     const probabilities = result.answers.route?.probabilities
@@ -310,116 +296,164 @@ export function createRequestRouter(
     const truncated = result.usage.input_tokens >= judge.window
     if (truncated) tier = undefined
     await logRoute({
-      turnId: payload.turn,
+      turnId: turn,
       ...(tier === undefined ? {} : { tier: TIER_ALIASES[tier] }),
       ...(probabilities === undefined ? {} : { probabilities }),
       latencyMs,
       truncated,
     })
-    if (tier === undefined) return undefined
-    return { tier, row: `moa: routed → ${TIER_ALIASES[tier]}` }
+    return tier
   }
 
-  /** The whole-turn decision for a NEW turn (undefined = no override). */
-  const decide = async (payload: RequestPayload): Promise<Decision | undefined> => {
-    const opening = deps.getCapturedOpening(payload.turn)
+  /**
+   * Sticky per-turn classification (effective-model-truth §5.3): the FIRST
+   * assembly of a turn classifies (System One, bounded by call-budget-ms);
+   * later assemblies of the same turn reuse the stored tier. Escalation
+   * retries (§3.4, moa-escalation provenance) skip classification and apply
+   * the live origin-seq floor, suppressed from row queueing (§3.5). The
+   * `gate` argument is the shared §5.3 gate the caller evaluated
+   * (round-5: the retry path uses the SAME gate, not a bare isArmed()).
+   */
+  const tierForTurn = async (
+    turn: number,
+    signal: AbortSignal,
+    gate: boolean,
+  ): Promise<{ tier: number; classifiedNow: boolean; suppressRow: boolean } | undefined> => {
+    const sticky = getTurnTier()
+    if (sticky !== undefined && sticky.turn === turn) {
+      return { tier: sticky.tier, classifiedNow: false, suppressRow: sticky.suppressRow === true }
+    }
+    const opening = getCapturedOpening(turn)
     if (opening === undefined) return undefined // capture miss: fail-open
     if (isMoaEscalationMessage(opening.source)) {
       // §3.4 retry-turn routing contract: NEVER re-classify a retry — a
       // re-classify would route the retry back to the cheap tier and make
       // escalation a no-op. Apply the live origin-seq floor instead.
-      // §6 adjudication: arming still gates overrides — an explicit /model
-      // this session (disarmed machine) passes through unmodified even for
-      // moa-escalation openings; classify is still skipped.
+      if (!gate) return undefined
       const { originSeq } = opening.source as { originSeq: number }
-      if (!arming.isArmed()) return undefined
       const floor = bookkeeping.floorFor(originSeq)
       if (floor === undefined) return undefined
-      // §3.5 conformance change (S4): the router does NOT queue the
-      // `moa: from → to` row — the typed followup the judge woke IS the
-      // escalation status row; a queued duplicate would render two rows.
-      return { tier: floor, row: '', suppressRow: true }
+      // §3.5 conformance (S4): NO queued row — the typed followup the judge
+      // woke IS the escalation status row.
+      const entry: TurnTier = { turn, tier: floor, suppressRow: true }
+      setTurnTier(entry)
+      return { tier: floor, classifiedNow: true, suppressRow: true }
     }
     // Genuine-user gate: classify only genuine user turns.
     if (opening.source?.kind !== 'user') return undefined
-    // §6 R6 pin: observe the LIVE pre-override pair FIRST. The session
-    // request header is the user/boot selection — EXCEPT that the harness
-    // re-stamps the header from the previous request's RESOLVED config, so
-    // our own overlay pair shows up there next turn (self-feedback). When
-    // the header pair is exactly what moa applied last, skip the observe:
-    // it carries no user intent, and observing it would disarm the machine.
-    const header = requestHeaderOf(payload.agent)
-    if (
-      lastAppliedPair === undefined ||
-      header === undefined ||
-      header.provider !== lastAppliedPair.provider ||
-      header.model !== lastAppliedPair.model
-    ) {
-      arming.observeRequestModel({ provider: header?.provider, model: header?.model })
-    }
     if (!opts.validation.ok) opts.ensureArmed?.()
     if (!arming.isArmed() || !opts.validation.ok) return undefined
-    const decided = await classifyOnce(payload, opening)
-    return decided
+    const tier = await classifyOnce(turn, signal, opening)
+    if (tier === undefined) return undefined
+    setTurnTier({ turn, tier })
+    return { tier, classifiedNow: true, suppressRow: false }
   }
 
   return {
-    tierFor: (turnId: number) => (turnTier !== undefined && turnTier.turn === turnId ? turnTier.tier : undefined),
     listener: async (payload, next) => {
-      // Fast bail: the §3.1 zero-overhead default-off contract.
-      if (!core.readSettings().enabled) return next()
-      // Subagent scope: moa routes the main conversation only. A spawned
+      // 1. Fast bail: the §3.1 zero-overhead default-off contract — still zero
+      // classification and zero overlay, but the boot baseline is ALWAYS
+      // captured (effective-model-truth §5.2 part 1; ship-dark sessions that
+      // later enable share one baseline).
+      if (!core.readSettings().enabled) {
+        const resolved = await next()
+        if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved))
+        return resolved
+      }
+      // 2. Subagent scope: moa routes the main conversation only. A spawned
       // agent's model comes from its declared alias (resolved by the spawn
       // path into agentOptions), so its requests pass through unclassified
-      // and unoverridden — and its turn numbering restarts at 1, so letting
-      // a child through would also reset the sticky-turn tracking and feed
-      // the arming machine a foreign header pair (see agent-scope.ts).
+      // and unoverridden (see agent-scope.ts).
       if (isSubagentAgent(payload.agent)) return next()
-      const isNewTurn = payload.turn !== lastSeenTurn
-      if (isNewTurn) {
-        // Step-1 trigger pin: see the module doc — `payload.turn` change, NOT
-        // step===0 (the first dispatched request of a turn carries step: 1).
-        lastSeenTurn = payload.turn
-        turnTier = undefined
-        const decision = await decide(payload)
-        if (decision !== undefined) turnTier = { turn: payload.turn, tier: decision.tier }
-        const resolved = await next()
-        const applied =
-          decision === undefined ? resolved : await withTier(resolved, decision.tier, payload.signal)
-        // Status row queued (delivered at the next pre-step decision, see
-        // pendingRows): mid-waterfall inject is NOT used — it wakes a
-        // continuation turn and breaks the P3a firings==steps contract.
-        if (decision !== undefined && !decision.suppressRow) queueNotice(decision.row, decision.tier)
-        return applied
+      // 3+4. Always-on arming observe (effective-model-truth §5.2 part 3):
+      // the resolved pair is PRE-overlay by construction (withTier runs
+      // strictly after), so the old header self-feedback trap is
+      // structurally impossible. Idempotent; every request.
+      const resolved = await next()
+      if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved))
+      // 5. The transition guard. When this clause skips withTier, clear the
+      // pending rows: the queue is untagged by design, and a row advertising
+      // a tier that was not applied is a lie (effective-model-truth §5.2).
+      if (!arming.isArmed() || !opts.validation.ok) {
+        clearMoaRows()
+        return resolved
       }
-      if (turnTier !== undefined && turnTier.turn === payload.turn) {
-        // P1: every step of a classified turn carries the override.
-        const resolved = await next()
-        return withTier(resolved, turnTier.tier, payload.signal)
+      // 6. The sticky tier comes from the assemble seam's runtime-state
+      // store; a classification miss fails open (serve the selection).
+      const sticky = getTurnTier()
+      if (sticky !== undefined && sticky.turn === payload.turn) {
+        return withTier(resolved, sticky.tier, payload.signal)
       }
-      return next()
+      return resolved
+    },
+    assembleListener: async (_assembly: unknown, context: unknown, next) => {
+      const assembled = (await next()) as { variables?: Record<string, unknown> } | undefined
+      if (assembled === undefined) return assembled
+      const agent = (context as { agent?: unknown } | undefined)?.agent
+      const selectionVars = pairOf(assembled.variables) // the harness's just-written selection pair
+      // The session's FIRST assembly notes the boot pair directly from the
+      // harness-written variables (effective-model-truth §5.2 caller (c)).
+      if (agent !== undefined && !isSubagentAgent(agent) && selectionVars !== undefined) {
+        noteBootPair(selectionVars)
+      }
+      if (!opts.validation.ok) opts.ensureArmed?.()
+      // The shared §5.3 gate: classify gate AND persona gate, evaluated once,
+      // so the persona and the wire cannot disagree about WHETHER an overlay
+      // applies. Fail-open: the persona states the selection.
+      const boot = moaBootDefault()
+      const gate =
+        core.readSettings().enabled &&
+        opts.validation.ok &&
+        agent !== undefined &&
+        !isSubagentAgent(agent) &&
+        selectionVars !== undefined &&
+        boot !== undefined &&
+        sameFields(selectionVars, boot)
+      if (!gate) return assembled
+      const turn = currentClaimedTurn()
+      if (turn === undefined) return assembled
+      const signal =
+        (context as { signal?: AbortSignal } | undefined)?.signal ?? new AbortController().signal
+      const decision = await tierForTurn(turn, signal, gate)
+      if (process.env.MOA_DEBUG) console.log('MOA_DEBUG decision', JSON.stringify(decision), 'turn', turn)
+      if (decision === undefined) return assembled
+      const pair = tierRoutePair(decision.tier)
+      // §3.1 — a classify is NEVER silent: once per routing decision; the
+      // escalation retries keep their suppression (§3.5 single-row).
+      if (decision.classifiedNow && !decision.suppressRow) {
+        queueMoaRow(
+          pair === undefined
+            ? `moa: routed → ${TIER_ALIASES[decision.tier]}`
+            : `moa: routed → ${TIER_ALIASES[decision.tier]} (${pair.model})`,
+          decision.tier,
+          pair?.model,
+        )
+      }
+      // Persona writes provider/model ONLY — never effort (§5.3, round-5).
+      return { ...assembled, variables: { ...assembled.variables, ...tierRouteVariables(decision.tier, deps.routes?.()) } }
     },
     // Pre-step delivery for queued status rows: appended to the decision's
     // messages (mcpReadyNotice.ts:161 precedent — form 'notice' + summary),
     // one row per queued notice, then pass through.
     preStepListener: async (payload: { agent?: unknown }, next) => {
       const decision = await next()
-      if (pendingRows.length === 0) return decision
       // A subagent's pre-step never delivers the root's queued status row:
       // the Task tool that spawned the child runs during the root's turn,
       // so the child's first pre-step would otherwise win the splice — both
       // injecting a moa row into the child's transcript and silencing the
-      // root's own classify notice (see agent-scope.ts).
+      // root's own classify notice (see agent-scope.ts). Checked BEFORE the
+      // splice: a child pre-step must not drain the root's rows.
       if (isSubagentAgent(payload.agent)) return decision
+      const rows = spliceMoaRows()
+      if (rows.length === 0) return decision
       const shape = decision as { kind?: string; messages?: UserMessage[] }
       if (shape.kind === 'reject' || shape.messages === undefined) return decision
-      const rows = pendingRows.splice(0)
       return {
         ...shape,
         messages: [
           ...shape.messages,
           ...rows.map((row) =>
-            createUserMessage({ content: [{ type: 'text', text: row.text }], source: moaNoticeSource(row.text, row.tier) }),
+            createUserMessage({ content: [{ type: 'text', text: row.text }], source: moaNoticeSource(row.text, row.tier, row.model) }),
           ),
         ],
       }
@@ -448,20 +482,19 @@ export function textOf(message: UserMessage): string {
     .join('\n')
 }
 
-/** The live pre-override provider/model pair off the session request header. */
-export function requestHeaderOf(
-  agent: RequestPayload['agent'],
-): { provider?: string; model?: string } | undefined {
-  try {
-    const config = agent.session.requestHeader()?.config as
-      | { provider?: string; model?: string }
-      | undefined
-    if (config === undefined) return undefined
-    return {
-      ...(config.provider === undefined ? {} : { provider: config.provider }),
-      ...(config.model === undefined ? {} : { model: config.model }),
-    }
-  } catch {
-    return undefined
-  }
+/**
+ * The SHARED PURE pair helper (effective-model-truth §5.3): the tier's
+ * provider/model from the resolved route — synchronous, no cache access, no
+ * notice queueing. Consumed by BOTH the wire's `withTier` (pair half) and
+ * the assemble seam's persona variables, so the persona and the wire get
+ * the identical pair.
+ */
+export function tierRouteVariables(
+  tier: number,
+  routes?: { resolve: (alias: string | undefined) => ResolvedRoute | undefined } | undefined,
+): { provider: string; model: string } | undefined {
+  const alias = tierAt(tier)
+  const route = alias === undefined ? undefined : routes?.resolve(alias)
+  if (route === undefined || route.provider === undefined || route.model === undefined) return undefined
+  return { provider: route.provider as string, model: route.model as string }
 }

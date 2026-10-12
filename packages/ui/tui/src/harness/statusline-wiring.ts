@@ -174,7 +174,14 @@ export function createStatusLineWiring(
       ...(pressure?.contextWindow === undefined ? {} : { contextWindowTokens: pressure.contextWindow }),
       ...(pressure?.pressureTokens === undefined ? {} : { pressureTokens: pressure.pressureTokens }),
       ...(rt.branchRef.value === undefined ? {} : { worktree: { branch: rt.branchRef.value } }),
-      ...(rt.moaRef.value === undefined ? {} : { moa: { tier: rt.moaRef.value } }),
+      ...(rt.moaRef.value === undefined
+        ? {}
+        : {
+            moa: {
+              tier: rt.moaRef.value.tier,
+              ...(rt.moaRef.value.model === undefined ? {} : { model: rt.moaRef.value.model }),
+            },
+          }),
       ...(mirror?.isReady() === true && mirror.getPath() !== undefined
         ? { transcriptPath: mirror.getPath()! }
         : {}),

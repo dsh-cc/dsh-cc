@@ -16,6 +16,10 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./sanitizer": {
+      "types": "./lib/sanitizer.d.ts",
+      "default": "./lib/sanitizer.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },

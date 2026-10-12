@@ -10,9 +10,8 @@ import type { LlmCallConfig, UserMessage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
-import { createOpeningCapture } from '../src/capture.ts'
-import { createRequestRouter, type ArmingValidation, type RequestPayload, type RouterDeps } from '../src/router.ts'
-import { textOf } from '../src/router.ts'
+import { captureClaimed, getCapturedOpening, noteClaimedTurn, resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
+import { createRequestRouter, textOf, type ArmingValidation, type RequestPayload, type RouterDeps } from '../src/router.ts'
 
 /** Boot-default pair the rig's fake request header reports. */
 export const BOOT_PAIR = { provider: 'mock', model: 'mock' }
@@ -37,7 +36,6 @@ export const DRAFT_PROBABILITIES = { sketch: 0.05, draft: 0.7, blueprint: 0.15, 
 
 export interface Rig {
   core: MoaCore
-  capture: ReturnType<typeof createOpeningCapture>
   router: ReturnType<typeof createRequestRouter>
   /** One entry per System One call: the parsed request state. */
   classifyStates: string[]
@@ -48,8 +46,15 @@ export interface Rig {
   injected: { text: string; source: unknown }[]
   warnings: string[]
   ledger: string
-  /** Seed the capture for a turn (drive the pre-step listener directly). */
+  /** Seed the capture for a turn (emit the claimed batch per message, §5.3). */
   seedCapture: (turn: number, messages: UserMessage[]) => Promise<void>
+  /**
+   * Drive the assemble seam (effective-model-truth §5.3): the harness's
+   * assembled prompt with `variables` (defaults to the fake header pair —
+   * the harness writes the live selection there). Classifies once per turn,
+   * writes the persona variables, queues the status row.
+   */
+  assemble: (turn?: number, variables?: Record<string, unknown>) => Promise<{ variables?: Record<string, unknown> } | undefined>
   /** Build an agent/request payload for the rig's fake agent. */
   payload: (turn: number, step: number, headerPair?: { provider: string; model: string }) => RequestPayload
   next: () => Promise<LlmCallConfig>
@@ -70,6 +75,9 @@ export interface RigOptions {
 }
 
 export function makeRig(options: RigOptions = {}): Rig {
+  // The capture map, claimed-turn, sticky-tier, and pending-row slots are
+  // process-global runtime state — start each rig clean.
+  resetRuntimeCore()
   const settings: MoaSettings = { ...DEFAULT_MOA_SETTINGS, enabled: options.enabled ?? true }
   const core: MoaCore = {
     readSettings: () => settings,
@@ -77,7 +85,9 @@ export function makeRig(options: RigOptions = {}): Rig {
     bookkeeping: new EscalationBookkeeping(),
   }
   core.arming.arm()
-  const capture = createOpeningCapture()
+  // The router observes through the shared runtime-state singletons; point
+  // them at THIS rig's machine/validation (apply() does this in production).
+  setRuntimeCore({ arming: core.arming, validation: options.validation ?? { ok: true } })
   const classifyStates: string[] = []
   const classifyModels: string[] = []
   const injected: { text: string; source: unknown }[] = []
@@ -103,7 +113,6 @@ export function makeRig(options: RigOptions = {}): Rig {
   }
 
   const deps: RouterDeps = {
-    getCapturedOpening: capture.getCapturedOpening,
     routes: () => routes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
@@ -127,7 +136,6 @@ export function makeRig(options: RigOptions = {}): Rig {
 
   return {
     core,
-    capture,
     router,
     classifyStates,
     classifyModels,
@@ -146,7 +154,25 @@ export function makeRig(options: RigOptions = {}): Rig {
       ledger = path
     },
     seedCapture: async (turn, messages) => {
-      await capture.listener({ messages, turn } as never, async () => ({}))
+      // The claimed emit is per-message; the LAST claimed message of the
+      // turn is the opening (the claim batch claims pending next-step items
+      // first, then the next-turn message — §5.3).
+      for (const message of messages) captureClaimed(undefined, message, turn)
+      noteClaimedTurn(undefined, turn)
+    },
+    assemble: async (turn, variables) => {
+      // The harness's assemble listener has already written the live
+      // selection into variables (defaults to the fake header pair); moa's
+      // OUTER listener reads it after `await next()`.
+      const assembled = { variables: { ...(variables ?? { provider: headerPair.provider, model: headerPair.model }) } }
+      const context = {
+        agent: fakeAgent,
+        signal: new AbortController().signal,
+        ...((turn === undefined ? {} : { turn }) as object),
+      }
+      return (await router.assembleListener(assembled, context, async () => assembled)) as {
+        variables?: Record<string, unknown>
+      }
     },
     payload: (turn, step, pair) => ({
       agent: fakeAgent as never,
@@ -155,8 +181,11 @@ export function makeRig(options: RigOptions = {}): Rig {
       signal: new AbortController().signal,
       ...((pair === undefined ? {} : { headerPairOverride: pair }) as never),
     }),
+    // Fake "resolved config": the pre-overlay selection, i.e. the header pair
+    // (matches the real harness, where the resolved config carries the
+    // selection until moa's withTier overrides AFTER the observe).
     next: async () =>
-      ({ provider: 'mock', model: 'mock', messages: [], reasoningEffort: 'max' }) as unknown as LlmCallConfig,
+      ({ provider: headerPair.provider, model: headerPair.model, messages: [], reasoningEffort: 'max' }) as unknown as LlmCallConfig,
     setHeaderPair: (pair) => {
       headerPair = pair
     },
