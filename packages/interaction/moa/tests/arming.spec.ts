@@ -105,19 +105,26 @@ describe('arming state machine (§3.1 truth table)', () => {
 })
 
 /**
- * §7.3 arming-through-the-router: the truth table as the PR-1 listener shape
+ * §7.3 arming-through-the-router: the truth table as the PR-2 listener shape
  * actually drives it. The pre-step observe (sanitizer publish → moa's first
  * pre-step listener) is simulated with `observeLiveSelection` — the sanctioned
  * path (§5.2 contract) — fired before the request listener, exactly as the
- * production pre-step ordering does.
+ * production pre-step ordering does. Classification runs at the assemble seam
+ * (PR-2), so each step drives assemble → request in lifecycle order.
  */
 describe('arming through the router (effective-model-truth §7.3)', () => {
   const pairOfResolved = (resolved: unknown): { model?: string } => resolved as { model?: string }
 
+  /** One step in PR-2 order: assemble (classify seam) → request (observe + overlay). */
+  async function fireStep(rig: ReturnType<typeof makeRig>, turn: number): Promise<unknown> {
+    await rig.assemble(turn)
+    return rig.router.listener(rig.payload(turn, 1), rig.next)
+  }
+
   it('/model away under overlay disarms BEFORE classification (no wasted call) and the wire serves the new selection', async () => {
     const rig = makeRig({ enabled: true })
     await rig.seedCapture(1, [userOpening('build a small feature')])
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await fireStep(rig, 1)
     expect(rig.classifyStates).toHaveLength(1) // turn 1 classified, overlay on
     // User /model away: the frozen new selection is observed at pre-step.
     const away = { provider: 'acme', model: 'opus-y' }
@@ -125,25 +132,25 @@ describe('arming through the router (effective-model-truth §7.3)', () => {
     expect(rig.core.arming.isArmed()).toBe(false)
     await rig.seedCapture(2, [userOpening('another prompt')])
     rig.setHeaderPair(away)
-    const resolved = await rig.router.listener(rig.payload(2, 1), rig.next)
-    expect(rig.classifyStates).toHaveLength(1) // NO new classify — disarmed pre-decide
+    const resolved = await fireStep(rig, 2)
+    expect(rig.classifyStates).toHaveLength(1) // NO new classify — the assemble gate fails on the new selection
     expect(pairOfResolved(resolved).model).toBe(away.model) // wire serves the selection
   })
 
   it('/model back re-arms and the transition turn IS overlaid', async () => {
     const rig = makeRig({ enabled: true })
     await rig.seedCapture(1, [userOpening('first')])
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await fireStep(rig, 1)
     const away = { provider: 'acme', model: 'opus-y' }
     observeLiveSelection(away)
     await rig.seedCapture(2, [userOpening('second')])
-    await rig.router.listener(rig.payload(2, 1), rig.next)
+    await fireStep(rig, 2)
     // Switch back to the boot default: re-arms (§3.1 row 4)…
     observeLiveSelection(BOOT_PAIR)
     expect(rig.core.arming.isArmed()).toBe(true)
     // …and the transition turn is classified AND overlaid.
     await rig.seedCapture(3, [userOpening('third')])
-    const resolved = await rig.router.listener(rig.payload(3, 1), rig.next)
+    const resolved = await fireStep(rig, 3)
     expect(rig.classifyStates).toHaveLength(2)
     expect(pairOfResolved(resolved).model).toBe('tier-draft')
   })
@@ -152,7 +159,7 @@ describe('arming through the router (effective-model-truth §7.3)', () => {
     const rig = makeRig({ enabled: true })
     for (const turn of [1, 2, 3]) {
       await rig.seedCapture(turn, [userOpening(`turn ${turn}`)])
-      await rig.router.listener(rig.payload(turn, 1), rig.next)
+      await fireStep(rig, turn)
       expect(rig.core.arming.isArmed()).toBe(true)
       expect(rig.core.arming.getBootDefaultModel()).toEqual(BOOT_PAIR)
     }
@@ -162,7 +169,7 @@ describe('arming through the router (effective-model-truth §7.3)', () => {
   it('disabled fast-bail still captures the boot baseline (ship-dark sessions that later enable)', async () => {
     const rig = makeRig({ enabled: false })
     await rig.seedCapture(1, [userOpening('hi')])
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await fireStep(rig, 1)
     expect(rig.classifyStates).toHaveLength(0) // zero classification
     expect(rig.core.arming.isArmed()).toBe(false)
     expect(rig.core.arming.getBootDefaultModel()).toEqual(BOOT_PAIR) // baseline captured
@@ -181,14 +188,14 @@ describe('arming through the router (effective-model-truth §7.3)', () => {
     const rig = makeRig({ enabled: false })
     // Disabled phase: the fast-bail observes the boot pair unconditionally.
     await rig.seedCapture(1, [userOpening('while dark')])
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await fireStep(rig, 1)
     expect(rig.core.arming.getBootDefaultModel()).toEqual(BOOT_PAIR)
     // The user /models away while moa is dark; then enables moa at runtime.
     const away = { provider: 'acme', model: 'opus-y' }
     rig.setHeaderPair(away)
     rig.settings.enabled = true
     await rig.seedCapture(2, [userOpening('after enable')])
-    await rig.router.listener(rig.payload(2, 1), rig.next)
+    await fireStep(rig, 2)
     // The hot-enabled machine observes the OFF-boot pair → stays disarmed
     // (explicit /model > moa, §6 precedence) — and the baseline is NOT clobbered.
     expect(rig.core.arming.isArmed()).toBe(false)
@@ -198,10 +205,10 @@ describe('arming through the router (effective-model-truth §7.3)', () => {
     // Escape hatch is live: returning to the shared boot pair re-arms.
     rig.setHeaderPair(BOOT_PAIR)
     // Production ordering: the sanitizer's publish + moa's pre-step observe
-    // re-arm BEFORE the request listener's decide.
+    // re-arm BEFORE the request listener.
     observeLiveSelection(BOOT_PAIR)
     await rig.seedCapture(3, [userOpening('back to boot')])
-    const resolved = await rig.router.listener(rig.payload(3, 1), rig.next)
+    const resolved = await fireStep(rig, 3)
     expect(rig.core.arming.isArmed()).toBe(true)
     expect(pairOfResolved(resolved).model).toBe('tier-draft')
   })

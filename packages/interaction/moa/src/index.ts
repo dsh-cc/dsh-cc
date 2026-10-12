@@ -4,24 +4,34 @@
  *
  * Plain plugin (advisor-watchdog shape): `apply(ctx)` registers the `moa`
  * settings namespace, constructs the core singletons, and wires the routing
- * slice: a capture-only `agent/pre-step` listener and the `agent/request`
- * classify/override listener (design §3.2). Both bail fast when
- * `moa.enabled` is false.
+ * slice: an `agent/inbox/claimed` capture listener, an observe+splice
+ * `agent/pre-step` listener, the `agent/request` override listener, and the
+ * `system-prompt/assemble` classification seam (effective-model-truth §5.3).
+ * All bail fast when `moa.enabled` is false.
  *
  * @module @dsh-cc/moa
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { readUserSection } from '@dsh-cc/settings-ns'
 import { isSubagentAgent } from './agent-scope.ts'
 import { ArmingMachine } from './arming.ts'
-import { createOpeningCapture } from './capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from './judge.ts'
 import { createRequestRouter, validateArming, type ArmingValidation, type EnsureArmed, type RequestRouter, type RouterDeps } from './router.ts'
 import { registerSettings, type MoaSettings } from './settings.ts'
-import { observeLiveSelection, readPublishedSelection, resetRuntimeCore, setRuntimeCore } from './runtime-state.ts'
+import {
+  captureClaimed,
+  getCapturedOpening,
+  noteClaimedTurn,
+  observeLiveSelection,
+  readPublishedSelection,
+  resetRuntimeCore,
+  setRuntimeCore,
+  tierFor,
+} from './runtime-state.ts'
 import { EscalationBookkeeping } from './state.ts'
 
 export { SETTINGS_NAMESPACE, DEFAULT_MOA_SETTINGS, MAX_ESCALATIONS_CEILING, registerSettings, type MoaSettings, type JudgeRouteObject, type JudgeRouteSetting } from './settings.ts'
@@ -30,8 +40,8 @@ export { TIER_ALIASES, TIER_COUNT, resolveTiers, tierAt, nextTierUp, type TierRe
 export { DEFAULT_JUDGE_ALIAS, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
 export { MOA_ESCALATION_KIND, isMoaEscalationMessage, EscalationBookkeeping, type EscalationState } from './state.ts'
 export { moaNoticeSource } from './provenance.ts'
-export { createOpeningCapture, CAPTURE_CAPACITY } from './capture.ts'
-export { createRequestRouter, validateArming, textOf, requestHeaderOf, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
+export { CAPTURE_CAPACITY, captureClaimed, getCapturedOpening } from './runtime-state.ts'
+export { createRequestRouter, validateArming, textOf, tierRouteVariables, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
 export { createAcceptanceJudge, ACCEPT_QUESTION, type AcceptanceJudge, type JudgeDeps } from './judge.ts'
 
 /** What the wiring slice consumes. */
@@ -159,27 +169,39 @@ export function apply(ctx: Context): void {
     // Caller fiber already unloading: the per-firing ensureArmed still runs.
   }
 
-  const capture = createOpeningCapture()
-  liveCapture = capture
-  // First-registered moa pre-step listener (the capture listener): observe
-  // the sanitizer's published FROZEN selection FIRST (effective-model-truth
-  // §5.2 part 2 — before anything else, subagent-guarded), then the mount-race
-  // ensureArmed retry. Listener order and the sanitizer's outermost
-  // `{ prepend: true }` registration (registered at agent creation, see
-  // driver.ts / model-control.ts) pin P-B.
-  const observeAndCapture = async (payload: { agent?: unknown }, next: () => Promise<unknown>): Promise<unknown> => {
+  // Opening capture (effective-model-truth §5.3): synchronous per-message
+  // emit at claim — per turn the LAST claimed message wins (the claim batch
+  // claims pending next-step items first, then the next-turn message).
+  // Subagent-guarded inside the runtime-state writers. `noteClaimedTurn`
+  // tracks the last-claimed turn (AssembleContext has no turn field — the
+  // assemble seam reads it).
+  ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: UserMessage; turn: number }) => {
+    captureClaimed(agent, message, turn)
+    noteClaimedTurn(agent, turn)
+  })
+  const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps: buildDeps(ctx) })
+  core.router = router
+  // First moa pre-step listener: observe the sanitizer's published FROZEN
+  // selection FIRST (effective-model-truth §5.2 part 2 — before anything
+  // else, subagent-guarded), then the mount-race ensureArmed retry, then the
+  // pending-row splice (the row was queued during this step's assemble, so
+  // delivery lands in the SAME step as the overlay, §5.3).
+  const observePreStep = async (payload: { agent?: unknown }, next: () => Promise<unknown>): Promise<unknown> => {
     if (!isSubagentAgent(payload.agent)) {
       const live = readPublishedSelection(payload.agent)
       if (live?.model !== undefined) observeLiveSelection(live)
     }
     if (!validation.ok) tryArm()
-    return capture.listener(payload as never, next)
+    return router.preStepListener(payload as never, next)
   }
-  ctx.on('agent/pre-step', observeAndCapture as never)
-  const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps: buildDeps(ctx, capture.getCapturedOpening) })
-  core.router = router
-  ctx.on('agent/pre-step', router.preStepListener as never)
+  ctx.on('agent/pre-step', observePreStep as never)
   ctx.on('agent/request', router.listener)
+  // The classification seam (effective-model-truth §5.3): an OUTER
+  // `system-prompt/assemble` listener — plugin-apply registration happens
+  // BEFORE the harness registers its assemble listener at agent creation
+  // (t0 < t1, no prepend), so after `await next()` the harness has already
+  // written variables.provider/model from the live selection.
+  ctx.on('system-prompt/assemble', router.assembleListener as never)
   // Acceptance judge (§3.3/§3.4): capture-only `agent/turn-stopping`
   // listener — capture inputs synchronously, dispatch the judge DETACHED
   // (never blocks the waterfall; wakes the retry via agent.followup).
@@ -230,8 +252,11 @@ function optionalSettings(ctx: Context): { describe?: () => ReadonlyArray<{ ns?:
 /** Wire the judge's host seams off the plug context (§3.3/§3.4). */
 function buildJudgeDeps(ctx: Context): JudgeDeps {
   return {
-    getCapturedOpening: (turnId) => getMoaCapture()?.getCapturedOpening(turnId),
-    tierFor: (turnId) => core?.router?.tierFor(turnId),
+    // Judge inputs read the shared runtime-state store (effective-model-truth
+    // §5.3): the capture is written by the `agent/inbox/claimed` listener and
+    // the sticky tier by the assemble seam — both keyed per turn.
+    getCapturedOpening: (turnId) => getCapturedOpening(turnId),
+    tierFor: (turnId) => tierFor(turnId),
     routes: () => optionalRoutes(ctx),
     resolveBackend: (route) => resolveSystemOneBackend(optionalSettings(ctx), route),
     routingLedgerPath: () => {
@@ -244,12 +269,6 @@ function buildJudgeDeps(ctx: Context): JudgeDeps {
     },
     logger: ctx.logger,
   }
-}
-
-/** The live opening capture (set in apply; test seam for the judge deps). */
-let liveCapture: ReturnType<typeof createOpeningCapture> | undefined
-function getMoaCapture(): ReturnType<typeof createOpeningCapture> | undefined {
-  return liveCapture
 }
 
 /** The `llm` service, read defensively (cordis throws on `ctx.llm` without inject). */
@@ -268,9 +287,8 @@ function optionalLlm(ctx: Context): {
  * regression specs (the lazy-`llm` seam cannot be pinned through `apply`
  * without a live preset boot).
  */
-export function buildDeps(ctx: Context, getCapturedOpening: RouterDeps['getCapturedOpening']): RouterDeps {
+export function buildDeps(ctx: Context): RouterDeps {
   return {
-    getCapturedOpening,
     // Lazy: `ccModelRoutes` is an app-level service absent during the preset
     // sweep — resolving per use (not capturing at mount) keeps the judge
     // alias path alive once the service settles.

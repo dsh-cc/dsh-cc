@@ -16,17 +16,18 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { createUserMessage, type LlmCallConfig, type LlmModelReasoningInfo, type UserMessage } from '@deepseek-ai/dsh-llm'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { installModelSelection, type Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
-import { createOpeningCapture } from '../src/capture.ts'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { createRequestRouter, type ArmingValidation, type RequestRouter, type RouterDeps } from '../src/router.ts'
 import { ArmingMachine, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
 import { routes as tierRoutes, GAUGE_ROUTE } from './rig.ts'
+import { captureClaimed, getCapturedOpening as captureAt, noteClaimedTurn, resetRuntimeCore, setRuntimeCore, tierFor } from '../src/runtime-state.ts'
 
 const roots: string[] = []
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  resetRuntimeCore()
 })
 
 const REASONING = {
@@ -69,9 +70,6 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
   await ctx.plugin(AgentLoop, { agents: [] })
-  const adapter = new MockAdapter(mainScript, REASONING)
-  ctx.llm.registerAdapter(['mock'], adapter)
-  const agent = await ctx.agentLoop.create(SessionId('moa-judge'), { provider: 'mock', model: 'mock' })
 
   const settings: MoaSettings = {
     enabled: true,
@@ -89,10 +87,11 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   arming.arm()
   const bookkeeping = new EscalationBookkeeping()
   const core: MoaCore = { readSettings: () => settings, arming, bookkeeping }
-
-  const capture = createOpeningCapture()
   const validation: ArmingValidation = { ok: true }
-  agent.ctx.on('agent/pre-step', capture.listener as never)
+  // Production parity: the assemble seam's boot-pair note and the arming
+  // observes route through the shared runtime-state singletons (apply()
+  // populates them via setRuntimeCore).
+  setRuntimeCore({ arming, validation })
 
   const classifyStates: string[] = []
   const acceptStates: string[] = []
@@ -128,18 +127,15 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
     )
   }
   const routerDeps: RouterDeps = {
-    getCapturedOpening: capture.getCapturedOpening,
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
   }
   const router = createRequestRouter(core, { validation, deps: routerDeps })
-  agent.ctx.on('agent/pre-step', router.preStepListener as never)
-  agent.ctx.on('agent/request', router.listener as never)
 
   const judgeDeps: JudgeDeps = {
-    getCapturedOpening: capture.getCapturedOpening,
-    tierFor: (turnId) => router.tierFor(turnId),
+    getCapturedOpening: (turnId) => captureAt(turnId),
+    tierFor: (turnId) => tierFor(turnId),
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
@@ -147,7 +143,27 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
     acceptanceLedgerPath: () => join(root, 'moa', 'acceptance.jsonl'),
   }
   const judge = createAcceptanceJudge(core, { validation, deps: judgeDeps })
+
+  const adapter = new MockAdapter(mainScript, REASONING)
+  ctx.llm.registerAdapter(['mock'], adapter)
+  const agent = await ctx.agentLoop.create(SessionId('moa-judge'), { provider: 'mock', model: 'mock' })
+
+  // Registration mirror of apply(): moa's listeners register BEFORE the
+  // harness's `installModelSelection` (plugin-apply t0 < agent creation t1,
+  // both no prepend), so moa's assemble listener is OUTER — after
+  // `await next()` the harness has already written the selection variables —
+  // and moa's request listener applies the overlay BEFORE the harness's
+  // inner request listener would force `selection.assembled` (which the
+  // overlay must win, design §2).
+  agent.ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: Parameters<typeof captureClaimed>[1]; turn: number }) => {
+    captureClaimed(agent, message, turn)
+    noteClaimedTurn(agent, turn)
+  })
+  agent.ctx.on('agent/pre-step', router.preStepListener as never)
+  agent.ctx.on('agent/request', router.listener as never)
+  agent.ctx.on('system-prompt/assemble', router.assembleListener as never)
   agent.ctx.on('agent/turn-stopping', judge.listener as never)
+  installModelSelection(agent.ctx, { current: { provider: 'mock', model: 'mock' }, assembled: undefined })
 
   return {
     core,

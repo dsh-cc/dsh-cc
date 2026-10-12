@@ -22,15 +22,15 @@ import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { createUserMessage, type LlmCallConfig, type LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
-import { createOpeningCapture } from '../src/capture.ts'
 import { createRequestRouter, textOf, type RouterDeps } from '../src/router.ts'
-import { setRuntimeCore } from '../src/runtime-state.ts'
+import { captureClaimed, noteClaimedTurn, resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore } from '../src/index.ts'
 import { GAUGE_ROUTE, noticeOpening, routes as tierRoutes, userOpening } from './rig.ts'
 
 const roots: string[] = []
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  resetRuntimeCore()
 })
 
 const REASONING = {
@@ -48,7 +48,6 @@ const DRAFT_PROBABILITIES = { sketch: 0.05, draft: 0.7, blueprint: 0.15, masterp
 
 interface Wire {
   core: MoaCore
-  capture: ReturnType<typeof createOpeningCapture>
   classifyStates: string[]
   injected: { text: string; source: unknown }[]
   payloads: { turn: number; step: number }[]
@@ -56,7 +55,9 @@ interface Wire {
 
 /**
  * Wire the production capture + router listeners onto the agent loop exactly
- * as `apply` does, with fake seams (fake ModelRoutes + canned System One).
+ * as `apply` does — on the PLUG context BEFORE the agent exists (plugin-apply
+ * t0 < agent creation t1; §5.3) — with fake seams (fake ModelRoutes + canned
+ * System One).
  */
 async function setup(mainScript: Script, options: { probabilities?: Record<string, number>; failFetch?: Error } = {}) {
   const ctx = new Context()
@@ -65,9 +66,6 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
   await ctx.plugin(AgentLoop, { agents: [] })
-  const adapter = new MockAdapter(mainScript, REASONING)
-  ctx.llm.registerAdapter(['mock'], adapter)
-  const agent = await ctx.agentLoop.create(SessionId('moa-router'), { provider: 'mock', model: 'mock' })
 
   const core: MoaCore = {
     readSettings: () => ({ ...DEFAULT_MOA_SETTINGS, enabled: true }),
@@ -78,8 +76,6 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
   // Production parity: the router observes via the shared runtime-state
   // singletons (apply() populates them; the rig mirrors that here).
   setRuntimeCore({ arming: core.arming, validation: { ok: true } })
-  const capture = createOpeningCapture()
-  agent.ctx.on('agent/pre-step', capture.listener as never)
 
   const classifyStates: string[] = []
   const injected: { text: string; source: unknown }[] = []
@@ -96,20 +92,33 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
     )
   }
   const deps: RouterDeps = {
-    getCapturedOpening: capture.getCapturedOpening,
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
   }
   const router = createRequestRouter(core, { validation: { ok: true }, deps })
-  agent.ctx.on('agent/pre-step', router.preStepListener as never)
   const payloads: { turn: number; step: number }[] = []
+
+  const adapter = new MockAdapter(mainScript, REASONING)
+  ctx.llm.registerAdapter(['mock'], adapter)
+  const agent = await ctx.agentLoop.create(SessionId('moa-router'), { provider: 'mock', model: 'mock' })
+
+  // Registration mirror of apply(): the assemble listener is OUTER relative
+  // to the harness's agent-creation listener (plugin-apply t0 < agent
+  // creation t1). In this rig the agent already exists, so the same outer
+  // position is restored with `{ prepend: true }` (sanitizer precedent).
+  agent.ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: Parameters<typeof captureClaimed>[1]; turn: number }) => {
+    captureClaimed(agent, message, turn)
+    noteClaimedTurn(agent, turn)
+  })
+  agent.ctx.on('agent/pre-step', router.preStepListener as never)
   agent.ctx.on('agent/request', async (payload: RequestPayload, next: RequestNext) => {
     payloads.push({ turn: payload.turn, step: payload.step })
     return next()
   })
   agent.ctx.on('agent/request', router.listener as never)
-  return { ctx, adapter, agent, wire: { core, capture, classifyStates, injected, payloads } satisfies Wire }
+  agent.ctx.on('system-prompt/assemble', router.assembleListener as never, { prepend: true })
+  return { ctx, adapter, agent, wire: { core, classifyStates, injected, payloads } satisfies Wire }
 }
 
 const runTurn = async (agent: Awaited<ReturnType<typeof setup>>['agent'], text: string): Promise<void> => {

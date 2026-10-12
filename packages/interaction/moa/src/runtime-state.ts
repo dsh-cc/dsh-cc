@@ -18,8 +18,99 @@
  */
 
 import { ArmingMachine, type RequestPair } from './arming.ts'
+import { isSubagentAgent } from './agent-scope.ts'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 
 export type { RequestPair }
+
+/** Field comparison (provider/model) — NEVER object identity (design §3). */
+export function sameFields(a: RequestPair, b: RequestPair): boolean {
+  return a.provider === b.provider && a.model === b.model
+}
+
+/** Maximum simultaneously-captured turns (effective-model-truth §5.3). */
+export const CAPTURE_CAPACITY = 8
+
+/** Bounded FIFO per-turn capture (effective-model-truth §5.3): the LAST
+ * claimed message of a turn wins (the claim batch claims pending next-step
+ * items first, then the next-turn message). */
+const captured = new Map<number, UserMessage>()
+
+/**
+ * Record one claimed message (the `agent/inbox/claimed` listener, per-message
+ * emit). Subagent-guarded: child turn numbers restart at 1, so an unguarded
+ * child would shadow the root's slot (see agent-scope.ts).
+ */
+export function captureClaimed(agent: unknown, message: UserMessage, turn: number): void {
+  if (isSubagentAgent(agent)) return
+  captured.set(turn, message)
+  while (captured.size > CAPTURE_CAPACITY) {
+    const oldest = captured.keys().next().value
+    if (oldest === undefined) break
+    captured.delete(oldest)
+  }
+}
+
+/** The captured opening message for a turn, or undefined. */
+export function getCapturedOpening(turnId: number): UserMessage | undefined {
+  return captured.get(turnId)
+}
+
+let lastClaimedTurn: number | undefined
+
+/** Track the last claimed turn (subagent-guarded on write; §5.3). */
+export function noteClaimedTurn(agent: unknown, turn: number): void {
+  if (isSubagentAgent(agent)) return
+  lastClaimedTurn = turn
+}
+
+/** The LAST turn seen by the `agent/inbox/claimed` listener. */
+export function currentClaimedTurn(): number | undefined {
+  return lastClaimedTurn
+}
+
+/** The sticky per-turn tier decision (§5.3). */
+export interface TurnTier {
+  turn: number
+  tier: number
+  /** True for moa-escalation openings: NO queued row (§3.5 single-row). */
+  suppressRow?: boolean
+}
+
+let turnTier: TurnTier | undefined
+
+/** Store the whole-turn tier decision (classification seam, §5.3). */
+export function setTurnTier(entry: TurnTier): void {
+  turnTier = entry
+}
+
+export function getTurnTier(): TurnTier | undefined {
+  return turnTier
+}
+
+/** The decided tier for a turn, or undefined (judge deps seam). */
+export function tierFor(turnId: number): number | undefined {
+  return turnTier !== undefined && turnTier.turn === turnId ? turnTier.tier : undefined
+}
+
+/** Queued status rows, delivered by the next main-agent pre-step (§3.1). */
+const pendingRows: { text: string; tier?: number }[] = []
+
+/** Queue one status row (called from the assemble waterfall). */
+export function queueMoaRow(text: string, tier?: number): void {
+  pendingRows.push({ text, ...(tier === undefined ? {} : { tier }) })
+}
+
+/** Drain the queued rows (the pre-step splice). */
+export function spliceMoaRows(): { text: string; tier?: number }[] {
+  return pendingRows.splice(0)
+}
+
+/** Clear un-delivered rows (request clause 5 skips withTier → the queued row
+ * would advertise a tier that was not applied). */
+export function clearMoaRows(): void {
+  pendingRows.length = 0
+}
 
 /** Minimal structural shape of the shared arming validation ref. */
 export interface RuntimeValidation {
@@ -37,10 +128,15 @@ export function setRuntimeCore(parts: { arming: ArmingMachine; validation: Runti
   validation = parts.validation
 }
 
-/** Drop the live plugin core (test seam / hot reload). */
+/** Drop the live plugin core (test seam / hot reload): also drops the
+ * per-turn capture, claimed-turn, sticky-tier, and pending-row slots. */
 export function resetRuntimeCore(): void {
   arming = undefined
   validation = undefined
+  captured.clear()
+  lastClaimedTurn = undefined
+  turnTier = undefined
+  pendingRows.length = 0
 }
 
 /** First non-undefined pair wins, never overwritten (design §5.2 part 1). */

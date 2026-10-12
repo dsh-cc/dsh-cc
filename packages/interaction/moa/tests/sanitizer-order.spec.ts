@@ -33,15 +33,15 @@ import { createUserMessage, type LlmModelReasoningInfo } from '@deepseek-ai/dsh-
 import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { installModelSelectionSanitizer } from '../src/sanitizer.ts'
-import { createOpeningCapture } from '../src/capture.ts'
+import { captureClaimed, getCapturedOpening, noteClaimedTurn, observeLiveSelection, readPublishedSelection, resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
 import { createRequestRouter, type RouterDeps } from '../src/router.ts'
-import { observeLiveSelection, readPublishedSelection, setRuntimeCore } from '../src/runtime-state.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore } from '../src/index.ts'
 import { GAUGE_ROUTE, routes as tierRoutes } from './rig.ts'
 
 const roots: string[] = []
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  resetRuntimeCore()
 })
 
 const REASONING = {
@@ -82,17 +82,21 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
   core.arming.arm()
   setRuntimeCore({ arming: core.arming, validation: { ok: true } })
 
-  const capture = createOpeningCapture()
+  const capture: { getCapturedOpening: (turnId: number) => unknown } = { getCapturedOpening }
   /** What the sanitizer had published when moa's pre-step observe ran. */
   const publishedAtObserve: ReturnType<typeof readPublishedSelection>[] = []
-  // Mirror of apply()'s FIRST moa pre-step listener (index.ts
-  // observeAndCapture): read the sanitizer's published frozen selection, then
-  // feed the capture.
-  const observeAndCapture = async (payload: { agent?: unknown }, next: () => Promise<unknown>): Promise<unknown> => {
+  // Mirror of apply()'s FIRST moa pre-step listener (index.ts observePreStep):
+  // read the sanitizer's published frozen selection, then feed the splice.
+  const observePreStep = async (payload: { agent?: unknown }, next: () => Promise<unknown>): Promise<unknown> => {
     publishedAtObserve.push(readPublishedSelection(payload.agent))
     const live = readPublishedSelection(payload.agent)
     if (live?.model !== undefined) observeLiveSelection(live)
-    return capture.listener(payload as never, next)
+    return router.preStepListener(payload as never, next)
+  }
+  // Mirror of apply()'s `agent/inbox/claimed` capture listener (§5.3).
+  const claimedListener = ({ agent, message, turn }: { agent?: unknown; message: never; turn: number }): void => {
+    captureClaimed(agent, message, turn)
+    noteClaimedTurn(agent, turn)
   }
   const classifyStates: string[] = []
   const fetchImpl: typeof fetch = async (_url, init) => {
@@ -107,7 +111,6 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
     )
   }
   const deps: RouterDeps = {
-    getCapturedOpening: capture.getCapturedOpening,
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
@@ -118,9 +121,13 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
   // OUTER relative to the harness's request listener (apply t0 < agent
   // creation t1); the sanitizer is installed co-located AFTER
   // installModelSelection, later-with-prepend → outermost pre-step listener.
+  // The assemble seam follows the same rule: moa's assemble listener registers
+  // BEFORE installModelSelection → OUTER → it reads the harness-written
+  // selection variables after `await next()` (§5.3).
+  agent.ctx.on('agent/inbox/claimed', claimedListener as never)
+  agent.ctx.on('agent/pre-step', observePreStep as never)
   agent.ctx.on('agent/request', router.listener as never)
-  agent.ctx.on('agent/pre-step', observeAndCapture as never)
-  agent.ctx.on('agent/pre-step', router.preStepListener as never)
+  agent.ctx.on('system-prompt/assemble', router.assembleListener as never)
   installModelSelection(agent.ctx, selection)
   if (options.sanitizer !== false) installModelSelectionSanitizer(agent.ctx, selection as never)
   return { adapter, agent, classifyStates, publishedAtObserve }
