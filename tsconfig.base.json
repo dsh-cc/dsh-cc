@@ -326,6 +326,12 @@
       "@dsh-cc/command-permissions/permissions": [
         "./packages/interaction/command-permissions/src/permissions.ts"
       ],
+      "@dsh-cc/command-preset": [
+        "./packages/interaction/command-preset/src/index.ts"
+      ],
+      "@dsh-cc/command-preset/settings": [
+        "./packages/interaction/command-preset/src/settings.ts"
+      ],
       "@dsh-cc/command-version": [
         "./packages/interaction/command-version/src/index.ts"
       ],

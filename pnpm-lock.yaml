@@ -1758,6 +1758,37 @@ importers:
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
 
+  packages/interaction/command-preset:
+    dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
+      '@dsh-cc/settings-provider':
+        specifier: workspace:^
+        version: link:../../settings/settings-provider
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
+      '@deepseek-ai/dsh-llm':
+        specifier: link:../../../../deepseek-harness/packages/llm/llm
+        version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+
   packages/interaction/command-release-notes:
     dependencies:
       '@dsh-cc/command-usage':
@@ -2734,6 +2765,9 @@ importers:
       '@dsh-cc/command-plugin':
         specifier: workspace:^
         version: link:../../interaction/command-plugin
+      '@dsh-cc/command-preset':
+        specifier: workspace:^
+        version: link:../../interaction/command-preset
       '@dsh-cc/command-release-notes':
         specifier: workspace:^
         version: link:../../interaction/command-release-notes

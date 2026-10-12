@@ -283,8 +283,10 @@ export interface DriverSessionsCtx {
    * change event fires on a switch.
    */
   refreshCatalog(): void
-  /** The agent setup closure (wraps presetSetup + installModelSelection). */
-  withSelection: AgentSetup
+  /** The RESUME agent setup closure (recorded-projection leg; wraps
+   *  preset mount + installModelSelection). Session creation uses the
+   *  createHandle closure, which binds the create-time setup. */
+  setupForResume: AgentSetup
   /** Explicit provider/model override, or undefined when unset. */
   agentOptions: { provider: string; model: string } | undefined
 }

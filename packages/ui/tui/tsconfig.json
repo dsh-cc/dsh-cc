@@ -3,14 +3,16 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "lib",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src"
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../compat/cc-model-aliases"
     },
     {
       "path": "../../interaction/command-agents"
@@ -25,22 +27,22 @@
       "path": "../../interaction/prompt-suggest"
     },
     {
-      "path": "../pi-tui"
-    },
-    {
       "path": "../../memory/memory"
     },
     {
-      "path": "../../compat/cc-model-aliases"
+      "path": "../../settings/settings-ns"
     },
     {
-      "path": "../../settings/settings-ns"
+      "path": "../../settings/settings-provider"
     },
     {
       "path": "../../subagent/task"
     },
     {
       "path": "../../workspace/session-cwd"
+    },
+    {
+      "path": "../pi-tui"
     }
   ]
 }

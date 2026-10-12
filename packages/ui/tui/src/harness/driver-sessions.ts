@@ -264,7 +264,7 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
     try {
       newHandle = await ctx.agents.resume({
         resumeSessionId: SessionId(id),
-        setup: rt.withSelection,
+        setup: rt.setupForResume,
         ...(rt.agentOptions === undefined ? {} : { agentOptions: rt.agentOptions }),
       })
     } catch (error) {

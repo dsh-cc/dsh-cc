@@ -18,3 +18,10 @@
   config:
     prefix: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}. VWA mode turns the agent toward verifiable workspace deliverables — technical documents, research artifacts. Verifiable claims in documents should carry 〔src:ws:<path>#La-Lb〕 markers citing workspace files.
+
+# The /preset command (VWA plan §3.2), double-written with agent.cordis.yml —
+# never the shared body — so VWA sessions can switch back to cc. Same wiring
+# notes as the cc twin: loud apply-time `ctx.get('agentPresets')`, and the
+# `vwa-preset` settings namespace registers at mount.
+- id: command-preset
+  name: '@dsh-cc/command-preset'

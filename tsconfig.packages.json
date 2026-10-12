@@ -218,6 +218,9 @@
       "path": "./packages/interaction/command-permissions"
     },
     {
+      "path": "./packages/interaction/command-preset"
+    },
+    {
       "path": "./packages/interaction/command-plugin"
     },
     {

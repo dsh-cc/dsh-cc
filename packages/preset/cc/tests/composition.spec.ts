@@ -702,8 +702,20 @@ describe('cc declaration row (packages/bundle/cc-tui/cordis.patch.yml)', () => {
   })
 })
 
-describe('agent.vwa.cordis.yml composition', () => {
-  const vwaDoc = expandIncludes(vwaCordisPath)
+describe('command-preset row (VWA plan §3.2, double-write)', () => {
+  // The /preset row is double-written into BOTH thin wrappers and never the
+  // shared body: each preset carries its own switch-back surface, and the
+  // capability-manifest I10 anchor reads the cc file's include closure.
+  it('is present in the cc closure and the vwa closure, and absent from the shared body', () => {
+    expect(doc.some((r) => r.id === 'command-preset' && r.name === '@dsh-cc/command-preset')).toBe(true)
+    const vwaDoc = expandIncludes(vwaCordisPath)
+    expect(vwaDoc.some((r) => r.id === 'command-preset' && r.name === '@dsh-cc/command-preset')).toBe(true)
+    const sharedDoc = expandIncludes(sharedCordisPath)
+    expect(sharedDoc.some((r) => r.id === 'command-preset')).toBe(false)
+  })
+})
+
+describe('agent.vwa.cordis.yml composition', () => {  const vwaDoc = expandIncludes(vwaCordisPath)
 
   it('expands the include closure to the shared body plus exactly one persona row', () => {
     // The include row is replaced by the shared body; the only VWA-local row

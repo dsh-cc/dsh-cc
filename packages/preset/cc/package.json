@@ -39,6 +39,7 @@
     "@dsh-cc/command-mcp": "workspace:^",
     "@dsh-cc/command-memory": "workspace:^",
     "@dsh-cc/command-permissions": "workspace:^",
+    "@dsh-cc/command-preset": "workspace:^",
     "@dsh-cc/command-plugin": "workspace:^",
     "@dsh-cc/command-release-notes": "workspace:^",
     "@dsh-cc/command-resume": "workspace:^",

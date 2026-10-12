@@ -21,3 +21,13 @@
   config:
     prefix: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+
+# The /preset command (VWA plan docs/plans/2026-10-12-verifiable-workspace-agent.md
+# §3.2): lists the agent-preset roster and switches the session/default preset.
+# Double-written into agent.cordis.yml and agent.vwa.cordis.yml — never the
+# shared body — so each preset carries its own switch-back surface. It reads
+# `agentPresets` with a loud apply-time ctx.get (an inject declaration would
+# re-compose the registry inside this preset scope) and registers the
+# `vwa-preset` settings namespace at mount.
+- id: command-preset
+  name: '@dsh-cc/command-preset'
