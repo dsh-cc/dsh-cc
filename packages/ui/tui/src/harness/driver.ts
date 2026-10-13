@@ -88,13 +88,11 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     emit(setNotice(state, text))
     noticeTimer = setTimeout(() => {
       noticeTimer = undefined
-      // Same-reference guard: no churn when the notice was already cleared.
       if (state.notice !== undefined) emit(setNotice(state, undefined))
     }, ttlMs)
   }
 
-  // Preset resolution (doc §3.3): fresh ids re-resolve per create call;
-  // resume reads the recorded projection in setup (create must not).
+  // Preset resolution (doc §3.3): fresh ids re-resolve per create; resume reads the recorded projection in setup (create must not).
   const { freshPresetId, setupForCreate, setupForResume } = await bindPresetResolution(ctx, {
     configPreset: config.agentPreset,
     showNotice,
@@ -106,6 +104,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const agentOptions = config.provider !== undefined && config.model !== undefined
     ? { provider: config.provider, model: config.model }
     : undefined
+
   const createHandle = (id: SessionId, extras: { cwd: string; agentOptions?: { provider: string; model: string } }) => {
     const presetId = freshPresetId()
     return ctx.agents.create({

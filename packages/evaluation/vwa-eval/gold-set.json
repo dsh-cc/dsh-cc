@@ -5,84 +5,79 @@
     "bytes": 2127
   },
   {
-    "path": "docs/dev.md",
-    "sha256": "07041567c1583840f2e873ae9201a5394f6feb0fce18d00244b1c10dff902cfe",
-    "bytes": 10962
+    "path": "docs/plans/2026-09-02-haiku-worker-stuffs.md",
+    "sha256": "2a83785fe6bd8292b062c12869c9f63041504c9deb389e8c9ad6dc9e53aa1a40",
+    "bytes": 30493
   },
   {
-    "path": "docs/plan-mode-command-channel.md",
-    "sha256": "ee9f6cd479fe35645864cbcb887809a97e092db2c99ff6438d03696eb7d3372c",
-    "bytes": 20976
+    "path": "docs/plans/2026-09-02-mcp-deferred-disclosure.md",
+    "sha256": "a23fb986012fe729404b0cd89213624ca579b7cf65686f597cf413bdbf4f1747",
+    "bytes": 14568
   },
   {
-    "path": "docs/plans/2026-09-02-worktree-session-isolation.md",
-    "sha256": "9491e20d38a08e114acb683a2b6bdc41d82df94759eb0377b2186000fb7ca7f9",
-    "bytes": 12753
+    "path": "docs/plans/2026-09-04-webfetch-ssrf-and-domain-rules.md",
+    "sha256": "328f72a92b80b936f9a9881b772827f09daacb31a155af50b7c9974301a11731",
+    "bytes": 33122
   },
   {
-    "path": "docs/plans/2026-09-05-statusline-multiline.md",
-    "sha256": "c7efda1d07cfe1cbcb8bb84318e46e8fddc070211444b914ddf9a399edb5980f",
-    "bytes": 8844
+    "path": "docs/plans/2026-09-07-task-plugin-agent-dispatch.md",
+    "sha256": "4c6b146fd2d32a0d369241acee5d4b4e986a8a555590276a475b8fb2caa46c2b",
+    "bytes": 23167
   },
   {
-    "path": "docs/plans/2026-09-07-plugin-mcp-seam.md",
-    "sha256": "51dd30fa63d44878cc30fa97cb1714f774b6b64332a4b85b0401bbd0ab3ac73c",
-    "bytes": 19306
+    "path": "docs/plans/2026-09-11-exit-resume-tip.md",
+    "sha256": "5eb4b01f665c06dc5402b9e03a708667f475cacde5db2cd1a5c0f069f8858293",
+    "bytes": 9380
   },
   {
-    "path": "docs/plans/2026-09-08-harness-0.1.2-rc1-compat.md",
-    "sha256": "84db05f05029f7cc4af76c4ec028e1c4400f3a9840037ec9e3d100eda6adfafb",
-    "bytes": 22598
+    "path": "docs/plans/2026-09-20-token-efficiency-eval-harness.md",
+    "sha256": "94b4a85c8d2fb05564d9f344ac045a84ae4cb2bdf9b499aa53b1b45c60548b03",
+    "bytes": 12809
   },
   {
-    "path": "docs/plans/2026-09-10-subagent-handoff-store.md",
-    "sha256": "9146cc63d8448a5d0324034e7fd0e46b828ea3b7e40413604dfc61c8240b6ef2",
-    "bytes": 6305
+    "path": "docs/plans/2026-09-21-tool-contract-integrity.md",
+    "sha256": "81de94477fa1d5434cff779247d619dcc33128fa4e8fa3d46fc9b02c6a4099e9",
+    "bytes": 10978
   },
   {
-    "path": "docs/plans/2026-09-16-memory-g4-g5-write-gate-and-dream-prompt.md",
-    "sha256": "61d7dd0a7fc1b0f4a9e18f52a25af3ed6c1a61ca71b639f308e55d5b1f4abe16",
-    "bytes": 14267
+    "path": "docs/plans/2026-09-22-auto-dream-session-scan.md",
+    "sha256": "a6577863e8e099880f31f8ece3cc5f599c14bd9f94ff27874dafe92ab77dc231",
+    "bytes": 19567
   },
   {
-    "path": "docs/plans/2026-09-21-prompt-cache-write-breakpoints.md",
-    "sha256": "addffd8f95e4e5020eab1a353f7f6b48e84dc33b73eecff126c8f41a9e64c076",
-    "bytes": 25196
+    "path": "docs/plans/2026-09-22-dream-dispatch-diagnostics.md",
+    "sha256": "77f7aa06c71ea102471ade96420bd9f9b43a6f445c5eadc8b7060b305d3d6041",
+    "bytes": 6466
   },
   {
-    "path": "docs/plans/2026-09-24-memory-structured-report.md",
-    "sha256": "225b4da488afdc1d1c914d2401165d6ce28dcdb27d294c9c4336421a7f21ba2b",
-    "bytes": 17109
+    "path": "docs/plans/2026-09-23-learned-skills.md",
+    "sha256": "9d64fc7d81c3ca9e0d86a7202bde1e5e051c2bbf4b8cef708ca16db6070e4e7a",
+    "bytes": 26929
   },
   {
-    "path": "docs/plans/2026-09-26-codex-rescue-bridge.md",
-    "sha256": "a1b208992ac910b9808cbce671fead926e96a388b976b2833afa56cd1eb25c50",
-    "bytes": 39900
+    "path": "docs/plans/2026-09-23-lsp-diagnostics-on-write.md",
+    "sha256": "3a7f820eeaced8d03353d2356fbecf84dc14fa3966b79d6afd627330b5092450",
+    "bytes": 21480
   },
   {
-    "path": "docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md",
-    "sha256": "78728848e4c8c5c121c4f9b208f21c3d5fe404eece22a0b344ec8abf25a8e129",
-    "bytes": 32033
+    "path": "docs/plans/2026-10-09-persistent-write-auditing.md",
+    "sha256": "3c98ffc0ba8c8bed4fecaaa1b7e9865b5b7a886890971e095d47f063cffd9938",
+    "bytes": 17417
   },
   {
-    "path": "docs/plans/2026-10-09-structured-progress-and-post-compact-rebuild.md",
-    "sha256": "4094c8e48dee98d3a3762992fb4374b87c484f0289337fbc67e9b1005477e50a",
-    "bytes": 51742
+    "path": "docs/plans/2026-10-09-session-config-snapshot-event.md",
+    "sha256": "c7156a83a8a6a6bd3933f5472875ea7aa764212d106dd027c23561ae2281a7bf",
+    "bytes": 48793
   },
   {
-    "path": "docs/rag-integration-protocol.md",
-    "sha256": "3d1be30395c86cb92e141b33b0a07689cec29f59b7fe51f3b9af640b85bf54a9",
-    "bytes": 29878
+    "path": "docs/plans/2026-10-09-underspec-ask-detector.md",
+    "sha256": "e2374c98cd3923481427ea6f59ca66813493e42e25163ffdabc6993c26ec18f8",
+    "bytes": 41092
   },
   {
     "path": "packages/bundle/cc-tui/README.md",
     "sha256": "c746279399716e4cdda20a50e3209823b880941aeca98d89969e8ba643412aed",
     "bytes": 370
-  },
-  {
-    "path": "packages/compaction/compaction-micro/README.md",
-    "sha256": "090dd7f393af8abb5e669a2c3c03963c845d18ce9f7cdd1bb300566df0b620c8",
-    "bytes": 5229
   },
   {
     "path": "packages/compat/cc-plugin-loader/README.md",
@@ -95,9 +90,9 @@
     "bytes": 1575
   },
   {
-    "path": "packages/interaction/command-auto-mode/README.md",
-    "sha256": "dfb359549006cfbc8205b008cb5d38af485a7d85b07ce94f544bf22f49399b50",
-    "bytes": 2048
+    "path": "packages/interaction/advisor-watchdog/README.md",
+    "sha256": "be2c5305179bdef009420bf8258dd22d2c8f56d2db21fb7d425ce0f260ed021a",
+    "bytes": 5225
   },
   {
     "path": "packages/interaction/command-compact/README.md",
@@ -105,9 +100,14 @@
     "bytes": 1784
   },
   {
-    "path": "packages/interaction/command-doctor/README.md",
-    "sha256": "0c1d8ece716c97c4db946ede76e507c979482543a6a2f29fce98afe1f614550d",
-    "bytes": 3055
+    "path": "packages/interaction/command-diff/README.md",
+    "sha256": "775dd9d1a2530f7a9dad3dc2a94ce9752f7b93536291ebc90e36b64133e4addc",
+    "bytes": 1119
+  },
+  {
+    "path": "packages/interaction/command-preset/README.md",
+    "sha256": "a197c780a1da97517e5b5a438c35981e806d8235bd26c7fa230e6267d3a643e5",
+    "bytes": 2033
   },
   {
     "path": "packages/interaction/command-tasks/README.md",
@@ -115,29 +115,24 @@
     "bytes": 1401
   },
   {
-    "path": "packages/interaction/transcript-secrets/README.md",
-    "sha256": "4046c8cd9a6ae643da4db0a78e29a4d3e1a8999539df08b64cfb2fe748a3ddfb",
-    "bytes": 1212
-  },
-  {
-    "path": "packages/llm-tuning/reasoning-fold/README.md",
-    "sha256": "da0bcbc64f14613987a51fa88e6e898bedf19a2e2683f6cebfdd18d175c34f3d",
-    "bytes": 3531
-  },
-  {
     "path": "packages/mcp/mcp-config/README.md",
     "sha256": "d8a1a0ff6adb77a60d3530181f1fd48ecf654058a1bad69b7a9ce66f605f0ea2",
     "bytes": 4445
   },
   {
-    "path": "packages/observability/cache-health/README.md",
-    "sha256": "ea705db9a88fe89b0d3f7fb68d577c1726e02177f89f91b2a75da0e70b8415de",
-    "bytes": 2718
+    "path": "packages/memory/memory-consolidation/README.md",
+    "sha256": "a1e81e9e4d20fedb5b80b93a0fadbc78dd2fabd891ba4e76509122de90f5f025",
+    "bytes": 6223
   },
   {
-    "path": "packages/session/command-cost/README.md",
-    "sha256": "1fc4cb66dda9053a4f706ee05ed2e6823a20fcc54e53517c1cac12000a0a09e7",
-    "bytes": 3748
+    "path": "packages/observability/config-snapshot/README.md",
+    "sha256": "7c8ac319f5ef10743b6e127ce3c775efedbc6817038ec45257e484abae5bc30c",
+    "bytes": 2657
+  },
+  {
+    "path": "packages/plugin/dsh-cc-shunt/README.md",
+    "sha256": "15bf5bec22c6aa148d705730deef659cf529e9edf05950a2b6a168b15c41f5be",
+    "bytes": 3037
   },
   {
     "path": "packages/session/command-learn/README.md",
@@ -145,8 +140,13 @@
     "bytes": 2360
   },
   {
-    "path": "packages/skill/skill-claude-code/README.md",
-    "sha256": "7e9d52e5cbbefc55b80750a7a85145ce01b4c62ca2ed8da2370bd03c86329eed",
-    "bytes": 6439
+    "path": "packages/settings/settings-ns/README.md",
+    "sha256": "bd33c302675d8f0a5ab6fc9f41da7c74d6e4360a7b3722a255ed57259eaa4691",
+    "bytes": 3767
+  },
+  {
+    "path": "packages/subagent/coordinator/README.md",
+    "sha256": "6f638b4e3e0e7a7db597274d5dd62aa0992033a187ad4103ddeb4396c69c98be",
+    "bytes": 3474
   }
 ]
