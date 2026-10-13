@@ -133,6 +133,18 @@ describe('aggregation (§4.3)', () => {
     }
   })
 
+  it('a runner that cannot even spawn (ENOENT) reports missing, not abstained (DoD case 2)', async () => {
+    const root = await tempWorkspace()
+    await mkdir(join(root, 'docs'), { recursive: true })
+    await writeFile(join(root, 'docs', 'a.md'), '```bash\necho hi\n```\n')
+    const spawnFail: Executor = () => Promise.reject(new Error('spawn bash ENOENT'))
+    const gates = await runGates(['docs/a.md'], root, spawnFail)
+    const execGate = gates.find(g => g.gate === 'exec')
+    expect(execGate?.status).toBe('missing')
+    expect(execGate?.detail).toContain('runner unavailable')
+    await rm(root, { recursive: true, force: true })
+  })
+
   it('default timeout is 30s', () => {
     expect(DEFAULT_GATE_TIMEOUT_MS).toBe(30_000)
   })

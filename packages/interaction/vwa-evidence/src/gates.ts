@@ -63,6 +63,12 @@ async function withTimeout(
     ])
     return { gate, ...result }
   } catch (error) {
+    // Design §4.3/§5 DoD case 2: a runner that cannot even spawn means the
+    // gate DID NOT run — that is `missing` with detail, not the abstained
+    // timeout/error family.
+    if (/ENOENT|not found|command not found/i.test(String(error))) {
+      return { gate, status: 'missing', detail: `gate ${gate} did not run: runner unavailable (${String(error).slice(0, 200)})` }
+    }
     return { gate, status: 'abstained', detail: `gate ${gate} errored: ${String(error)}` }
   } finally {
     if (timer !== undefined) clearTimeout(timer)
@@ -216,13 +222,21 @@ async function gateCBody(
     }
   }
   const failures: string[] = []
+  // DoD case 2 (§4.3/§5): a runner that cannot even spawn (ENOENT) means this
+  // gate did not RUN at all — surface as `missing` with detail at gate level,
+  // not as per-snippet failures. A real nonzero exit remains a gate verdict.
+  const runnerMissing: string[] = []
+  const runsig = (error: unknown): boolean => /ENOENT|not found|command not found/i.test(String(error))
   for (const snippet of runnable) {
     if (snippet.lang === 'bash') {
-      const result = await exec('bash', ['-n', '-c', snippet.code], workspaceRoot).catch(error => ({
-        code: -1,
-        stdout: '',
-        stderr: String(error),
-      }))
+      const result = await exec('bash', ['-n', '-c', snippet.code], workspaceRoot).catch(error => {
+        if (runsig(error)) {
+          runnerMissing.push(`${snippet.file}:${snippet.line} bash spawn`)
+          return null
+        }
+        return { code: -1, stdout: '', stderr: String(error) }
+      })
+      if (result === null) continue
       if (result.code !== 0) {
         failures.push(`${snippet.file}:${snippet.line} bash -n failed: ${result.stderr.trim().slice(0, 200)}`)
       }
@@ -234,17 +248,23 @@ async function gateCBody(
       const ext = snippet.lang === 'ts' ? 'ts' : 'mjs'
       const snippetPath = join(dir, `snippet.${ext}`)
       await writeFile(snippetPath, snippet.code, 'utf8')
-      const result = await exec('npx', ['tsc', ...TSC_ARGS, snippetPath], dir).catch(error => ({
-        code: -1,
-        stdout: '',
-        stderr: String(error),
-      }))
+      const result = await exec('npx', ['tsc', ...TSC_ARGS, snippetPath], dir).catch(error => {
+        if (runsig(error)) {
+          runnerMissing.push(`${snippet.file}:${snippet.line} tsc spawn`)
+          return null
+        }
+        return { code: -1, stdout: '', stderr: String(error) }
+      })
+      if (result === null) continue
       if (result.code !== 0) {
         failures.push(`${snippet.file}:${snippet.line} tsc failed: ${(result.stderr || result.stdout).trim().slice(0, 200)}`)
       }
     } finally {
       await rm(dir, { recursive: true, force: true }).catch(() => undefined)
     }
+  }
+  if (runnerMissing.length > 0) {
+    return { status: 'missing', detail: `gate exec did not run: runner unavailable (${runnerMissing.slice(0, 3).join('; ')})` }
   }
   const parts: string[] = []
   if (skippedLangs.size > 0) parts.push(`abstained languages: ${[...skippedLangs].sort().join(', ')}`)
