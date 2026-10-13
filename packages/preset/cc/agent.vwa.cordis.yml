@@ -25,3 +25,12 @@
 # `vwa-preset` settings namespace registers at mount.
 - id: command-preset
   name: '@dsh-cc/command-preset'
+
+# The vwa-evidence turn-stopping evaluator (VWA plan §4.4/§4.5), mounted ONLY
+# here — the cc preset deliberately lacks this row (§4.4: cc sessions stay
+# untouched; `vwa-evidence.enabled:false` is only an off valve inside vwa).
+# Top-level row placement is the judged precedent: command-preset passed
+# smoke that way (plain plugin, publishes no Service; `inject = ['shell']`
+# post-edit-verify idiom for the §4.3 gate C execution seam).
+- id: vwa-evidence
+  name: '@dsh-cc/vwa-evidence'

@@ -738,6 +738,16 @@ describe('agent.vwa.cordis.yml composition', () => {  const vwaDoc = expandInclu
     expect(prefix).toContain('verifiable workspace deliverables')
     expect(prefix).toContain('〔src:ws:<path>#La-Lb〕')
   })
+
+  it('carries the vwa-evidence row ONLY in the vwa closure (VWA plan §4.4/§4.5)', () => {
+    // The turn-stopping evaluator mounts only in VWA mode: the cc closure and
+    // the shared body deliberately lack the row, so cc sessions stay
+    // untouched. Top-level placement is the judged precedent (command-preset
+    // passed smoke that way — plain plugin, no Service).
+    expect(vwaDoc.some((r) => r.id === 'vwa-evidence' && r.name === '@dsh-cc/vwa-evidence')).toBe(true)
+    expect(doc.some((r) => r.id === 'vwa-evidence')).toBe(false)
+    expect(expandIncludes(sharedCordisPath).some((r) => r.id === 'vwa-evidence')).toBe(false)
+  })
 })
 
 describe('vwa declaration row (packages/bundle/cc-tui/cordis.patch.yml)', () => {

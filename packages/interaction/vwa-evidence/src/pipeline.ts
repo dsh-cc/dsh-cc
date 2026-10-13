@@ -30,7 +30,7 @@ export interface EvaluateOptions {
   gates?: GateOptions
   /** Chain head linkage; '' at v1 until P2b wires ledger chaining (§4.1). */
   parentHash?: string
-  now?: number
+  now?: number | undefined
 }
 
 export interface EvaluationResult {

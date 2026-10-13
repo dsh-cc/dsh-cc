@@ -10,7 +10,12 @@
  * @module @dsh-cc/vwa-evidence/settings
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type { Context } from '@deepseek-ai/cordis'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import z from '@deepseek-ai/schemastery'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 
 /** The settings namespace carrying the VWA evidence flags (§4.4). */
 export const SETTINGS_NAMESPACE = 'vwa-evidence'
@@ -47,4 +52,68 @@ export const DEFAULT_VWA_EVIDENCE_SETTINGS: VwaEvidenceSettings = {
   'nudge-budget': 4,
   'gate-timeout-ms': 30_000,
   'coverage-threshold': 0.9,
+}
+
+/**
+ * Register the settings namespace (§4.4, skill-usage shape). PLANE NOTE: the
+ * registration is /config UX and validation only — the evaluator NEVER reads
+ * through the cascade; it re-reads the raw `<dshHome>/settings.json` per
+ * event (see {@link readUserSettingsSync}), so a settings edit takes effect
+ * on the next turn-stopping dispatch without a restart (completion-gate's
+ * dual-half pattern, evaluate-time hot read, §4.4).
+ */
+export function registerSettings(ctx: Context): void {
+  try {
+    const settings = ctx.get('settings')
+    if (settings === undefined) return
+    registerNamespaceSafe<Record<string, unknown>>(
+      ctx,
+      SETTINGS_NAMESPACE as SettingsNamespace,
+      SettingsSchema as unknown as z<Record<string, unknown>>,
+    )
+  } catch {
+    // Registration is UX-only; an absent settings service must never break mounting.
+  }
+}
+
+/** Parse one raw `<dshHome>/settings.json` section into the settings shape. */
+function resolveSection(section: Record<string, unknown>): VwaEvidenceSettings {
+  const resolved = SettingsObject(section as unknown as Record<string, never>) as unknown as Record<string, unknown>
+  const num = (value: unknown, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback
+  return {
+    enabled: resolved.enabled === true,
+    'nudge-budget': Math.trunc(num(resolved['nudge-budget'], DEFAULT_VWA_EVIDENCE_SETTINGS['nudge-budget'])),
+    'gate-timeout-ms': num(resolved['gate-timeout-ms'], DEFAULT_VWA_EVIDENCE_SETTINGS['gate-timeout-ms']),
+    'coverage-threshold': num(resolved['coverage-threshold'], DEFAULT_VWA_EVIDENCE_SETTINGS['coverage-threshold']),
+  }
+}
+
+/**
+ * SYNCHRONOUS raw read of `<dshHome>/settings.json` — the hot-path half of
+ * the dual-half pattern (§4.4): the turn-stopping handler re-reads per event
+ * so settings hot-toggle takes effect on the next turn. Fail-soft: absent
+ * file, parse error, or malformed section yields the ship defaults (ON).
+ */
+export function readUserSettingsSync(dshHome: string): VwaEvidenceSettings {
+  let text: string
+  try {
+    text = readFileSync(join(dshHome, 'settings.json'), 'utf8')
+  } catch {
+    return DEFAULT_VWA_EVIDENCE_SETTINGS
+  }
+  let root: unknown
+  try {
+    root = JSON.parse(text)
+  } catch {
+    return DEFAULT_VWA_EVIDENCE_SETTINGS
+  }
+  if (typeof root !== 'object' || root === null) return DEFAULT_VWA_EVIDENCE_SETTINGS
+  const section = (root as Record<string, unknown>)[SETTINGS_NAMESPACE]
+  if (typeof section !== 'object' || section === null) return DEFAULT_VWA_EVIDENCE_SETTINGS
+  try {
+    return resolveSection(section as Record<string, unknown>)
+  } catch {
+    return DEFAULT_VWA_EVIDENCE_SETTINGS
+  }
 }

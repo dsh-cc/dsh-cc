@@ -10,6 +10,15 @@
   "references": [
     {
       "path": "../../observability/sidecar-io"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../settings/settings-provider"
+    },
+    {
+      "path": "../../workspace/session-cwd"
     }
   ]
 }
