@@ -1157,6 +1157,16 @@ importers:
         specifier: 4.8.0
         version: 4.8.0
 
+  packages/evaluation/vwa-eval:
+    dependencies:
+      '@dsh-cc/vwa-evidence':
+        specifier: workspace:^
+        version: link:../../interaction/vwa-evidence
+    devDependencies:
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/hooks/hook-protocol:
     devDependencies:
       '@deepseek-ai/cordis':
