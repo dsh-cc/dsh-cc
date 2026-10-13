@@ -7,10 +7,10 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { type Agent, type AgentHandle, type AgentSetup, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import { type Agent, type AgentHandle, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { installModelSelectionWithSanitizer } from './model-selection-wiring.ts'
-import { composePreset } from './preset.ts'
+import { bindPresetResolution } from './preset.ts'
 import { bootBannerRows } from './boot-banner.ts'
 import { createSessionsSection } from './driver-sessions.ts'
 import { gitBranchOf } from './shell-output.ts'
@@ -81,48 +81,48 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const { listeners, emit, uiFaults } = createEmitChannel((next) => { state = next }, (text) => showNotice(text))
 
   // Transient notice: parked in state.notice with a self-clearing timer. The
-  // timer handle lives here so dispose() can cancel it (reversible effect),
-  // and a newer notice replaces the pending timer of the previous one.
+  // timer handle lives here so dispose() can cancel it (reversible effect).
   let noticeTimer: ReturnType<typeof setTimeout> | undefined
   const showNotice = (text: string, ttlMs = NOTICE_TTL_MS): void => {
     if (noticeTimer !== undefined) clearTimeout(noticeTimer)
     emit(setNotice(state, text))
     noticeTimer = setTimeout(() => {
       noticeTimer = undefined
-      // Same-reference guard: no churn when the notice was already cleared.
       if (state.notice !== undefined) emit(setNotice(state, undefined))
     }, ttlMs)
   }
 
-  const composition = await composePreset(ctx, config.agentPreset ?? 'cc')
+  // Preset resolution (doc §3.3): fresh ids re-resolve per create; resume reads the recorded projection in setup (create must not).
+  const { freshPresetId, setupForCreate, setupForResume } = await bindPresetResolution(ctx, {
+    configPreset: config.agentPreset,
+    showNotice,
+    afterMount: (agentCtx) => installModelSelectionWithSanitizer(agentCtx, selection),
+  })
   const cwd = config.cwd ?? process.cwd()
   const selection: ModelSelectionRef = { assembled: undefined, current: undefined }
-
-  const presetSetup = composition.setup
-  const withSelection: AgentSetup = async (agentCtx, agent) => {
-    if (presetSetup !== undefined) await presetSetup(agentCtx, agent)
-    installModelSelectionWithSanitizer(agentCtx, selection)
-  }
 
   const agentOptions = config.provider !== undefined && config.model !== undefined
     ? { provider: config.provider, model: config.model }
     : undefined
-  const createHandle = (id: SessionId, extras: { cwd: string; agentOptions?: { provider: string; model: string } }) =>
-    ctx.agents.create({
+
+  const createHandle = (id: SessionId, extras: { cwd: string; agentOptions?: { provider: string; model: string } }) => {
+    const presetId = freshPresetId()
+    return ctx.agents.create({
       sessionId: id,
-      meta: { cwd: extras.cwd, ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset } },
-      setup: withSelection,
+      meta: { cwd: extras.cwd, agentPreset: presetId },
+      setup: setupForCreate,
       ...(extras.agentOptions === undefined ? {} : { agentOptions: extras.agentOptions }),
     })
+  }
   const createArgs = (id: SessionId) => ({
     sessionId: id,
-    meta: { cwd, ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset } },
-    setup: withSelection,
+    meta: { cwd, agentPreset: freshPresetId() },
+    setup: setupForCreate,
     ...agentOptions === undefined ? {} : { agentOptions },
   })
 
-  // Boot session resolution (§2.3): non-empty sessionId → resume that id;
-  // '' → fresh; undefined + autoResume → marker; else fresh. Never SessionId('').
+  // Boot session resolution (§2.3): non-empty sessionId → resume; '' → fresh;
+  // undefined + autoResume → marker; else fresh. Never SessionId('').
   let resumeSession: SessionId | undefined
   let attemptedAutoResume = false
   let markerFound = false
@@ -146,7 +146,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     try {
       handle = await ctx.agents.resume({
         resumeSessionId: resumeSession,
-        setup: withSelection,
+        setup: setupForResume,
         ...agentOptions === undefined ? {} : { agentOptions },
       })
       resumed = true
@@ -159,8 +159,8 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     handle = await ctx.agents.create(createArgs(SessionId(`tui-${randomUUID()}`)))
   }
 
-  // `-c`/`--continue` on a bare boot with nothing to continue → point at
-  // /resume (a stale-marker degrade already surfaced its own notice above).
+  // `-c`/`--continue` on a bare boot with nothing to continue → point at /resume
+  // (a stale-marker degrade already surfaced its own notice above).
   if (attemptedAutoResume && !markerFound && config.continueRequested === true) {
     showNotice('没有可继续的上一会话，可 /resume 手动选择')
   }
@@ -346,7 +346,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     refreshCatalog: () => catalog.refreshCatalog(),
     createHandle,
     reapplyMode: (mode: string) => { modeSection.applyMode(mode as never); return modeSection.modeWrites },
-    withSelection,
+    setupForResume,
     agentOptions,
   })
   const switchSession = sessions.switchSession

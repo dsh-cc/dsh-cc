@@ -128,6 +128,12 @@
       "path": "./packages/interaction/completion-gate"
     },
     {
+      "path": "./packages/interaction/vwa-evidence"
+    },
+    {
+      "path": "./packages/evaluation/vwa-eval"
+    },
+    {
       "path": "./packages/context/progress-rebuild"
     },
     {
@@ -216,6 +222,9 @@
     },
     {
       "path": "./packages/interaction/command-permissions"
+    },
+    {
+      "path": "./packages/interaction/command-preset"
     },
     {
       "path": "./packages/interaction/command-plugin"

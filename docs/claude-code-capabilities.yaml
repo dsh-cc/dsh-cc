@@ -2,6 +2,12 @@
 # Authored source of truth (spec: docs/plans/2026-09-03-claude-code-capability-manifest.md §4, §6).
 # docs/cc-parity-matrix.md and the README parity block are GENERATED from this file;
 # hand edits there fail CI. Edit loop: edit this file → run pnpm docs:parity → commit all.
+#
+# Scope note (VWA, docs/plans/2026-10-12-verifiable-workspace-agent.md §3.2a):
+# this manifest is the CC-parity ledger. Capabilities exclusive to the VWA
+# agent preset (packages/preset/cc/agent.vwa.cordis.yml — verifiable workspace
+# deliverables with 〔src:ws:...〕 evidence receipts) have no Claude Code
+# counterpart and deliberately stay OUT of this manifest.
 manifest_version: 1
 
 baseline:
@@ -2237,6 +2243,33 @@ capabilities:
         per key), mutations write to the dsh home (`$DSH_HOME` / `~/.dsh`)
         never the Claude home, and a shadowed-claude marketplace re-add prints
         a one-line notice.
+
+  commands.preset:
+    title: /preset
+    category: commands
+    plane: preset
+    upstream:
+      summary: Show the agent-preset roster, or switch this session and the default with /preset <id>.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: full
+      ux: full
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-preset" }
+      - { type: test, path: packages/interaction/command-preset/tests/command-preset.spec.ts }
+    deviation:
+      kind: none
+      summary: >-
+        /preset has no Claude Code counterpart: it drives the agent-preset
+        registry's roster (bare invocation lists id, name, order, description,
+        and the current default) and runs the pinned switch transaction —
+        validate against the roster, hot-activate the zero-turn session
+        (`agent-preset/locked` downgrades to default-only), persist
+        `vwa-preset.selectedDefault` through the settings-provider update
+        semantics, and only after a successful branch inject a
+        `command-preset`-sourced announcement with the tri-state texts.
 
   commands.provider:
     title: /provider
