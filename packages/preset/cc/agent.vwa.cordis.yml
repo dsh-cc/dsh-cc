@@ -4,6 +4,8 @@
 # body lives in agent.shared.cordis.yml (included below); this file adds only
 # the VWA persona. Co-located include paths resolve relative to the including
 # file, so the inner path is `./agent.shared.cordis.yml`.
+# Writing behavior for lane-1 documents: docs/vwa/writing-guidance.md
+# (marker discipline, turn-end verification loop, delivery states).
 # END dsh-cc header
 - id: vwa-shared
   name: '@deepseek-ai/cordis-plugin-include'

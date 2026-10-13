@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-12",
+  "convention": "docs/plans/2026-10-12-verifiable-workspace-agent.md §8 (frozen): coverage = marked+read-back-passing ÷ detected claims (four-family detector); threshold ≥ 0.9 first release, recalibrated after one dogfood week",
+  "goldSet": {
+    "entries": 30,
+    "pinned": "packages/evaluation/vwa-eval/gold-set.json"
+  },
+  "detectedClaims": 503,
+  "documentsWithClaims": 23,
+  "claimsPerFamily": {
+    "numbersWithUnits": 97,
+    "isoDate": 68,
+    "versionString": 211,
+    "identifier": 162
+  },
+  "candidateCoverageDenominator": 503
+}

@@ -1,0 +1,152 @@
+[
+  {
+    "path": "docs/code-intelligence-health.md",
+    "sha256": "9993258a5bc2f591c20de5c49bbe04a09cda6faf294520af34891378e3bb6cf6",
+    "bytes": 2127
+  },
+  {
+    "path": "docs/dev.md",
+    "sha256": "07041567c1583840f2e873ae9201a5394f6feb0fce18d00244b1c10dff902cfe",
+    "bytes": 10962
+  },
+  {
+    "path": "docs/plan-mode-command-channel.md",
+    "sha256": "ee9f6cd479fe35645864cbcb887809a97e092db2c99ff6438d03696eb7d3372c",
+    "bytes": 20976
+  },
+  {
+    "path": "docs/plans/2026-09-02-worktree-session-isolation.md",
+    "sha256": "9491e20d38a08e114acb683a2b6bdc41d82df94759eb0377b2186000fb7ca7f9",
+    "bytes": 12753
+  },
+  {
+    "path": "docs/plans/2026-09-05-statusline-multiline.md",
+    "sha256": "c7efda1d07cfe1cbcb8bb84318e46e8fddc070211444b914ddf9a399edb5980f",
+    "bytes": 8844
+  },
+  {
+    "path": "docs/plans/2026-09-07-plugin-mcp-seam.md",
+    "sha256": "51dd30fa63d44878cc30fa97cb1714f774b6b64332a4b85b0401bbd0ab3ac73c",
+    "bytes": 19306
+  },
+  {
+    "path": "docs/plans/2026-09-08-harness-0.1.2-rc1-compat.md",
+    "sha256": "84db05f05029f7cc4af76c4ec028e1c4400f3a9840037ec9e3d100eda6adfafb",
+    "bytes": 22598
+  },
+  {
+    "path": "docs/plans/2026-09-10-subagent-handoff-store.md",
+    "sha256": "9146cc63d8448a5d0324034e7fd0e46b828ea3b7e40413604dfc61c8240b6ef2",
+    "bytes": 6305
+  },
+  {
+    "path": "docs/plans/2026-09-16-memory-g4-g5-write-gate-and-dream-prompt.md",
+    "sha256": "61d7dd0a7fc1b0f4a9e18f52a25af3ed6c1a61ca71b639f308e55d5b1f4abe16",
+    "bytes": 14267
+  },
+  {
+    "path": "docs/plans/2026-09-21-prompt-cache-write-breakpoints.md",
+    "sha256": "addffd8f95e4e5020eab1a353f7f6b48e84dc33b73eecff126c8f41a9e64c076",
+    "bytes": 25196
+  },
+  {
+    "path": "docs/plans/2026-09-24-memory-structured-report.md",
+    "sha256": "225b4da488afdc1d1c914d2401165d6ce28dcdb27d294c9c4336421a7f21ba2b",
+    "bytes": 17109
+  },
+  {
+    "path": "docs/plans/2026-09-26-codex-rescue-bridge.md",
+    "sha256": "a1b208992ac910b9808cbce671fead926e96a388b976b2833afa56cd1eb25c50",
+    "bytes": 39900
+  },
+  {
+    "path": "docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md",
+    "sha256": "78728848e4c8c5c121c4f9b208f21c3d5fe404eece22a0b344ec8abf25a8e129",
+    "bytes": 32033
+  },
+  {
+    "path": "docs/plans/2026-10-09-structured-progress-and-post-compact-rebuild.md",
+    "sha256": "4094c8e48dee98d3a3762992fb4374b87c484f0289337fbc67e9b1005477e50a",
+    "bytes": 51742
+  },
+  {
+    "path": "docs/rag-integration-protocol.md",
+    "sha256": "3d1be30395c86cb92e141b33b0a07689cec29f59b7fe51f3b9af640b85bf54a9",
+    "bytes": 29878
+  },
+  {
+    "path": "packages/bundle/cc-tui/README.md",
+    "sha256": "c746279399716e4cdda20a50e3209823b880941aeca98d89969e8ba643412aed",
+    "bytes": 370
+  },
+  {
+    "path": "packages/compaction/compaction-micro/README.md",
+    "sha256": "090dd7f393af8abb5e669a2c3c03963c845d18ce9f7cdd1bb300566df0b620c8",
+    "bytes": 5229
+  },
+  {
+    "path": "packages/compat/cc-plugin-loader/README.md",
+    "sha256": "bc758e159d9ba7d0455a48769b520875253aae0238a0ab17a2d589107d3adfbb",
+    "bytes": 10678
+  },
+  {
+    "path": "packages/core/tool-append-order/README.md",
+    "sha256": "9909f39264aac82571b012e8c1283743faf0afb65e9d0928c60a40e00b3abec3",
+    "bytes": 1575
+  },
+  {
+    "path": "packages/interaction/command-auto-mode/README.md",
+    "sha256": "dfb359549006cfbc8205b008cb5d38af485a7d85b07ce94f544bf22f49399b50",
+    "bytes": 2048
+  },
+  {
+    "path": "packages/interaction/command-compact/README.md",
+    "sha256": "8eeed74652f06489e564b1d70d4a7844a84526d815af12330bedb8b319b90a55",
+    "bytes": 1784
+  },
+  {
+    "path": "packages/interaction/command-doctor/README.md",
+    "sha256": "0c1d8ece716c97c4db946ede76e507c979482543a6a2f29fce98afe1f614550d",
+    "bytes": 3055
+  },
+  {
+    "path": "packages/interaction/command-tasks/README.md",
+    "sha256": "4dae9490f77f57b2e3c320191cd741508a3050762351e1957310b78a548f82bb",
+    "bytes": 1401
+  },
+  {
+    "path": "packages/interaction/transcript-secrets/README.md",
+    "sha256": "4046c8cd9a6ae643da4db0a78e29a4d3e1a8999539df08b64cfb2fe748a3ddfb",
+    "bytes": 1212
+  },
+  {
+    "path": "packages/llm-tuning/reasoning-fold/README.md",
+    "sha256": "da0bcbc64f14613987a51fa88e6e898bedf19a2e2683f6cebfdd18d175c34f3d",
+    "bytes": 3531
+  },
+  {
+    "path": "packages/mcp/mcp-config/README.md",
+    "sha256": "d8a1a0ff6adb77a60d3530181f1fd48ecf654058a1bad69b7a9ce66f605f0ea2",
+    "bytes": 4445
+  },
+  {
+    "path": "packages/observability/cache-health/README.md",
+    "sha256": "ea705db9a88fe89b0d3f7fb68d577c1726e02177f89f91b2a75da0e70b8415de",
+    "bytes": 2718
+  },
+  {
+    "path": "packages/session/command-cost/README.md",
+    "sha256": "1fc4cb66dda9053a4f706ee05ed2e6823a20fcc54e53517c1cac12000a0a09e7",
+    "bytes": 3748
+  },
+  {
+    "path": "packages/session/command-learn/README.md",
+    "sha256": "cf7df8ae4e67ff7a848b3c9c9b45025f34208fe5d5d26401d4690f05cc72ce21",
+    "bytes": 2360
+  },
+  {
+    "path": "packages/skill/skill-claude-code/README.md",
+    "sha256": "7e9d52e5cbbefc55b80750a7a85145ce01b4c62ca2ed8da2370bd03c86329eed",
+    "bytes": 6439
+  }
+]
