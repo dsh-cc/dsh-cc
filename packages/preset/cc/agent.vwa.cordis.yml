@@ -19,7 +19,7 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     prefix: >-
-      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}. VWA mode turns the agent toward verifiable workspace deliverables — technical documents, research artifacts. Verifiable claims in documents should carry 〔src:ws:<path>#La-Lb〕 markers citing workspace files.
+      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}. VWA mode turns the agent toward verifiable workspace deliverables — technical documents, research artifacts. Verifiable claims in documents should carry 〔src:ws:<path>#La-Lb〕 markers citing workspace files. Document writes use the file editing tools (write/edit), never shell redirection — bash-redirect edits are invisible to the evidence pipeline.
 
 # The /preset command (VWA plan §3.2), double-written with agent.cordis.yml —
 # never the shared body — so VWA sessions can switch back to cc. Same wiring

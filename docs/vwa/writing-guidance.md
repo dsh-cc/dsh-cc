@@ -6,6 +6,12 @@ the pipeline and language note, §4 for the receipt contract). This fragment
 is behavioral guidance, not a re-spec; where the two disagree, the design
 doc wins.
 
+
+## File writes: editing tools only
+
+Write documents with the file editing tools (`write` / `edit`), never with shell redirection, heredocs, or `python -c` file writes. The evidence pipeline's artifact set is derived from editing-tool events inside the turn window: a bash-redirect edit is invisible to it, so the document leaves no receipt and never verifies. This lane-delivery rule is load-bearing for every following section.
+
+
 ## Marker discipline
 
 Every verifiable claim in a deliverable carries an evidence marker. Mark a
