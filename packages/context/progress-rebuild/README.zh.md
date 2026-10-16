@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-结构化进度状态 + 压缩后上下文重建。一个注册的**会话投影**从已提交的会话事件派生每会话的类型化进度状态——goal 走上游 canonical `applyGoalProjection` 折叠（喂全部事件，含 `clear` 墓碑与 goal 轮次计数）、最新 `todo/write` 快照、已验证的 bash 执行回执、以及最近一条真实用户消息。在**成功的** `compaction/end` 上，派生简报被投递进**压缩边界后构建的第一个模型请求**：turn 内压缩走 `agent/pre-step` 决策拼接（同一步的请求），空闲压缩走延迟的持久 `agent.inject`（可跨持久化+恢复存活，由用户下一轮认领）。**默认开启**（2026-10-16 起 `progress-rebuild.enabled: true`；经生产 dogfood——测量周内 1,699 次简报注入全部良构、交付路径零错误——由暗发布转正；收益抽查转正后继续观察）。
+结构化进度状态 + 压缩后上下文重建。一个注册的**会话投影**从已提交的会话事件派生每会话的类型化进度状态——goal 走上游 canonical `applyGoalProjection` 折叠（喂全部事件，含 `clear` 墓碑与 goal 轮次计数）、最新 `todo/write` 快照、已验证的 bash 执行回执、以及最近一条真实用户消息。在**成功的** `compaction/end` 上，派生简报被投递进**压缩边界后构建的第一个模型请求**：turn 内压缩走 `agent/pre-step` 决策拼接（同一步的请求），空闲压缩走延迟的持久 `agent.inject`（可跨持久化+恢复存活，由用户下一轮认领）。**默认开启**（2026-10-16 起 `progress-rebuild.enabled: true`；经生产 dogfood 由暗发布转正）。
 
 ## 工作方式
 

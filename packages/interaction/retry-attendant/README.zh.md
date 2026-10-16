@@ -7,7 +7,7 @@
 - **M1 — 含糊结果指引**：命中分类时，以 `additionalContexts` 条目（source kind `retry-attendant`）追加一行按类别的建议：“重跑之前先核实预期后置条件”。
 - **M2 — 相同重试升级**：按会话记录调用效果的摘要；`expire-minutes` 内相同效果的重试（忽略改写过的 `description`/`timeoutMs`）被升级为权限**询问**而非直接放行。
 
-**默认开启**（2026-10-16 起 `retry-attendant.enabled: true`；经一周生产 dogfood——监听器事件 2,150 次、转录复核无可归因误伤——由暗发布转正）。
+**默认开启**（2026-10-16 起 `retry-attendant.enabled: true`；经生产 dogfood 由暗发布转正）。
 
 ## 设置（仅用户层）
 

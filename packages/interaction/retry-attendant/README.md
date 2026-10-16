@@ -7,7 +7,7 @@ Verify-before-retry attendant: a post-execute listener for **mutating tool calls
 - **M1 — ambiguous-outcome guidance**: on a classified ambiguous outcome, appends a one-line class-specific advice as an `additionalContexts` entry (source kind `retry-attendant`) — "verify the intended postcondition before re-running".
 - **M2 — identical-retry escalation**: records the call's effect digest per session; an identical retry (same effect fields, ignoring reworded `description`/`timeoutMs`) within `expire-minutes` is escalated to a permission **ask** instead of passing through.
 
-**Default ON** since 2026-10-16 (`retry-attendant.enabled: true`; promoted from ship-dark after a one-week production dogfood — 2,150 listener events with zero misfires attributable in the operator's transcript review).
+**Default ON** since 2026-10-16 (`retry-attendant.enabled: true`; promoted from ship-dark after the production dogfood).
 
 ## Settings (user layer only)
 
