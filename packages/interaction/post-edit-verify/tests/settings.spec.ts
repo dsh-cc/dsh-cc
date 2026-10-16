@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SettingsSchema, DEFAULT_RULES_SETTINGS, readUserRules, rulesOf } from '../src/settings.ts'
+import { SettingsSchema, DEFAULT_RULES_SETTINGS, readUserRules, rulesOf, DEFAULT_RECOVERY_HINT_SETTINGS, RecoveryHintSettingsSchema, readUserEnabled } from '../src/settings.ts'
 
 describe('SettingsSchema', () => {
   it('materializes defaults for a full object', () => {
@@ -36,6 +36,35 @@ describe('SettingsSchema', () => {
 
   it('preserves absence like the cascade does (z.const(undefined) union)', () => {
     expect(SettingsSchema(undefined as unknown as Record<string, never>)).toBeUndefined()
+  })
+})
+
+describe('recovery-hint defaults (2026-10-16 flip)', () => {
+  it('DEFAULT_RECOVERY_HINT_SETTINGS.enabled is true', () => {
+    expect(DEFAULT_RECOVERY_HINT_SETTINGS.enabled).toBe(true)
+  })
+
+  it('schema materializes enabled: true for an empty section (absence → default ON)', () => {
+    const resolved = RecoveryHintSettingsSchema({} as unknown as Record<string, never>) as Record<string, unknown>
+    expect(resolved.enabled).toBe(true)
+  })
+
+  it('schema honors an explicit enabled: false (the opt-out path is untouched)', () => {
+    const resolved = RecoveryHintSettingsSchema({ enabled: false } as unknown as Record<string, never>) as Record<string, unknown>
+    expect(resolved.enabled).toBe(false)
+  })
+
+  it('readUserEnabled: absent file, parse error, missing section, and missing key all resolve to the default (ON)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'pev-home-'))
+    expect(await readUserEnabled(home)).toBe(true) // no file
+    await writeFile(join(home, 'settings.json'), '{not json')
+    expect(await readUserEnabled(home)).toBe(true) // parse error
+    await writeFile(join(home, 'settings.json'), JSON.stringify({}))
+    expect(await readUserEnabled(home)).toBe(true) // section absent
+    await writeFile(join(home, 'settings.json'), JSON.stringify({ 'cc-edit-recovery-hint': {} }))
+    expect(await readUserEnabled(home)).toBe(true) // key absent
+    await writeFile(join(home, 'settings.json'), JSON.stringify({ 'cc-edit-recovery-hint': { enabled: false } }))
+    expect(await readUserEnabled(home)).toBe(false) // explicit opt-out
   })
 })
 

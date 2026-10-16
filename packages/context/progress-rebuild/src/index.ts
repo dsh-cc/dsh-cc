@@ -8,7 +8,8 @@
  *
  * Slice B (derivation): registers the `progress-rebuild` Session projection
  * unit from state.ts. Slice C (delivery) lands here.
- * Ship-dark: `progress-rebuild.enabled` defaults to false.
+ * Default ON since the 2026-10-16 default-flip (`progress-rebuild.enabled`
+ * was ship-dark false at launch).
  *
  * @module @dsh-cc/progress-rebuild
  */
@@ -88,7 +89,7 @@ export interface ProgressRebuildPluginConfig {
  * Mount the plugin: register the settings namespace (for /config UX), the
  * `progress-rebuild` projection unit (slice B), and the delivery listeners
  * (slice C — Listener B, Listener C, the ACK observer; all gated on
- * `progress-rebuild.enabled`, ship-dark default false).
+ * `progress-rebuild.enabled`, default ON since the 2026-10-16 flip).
  * @param ctx - the plug context (declares `sessionProjections` via inject).
  * @param config - optional config seam (tests inject a settings reader).
  */
@@ -101,7 +102,7 @@ export function apply(ctx: Context, config: ProgressRebuildPluginConfig = {}): v
   if (projections === undefined) throw new Error('progress-rebuild requires the sessionProjections registry')
   projections.register(progressRebuildProjection)
   // Gate reader (§3.3 round-9): the injected test seam, else the namespace
-  // reader, else ship-dark defaults (no settings provider → enabled false).
+  // reader, else defaults (no settings provider → default enabled true).
   const readSettings = config.readSettings
     ?? ((): ProgressRebuildSettings => {
       try {

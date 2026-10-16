@@ -102,8 +102,8 @@ function resolveRules(section: Record<string, unknown>): RulesSettings {
 // ---------------------------------------------------------------------------
 // Second namespace: edit recovery hint (merged from @dsh-cc/edit-recovery-hint,
 // design doc docs/plans/2026-09-21-edit-fuzzy-matching-and-read-state.md,
-// Track B). Ship-dark, user-layer-only; names carry a RecoveryHint prefix to
-// coexist with the verify namespace in one module.
+// Track B). User-layer-only, default ON since 2026-10-16; names carry a
+// RecoveryHint prefix to coexist with the verify namespace in one module.
 // ---------------------------------------------------------------------------
 
 /** The settings namespace carrying the recovery-hint feature flag. */
@@ -116,15 +116,15 @@ export interface RecoveryHintSettings {
 
 /** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
 const RecoveryHintSettingsObject = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
 })
 
 /** Recovery-hint namespace schema (same z.const(undefined) wrapping convention). */
 export const RecoveryHintSettingsSchema: z<Record<string, unknown>> =
   opt(RecoveryHintSettingsObject) as unknown as z<Record<string, unknown>>
 
-/** Ship-dark default: the hint is opt-in. */
-export const DEFAULT_RECOVERY_HINT_SETTINGS: RecoveryHintSettings = { enabled: false }
+/** Default: enabled since the 2026-10-16 default-flip (was ship-dark opt-in). */
+export const DEFAULT_RECOVERY_HINT_SETTINGS: RecoveryHintSettings = { enabled: true }
 
 /**
  * Register the recovery-hint settings namespace (for /config UX and
@@ -146,7 +146,7 @@ export function registerRecoveryHintSettings(ctx: Context): (() => RecoveryHintS
       const resolved = RecoveryHintSettingsObject(value as unknown as Record<string, never>) as unknown as Record<string, unknown>
       return { enabled: resolved.enabled as boolean }
     } catch {
-      // Malformed live scope → ship-dark defaults; never throw into a hot path.
+      // Malformed live scope → defaults; never throw into a hot path.
       return DEFAULT_RECOVERY_HINT_SETTINGS
     }
   }
@@ -154,27 +154,29 @@ export function registerRecoveryHintSettings(ctx: Context): (() => RecoveryHintS
 
 /**
  * Read the recovery-hint enabled flag DIRECTLY from `<dshHome>/settings.json`,
- * bypassing the merged cascade. Fail-soft: absent file, parse error, or a
- * malformed section yields the ship-dark default (false). Project-scope
- * values are never read — invisible, not refused.
+ * bypassing the merged cascade. Fail-soft: absent file, parse error, a
+ * malformed section, or a missing `enabled` key yields the DEFAULT (ON since
+ * the 2026-10-16 default-flip). Project-scope values are never read —
+ * invisible, not refused.
  */
 export async function readUserEnabled(dshHome: string): Promise<boolean> {
   let text: string
   try {
     text = await readFile(join(dshHome, 'settings.json'), 'utf8')
   } catch {
-    return false
+    return DEFAULT_RECOVERY_HINT_SETTINGS.enabled
   }
   let root: unknown
   try {
     root = JSON.parse(text)
   } catch {
-    return false
+    return DEFAULT_RECOVERY_HINT_SETTINGS.enabled
   }
-  if (typeof root !== 'object' || root === null) return false
+  if (typeof root !== 'object' || root === null) return DEFAULT_RECOVERY_HINT_SETTINGS.enabled
   const section = (root as Record<string, unknown>)[RECOVERY_HINT_SETTINGS_NAMESPACE]
-  if (typeof section !== 'object' || section === null) return false
-  return (section as Record<string, unknown>).enabled === true
+  if (typeof section !== 'object' || section === null) return DEFAULT_RECOVERY_HINT_SETTINGS.enabled
+  const enabled = (section as Record<string, unknown>).enabled
+  return typeof enabled === 'boolean' ? enabled : DEFAULT_RECOVERY_HINT_SETTINGS.enabled
 }
 
 /**
@@ -204,7 +206,7 @@ export function registerSettings(ctx: Context): (() => RulesSettings) | undefine
 /**
  * Read verify rules DIRECTLY from `<dshHome>/settings.json`, bypassing the
  * merged cascade (design doc §3.4). Fail-soft: absent file, parse error, or
- * a malformed section yields the ship-dark defaults. Project-scope rules are
+ * a malformed section yields the defaults. Project-scope rules are
  * never read — they are invisible, not refused.
  */
 export async function readUserRules(dshHome: string): Promise<RulesSettings> {

@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 
 ## 编辑恢复提示
 
-本包同时承载合并进来的 edit-recovery-hint 功能：当 `edit` 工具因多行 `old_string` 未匹配而失败时，向同一条工具结果以 `additionalContexts` 旁路追加一条固定的静态恢复建议（改用单行 `old_string` 锚点，或按 hunk 拆分）——工具结果内容本身绝不被改写。该功能不依赖 shell 服务，因此即使自动验证处于惰性状态也会挂载。它由独立的仅用户层 `cc-edit-recovery-hint` 命名空间控制（与合并前保持不变），同样**默认关闭**。
+本包同时承载合并进来的 edit-recovery-hint 功能：当 `edit` 工具因多行 `old_string` 未匹配而失败时，向同一条工具结果以 `additionalContexts` 旁路追加一条固定的静态恢复建议（改用单行 `old_string` 锚点，或按 hunk 拆分）——工具结果内容本身绝不被改写。该功能不依赖 shell 服务，因此即使自动验证处于惰性状态也会挂载。它由独立的仅用户层 `cc-edit-recovery-hint` 命名空间控制（与合并前保持不变），**2026-10-16 起默认开启**（经生产 dogfood 由暗发布转正；如需关闭设 `cc-edit-recovery-hint.enabled: false`）。
 
 ## 命令环境
 

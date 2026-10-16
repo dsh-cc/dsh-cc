@@ -486,7 +486,7 @@ capabilities:
       kind: divergent
       summary: >-
         dsh-cc extension (user-layer-only setting cc-edit-recovery-hint,
-        enabled default false): on an edit-tool FS_EDIT_NOT_FOUND failure of a
+        enabled default true since 2026-10-16): on an edit-tool FS_EDIT_NOT_FOUND failure of a
         multi-line old_string, a FIXED static recovery-advice message (anchor
         to a single-line old_string, or split per-hunk) is appended as an
         additionalContexts entry on the accept decision — same
@@ -1172,7 +1172,7 @@ capabilities:
       kind: divergent
       summary: >-
         dsh-cc extension (user-layer-only setting retry-attendant, enabled
-        default false): classifies ambiguous tool outcomes into effect
+        default true since 2026-10-16): classifies ambiguous tool outcomes into effect
         classes (bash-timeout/promotion, git-mutation, write-partial, mcp
         mutation), deduplicates per effect digest, and on an identical retry
         re-asks for confirmation via the tools/pre-execute waterfall
@@ -2553,7 +2553,8 @@ capabilities:
         todo/write snapshot, verified bash receipts, last user message) as a
         registered session projection, and on a successful compaction/end
         re-injects the brief into the first model request built after the
-        compaction boundary. Ships dark (progress-rebuild.enabled: false).
+        compaction boundary. Default ON since 2026-10-16
+        (progress-rebuild.enabled: true, promoted from ship-dark).
       refs: []
     dimensions:
       recognized: true

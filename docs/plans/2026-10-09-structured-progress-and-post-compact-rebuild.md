@@ -1,7 +1,7 @@
 # Structured progress state + post-compact context rebuild (design)
 
 - Date: 2026-10-09
-- Status: draft v8 (final) — 10 review rounds; all seats GO on the shipped text (codex r8, grok r9-full + r10-delta). Implemented — PR #216 (merged 2026-10-09); dogfood started 2026-10-09 (user-layer enabled); default-ON graduation pending.
+- Status: draft v8 (final) — 10 review rounds; all seats GO on the shipped text (codex r8, grok r9-full + r10-delta). Implemented — PR #216 (merged 2026-10-09); dogfood started 2026-10-09 (user-layer enabled). **Default-ON graduation 2026-10-16**: dogfood delivery evidence — 1,699 `progress-rebuild/injected` briefs across the measurement week, every row well-formed (`{bytes, sections, path}`), zero delivery-path errors — cleared the PR #216 body gate on delivery health; the §5 benefit spot-check (next-step avoids re-reads) was not re-measured quantitatively and remains the post-flip observation item; `enabled` default flipped to `true`.
 - Scope: new package `packages/context/progress-rebuild`; capability manifest row; preset registration. Read-only consumption of session events + one injection path. No compaction-engine changes; no upstream harness modifications required — round 3 adds one dependency on EXISTING upstream exports (`@deepseek-ai/dsh-goal`'s pure fold, §3.2), which is a read of already-shipped code, not an upstream ask.
 - Sources: Effective Harnesses (initializer/progress-log/handoff protocol against one-shotting and premature completion), Harness Design (context reset + structured handoff artifact beats in-place compaction under context anxiety), Remember-Don't-Re-read (typed runtime state instead of prompt replay: 24,465→2,492 tokens on 15-step runs), SLA (restricted role context rebuilt by the harness). Calibrated by Coding Harness Study/Malena: the win here is *continuity at compaction boundaries*, not more scaffolding.
 
@@ -167,7 +167,7 @@ transcripts, 2026-10-09, two independent sessions each):
 
 ### 3.3 M2 — rebuild injection
 
-Listener B (trigger): on `session/event` where `event.type === 'compaction/end'` (round-9, grok: Listener B, Listener C, and the measurement append all NO-OP unless `progress-rebuild.enabled` is true — the ship-dark gate is on the delivery machinery, not the projection registration, which stays mounted so resume restore is unaffected):
+Listener B (trigger): on `session/event` where `event.type === 'compaction/end'` (round-9, grok: Listener B, Listener C, and the measurement append all NO-OP unless `progress-rebuild.enabled` is true (default ON since the 2026-10-16 graduation) — the gate is on the delivery machinery, not the projection registration, which stays mounted so resume restore is unaffected):
 
 1. Skip failed compactions FIRST: `event.data.error !== undefined` means the
    compaction did not complete and nothing was amputated (upstream
@@ -325,8 +325,9 @@ pending brief (narrow window; the next compaction regenerates — accepted).
 Kebab namespace (`registerNamespaceSafe` precedent
 `packages/interaction/advisor-watchdog/src/settings.ts:23,90`):
 
-- `progress-rebuild.enabled` — default `false` (ship-dark, §3.1; flip to `true`
-  on the dogfood graduation commit, along with the §5 observable evidence).
+- `progress-rebuild.enabled` — default `true` (flipped on the 2026-10-16
+  dogfood graduation commit, along with the §5 observable evidence; was
+  ship-dark `false` at launch, §3.1).
 - `progress-rebuild.max-lines` — default `120`.
 - `progress-rebuild.include-verified` — default `true`; governs the WHOLE
   verified section (the live bash fallback AND the D1 receipts once it ships —

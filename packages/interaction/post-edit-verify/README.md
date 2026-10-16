@@ -23,7 +23,7 @@ Key `cc-post-edit-verify` in the **user-layer** `settings.json` (the harness-hom
 
 ## Recovery hints
 
-This package also hosts the merged edit-recovery-hint feature: when the `edit` tool fails not-found on a multi-line `old_string`, a fixed static recovery-advice message (anchor to a single-line `old_string`, or split per hunk) is appended to the same tool result as an `additionalContexts` sideband — the tool result content is never rewritten. No shell service is needed, so this listener is mounted even where auto-verify is inert. It is controlled by the separate user-layer-only `cc-edit-recovery-hint` namespace (unchanged from before the merge) and stays **default OFF**.
+This package also hosts the merged edit-recovery-hint feature: when the `edit` tool fails not-found on a multi-line `old_string`, a fixed static recovery-advice message (anchor to a single-line `old_string`, or split per hunk) is appended to the same tool result as an `additionalContexts` sideband — the tool result content is never rewritten. No shell service is needed, so this listener is mounted even where auto-verify is inert. It is controlled by the separate user-layer-only `cc-edit-recovery-hint` namespace (unchanged from before the merge) and is **default ON** since 2026-10-16 (promoted from ship-dark after the production dogfood; opt out with `cc-edit-recovery-hint.enabled: false`).
 
 ## Command environment
 

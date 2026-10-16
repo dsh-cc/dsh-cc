@@ -27,7 +27,7 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
 
 /** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
 const SettingsObject = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   'max-lines': z.number().min(1).default(120),
   'include-verified': z.boolean().default(true),
 })
@@ -40,9 +40,9 @@ const SettingsObject = z.object({
 export const SettingsSchema: z<Record<string, unknown>> =
   opt(SettingsObject) as unknown as z<Record<string, unknown>>
 
-/** Ship-dark defaults (§3.1/§3.5): enabled false. */
+/** Defaults: enabled since the 2026-10-16 default-flip (was ship-dark §3.1/§3.5). */
 export const DEFAULT_PROGRESS_REBUILD_SETTINGS: ProgressRebuildSettings = {
-  enabled: false,
+  enabled: true,
   maxLines: 120,
   includeVerified: true,
 }

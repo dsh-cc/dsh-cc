@@ -1,7 +1,7 @@
 # Verify-before-retry for mutating tool calls (design)
 
 - Date: 2026-10-09
-- Status: **Implemented** — package `packages/interaction/retry-attendant`, preset row before hooks-claude-code, capability manifest `engine.verify-before-retry` (merged as PR #215, 2026-10-09). Design review: internal critic GO (4 rounds); codex/grok external blind review both GO-WITH-AMENDMENTS, folded through v5.2 (two delta rounds each; cross-seat sibling-remedy adjudication in §8); user sign-off 2026-10-09.
+- Status: **Implemented** — package `packages/interaction/retry-attendant`, preset row before hooks-claude-code, capability manifest `engine.verify-before-retry` (merged as PR #215, 2026-10-09). Design review: internal critic GO (4 rounds); codex/grok external blind review both GO-WITH-AMENDMENTS, folded through v5.2 (two delta rounds each; cross-seat sibling-remedy adjudication in §8); user sign-off 2026-10-09. **Default-ON graduation 2026-10-16**: one-week production dogfood (2,150 listener events — 1,811 guidance, 339 escalations) with zero misfires attributable in the operator's transcript review (no incorrect class assignments, no wrongly-escalated benign retries observed); `enabled` default flipped to `true`. The §5.6 genuine-retry sampling rate remains a post-flip observation item.
 - Scope: new package `packages/interaction/retry-attendant`; capability manifest row; preset registration. No harness-upstream dependency. No edits to `post-edit-verify` (boundary in §2).
 - Sources: Verified Tool Calls (arXiv 2608.02645): non-atomic tool failures fall into four classes (timeout-after-dispatch, delayed visibility, partial success, stale conflict) where the observed response is not a reliable proxy for the effect; verify the postcondition before retrying; ablation showed the verification-only variant captures most of the gain (duplicate side effects 20–72% → ~0 with the full wrapper).
 
@@ -492,7 +492,7 @@ One kebab-case settings namespace (`retry-attendant.*`, repo convention —
 `cc-edit-recovery-hint.enabled` precedent; the earlier draft's camelCase
 `retryAttendant.*` spelling is dropped):
 
-- `retry-attendant.enabled` (default `false`, dogfood-first).
+- `retry-attendant.enabled` (default `true` since the 2026-10-16 dogfood graduation; was `false`, dogfood-first, at launch).
 - `retry-attendant.guidance` (default `true` when enabled) — M1.
 - `retry-attendant.escalate` (default `true` when enabled) — M2.
 - `retry-attendant.expireMinutes` (default `10`).

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Structured progress state + post-compact context rebuild. A registered **session projection** derives a typed per-session progress state from already-committed session events — goal state via the upstream canonical `applyGoalProjection` fold (fed EVERY event, `clear` tombstones and goal-round counting included), the latest `todo/write` snapshot, verified bash execution receipts, and the last genuine user message. On a **successful** `compaction/end`, the derived brief is delivered into the **first model request built after the compaction boundary**: in-turn compaction via an `agent/pre-step` decision splice (the same step's request), idle compaction via a deferred durable `agent.inject` (survives persist+resume, claimed by the user's next turn). **Default off** (`progress-rebuild.enabled: false`, ship-dark).
+Structured progress state + post-compact context rebuild. A registered **session projection** derives a typed per-session progress state from already-committed session events — goal state via the upstream canonical `applyGoalProjection` fold (fed EVERY event, `clear` tombstones and goal-round counting included), the latest `todo/write` snapshot, verified bash execution receipts, and the last genuine user message. On a **successful** `compaction/end`, the derived brief is delivered into the **first model request built after the compaction boundary**: in-turn compaction via an `agent/pre-step` decision splice (the same step's request), idle compaction via a deferred durable `agent.inject` (survives persist+resume, claimed by the user's next turn). **Default ON** since 2026-10-16 (`progress-rebuild.enabled: true`; promoted from ship-dark after the production dogfood — 1,699 well-formed injected briefs in the measurement week with zero delivery-path errors; benefit spot-checks continue post-flip).
 
 ## How it works
 
@@ -21,7 +21,7 @@ Cross-package obligation: the injected kind `progress-rebuild` is added to the d
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | Master flag. Ship-dark; gates Listener B, Listener C, and the measurement append (the projection registration stays mounted so resume restore is unaffected). |
+| `enabled` | `true` | Master flag (default ON since the 2026-10-16 flip). Gates Listener B, Listener C, and the measurement append (the projection registration stays mounted so resume restore is unaffected). |
 | `max-lines` | `120` | Brief line budget (a 6 KiB byte cap and 240-char line truncation apply independently). |
 | `include-verified` | `true` | Governs the whole verified section (bash fallback now, D1 receipts once the sibling design ships). |
 
