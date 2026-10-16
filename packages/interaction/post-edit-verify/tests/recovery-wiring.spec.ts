@@ -167,19 +167,22 @@ describe('listener trigger permutations', () => {
     expect(downstream).toEqual({ kind: 'accept', content: [{ type: 'text', text: NOT_FOUND }] })
   })
 
-  it('settings.json absent → inert passthrough (fail-soft)', async () => {
+  it('settings.json absent → hint fires (default ON since the 2026-10-16 default-flip; fail-soft)', async () => {
     const home = tempHome()
     const { listener } = rig({ home })
-    const downstream = await listener(editExec(MULTI), result(NOT_FOUND), nextAccept())
-    expect(downstream).toEqual({ kind: 'accept', content: [{ type: 'text', text: NOT_FOUND }] })
+    const decision = await listener(editExec(MULTI), result(NOT_FOUND), nextAccept())
+    const contexts = (decision as { additionalContexts?: { content: { type: 'text'; text: string }[] }[] }).additionalContexts
+    expect(contexts).toHaveLength(1)
+    expect(contexts![0]!.content).toEqual([{ type: 'text', text: RECOVERY_HINT }])
   })
 
-  it('malformed settings.json → inert passthrough (fail-soft)', async () => {
+  it('malformed settings.json → hint fires (fail-soft resolves to default ON)', async () => {
     const home = tempHome()
     writeFileSync(join(home, 'settings.json'), '{not json')
     const { listener } = rig({ home })
-    const downstream = await listener(editExec(MULTI), result(NOT_FOUND), nextAccept())
-    expect(downstream).toEqual({ kind: 'accept', content: [{ type: 'text', text: NOT_FOUND }] })
+    const decision = await listener(editExec(MULTI), result(NOT_FOUND), nextAccept())
+    const contexts = (decision as { additionalContexts?: unknown[] }).additionalContexts
+    expect(contexts).toHaveLength(1)
   })
 
   it('no dshHome available → inert', async () => {

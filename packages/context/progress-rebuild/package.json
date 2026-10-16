@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/progress-rebuild",
-  "description": "Structured progress state + post-compact context rebuild: derives a typed per-session progress brief from session events (goal fold, todo snapshot, verified bash receipts, last user message) and re-injects it after a successful compaction/end; default off",
+  "description": "Structured progress state + post-compact context rebuild: derives a typed per-session progress brief from session events (goal fold, todo snapshot, verified bash receipts, last user message) and re-injects it after a successful compaction/end; default ON since 2026-10-16",
   "version": "0.9.1-rc.1",
   "repository": {
     "type": "git",

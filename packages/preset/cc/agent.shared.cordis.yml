@@ -546,8 +546,8 @@
     # on an edit-tool not-found failure of a multi-line `old_string`, it
     # appends a FIXED static recovery-advice message to the accept decision as
     # an `additionalContexts` entry (model-visible sideband; the tool result
-    # content is never rewritten). User-layer-only setting, ship-dark by
-    # default (cc-edit-recovery-hint). Publishes no
+    # content is never rewritten). User-layer-only setting (cc-edit-recovery-hint),
+    # default ON since the 2026-10-16 flip. Publishes no
     # Service (plain plugin), so it needs no isolate key of its own; the
     # `tools/post-execute` listener is registered WITHOUT prepend so it composes
     # inside context-crusher's outermost post-execute listener.
@@ -630,7 +630,7 @@
     # from session events (goal fold, todo snapshot, verified bash receipts,
     # last user message) and re-injects it into the first model request after
     # a successful compaction/end. Publishes no Service (plain plugin), so it
-    # needs no isolate key. DEFAULT OFF (progress-rebuild.enabled). ORDER:
+    # needs no isolate key. DEFAULT ON since 2026-10-16 (progress-rebuild.enabled). ORDER:
     # after advisor-watchdog, at the cc-services tail — read-only observer +
     # one bounded injection, no composition dependency on any earlier row.
     - id: progress-rebuild

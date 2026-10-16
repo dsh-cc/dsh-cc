@@ -1,14 +1,17 @@
 /**
  * Settings for the retry-attendant (design doc
  * docs/plans/2026-10-09-verify-before-retry.md §3.5): one kebab-case
- * namespace, ship-dark (`enabled` defaults false). Two halves, mirroring
+ * namespace, default ON since 2026-10-16 (promoted from ship-dark after a
+ * one-week production dogfood: 2,150 listener events, zero attributable
+ * misfires). Two halves, mirroring
  * post-edit-verify/turn-rules:
  *
  * 1. namespace registration via `@dsh-cc/settings-ns` (for /config UX and
  *    validation only);
  * 2. a RAW user-layer read of `<dshHome>/settings.json` per use — hot reload
  *    for free, and project-scope values are invisible. Fail-soft everywhere:
- *    absent file, parse error, or malformed section yields ship-dark defaults.
+ *    absent file, parse error, or malformed section yields the defaults
+ *    (enabled ON since the 2026-10-16 default-flip).
  *
  * @module
  */
@@ -31,9 +34,9 @@ export interface RetrySettings {
   expireMinutes: number
 }
 
-/** Ship-dark defaults (§3.5): the whole feature is opt-in. */
+/** Defaults: enabled since the 2026-10-16 default-flip (was ship-dark opt-in). */
 export const DEFAULT_RETRY_SETTINGS: RetrySettings = {
-  enabled: false,
+  enabled: true,
   guidance: true,
   escalate: true,
   expireMinutes: 10,
@@ -43,7 +46,7 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
 
 /** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
 const SettingsObject = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   guidance: z.boolean().default(true),
   escalate: z.boolean().default(true),
   'expire-minutes': z.number().default(10),
@@ -86,7 +89,7 @@ export function registerRetrySettings(ctx: Context): (() => RetrySettings) | und
       const value = read()
       return value === undefined ? DEFAULT_RETRY_SETTINGS : resolveSettings(value)
     } catch {
-      // Malformed live scope → ship-dark defaults; never throw into a hot path.
+      // Malformed live scope → defaults; never throw into a hot path.
       return DEFAULT_RETRY_SETTINGS
     }
   }
@@ -95,8 +98,8 @@ export function registerRetrySettings(ctx: Context): (() => RetrySettings) | und
 /**
  * Read retry-attendant settings DIRECTLY from `<dshHome>/settings.json`,
  * bypassing the merged cascade (post-edit-verify §3.4 idiom). Fail-soft:
- * absent file, parse error, or a malformed section yields the ship-dark
- * defaults. Project-scope values are never read — invisible, not refused.
+ * absent file, parse error, or a malformed section yields the defaults
+ * (enabled ON since the 2026-10-16 flip). Project-scope values are never read — invisible, not refused.
  */
 export async function readUserSettings(dshHome: string): Promise<RetrySettings> {
   let text: string

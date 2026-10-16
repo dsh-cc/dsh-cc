@@ -4,6 +4,8 @@
  * fresh digest, downstream preservation, source kind, and the swallow rule.
  */
 
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { failureResult, bashExec, contextsOf, enable, promotedResult, rig, successResult, tempHome } from './rig.ts'
@@ -45,6 +47,23 @@ describe('M1 guidance (tools/post-execute)', () => {
     const { post } = rig({ home })
     const decision = await post(bashExec('pnpm build'), promotedResult(), async () => ({ kind: 'accept' }))
     expect(contextsOf(decision)).toHaveLength(0)
+  })
+
+  it('settings.json absent ⇒ guidance fires (default ON since the 2026-10-16 default-flip)', async () => {
+    const home = tempHome()
+    const { post } = rig({ home })
+    const decision = await post(bashExec('pnpm build'), promotedResult(), async () => ({ kind: 'accept' }))
+    const contexts = contextsOf(decision)
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]!.source?.kind).toBe('retry-attendant')
+  })
+
+  it('malformed settings.json ⇒ guidance fires (fail-soft resolves to default ON)', async () => {
+    const home = tempHome()
+    writeFileSync(join(home, 'settings.json'), '{not json')
+    const { post } = rig({ home })
+    const decision = await post(bashExec('pnpm build'), promotedResult(), async () => ({ kind: 'accept' }))
+    expect(contextsOf(decision)).toHaveLength(1)
   })
 
   it('same-digest second ambiguous outcome ⇒ guidance deduped (fresh-digest rule)', async () => {

@@ -30,6 +30,14 @@ describe('M2 escalation (tools/pre-execute, prepend:true)', () => {
     expect((decision as { reason: string }).reason).toContain('identical retry of bash after git-mutation')
   })
 
+  it('settings.json absent ⇒ M2 escalation still armed (default ON since the 2026-10-16 default-flip)', async () => {
+    const home = tempHome()
+    const r = rig({ home, approval: {} })
+    await record(r, 'git commit -m x', failureResult('fatal: something'))
+    const decision = await r.pre(bashExec('git commit -m x', { description: 'try again', timeoutMs: 999, callId: 'c2' }), nextAllow)
+    expect((decision as { kind: string }).kind).toBe('ask')
+  })
+
   it('reworded description/different timeoutMs ⇒ SAME key (digest projection) — reason names tool+class+time', async () => {
     const home = tempHome()
     enable(home)
@@ -141,11 +149,18 @@ describe('M2 escalation (tools/pre-execute, prepend:true)', () => {
     const r = rig({ home, approval: {} })
     await record(r, 'pnpm install', failureResult('network dropped'))
     let release: (() => void) | undefined
+    let entered!: () => void
+    const inFlight = new Promise<void>((resolve) => { entered = resolve })
     const slowNext = async (): Promise<unknown> => {
+      entered()
       await new Promise<void>((resolve) => { release = resolve })
       return { kind: 'allow' } as unknown
     }
     const first = r.pre(bashExec('pnpm install', { callId: 'c1' }), slowNext)
+    // The settings read before the handler is async; gate the sibling on
+    // slowNext entry so it always observes the first call in flight
+    // (full-suite parallel runs otherwise race the two pre() starts).
+    await inFlight
     const second = await r.pre(bashExec('pnpm install', { callId: 'c2' }), nextAllow)
     expect(second).toEqual({ kind: 'deny', reason: 'identical call is already awaiting confirmation' })
     release?.()
