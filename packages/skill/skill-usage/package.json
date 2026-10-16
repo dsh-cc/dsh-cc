@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/skill-usage",
   "description": "Skill lifecycle usage telemetry: observe-only listeners counting committed skill loads (tool form via tools/result, slash form via persisted skill-invocation messages) into a per-workspace sidecar ledger with an observation-start marker; default on",
-  "version": "0.9.1-rc.1",
+  "version": "0.9.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
