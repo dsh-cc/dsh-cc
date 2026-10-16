@@ -149,17 +149,18 @@ describe('M2 escalation (tools/pre-execute, prepend:true)', () => {
     const r = rig({ home, approval: {} })
     await record(r, 'pnpm install', failureResult('network dropped'))
     let release: (() => void) | undefined
-    let entered = false
+    let entered!: () => void
+    const inFlight = new Promise<void>((resolve) => { entered = resolve })
     const slowNext = async (): Promise<unknown> => {
-      entered = true
+      entered()
       await new Promise<void>((resolve) => { release = resolve })
       return { kind: 'allow' } as unknown
     }
     const first = r.pre(bashExec('pnpm install', { callId: 'c1' }), slowNext)
-    // The settings read before the handler is async; synchronize on slowNext
-    // entry so the sibling below always observes the first call in flight
+    // The settings read before the handler is async; gate the sibling on
+    // slowNext entry so it always observes the first call in flight
     // (full-suite parallel runs otherwise race the two pre() starts).
-    while (!entered) await new Promise((resolve) => setTimeout(resolve, 1))
+    await inFlight
     const second = await r.pre(bashExec('pnpm install', { callId: 'c2' }), nextAllow)
     expect(second).toEqual({ kind: 'deny', reason: 'identical call is already awaiting confirmation' })
     release?.()

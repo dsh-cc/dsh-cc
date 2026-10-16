@@ -459,6 +459,7 @@ capabilities:
         in-repo file to anchor a positive claim against, so per the evidence
         backfill rule the claim is downgraded until an in-repo seam exists.
 
+  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:packages/interaction/post-edit-verify/src/settings.ts#L119-L127〕
   engine.edit-recovery-hint:
     title: Edit recovery hint (not-found recovery advice)
     category: engine
@@ -1144,6 +1145,7 @@ capabilities:
       kind: non-goal
       summary: Anthropic-internal or vendor-bound features; no design asset and out of parity scope.
 
+  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:packages/interaction/retry-attendant/src/settings.ts#L35-L52〕
   engine.verify-before-retry:
     title: Verify-before-retry attendant (ambiguity-aware retry confirmation)
     category: engine
@@ -2542,6 +2544,7 @@ capabilities:
         and clears the persisted binding, which needs the upstream
         `resume({ meta })` cwd-override seam (plan §11.3).
 
+  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:packages/context/progress-rebuild/src/settings.ts#L28-L48〕
   sessions.progress-rebuild:
     title: Structured progress state + post-compact context rebuild
     category: sessions
