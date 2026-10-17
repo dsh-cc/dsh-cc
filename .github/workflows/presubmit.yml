@@ -229,6 +229,13 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/generate-parity-matrix.test.mjs
 
+      # Cordis inject declarations (#140 class: ctx.<svc> read on a plugin
+      # context without `export const inject` throws only in a real boot).
+      # TypeScript AST scan — needs node_modules, so it runs after install.
+      - name: Plugin inject declarations (check:inject)
+        working-directory: dsh-cc
+        run: node scripts/check-inject.mjs && node scripts/check-inject.test.mjs
+
       - name: Typecheck ≡ Build (tsc -b project references)
         working-directory: dsh-cc
         run: pnpm typecheck

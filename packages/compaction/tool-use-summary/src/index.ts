@@ -204,5 +204,13 @@ export function apply(ctx: Context): (() => void) | undefined {
 /** Cordis plugin id. */
 export const name = 'cc-tool-use-summary'
 
+/**
+ * Cordis lazy-injection declaration: summaries call `runSideQuery(ctx, …)`
+ * → `ctx.llm.stream` on THIS plugin's context; without `inject: ['llm']`
+ * cordis throws "cannot get property 'llm' without inject" at call time
+ * (#140 class; enforced by scripts/check-inject.mjs).
+ */
+export const inject = ['llm']
+
 // Re-exported for the compaction-micro consumer (pure reader over the ledger).
 export { loadSummaries as loadTusSummaries }

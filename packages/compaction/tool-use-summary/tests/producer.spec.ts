@@ -140,6 +140,13 @@ async function settle(ms = 80): Promise<void> {
 }
 
 describe('TUS producer listener', () => {
+  it('declares cordis inject for the llm service (runSideQuery reaches ctx.llm)', async () => {
+    // #140 class: hand-built test contexts mount llm on the root ctx, so only
+    // this pin (and scripts/check-inject.mjs) guards the plugin definition.
+    const mod = await import('../src/index.ts')
+    expect(mod.inject).toContain('llm')
+  })
+
   it('test 1: accept + large result → side query fired, decision returned untouched', async () => {
     const { fire, adapter, rows } = await boot()
     const decision = await fire()
