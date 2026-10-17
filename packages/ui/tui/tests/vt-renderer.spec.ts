@@ -594,7 +594,7 @@ describe('vt-renderer', () => {
 
     // The newest chip lands in the composer for editing and leaves the queue.
     expect(root.editor.getText()).toBe('second idea')
-    expect(driver.state.queued).toEqual(['first idea'])
+    expect(driver.state.queued).toEqual([{ text: 'first idea' }])
     const stripped = stripAnsi(vt.grid().join('\n'))
     expect(stripped).not.toContain('⏵ queued: second idea')
     expect(stripped).toContain('⏵ queued: first idea')
@@ -623,7 +623,7 @@ describe('vt-renderer', () => {
 
     // History navigation replaced the draft; the outbox was not popped.
     expect(root.editor.getText()).toBe('history entry')
-    expect(driver.state.queued).toEqual(['queued one', 'queued two'])
+    expect(driver.state.queued).toEqual([{ text: 'queued one' }, { text: 'queued two' }])
 
     root.tui.stop()
     root.destroy()

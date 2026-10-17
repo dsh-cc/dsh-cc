@@ -106,10 +106,19 @@ export function attachBashMode(args: AttachBashModeArgs): BashModeHandle {
     if (!bashRecallApplied) resetBashHistoryBrowsing()
   }
   editor.onSubmit = (text: string): void => {
+    // Clipboard images captured for THIS submission. The read is load-bearing
+    // and must stay synchronous: Editor.submitValue() resets the composer
+    // before it invokes this callback, and getImages() only answers for the
+    // submission in flight (the markers it is driven by are already gone from
+    // the buffer). Anywhere past the first await - or in a later tick - it
+    // reports the empty composer instead.
+    const images = editor.getImages()
     if (text.startsWith('!')) {
       // Shell command: never a composer prompt. While the driver runs it,
       // the composer is disabled — the input listener swallows every key
-      // until submit settles (bounded by the command's own timeout).
+      // until submit settles (bounded by the command's own timeout). The
+      // images are dropped with them: a `!` line is not a prompt, so the
+      // line reaches the shell with its marker text, as it always has.
       resetBashHistoryBrowsing()
       bashRunning = true
       void driver.submit(text)
@@ -126,7 +135,7 @@ export function attachBashMode(args: AttachBashModeArgs): BashModeHandle {
     // Submit is fire-and-forget. Quit/exit finalization — including the
     // /quit worktree-exit confirmation — is owned by the driver's quit path
     // (config.onQuit), not by the onSubmit special-case it used to have here.
-    void driver.submit(text)
+    void driver.submit(text, images)
   }
 
   return { bashRunning: () => bashRunning, inShellMode, browseBashHistory, resetBashHistoryBrowsing }

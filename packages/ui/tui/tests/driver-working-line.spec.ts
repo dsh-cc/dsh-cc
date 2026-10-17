@@ -188,7 +188,7 @@ describe('createDriver working-line turn anchors', () => {
     const driver = await createDriver(ctx as never, driverOpts)
 
     await driver.submit('one')
-    expect(driver.state.queued).toEqual(['one'])
+    expect(driver.state.queued).toEqual([{ text: 'one' }])
 
     emitSession({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
     await settle()

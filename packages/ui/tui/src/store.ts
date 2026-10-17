@@ -16,6 +16,7 @@ export type {
   PermissionPickerEntryView,
   PermissionPickerView,
   ProviderPanelView,
+  QueuedChip,
   QuestionOptionView,
   QuestionView,
   SessionEntryView,

@@ -107,7 +107,7 @@ describe('createDriver busy input semantics', () => {
     // the running turn until turn/end (or an explicit Ctrl+S).
     expect(agent.steer).not.toHaveBeenCalled()
     expect(agent.followup).not.toHaveBeenCalled()
-    expect(driver.state.queued).toEqual(['steer me'])
+    expect(driver.state.queued).toEqual([{ text: 'steer me' }])
     // No optimistic user row on the queue path.
     expect(driver.state.rows.filter(r => r.kind === 'user')).toHaveLength(0)
   })
@@ -134,12 +134,12 @@ describe('createDriver busy input semantics', () => {
     const driver = await createDriver(ctx as never, {})
 
     await driver.submit('hello')
-    expect(driver.state.queued).toEqual(['hello'])
+    expect(driver.state.queued).toEqual([{ text: 'hello' }])
 
     emitSession({ type: 'user/message', data: { content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } } })
     // The fold only renders the row; chip clearing is driver-side and
     // synchronous (flush / Ctrl+S / interrupt / recall), never event-driven.
-    expect(driver.state.queued).toEqual(['hello'])
+    expect(driver.state.queued).toEqual([{ text: 'hello' }])
     expect(driver.state.rows).toContainEqual({ kind: 'user', text: 'hello' })
   })
 
@@ -150,7 +150,7 @@ describe('createDriver busy input semantics', () => {
 
     await driver.submit('one')
     await driver.submit('two')
-    expect(driver.state.queued).toEqual(['one', 'two'])
+    expect(driver.state.queued).toEqual([{ text: 'one' }, { text: 'two' }])
 
     emitSession({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
     await settle()
@@ -176,7 +176,7 @@ describe('createDriver busy input semantics', () => {
     await settle()
     // The driver-teardown gap must pass first: nothing dispatches, nothing clears.
     expect(agent.followup).not.toHaveBeenCalled()
-    expect(driver.state.queued).toEqual(['queued line'])
+    expect(driver.state.queued).toEqual([{ text: 'queued line' }])
 
     release()
     await settle()
@@ -237,7 +237,7 @@ describe('createDriver busy input semantics', () => {
     await driver.submit('one')
     await driver.submit('two')
     expect(driver.recallQueued()).toBe('two')
-    expect(driver.state.queued).toEqual(['one'])
+    expect(driver.state.queued).toEqual([{ text: 'one' }])
   })
 
   it('recallQueued on an empty queue returns undefined and leaves the state alone', async () => {
@@ -254,7 +254,7 @@ describe('createDriver busy input semantics', () => {
     const { ctx } = makeCtx(agent)
     const driver = await createDriver(ctx as never, {})
     await driver.submit('pending steer')
-    expect(driver.state.queued).toEqual(['pending steer'])
+    expect(driver.state.queued).toEqual([{ text: 'pending steer' }])
     expect(driver.state.busy).toBe(true)
 
     driver.interrupt()
