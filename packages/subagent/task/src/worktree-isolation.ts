@@ -147,11 +147,6 @@ export function isUnknownOptionFailure(result: ShellRunResult): boolean {
   return /unknown option|unknown switch/i.test(text)
 }
 
-// check-inject-ignore: shell — known, deliberately not changed in the CI-gates PR:
-// the cc-subagent-task plugin does not inject 'shell', so this read on its
-// plugin ctx may throw under cordis (integration specs call apply(ctx) on the
-// root ctx and never exercise the guard). Follow-up: declare 'shell' or read
-// it via ctx.get('shell'), with a real-boot test.
 /** Run one constructed git command through the `ctx.shell` seam. */
 async function runGit(ctx: Context, cmd: GitCmd, signal?: AbortSignal): Promise<ShellRunResult> {
   const execution = await ctx.shell.execute(ctx.shell.resolve({
