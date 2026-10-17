@@ -50,6 +50,11 @@ pnpm release <x.y.z[-rc.N]>             # 改写所有可发布包版本 → 提
 - 版本号与计划一致,恰为 `x.y.z`(正式)或 `x.y.z-rc.N`(预发布);
 - 提交与 `vX.Y.Z` tag 就位(带 `--dry-run` 不会真的改动它们)。
 
+本地预发布自检(需要先构建 `lib/`):先 `pnpm typecheck`(tsc -b,产出各包
+`lib/` 〔src:ws:package.json#L15-L16〕),再 `pnpm check:artifacts` —— 校验每个
+可发布包 tarball 内的相对导入都能解析(问题 #249 类缺陷的门禁)
+〔src:ws:scripts/check-publish-artifacts.mjs#L1-L27〕。
+
 然后走 PR 流程同推 main 和 tag(rebase 合并保留单 commit 线性历史):
 
 ```bash
