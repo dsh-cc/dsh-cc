@@ -114,6 +114,11 @@ async function boot(settings: Record<string, unknown> = { 'semantic-enabled': tr
     output: { schema: { type: 'object' }, render: (_a: unknown, v: unknown) => text(v) },
     async execute(args: { file_path: string; content: string }) { writeFileSync(args.file_path, args.content, 'utf8'); return { ok: true } },
   })
+  tools.register({
+    name: 'web_fetch', description: 'fetch a url', parameters: { type: 'object', properties: { url: { type: 'string' } } },
+    output: { schema: { type: 'object' }, render: (_a: unknown, v: unknown) => [{ type: 'text', text: (v as { body: string }).body }] },
+    async execute() { return { body: FETCHED_BODY } },
+  })
   const fiber = await ctx.plugin(VwaArgument as never)
   disposers.push(async () => { await fiber.dispose(); await ctx.fiber.dispose() })
   const agentAt = (root: string): unknown => {
@@ -146,6 +151,7 @@ const METADATA = {
   title: 'Council minutes', creators: [], publication: 'unknown', originalLocator: 'archive://minutes/1',
   edition: 'unknown', language: 'en', origin: 'external', material: 'primary',
 }
+const FETCHED_BODY = 'Port closure order, archived copy.\n'
 const SOURCE_TEXT = 'The council voted to close the port on 3 May.\n'
 
 async function waitForRun(root: string, projectId: string, requestId: string): Promise<ReturnType<ReviewRunStore['readRecords']>> {
@@ -219,5 +225,86 @@ describe('vwa-argument real mount (semantic-enabled)', () => {
     expect(reviewer.calls[0]).toMatchObject({ provider: PROVIDER, model: REVIEWER_MODEL })
     // The envelope carried the real quoted bytes read back from the snapshot (§11.4).
     expect(reviewer.quotes).toEqual([SOURCE_TEXT.slice(0, 44)])
+  })
+})
+
+describe('vwa-argument real mount: capture and artifact sources (§10.3/§10.5)', () => {
+  async function registerSource(b: Booted, agent: unknown, projectId: string, path: string): Promise<string> {
+    const registered = await b.exec('evidence.register', {
+      projectId, expectedRevision: 1, requestId: randomUUID(),
+      input: { path, metadata: METADATA, excerpts: [] },
+    }, agent)
+    expect(registered.ok, JSON.stringify(registered)).toBe(true)
+    const sourceId = (registered.data as { sourceId: string }).sourceId
+    const root = (agent as { session: { header: { cwd: string } } }).session.header.cwd
+    const head = new ProjectStore(root, projectId).readHead()
+    if (!head.ok) throw new Error(head.message)
+    return head.data.snapshot.sources.find((source) => source.id === sourceId)!.acquisition.kind
+  }
+
+  it('a same-session read through the real tool pipeline makes the source a tool-event capture', async () => {
+    const b = await boot()
+    const root = workspace()
+    const agent = b.agentAt(root)
+    const projectId = initProject(root)
+    const path = join(root, 'minutes.md')
+    writeFileSync(path, SOURCE_TEXT, 'utf8')
+    await b.exec('read', { file_path: path }, agent)
+    expect(await registerSource(b, agent, projectId, path)).toBe('tool-event')
+  })
+
+  it('a file never read in the session stays unverified, and another session\'s read does not count', async () => {
+    const b = await boot()
+    const root = workspace()
+    const agent = b.agentAt(root)
+    const projectId = initProject(root)
+    const path = join(root, 'minutes.md')
+    writeFileSync(path, SOURCE_TEXT, 'utf8')
+    await b.exec('read', { file_path: path }, b.agentAt(root))
+    expect(await registerSource(b, agent, projectId, path)).toBe('unverified')
+  })
+
+  it('web_fetch body written byte-identically to a file upgrades that file to tool-event', async () => {
+    const b = await boot()
+    const root = workspace()
+    const agent = b.agentAt(root)
+    const projectId = initProject(root)
+    const path = join(root, 'order.md')
+    await b.exec('web_fetch', { url: 'https://archive.example/order' }, agent)
+    await b.exec('write', { file_path: path, content: FETCHED_BODY }, agent)
+    expect(await registerSource(b, agent, projectId, path)).toBe('tool-event')
+  })
+
+  it('bind-artifact reads the artifact bytes the session wrote to the workspace', async () => {
+    const b = await boot()
+    const root = workspace()
+    const agent = b.agentAt(root)
+    const projectId = initProject(root)
+    const made = await b.exec('argument.update', {
+      projectId, expectedRevision: 1, requestId: randomUUID(),
+      input: {
+        op: 'upsert', updates: [], deletes: [],
+        creates: [{
+          clientKey: 'c', type: 'claim',
+          body: {
+            text: 'The port closed in May.', kind: 'fact',
+            scope: { subject: 'port', corpus: [], time: 'May', geography: 'unspecified', exclusions: [] },
+            importance: 'core', stance: 'asserted', evaluationCriteria: [],
+          },
+        }],
+      },
+    }, agent)
+    expect(made.ok).toBe(true)
+    const claimId = (made.data as { changedIds: string[] }).changedIds[0]
+    mkdirSync(join(root, 'docs'), { recursive: true })
+    await b.exec('write', { file_path: join(root, 'docs', 'report.md'), content: '# Report\n\nThe port closed in May.\n' }, agent)
+    const bound = await b.exec('argument.update', {
+      projectId, expectedRevision: 2, requestId: randomUUID(),
+      input: {
+        op: 'bind-artifact', path: 'docs/report.md', outline: [],
+        occurrences: [{ claimId, span: { start: 10, end: 32 }, exactText: 'The port closed in May' }],
+      },
+    }, agent)
+    expect(bound, JSON.stringify(bound)).toMatchObject({ ok: true })
   })
 })
