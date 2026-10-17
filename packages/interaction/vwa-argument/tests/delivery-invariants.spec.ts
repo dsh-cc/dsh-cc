@@ -53,6 +53,11 @@ function fixture() {
 }
 
 describe('delivery hard conditions',()=>{
+  it('production mechanical gates actually inspect the bound workspace file',async()=>{
+    const f=fixture();writeFileSync(join(f.root,'report.md'),'[broken](missing-file.md)')
+    const {defaultGates}=await import('../src/delivery-check.ts')
+    expect((await defaultGates(f.root,'report.md')).find(g=>g.gate==='link')?.status).toBe('fail')
+  })
   it('full all review reaches a hash-bound report and a successfully read-back v2 reviewed receipt',async()=>{
     const f=fixture(),run=await f.run();expect(run.status).toBe('completed')
     const service=new VwaArgumentService({root:f.root}),frozen=await service.checkForDelivery(f.projectId,f.artifactId)
