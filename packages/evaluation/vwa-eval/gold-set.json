@@ -35,11 +35,6 @@
     "bytes": 12871
   },
   {
-    "path": "docs/plans/2026-09-21-tool-contract-integrity.md",
-    "sha256": "81de94477fa1d5434cff779247d619dcc33128fa4e8fa3d46fc9b02c6a4099e9",
-    "bytes": 10978
-  },
-  {
     "path": "docs/plans/2026-09-22-auto-dream-session-scan.md",
     "sha256": "a6577863e8e099880f31f8ece3cc5f599c14bd9f94ff27874dafe92ab77dc231",
     "bytes": 19567
@@ -53,6 +48,11 @@
     "path": "docs/plans/2026-09-22-workflow-resume-journal.md",
     "sha256": "924d121a8c2926c482a47a1b8d91913242cebd5f7b2df47f5a33d36c6e95447a",
     "bytes": 31377
+  },
+  {
+    "path": "docs/plans/2026-09-24-memory-job-silence.md",
+    "sha256": "60c7a74f10556f66ed6076a8becade7034919b7e59b55a9ef7945967d47457ca",
+    "bytes": 11064
   },
   {
     "path": "docs/plans/2026-09-27-gauge-approval-l1-l2-segment-eval.md",
