@@ -263,6 +263,15 @@ jobs:
         working-directory: dsh-cc
         run: pnpm check:exports
 
+      # Real-boot smoke (v0.4.1 incident class: "merged green, boot crashes for
+      # every user"): sync the built packages into a throwaway DSH_HOME profile
+      # and require the TUI's first frame. Zero LLM calls; needs the harness
+      # build:lib output above, python3 (pty) and rsync from the runner image.
+      - name: Profile boot smoke (smoke:profile-boot)
+        working-directory: dsh-cc
+        timeout-minutes: 5
+        run: pnpm smoke:profile-boot
+
       # Observability add-on (docs/plans/2026-10-03-ci-test-stability.md §5):
       # the 25m step cap kills the hang-all case so the upload below still
       # runs (R4 bounds every touched file at 18m at enforced ceilings); the
