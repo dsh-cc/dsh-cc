@@ -1,0 +1,109 @@
+{
+  "schema": "vwa-eval/humanities-gold-manifest@1",
+  "scorer": "humanities-scorer@1",
+  "frozenAt": "2026-10-16",
+  "cases": [
+    {
+      "id": "arg-partial-003",
+      "domain": "research-argumentative",
+      "synthetic": true,
+      "split": "dev",
+      "clean": false,
+      "sha256": "372bc919ec03c6f65646adaa08cb2f2553bb37b56306defbd402b87e01bd5f21",
+      "adjudicated": true,
+      "claims": [
+        {
+          "id": "claim-a1",
+          "span": [
+            0,
+            55
+          ],
+          "kind": "factual",
+          "text": "Corpus size correlates with annotation speed in the pilot.",
+          "core": true
+        },
+        {
+          "id": "claim-a2",
+          "span": [
+            60,
+            120
+          ],
+          "kind": "interpretive",
+          "text": "The correlation therefore generalizes to full-scale annotation.",
+          "core": false
+        }
+      ],
+      "support": [
+        {
+          "evidenceId": "ev-table1",
+          "targetClaimId": "claim-a1",
+          "support": "partial"
+        },
+        {
+          "evidenceId": "ev-table1",
+          "targetClaimId": "claim-a2",
+          "support": "contradicted"
+        }
+      ]
+    },
+    {
+      "id": "hist-clean-001",
+      "domain": "historical",
+      "synthetic": true,
+      "split": "dev",
+      "clean": true,
+      "sha256": "0f78ddd1c8997c32ccc4ff48b14cf709383905af0ae298cbe4a80b2fdcea25e0",
+      "adjudicated": true,
+      "claims": [
+        {
+          "id": "claim-h1",
+          "span": [
+            0,
+            62
+          ],
+          "kind": "factual",
+          "text": "The 1848 treaty was ratified by both signatories within one month.",
+          "core": true
+        },
+        {
+          "id": "claim-h2",
+          "span": [
+            70,
+            132
+          ],
+          "kind": "factual",
+          "text": "Ratification was recorded in the official gazette of May 1848.",
+          "core": false
+        }
+      ],
+      "support": [
+        {
+          "evidenceId": "ev-gazette",
+          "targetClaimId": "claim-h2",
+          "support": "direct"
+        }
+      ]
+    },
+    {
+      "id": "lit-split-002",
+      "domain": "literary",
+      "synthetic": true,
+      "split": "holdout",
+      "clean": false,
+      "sha256": "f21c7d40694f3e8051352d32eb2a716fc9c50947b56642b3a904baa8f95a615a",
+      "claims": [
+        {
+          "id": "claim-l1",
+          "span": [
+            0,
+            58
+          ],
+          "kind": "interpretive",
+          "text": "The protagonist's silence marks a refusal rather than inability.",
+          "core": true
+        }
+      ],
+      "support": []
+    }
+  ]
+}
