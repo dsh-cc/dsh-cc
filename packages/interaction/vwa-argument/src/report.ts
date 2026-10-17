@@ -452,7 +452,24 @@ function activeFindingCounts(
   return { blocker, major, minor }
 }
 
-/** Cordis service registration (name `vwa-argument`; vwa-evidence consumes it structurally in slice 5). */
-export function registerVwaArgumentService(ctx: { provide(name: string, value: unknown): unknown }, deps: VwaArgumentServiceDeps): void {
-  ctx.provide('vwa-argument', new VwaArgumentService(deps))
+/**
+ * The published `vwa-argument` service: one process-wide host, bound to a
+ * workspace PER CALL. The store lives under the caller's session cwd, which
+ * differs per session/worktree/subagent, so the root is never fixed at mount.
+ */
+export class VwaArgumentHost {
+  constructor(private readonly deps: Omit<VwaArgumentServiceDeps, 'root'> = {}) {}
+
+  /** The delivery provider bound to one workspace root (the caller's session cwd). */
+  forWorkspace(root: string): VwaArgumentService {
+    return new VwaArgumentService({ ...this.deps, root })
+  }
+}
+
+/** Cordis service registration (name `vwa-argument`; vwa-evidence binds it per workspace). */
+export function registerVwaArgumentService(
+  ctx: { provide(name: string, value: unknown): unknown },
+  deps: Omit<VwaArgumentServiceDeps, 'root'> = {},
+): void {
+  ctx.provide('vwa-argument', new VwaArgumentHost(deps))
 }

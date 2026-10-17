@@ -75,14 +75,26 @@ export interface VwaArgumentDeliveryProvider {
 }
 
 /**
- * Duck-typed resolution of the `vwa-argument` service (§16.2). Returns
- * undefined when the service is absent or lacks the provider face — the
- * artifact then stays on the v1 path (fail-soft; lane 1 is unchanged).
+ * The published `vwa-argument` service face: a host that binds the delivery
+ * provider to the caller's workspace (the store lives under each session's
+ * cwd, so no single root is correct process-wide).
  */
-export function resolveDeliveryProvider(ctx: unknown): VwaArgumentDeliveryProvider | undefined {
+export interface VwaArgumentDeliveryHost {
+  forWorkspace(workspaceRoot: string): unknown
+}
+
+/**
+ * Duck-typed resolution of the `vwa-argument` service (§16.2), bound to the
+ * caller's workspace root. Returns undefined when the service is absent or
+ * lacks the host/provider face — the artifact then stays on the v1 path
+ * (fail-soft; lane 1 is unchanged). Resolved per dispatch, so mount order of
+ * vwa-evidence vs vwa-argument does not matter (same isolate realm).
+ */
+export function resolveDeliveryProvider(ctx: unknown, workspaceRoot: string): VwaArgumentDeliveryProvider | undefined {
   try {
-    const service = (ctx as { get?(name: string): unknown }).get?.('vwa-argument')
-    const candidate = service as VwaArgumentDeliveryProvider | undefined
+    const host = (ctx as { get?(name: string): unknown }).get?.('vwa-argument') as VwaArgumentDeliveryHost | undefined
+    if (host === undefined || typeof host !== 'object' || typeof host.forWorkspace !== 'function') return undefined
+    const candidate = host.forWorkspace(workspaceRoot) as VwaArgumentDeliveryProvider | undefined
     if (candidate === undefined || typeof candidate !== 'object') return undefined
     if (typeof candidate.listBoundArtifacts !== 'function') return undefined
     if (typeof candidate.checkForDelivery !== 'function') return undefined

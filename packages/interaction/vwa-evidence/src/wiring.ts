@@ -84,7 +84,7 @@ export function createTurnStoppingHandler(deps: VwaDeps) {
         debug: deps.debug,
         signal: payload.signal,
         // Hot per-dispatch resolution, duck-typed — no package import (§3).
-        deliveryProvider: resolveDeliveryProvider(deps.deliveryProvider?.()),
+        deliveryProvider: resolveDeliveryProvider(deps.deliveryProvider?.(), workspaceRoot),
       })
     } catch (error: unknown) {
       deps.debug(`vwa-evidence: turn-stopping handler failed: ${String(error)}`)

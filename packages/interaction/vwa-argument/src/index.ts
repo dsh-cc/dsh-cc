@@ -199,6 +199,7 @@ export {
   InputChangedError,
   registerVwaArgumentService,
   validateAdjudicationSource,
+  VwaArgumentHost,
   VwaArgumentService,
   type DeliveryCheck,
   type FrozenEvaluation,
@@ -270,10 +271,8 @@ export function apply(ctx: Context): void {
     registerCaptureWiring(ctx, captures, workspaceRoot)
     // Appendix A: the frozen-handle service, registered structurally
     // (vwa-evidence consumes it via cordis `ctx.get` in slice 5).
-    registerVwaArgumentService(
-      ctx as unknown as { provide(name: string, value: unknown): unknown },
-      { root: process.cwd() },
-    )
+    // Bound to the caller's workspace per call (forWorkspace), never process.cwd().
+    registerVwaArgumentService(ctx as unknown as { provide(name: string, value: unknown): unknown })
     ctx.inject(['tools'], (injected: Context) => {
       registerArgumentTools(
         { tools: (injected as unknown as { tools: { register: ToolRegistrar['register'] } }).tools },

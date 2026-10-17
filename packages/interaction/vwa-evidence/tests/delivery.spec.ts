@@ -338,11 +338,16 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
     expect(deliveryState({ ...base, eligibleForReviewed: true })).toBe('reviewed')
     expect(deliveryState({ ...base, eligibleForReviewed: false })).toBe('draft')
   })
-  it('the provider resolves duck-typed and stays absent without the service (§3 cycle-break)', () => {
-    expect(resolveDeliveryProvider(undefined)).toBeUndefined()
-    expect(resolveDeliveryProvider({ get: () => ({}) })).toBeUndefined()
+  it('the provider resolves duck-typed, bound to the caller workspace, and stays absent without the service (§3 cycle-break)', () => {
+    expect(resolveDeliveryProvider(undefined, '/w')).toBeUndefined()
+    expect(resolveDeliveryProvider({ get: () => ({}) }, '/w')).toBeUndefined()
     const provider = fakeProvider({ check: makeCheck() })
-    expect(resolveDeliveryProvider({ get: () => provider })).toBe(provider)
+    // A bare provider (no forWorkspace host face) is not the published service.
+    expect(resolveDeliveryProvider({ get: () => provider }, '/w')).toBeUndefined()
+    const roots: string[] = []
+    const host = { forWorkspace: (root: string) => { roots.push(root); return provider } }
+    expect(resolveDeliveryProvider({ get: () => host }, '/w')).toBe(provider)
+    expect(roots).toEqual(['/w'])
   })
   it('the pointer is fail-soft: corrupt/missing means no bound lane-2 turn', async () => {
     const e = await env()
