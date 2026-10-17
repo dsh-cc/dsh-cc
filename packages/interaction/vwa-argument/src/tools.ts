@@ -149,7 +149,7 @@ function guard(raw: unknown): ToolArgs {
 }
 
 /** Mount the three lane-2 tools (caller gates on semantic-enabled, §13). */
-export function registerArgumentTools(ctx: { tools: { register(definition: ToolDefinition): unknown } }, deps: ToolDeps): void {
+export function registerArgumentTools(registrar: { tools: { register(definition: ToolDefinition): unknown } }, deps: ToolDeps): void {
   const common = () => ({
     projectId: COMMON_PARAMS.projectId,
     expectedRevision: COMMON_PARAMS.expectedRevision,
@@ -157,7 +157,7 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
   })
   const finish = (result: Result<unknown>): unknown => result
 
-  ctx.tools.register({
+  registrar.tools.register({
     name: 'evidence.register',
     description:
       'Register a source snapshot and optional evidence excerpts for a VWA lane-2 project. '
@@ -181,7 +181,7 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
     },
   })
 
-  ctx.tools.register({
+  registrar.tools.register({
     name: 'evidence.search_log',
     description:
       'Record 1–50 search-log entries for a VWA lane-2 project. This tool performs no searches; '
@@ -219,7 +219,7 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
     },
   })
 
-  ctx.tools.register({
+  registrar.tools.register({
     name: 'argument.update',
     description:
       'Atomically mutate a VWA lane-2 argument graph: set the project contract, upsert claims/'
@@ -239,7 +239,7 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
     },
   })
 
-  ctx.tools.register({
+  registrar.tools.register({
     name: 'argument.review',
     description:
       'Run a lane-2 semantic review stage (sources|support|claims|arguments|all) over the current graph '
