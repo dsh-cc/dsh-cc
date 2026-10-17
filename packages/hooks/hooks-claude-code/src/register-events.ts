@@ -34,6 +34,7 @@ import { createRunPoint } from './run-point.ts'
 import { lastTurn, type TurnSafety } from './turn-safety.ts'
 import type { ErrorStreak } from './error-streak.ts'
 import type { Continuation } from './continuation.ts'
+import type { LateInjectGuard } from './late-inject.ts'
 
 /** The run-point function shape (return type of {@link createRunPoint}). */
 type RunPoint = ReturnType<typeof createRunPoint>
@@ -54,6 +55,7 @@ export interface ListenerDeps {
   readonly subagentIds: Set<string>
   /** LIVE subagent ids (start adds, end deletes) — gates the CC caller-identity payload fields. */
   readonly liveSubagentIds: Set<string>
+  readonly lateInject: LateInjectGuard
 }
 
 /**
@@ -61,7 +63,7 @@ export interface ListenerDeps {
  * config is parsed and the run point / turn-safety cluster are built.
  */
 export function registerEvents(deps: ListenerDeps): void {
-  const { ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds, liveSubagentIds } = deps
+  const { ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds, liveSubagentIds, lateInject } = deps
 
   // --- UserPromptSubmit → PreStepDecision. The prompt text is the payload; no
   // matcher subject (CC ignores matchers for this event). ---
@@ -228,9 +230,9 @@ export function registerEvents(deps: ListenerDeps): void {
     if (child !== undefined) subagentChildren.set(info.runId, child)
     detached.track(runPoint('SubagentStart', SUBAGENT_TYPE, subagentPayload(ctx, 'SubagentStart', info, child), { ...child ? { agent: child } : {}, signal: detached.signal })
       .then((merged) => {
-        turnSafety.detachedOutcome('SubagentStart', merged, child)
+        turnSafety.detachedOutcome('SubagentStart', merged, child !== undefined && lateInject.stranded(child) ? undefined : child)
         const context = turnSafety.contextFrom(merged)
-        if (context && child) child.inject(context)
+        if (context && child) lateInject.inject(child, context, 'SubagentStart')
       })
       .catch((error: unknown) => { ctx.logger.warn(`hooks-claude-code: SubagentStart hook failed: ${String(error)}`) }))
   })
