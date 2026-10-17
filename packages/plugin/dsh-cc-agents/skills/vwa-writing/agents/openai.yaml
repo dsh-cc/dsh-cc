@@ -1,0 +1,4 @@
+interface:
+  display_name: "VWA Writing"
+  short_description: "Write and review documents with evidence checks"
+  default_prompt: "Use $vwa-writing to write or review this document with source evidence."
