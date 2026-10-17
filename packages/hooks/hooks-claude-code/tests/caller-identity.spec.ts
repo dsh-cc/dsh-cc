@@ -184,11 +184,19 @@ describe('hooks-claude-code — caller-identity fields on live subagent payloads
     ctx.emit(subagentCarrier(ctx), 'subagent/start', startEvent(String(child.session.header.id)))
     await runTool(child)
     await waitFor(() => payloads(marker).length >= 2)
-    // Order in the marker file IS the process order: SubagentStart first.
-    expect(payloads(marker)[0]).toMatchObject({ hook_event_name: 'SubagentStart', agent_id: String(child.session.header.id) })
-    expect(payloads(marker)[1]).toMatchObject({ hook_event_name: 'PreToolUse', agent_id: String(child.session.header.id) })
+    // The SubagentStart hook runs DETACHED (register-events.ts: detached.track),
+    // so its command process races the PreToolUse command process and the
+    // marker-file order is not a contract. What subagent/start guarantees is
+    // synchronous: the child joins the live set before any tool call, so the
+    // FIRST PreToolUse payload already carries the identity. Look each payload
+    // up by event name instead of by file position.
+    const all = payloads(marker)
+    const start = all.find(p => p.hook_event_name === 'SubagentStart')
+    const firstPre = all.find(p => p.hook_event_name === 'PreToolUse')
+    expect(start).toMatchObject({ hook_event_name: 'SubagentStart', agent_id: String(child.session.header.id) })
+    expect(firstPre).toMatchObject({ hook_event_name: 'PreToolUse', agent_id: String(child.session.header.id) })
     // And the identity is equal across the two payloads for the same child.
-    expect(payloads(marker)[1]!.agent_id).toBe(payloads(marker)[0]!.agent_id)
+    expect(firstPre!.agent_id).toBe(start!.agent_id)
   }, 30_000)
 
   it('a grandchild (depth 2) caller also carries the identity fields', async () => {
