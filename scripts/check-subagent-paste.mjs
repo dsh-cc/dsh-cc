@@ -3,7 +3,7 @@
  * check-subagent-paste.mjs — Stop hook that flags when the assistant
  * pastes a subagent's output verbatim (a ≥40-line quoted block carrying
  * agent-contract headers) instead of distilling it — a violation of the
- * CLAUDE.md context-discipline rule.
+ * AGENTS.md context-discipline rule.
  *
  * Hook protocol (canonical): https://code.claude.com/docs/en/hooks
  *   - On HIT (default mode): print {"systemMessage": ...} to stdout.
@@ -18,9 +18,9 @@
 import { readFileSync } from "node:fs";
 
 const SYSTEM_MSG =
-  "⚠️ 疑似整段转述 subagent 输出（违反 CLAUDE.md 上下文纪律），请提炼综合而非转述。";
+  "⚠️ 疑似整段转述 subagent 输出（违反 AGENTS.md 上下文纪律），请提炼综合而非转述。";
 const BLOCK_REASON =
-  "疑似整段转述 subagent 输出（违反 CLAUDE.md 上下文纪律）。请提炼综合为结论，不要整段转述 subagent 返回。";
+  "疑似整段转述 subagent 输出（违反 AGENTS.md 上下文纪律）。请提炼综合为结论，不要整段转述 subagent 返回。";
 
 // fast-worker contract pair: a Changed header line + a Deviations: line.
 const CHANGED_RE = /^-?\s*\*\*Changed\*\*|^Changed:/;
