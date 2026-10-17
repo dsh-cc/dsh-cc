@@ -2039,7 +2039,7 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: link:../../../../../../../../deepseek-harness/packages/session/session-persistence-jsonl
-        version: link:../../../../../../../../deepseek-harness/packages/session/session-persistence-jsonl
+        version: link:../../../../../../deepseek-harness/packages/session/session-persistence-jsonl
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2389,6 +2389,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/model-aliases':
+        specifier: workspace:^
+        version: link:../../compat/cc-model-aliases
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
@@ -2414,9 +2417,18 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
+      '@deepseek-ai/dsh-jobs':
+        specifier: link:../../../../deepseek-harness/packages/jobs/jobs
+        version: link:../../../../deepseek-harness/packages/jobs/jobs
+      '@deepseek-ai/dsh-jobs-local':
+        specifier: link:../../../../deepseek-harness/packages/jobs/jobs-local
+        version: link:../../../../deepseek-harness/packages/jobs/jobs-local
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-tools':
+        specifier: link:../../../../deepseek-harness/packages/core/tools
+        version: link:../../../../deepseek-harness/packages/core/tools
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery

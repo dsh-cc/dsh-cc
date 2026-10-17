@@ -35,7 +35,8 @@
     "@dsh-cc/vwa-evidence": "workspace:^",
     "ajv": "^8.20.0",
     "markdown-it": "^14.1.0",
-    "@dsh-cc/command-usage": "workspace:^"
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/model-aliases": "workspace:^"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",
@@ -44,7 +45,10 @@
     "@dsh-cc/settings-provider": "workspace:^",
     "vitest": "^4.1.8",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
-    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands"
+    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
+    "@deepseek-ai/dsh-jobs": "link:../../../../deepseek-harness/packages/jobs/jobs",
+    "@deepseek-ai/dsh-jobs-local": "link:../../../../deepseek-harness/packages/jobs/jobs-local"
   },
   "publishConfig": {
     "access": "public"

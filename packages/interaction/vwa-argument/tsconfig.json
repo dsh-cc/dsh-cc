@@ -20,6 +20,9 @@
     },
     {
       "path": "../../settings/settings-provider"
+    },
+    {
+      "path": "../../compat/cc-model-aliases"
     }
   ]
 }
