@@ -1,0 +1,10 @@
+{
+  "id": "lit-split-002",
+  "domain": "literary",
+  "synthetic": true,
+  "clean": false,
+  "claims": [
+    { "id": "claim-l1", "span": [0, 58], "kind": "interpretive", "text": "The protagonist's silence marks a refusal rather than inability.", "core": true }
+  ],
+  "support": []
+}
