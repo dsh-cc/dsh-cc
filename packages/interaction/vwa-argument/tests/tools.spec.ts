@@ -50,9 +50,18 @@ const METADATA = {
 }
 
 describe('tool registration (§13 gate surface)', () => {
-  it('mounts exactly the three author tools', () => {
+  it('mounts the three author tools plus argument.review', () => {
     const { tools } = mount()
-    expect([...tools.keys()].sort()).toEqual(['argument.update', 'evidence.register', 'evidence.search_log'])
+    expect([...tools.keys()].sort()).toEqual(['argument.review', 'argument.update', 'evidence.register', 'evidence.search_log'])
+  })
+
+  it('argument.review is disabled with REVIEW_UNAVAILABLE when no review collaborators are mounted', async () => {
+    const { tools } = mount()
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: 'prj_none', expectedRevision: 1, requestId: 'r', input: { stage: 'claims' },
+    })
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe('REVIEW_UNAVAILABLE')
   })
 
   it('refuses to run without a bound workspace root', async () => {

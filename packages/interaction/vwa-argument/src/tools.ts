@@ -22,7 +22,12 @@ import { sha256Hex, stableJson } from './schema.ts'
 import { VwaFail, fail, ProjectStore, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
-import type { ProjectSnapshot, SearchLog } from './types.ts'
+import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
+import type { ReviewStage } from './review-plan.ts'
+import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
+import { executeReviewRun } from './review-runner.ts'
+import { ReviewRunStore } from './review-run-store.ts'
+import type { ReviewModelAdapter } from './review-adapter.ts'
 
 /** The minimal registration face of the harness tool runtime (no hard dep). */
 export interface ToolRegistrar {
@@ -52,7 +57,22 @@ export interface ToolDeps {
   /** Source snapshot texts by sourceId (quote validation, §5.1). */
   snapshotTexts: Map<string, string>
   maxEntities: number
+  /**
+   * Review collaborators (§10.6/Appendix A). Absent → `argument.review` is
+   * disabled with REVIEW_UNAVAILABLE (never a synchronous long call).
+   */
+  review?: {
+    adapter: ReviewModelAdapter
+    budget: ReviewBudget
+    tasks?: ReviewTaskService
+    readSnapshot?(sourceId: Id): string | undefined
+    emitProgress?(event: { runId: Id; stage: string; message: string }): void
+  }
 }
+
+/** The §10.6 stage union (audit lands with the slice-4 extract/align stages). */
+const REVIEW_STAGES = new Set(['sources', 'support', 'claims', 'arguments'])
+const ALL_ORDER: ReviewStage[] = ['sources', 'support', 'claims', 'arguments']
 
 /** Tool arguments: common write fields plus the op body (§10.1). */
 interface ToolArgs {
@@ -216,6 +236,95 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
         const outcome = applyMutation(graph, args.input as Mutation)
         return { result: outcome }
       }))
+    },
+  })
+
+  ctx.tools.register({
+    name: 'argument.review',
+    description:
+      'Run a lane-2 semantic review stage (sources|support|claims|arguments|all) over the current graph '
+      + 'revision. Registers a background run and returns immediately; the run NEVER modifies the body or '
+      + 'the author graph. Repeating the same requestId returns the run state without re-calling the model.',
+    parameters: {
+      ...common(),
+      input: { type: 'object', required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage}' },
+    },
+    output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
+    async execute(raw, exec) {
+      const args = guard(raw)
+      if (deps.review === undefined) {
+        return fail('REVIEW_UNAVAILABLE', 'no review adapter or background task service is mounted', true)
+      }
+      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string }
+      const stage = body.stage
+      if (stage === 'audit') {
+        return fail('REVIEW_UNAVAILABLE', 'the audit stage (extract/align) is not implemented in this slice', false)
+      }
+      if (stage === undefined || (stage !== 'all' && !REVIEW_STAGES.has(stage))) {
+        return fail('SCHEMA_INVALID', `stage must be sources|support|claims|arguments|all|audit, got ${String(stage)}`)
+      }
+      const root = deps.workspaceRoot(exec.agent)
+      if (root === undefined) return fail('STORE_IO_FAILED', 'no workspace root is bound to this session', false)
+      const store = new ProjectStore(root, args.projectId)
+      const head = store.readHead()
+      if (!head.ok) return head
+      // §11.1: requests that no longer match expectedRevision fail BEFORE any model call.
+      if (args.expectedRevision !== head.data.head.revision) {
+        return fail('REVISION_CONFLICT', `expectedRevision ${args.expectedRevision} is not HEAD ${head.data.head.revision}`, true)
+      }
+      const runStore = new ReviewRunStore(root, args.projectId)
+      // §10.6: same requestId running → {completion:'running'}; same requestId
+      // finished → the stored result; continuing requires a NEW requestId.
+      const existing = runStore.findRunByRequestId(args.requestId)
+      if (existing !== undefined) {
+        const records = runStore.readRecords(existing.runId)
+        return {
+          ok: true, projectId: args.projectId, revision: head.data.head.revision,
+          data: existing.status === 'running'
+            ? { completion: 'running' as const, runId: existing.runId, taskId: existing.runId }
+            : {
+              completion: existing.status === 'completed' ? ('completed' as const) : ('incomplete' as const),
+              status: existing.status,
+              runId: existing.runId,
+              records,
+            },
+        }
+      }
+      const runId = `run_${randomUUID()}`
+      const taskId = runId
+      const snapshot = head.data.snapshot
+      const stages: ReviewStage[] = stage === 'all' ? ALL_ORDER : [stage as ReviewStage]
+      // Disabled without a task service (Appendix A): REVIEW_UNAVAILABLE, never a blocking call.
+      let tasks: ReviewTaskService
+      try {
+        tasks = deps.review.tasks ?? createHostTaskService(undefined)
+      } catch {
+        return fail('REVIEW_UNAVAILABLE', 'no background task service is mounted', true)
+      }
+      const review = deps.review
+      const started = tasks.start(taskId, runId, async (signal) => {
+        await executeReviewRun({
+          deps: {
+            root,
+            adapter: review.adapter,
+            budget: review.budget,
+            contractHash: sha256Hex(stableJson(snapshot.contract)),
+            ...(review.readSnapshot === undefined ? {} : { readSnapshot: review.readSnapshot }),
+            ...(review.emitProgress === undefined ? {} : { emitProgress: review.emitProgress }),
+          },
+          runId,
+          requestId: args.requestId,
+          stages,
+          targetClaimIds: body.targetClaimIds ?? [],
+          snapshot,
+          signal,
+        })
+      })
+      if (!started) return fail('REVIEW_UNAVAILABLE', 'background task owner cap exceeded (10)', true)
+      return {
+        ok: true, projectId: args.projectId, revision: head.data.head.revision,
+        data: { completion: 'started' as const, runId, taskId },
+      }
     },
   })
 }

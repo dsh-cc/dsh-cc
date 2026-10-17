@@ -104,6 +104,66 @@ export {
   type StoreOptions,
   type TransactionInput,
 } from './store.ts'
+export {
+  computeAssessments,
+  dispositionFor,
+  activeMajorCount,
+  gradeClaim,
+  oppositionFor,
+  POLICY_VERSION,
+  reviewStateFor,
+  supportPaths,
+  strongestOpposition,
+  digestRecords,
+  type Grade,
+  type Opposition,
+  type PolicyWorld,
+  type ReviewDigest,
+  type SupportPath,
+} from './policy.ts'
+export {
+  ReviewInvalidError,
+  createReviewAdapter,
+  forcedRespondTools,
+  parseReviewResponse,
+  validateTaskResponse,
+  type PreparedReviewCall,
+  type ReviewLlmFace,
+  type ReviewMessages,
+  type ReviewModelAdapter,
+  type ReviewTaskContract,
+  type ReviewerRoute,
+} from './review-adapter.ts'
+export {
+  claimClosure,
+  computeCoreSet,
+  planStage,
+  rootBlocks,
+  type ReviewStage,
+  type ReviewTask,
+} from './review-plan.ts'
+export {
+  ReviewRunStore,
+  cacheKey,
+  detectDisagreement,
+  disagreementFinding,
+  recordReusable,
+  type UsageRow,
+} from './review-run-store.ts'
+export {
+  BudgetTracker,
+  createHostTaskService,
+  executeReviewRun,
+  loadPrompt,
+  policyHash,
+  promptHash,
+  responseSchemaFor,
+  RUBRIC_VERSION,
+  type ReviewBudget,
+  type ReviewRunnerDeps,
+  type ReviewRunOutcome,
+  type ReviewTaskService,
+} from './review-runner.ts'
 
 /** Cordis plugin id (mount-row name `@dsh-cc/vwa-argument`). */
 export const name = 'vwa-argument'

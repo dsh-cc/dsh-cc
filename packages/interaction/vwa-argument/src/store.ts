@@ -38,6 +38,7 @@ export interface Fail {
     | 'PATH_OUT_OF_BOUNDS' | 'INVALID_ENCODING' | 'INPUT_CHANGED'
     | 'CONTEXT_TOO_LARGE' | 'LIMIT_EXCEEDED' | 'STORE_CORRUPT'
     | 'STORE_IO_FAILED' | 'LOCK_BUSY' | 'IDEMPOTENCY_CONFLICT' | 'NOT_FOUND'
+    | 'REVIEW_UNAVAILABLE' | 'REVIEW_INVALID' | 'BUDGET_EXHAUSTED' | 'CANCELLED'
   message: string
   retryable: boolean
   details?: unknown
