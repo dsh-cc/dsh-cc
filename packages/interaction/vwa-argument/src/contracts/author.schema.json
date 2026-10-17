@@ -1,0 +1,342 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-cc.dev/schemas/vwa-argument/author.schema.json",
+  "title": "VWA lane-2 author contract (design docs/plans/2026-10-16-vwa-evidence-argument.md §4/§5)",
+  "$defs": {
+    "Hash": {
+      "type": "string",
+      "description": "SHA-256, lowercase, 64 hex characters (§4).",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "Span": {
+      "type": "object",
+      "description": "UTF-16 code-unit range [start,end) (§4); end<=string.length is enforced by the runtime.",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "Uuid": {
+      "type": "string",
+      "description": "Runtime-generated UUID v4 with a type prefix (§4).",
+      "pattern": "^[a-z]+_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "ProjectId": { "type": "string", "pattern": "^prj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "SourceId": { "type": "string", "pattern": "^src_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "EvidenceId": { "type": "string", "pattern": "^ev_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "ClaimId": { "type": "string", "pattern": "^cl_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "GroupId": { "type": "string", "pattern": "^grp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "ArgumentId": { "type": "string", "pattern": "^arg_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "IssueId": { "type": "string", "pattern": "^iss_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "ArtifactId": { "type": "string", "pattern": "^art_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "SearchId": { "type": "string", "pattern": "^search_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "RecordId": { "type": "string", "pattern": "^rec_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "Ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "entityVersion": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "EntityFields": {
+      "type": "object",
+      "required": ["id", "entityVersion", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" }
+      }
+    },
+    "Rfc3339": {
+      "type": "string",
+      "description": "RFC3339 UTC with millisecond precision (§4); format-assertion stays a runtime check.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "Scope": {
+      "type": "object",
+      "description": "§5 Scope. Unconstrained time/geography is the literal 'unspecified' (§5.1).",
+      "additionalProperties": false,
+      "required": ["subject", "corpus", "time", "geography", "exclusions"],
+      "properties": {
+        "subject": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "corpus": { "type": "array", "items": { "$ref": "#/$defs/SourceId" }, "maxItems": 1000 },
+        "time": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "geography": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "exclusions": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "description": "§5 Source.",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "snapshotPath", "snapshotHash", "acquisition", "title", "creators", "publication", "originalLocator", "edition", "language", "origin", "material", "lineage", "authenticity", "authenticityBasisEvidenceIds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/SourceId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "snapshotPath": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "snapshotHash": { "$ref": "#/$defs/Hash" },
+        "acquisition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "capturedAt"],
+          "properties": {
+            "kind": { "enum": ["tool-event", "user-file", "unverified"] },
+            "capturedAt": { "$ref": "#/$defs/Rfc3339" },
+            "eventRef": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "creators": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 },
+        "publication": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "originalLocator": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "edition": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "language": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "origin": { "enum": ["external", "user-provided", "agent-generated"] },
+        "material": { "enum": ["primary", "secondary", "literary-text", "other"] },
+        "lineage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["relation", "parentSourceIds", "note"],
+          "properties": {
+            "relation": { "enum": ["independent", "derived", "unknown"] },
+            "parentSourceIds": { "type": "array", "items": { "$ref": "#/$defs/SourceId" }, "maxItems": 1000 },
+            "note": { "type": "string", "maxLength": 4000 }
+          }
+        },
+        "authenticity": { "enum": ["unverified", "documented", "questioned"] },
+        "authenticityBasisEvidenceIds": { "type": "array", "items": { "$ref": "#/$defs/EvidenceId" }, "maxItems": 1000 }
+      }
+    },
+    "Evidence": {
+      "type": "object",
+      "description": "§5 Evidence. quote === decodedSnapshot.slice(span.start, span.end) is enforced by the runtime (§5.1).",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "sourceId", "sourceSnapshotHash", "span", "quote", "contextSpan", "originalLocation", "transformation", "transformationNote"],
+      "properties": {
+        "id": { "$ref": "#/$defs/EvidenceId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "sourceId": { "$ref": "#/$defs/SourceId" },
+        "sourceSnapshotHash": { "$ref": "#/$defs/Hash" },
+        "span": { "$ref": "#/$defs/Span" },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 12000 },
+        "contextSpan": { "$ref": "#/$defs/Span" },
+        "originalLocation": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "transformation": { "enum": ["none", "translation", "transcription", "extraction"] },
+        "transformationNote": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "Claim": {
+      "type": "object",
+      "description": "§5 Claim.",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "text", "kind", "scope", "importance", "stance", "evaluationCriteria"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ClaimId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "kind": { "enum": ["fact", "source-report", "interpretation", "causal", "intent", "evaluation"] },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "importance": { "enum": ["core", "supporting"] },
+        "stance": { "enum": ["asserted", "qualified", "hypothesis", "attributed"] },
+        "evaluationCriteria": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 }
+      }
+    },
+    "EvidenceGroup": {
+      "type": "object",
+      "description": "§5 EvidenceGroup; evidenceIds non-empty and deduplicated (§5.1, runtime-checked).",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "targetClaimId", "evidenceIds", "mode", "rationale"],
+      "properties": {
+        "id": { "$ref": "#/$defs/GroupId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "targetClaimId": { "$ref": "#/$defs/ClaimId" },
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/EvidenceId" }
+        },
+        "mode": { "enum": ["all", "any"] },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "Argument": {
+      "type": "object",
+      "description": "§5 Argument; at least one premise or evidence group; conclusion must not feed itself (runtime DAG check, §5.1).",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "premiseClaimIds", "evidenceGroupIds", "conclusionClaimId", "scheme", "warrant", "assumptions", "limitations"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ArgumentId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "premiseClaimIds": { "type": "array", "items": { "$ref": "#/$defs/ClaimId" }, "maxItems": 1000 },
+        "evidenceGroupIds": { "type": "array", "items": { "$ref": "#/$defs/GroupId" }, "maxItems": 1000 },
+        "conclusionClaimId": { "$ref": "#/$defs/ClaimId" },
+        "scheme": { "enum": ["deductive", "causal", "abductive", "interpretive", "generalization", "evaluative"] },
+        "warrant": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "assumptions": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 4000 }, "maxItems": 1000 },
+        "limitations": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 4000 }, "maxItems": 1000 }
+      }
+    },
+    "Issue": {
+      "type": "object",
+      "description": "§5 Issue. kind missing-evidence MUST carry gap; other kinds MUST NOT (conditional requirement is runtime-checked per §5.1).",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "targetId", "kind", "description", "evidenceIds", "relatedClaimIds", "proposedImpact", "response", "resolution"],
+      "properties": {
+        "id": { "$ref": "#/$defs/IssueId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "targetId": { "$ref": "#/$defs/Uuid" },
+        "kind": { "enum": ["source-reliability", "counterevidence", "alternative-explanation", "missing-evidence", "inference-gap"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "evidenceIds": { "type": "array", "items": { "$ref": "#/$defs/EvidenceId" }, "maxItems": 1000 },
+        "relatedClaimIds": { "type": "array", "items": { "$ref": "#/$defs/ClaimId" }, "maxItems": 1000 },
+        "proposedImpact": { "enum": ["qualify", "downgrade", "invalidate"] },
+        "response": { "type": "string", "maxLength": 4000 },
+        "resolution": { "enum": ["open", "addressed", "unresolved"] },
+        "gap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["needed", "distinguishes", "nextAction", "ifUnresolved"],
+          "properties": {
+            "needed": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "distinguishes": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 },
+            "nextAction": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "ifUnresolved": { "type": "string", "minLength": 1, "maxLength": 4000 }
+          }
+        }
+      }
+    },
+    "SearchLog": {
+      "type": "object",
+      "description": "§5 SearchLog.",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "purpose", "targetIds", "corpus", "query", "tool", "performedAt", "state", "resultSourceIds", "inaccessible", "finding"],
+      "properties": {
+        "id": { "$ref": "#/$defs/SearchId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "targetIds": { "type": "array", "items": { "$ref": "#/$defs/Uuid" }, "maxItems": 1000 },
+        "corpus": { "type": "array", "items": { "$ref": "#/$defs/SourceId" }, "maxItems": 1000 },
+        "query": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "tool": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "performedAt": { "$ref": "#/$defs/Rfc3339" },
+        "state": { "enum": ["executed", "failed", "planned"] },
+        "resultSourceIds": { "type": "array", "items": { "$ref": "#/$defs/SourceId" }, "maxItems": 1000 },
+        "inaccessible": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 },
+        "finding": { "enum": ["relevant-found", "none-found", "inconclusive"] },
+        "executionEventRef": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "externalAttestation": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "Occurrence": {
+      "type": "object",
+      "description": "§5 Occurrence; exactText must equal the body slice at span (runtime-checked, §5.1).",
+      "additionalProperties": false,
+      "required": ["claimId", "span", "exactText"],
+      "properties": {
+        "claimId": { "$ref": "#/$defs/ClaimId" },
+        "span": { "$ref": "#/$defs/Span" },
+        "exactText": { "type": "string", "minLength": 1, "maxLength": 12000 }
+      }
+    },
+    "Artifact": {
+      "type": "object",
+      "description": "§5 Artifact.",
+      "additionalProperties": false,
+      "required": ["id", "entityVersion", "createdAt", "updatedAt", "path", "contentHash", "occurrences", "outline"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ArtifactId" },
+        "entityVersion": { "type": "integer", "minimum": 1 },
+        "createdAt": { "$ref": "#/$defs/Rfc3339" },
+        "updatedAt": { "$ref": "#/$defs/Rfc3339" },
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "contentHash": { "$ref": "#/$defs/Hash" },
+        "occurrences": { "type": "array", "items": { "$ref": "#/$defs/Occurrence" }, "maxItems": 1000 },
+        "outline": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["section", "goal", "claimIds", "argumentIds", "qualifications"],
+            "properties": {
+              "section": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "goal": { "type": "string", "minLength": 1, "maxLength": 4000 },
+              "claimIds": { "type": "array", "items": { "$ref": "#/$defs/ClaimId" }, "maxItems": 1000 },
+              "argumentIds": { "type": "array", "items": { "$ref": "#/$defs/ArgumentId" }, "maxItems": 1000 },
+              "qualifications": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 }
+            }
+          }
+        }
+      }
+    },
+    "ProjectContract": {
+      "type": "object",
+      "description": "§5.2 ProjectContract.",
+      "additionalProperties": false,
+      "required": ["question", "language", "domain", "requiredQuestions", "plannedCorpus", "expectedCoreTopics", "mode"],
+      "properties": {
+        "question": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "language": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "domain": { "enum": ["history", "literature", "research"] },
+        "requiredQuestions": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "text": { "type": "string", "minLength": 1, "maxLength": 4000 }
+            }
+          }
+        },
+        "plannedCorpus": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 },
+        "expectedCoreTopics": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 },
+        "mode": { "enum": ["draft", "reviewed"] }
+      }
+    },
+    "ProjectSnapshot": {
+      "type": "object",
+      "description": "§5.2 ProjectSnapshot — the top-level author contract document.",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "projectId", "revision", "workspaceIdentity", "contract", "sources", "evidence", "claims", "groups", "arguments", "issues", "searches", "artifacts"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "projectId": { "$ref": "#/$defs/ProjectId" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "workspaceIdentity": { "$ref": "#/$defs/Hash" },
+        "contract": { "$ref": "#/$defs/ProjectContract" },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/Source" } },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/Evidence" } },
+        "claims": { "type": "array", "items": { "$ref": "#/$defs/Claim" } },
+        "groups": { "type": "array", "items": { "$ref": "#/$defs/EvidenceGroup" } },
+        "arguments": { "type": "array", "items": { "$ref": "#/$defs/Argument" } },
+        "issues": { "type": "array", "items": { "$ref": "#/$defs/Issue" } },
+        "searches": { "type": "array", "items": { "$ref": "#/$defs/SearchLog" } },
+        "artifacts": { "type": "array", "items": { "$ref": "#/$defs/Artifact" } }
+      }
+    }
+  },
+  "$ref": "#/$defs/ProjectSnapshot"
+}

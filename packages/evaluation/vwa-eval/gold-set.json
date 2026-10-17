@@ -5,29 +5,29 @@
     "bytes": 2127
   },
   {
-    "path": "docs/plans/2026-09-02-haiku-worker-stuffs.md",
-    "sha256": "2a83785fe6bd8292b062c12869c9f63041504c9deb389e8c9ad6dc9e53aa1a40",
-    "bytes": 30493
-  },
-  {
     "path": "docs/plans/2026-09-02-mcp-deferred-disclosure.md",
     "sha256": "a23fb986012fe729404b0cd89213624ca579b7cf65686f597cf413bdbf4f1747",
     "bytes": 14568
   },
   {
-    "path": "docs/plans/2026-09-04-webfetch-ssrf-and-domain-rules.md",
-    "sha256": "328f72a92b80b936f9a9881b772827f09daacb31a155af50b7c9974301a11731",
-    "bytes": 33122
-  },
-  {
-    "path": "docs/plans/2026-09-07-task-plugin-agent-dispatch.md",
-    "sha256": "4c6b146fd2d32a0d369241acee5d4b4e986a8a555590276a475b8fb2caa46c2b",
-    "bytes": 23167
+    "path": "docs/plans/2026-09-04-doctor-health-report.md",
+    "sha256": "c17e87980115eafc48bc15c67209fb44cbf0f2f9023f35802247e1d2d8336236",
+    "bytes": 23402
   },
   {
     "path": "docs/plans/2026-09-11-exit-resume-tip.md",
     "sha256": "5eb4b01f665c06dc5402b9e03a708667f475cacde5db2cd1a5c0f069f8858293",
     "bytes": 9380
+  },
+  {
+    "path": "docs/plans/2026-09-15-error-recovery-parity.md",
+    "sha256": "54917613869c0bc1910d184a405668abcb094be431627c3b96002f4551f221a1",
+    "bytes": 21627
+  },
+  {
+    "path": "docs/plans/2026-09-15-side-queries.md",
+    "sha256": "9c7e2cdf68bc3035b8ab9e76eac06a6f8daba7595b367f57759b1c4404948cf7",
+    "bytes": 26997
   },
   {
     "path": "docs/plans/2026-09-21-edit-fuzzy-matching-and-read-state.md",
@@ -50,14 +50,14 @@
     "bytes": 6466
   },
   {
-    "path": "docs/plans/2026-09-23-learned-skills.md",
-    "sha256": "9d64fc7d81c3ca9e0d86a7202bde1e5e051c2bbf4b8cef708ca16db6070e4e7a",
-    "bytes": 26929
+    "path": "docs/plans/2026-09-22-workflow-resume-journal.md",
+    "sha256": "924d121a8c2926c482a47a1b8d91913242cebd5f7b2df47f5a33d36c6e95447a",
+    "bytes": 31377
   },
   {
-    "path": "docs/plans/2026-09-23-lsp-diagnostics-on-write.md",
-    "sha256": "3a7f820eeaced8d03353d2356fbecf84dc14fa3966b79d6afd627330b5092450",
-    "bytes": 21480
+    "path": "docs/plans/2026-09-27-gauge-approval-l1-l2-segment-eval.md",
+    "sha256": "21c2acdcc9630065386722a8930988faa4050135601a8ee73e6e049236b4ed1a",
+    "bytes": 34673
   },
   {
     "path": "docs/plans/2026-10-09-persistent-write-auditing.md",
@@ -65,14 +65,14 @@
     "bytes": 17417
   },
   {
-    "path": "docs/plans/2026-10-09-session-config-snapshot-event.md",
-    "sha256": "c7156a83a8a6a6bd3933f5472875ea7aa764212d106dd027c23561ae2281a7bf",
-    "bytes": 48793
+    "path": "docs/plans/2026-10-09-structured-progress-and-post-compact-rebuild.md",
+    "sha256": "9ad72d96d482bd3d8e086f4aecfb40b7658162fa17c6bf351b038073271fade2",
+    "bytes": 52213
   },
   {
-    "path": "docs/plans/2026-10-09-underspec-ask-detector.md",
-    "sha256": "e2374c98cd3923481427ea6f59ca66813493e42e25163ffdabc6993c26ec18f8",
-    "bytes": 41092
+    "path": "docs/plans/2026-10-12-verifiable-workspace-agent.md",
+    "sha256": "99e59775b1e5bba43ff5a926870ede5743741b999f03f7f6ed2ec619d3e7600c",
+    "bytes": 41380
   },
   {
     "path": "packages/bundle/cc-tui/README.md",
@@ -95,19 +95,14 @@
     "bytes": 1575
   },
   {
-    "path": "packages/core/tool-notebook-edit/README.md",
-    "sha256": "b8b6167fc1c3f3f8d6e0c1364457bb7225a1174cfcc3381b49c5755982011128",
-    "bytes": 4496
-  },
-  {
     "path": "packages/interaction/advisor-watchdog/README.md",
     "sha256": "be2c5305179bdef009420bf8258dd22d2c8f56d2db21fb7d425ce0f260ed021a",
     "bytes": 5225
   },
   {
-    "path": "packages/interaction/command-compact/README.md",
-    "sha256": "8eeed74652f06489e564b1d70d4a7844a84526d815af12330bedb8b319b90a55",
-    "bytes": 1784
+    "path": "packages/interaction/command-auto-mode/README.md",
+    "sha256": "dfb359549006cfbc8205b008cb5d38af485a7d85b07ce94f544bf22f49399b50",
+    "bytes": 2048
   },
   {
     "path": "packages/interaction/command-diff/README.md",
@@ -115,14 +110,19 @@
     "bytes": 1119
   },
   {
-    "path": "packages/interaction/command-preset/README.md",
-    "sha256": "a197c780a1da97517e5b5a438c35981e806d8235bd26c7fa230e6267d3a643e5",
-    "bytes": 2033
+    "path": "packages/interaction/command-status/README.md",
+    "sha256": "c9b6fa5e3d9078e8950953340740e3e8673e666a7a4b366022130d2e88318fd8",
+    "bytes": 1819
   },
   {
     "path": "packages/interaction/command-tasks/README.md",
     "sha256": "4dae9490f77f57b2e3c320191cd741508a3050762351e1957310b78a548f82bb",
     "bytes": 1401
+  },
+  {
+    "path": "packages/mcp/mcp-config/README.md",
+    "sha256": "d8a1a0ff6adb77a60d3530181f1fd48ecf654058a1bad69b7a9ce66f605f0ea2",
+    "bytes": 4445
   },
   {
     "path": "packages/memory/memory-consolidation/README.md",

@@ -1,0 +1,22 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src",
+    "src/contracts/*.json"
+  ],
+  "references": [
+    {
+      "path": "../vwa-evidence"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../settings/settings-provider"
+    }
+  ]
+}

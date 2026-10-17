@@ -1,0 +1,45 @@
+{
+  "name": "@dsh-cc/vwa-argument",
+  "description": "Verifiable Workspace Agent lane-2 argumentation substrate (docs/plans/2026-10-16-vwa-evidence-argument.md): contracts and schemas for the author-side argument graph (sources, evidence, claims, groups, arguments, issues, searches, artifacts), the per-stage review records, the v2 receipt shape, and the vwa-argument settings namespace; feature ships default-off and inert",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/interaction/vwa-argument"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "dependencies": {
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings-provider": "workspace:^",
+    "@dsh-cc/vwa-evidence": "workspace:^",
+    "ajv": "^8.20.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/settings-provider": "workspace:^",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
