@@ -32,6 +32,7 @@ import type { MatcherGroup } from '@dsh-cc/hook-protocol'
 import type { HooksSeam } from '@dsh-cc/plugin-loader'
 import { failedStatus, loadedStatus } from './status.ts'
 import { registerEvents } from './register-events.ts'
+import { createLateInjectGuard } from './late-inject.ts'
 
 export type { HookBridgeStatus } from './status.ts'
 import { createRunPoint } from './run-point.ts'
@@ -204,6 +205,8 @@ export function apply(ctx: Context, config: Config): void {
   // exactly while the child is live — an ended child resumed as top-level
   // re-emits no fields.
   const liveSubagentIds = new Set<string>()
+  // Late detached-hook context must never strand a settled-but-resident child.
+  const lateInject = createLateInjectGuard({ ctx, liveSubagentIds })
   ctx.effect(() => () => detached.drain(), 'hooks-claude-code: drain detached hook runs')
 
   // The http-hook header interpolation policy: the effective allowlist is the
@@ -308,9 +311,9 @@ export function apply(ctx: Context, config: Config): void {
     const ownerSignal = signal === undefined ? detached.signal : AbortSignal.any([signal, detached.signal])
     detached.track(runPoint('SessionStart', source, sessionStartPayload(ctx, agent, source), { agent, signal: ownerSignal })
       .then((merged) => {
-        turnSafety.detachedOutcome('SessionStart', merged, agent)
+        turnSafety.detachedOutcome('SessionStart', merged, lateInject.stranded(agent) ? undefined : agent)
         const context = turnSafety.contextFrom(merged)
-        if (context) agent.inject(context)
+        if (context) lateInject.inject(agent, context, 'SessionStart')
       })
       .catch((error: unknown) => {
         ctx.logger.warn(`hooks-claude-code: SessionStart hook failed: ${String(error)}`)
@@ -337,7 +340,7 @@ export function apply(ctx: Context, config: Config): void {
   // lifecycle, approval, observe, SessionEnd, StopFailure, TaskCreated,
   // TeammateIdle) live in register-events.ts, extracted to keep this entry
   // under the 500-line source budget.
-  registerEvents({ ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds, liveSubagentIds })
+  registerEvents({ ctx, detached, runPoint, turnSafety, errorStreak, continuation, subagentChildren, subagentIds, liveSubagentIds, lateInject })
 }
 
 // Public surface preserved from the pre-split monolith: prompt interpolation and
