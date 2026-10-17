@@ -134,10 +134,18 @@ const MAX_SOURCE_BYTES = 8 * 1024 * 1024
 /**
  * Validate the path (§10.3): realpath regular file inside root, ≤8 MiB,
  * valid UTF-8, no NUL/unpaired surrogates; stat before and after read, hash
- * re-read before commit (INPUT_CHANGED on mismatch).
+ * re-read before commit (INPUT_CHANGED on mismatch). Sources must never live
+ * under the runtime's own output trees (`.dsh/vwa`, `docs/vwa-sources`,
+ * `docs/vwa-reports`) — the report output being rescanned as evidence would
+ * create a self-referential evidence loop (D22).
  */
 export function readSourceBytes(root: string, path: string): { bytes: Buffer; text: string; hash: string } {
   if (!isAbsolute(path)) throw new VwaFail(fail('PATH_OUT_OF_BOUNDS', 'path must be absolute'))
+  const relative = path.replace(/\\/g, '/').replace(/^\//, '').split('/')
+  if (relative[0] === '.dsh' && relative[1] === 'vwa'
+    || (relative[0] === 'docs' && (relative[1] === 'vwa-sources' || relative[1] === 'vwa-reports'))) {
+    throw new VwaFail(fail('PATH_OUT_OF_BOUNDS', `path is inside the runtime output tree and cannot be a source (D22): ${path}`))
+  }
   let resolved: string
   try {
     const resolvedRoot = realpathSync(root)

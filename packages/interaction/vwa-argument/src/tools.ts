@@ -70,9 +70,9 @@ export interface ToolDeps {
   }
 }
 
-/** The §10.6 stage union (audit lands with the slice-4 extract/align stages). */
+/** The §10.6 stage union: the audit stage dispatches extract+align (§12). */
 const REVIEW_STAGES = new Set(['sources', 'support', 'claims', 'arguments'])
-const ALL_ORDER: ReviewStage[] = ['sources', 'support', 'claims', 'arguments']
+const ALL_ORDER: ReviewStage[] = ['sources', 'support', 'claims', 'arguments', 'audit']
 
 /** Tool arguments: common write fields plus the op body (§10.1). */
 interface ToolArgs {
@@ -257,10 +257,7 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
       }
       const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string }
       const stage = body.stage
-      if (stage === 'audit') {
-        return fail('REVIEW_UNAVAILABLE', 'the audit stage (extract/align) is not implemented in this slice', false)
-      }
-      if (stage === undefined || (stage !== 'all' && !REVIEW_STAGES.has(stage))) {
+      if (stage === undefined || (stage !== 'all' && stage !== 'audit' && !REVIEW_STAGES.has(stage))) {
         return fail('SCHEMA_INVALID', `stage must be sources|support|claims|arguments|all|audit, got ${String(stage)}`)
       }
       const root = deps.workspaceRoot(exec.agent)
@@ -302,6 +299,20 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
         return fail('REVIEW_UNAVAILABLE', 'no background task service is mounted', true)
       }
       const review = deps.review
+      // §12: the audit stage needs the bound artifact's ACTUAL bytes; the
+      // artifact is resolved from the bound snapshot + the host text map.
+      let artifact: { id: string; path: string; text: string } | undefined
+      if (stage === 'audit' || stage === 'all') {
+        const bound = body.artifactId !== undefined
+          ? snapshot.artifacts.find((art) => art.id === body.artifactId)
+          : snapshot.artifacts.length === 1 ? snapshot.artifacts[0] : undefined
+        if (bound === undefined) {
+          return fail('SCHEMA_INVALID', 'the audit stage requires exactly one bound artifact (pass artifactId when several are bound)', false)
+        }
+        const text = deps.artifactTexts.get(bound.path)
+        if (text === undefined) return fail('INPUT_CHANGED', `artifact text for ${bound.path} is not available to the runtime`, true)
+        artifact = { id: bound.id, path: bound.path, text }
+      }
       const started = tasks.start(taskId, runId, async (signal) => {
         await executeReviewRun({
           deps: {
@@ -318,6 +329,7 @@ export function registerArgumentTools(ctx: { tools: { register(definition: ToolD
           targetClaimIds: body.targetClaimIds ?? [],
           snapshot,
           signal,
+          ...(artifact === undefined ? {} : { artifact }),
         })
       })
       if (!started) return fail('REVIEW_UNAVAILABLE', 'background task owner cap exceeded (10)', true)

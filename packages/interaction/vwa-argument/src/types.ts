@@ -234,11 +234,27 @@ export interface ArgumentsResponse extends ResponseBase {
   )[]
 }
 
-export type ReviewResponse = SourcesResponse | ClaimsResponse | SupportResponse | ArgumentsResponse
+/** One §11.4 alignment entry: relation enum with the claimIds emptiness rules. */
+export interface AlignEntry {
+  extractedId: Id
+  claimIds: Id[]
+  relation: 'exact' | 'equivalent' | 'stronger' | 'broader' | 'new'
+  rationale: string
+}
+
+/** Align-stage response (§11.4): findings plus the alignment array (each extracted item exactly once). */
+export interface AlignResponse extends ResponseBase {
+  stage: 'align'
+  targets: ResponseTarget[]
+  alignment: AlignEntry[]
+}
+
+export type ReviewResponse = SourcesResponse | ClaimsResponse | SupportResponse | ArgumentsResponse | AlignResponse
 
 export interface ReviewRecord {
   runId: Id
-  stage: 'sources' | 'claims' | 'support' | 'arguments' | 'audit'
+  /** 'extract'/'align' are the §12 audit sub-stage records; 'audit' is the aggregate stage. */
+  stage: 'sources' | 'claims' | 'support' | 'arguments' | 'audit' | 'extract' | 'align'
   targetRefs: Ref[]
   dependencyDigest: Hash
   artifactHash?: Hash

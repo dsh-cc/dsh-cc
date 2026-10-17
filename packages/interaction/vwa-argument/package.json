@@ -33,9 +33,11 @@
     "@dsh-cc/settings-ns": "workspace:^",
     "@dsh-cc/settings-provider": "workspace:^",
     "@dsh-cc/vwa-evidence": "workspace:^",
-    "ajv": "^8.20.0"
+    "ajv": "^8.20.0",
+    "markdown-it": "^14.1.0"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/settings-provider": "workspace:^",

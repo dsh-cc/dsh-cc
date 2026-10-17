@@ -18,6 +18,7 @@ import { getSessionCwd } from '@dsh-cc/session-cwd'
 import { registerArgumentTools, semanticEnabled, type ToolRegistrar } from './tools.ts'
 import { CaptureRegistry } from './sources.ts'
 import { readUserSettingsSync, registerSettings } from './settings.ts'
+import { registerVwaArgumentService } from './report.ts'
 
 export {
   DEFAULT_VWA_ARGUMENT_SETTINGS,
@@ -164,6 +165,36 @@ export {
   type ReviewRunOutcome,
   type ReviewTaskService,
 } from './review-runner.ts'
+export {
+  AuditInvalidError,
+  executeAudit,
+  EXTRACT_RESPONSE_SCHEMA,
+  extractionUnits,
+  stripClaimMarkers,
+  type AlignEnvelope,
+  type AuditOutcome,
+  type ExtractEnvelope,
+  type ExtractionUnit,
+} from './audit.ts'
+export {
+  computeBindingDigest,
+  InputChangedError,
+  registerVwaArgumentService,
+  validateAdjudicationSource,
+  VwaArgumentService,
+  type DeliveryCheck,
+  type FrozenEvaluation,
+  type VwaArgumentServiceDeps,
+} from './report.ts'
+export {
+  HONESTY,
+  mapMechanical,
+  REPORT_TEMPLATE,
+  renderReportJson,
+  renderReportMarkdown,
+  type GateEntry,
+  type ReportInput,
+} from './report-render.ts'
 
 /** Cordis plugin id (mount-row name `@dsh-cc/vwa-argument`). */
 export const name = 'vwa-argument'
@@ -188,6 +219,12 @@ export function apply(ctx: Context): void {
     const dshHome = (ctx as unknown as { dshHomePath?: () => string | undefined }).dshHomePath?.()
     if (dshHome === undefined || !semanticEnabled(dshHome)) return
     const captures = new CaptureRegistry()
+    // Appendix A: the frozen-handle service, registered structurally
+    // (vwa-evidence consumes it via cordis `ctx.get` in slice 5).
+    registerVwaArgumentService(
+      ctx as unknown as { service(name: string, value: unknown): unknown },
+      { root: process.cwd() },
+    )
     ctx.inject(['tools'], (tools: unknown) => {
       registerArgumentTools(
         { tools: tools as unknown as { register: ToolRegistrar['register'] } },

@@ -18,9 +18,16 @@
 
 import type { ReverseIndex } from './dependencies.ts'
 import { randomUUID } from 'node:crypto'
+import MarkdownIt from 'markdown-it'
 import type { Id, ProjectSnapshot, Ref } from './types.ts'
 
-export type ReviewStage = 'sources' | 'support' | 'claims' | 'arguments'
+// 'zero' preset + block rules only: the AST's line maps drive block
+// segmentation (same pattern as vwa-evidence's prose mask).
+const blockMd: MarkdownIt = new MarkdownIt('zero', { breaks: false })
+blockMd.enable(['paragraph', 'heading', 'fence', 'code', 'html_block', 'blockquote', 'list', 'table'])
+
+/** 'audit' is planned/extracted in audit.ts (extract+align), not by planStage. */
+export type ReviewStage = 'sources' | 'support' | 'claims' | 'arguments' | 'audit'
 
 /** One planned per-stage review task (§11.1/§11.3). */
 export interface ReviewTask {
@@ -74,37 +81,52 @@ function groupsOfClaims(index: ReverseIndex, claims: ReadonlySet<Id>): Map<Id, {
 }
 
 /**
- * §12.1 core set frozen at plan creation. Section rules (§9): title = first
- * ATX-1 heading block; abstract = section matching /^摘要|abstract$/i;
- * conclusion = LAST ATX-2+ section matching /结论|conclusion|结语/i; plus
- * outline goal sections answering requiredQuestions. Extracted-core findings
- * from the audit stage are accepted as an extra input (slice-4 seam).
- *
- * ponytail: block segmentation is a blank-line split with ATX-heading
- * detection, not a CommonMark AST — lists with blank lines and HTML blocks
- * may segment differently. Upgrade path: swap `rootBlocks` for a CommonMark
- * parser in the audit slice (P3) without changing the signature.
+ * Root-level block splitter over the CommonMark parser AST (§4/§12): the
+ * extraction units are the root-level children of a CommonMark parse. Uses
+ * the markdown-it token stream's line maps (its only stable offsets) at
+ * depth 0 (nesting +1/-1 accounting), so lists/quotes/fences stay ONE block.
+ * Fallback: unparseable/empty input → the whole text as one block.
  */
 export function rootBlocks(text: string): { start: number; end: number; heading: { level: number; text: string } | undefined; body: string }[] {
+  const lineStarts: number[] = []
+  let offset = 0
+  for (const line of text.split('\n')) {
+    lineStarts.push(offset)
+    offset += line.length + 1
+  }
+  const lineEnd = (line: number): number => Math.min((lineStarts[line] ?? text.length + 1) - 1, text.length)
   const blocks: { start: number; end: number; heading: { level: number; text: string } | undefined; body: string }[] = []
-  const re = /\n\s*\n/g
-  let from = 0
-  const push = (end: number): void => {
-    const chunk = text.slice(from, end)
-    const first = chunk.split('\n', 1)[0] ?? ''
-    const heading = /^(#{1,6})\s+(.*)$/.exec(first)
-    blocks.push({
-      start: from, end,
-      heading: heading === null ? undefined : { level: heading[1]!.length, text: heading[2] ?? '' },
-      body: chunk,
-    })
+  let depth = 0
+  for (const token of blockMd.parse(text, {})) {
+    if (token.nesting === 1) {
+      if (depth === 0 && token.map) {
+        const start = lineStarts[token.map[0]!] ?? 0
+        const end = lineEnd(token.map[1]!)
+        if (end > start) {
+          const body = text.slice(start, end)
+          // Heading TEXT comes from the block's first line (the heading_open
+          // token itself carries no inline content).
+          const heading = token.type === 'heading_open'
+            ? (/^(#{1,6})\s+(.*)$/.exec(body.split('\n', 1)[0] ?? ''))
+              ? { level: Number(token.tag.slice(1)) || 1, text: (/^(#{1,6})\s+(.*)$/.exec(body.split('\n', 1)[0] ?? ''))![2]!.trim() }
+              : { level: Number(token.tag.slice(1)) || 1, text: '' }
+            : undefined
+          blocks.push({ start, end, heading, body })
+        }
+      }
+      depth += 1
+    } else if (token.nesting === -1) {
+      depth -= 1
+    } else if (depth === 0 && token.map) {
+      // Self-closing token at depth 0 (fence/html_block/html_self_closing).
+      const start = lineStarts[token.map[0]!] ?? 0
+      const end = lineEnd(token.map[1]!)
+      if (end > start) blocks.push({ start, end, heading: undefined, body: text.slice(start, end) })
+    }
   }
-  let match: RegExpExecArray | null
-  while ((match = re.exec(text)) !== null) {
-    push(match.index)
-    from = match.index + match[0].length
+  if (blocks.length === 0 && text.length > 0) {
+    blocks.push({ start: 0, end: text.length, heading: undefined, body: text })
   }
-  if (from < text.length) push(text.length)
   return blocks
 }
 

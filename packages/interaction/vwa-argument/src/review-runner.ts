@@ -31,6 +31,7 @@ import {
   type ReviewModelAdapter, type ReviewTaskContract, type ReviewMessages,
 } from './review-adapter.ts'
 import { BudgetTracker, type ReviewBudget } from './review-tasks.ts'
+import { executeAudit } from './audit.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
 import { POLICY_VERSION } from './policy.ts'
@@ -41,12 +42,12 @@ import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord, ReviewRe
 export const RUBRIC_VERSION = 'humanities-v1'
 
 /** Load one §11.2 stage prompt template from the package prompts directory. */
-export function loadPrompt(stage: ReviewStage): string {
+export function loadPrompt(stage: ReviewStage | 'extract' | 'align'): string {
   return readFileSync(new URL(`../prompts/${stage}.md`, import.meta.url), 'utf8')
 }
 
 /** §11.2 prompt template hash. */
-export function promptHash(stage: ReviewStage): Hash {
+export function promptHash(stage: ReviewStage | 'extract' | 'align'): Hash {
   return sha256Hex(stableJson({ policy: POLICY_VERSION, prompt: loadPrompt(stage) }))
 }
 
@@ -79,9 +80,10 @@ export function buildEnvelope(input: {
 }
 
 /** Stage response schema from the registered review contract (§13 forced-tool parameters). */
-export function responseSchemaFor(stage: ReviewStage): object {
+/** Stage response schema from the registered review contract (§13 forced-tool parameters). 'audit' never routes here (it is extract+align in audit.ts). */
+export function responseSchemaFor(stage: Exclude<ReviewStage, 'audit'> | 'align'): object {
   const defs = reviewSchemaJson as { $defs: Record<string, object> }
-  const defName = { sources: 'SourcesResponse', support: 'SupportResponse', claims: 'ClaimsResponse', arguments: 'ArgumentsResponse' }[stage]
+  const defName = { sources: 'SourcesResponse', support: 'SupportResponse', claims: 'ClaimsResponse', arguments: 'ArgumentsResponse', align: 'AlignResponse' }[stage]
   return defs.$defs[defName!] ?? {}
 }
 
@@ -104,6 +106,10 @@ export interface ReviewRunOutcome {
   inputTokens: number
   outputTokens: number
   calls: number
+  /** §12.1: audit discovered a new core claim → this run is needs-review; a new run is required. */
+  newCoreDiscovered?: boolean
+  /** §17.2 metrics from the audit stage, when it ran. */
+  auditMetrics?: { extractedAtomicClaims: number; mappedAtomicClaims: number }
 }
 
 /**
@@ -120,6 +126,10 @@ export async function executeReviewRun(input: {
   targetClaimIds: Id[]
   snapshot: ProjectSnapshot
   signal: AbortSignal
+  /** Bound artifact text for the audit stage (§12); without it audit → incomplete. */
+  artifact?: { id: Id; path: string; text: string }
+  /** §13 review-max-context-chars-per-task: the over-long unit split threshold. */
+  maxUnitChars?: number
 }): Promise<ReviewRunOutcome> {
   const { deps } = input
   const store = new ReviewRunStore(deps.root, input.snapshot.projectId)
@@ -128,6 +138,8 @@ export async function executeReviewRun(input: {
   const index = buildReverseIndex(input.snapshot)
   const records: (ReviewRecord & { kind?: 'disagreement' })[] = []
   const findings: unknown[] = []
+  let newCoreDiscovered = false
+  let auditMetrics: { extractedAtomicClaims: number; mappedAtomicClaims: number } | undefined
   const requestRow = {
     schemaVersion: 1 as const,
     requestId: input.requestId,
@@ -156,10 +168,53 @@ export async function executeReviewRun(input: {
       endedAt: new Date(deps.now?.() ?? Date.now()).toISOString(),
     })
     deps.emitProgress?.({ runId: input.runId, stage: input.stages.at(-1) ?? '', message: `run ${finalStatus}` })
-    return { runId: input.runId, status: finalStatus, records, findings, ...totals }
+    return {
+      runId: input.runId, status: finalStatus, records, findings, ...totals,
+      ...(newCoreDiscovered ? { newCoreDiscovered } : {}),
+      ...(auditMetrics === undefined ? {} : { auditMetrics }),
+    }
   }
 
   for (const stage of input.stages) {
+    if (stage === 'audit') {
+      // §12 audit: extract + align over the whole bound artifact. Requires the
+      // artifact text; without it the stage cannot run (incomplete, §12).
+      if (input.artifact === undefined) return finish('incomplete')
+      const audit = await executeAudit({
+        adapter: deps.adapter,
+        runId: input.runId,
+        artifact: input.artifact,
+        snapshot: input.snapshot,
+        rubricVersion: RUBRIC_VERSION,
+        contractHash: deps.contractHash,
+        policyHash: policyHash(),
+        reviewerConfigHash: reviewerConfigHash(deps),
+        maxOutputTokens: deps.budget.maxOutputTokensPerCall,
+        maxUnitChars: input.maxUnitChars ?? 48_000,
+        signal: input.signal,
+      }).catch((error: unknown) => {
+        // Runtime validation failure: error records, never semantic findings (§11.4).
+        const code = error instanceof ReviewInvalidError || (error as { code?: string })?.code === 'REVIEW_INVALID' ? 'REVIEW_INVALID' : 'REVIEW_UNAVAILABLE'
+        records.push({
+          runId: input.runId, stage: 'audit', targetRefs: [], dependencyDigest: '',
+          contractHash: deps.contractHash, policyHash: policyHash(), reviewerConfigHash: reviewerConfigHash(deps),
+          promptHash: '', inputHash: '', status: 'error', inputTokens: 0, outputTokens: 0,
+          startedAt: '', endedAt: new Date().toISOString(), errorCode: code,
+        })
+        return undefined
+      })
+      if (audit === undefined) return finish('incomplete')
+      // §12.1: a discovered new core claim marks the run needs-review — a
+      // NEW run is required; online reclassification is not allowed.
+      if (audit.needsReview) newCoreDiscovered = true
+      store.writeRecord(input.runId, audit.extractionRecord as unknown as ReviewRecord & { kind?: 'disagreement' })
+      store.writeRecord(input.runId, audit.alignRecord as ReviewRecord & { kind?: 'disagreement' })
+      records.push(audit.extractionRecord as unknown as ReviewRecord & { kind?: 'disagreement' }, audit.alignRecord)
+      findings.push(...audit.findings)
+      auditMetrics = audit.metrics
+      deps.emitProgress?.({ runId: input.runId, stage: 'audit', message: 'extract+align done' })
+      continue
+    }
     const tasks = planStage({ stage, snapshot: input.snapshot, index, targetClaimIds: input.targetClaimIds, core: new Set() })
     for (const task of tasks) {
       if (budget.wallExceeded()) return finish('incomplete')
@@ -201,7 +256,7 @@ async function executeTask(input: {
     promptHash: promptHash(stage),
   })
   const contract: ReviewTaskContract = {
-    stage,
+    stage: stage as Exclude<ReviewStage, 'audit'>,
     targetIds: new Set(task.targetIds),
     requiredRules: new Map(task.targetRefs.map((ref) => [ref.id, new Set(task.requiredRules.filter((rule) => rule.targetId === ref.id).map((rule) => rule.ruleId))])),
     knownEvidenceIds: knownEvidenceIds(input.index, task),
@@ -275,7 +330,7 @@ async function executeTask(input: {
     try {
       const call = await deps.adapter.prepareReviewCall({
         messages,
-        responseSchema: responseSchemaFor(stage),
+        responseSchema: responseSchemaFor(stage as Exclude<ReviewStage, 'audit'>),
         maxOutputTokens: deps.budget.maxOutputTokensPerCall,
         signal: input.signal,
       })

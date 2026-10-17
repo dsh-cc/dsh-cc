@@ -2401,6 +2401,9 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.3.2
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2411,6 +2414,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.2.0
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
