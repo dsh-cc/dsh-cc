@@ -1,7 +1,7 @@
 # Final real-boot smoke before opening a PR / pushing a branch (after the
 # 2026-09-04 v0.4.1 incident: two "presubmit fully green but boot crashes
-# for every user" regressions). All gates run statically in pre-commit; this
-# line additionally proves the trunk build artifact actually boots in a
+# for every user" regressions). Presubmit runs the same smoke in CI; this
+# local run additionally proves the trunk build artifact actually boots in a
 # user-equivalent resolution pool.
 # Skip (only when you are certain the change cannot affect boot):
 # git push --no-verify

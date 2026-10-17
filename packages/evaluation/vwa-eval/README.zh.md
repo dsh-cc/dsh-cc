@@ -7,11 +7,15 @@
 ## 内容
 
 - `gold-set.json` — 固定的 30 篇文档金标集（15 篇 `docs/**` + 15 个包
-  README），每条为 `{path, sha256, bytes}`。确定性重生成或校验：
+  README），每条为 `{path, sha256, bytes}`；固定的字节快照存放在
+  `fixtures/gold/<path>`。校验或有意重新固定：
   ```
   node packages/evaluation/vwa-eval/scripts/select-gold.mjs --check
+  node packages/evaluation/vwa-eval/scripts/select-gold.mjs --write
   ```
-  任何被固定的文件发生变更时 `--check` 会大声失败（打印路径与原因）。
+  `--check` 只校验快照：快照文件缺失、被改或多余时大声失败（打印路径与原因）；
+  从不读取仓库里的实时文档，因此文档增删改不会让它变红。`--write` 从实时仓库
+  重新选择并替换快照。
   选择过程不依赖正则、与 locale 无关（仅用码元比较排序）。
 - `scripts/annotate.mjs` — 句级标注通道：`export` 导出金标集全部句子
   （使用 `@dsh-cc/vwa-evidence` 的分句与冻结的四族检测器），`merge` 将

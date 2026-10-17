@@ -81,10 +81,20 @@ export function splitSentences(path: string, text: string): ExportedSentence[] {
   return out
 }
 
-/** Export every gold-set sentence, for human annotation. */
-export function exportGoldSentences(pkgRoot: string, repoRoot: string): ExportedSentence[] {
+/** Path of a gold document's pinned snapshot (fixtures/gold/<repo path>). */
+export function goldSnapshotPath(pkgRoot: string, path: string): string {
+  return join(pkgRoot, 'fixtures', 'gold', path)
+}
+
+/**
+ * Export every gold-set sentence, for human annotation. Reads the pinned
+ * fixtures/gold snapshot, never the live repo file, so annotations stay
+ * aligned with the exact bytes that were pinned. `_repoRoot` is kept for
+ * call-site compatibility.
+ */
+export function exportGoldSentences(pkgRoot: string, _repoRoot?: string): ExportedSentence[] {
   return loadGoldSet(pkgRoot).flatMap((entry) =>
-    splitSentences(entry.path, readFileSync(join(repoRoot, entry.path), 'utf8')),
+    splitSentences(entry.path, readFileSync(goldSnapshotPath(pkgRoot, entry.path), 'utf8')),
   )
 }
 
