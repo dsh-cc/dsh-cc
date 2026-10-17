@@ -20,6 +20,13 @@ interface RegistryService {
 
 async function mounted(): Promise<{ ctx: Context; fiber: Fiber }> {
   const ctx = new Context()
+  // The plugin injects 'shell' (worktree isolation runs git through it), so
+  // cordis only activates it once a shell service exists. Publication never
+  // executes commands; a throwing stub is enough.
+  ctx.provide('shell', {
+    resolve() { throw new Error('registry-publication tests do not run shell') },
+    execute() { throw new Error('registry-publication tests do not run shell') },
+  })
   const fiber = ctx.plugin(taskPlugin)
   await fiber.await()
   return { ctx, fiber }

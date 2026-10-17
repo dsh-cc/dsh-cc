@@ -137,6 +137,15 @@ export { SpawnPinCapture, overlayRoute, probeWorkspace } from './resume-capture.
 /** Cordis plugin id. */
 export const name = 'cc-subagent-task'
 
+/**
+ * Cordis lazy-injection declaration: worktree isolation runs git through
+ * `ctx.shell` on THIS plugin's context (worktree-isolation.ts runGit);
+ * without `inject: ['shell']` cordis throws "cannot get property 'shell'
+ * without inject" at dispatch time (#140 class; check-inject enforces it,
+ * tests/worktree-isolation.real-boot.spec.ts pins it through real loading).
+ */
+export const inject = ['shell']
+
 /** Section name for the background-subagent contract. */
 export const BACKGROUND_SECTION_NAME = 'cc:subagent-background'
 
