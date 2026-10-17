@@ -9,8 +9,8 @@ Official dsh-cc plugin with three subagents, three skills, and optional Serena h
 | Component | Purpose | Model alias |
 | --- | --- | --- |
 | `dsh-cc-agents:critic` | Analysis, architecture decisions, plan review, and cause analysis | `opus` |
-| `dsh-cc-agents:executor` | Execution of approved, fully specified plans | `sonnet` |
-| `dsh-cc-agents:marathon` | Large changes, uncertain tasks, and extended debugging | `fable` |
+| `dsh-cc-agents:executor` | Execution of approved plans with complete specifications | `sonnet` |
+| `dsh-cc-agents:marathon` | Changes to many files, tasks with unknown requirements, and long debugging tasks | `fable` |
 | `dsh-cc-agents-orchestration` | Agent selection and report contracts | Main agent |
 | `data-analysis` | Metric definitions, reconciliation, and report checks | Main agent |
 | `vwa-writing` | Source evidence, argument review, article writing, and delivery | Configured VWA reviewer |
@@ -110,13 +110,13 @@ Do not change the article. Make a report of the findings.
 
 1. Check the available tools, settings, and active project.
 2. Set the research contract through `argument.update`.
-3. Read sources and register source excerpts without changes with `evidence.register`.
+3. Read sources. Then register source excerpts without changes with `evidence.register`.
 4. Record actual searches with `evidence.search_log`.
 5. Build claims, evidence groups, and arguments through `argument.update`.
 6. Bind the bound body through `argument.update`.
 7. Run `argument.review` with `input.stage: "all"`.
 8. Wait for the host job and inspect the findings.
-9. Make approved repairs within the frozen budget. Rebind and review changed material.
+9. Make approved repairs within the frozen budget. Bind changed material again. Then review it.
 10. Make the report with `argument.report`.
 11. Present the specified body and report paths through the host.
 

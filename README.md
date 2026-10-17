@@ -92,7 +92,7 @@ The bundles are sufficient for the quick start. The `dsh-cc` marketplace has fou
 - **`dsh-cc-agents`** has three subagents, three skills, and optional Serena hooks.
   - `critic` uses `opus` for analysis and review.
   - `executor` uses `sonnet` to execute a specified plan.
-  - `marathon` uses `fable` for large or uncertain tasks.
+  - `marathon` uses `fable` for changes to many files or tasks with unknown requirements.
   - The skills are `dsh-cc-agents-orchestration`, `data-analysis`, and **`vwa-writing`**.
 - **`dsh-cc-shunt`** sends bulk reads and code generation again and again to worker subagents. Configure `haiku` for lower model cost.
 - **`cc-codex-bridge`** lets you run one specified Codex command form through its PreToolUse hook.
@@ -123,7 +123,7 @@ Read each plugin README for its configuration and limits: [agents](packages/plug
 
 ## Write and review documents with VWA
 
-CC is the default preset. Installing `dsh-cc-agents` does not select VWA or enable semantic review.
+CC is the default preset. Installation of `dsh-cc-agents` does not select VWA or enable semantic review.
 
 The `vwa-writing` skill can write a new article or review an article. Its workflow has evidence, claims, arguments, review, and delivery.
 
@@ -346,7 +346,7 @@ Use `/model` to change the running session's model route.
 
 ### First start
 
-Without a default model, the TUI opens the provider panel. Select a provider, enter its key, and set a default model.
+Without a default model, the TUI opens the provider panel. Select a provider. Enter its key. Set a default model.
 
 Esc skips setup for the active session. The panel returns at the next start.
 
@@ -507,7 +507,7 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 
 This repository has `.serena/project.yml`. With the plugin enabled and `serena-hooks` on PATH, the hooks can run.
 
-Hooks use `SERENA_HOME=<repo>/.serena`. This keeps hook state in the session sandbox write boundary.
+Hooks use `SERENA_HOME=<repo>/.serena`. This keeps hook state in the write boundary of the session sandbox.
 
 The default home can be unwritable, and Serena can suppress that error. Keep `.serena/hook_data/` out of version control.
 

@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | `dsh-cc-agents:critic` | 分析、架构决策、计划评审和原因分析 | `opus` |
 | `dsh-cc-agents:executor` | 执行已批准且完全明确的计划 | `sonnet` |
-| `dsh-cc-agents:marathon` | 大型改动、不确定任务和长期调试 | `fable` |
+| `dsh-cc-agents:marathon` | 涉及大量文件的变更、需求未知的任务和长时间调试 | `fable` |
 | `dsh-cc-agents-orchestration` | Agent 选择和报告契约 | 主 agent |
 | `data-analysis` | 指标口径、对账和报告检查 | 主 agent |
 | `vwa-writing` | 来源证据、论证审查、文章写作和交付 | 已配置的 VWA reviewer |
