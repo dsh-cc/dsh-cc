@@ -32,7 +32,7 @@ let detectedClaims = 0
 let docsWithClaims = 0
 
 for (const entry of gold) {
-  const text = readFileSync(join(ROOT, entry.path), 'utf8')
+  const text = readFileSync(join(PKG, '..', 'fixtures', 'gold', entry.path), 'utf8')
   const { claims } = extractClaims(text)
   detectedClaims += claims.length
   if (claims.length > 0) docsWithClaims++

@@ -8,12 +8,16 @@ the scripts below or the package scripts.
 ## Contents
 
 - `gold-set.json` — the pinned 30-document gold set (15 `docs/**` + 15
-  package READMEs), each entry `{path, sha256, bytes}`. Regenerate or
-  verify deterministically:
+  package READMEs), each entry `{path, sha256, bytes}`; the pinned bytes
+  live in `fixtures/gold/<path>`. Verify, or deliberately re-pin:
   ```
   node packages/evaluation/vwa-eval/scripts/select-gold.mjs --check
+  node packages/evaluation/vwa-eval/scripts/select-gold.mjs --write
   ```
-  `--check` fails loudly (path + reason) if any pinned file changed.
+  `--check` validates only the snapshot and fails loudly (path + reason) if
+  a snapshot file is missing, edited or stray; live repo docs are never
+  consulted, so docs churn cannot break it. `--write` re-selects from the
+  live repo and replaces the snapshot.
   Selection is regex-free, locale-independent (code-unit sorts only).
 - `scripts/annotate.mjs` — sentence-level annotation lane: `export` dumps
   every gold-set sentence (via `@dsh-cc/vwa-evidence`'s sentence splitting

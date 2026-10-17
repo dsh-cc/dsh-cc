@@ -11,20 +11,29 @@
  *
  * Modes:
  *   default   — print the selection as JSON to stdout;
- *   --write   — write packages/evaluation/vwa-eval/gold-set.json;
- *   --check   — verify the committed gold-set.json matches a fresh run:
- *               same paths, same sha256, same byte counts. Any file that
- *               changed since pinning fails LOUDLY with its path.
+ *   --write   — re-select from the live repo, write
+ *               packages/evaluation/vwa-eval/gold-set.json AND snapshot each
+ *               selected document into fixtures/gold/<path> (replacing the
+ *               previous snapshot);
+ *   --check   — verify the committed gold-set.json against the committed
+ *               SNAPSHOT only (exactly 30 entries, 15 docs + 15 READMEs,
+ *               every fixtures/gold/<path> present with matching sha256 and
+ *               byte count, no stray snapshot files). Live docs/ and READMEs
+ *               are deliberately NOT consulted: adding, editing or deleting a
+ *               repo document must never turn this check red. Re-pinning is
+ *               an explicit `--write`.
  *
  * Pure node stdlib, regex-free selection.
  */
 import { createHash } from 'node:crypto'
-import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync, writeFileSync, existsSync, mkdirSync, rmSync, copyFileSync } from 'node:fs'
 import { join, relative, sep, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
-const OUT = join(ROOT, 'packages', 'evaluation', 'vwa-eval', 'gold-set.json')
+const PKG = join(ROOT, 'packages', 'evaluation', 'vwa-eval')
+const OUT = join(PKG, 'gold-set.json')
+const SNAP = join(PKG, 'fixtures', 'gold')
 const DOCS_N = 15
 const README_N = 15
 
@@ -56,7 +65,7 @@ function select() {
   // Package READMEs: exactly packages/<group>/<pkg>/README.md.
   const pkgReadmes = [...walk(join(ROOT, 'packages'), new Set(['node_modules', 'lib']))]
     .filter((p) => {
-      if (p.startsWith(join(ROOT, 'packages', 'evaluation', 'vwa-eval'))) return false
+      if (p.startsWith(PKG)) return false
       const rel = relative(join(ROOT, 'packages'), p).split(sep)
       return rel.length === 3 && rel[2] === 'README.md'
     })
@@ -76,32 +85,47 @@ function check() {
     process.exit(1)
   }
   const committed = JSON.parse(readFileSync(OUT, 'utf8'))
-  const fresh = select()
   const problems = []
-  const committedMap = new Map(committed.map((e) => [e.path, e]))
-  const freshMap = new Map(fresh.map((e) => [e.path, e]))
-  for (const [path, e] of freshMap) {
-    const old = committedMap.get(path)
-    if (!old) problems.push(`missing from committed gold set: ${path}`)
-    else {
-      if (old.sha256 !== e.sha256) problems.push(`sha256 MISMATCH (file changed since pinning): ${path}`)
-      if (old.bytes !== e.bytes) problems.push(`bytes changed: ${path}`)
-    }
+  if (committed.length !== DOCS_N + README_N) problems.push(`expected ${DOCS_N + README_N} entries, got ${committed.length}`)
+  const docsN = committed.filter((e) => e.path.startsWith('docs/')).length
+  if (docsN !== DOCS_N) problems.push(`expected ${DOCS_N} docs/** entries, got ${docsN}`)
+  const paths = committed.map((e) => e.path)
+  if ([...paths].sort().join('\n') !== paths.join('\n')) problems.push('gold-set.json is not sorted by path')
+  for (const e of committed) {
+    const p = join(SNAP, e.path)
+    if (!existsSync(p)) { problems.push(`snapshot missing: fixtures/gold/${e.path}`); continue }
+    if (sha256(p) !== e.sha256) problems.push(`sha256 MISMATCH (snapshot edited): fixtures/gold/${e.path}`)
+    if (statSync(p).size !== e.bytes) problems.push(`bytes changed: fixtures/gold/${e.path}`)
   }
-  for (const path of committedMap.keys()) {
-    if (!freshMap.has(path)) problems.push(`no longer selected (selection rule or repo changed): ${path}`)
+  const pinned = new Set(paths)
+  if (existsSync(SNAP)) {
+    for (const p of walk(SNAP, new Set())) {
+      const rel = relative(SNAP, p).split(sep).join('/')
+      if (!pinned.has(rel)) problems.push(`stray snapshot file not in gold-set.json: fixtures/gold/${rel}`)
+    }
   }
   if (problems.length) {
     console.error(`gold-set check FAILED (${problems.length} problem(s)):`)
     for (const p of problems) console.error(`  - ${p}`)
+    console.error('  re-pin deliberately with: node packages/evaluation/vwa-eval/scripts/select-gold.mjs --write')
     process.exit(1)
   }
-  console.log(`gold-set check OK: ${fresh.length} entries, all sha256s match live files`)
+  console.log(`gold-set check OK: ${committed.length} entries, all sha256s match the fixtures/gold snapshot`)
+}
+
+function write() {
+  const sel = select()
+  rmSync(SNAP, { recursive: true, force: true })
+  for (const e of sel) {
+    const dest = join(SNAP, e.path)
+    mkdirSync(dirname(dest), { recursive: true })
+    copyFileSync(join(ROOT, e.path), dest)
+  }
+  writeFileSync(OUT, JSON.stringify(sel, null, 2) + '\n')
+  console.log(`wrote ${relative(ROOT, OUT)} + ${sel.length} snapshot files under ${relative(ROOT, SNAP)}`)
 }
 
 const mode = process.argv[2] ?? ''
 if (mode === '--check') check()
-else if (mode === '--write') {
-  writeFileSync(OUT, JSON.stringify(select(), null, 2) + '\n')
-  console.log(`wrote ${relative(ROOT, OUT)}`)
-} else console.log(JSON.stringify(select(), null, 2))
+else if (mode === '--write') write()
+else console.log(JSON.stringify(select(), null, 2))
