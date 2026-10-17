@@ -236,6 +236,12 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-inject.mjs && node scripts/check-inject.test.mjs
 
+      # Concrete model ids only in the alias registry (cc-model-aliases;
+      # allowlist: tui/src/provider-presets.ts, test-support). AST scan.
+      - name: Model id literals (check:model-literals)
+        working-directory: dsh-cc
+        run: node scripts/check-model-literals.mjs && node scripts/check-model-literals.test.mjs
+
       - name: Typecheck ≡ Build (tsc -b project references)
         working-directory: dsh-cc
         run: pnpm typecheck

@@ -35,6 +35,7 @@
     "check:deep-imports": "node scripts/check-deep-src-imports.mjs",
     "check:identity": "node scripts/check-project-identity.mjs",
     "check:inject": "node scripts/check-inject.mjs && node scripts/check-inject.test.mjs",
+    "check:model-literals": "node scripts/check-model-literals.mjs && node scripts/check-model-literals.test.mjs",
     "check:workflow-pipefail": "node scripts/check-workflow-pipefail.mjs && node scripts/check-workflow-pipefail.test.mjs",
     "smoke:profile-boot": "bash scripts/smoke-profile-boot.sh",
     "smoke:acp": "node scripts/smoke-acp.mjs"
