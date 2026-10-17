@@ -128,8 +128,20 @@ const mask = text.split('')
 }
 
 /**
+ * `〔claim:<id>〕` authoring-aid markers (§19): lane-1 treats them as
+ * non-marker text — they are skipped entirely (no SourceSpec, no
+ * `invalid-marker`) and every character offset stays valid because nothing
+ * is removed or masked. Recognition is by inner-text prefix only.
+ */
+export function isClaimMarkerInner(inner: string): boolean {
+  return /^claim:[^\s;]+$/.test(inner)
+}
+
+/**
  * Parse the inner text of one marker (between the full-width brackets).
  * Multiple sources join with `;`. Returns null when any spec is malformed.
+ * A `claim:<id>` inner is NOT malformed — the caller skips it via
+ * {@link isClaimMarkerInner} before treating null as an invalid marker.
  */
 export function parseMarkerInner(inner: string): SourceSpec[] | null {
   if (!inner.startsWith('src:')) return null
@@ -155,7 +167,11 @@ export function findMarkers(maskedText: string): MarkerOccurrence[] {
   const re = new RegExp(`${MARKER_OPEN}([^${MARKER_CLOSE}]*)${MARKER_CLOSE}`, 'g')
   let match: RegExpExecArray | null
   while ((match = re.exec(maskedText)) !== null) {
-    const specs = parseMarkerInner(match[1] ?? '')
+    const inner = match[1] ?? ''
+    // 〔claim:<id>〕 is non-marker text on the lane-1 surface: skipped, no
+    // invalid-marker, offsets preserved (§19/D24).
+    if (isClaimMarkerInner(inner)) continue
+    const specs = parseMarkerInner(inner)
     out.push({ span: [match.index, match.index + match[0].length], specs: specs ?? [], parsed: specs !== null })
   }
   return out

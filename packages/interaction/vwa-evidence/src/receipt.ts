@@ -58,6 +58,27 @@ export interface GateEntry {
   detail?: string
 }
 
+/**
+ * Mechanical-check layer status (§17.1) — locally declared (cycle-break §3:
+ * vwa-evidence never imports @dsh-cc/vwa-argument; the union mirrors the
+ * review schema's MechanicalStatus).
+ */
+export type MechanicalStatus = 'pass' | 'fail' | 'not-run' | 'inapplicable'
+
+/** Semantic check-layer verdict (review schema union). */
+export type Verdict = 'pass' | 'fail' | 'needs-review' | 'not-run'
+
+/** One claim's lane-2 assessment as carried by a v2 row (review schema shape). */
+export interface AssessmentEntry {
+  claimId: string
+  supportGrade: 'A' | 'B' | 'C' | 'U'
+  opposition: 'not-checked' | 'none-found' | 'material' | 'decisive'
+  disposition: 'supported' | 'contested' | 'underdetermined' | 'refuted'
+  reviewState: 'current' | 'stale' | 'not-run' | 'incomplete'
+  reviewRunIds: string[]
+  rationale: string[]
+}
+
 /** Receipt row v:1 — all fields required except where marked optional (§4.1). */
 export interface ReceiptRow {
   v: 1
@@ -72,6 +93,54 @@ export interface ReceiptRow {
   provenance: { inputs: { sourceId: string; revisionHash: string }[]; parentHash: string }
   overall: 'pass' | 'fail' | 'abstained'
   nudge: { round: number }
+}
+
+/** One v2 claim entry: multi-source (§16.1) — spans/sources may be empty. */
+export interface ReceiptClaim {
+  claimId: string
+  spans: [number, number][]
+  sources: { sourceId: string; snapshotHash: string; evidenceIds: string[] }[]
+  assessment: AssessmentEntry
+}
+
+/**
+ * Receipt row v:2 (§16.1) — same session ledger, discriminated by `v:2`.
+ * `NumberEntry`/`GateEntry` are the exact v1 types (no drifted duplicates).
+ */
+export interface ReceiptV2 {
+  v: 2
+  receiptId: string
+  ts: number
+  sessionId: string
+  projectId: string
+  projectRevision: number
+  artifactId: string
+  artifactPath: string
+  artifactHash: string
+  graphHash: string
+  policyHash: string
+  reviewerConfigHash: string
+  claims: ReceiptClaim[]
+  numbers: NumberEntry[]
+  gates: GateEntry[]
+  checks: { mechanical: MechanicalStatus; evidence: Verdict; argument: Verdict; audit: Verdict }
+  metrics: { mappedAtomicClaims: number; extractedAtomicClaims: number; reviewedCoreClaims: number; coreClaims: number }
+  reviewRunIds: string[]
+  pendingRunIds?: string[]
+  findingCounts: { blocker: number; major: number; minor: number }
+  report: { path: string; hash: string }
+  provenance: { inputs: { sourceId: string; revisionHash: string }[]; parentHash: string }
+  delivery: 'draft' | 'reviewed' | 'delivered-unverified' | 'delivered-reviewed'
+  overall: 'pass' | 'fail' | 'abstained'
+  nudge: { round: number }
+}
+
+/** The session-ledger discriminated union, typed by the `v` field (§16.1). */
+export type AnyReceiptRow = ReceiptRow | ReceiptV2
+
+/** receiptHash = SHA256(stableJson(row)); never stored in the row itself (§16.1). */
+export function receiptHashOf(row: ReceiptV2): string {
+  return sha256Hex(stableJson(row))
 }
 
 /** Canonical JSON: sorted keys recursively, no whitespace (pinned by tests). */
@@ -116,7 +185,9 @@ export interface WriteReceiptResult {
  */
 export async function writeReceipt(ledgerPath: string, row: ReceiptRow): Promise<WriteReceiptResult> {
   await appendJsonl(ledgerPath, JSON.parse(stableJson(row)), { repairTail: true })
-  const rows = await readJsonl<ReceiptRow>(ledgerPath)
+  // v1 read-back path (§16.1): v2 rows are skipped, never mistaken for the
+  // v1 row just appended — the LAST v:1 line must match artifactHash.
+  const rows = (await readJsonl<unknown>(ledgerPath)).filter(isV1Row)
   const last = rows.at(-1)
   if (last === undefined) return { ok: false, detail: 'ledger empty after append' }
   if (last.artifactHash !== row.artifactHash) {
@@ -125,23 +196,86 @@ export async function writeReceipt(ledgerPath: string, row: ReceiptRow): Promise
   return { ok: true, row: last }
 }
 
-/** Rows of the session ledger whose nudge actually fired (§4.1 budget projection). */
-export function nudgeBudgetConsumed(rows: readonly ReceiptRow[]): number {
+export interface WriteReceiptV2Result {
+  /** True only when the appended line read back with the same receiptId AND receiptHash. */
+  ok: boolean
+  row?: ReceiptV2
+  /** receiptHash of the read-back row when it parsed; useful for parentHash chaining. */
+  receiptHash?: string
+  detail?: string
+}
+
+/**
+ * Append one v:2 row, then read back: the write is only claimable when the
+ * last v:2 row with this receiptId re-hashes to the written receiptHash
+ * (§16.1: both (receiptId, receiptHash) are compared; a write failure is
+ * never presented as if the receipt exists). Historical v1 bytes are not
+ * altered. Best-effort: never throws.
+ */
+export async function writeReceiptV2(ledgerPath: string, row: ReceiptV2): Promise<WriteReceiptV2Result> {
+  const expectedHash = receiptHashOf(row)
+  try {
+    await appendJsonl(ledgerPath, JSON.parse(stableJson(row)), { repairTail: true })
+  } catch {
+    // appendJsonl swallows write errors internally; the read-back below
+    // still decides. A throw here (e.g. parent dir unwritable) is decisive.
+    return { ok: false, detail: 'append failed' }
+  }
+  let rows: unknown[]
+  try {
+    rows = await readJsonl<unknown>(ledgerPath)
+  } catch (error: unknown) {
+    return { ok: false, detail: `read-back failed: ${String(error)}` }
+  }
+  const mine = rows.filter(isV2Row).filter(candidate => candidate.receiptId === row.receiptId)
+  const last = mine.at(-1)
+  if (last === undefined) return { ok: false, detail: 'row not present after append' }
+  const readBackHash = receiptHashOf(last)
+  if (readBackHash !== expectedHash) {
+    return { ok: false, receiptHash: readBackHash, detail: 'read-back receiptHash mismatch' }
+  }
+  return { ok: true, row: last, receiptHash: readBackHash }
+}
+
+/** Narrowing guard: v:1 rows only (§16.1 — v1 readers skip v2 rows). */
+export function isV1Row(row: unknown): row is ReceiptRow {
+  return typeof row === 'object' && row !== null && (row as { v?: unknown }).v === 1
+}
+
+/** Narrowing guard: v:2 rows only. */
+export function isV2Row(row: unknown): row is ReceiptV2 {
+  return typeof row === 'object' && row !== null && (row as { v?: unknown }).v === 2
+}
+
+/**
+ * Nudge budget projection (§4.1/§16.2): counts `nudge.round > 0` rows from
+ * BOTH versions — two packages share one budget, so v2 rounds consume it too.
+ */
+export function nudgeBudgetConsumed(rows: readonly AnyReceiptRow[]): number {
   return rows.filter(row => typeof row?.nudge?.round === 'number' && row.nudge.round > 0).length
 }
 
 /**
- * Last-matching-row staleness (§4.1): an artifact at `artifactPath` is stale
- * against the ledger unless the LAST row for that path carries exactly the
- * current content hash. No row at all counts as stale (never verified).
- * Callers combine this with write-then-read-back success.
+ * Last-matching-row staleness (§4.1), v:1 faces only (§16.1: v2 rows are
+ * skipped by the v1 staleness reader — a v2 row never clears v1 staleness).
+ * No v:1 row at all counts as stale (never verified).
  */
 export function staleAgainst(
-  rows: readonly ReceiptRow[],
+  rows: readonly AnyReceiptRow[],
   artifactPath: string,
   currentHash: string,
 ): boolean {
-  const matching = rows.filter(row => row?.artifactPath === artifactPath)
+  const matching = rows.filter(isV1Row).filter(row => row?.artifactPath === artifactPath)
   const last = matching.at(-1)
   return !(last !== undefined && last.artifactHash === currentHash)
+}
+
+/**
+ * Latest successfully read-back v2 receiptHash for a path, or '' (§16.1
+ * parentHash chaining). Hashes are recomputed from the rows, never stored.
+ */
+export function lastV2ReceiptHash(rows: readonly AnyReceiptRow[], artifactPath: string): string {
+  const matching = rows.filter(isV2Row).filter(row => row.artifactPath === artifactPath)
+  const last = matching.at(-1)
+  return last === undefined ? '' : receiptHashOf(last)
 }

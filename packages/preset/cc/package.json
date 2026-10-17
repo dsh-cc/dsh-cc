@@ -88,11 +88,16 @@
     "@dsh-cc/reasoning-fold": "workspace:^",
     "@dsh-cc/progress-rebuild": "workspace:^",
     "@dsh-cc/retry-attendant": "workspace:^",
-    "@dsh-cc/vwa-evidence": "workspace:^"
+    "@dsh-cc/vwa-evidence": "workspace:^",
+    "@dsh-cc/vwa-argument": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
     "js-yaml": "^4.1.0",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
+    "@deepseek-ai/dsh-jobs-local": "link:../../../../deepseek-harness/packages/jobs/jobs-local"
   }
 }
