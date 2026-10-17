@@ -21,8 +21,12 @@ import { isAbsolute, join, relative, sep } from 'node:path'
 import type { ClaimStatus } from './receipt.ts'
 import type { SourceSpec } from './marker.ts'
 
-/** Corpus whitelist, frozen (§4.2): `docs/` prefix ∪ `*.md` ∪ `*.mdx` under the workspace. */
+/** Corpus whitelist, frozen (§4.2): `docs/` prefix ∪ `*.md` ∪ `*.mdx` under
+ * the workspace — EXCLUDING the runtime's own output tree `.dsh/**` (D22:
+ * the report output being rescanned as evidence would create a
+ * self-referential evidence loop). */
 export function isWhitelistedRel(relPosix: string): boolean {
+  if (relPosix === '.dsh' || relPosix.startsWith('.dsh/')) return false
   return relPosix.startsWith('docs/') || /\.mdx?$/.test(relPosix)
 }
 

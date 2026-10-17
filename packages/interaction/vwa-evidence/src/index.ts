@@ -26,19 +26,31 @@ import { registerEvaluator } from './wiring.ts'
 
 export { encodeSegment } from './encode.ts'
 export {
+  isV1Row,
+  isV2Row,
+  lastV2ReceiptHash,
   nudgeBudgetConsumed,
+  receiptHashOf,
   receiptLedgerPath,
   sha256Hex,
   stableJson,
   staleAgainst,
   writeReceipt,
+  writeReceiptV2,
+  type AnyReceiptRow,
+  type AssessmentEntry,
   type ClaimEntry,
   type ClaimStatus,
   type GateEntry,
   type GateStatus,
+  type MechanicalStatus,
   type NumberEntry,
+  type ReceiptClaim,
   type ReceiptRow,
+  type ReceiptV2,
+  type Verdict,
   type WriteReceiptResult,
+  type WriteReceiptV2Result,
 } from './receipt.ts'
 export {
   CLAIM_DETECTORS,
@@ -70,6 +82,20 @@ export {
   registerSettings,
   type VwaEvidenceSettings,
 } from './settings.ts'
+export {
+  deliveryState,
+  boundNudgeTargets,
+  buildReceiptV2,
+  presentedFiles,
+  readCurrentProject,
+  resolveDeliveryProvider,
+  overallOf,
+  writeBoundReport,
+  type AssessmentLike,
+  type DeliveryCheckLike,
+  type FindingLike,
+  type VwaArgumentDeliveryProvider,
+} from './vwa-delivery.ts'
 export {
   VWA_EVIDENCE_SOURCE_KIND,
   createEvaluatorState,
