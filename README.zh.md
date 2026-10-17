@@ -92,7 +92,7 @@ dsh web
 - **`dsh-cc-agents`** 提供三个子代理、三个 skill 和可选的 Serena hooks。
   - `critic` 使用 `opus` 做分析和评审。
   - `executor` 使用 `sonnet` 执行已明确的计划。
-  - `marathon` 使用 `fable` 处理大型或不确定的任务。
+  - `marathon` 使用 `fable` 处理涉及大量文件的变更或需求未知的任务。
   - 三个 skill 分别是 `dsh-cc-agents-orchestration`、`data-analysis` 和 **`vwa-writing`**。
 - **`dsh-cc-shunt`** 将批量读取和重复代码生成交给 worker 子代理。配置 `haiku` 可降低模型成本。
 - **`cc-codex-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Codex 命令。
