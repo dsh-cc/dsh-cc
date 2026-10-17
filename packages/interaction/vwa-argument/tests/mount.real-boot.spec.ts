@@ -23,6 +23,7 @@ import * as VwaArgument from '../src/index.ts'
 import { ProjectStore } from '../src/store.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { CONTRACT } from './helpers.ts'
+import { resolveDeliveryProvider } from '@dsh-cc/vwa-evidence'
 
 const PROVIDER = 'fake-provider'
 const REVIEWER_MODEL = 'reviewer-model'
@@ -317,5 +318,52 @@ describe('vwa-argument real mount: capture and artifact sources (§10.3/§10.5)'
       },
     }, agent)
     expect(bound, JSON.stringify(bound)).toMatchObject({ ok: true })
+  })
+})
+
+describe('vwa-argument real mount: the delivery service resolves the CALLER\'s workspace (Appendix A)', () => {
+  async function boundProject(b: Booted, agent: unknown, root: string, body: string): Promise<{ projectId: string; artifactId: string }> {
+    const projectId = initProject(root)
+    const made = await b.exec('argument.update', {
+      projectId, expectedRevision: 1, requestId: randomUUID(),
+      input: {
+        op: 'upsert', updates: [], deletes: [],
+        creates: [{
+          clientKey: 'c', type: 'claim',
+          body: {
+            text: body, kind: 'fact',
+            scope: { subject: 's', corpus: [], time: 'unspecified', geography: 'unspecified', exclusions: [] },
+            importance: 'core', stance: 'asserted', evaluationCriteria: [],
+          },
+        }],
+      },
+    }, agent)
+    const claimId = (made.data as { changedIds: string[] }).changedIds[0]
+    await b.exec('write', { file_path: join(root, 'report.md'), content: `${body}\n` }, agent)
+    const bound = await b.exec('argument.update', {
+      projectId, expectedRevision: 2, requestId: randomUUID(),
+      input: { op: 'bind-artifact', path: 'report.md', outline: [], occurrences: [{ claimId, span: { start: 0, end: body.length }, exactText: body }] },
+    }, agent)
+    expect(bound.ok, JSON.stringify(bound)).toBe(true)
+    const head = new ProjectStore(root, projectId).readHead()
+    if (!head.ok) throw new Error(head.message)
+    return { projectId, artifactId: head.data.snapshot.artifacts[0]!.id }
+  }
+
+  it('two sessions in two workspaces each see their own bound artifacts, independent of process.cwd()', async () => {
+    const b = await boot()
+    const rootA = workspace()
+    const rootB = workspace()
+    expect(process.cwd()).not.toBe(rootA)
+    const a = await boundProject(b, b.agentAt(rootA), rootA, 'Workspace A claim.')
+    const bProject = await boundProject(b, b.agentAt(rootB), rootB, 'Workspace B claim.')
+    const providerA = resolveDeliveryProvider(b.ctx, rootA)
+    const providerB = resolveDeliveryProvider(b.ctx, rootB)
+    expect(providerA?.listBoundArtifacts(a.projectId)).toEqual([{ artifactId: a.artifactId, path: 'report.md' }])
+    expect(providerB?.listBoundArtifacts(bProject.projectId)).toEqual([{ artifactId: bProject.artifactId, path: 'report.md' }])
+    // A project id never leaks across workspaces.
+    expect(providerA?.listBoundArtifacts(bProject.projectId)).toEqual([])
+    const frozen = await providerA!.checkForDelivery(a.projectId, a.artifactId)
+    expect(frozen.check.artifactHash).toMatch(/^[0-9a-f]{64}$/)
   })
 })
