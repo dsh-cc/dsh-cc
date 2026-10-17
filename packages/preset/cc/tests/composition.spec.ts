@@ -748,6 +748,15 @@ describe('agent.vwa.cordis.yml composition', () => {  const vwaDoc = expandInclu
     expect(doc.some((r) => r.id === 'vwa-evidence')).toBe(false)
     expect(expandIncludes(sharedCordisPath).some((r) => r.id === 'vwa-evidence')).toBe(false)
   })
+
+  it('carries the vwa-argument row ONLY in the vwa closure (VWA split plan §23)', () => {
+    // The lane-2 argumentation plugin mounts only in VWA mode, same precedent
+    // as vwa-evidence: the cc closure and the shared body deliberately lack
+    // the row (default-off settings keep it inert until enabled, §13).
+    expect(vwaDoc.some((r) => r.id === 'vwa-argument' && r.name === '@dsh-cc/vwa-argument')).toBe(true)
+    expect(doc.some((r) => r.id === 'vwa-argument')).toBe(false)
+    expect(expandIncludes(sharedCordisPath).some((r) => r.id === 'vwa-argument')).toBe(false)
+  })
 })
 
 describe('vwa declaration row (packages/bundle/cc-tui/cordis.patch.yml)', () => {

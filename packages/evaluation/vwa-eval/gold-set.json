@@ -80,11 +80,6 @@
     "bytes": 370
   },
   {
-    "path": "packages/compat/cc-output-styles/README.md",
-    "sha256": "3942b7be8eb40e1377298757c26c79003ad69ca0906d014478bb9f826495c157",
-    "bytes": 3854
-  },
-  {
     "path": "packages/compat/cc-plugin-loader/README.md",
     "sha256": "bc758e159d9ba7d0455a48769b520875253aae0238a0ab17a2d589107d3adfbb",
     "bytes": 10678
@@ -93,6 +88,11 @@
     "path": "packages/core/tool-append-order/README.md",
     "sha256": "9909f39264aac82571b012e8c1283743faf0afb65e9d0928c60a40e00b3abec3",
     "bytes": 1575
+  },
+  {
+    "path": "packages/core/tool-notebook-edit/README.md",
+    "sha256": "b8b6167fc1c3f3f8d6e0c1364457bb7225a1174cfcc3381b49c5755982011128",
+    "bytes": 4496
   },
   {
     "path": "packages/interaction/advisor-watchdog/README.md",
@@ -110,6 +110,11 @@
     "bytes": 1119
   },
   {
+    "path": "packages/interaction/command-doctor/README.md",
+    "sha256": "0c1d8ece716c97c4db946ede76e507c979482543a6a2f29fce98afe1f614550d",
+    "bytes": 3055
+  },
+  {
     "path": "packages/interaction/command-status/README.md",
     "sha256": "c9b6fa5e3d9078e8950953340740e3e8673e666a7a4b366022130d2e88318fd8",
     "bytes": 1819
@@ -120,9 +125,14 @@
     "bytes": 1401
   },
   {
-    "path": "packages/mcp/mcp-config/README.md",
-    "sha256": "d8a1a0ff6adb77a60d3530181f1fd48ecf654058a1bad69b7a9ce66f605f0ea2",
-    "bytes": 4445
+    "path": "packages/interaction/post-edit-verify/README.md",
+    "sha256": "5b89dd092d8d247d259533bec930e04ccf72204218551c09eaab1a0425b8bc7a",
+    "bytes": 3865
+  },
+  {
+    "path": "packages/llm-tuning/reasoning-fold/README.md",
+    "sha256": "da0bcbc64f14613987a51fa88e6e898bedf19a2e2683f6cebfdd18d175c34f3d",
+    "bytes": 3531
   },
   {
     "path": "packages/memory/memory-consolidation/README.md",
@@ -135,18 +145,8 @@
     "bytes": 2657
   },
   {
-    "path": "packages/plugin/dsh-cc-shunt/README.md",
-    "sha256": "15bf5bec22c6aa148d705730deef659cf529e9edf05950a2b6a168b15c41f5be",
-    "bytes": 3037
-  },
-  {
     "path": "packages/session/command-learn/README.md",
     "sha256": "cf7df8ae4e67ff7a848b3c9c9b45025f34208fe5d5d26401d4690f05cc72ce21",
     "bytes": 2360
-  },
-  {
-    "path": "packages/subagent/coordinator/README.md",
-    "sha256": "6f638b4e3e0e7a7db597274d5dd62aa0992033a187ad4103ddeb4396c69c98be",
-    "bytes": 3474
   }
 ]

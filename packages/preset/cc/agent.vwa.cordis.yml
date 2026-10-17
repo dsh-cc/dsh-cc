@@ -36,3 +36,11 @@
 # post-edit-verify idiom for the §4.3 gate C execution seam).
 - id: vwa-evidence
   name: '@dsh-cc/vwa-evidence'
+
+# The vwa-argument lane-2 argumentation plugin (VWA split plan
+# docs/plans/2026-10-16-vwa-evidence-argument.md §23), mounted ONLY here —
+# same precedent as vwa-evidence: plain plugin (settings namespace + tools +
+# the /vwa command), publishes no Service; `vwa-argument.semantic-enabled`
+# defaults to false, so mounting changes nothing until enabled (§13).
+- id: vwa-argument
+  name: '@dsh-cc/vwa-argument'

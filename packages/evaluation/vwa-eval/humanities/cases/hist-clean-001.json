@@ -1,0 +1,14 @@
+{
+  "id": "hist-clean-001",
+  "domain": "historical",
+  "synthetic": true,
+  "clean": true,
+  "adjudicated": true,
+  "claims": [
+    { "id": "claim-h1", "span": [0, 62], "kind": "factual", "text": "The 1848 treaty was ratified by both signatories within one month.", "core": true },
+    { "id": "claim-h2", "span": [70, 132], "kind": "factual", "text": "Ratification was recorded in the official gazette of May 1848.", "core": false }
+  ],
+  "support": [
+    { "evidenceId": "ev-gazette", "targetClaimId": "claim-h2", "support": "direct" }
+  ]
+}
