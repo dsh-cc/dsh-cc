@@ -447,10 +447,10 @@ describe('agent.cordis.yml composition', () => {
     expect(engine.config).toMatchObject({ provider: 'cc-workflow-journal' })
   })
 
-  it('declares every @dsh-cc row name as a dependency (top level and group-nested)', () => {
+  it('declares every @dsh-cc row name as a dependency (top level and group-nested, cc AND vwa closures)', () => {
     const deps = Object.keys(pkgJson.dependencies ?? {})
     const rows: any[] = []
-    for (const row of doc) {
+    for (const row of [...doc, ...expandIncludes(vwaCordisPath)]) {
       if (row.name === 'cordis:group' && Array.isArray(row.config)) {
         rows.push(...row.config)
       } else {
