@@ -26,6 +26,8 @@ export const SETTINGS_NAMESPACE = 'vwa-argument'
 export interface VwaArgumentSettings {
   'semantic-enabled': boolean
   'semantic-mode': 'draft' | 'reviewed'
+  /** Model ALIAS (never a concrete id) the reviewer routes through (ccModelRoutes / resolveAlias). */
+  'review-alias': string
   'review-max-calls-per-run': number
   'review-max-input-tokens-per-run': number
   'review-max-output-tokens-per-run': number
@@ -45,6 +47,7 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
 const SettingsObject = z.object({
   'semantic-enabled': z.boolean().default(false),
   'semantic-mode': z.union([z.const('draft'), z.const('reviewed')]).default('draft'),
+  'review-alias': z.string().default('sonnet'),
   'review-max-calls-per-run': z.number().min(1).max(200).default(40),
   'review-max-input-tokens-per-run': z.number().min(1000).max(1_000_000).default(160_000),
   'review-max-output-tokens-per-run': z.number().min(1000).max(200_000).default(24_000),
@@ -71,6 +74,7 @@ export const SettingsSchema: z<Record<string, unknown>> =
 export const DEFAULT_VWA_ARGUMENT_SETTINGS: VwaArgumentSettings = {
   'semantic-enabled': false,
   'semantic-mode': 'draft',
+  'review-alias': 'sonnet',
   'review-max-calls-per-run': 40,
   'review-max-input-tokens-per-run': 160_000,
   'review-max-output-tokens-per-run': 24_000,
@@ -114,6 +118,8 @@ function resolveSection(section: Record<string, unknown>): VwaArgumentSettings {
   return {
     'semantic-enabled': resolved['semantic-enabled'] === true,
     'semantic-mode': resolved['semantic-mode'] === 'reviewed' ? 'reviewed' : 'draft',
+    'review-alias': typeof resolved['review-alias'] === 'string' && resolved['review-alias'].length > 0
+      ? resolved['review-alias'] : defaults['review-alias'],
     'review-max-calls-per-run': num('review-max-calls-per-run'),
     'review-max-input-tokens-per-run': num('review-max-input-tokens-per-run'),
     'review-max-output-tokens-per-run': num('review-max-output-tokens-per-run'),

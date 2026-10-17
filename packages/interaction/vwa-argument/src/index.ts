@@ -20,6 +20,7 @@ import { CaptureRegistry } from './sources.ts'
 import { readUserSettingsSync, registerSettings } from './settings.ts'
 import { registerVwaArgumentService } from './report.ts'
 import { registerVwaCommand } from './commands.ts'
+import { createReviewFactory } from './review-host.ts'
 
 export {
   DEFAULT_VWA_ARGUMENT_SETTINGS,
@@ -101,9 +102,11 @@ export {
   registerArgumentTools,
   semanticEnabled,
   type ToolDefinition,
+  type ReviewCollaborators,
   type ToolDeps,
   type ToolRegistrar,
 } from './tools.ts'
+export { budgetFrom, createReviewFactory, resolveReviewerRoute } from './review-host.ts'
 export {
   fail,
   ProjectStore,
@@ -240,9 +243,11 @@ export function apply(ctx: Context): void {
         return undefined
       }
     }
-    ctx.inject(['commands'], (commands: unknown) => {
+    // cordis `ctx.inject(deps, cb)` calls cb with the INJECTED CONTEXT (a
+    // sub-plugin whose inject is `deps`), not with the service itself.
+    ctx.inject(['commands'], (injected: Context) => {
       registerVwaCommand(
-        { commands: commands as { register(definition: unknown): unknown } },
+        { commands: (injected as unknown as { commands: { register(definition: unknown): unknown } }).commands },
         { workspaceRoot: workspaceRootOf },
       )
     })
@@ -256,12 +261,12 @@ export function apply(ctx: Context): void {
     // Appendix A: the frozen-handle service, registered structurally
     // (vwa-evidence consumes it via cordis `ctx.get` in slice 5).
     registerVwaArgumentService(
-      ctx as unknown as { service(name: string, value: unknown): unknown },
+      ctx as unknown as { provide(name: string, value: unknown): unknown },
       { root: process.cwd() },
     )
-    ctx.inject(['tools'], (tools: unknown) => {
+    ctx.inject(['tools'], (injected: Context) => {
       registerArgumentTools(
-        { tools: tools as unknown as { register: ToolRegistrar['register'] } },
+        { tools: (injected as unknown as { tools: { register: ToolRegistrar['register'] } }).tools },
         {
           workspaceRoot: (agent: unknown) => {
             try {
@@ -274,6 +279,8 @@ export function apply(ctx: Context): void {
           artifactTexts: new Map(),
           snapshotTexts: new Map(),
           maxEntities: readUserSettingsSync(dshHome)['project-max-entities'],
+          // §13/Appendix A: llm + jobs + alias route resolved per call (review-host.ts).
+          review: createReviewFactory(ctx, dshHome),
         },
       )
     })

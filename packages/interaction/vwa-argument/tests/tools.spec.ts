@@ -12,6 +12,8 @@ import { registerArgumentTools, type ToolDefinition } from '../src/tools.ts'
 import type { ToolDeps } from '../src/tools.ts'
 import { CaptureRegistry } from '../src/sources.ts'
 import { CONTRACT, initWorkspace, uuid } from './helpers.ts'
+import { BUDGET, fakeAdapter } from './review-helpers.ts'
+import { fail } from '../src/store.ts'
 
 /** Mount the tools against a fresh initialized workspace; return them by name. */
 function mount(overrides: Partial<ToolDeps> = {}): {
@@ -55,13 +57,43 @@ describe('tool registration (§13 gate surface)', () => {
     expect([...tools.keys()].sort()).toEqual(['argument.review', 'argument.update', 'evidence.register', 'evidence.search_log'])
   })
 
-  it('argument.review is disabled with REVIEW_UNAVAILABLE when no review collaborators are mounted', async () => {
-    const { tools } = mount()
-    const result = await call(tools.get('argument.review') as ToolDefinition, {
-      projectId: 'prj_none', expectedRevision: 1, requestId: 'r', input: { stage: 'claims' },
+  it('argument.review resolves its collaborators per call and surfaces the host reason when unavailable', async () => {
+    // Production mounts always pass a per-call factory (review-host.ts); the
+    // factory's REVIEW_UNAVAILABLE (no llm / jobs / route) reaches the caller.
+    const reasons: unknown[] = []
+    const { tools, workspace } = mount({
+      review: (agent) => {
+        reasons.push(agent)
+        return fail('REVIEW_UNAVAILABLE', 'no llm service is mounted on the host', true)
+      },
     })
+    const agent = { id: 'sess-1' }
+    const result = await (tools.get('argument.review') as ToolDefinition).execute({
+      projectId: workspace.projectId, expectedRevision: 1, requestId: 'r', input: { stage: 'claims' },
+    }, { signal: new AbortController().signal, agent }) as Record<string, unknown>
     expect(result.ok).toBe(false)
     expect(result.code).toBe('REVIEW_UNAVAILABLE')
+    expect(result.message).toBe('no llm service is mounted on the host')
+    expect(reasons).toEqual([agent])
+  })
+
+  it('argument.review starts a background run when the factory resolves collaborators', async () => {
+    const started: string[] = []
+    const { tools, workspace } = mount({
+      review: () => ({
+        adapter: fakeAdapter([() => { throw new Error('no task planned') }]),
+        budget: BUDGET,
+        tasks: {
+          start: (taskId, _label, run) => { started.push(taskId); void run(new AbortController().signal); return true },
+          cancel: () => {}, get: () => 'settled', emitProgress: () => {},
+        },
+      }),
+    })
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: 1, requestId: 'r2', input: { stage: 'claims' },
+    })
+    expect(result).toMatchObject({ ok: true, data: { completion: 'started' } })
+    expect(started).toHaveLength(1)
   })
 
   it('refuses to run without a bound workspace root', async () => {

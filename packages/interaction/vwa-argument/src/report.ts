@@ -453,6 +453,6 @@ function activeFindingCounts(
 }
 
 /** Cordis service registration (name `vwa-argument`; vwa-evidence consumes it structurally in slice 5). */
-export function registerVwaArgumentService(ctx: { service(name: string, value: unknown): unknown }, deps: VwaArgumentServiceDeps): void {
-  ctx.service('vwa-argument', new VwaArgumentService(deps))
+export function registerVwaArgumentService(ctx: { provide(name: string, value: unknown): unknown }, deps: VwaArgumentServiceDeps): void {
+  ctx.provide('vwa-argument', new VwaArgumentService(deps))
 }

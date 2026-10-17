@@ -45,7 +45,7 @@ export function createHostTaskService(
           cancel(reason?: string): void
           done: Promise<{ status: string; detail?: string }>
         }
-      }): { id: string }
+      }): string | { id: string }
       kill(id: string, caller?: unknown, reason?: string): string
       get(id: string): { status: string }
       list(caller?: unknown): unknown[]
@@ -56,6 +56,8 @@ export function createHostTaskService(
 ): ReviewTaskService {
   if (jobs === undefined) throw new Error('REVIEW_UNAVAILABLE: no background task service is mounted')
   const handles = new Map<string, { updateProgress(line: string): void }>()
+  // taskId (= runId) → the registry-issued `<kind>-N` job id kill/get address.
+  const jobIds = new Map<string, string>()
   return {
     start(taskId, label, run) {
       try {
@@ -66,7 +68,7 @@ export function createHostTaskService(
       }
       let controller: AbortController | undefined
       try {
-        jobs.start({
+        const issued = jobs.start({
           kind: 'vwa-review',
           label,
           ...(owner === undefined ? {} : { owner }),
@@ -80,6 +82,7 @@ export function createHostTaskService(
             return { cancel: (reason?: string) => controller?.abort(reason), done }
           },
         })
+        jobIds.set(taskId, typeof issued === 'string' ? issued : issued.id)
         return true
       } catch {
         return false
@@ -88,14 +91,14 @@ export function createHostTaskService(
     cancel(taskId) {
       // Cancellation travels through the host registry: jobs.kill(runId).
       try {
-        jobs.kill(taskId, owner, 'review cancelled')
+        jobs.kill(jobIds.get(taskId) ?? taskId, owner, 'review cancelled')
       } catch {
         // Already settled — kill is advisory.
       }
     },
     get(taskId) {
       try {
-        const status = jobs.get(taskId)?.status
+        const status = jobs.get(jobIds.get(taskId) ?? taskId)?.status
         return status === 'running' || status === 'stopping' ? 'running' : 'settled'
       } catch {
         return 'unknown'

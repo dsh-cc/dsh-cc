@@ -69,6 +69,7 @@ interface Booted {
   reviewer: EnvelopeReviewer
   agentAt(root: string): unknown
   exec(name: string, args: unknown, agent: unknown): Promise<Record<string, unknown>>
+  commandNames: string[]
 }
 
 const disposers: (() => Promise<void>)[] = []
@@ -87,7 +88,8 @@ async function boot(settings: Record<string, unknown> = { 'semantic-enabled': tr
   const ctx = new Context()
   ;(ctx as unknown as { dshHomePath: () => string }).dshHomePath = () => dshHome
   ctx.provide('systemPrompt', { tools: () => () => {}, section: () => () => {} })
-  ctx.provide('commands', { register: () => () => {} })
+  const commandNames: string[] = []
+  ctx.provide('commands', { register: (definition: { name: string }) => { commandNames.push(definition.name); return () => {} } })
   // The alias registry: `reviewer` routes to the test provider (no concrete id in src).
   ctx.provide('ccModelRoutes', {
     resolve: (alias: string | undefined) => (alias === 'reviewer' ? { provider: PROVIDER, model: REVIEWER_MODEL } : undefined),
@@ -130,7 +132,7 @@ async function boot(settings: Record<string, unknown> = { 'semantic-enabled': tr
     if (result.isError) throw new Error(`${name} failed: ${result.error?.message}`)
     return result.value as Record<string, unknown>
   }
-  return { ctx, reviewer, agentAt, exec }
+  return { ctx, reviewer, agentAt, exec, commandNames }
 }
 
 function initProject(root: string): string {
@@ -158,7 +160,9 @@ async function waitForRun(root: string, projectId: string, requestId: string): P
 
 describe('vwa-argument real mount (semantic-enabled)', () => {
   it('registers the lane-2 tools and the vwa-argument service on a real cordis mount', async () => {
-    const { ctx } = await boot()
+    const { ctx, commandNames } = await boot()
+    // The user-surface /vwa command reaches the real commands service too.
+    expect(commandNames).toContain('vwa')
     const tools = (ctx as unknown as { tools: { get(name: string): unknown } }).tools
     for (const name of ['evidence.register', 'evidence.search_log', 'argument.update', 'argument.review']) {
       expect(tools.get(name), name).toBeDefined()

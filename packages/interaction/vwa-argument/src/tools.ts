@@ -16,10 +16,12 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readUserSettingsSync } from './settings.ts'
 import { sha256Hex, stableJson } from './schema.ts'
-import { VwaFail, fail, ProjectStore, type Result } from './store.ts'
+import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
 import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
@@ -61,13 +63,17 @@ export interface ToolDeps {
    * Review collaborators (§10.6/Appendix A). Absent → `argument.review` is
    * disabled with REVIEW_UNAVAILABLE (never a synchronous long call).
    */
-  review?: {
-    adapter: ReviewModelAdapter
-    budget: ReviewBudget
-    tasks?: ReviewTaskService
-    readSnapshot?(sourceId: Id): string | undefined
-    emitProgress?(event: { runId: Id; stage: string; message: string }): void
-  }
+  review?: ReviewCollaborators | ((agent: unknown) => ReviewCollaborators | Fail)
+}
+
+/** The review collaborator bundle (Appendix A); production builds it per call (review-host.ts). */
+export interface ReviewCollaborators {
+  adapter: ReviewModelAdapter
+  budget: ReviewBudget
+  tasks?: ReviewTaskService
+  /** Snapshot text by source id; defaults to the project's on-disk exact-byte snapshot. */
+  readSnapshot?(sourceId: Id): string | undefined
+  emitProgress?(event: { runId: Id; stage: string; message: string }): void
 }
 
 /** The §10.6 stage union: the audit stage dispatches extract+align (§12). */
@@ -255,6 +261,8 @@ export function registerArgumentTools(registrar: { tools: { register(definition:
       if (deps.review === undefined) {
         return fail('REVIEW_UNAVAILABLE', 'no review adapter or background task service is mounted', true)
       }
+      const resolved = typeof deps.review === 'function' ? deps.review(exec.agent) : deps.review
+      if ('ok' in resolved) return resolved
       const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string }
       const stage = body.stage
       if (stage === undefined || (stage !== 'all' && stage !== 'audit' && !REVIEW_STAGES.has(stage))) {
@@ -294,11 +302,19 @@ export function registerArgumentTools(registrar: { tools: { register(definition:
       // Disabled without a task service (Appendix A): REVIEW_UNAVAILABLE, never a blocking call.
       let tasks: ReviewTaskService
       try {
-        tasks = deps.review.tasks ?? createHostTaskService(undefined)
+        tasks = resolved.tasks ?? createHostTaskService(undefined)
       } catch {
         return fail('REVIEW_UNAVAILABLE', 'no background task service is mounted', true)
       }
-      const review = deps.review
+      const review = resolved
+      // §11.4: quotes/context come from the exact-byte snapshot on disk unless the host overrides.
+      const readSnapshot = review.readSnapshot ?? ((sourceId: Id): string | undefined => {
+        try {
+          return readFileSync(join(store.snapshotDir, `${sourceId}.md`), 'utf8')
+        } catch {
+          return undefined
+        }
+      })
       // §12: the audit stage needs the bound artifact's ACTUAL bytes; the
       // artifact is resolved from the bound snapshot + the host text map.
       let artifact: { id: string; path: string; text: string } | undefined
@@ -320,13 +336,13 @@ export function registerArgumentTools(registrar: { tools: { register(definition:
             adapter: review.adapter,
             budget: review.budget,
             contractHash: sha256Hex(stableJson(snapshot.contract)),
-            ...(review.readSnapshot === undefined ? {} : { readSnapshot: review.readSnapshot }),
+            readSnapshot,
             ...(review.emitProgress === undefined ? {} : { emitProgress: review.emitProgress }),
           },
           runId,
           requestId: args.requestId,
           stages,
-          targetClaimIds: body.targetClaimIds ?? [],
+          targetClaimIds: resolveTargetClaimIds(snapshot, body),
           snapshot,
           signal,
           ...(artifact === undefined ? {} : { artifact }),
@@ -341,6 +357,20 @@ export function registerArgumentTools(registrar: { tools: { register(definition:
   })
 }
 
+/**
+ * §10.6 target defaulting: an empty targetClaimIds means every claim with an
+ * occurrence in the bound artifact (the named one, or the only one); with no
+ * bound artifact, every project claim.
+ */
+export function resolveTargetClaimIds(snapshot: ProjectSnapshot, body: { artifactId?: string; targetClaimIds?: string[] }): Id[] {
+  if (body.targetClaimIds !== undefined && body.targetClaimIds.length > 0) return body.targetClaimIds
+  const artifact = body.artifactId !== undefined
+    ? snapshot.artifacts.find((candidate) => candidate.id === body.artifactId)
+    : snapshot.artifacts.length === 1 ? snapshot.artifacts[0] : undefined
+  if (artifact !== undefined) return [...new Set(artifact.occurrences.map((occurrence) => occurrence.claimId))]
+  return snapshot.claims.map((claim) => claim.id)
+}
+
 /** True when the lane-2 feature gate is on in the raw settings file (§13). */
 export function semanticEnabled(dshHome: string): boolean {
   return readUserSettingsSync(dshHome)['semantic-enabled']
@@ -353,8 +383,9 @@ export function semanticEnabled(dshHome: string): boolean {
  */
 export function mountArgumentTools(ctx: Context, deps: ToolDeps, dshHome: string): void {
   if (!semanticEnabled(dshHome)) return
-  ctx.inject(['tools'], (tools: unknown) => {
-    const registrar = tools as unknown as { register(definition: ToolDefinition): unknown }
+  // cordis passes the injected sub-context, not the service, to the callback.
+  ctx.inject(['tools'], (injected: Context) => {
+    const registrar = (injected as unknown as { tools: { register(definition: ToolDefinition): unknown } }).tools
     registerArgumentTools({ tools: registrar }, deps)
   })
 }
