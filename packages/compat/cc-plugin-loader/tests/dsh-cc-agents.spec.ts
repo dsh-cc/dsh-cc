@@ -176,7 +176,7 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR, seams: { subagents } })
     try {
       const skills = mount.report.components.find(c => c.kind === 'skills')
-      expect(skills?.loaded).toBe(2)
+      expect(skills?.loaded).toBe(3)
       expect(skills?.skipped).toBe(0)
       expect(skills?.failed).toBe(0)
       // Real-registry visibility (a tally alone cannot prove it — a duplicate
@@ -189,6 +189,13 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       const dataAnalysis = await ctx.skills.get('data-analysis')
       expect(dataAnalysis).toBeDefined()
       expect(dataAnalysis?.invocation.modelInvocable).toBe(true)
+      const writing = await ctx.skills.get('vwa-writing')
+      expect(writing).toBeDefined()
+      expect(writing?.invocation.modelInvocable).toBe(true)
+      expect(writing?.invocation.userInvocable).toBe(true)
+      expect(writing?.resourceBase).toEqual({ kind: 'directory', path: resolve(REAL_PLUGIN_DIR, 'skills/vwa-writing') })
+      expect(writing?.content).toContain('references/tool-contract.md')
+      expect(writing?.content).toContain('scripts/preflight.mjs')
     } finally {
       mount.dispose()
     }
