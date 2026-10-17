@@ -2,45 +2,52 @@
 
 **English** | [简体中文](README.zh.md)
 
-## Claude Code-style workflows. Your models. DeepSeek Harness.
+## Coding and document workflows on DeepSeek Harness
 
-`dsh-cc` turns [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) into a batteries-included coding environment for everyday development. Keep familiar project assets and interaction patterns while choosing the models, tools, permissions, and agent composition that fit your environment.
+`dsh-cc` adds Claude Code workflows to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). You select the models, tools, permissions, and agent configuration.
 
-- **Reuse familiar workflows:** `.claude/agents`, `SKILL.md`, `CLAUDE.md`, hooks, permissions, slash commands, and resumable sessions.
-- **Bring your own model strategy:** route aliases such as `sketch`, `draft`, `blueprint`, and `masterplan` to any provider/model pair supported by your dsh deployment.
-- **Run a complete coding loop:** TUI, MCP, memory, subagents, background tasks, worktrees, structured output, deferred tool discovery, reversible tool-output compression (`context-crusher` + `context_retrieve`), and cost-gated compaction.
-- **Stay composable:** install the experience through native dsh profiles and plugins instead of maintaining a permanent DeepSeek Harness fork.
+- Reuse `.claude/agents`, `SKILL.md`, `CLAUDE.md`, hooks, slash commands, and saved sessions.
+- Map model aliases to the provider and model that your deployment has.
+- Use TUI, MCP, memory, subagents, background tasks, worktrees, and structured output.
+- Use `context-crusher` and `context_retrieve` for reversible tool-output compression.
+- Add evidence checks for documents with the optional `vwa-writing` skill.
 
-> `dsh-cc` is not Claude Code and is not a wrapper around Claude Code. It implements familiar Claude Code-style workflows on the open, composable DeepSeek Harness runtime.
+`dsh-cc` is a plugin stack for DeepSeek Harness. It is not Claude Code or a wrapper for Claude Code.
 
 ## Quick start
 
-Install DeepSeek Harness and the `dsh-cc` launcher, then start coding:
+Install DeepSeek Harness and the launcher.
 
 ```sh
 npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-`dsh-cc` requires `dsh` **>= 0.2.0-rc.2**; the default `npm install -g @deepseek-ai/dsh` currently satisfies this (as of 2026-09-29), and the launcher enforces the floor at bootstrap. This floor tracks the development line; per-release pairings are listed in the table below.
+The launcher must have `dsh >= 0.2.0-rc.2`. If dsh is an earlier version, the launcher stops with an upgrade message.
 
-Already have `dsh` **>= 0.2.0-rc.2**? Install only the launcher:
+If the necessary dsh version is installed, install only the launcher.
 
 ```sh
 npm install -g @dsh-cc/cli
 dsh-cc
 ```
 
-### Upgrading
+### Upgrade
 
 ```sh
 npm install -g @dsh-cc/cli@latest
 dsh-cc
 ```
 
-On the first launch after an upgrade, the launcher re-runs the profile's bundle install at the new version (recorded in `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`), so the profile converges automatically, with no manual step. A failed reconcile (e.g. network, or the fresh release still inside npm/pnpm's minimum-release-age window) warns and boots anyway, retrying on the next launch. Dev-synced profiles (via `scripts/sync-local-profile.sh`) are never reconciled by the launcher; they follow the dev-restore flow instead.
+After an upgrade, the launcher updates the profile bundles at the next start. It records the version in `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`.
 
-The launcher creates and boots the CC-oriented `tui` profile. To compose the profile explicitly instead:
+If the update cannot complete, the launcher shows a warning and starts the active profile. The next start runs the update again.
+
+Network errors and the npm/pnpm minimum-release-age limit can delay an update. Profiles from a development sync use the development restore process.
+
+### Profile installation
+
+The launcher makes the `tui` profile. To install its bundles directly, use these commands.
 
 ```sh
 dsh plugin --profile tui add \
@@ -50,7 +57,7 @@ dsh plugin --profile tui add \
 dsh --profile tui
 ```
 
-The same backend also works with the dsh web UI:
+For the web UI, use these commands.
 
 ```sh
 dsh plugin --profile web add \
@@ -61,7 +68,7 @@ dsh web
 
 ### dsh version compatibility
 
-Each dsh-cc release is developed and CI-verified against one DeepSeek Harness (`dsh`) version. The launcher enforces that same version as the minimum dsh at bootstrap and refuses to start when dsh is older, with an upgrade hint.
+Each release has one dsh version for CI verification. The launcher also uses that version as its minimum requirement.
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
@@ -72,22 +79,28 @@ Each dsh-cc release is developed and CI-verified against one DeepSeek Harness (`
 | v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
 | v0.5.0 | 0.1.1-rc.2 (no launcher version gate) |
 
-There is no enforced upper bound, but only the listed pairing is CI-verified; running dsh-cc against a dsh newer than its verified version is untested territory. When a new dsh-cc release moves to a newer dsh version, upgrade dsh first, then dsh-cc.
+There is no maximum version limit. A newer dsh version can be untested. Upgrade dsh first when a dsh-cc release raises its minimum.
 
-The two packages ship on independent schedules, so `@latest` on one side is not necessarily the verified partner of `@latest` on the other; check this table after upgrading either package.
+The two packages have different release schedules. Their `@latest` versions are not always a verified pair.
 
-Maintainers: the verified pin lives in `.github/workflows/presubmit.yml` (`DSH_HARNESS_REF`) and the launcher floor in `packages/launcher/tui/bootstrap.mjs` (`MIN_DSH_VERSION`); update this table when either changes.
+Maintainers: keep this table consistent with `DSH_HARNESS_REF` in `.github/workflows/presubmit.yml` and `MIN_DSH_VERSION` in `packages/launcher/tui/bootstrap.mjs`.
 
-### Optional: official plugins
+### Optional official plugins
 
-The bundles above are the whole quick start. Four optional official plugins, shipped through the repo's `dsh-cc` marketplace, add preconfigured subagent lanes and external model bridges:
+The bundles are sufficient for the quick start. The `dsh-cc` marketplace has four optional official plugins.
 
-- **`dsh-cc-agents`**: the `dsh-cc-agents:critic` (reasoning and plan review, `opus` alias), `dsh-cc-agents:executor` (mechanical execution, `sonnet` alias), and `dsh-cc-agents:marathon` (long-horizon or repo-wide complexity, `fable` alias) subagents, plus two routing skills (`dsh-cc-agents-orchestration` for picking an agent, `data-analysis` for analysis tasks) and optional serena code-intelligence hooks (gated on serena-onboarded repos).
-- **`dsh-cc-shunt`**: PreToolUse gates that redirect bulk file reads and boilerplate generation to cheap-lane worker subagents, keeping large file corpora out of the main context (configure a `haiku` alias for real token savings).
-- **`cc-codex-bridge`**: an approval-free Codex rescue lane. A PreToolUse hook auto-allows exactly one canonical, locked-down Codex invocation per session run, so a stuck session can hand a task to Codex without a permission checkpoint.
-- **`cc-grok-bridge`**: the same pattern for a Grok review lane; one canonical invocation is auto-allowed so external Grok review passes need no per-run approval.
+- **`dsh-cc-agents`** has three subagents, three skills, and optional Serena hooks.
+  - `critic` uses `opus` for analysis and review.
+  - `executor` uses `sonnet` to execute a specified plan.
+  - `marathon` uses `fable` for large or uncertain tasks.
+  - The skills are `dsh-cc-agents-orchestration`, `data-analysis`, and **`vwa-writing`**.
+- **`dsh-cc-shunt`** sends bulk reads and code generation again and again to worker subagents. Configure `haiku` for lower model cost.
+- **`cc-codex-bridge`** lets you run one specified Codex command form through its PreToolUse hook.
+- **`cc-grok-bridge`** lets you run one specified Grok command form through its PreToolUse hook.
 
-Install them inside a session:
+Use the scoped subagent names, for example, `dsh-cc-agents:critic`. The bridge hooks do not get approval for each permitted command invocation.
+
+Install plugins in a session.
 
 ```text
 /plugin marketplace add dsh-cc/dsh-cc
@@ -95,27 +108,102 @@ Install them inside a session:
 /plugin install dsh-cc-shunt@dsh-cc
 ```
 
-`/plugin install` flips the `enabledPlugins` flag for you; restart the session so the new agents and hooks are picked up. To update later, re-pull the marketplace and then update the plugin: `/plugin marketplace update dsh-cc`, then `/plugin update <id>`. Each plugin's own README ([agents](packages/plugin/dsh-cc-agents/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md), [cc-codex-bridge](packages/plugin/cc-codex-bridge/README.md), [cc-grok-bridge](packages/plugin/cc-grok-bridge/README.md)) covers configuration and known limits.
+Installation sets `enabledPlugins`. Restart dsh to load the new agents, skills, and hooks.
 
-## Why developers use dsh-cc
+To update an installed plugin, update the marketplace first. Then update the plugin cache.
 
-| Need | What dsh-cc provides |
+```text
+/plugin marketplace update dsh-cc
+/plugin update dsh-cc-agents@dsh-cc
+```
+
+A marketplace update by itself does not update the installed plugin. Restart dsh after the plugin update.
+
+Read each plugin README for its configuration and limits: [agents](packages/plugin/dsh-cc-agents/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md), [Codex](packages/plugin/cc-codex-bridge/README.md), and [Grok](packages/plugin/cc-grok-bridge/README.md).
+
+## Write and review documents with VWA
+
+CC is the default preset. Installing `dsh-cc-agents` does not select VWA or enable semantic review.
+
+The `vwa-writing` skill can write a new article or review an article. Its workflow has evidence, claims, arguments, review, and delivery.
+
+Use a dsh-cc build with the lane-2 tools. A different Claude-compatible host can load the skill without the necessary tools.
+
+1. Install or update `dsh-cc-agents` with the procedure above.
+2. Add these settings to `$DSH_HOME/settings.json`. The default directory is `~/.dsh`.
+
+```json
+{
+  "vwa-argument": {
+    "semantic-enabled": true,
+    "review-alias": "sonnet"
+  },
+  "vwa-evidence": {
+    "enabled": true
+  }
+}
+```
+
+3. Restart dsh to mount the enabled tools.
+4. Run `/preset vwa`. If the session is locked, start a new session.
+5. Run `/vwa init` one time in the workspace.
+6. Use `/skills` to check that `vwa-writing` is present.
+
+Then tell the agent to use the skill. For example:
+
+```text
+Use vwa-writing to review docs/article.md against docs/sources/. Do not change the article.
+```
+
+For a new article, give the research question, source scope, and output path. If you want repairs, let the agent change the body.
+
+The skill checks prerequisites before work. If setup is not complete, it gives the necessary user actions in one message.
+
+It does not change global settings or execute user-only commands. Only the user can run `/vwa sign` and `/vwa adjudicate`.
+
+### Review behavior and limits
+
+The workflow registers source excerpts, builds the argument graph, binds the bound body, and starts `argument.review` with `input.stage: "all"`.
+
+The agent waits for the job before it makes a report. After related changes, approved repairs must have a new binding and review.
+
+The runtime sets grades and delivery status. The skill and a critic opinion cannot replace those checks.
+
+The specified body path and report path must be in the host presentation event before `delivered-reviewed` is possible.
+
+A pending job, a failed check, or an exhausted budget cannot count as a passed review. The runtime can deliver an unverified draft.
+
+`review-alias` selects a model alias. The default is `sonnet`. An unconfigured built-in alias can inherit the main model.
+
+`semantic-mode` sets the initial project mode label. It does not make a passed review necessary for each delivery.
+
+Project review limits are frozen at initialization. Review adds model calls, time, and token use.
+
+Semantic review is experimental. The human annotation study has 60 cases. That study and acceptance tests with live models are not complete. A grade does not show that all claims are correct.
+
+See the [plugin guide](packages/plugin/dsh-cc-agents/README.md#vwa-writing) and [acceptance record](docs/vwa/lane2-validation.md).
+
+## Why use dsh-cc?
+
+| Need | Capability |
 | --- | --- |
-| Keep project conventions | Loads Claude Code-style agents, skills, project memory, settings, hooks, and plugin commands |
-| Mix fast and capable models | Maps stable aliases to deployment-controlled provider/model routes |
-| Delegate larger tasks | Supports subagent dispatch, background work, task inspection, and resume-aware routing |
-| Work safely in parallel | Adds permission rules, approval flows, worktree tools, and workspace boundaries |
-| Avoid loading every tool up front | Provides deferred discovery through `ToolSearch` and MCP integration |
-| Move between interfaces | Exposes the same CC-oriented backend through terminal and web profiles |
+| Keep project rules | Agents, skills, memory, settings, hooks, and commands |
+| Select models by task | Configured provider/model aliases |
+| Divide large tasks | Subagents, background jobs, and saved sessions |
+| Control changes | Permissions, approval rules, worktrees, and workspace boundaries |
+| Find tools when needed | ToolSearch and MCP discovery |
+| Change interfaces | Terminal and web profiles |
+| Review document evidence | Optional VWA runtime and vwa-writing skill |
 
-`dsh-cc` is developed with `dsh-cc` itself. The repository's current setup routes work across Kimi, GLM, and DeepSeek models, plus a System One decision lane for the typed-approval `gauge` alias; see [Dogfooding dsh-cc](#dogfooding-dsh-cc) for the concrete mapping.
+This project uses dsh-cc for development. See [the example model configuration](#example-model-configuration).
 
-## Who is this for?
+## Users
 
-- Developers who want to use DeepSeek Harness directly as an everyday coding agent;
-- Teams that already have `.claude/` project assets and want to keep reusing agents, skills, hooks, and project memory;
-- Users who want to pick Kimi, GLM, DeepSeek, or other models per task instead of being tied to a single vendor;
-- Plugin authors who want to compose or extend an agent's permissions, tools, memory, subagents, and UI rather than maintain a product fork.
+- Developers that use DeepSeek Harness for coding.
+- Teams that reuse `.claude/` agents, skills, hooks, and project memory.
+- Users that select different models for different tasks.
+- Plugin authors that extend an agent runtime.
+- Writers that want evidence and argument checks for documents.
 
 ## Compatibility at a glance
 
@@ -142,11 +230,11 @@ Statuses were verified against upstream documentation retrieved as of 2026-09-23
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->
 
-## Familiar coding-agent workflows
+## Agent workflows
 
 ### Subagents
 
-Project-local Claude Code-style agent definitions under `.claude/agents` can be discovered and dispatched by the CC preset.
+The CC preset discovers project agent definitions in `.claude/agents`. Agent frontmatter can select a model alias.
 
 ```text
 .claude/
@@ -155,38 +243,31 @@ Project-local Claude Code-style agent definitions under `.claude/agents` can be 
     debugger.md
 ```
 
-Agent frontmatter can continue using familiar model aliases while dsh decides which provider/model actually serves the request.
-
 ### Skills
 
-`SKILL.md`-based skills are discovered by the CC skill provider, including project-specific skills and bundled utility skills.
+The skill provider discovers `SKILL.md` files in project and installed skill directories. Use `/skills` to inspect the effective catalog.
 
 ### Memory
 
-The memory layer supports `CLAUDE.md`-style context plus a dedicated write channel for durable memories. Memory is isolated by workspace, with optional shared team memory, and background dream consolidation kicks in automatically when memory-index pressure builds up.
+Memory has `CLAUDE.md` context and a separate write channel. Workspace memory is isolated. Shared team memory is optional.
+
+When memory-index pressure increases, a background consolidation process runs automatically.
 
 ### MCP
 
-The CC profile includes an MCP client with:
+The MCP client has tools, resources, prompts, and OAuth 2.1 authentication. Use `/mcp` to inspect and manage connections.
 
-- tools;
-- resources;
-- prompts;
-- OAuth 2.1 flows.
+#### Optional Serena code intelligence
 
-Use `/mcp` to inspect and manage MCP connections.
+A configured [Serena](https://github.com/oraios/serena) server adds symbol tools and prompt guidance. The `explore` subagent gets read-only symbol tools.
 
-#### Optional: Serena code intelligence
-
-When your MCP configuration connects a [Serena](https://github.com/oraios/serena) server, dsh-cc automatically takes advantage of it: the system prompt steers toward Serena's symbol tools for code questions, and the bundled `explore` subagent gains read-only symbol retrieval (`find_symbol`, `find_referencing_symbols`, `get_symbols_overview`). Serena is strictly optional; without it, sessions behave identically through the built-in Read/Grep tools, minus the steering hints.
-
-Install Serena once so a local `serena` binary is on `PATH`:
+Without Serena, the agent uses built-in Read/Grep tools. Install Serena if you want its symbol tools.
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-Then add it to `~/.dsh/.mcp.json` (or a project `.mcp.json`) using the local binary:
+Add the server to `~/.dsh/.mcp.json` or a project `.mcp.json`.
 
 ```json
 {
@@ -199,21 +280,23 @@ Then add it to `~/.dsh/.mcp.json` (or a project `.mcp.json`) using the local bin
 }
 ```
 
-Avoid launching it via `uvx --from git+…`: every server start would write `~/.cache/uv`, which the session sandbox denies.
+Use the installed binary. A `uvx --from git+…` start writes to `~/.cache/uv`, which the session sandbox denies.
 
-`/doctor` reports the connection under the `mcp.serena` check.
+Use `/doctor` to inspect the `mcp.serena` check.
 
 ### Hooks
 
-Claude Code-style hooks can react to session, prompt, tool, permission, compaction, task, and subagent lifecycle events. Command and HTTP executors are supported, with additional prompt/agent executors available behind configuration gates.
+Hooks can react to session, prompt, tool, permission, compaction, task, and subagent events. Command and HTTP executors are available.
 
-This repository ships a tracked `hooks.json` (the CC preset loads it from the launch cwd) carrying the repo-development hooks. The serena code-intelligence hooks ship with the official `dsh-cc-agents` plugin (gated; they fire here because this repo is serena-onboarded) and require `serena-hooks` on `PATH`; see [Local development](#local-development).
+Prompt and agent executors must have their configuration flags. See the [parity matrix](docs/cc-parity-matrix.md) for the implemented events.
 
-See the [parity matrix](docs/cc-parity-matrix.md) for the currently bridged event set.
+The CC preset loads this repository's tracked `hooks.json` from the launch directory. It contains development hooks.
+
+The optional `dsh-cc-agents` plugin contains the Serena hooks. See [local development](#local-development) for their prerequisites.
 
 ## Slash commands
 
-The CC preset exposes a growing command surface, including:
+The CC preset includes these commands. Use `/help` to inspect the commands in your installed build.
 
 ```text
 /agents            manage continuable background agents
@@ -245,25 +328,41 @@ The CC preset exposes a growing command surface, including:
 /version           show version information
 ```
 
-The TUI also provides terminal-oriented interactions such as todo inspection, approval flows, queued prompts, transcript export, usage/context display, and local shell commands.
+The shared presets also include `/preset`. The VWA preset adds `/vwa` project commands.
 
-`/provider` opens an overlay over your configured model providers: `/provider list` prints the current routes, `/provider add <preset-id>` walks a wizard for the built-in presets (Moonshot, Z.AI/Zhipu, DeepSeek) or a fully custom endpoint, and the per-route detail view rotates keys, refreshes the model list, sets the default, or removes the route. API keys are typed into a masked field and stored in the credential store (`~/.dsh/.credentials.yaml`), never in settings; keys already supplied by the environment are shown read-only. Changes take effect for new sessions immediately (credentials resolve per request); the running session keeps its current provider until you pick again with `/model`.
+The TUI also has task lists, approvals, queued prompts, transcript export, usage displays, and local shell commands.
 
-### First-run onboarding
+### Provider setup
 
-On a fresh install with no model configured, the boot seed settles with no default route and the TUI opens the provider panel automatically: pick a preset, paste your API key (stored only in the credential store), set the default model, and you are ready to go. Dismissing the panel with `Esc` only skips it for the current session; the flow is re-offered on the next boot. To opt out permanently, set `cc-onboarding.suppressed: true` under the user settings namespace in `~/.dsh/settings.json`, and re-arm any time with `/onboard`. Non-interactive (non-TTY) runs never trigger the flow and keep the plain "No model configured" notice.
+Use `/provider list` to inspect routes. Use `/provider add <preset-id>` to add Moonshot, Z.AI/Zhipu, DeepSeek, or a custom endpoint.
 
-## Use the models you want
+The provider panel can change keys, refresh model lists, select defaults, and remove routes.
 
-Claude Code-style agent definitions often refer to models using aliases:
+Type keys into the masked field. The credential store is `~/.dsh/.credentials.yaml`. Settings do not contain those keys.
+
+Keys from environment variables are read-only in the panel. Credentials resolve per request. Changed defaults apply to new sessions.
+
+Use `/model` to change the running session's model route.
+
+### First start
+
+Without a default model, the TUI opens the provider panel. Select a provider, enter its key, and set a default model.
+
+Esc skips setup for the active session. The panel returns at the next start.
+
+Set `cc-onboarding.suppressed: true` in user settings to suppress automatic setup. Use `/onboard` to enable setup again.
+
+Non-TTY runs do not open this panel. They show the no-model message.
+
+## Model aliases
+
+An agent definition can select an alias.
 
 ```yaml
 model: sonnet
 ```
 
-`dsh-cc` can route those aliases to provider/model pairs configured for your deployment.
-
-Conceptually:
+The configured route selects the actual provider and model.
 
 ```text
 sonnet / draft      -> <provider>/<general coding model>
@@ -275,11 +374,11 @@ gauge               -> typed-decision cheap lane (System One models; not generat
 inherit             -> parent agent route
 ```
 
-Aliases are configuration, not hard-coded vendor bindings. This lets you preserve familiar agent definitions while choosing the models that fit your own environment.
+Aliases are configuration, not fixed vendor assignments. A missing built-in alias usually inherits the parent route.
 
-### Dogfooding dsh-cc
+### Example model configuration
 
-`dsh-cc` is now developed with `dsh-cc` itself. The project's current development setup uses the same model-alias routing described above, with this mapping:
+The repository development configuration uses this mapping. It is an example, not a necessary default.
 
 | Alias | Model |
 | --- | --- |
@@ -290,31 +389,23 @@ Aliases are configuration, not hard-coded vendor bindings. This lets you preserv
 | `gauge` | `jev` (System One decision lane: typed verdicts, not generative) |
 | `architect` | inherit (main thread) |
 
-This is a real project configuration rather than a required default: users can map the aliases to any provider/model combination supported by their DeepSeek Harness deployment.
+## Product boundaries
 
-## How this is different
+Claude Code is a separate product. dsh-cc adds Claude-compatible workflows to the DeepSeek Harness runtime.
 
-### vs. Claude Code
+A model router changes model routes. This stack also adds UI, commands, tools, memory, subagents, hooks, permissions, sessions, and worktrees.
 
-Claude Code is a complete coding-agent product. `dsh-cc` instead brings many familiar interaction patterns to the DeepSeek Harness runtime, where the deployment controls models, tools, plugins, permissions, and agent composition.
-
-### vs. a DeepSeek Harness fork
-
-This repository is designed primarily as an out-of-repo plugin stack. Most functionality is installed and composed through dsh profiles, reducing the amount of permanent fork maintenance required as upstream evolves.
-
-A small number of upstream packages are vendored where the required extension point cannot currently be expressed as a wrapper. See [Architecture notes](#architecture) below.
-
-### vs. model/API routers
-
-A model-routing proxy only switches models. `dsh-cc` extends the agent runtime and developer experience itself: UI, commands, tools, memory, subagents, hooks, MCP, permissions, sessions, and worktree workflows.
+Most features use external plugins. Some packages contain upstream source copies because the necessary extension points are internal.
 
 ## CC Mode
 
-CC Mode is an additional dsh agent preset. The four built-in dsh modes remain behaviorally unchanged.
+CC is the default preset for the `tui` profile. The four built-in dsh modes keep their original behavior.
 
-On the `tui` profile, CC Mode is the default. On other profiles it can be selected through the preset selector or configured as the default agent preset.
+For other profiles, select CC in the preset selector or configure CC as the default.
 
-The terminal profile launches in fullscreen mode by default. To opt out for one invocation:
+`/preset vwa` can change the saved default for new sessions. To return to CC, use `/preset cc`.
+
+The terminal profile uses fullscreen mode by default. To use regular mode for one start, run this command.
 
 ```sh
 DSH_CCTUI_UI_MODE=regular dsh --profile tui
@@ -322,21 +413,17 @@ DSH_CCTUI_UI_MODE=regular dsh --profile tui
 
 ## Configuration
 
-Your profile remains ordinary dsh composition. Local tweaks can be placed in:
+Profiles use standard dsh composition. Put local profile overrides in this file.
 
 ```text
 ~/.dsh/profiles/tui/cordis.patch.yml
 ```
 
-They are applied after the installed bundles.
-
-Model alias configuration, permissions, settings precedence, hook behavior, memory options, and TUI behavior are exposed through the corresponding plugins/settings namespaces.
-
-For exact semantics, use the package READMEs and the [parity matrix](docs/cc-parity-matrix.md) as the source of truth.
+The overrides apply after the installed bundles. Package READMEs define settings precedence, model routes, permissions, hooks, memory, and TUI behavior.
 
 ### Custom status line
 
-On the `tui` profile, you can replace the built-in bottom status line with your own shell command (Claude Code-compatible). The block can live in the user file `~/.dsh/settings.json` or in a project `.claude/settings.json`:
+On `tui`, a shell command can replace the bottom status line. Put its configuration in user settings or project `.claude/settings.json`.
 
 ```json
 {
@@ -349,25 +436,27 @@ On the `tui` profile, you can replace the built-in bottom status line with your 
 }
 ```
 
-Project `.claude/settings.json` files shared with a Claude Code checkout work as-is; if both a camelCase `statusLine` and a dsh-native kebab `statusline` key are present, the dsh-native key wins.
+If the two keys are present, the dsh-native `statusline` key takes precedence over the compatible `statusLine` key.
 
-The command receives a Claude Code-compatible JSON session payload on stdin (the [CC statusline docs](https://code.claude.com/docs/en/statusline) describe the contract); dsh-cc supplies only the fields it can source truthfully. Its stdout's first lines (up to 3) become the status line (ANSI escapes are passed through); a failure or empty output renders a blank line. The command reruns on session boot/resume, new messages, mode and model changes, plus on the `refreshInterval` timer, which is in **seconds** (minimum 1). Scripts get `COLUMNS`/`LINES` in their environment.
+The command receives a JSON session payload on stdin. It contains only available fields from the [statusline contract](https://code.claude.com/docs/en/statusline).
 
-Current limits: only the first 3 output rows are rendered (CC renders every row). Settings files are hot-reloaded, so `settings.json` edits made outside the running session apply without a restart; when the `command` itself changes, the status line re-runs it immediately.
+The first three stdout rows become the status line. The output keeps ANSI escape sequences. A command error or empty output gives a blank line.
 
-## Compatibility and known limits
+The command runs at start, resume, new messages, mode changes, model changes, and each refresh interval.
 
-The goal is **useful Claude Code-style workflow compatibility**, not byte-for-byte emulation of Claude Code.
+`refreshInterval` is in seconds, with a minimum of one. The environment includes `COLUMNS` and `LINES`.
 
-Some areas are intentionally partial or depend on DeepSeek Harness extension points. Examples include parts of the hook event vocabulary, background subagent workflows, notification/IDE-shell behavior, and vendor-specific features.
+Settings edits apply without a restart. A changed command runs immediately. The three-row limit is different from Claude Code.
 
-The project tracks those differences explicitly instead of hiding them:
+## Known limits
 
-**[Read the full Claude Code parity matrix →](docs/cc-parity-matrix.md)**
+Compatibility is functional, not an exact copy of Claude Code. Some hook events, background workflows, IDE features, and vendor features are partial.
+
+Read the [parity matrix](docs/cc-parity-matrix.md) for the active status.
 
 ## Architecture
 
-The repository is a monorepo of small plugins and bundles grouped by responsibility:
+Packages are grouped by responsibility.
 
 ```text
 packages/
@@ -394,13 +483,13 @@ packages/
   launcher/       the dsh-cc executable
 ```
 
-Most packages are normal out-of-repo dsh plugins.
+Source copies include the tools registry, MCP client, hook protocol, Claude Code hook bridge, and pi-tui renderer.
 
-A few packages vendor upstream code when the required changes need private or internal extension points rather than composition. These currently include the tools registry, MCP client, hook protocol, and Claude Code hook bridge (mounted at runtime under distinct package names while preserving the expected service interfaces), plus the pi-tui terminal renderer under `ui/`, whose purity is enforced by `check:vendor-purity`.
+Runtime packages keep different names and service interfaces. The `check:vendor-purity` gate checks pi-tui source boundaries.
 
 ## Local development
 
-This repository expects a sibling DeepSeek Harness checkout at `../deepseek-harness` for local `link:` development dependencies.
+Install workspace dependencies from the lockfile.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -408,21 +497,25 @@ pnpm run typecheck
 pnpm test
 ```
 
-### Serena (`serena-hooks` on PATH)
+### Serena hooks
 
-The serena code-intelligence hooks (a PreToolUse remind nudge after a burst of raw reads/greps, plus SessionEnd cleanup of the per-session hook state) ship with the official `dsh-cc-agents` plugin (see its README's *Serena hooks* section for the gating contract). They fire in this repo because it is serena-onboarded (`.serena/project.yml` is tracked) once the plugin is enabled and the binary is on `PATH`:
+The official agents plugin contains the Serena reminder and session cleanup hooks. Their prerequisites are in its [README](packages/plugin/dsh-cc-agents/README.md#serena-hooks).
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-That pin provides `serena`, `serena-agent`, and `serena-hooks`. The plugin's gate wrappers pin hook state into the project (`SERENA_HOME=<repo>/.serena`): serena's default state dir (`~/.serena/hook_data`) is outside the session sandbox's writable surface, and serena swallows the failure; without the pin the remind counter never persists and the hooks silently no-op. State lands in `.serena/hook_data/` (gitignored), per session id, and is removed when the session is disposed.
+This repository has `.serena/project.yml`. With the plugin enabled and `serena-hooks` on PATH, the hooks can run.
 
-The repo's own tracked `hooks.json` keeps only repo-development hooks that reference `scripts/hooks/` (post-edit diagnostics nudge, serena failure watchdog).
+Hooks use `SERENA_HOME=<repo>/.serena`. This keeps hook state in the session sandbox write boundary.
 
-Health-check and index remain one-shot `uvx` commands; see [docs/code-intelligence-health.md](docs/code-intelligence-health.md).
+The default home can be unwritable, and Serena can suppress that error. Keep `.serena/hook_data/` out of version control.
 
-To test unpublished packages against a real profile:
+The installed pin also supplies `serena` and `serena-agent`. Health checks and indexing use one-shot uvx commands.
+
+See [code intelligence health](docs/code-intelligence-health.md) for those commands.
+
+To test unpublished packages in a real profile, use these commands.
 
 ```sh
 pnpm run build
@@ -430,45 +523,31 @@ bash scripts/sync-local-profile.sh web
 dsh web
 ```
 
-After a dev sync, `dsh-cc --version` shows a `-dev+<commit>[.dirty]` label
-identifying the source tree; updating the launcher via npm automatically
-returns the profile to the store bundles.
+After a development sync, `dsh-cc --version` shows `-dev+<commit>[.dirty]`. A launcher update through npm returns the profile to published bundles.
 
-To prove the production bundle set actually boots in a user-grade
-environment (fresh `DSH_HOME`, harness-healed fallback, pseudo-TTY, no LLM
-calls), run the same gate presubmit and publish use:
+Run the production boot check before delivery. It uses a temporary DSH_HOME and a pseudo-TTY, with no model calls.
 
 ```sh
 pnpm smoke:profile-boot
 ```
 
-The CC preset needs no separate install step: the `tui` profile's bundle patch
-declares the `cc` agent-preset registry roster directly, and the composition is
-carried by `@dsh-cc/preset-cc` (installed with the bundles into the profile's
-`node_modules`).
-
-See **[docs/dev.md](docs/dev.md)** for offline development details and repository-specific dependency rules.
+The bundles include `@dsh-cc/preset-cc`. A separate preset installation is not necessary for CC. See [development instructions](docs/dev.md) for dependency rules and offline work.
 
 ## Packages and releases
 
-Published plugins use the `@dsh-cc` npm scope. The root monorepo package is private; installable packages are released individually through the repository release tooling.
+Published packages use the `@dsh-cc` npm scope. The root package is private. Installable packages use the repository release tools.
 
-Release process details: **[docs/release.md](docs/release.md)**.
+See [the release process](docs/release.md).
 
 ## Project status
 
-`dsh-cc` is evolving alongside DeepSeek Harness. The compatibility surface can change as upstream adds new extension points or changes existing ones.
+Upstream changes can change this project's interfaces and compatibility. Use the parity matrix to check implemented features and known gaps.
 
-If you find a workflow that works differently from Claude Code, the [parity matrix](docs/cc-parity-matrix.md) is the best place to check whether it is implemented, partial, intentionally out of scope, or still missing.
+For English documentation, use the [ASD-STE100 writing rules](docs/i18n/ste100.md). Keep each Chinese README consistent with its English pair.
 
-Contributions, compatibility reports, and focused upstream extension proposals are welcome. Useful ways to help include:
+Give reproduction steps, `/doctor --json` output, fixes with tests, extension proposals, or real project examples.
 
-- compatibility reports with reproduction steps and `/doctor --json` output;
-- focused fixes and tests for one capability;
-- upstream extension proposals that reduce vendored code;
-- real-project model-routing and workflow examples.
-
-**[Open an issue](https://github.com/dsh-cc/dsh-cc/issues) · [View pull requests](https://github.com/dsh-cc/dsh-cc/pulls)**
+[Open an issue](https://github.com/dsh-cc/dsh-cc/issues) · [View pull requests](https://github.com/dsh-cc/dsh-cc/pulls)
 
 ## License
 

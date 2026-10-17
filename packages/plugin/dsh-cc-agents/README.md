@@ -2,132 +2,188 @@
 
 English | [中文](README.zh.md)
 
-Official dsh-cc plugin shipping three subagents and two skills:
+Official dsh-cc plugin with three subagents, three skills, and optional Serena hooks.
 
-- **`dsh-cc-agents:critic`** — reasoning-heavy work: complex analysis, architectural decisions, adversarial plan review, root-cause analysis. Runs on the `opus` model alias; read-only persona.
-- **`dsh-cc-agents:executor`** — mechanical execution of pre-approved, fully specified plans: formatting, simple refactors, boilerplate, renames, tests, docs, checks. Runs on the `sonnet` model alias.
-- **`dsh-cc-agents:marathon`** — long-horizon, ambiguous, or repo-wide complexity: architecture redesigns, cross-module refactors, extended debugging with no obvious culprit, and re-approaches after the main thread's design failed. Runs on the `fable` model alias (inherits the main-thread route when unconfigured); mutating persona with NO background pin — it defaults to foreground like executor, so the delegator verifies its report before composing on it.
-- **`dsh-cc-agents-orchestration` skill** — routing table for choosing between the agents, the background asymmetry, and their report contracts.
-- **`data-analysis` skill** — data-analysis tasks (caliber doubt, reconciliation, external reports; 数据分析/口径/对账) route through critic/executor with review/verification/execution meta-rules inlined into the dispatch prompts.
+## Components
 
-## Prerequisites
+| Component | Purpose | Model alias |
+| --- | --- | --- |
+| `dsh-cc-agents:critic` | Analysis, architecture decisions, plan review, and cause analysis | `opus` |
+| `dsh-cc-agents:executor` | Execution of approved, fully specified plans | `sonnet` |
+| `dsh-cc-agents:marathon` | Large changes, uncertain tasks, and extended debugging | `fable` |
+| `dsh-cc-agents-orchestration` | Agent selection and report contracts | Main agent |
+| `data-analysis` | Metric definitions, reconciliation, and report checks | Main agent |
+| `vwa-writing` | Source evidence, argument review, article writing, and delivery | Configured VWA reviewer |
 
-The agents request the `opus` / `sonnet` / `fable` model aliases. If those
-aliases are not configured, the agents still work — unconfigured aliases resolve to
-inherit-the-parent-route — but lane separation (heavy reasoning on a stronger
-model, mechanical work on a faster one) is lost until you configure them.
-Optional, not required.
+The critic has a read-only persona and usually runs in the background. Executor and marathon can change files and usually run in the foreground.
+
+Check their reports before you use the results. Critic read-only behavior is a persona rule, not a host-enforced write restriction.
+
+A missing built-in alias inherits the parent route. Configure aliases to select different models for different tasks.
 
 ## Install
 
-From your Claude-compatible client with plugin support:
+Use a Claude-compatible client with plugin installation commands.
 
-1. `/plugin marketplace add dsh-cc/dsh-cc`
-2. `/plugin install dsh-cc-agents@dsh-cc`
-3. Restart the session.
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install dsh-cc-agents@dsh-cc
+```
+
+Restart dsh to load the plugin. Use `/skills` to find `vwa-writing` and the other installed skills.
 
 ## Update
 
-Updates are **two commands** — a marketplace re-pull alone does NOT refresh
-the installed plugin cache:
+Update the marketplace first. Then update the installed plugin cache.
 
-1. `/plugin marketplace update dsh-cc`
-2. `/plugin update dsh-cc-agents@dsh-cc`
+```text
+/plugin marketplace update dsh-cc
+/plugin update dsh-cc-agents@dsh-cc
+```
+
+Restart dsh after the update. A marketplace update by itself does not update the installed plugin.
+
+## VWA writing
+
+Use `vwa-writing` for research articles, historical or literary analysis, and technical reports with source evidence.
+
+Use it to review an article without body changes, or to write and revise a new article.
+
+This workflow is optional for coding, translation, and copy editing. Use it if you want evidence review.
+
+### Prerequisites
+
+The skill does not enable VWA. CC is the default preset.
+
+Use a dsh-cc build with the lane-2 delivery tools. Other clients can load the skill without those tools.
+
+1. Add the following entries to `$DSH_HOME/settings.json`. The default directory is `~/.dsh`.
+
+```json
+{
+  "vwa-argument": {
+    "semantic-enabled": true,
+    "review-alias": "sonnet"
+  },
+  "vwa-evidence": {
+    "enabled": true
+  }
+}
+```
+
+2. Restart dsh after you change the enable flag.
+3. Run `/preset vwa`. If the active session is locked, start a new session.
+4. Run `/vwa init` one time in the workspace.
+5. Use `/vwa status` to inspect the project.
+
+`review-alias` is a configured alias, not a fixed model name. Its default is `sonnet`. A missing built-in alias can inherit the parent model.
+
+Project limits are frozen at initialization. The reviewer uses the host model route. Review uses model calls, tokens, and time.
+
+`semantic-mode` sets the initial project mode label. It does not make a passed review necessary for each delivery.
+
+The skill gives missing prerequisites in one message. Its read-only script checks settings, project metadata, and the tool names from live discovery.
+
+The script does not prove data integrity or article quality. Runtime tools perform those checks.
+
+The skill does not change global settings or write internal project state directly. Only the user can run user commands.
+
+### Requests
+
+For a new article, give the question, source scope, language, and output path. For example:
+
+```text
+Use vwa-writing to write a Chinese article about the port closure.
+Use docs/sources/ as evidence. Write docs/article.md.
+Explain the supported conclusions, disputed claims, and missing evidence.
+You may revise the article after review.
+```
+
+For an available article, tell the agent if it can change the body. For example:
+
+```text
+Use vwa-writing to review docs/article.md against docs/sources/.
+Do not change the article. Make a report of the findings.
+```
+
+### Workflow
+
+1. Check the available tools, settings, and active project.
+2. Set the research contract through `argument.update`.
+3. Read sources and register source excerpts without changes with `evidence.register`.
+4. Record actual searches with `evidence.search_log`.
+5. Build claims, evidence groups, and arguments through `argument.update`.
+6. Bind the bound body through `argument.update`.
+7. Run `argument.review` with `input.stage: "all"`.
+8. Wait for the host job and inspect the findings.
+9. Make approved repairs within the frozen budget. Rebind and review changed material.
+10. Make the report with `argument.report`.
+11. Present the specified body and report paths through the host.
+
+### Results and limits
+
+The runtime sets evidence grades, active findings, and delivery status. The skill cannot give itself a pass.
+
+A pending or incomplete job is not a passed review. A report or reviewed candidate is not a confirmed delivery.
+
+The two specified paths must be in the host presentation event before `delivered-reviewed` is possible. Without presentation, delivery is not confirmed.
+
+A failed review, missing evidence, or an exhausted budget stays visible. The result can be an unverified draft.
+
+Use the runtime report for claim strength, premises, reasoning, disputes, and evidence gaps. Put necessary limits in the body also.
+
+Only the user can run `/vwa sign` and `/vwa adjudicate`. A critic opinion does not replace `argument.review`.
+
+Semantic review is experimental. Human calibration and live-model acceptance are incomplete. A grade does not show that all claims are correct.
+
+The package includes the [skill](skills/vwa-writing/SKILL.md), [tool contract](skills/vwa-writing/references/tool-contract.md), and [writing rules](skills/vwa-writing/references/writing-rules.md).
+
+Relative resources resolve from the installed skill directory. A repository checkout is not necessary.
 
 ## Name collisions
 
-If your workspace defines file-based agents named `critic`, `executor`, or
-`marathon` (e.g. `.claude/agents/critic.md`), the bare names (`critic`)
-resolve to your workspace definitions; the plugin copies resolve only by the
-exact scoped ids (`dsh-cc-agents:critic` / `dsh-cc-agents:executor` /
-`dsh-cc-agents:marathon`).
-Both appear in the agent catalog; the plugin copies carry distinct
-"official plugin build" descriptions so you can tell them apart.
+Project agents can use the same bare names. Plugin agents use the specified scoped identifiers in the component table.
 
-## MCP-enhanced tool surfaces (optional)
+The two definitions can be in the catalog. The plugin definitions have an official-build description.
 
-All agents name deferred MCP tools in their frontmatter. When the host
-connects those servers, the names survive spawn-time filtering and are
-pre-activated before the child's first turn, so the agents call them
-directly:
+## Optional MCP tools
 
-- **critic** — five read-only serena symbol tools
-  (`mcp__serena__find_symbol`, `get_symbols_overview`,
-  `find_referencing_symbols`, `search_for_pattern`,
-  `get_diagnostics_for_file`), `mcp__sequential_thinking__sequentialthinking`,
-  and the two context7 documentation lookups.
-- **executor** — twelve serena symbol tools, including the
-  reference-aware editing family (`replace_symbol_body`,
-  `insert_before/after_symbol`, `rename_symbol`, `replace_content`,
-  `replace_in_files`, `get_diagnostics_for_file`,
-  `restart_language_server`); its serena-first editing policy activates
-  with them.
-- **marathon** — the executor editing family plus the critic reasoning set:
-  all twelve serena symbol tools (editing included),
-  `mcp__sequential_thinking__sequentialthinking` for multi-branch
-  exploration, and the two context7 documentation lookups.
+The agent definitions name optional MCP tools. The dsh-cc Task dispatcher removes unavailable names with a warning.
 
-Hosts without these servers are unaffected: the names are dropped with a
-startup warning and the agents run on built-in tools alone.
+With those servers connected, the dispatcher activates their named tools before the child starts. It also adds ToolSearch where necessary.
 
-**Portability note:** the drop-with-warning degradation is a property of
-the dsh-cc Task dispatch path, which sanitizes a definition's tool list
-against the live registry at spawn. The plugin loader's own exported
-`AgentProvider.start` overlays the raw tool restriction UNSANITIZED and
-may fail in the backend when a named server is absent — if you dispatch
-these definitions through provider.start directly (or embed them outside
-dsh-cc), strip the `mcp__*` entries or sanitize first. The enhancement
-also assumes the servers keep their conventional aliases (`serena`,
-`sequential_thinking`, `context7`); a renamed server degrades to the
-same drop-with-warning path.
+- Critic has five read-only Serena tools, sequential_thinking, and two context7 lookups.
+- Executor has twelve Serena tools, including symbol changes, diagnostics, and language-server restart.
+- Marathon has the executor tools plus the critic reasoning tools.
 
-## Serena hooks (optional)
+Keep the server aliases `serena`, `sequential_thinking`, and `context7`. Different aliases can make the named tools unavailable.
 
-The plugin ships two Claude-Code hooks for projects that use
-[Serena](https://github.com/oraios/serena) symbolic code tools:
+The direct `AgentProvider.start` path does not remove unavailable tool names. For direct calls, sanitize the list or remove unavailable MCP entries.
 
-- **PreToolUse** on `read`/`grep` (and serena tool calls) reminds the model
-  to reach for symbolic tools after a burst of raw reads/greps — a short
-  deny + nudge, at most once per two minutes per session.
-- **SessionEnd** cleans up the session's hook state
-  (`<project>/.serena/hook_data/<session-id>/`) when the session is disposed.
+## Serena hooks
 
-Both hooks are double-gated and stay silent no-ops unless the current
-session's project is serena-onboarded (`<repo>/.serena/project.yml`, found by
-walking up from the session cwd through the git toplevel) **and** the
-`serena-hooks` binary resolves on `PATH`:
+The PreToolUse hook can stop raw read/grep calls that occur again and again and give a symbol-tool reminder. Its limit is one reminder per two minutes per session.
+
+The SessionEnd hook removes that session's hook state. The two hooks must have a Serena project and `serena-hooks` on PATH.
+
+The project check searches from the session directory to the Git root for `.serena/project.yml`. Without the two prerequisites, the hooks do nothing.
+
+Install the binary with this command.
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-Hook state is pinned into the project (`SERENA_HOME=<repo>/.serena`) because
-the session sandbox makes serena's `~/.serena` default unwritable. Keep
-`.serena/hook_data/` out of version control.
+Hook state uses `SERENA_HOME=<repo>/.serena` to stay in the sandbox write boundary. Keep `.serena/hook_data/` out of version control.
 
-Two operational notes:
+Keep each reminder in one place. A second repository reminder can count the same calls twice.
 
-- **One channel per behavior.** If a repository also ships its own
-  `hooks.json` serena-remind entry, both fire and the shared counter
-  double-counts bursts. Keep the reminder in exactly one place — this plugin
-  or the repo.
-- **Cost on non-serena projects**: one ~50 ms gated node spawn per Read/Grep
-  and no python. Disable the plugin to opt out entirely; conversely, run
-  `/plugin update` after a dsh-cc release to pick up hook changes.
+Without a Serena project, each read/grep starts a gated Node process, usually about 50 ms. It does not start Python.
 
-## Advisory safety: critic
+Disable the plugin to remove that hook cost. Update the plugin after releases to get hook changes.
 
-`critic` retains the `Bash` tool for read-only verification (run a
-test, reproduce a failure, inspect history). Its read-only nature is a
-**persona contract, not an enforced restriction** — the host does not block
-a mutating command from a (by default backgrounded) reasoner. Avoid handing
-it mutation-tempting tasks and review its output before acting on it.
+## Local plugin directories
 
-## Advanced: pluginDirs
+The host composition setting `pluginDirs` can load a checkout or an installed `@dsh-cc/plugin-dsh-cc-agents` package.
 
-You can skip the marketplace and load the plugin from any local copy — a
-checkout of this repository, or a standalone `npm install
-@dsh-cc/plugin-dsh-cc-agents` — by pointing the host's `pluginDirs`
-composition-level setting at the package directory. This knob is
-configuration-level and unreachable from the CLI plugin commands; the
-marketplace flow above is the recommended path.
+Plugin CLI commands do not change this composition setting. Use marketplace installation for the usual setup.

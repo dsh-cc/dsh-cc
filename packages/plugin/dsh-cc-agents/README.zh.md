@@ -2,105 +2,188 @@
 
 [English](README.md) | 中文
 
-官方 dsh-cc 插件，提供三个 subagent 和两个 skill：
+官方 dsh-cc 插件，提供三个子代理、三个 skill 和可选的 Serena hooks。
 
-- **`dsh-cc-agents:critic`** — 推理密集型工作：复杂分析、架构决策、对抗性计划评审、根因分析。运行在 `opus` 模型别名上；只读人格。
-- **`dsh-cc-agents:executor`** — 对已批准、已完全指定的计划做机械执行：格式化、简单重构、样板代码、重命名、测试、文档、检查。运行在 `sonnet` 模型别名上。
-- **`dsh-cc-agents:marathon`** — 长周期、模糊或仓库级复杂度：架构重设计、跨模块重构、无明显线索的长期调试，以及主线程设计失败后的重新攻关。运行在 `fable` 模型别名上（未配置时继承主线程路由）；可变更人格，且没有后台 pin——默认像 executor 一样前台运行，因此委派方应在基于其报告继续之前先核验其报告。
-- **`dsh-cc-agents-orchestration` skill** — 用于在这些 agent 之间做选择的路由表，以及后台不对称性与它们的报告契约。
-- **`data-analysis` skill** — 数据分析类任务（口径存疑、对账、对外报告）经 critic/executor 编排执行，评审/验证/执行元规则内联进派发 prompt。
+## 组件
 
-## Prerequisites
+| 组件 | 用途 | 模型别名 |
+| --- | --- | --- |
+| `dsh-cc-agents:critic` | 分析、架构决策、计划评审和原因分析 | `opus` |
+| `dsh-cc-agents:executor` | 执行已批准且完全明确的计划 | `sonnet` |
+| `dsh-cc-agents:marathon` | 大型改动、不确定任务和长期调试 | `fable` |
+| `dsh-cc-agents-orchestration` | Agent 选择和报告契约 | 主 agent |
+| `data-analysis` | 指标口径、对账和报告检查 | 主 agent |
+| `vwa-writing` | 来源证据、论证审查、文章写作和交付 | 已配置的 VWA reviewer |
 
-这些 agent 请求 `opus` / `sonnet` / `fable` 模型别名。若这些别名未配置，
-agent 仍能工作——未配置的别名会解析为继承父路由——但在你配置它们之前，
-分道（重推理交给更强的模型、机械工作交给更快的模型）就不成立。
-可选，非必需。
+critic 采用只读人格，通常在后台运行；executor 和 marathon 可以修改文件，通常在前台运行。
 
-## Install
+使用结果前请核查其报告。critic 的只读行为属于人格规则，不是宿主强制执行的写入限制。
 
-在支持插件的 Claude 兼容客户端中：
+未配置的内置别名会继承父路由。若要为不同任务选择不同模型，请配置别名。
 
-1. `/plugin marketplace add dsh-cc/dsh-cc`
-2. `/plugin install dsh-cc-agents@dsh-cc`
-3. 重启会话。
+## 安装
 
-## Update
+使用支持插件安装命令的 Claude 兼容客户端。
 
-更新需要**两条命令**——仅重新拉取 marketplace 并不会刷新已安装的插件缓存：
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install dsh-cc-agents@dsh-cc
+```
 
-1. `/plugin marketplace update dsh-cc`
-2. `/plugin update dsh-cc-agents@dsh-cc`
+重启 dsh 以加载插件。用 `/skills` 查看 `vwa-writing` 和其他已安装技能。
 
-## Name collisions
+## 更新
 
-如果你的工作区定义了名为 `critic`、`executor` 或 `marathon` 的基于文件的
-agent（例如 `.claude/agents/critic.md`），裸名（`critic`）
-会解析到你的工作区定义；插件副本只能通过精确的带作用域 id 解析
-（`dsh-cc-agents:critic` / `dsh-cc-agents:executor` / `dsh-cc-agents:marathon`）。
-两者都会出现在 agent 目录中；插件副本带有独特的"official plugin build"
-描述以便区分。
+先更新插件市场，再更新已安装的插件缓存。
 
-## MCP-enhanced tool surfaces (optional)
+```text
+/plugin marketplace update dsh-cc
+/plugin update dsh-cc-agents@dsh-cc
+```
 
-所有 agent 都在其 frontmatter 中列出延迟加载的 MCP 工具名。当宿主连接
-这些服务器时，这些名字能在 spawn 期过滤中保留下来，并在子 agent 的首个
-回合前预先激活，因此 agent 可以直接调用它们：
+更新后请重启 dsh。仅更新插件市场不会更新已安装插件。
 
-- **critic** — 五个只读 serena 符号工具
-  （`mcp__serena__find_symbol`、`get_symbols_overview`、
-  `find_referencing_symbols`、`search_for_pattern`、
-  `get_diagnostics_for_file`），`mcp__sequential_thinking__sequentialthinking`，
-  以及两个 context7 文档查询。
-- **executor** — 十二个 serena 符号工具，包括引用感知的编辑家族
-  （`replace_symbol_body`、`insert_before/after_symbol`、`rename_symbol`、
-  `replace_content`、`replace_in_files`、`get_diagnostics_for_file`、
-  `restart_language_server`）；其 serena-first 编辑策略随这些工具激活。
-- **marathon** — executor 的编辑家族加上 critic 的推理集合：
-  全部十二个 serena 符号工具（含编辑类）、用于多分支探索的
-  `mcp__sequential_thinking__sequentialthinking`，以及两个 context7 文档查询。
+## VWA writing
 
-没有这些服务器的宿主不受影响：这些名字随启动警告被丢弃，agent 仅靠内置
-工具运行。
+需要来源证据的研究文章、历史或文学分析、技术报告，可使用 `vwa-writing`。
 
-**可移植性说明：**"带警告丢弃"的降级是 dsh-cc Task 派发路径的属性，该路径
-会在 spawn 时依据实时注册表对定义的工具列表做净化（sanitize）。插件加载器
-自己导出的 `AgentProvider.start` 会原样叠加工具限制而不净化，当命名的服务
-器缺失时可能在后端失败——如果你直接通过 provider.start 派发这些定义（或在
-dsh-cc 之外嵌入它们），请先剥离 `mcp__*` 条目或自行净化。该增强还假定这些
-服务器保持其惯用别名（`serena`、`sequential_thinking`、`context7`）；改名
-的服务器会落入同样的"带警告丢弃"路径。
+它既可在不修改正文的情况下审查已有文章，也可用于撰写和修订新文章。
 
-## Serena hooks（可选）
+普通编码、翻译和文字润色无需使用此流程，除非你明确要求证据审查。
 
-插件为使用 [Serena](https://github.com/oraios/serena) 符号化代码工具的项目附带两个 Claude-Code hook：
+### 前置条件
 
-- **PreToolUse** 作用于 `read`/`grep`（及 serena 工具调用）：连续爆发式裸读/裸搜之后提醒模型改用符号工具——一次简短的 deny + 提醒，每会话每两分钟至多一次。
-- **SessionEnd** 在会话销毁时清理本会话的 hook 状态（`<project>/.serena/hook_data/<session-id>/`）。
+skill 不会自动启用 VWA，默认 preset 仍是 CC。
 
-两个 hook 都经双重门控，只有同时满足两个条件才会生效，否则静默空转：当前会话项目已完成 serena 初始化（存在 `<repo>/.serena/project.yml`，从会话 cwd 沿目录树向上穿过 git 根查找）**且** `serena-hooks` 二进制能经 `PATH` 解析：
+请使用包含第二层交付工具的 dsh-cc 构建。其他客户端可能能加载 skill，但缺少这些工具。
+
+1. 将以下内容加入 `$DSH_HOME/settings.json`，默认目录为 `~/.dsh`。
+
+```json
+{
+  "vwa-argument": {
+    "semantic-enabled": true,
+    "review-alias": "sonnet"
+  },
+  "vwa-evidence": {
+    "enabled": true
+  }
+}
+```
+
+2. 修改启用开关后，重启 dsh。
+3. 执行 `/preset vwa`；如果当前会话已锁定，请新建会话。
+4. 在工作区执行一次 `/vwa init`。
+5. 用 `/vwa status` 查看项目。
+
+`review-alias` 是已配置的别名，不是固定模型名，默认为 `sonnet`；未配置的内置别名可能继承父模型。
+
+项目额度在初始化时冻结。reviewer 使用宿主模型路由，审查会消耗模型调用、token 和时间。
+
+`semantic-mode` 设置项目的初始模式标记，不会强制每次交付都通过审查。
+
+skill 会一次列出缺失的前置条件，只读脚本检查设置、项目元数据和实时发现的工具名称。
+
+该脚本不能证明数据完整性或文章质量，这些检查由运行时工具执行。
+
+skill 不会修改全局设置、冒充用户命令，也不会直接写入项目内部状态。
+
+### 使用请求
+
+撰写新文章时，请提供问题、资料范围、语言和输出路径，例如：
+
+```text
+请用 vwa-writing 写一篇关于港口关闭的中文文章。
+使用 docs/sources/ 中的资料作为证据，正文写入 docs/article.md。
+说明有依据的结论、有争议的主张和缺失的证据。
+审查后可以修订正文。
+```
+
+审查已有文章时，请说明是否允许修改，例如：
+
+```text
+请用 vwa-writing，依据 docs/sources/ 审查 docs/article.md。
+不要修改正文，请生成问题报告。
+```
+
+### 工作流程
+
+1. 检查可用工具、设置和当前项目。
+2. 用 `argument.update` 设置研究契约。
+3. 阅读来源，用 `evidence.register` 登记准确摘录。
+4. 用 `evidence.search_log` 记录实际进行的检索。
+5. 用 `argument.update` 建立主张、证据组和论证。
+6. 用 `argument.update` 绑定当前正文。
+7. 以 `input.stage: "all"` 调用 `argument.review`。
+8. 等待宿主任务结束并查看发现的问题。
+9. 在冻结额度内执行获准修订，相关内容变化后重新绑定并审查。
+10. 用 `argument.report` 生成报告。
+11. 通过宿主展示正文与报告的准确路径。
+
+### 结果与限制
+
+证据评级、当前问题和交付状态由运行时决定，skill 不能自行判定通过。
+
+等待中或未完成的任务不算审查通过，报告或已审查候选状态也不代表确认交付。
+
+正文和报告的准确路径都必须进入宿主展示事件，才可能达到 `delivered-reviewed`；缺少展示时，交付未确认。
+
+审查失败、证据缺失和预算耗尽都必须明确呈现，最终结果可能是未验证稿。
+
+用运行时报告查看主张强度、前提、推理、争议和证据缺口；必要限定也应写进正文。
+
+只有用户可以执行 `/vwa sign` 和 `/vwa adjudicate`。critic 的意见不能替代 `argument.review`。
+
+语义审查仍处于实验阶段，人工校准和真实模型验收尚未完成，评级不是事实正确性证书。
+
+包内包含 [skill](skills/vwa-writing/SKILL.md)、[工具契约](skills/vwa-writing/references/tool-contract.md)和[写作规范](skills/vwa-writing/references/writing-rules.md)。
+
+相对资源路径以已安装的 skill 目录为基准，无需仓库源码副本。
+
+## 名称冲突
+
+项目 agent 可以使用相同的裸名，插件 agent 使用组件表中的完整作用域标识符。
+
+两种定义都可能出现在目录中，插件定义带有官方构建说明。
+
+## 可选的 MCP 工具
+
+agent 定义声明了可选的 MCP 工具，dsh-cc Task 派发器会移除不可用的名称并显示警告。
+
+连接这些服务器后，派发器会在子 agent 启动前激活指定工具，并在需要时加入 ToolSearch。
+
+- Critic 声明五个只读 Serena 工具、sequential_thinking 和两个 context7 查询工具。
+- Executor 声明十二个 Serena 工具，包括符号修改、诊断和语言服务器重启。
+- Marathon 使用 executor 的工具，并增加 critic 的推理工具。
+
+请保留服务器别名 `serena`、`sequential_thinking` 和 `context7`；使用其他别名可能导致指定工具不可用。
+
+直接调用 `AgentProvider.start` 不会移除不可用工具名称。直接调用时，请先净化工具列表或删除不可用的 MCP 条目。
+
+## Serena hooks
+
+PreToolUse hook 可中止反复的原始 read/grep 调用并提醒使用符号工具，每个会话每两分钟最多提醒一次。
+
+SessionEnd hook 清理该会话的 hook 状态。两个 hook 都要求项目已配置 Serena，且 PATH 中可找到 `serena-hooks`。
+
+项目检查会从会话目录向上到 Git 根查找 `.serena/project.yml`。两个前置条件未同时满足时，hooks 不执行操作。
+
+用以下命令安装二进制。
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-hook 状态钉在项目内（`SERENA_HOME=<repo>/.serena`），因为会话沙箱使 serena 默认的 `~/.serena` 不可写。请把 `.serena/hook_data/` 保持出版本库外。
+Hook 状态通过 `SERENA_HOME=<repo>/.serena` 保持在沙箱写入边界内，请勿将 `.serena/hook_data/` 加入版本控制。
 
-两条运维须知：
+同一种提醒只保留一处。仓库内的第二个提醒可能对相同调用重复计数。
 
-- **一个行为只走一个渠道。** 如果仓库自己也带了 `hooks.json` 的 serena-remind 条目，两边会同时触发、共享计数器被双计。提醒只放在一处——本插件或仓库。
-- **非 serena 项目的开销**：每次 Read/Grep 多一个约 50 ms 的带门控 node 进程，不起 python。要完全退出可禁用本插件；反过来，dsh-cc 发版后用 `/plugin update` 拉取 hook 变更。
+没有 Serena 项目时，每次 read/grep 仍会启动一次带条件检查的 Node 进程，通常约 50 ms，不会启动 Python。
 
-## Advisory safety: critic
+禁用插件可消除这项 hook 开销。发布后请更新插件，以取得 hook 的变更。
 
-`critic` 保留 `Bash` 工具用于只读验证（跑测试、复现失败、查看历史）。
-其只读性是**人格契约，而非强制限制**——宿主不会阻止（默认置于后台的）
-推理者执行可变更命令。避免把诱使其修改数据的任务交给它，并在采纳其输出
-之前先审阅。
+## 本地插件目录
 
-## Advanced: pluginDirs
+宿主组合设置 `pluginDirs` 可加载源码副本或已安装的 `@dsh-cc/plugin-dsh-cc-agents` 包。
 
-你可以跳过 marketplace，把宿主的 `pluginDirs` 组合级设置指向本包目录，
-从任意本地副本加载插件——本仓库的 checkout，或独立执行
-`npm install @dsh-cc/plugin-dsh-cc-agents`。该开关是配置级的，CLI 插件
-命令无法触达；推荐使用上文的 marketplace 流程。
+插件 CLI 命令不能修改这个组合设置。常规使用请选择插件市场安装方式。

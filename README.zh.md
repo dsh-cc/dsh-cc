@@ -2,29 +2,30 @@
 
 [English](README.md) | **简体中文**
 
-## 熟悉的 Claude Code 工作流，自由选择模型，运行于 DeepSeek Harness
+## 在 DeepSeek Harness 上使用编程与文档工作流
 
-`dsh-cc` 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 组合成一个开箱即用、适合日常开发的编程 Agent 环境。你可以延续熟悉的项目资产与交互方式，同时自行决定使用哪些模型、工具、权限策略和 Agent 组合。
+`dsh-cc` 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加 Claude Code 风格的工作流。模型、工具、权限和 agent 配置由你选择。
 
-- **复用熟悉的工作流：** 支持 `.claude/agents`、`SKILL.md`、`CLAUDE.md`、hooks、权限规则、斜杠命令和会话恢复。
-- **自由组合模型：** 将 `sketch`、`draft`、`blueprint`、`masterplan` 等稳定别名映射到当前 dsh 部署支持的任意 provider/model。
-- **覆盖完整编程闭环：** 提供 TUI、MCP、记忆、子代理、后台任务、worktree、结构化输出、延迟工具发现、可逆的工具输出压缩（`context-crusher` + `context_retrieve`）以及成本门控的压缩（compaction）。
-- **保持可组合：** 通过 dsh 原生 profile/plugin 系统安装，无需长期维护 DeepSeek Harness fork。
+- 复用 `.claude/agents`、`SKILL.md`、`CLAUDE.md`、hooks、斜杠命令和已保存的会话。
+- 将模型别名映射到当前部署可用的 provider 和模型。
+- 使用 TUI、MCP、记忆、子代理、后台任务、worktree 和结构化输出。
+- 使用 `context-crusher` 与 `context_retrieve` 进行可逆的工具输出压缩。
+- 通过可选的 `vwa-writing` skill 为文档增加证据检查。
 
-> `dsh-cc` 不是 Claude Code，也不是 Claude Code 的包装器。它在开放、可组合的 DeepSeek Harness 运行时上实现了开发者熟悉的 Claude Code 风格工作流。
+`dsh-cc` 是 DeepSeek Harness 的插件栈，不是 Claude Code，也不是 Claude Code 的封装。
 
 ## 快速开始
 
-安装 DeepSeek Harness 和 `dsh-cc` 启动器，然后直接启动：
+安装 DeepSeek Harness 和启动器。
 
 ```sh
 npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-`dsh-cc` 要求 `dsh` **>= 0.2.0-rc.2**；默认的 `npm install -g @deepseek-ai/dsh` 目前即可满足（截至 2026-09-29），启动器会在启动时校验该下限。该下限跟随开发主线；各版本的具体配对见下表。
+启动器要求 `dsh >= 0.2.0-rc.2`。如果版本更旧，启动器会停止并提示升级。
 
-如果已经安装 `dsh` **>= 0.2.0-rc.2**，只需安装启动器：
+如果已经安装所需版本的 dsh，只需安装启动器。
 
 ```sh
 npm install -g @dsh-cc/cli
@@ -38,9 +39,15 @@ npm install -g @dsh-cc/cli@latest
 dsh-cc
 ```
 
-升级后首次启动时，启动器会按新版本重跑 profile 的 bundle 安装（记录在 `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`），profile 自动收敛，无需手动操作。reconcile 失败（比如网络问题，或新版本还处在 npm/pnpm 的 minimum-release-age 窗口内）时会警告并照常启动，下次启动重试。通过 `scripts/sync-local-profile.sh` 同步的开发版 profile 不会被启动器 reconcile，走开发恢复流程。
+升级后，启动器会在下次启动时更新 profile 中的 bundles，并将版本记录在 `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`。
 
-启动器会创建并运行面向 CC 工作流的 `tui` profile。也可以显式组合这个 profile：
+如果更新失败，启动器会显示警告并使用当前 profile 启动，下次启动时重试。
+
+网络错误和 npm/pnpm 的 minimum-release-age 限制可能延迟更新。由开发同步生成的 profile 使用开发恢复流程。
+
+### 安装 profile
+
+启动器会创建 `tui` profile。也可以用以下命令直接安装其 bundles。
 
 ```sh
 dsh plugin --profile tui add \
@@ -50,7 +57,7 @@ dsh plugin --profile tui add \
 dsh --profile tui
 ```
 
-同一套后端也可用于 dsh Web UI：
+Web UI 使用以下命令。
 
 ```sh
 dsh plugin --profile web add \
@@ -59,35 +66,41 @@ dsh plugin --profile web add \
 dsh web
 ```
 
-### dsh 版本兼容对照
+### dsh 版本兼容性
 
-每个 dsh-cc 版本都针对一个 DeepSeek Harness（`dsh`）版本开发并完成 CI 验证。启动器把同一个版本作为 dsh 下限，启动时校验，dsh 低于下限会拒绝启动并给出升级提示。
+每个版本使用一个 dsh 版本进行 CI 验证，启动器也将该版本作为最低要求。
 
-| dsh-cc 版本 | 验证过的 dsh 版本 |
+| dsh-cc 版本 | 已验证的 dsh |
 | --- | --- |
 | v0.9.0-rc.1 – v0.9.0-rc.4 | 0.2.0-rc.2 |
 | v0.8.3-rc.1 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
 | v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
-| v0.5.0 | 0.1.1-rc.2（启动器无版本校验） |
+| v0.5.0 | 0.1.1-rc.2 (启动器未设置版本门禁) |
 
-没有强制上限，但只有表中的配对经过 CI 验证；用比验证版本更新的 dsh 运行旧版 dsh-cc 是未经测试的组合。当 dsh-cc 新版提升对应的 dsh 版本时，请先升级 dsh，再升级 dsh-cc。
+没有最高版本限制，但更高版本的 dsh 可能尚未验证。当 dsh-cc 提高最低要求时，请先升级 dsh。
 
-两个包各自独立发版，两侧的 `@latest` 不一定互为验证过的配对，升级任意一侧后请对照本表确认。
+这两个包独立发布，各自的 `@latest` 不一定构成已验证的版本组合。
 
-维护者注意：验证用的 pin 记录在 `.github/workflows/presubmit.yml`（`DSH_HARNESS_REF`），启动器下限在 `packages/launcher/tui/bootstrap.mjs`（`MIN_DSH_VERSION`）；任一变化时请同步更新本表。
+维护者：请保持本表与 `.github/workflows/presubmit.yml` 的 `DSH_HARNESS_REF`、`packages/launcher/tui/bootstrap.mjs` 的 `MIN_DSH_VERSION` 一致。
 
-### 可选：官方插件
+### 可选官方插件
 
-上面的 bundle 就是快速开始的全部内容。仓库内建的 `dsh-cc` 插件市场另有四个按需安装的官方插件，提供预配置的子代理通道和外部模型桥接：
+快速开始只需安装 bundles。`dsh-cc` 插件市场另提供四个可选的官方插件。
 
-- **`dsh-cc-agents`**：`dsh-cc-agents:critic`（重推理的评审与分析，走 `opus` 别名）、`dsh-cc-agents:executor`（已批准方案的机械化执行，走 `sonnet` 别名）、`dsh-cc-agents:marathon`（长程、不明确或全仓级别的复杂任务，走 `fable` 别名）三个子代理，外加两个路由 skill（挑 agent 的 `dsh-cc-agents-orchestration` 与数据分析编排的 `data-analysis`）和可选的 serena 代码智能 hooks（仅在完成 serena 初始化的仓库上启用）。
-- **`dsh-cc-shunt`**：PreToolUse 门禁，把批量文件阅读和样板代码生成重定向到廉价通道的 worker 子代理，让大文件语料不进入主上下文（配置 `haiku` 别名才能真正省 token）。
-- **`cc-codex-bridge`**：免审批的 Codex 救援通道。PreToolUse hook 只放行一种固定形态的 Codex 调用，卡住的会话可以直接把任务交给 Codex，不需要人工确认。
-- **`cc-grok-bridge`**：同一模式的 Grok 评审通道，固定调用形态自动放行，外部 Grok 评审不用每次审批。
+- **`dsh-cc-agents`** 提供三个子代理、三个 skill 和可选的 Serena hooks。
+  - `critic` 使用 `opus` 做分析和评审。
+  - `executor` 使用 `sonnet` 执行已明确的计划。
+  - `marathon` 使用 `fable` 处理大型或不确定的任务。
+  - 三个 skill 分别是 `dsh-cc-agents-orchestration`、`data-analysis` 和 **`vwa-writing`**。
+- **`dsh-cc-shunt`** 将批量读取和重复代码生成交给 worker 子代理。配置 `haiku` 可降低模型成本。
+- **`cc-codex-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Codex 命令。
+- **`cc-grok-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Grok 命令。
 
-在会话内安装：
+子代理使用完整作用域名称，例如 `dsh-cc-agents:critic`。桥接 hook 不会为每次符合规定的命令调用请求审批。
+
+在会话内安装插件。
 
 ```text
 /plugin marketplace add dsh-cc/dsh-cc
@@ -95,43 +108,133 @@ dsh web
 /plugin install dsh-cc-shunt@dsh-cc
 ```
 
-`/plugin install` 会替你写入 `enabledPlugins` 标记；安装后重启会话以加载新的 agents 和 hooks。后续更新分两步：先 `/plugin marketplace update dsh-cc` 重新拉取市场，再 `/plugin update <id>` 更新插件。各插件自己的 README（[agents](packages/plugin/dsh-cc-agents/README.md)、[shunt](packages/plugin/dsh-cc-shunt/README.md)、[cc-codex-bridge](packages/plugin/cc-codex-bridge/README.md)、[cc-grok-bridge](packages/plugin/cc-grok-bridge/README.md)）覆盖配置项与已知限制。
+安装会设置 `enabledPlugins`。重启 dsh 后加载新的 agents、skills 和 hooks。
 
-## 为什么选择 dsh-cc？
+更新已安装插件时，先更新插件市场，再更新插件缓存。
 
-| 需求 | dsh-cc 提供的能力 |
+```text
+/plugin marketplace update dsh-cc
+/plugin update dsh-cc-agents@dsh-cc
+```
+
+仅更新插件市场不会更新已安装的插件。完成插件更新后请重启 dsh。
+
+各插件的配置和限制见：[agents](packages/plugin/dsh-cc-agents/README.zh.md)、[shunt](packages/plugin/dsh-cc-shunt/README.zh.md)、[Codex](packages/plugin/cc-codex-bridge/README.zh.md) 和 [Grok](packages/plugin/cc-grok-bridge/README.zh.md)。
+
+## 用 VWA 写作与审查文档
+
+默认 preset 仍为 CC。安装 `dsh-cc-agents` 不会自动切换到 VWA，也不会开启语义审查。
+
+`vwa-writing` skill 可用于撰写新文章或审查已有文章，负责组织证据、主张、论证、审查和交付流程。
+
+请使用包含第二层工具的 dsh-cc 构建。其他 Claude 兼容宿主可能能够加载 skill，但缺少所需工具。
+
+1. 按上文安装或更新 `dsh-cc-agents`。
+2. 将以下设置加入 `$DSH_HOME/settings.json`；默认目录为 `~/.dsh`。
+
+```json
+{
+  "vwa-argument": {
+    "semantic-enabled": true,
+    "review-alias": "sonnet"
+  },
+  "vwa-evidence": {
+    "enabled": true
+  }
+}
+```
+
+3. 重启 dsh，加载已启用的工具。
+4. 执行 `/preset vwa`。如果会话已锁定，请新建会话。
+5. 在工作区执行一次 `/vwa init`。
+6. 用 `/skills` 确认已加载 `vwa-writing`。
+
+然后用自然语言要求 agent 使用该 skill，例如：
+
+```text
+请用 vwa-writing，依据 docs/sources/ 审查 docs/article.md，不要修改正文。
+```
+
+撰写新文章时，请给出研究问题、资料范围和输出路径。如果希望 agent 修正审查发现的问题，请授权修改正文。
+
+skill 会先检查前置条件；设置不完整时，会一次列出用户需要完成的操作。
+
+它不会修改全局设置，也不会代替用户执行专属命令。`/vwa sign` 和 `/vwa adjudicate` 仍由用户执行。
+
+### 审查行为与限制
+
+该流程会登记来源摘录、建立论证图、绑定当前正文，并用 `input.stage: "all"` 启动 `argument.review`。
+
+agent 会等待任务结束后生成报告。获准修订的相关内容发生变化后，需要重新绑定并审查。
+
+评级和交付状态由运行时决定，skill 或 critic 的意见不能代替这些检查。
+
+只有正文和报告的准确路径都进入宿主展示事件，才可能达到 `delivered-reviewed` 状态。
+
+等待中的任务、失败的检查或耗尽的预算都不能算审查通过，但仍可能交付未验证稿。
+
+`review-alias` 选择模型别名，默认为 `sonnet`；未配置的内置别名可能继承主模型。
+
+`semantic-mode` 设置新项目的初始模式标记，不会强制每次交付都通过审查。
+
+项目审查额度在初始化时冻结，审查会增加模型调用、耗时和 token 用量。
+
+语义审查仍处于实验阶段。60 例人工标注评估和真实模型验收尚未完成，评级不是事实正确性证书。
+
+详见[插件指南](packages/plugin/dsh-cc-agents/README.zh.md#vwa-writing)和[验收记录](docs/vwa/lane2-validation.md)。
+
+## 为什么使用 dsh-cc？
+
+| 需求 | 能力 |
 | --- | --- |
-| 延续项目约定 | 加载 Claude Code 风格的 agents、skills、项目记忆、settings、hooks 和插件命令 |
-| 混合使用快模型与强模型 | 将稳定别名映射到由部署方控制的 provider/model 路由 |
-| 委派复杂任务 | 支持子代理派发、后台执行、任务查看和可恢复路由 |
-| 安全地并行开发 | 提供权限规则、审批流程、worktree 工具和工作区边界 |
-| 避免预先加载全部工具 | 通过 `ToolSearch` 和 MCP 按需发现工具 |
-| 在不同界面间切换 | 在终端和 Web profile 中复用同一套 CC 工作流后端 |
+| 延续项目约定 | Agents、skills、记忆、settings、hooks 和命令 |
+| 按任务选择模型 | 已配置的 provider/model 别名 |
+| 分解大型任务 | 子代理、后台任务和已保存会话 |
+| 控制变更 | 权限、审批规则、worktree 和工作区边界 |
+| 按需发现工具 | ToolSearch 和 MCP 发现 |
+| 切换交互界面 | 终端和 Web profile |
+| 审查文档证据 | 可选的 VWA 运行时与 vwa-writing skill |
 
-`dsh-cc` 已经用于开发 `dsh-cc` 自身。当前仓库的实际配置会把不同任务路由到 Kimi、GLM 和 DeepSeek 模型，另外为类型化审批别名 `gauge` 配了一条 System One 决策车道。具体映射见[使用 dsh-cc 开发 dsh-cc](#使用-dsh-cc-开发-dsh-cc)。
+本项目使用 dsh-cc 开发自身，参见[模型配置示例](#模型配置示例)。
 
-## 适合哪些开发者？
+## 适用用户
 
-- 希望把 DeepSeek Harness 直接用作日常编程 Agent 的开发者；
-- 已经积累 `.claude/` 项目资产，希望继续复用 agents、skills、hooks 和项目记忆的团队；
-- 希望按任务选择 Kimi、GLM、DeepSeek 或其他模型，而不是绑定单一模型供应商的用户；
-- 希望组合或扩展 Agent 的权限、工具、记忆、子代理和界面，而不是维护产品 fork 的插件作者。
+- 使用 DeepSeek Harness 编程的开发者。
+- 复用 `.claude/` agents、skills、hooks 和项目记忆的团队。
+- 按任务选择不同模型的用户。
+- 扩展 agent 运行时的插件作者。
+- 需要为文档检查证据与论证的写作者。
 
-## 当前兼容范围
+## 兼容性概览
 
-`dsh-cc` 已覆盖终端交互、斜杠命令、MCP、会话恢复、worktree、模型别名、工具延迟发现等能力；部分 hooks、子代理、权限、记忆和厂商专属体验仍存在已知差异。
+<!-- parity:matrix:start -->
+| Category | Full | Partial | Missing | Non-goal |
+| --- | --- | --- | --- | --- |
+| Engine subsystems | 11 | 26 | 4 | 2 |
+| Hook events | 10 | 7 | 4 | 0 |
+| Command surface | 22 | 10 | 1 | 1 |
+| Sessions and context | 0 | 2 | 1 | 0 |
+| Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
+| Skills | 2 | 1 | 0 | 0 |
+| Subagents | 0 | 4 | 0 | 0 |
+| MCP | 2 | 1 | 0 | 0 |
+| Plugins and marketplaces | 0 | 6 | 0 | 0 |
+| Settings | 2 | 1 | 1 | 0 |
+| Permissions | 0 | 1 | 0 | 0 |
+| Models | 0 | 1 | 0 | 0 |
+| Workspace | 0 | 4 | 0 | 0 |
+| Interactive UX | 1 | 2 | 0 | 0 |
 
-项目不会用模糊的“完全兼容”掩盖差异。每项能力的实现状态、证据和已知限制都记录在：
+Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).
 
-**[查看 Claude Code 功能兼容矩阵 →](docs/cc-parity-matrix.md)**
+For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
+<!-- parity:matrix:end -->
 
-英文首页中的[兼容状态汇总](README.md#compatibility-at-a-glance)由仓库工具根据能力清单生成。
-
-## 熟悉的编程 Agent 工作流
+## Agent 工作流
 
 ### 子代理
 
-CC preset 可以发现并派发项目内 `.claude/agents` 中的 Claude Code 风格 Agent 定义：
+CC preset 会发现 `.claude/agents` 中的项目 agent 定义，其 frontmatter 可指定模型别名。
 
 ```text
 .claude/
@@ -140,38 +243,31 @@ CC preset 可以发现并派发项目内 `.claude/agents` 中的 Claude Code 风
     debugger.md
 ```
 
-Agent frontmatter 可以继续使用熟悉的模型别名，实际 provider/model 由 dsh 配置决定。
-
 ### Skills
 
-CC skill provider 会发现基于 `SKILL.md` 的技能，包括项目自有技能和已安装的通用技能。
+skill provider 会发现项目和已安装技能目录中的 `SKILL.md`，可用 `/skills` 查看生效的技能目录。
 
 ### 记忆
 
-记忆层支持 `CLAUDE.md` 风格的项目上下文，以及面向长期信息的独立写入通道。记忆按工作区隔离，也可配置团队共享记忆；当记忆索引压力增大时，后台 dream 整理会自动触发。
+记忆包括 `CLAUDE.md` 上下文和独立写入通道。工作区记忆相互隔离，可选启用团队共享记忆。
+
+当记忆索引压力增加时，后台整合流程会自动运行。
 
 ### MCP
 
-CC profile 中的 MCP 客户端支持：
+MCP 客户端提供工具、资源、提示词和 OAuth 2.1 认证。用 `/mcp` 查看和管理连接。
 
-- tools；
-- resources；
-- prompts；
-- OAuth 2.1 流程。
+#### 可选的 Serena 代码智能
 
-使用 `/mcp` 查看和管理 MCP 连接。
+配置 [Serena](https://github.com/oraios/serena) 服务器后，可增加符号工具和提示指导；`explore` 子代理会获得只读符号工具。
 
-#### 可选：Serena 代码智能
-
-当你的 MCP 配置连接了 [Serena](https://github.com/oraios/serena) server 时，dsh-cc 会自动加以利用：系统提示词会引导模型在代码问题上优先使用 Serena 的符号工具，内置的 `explore` 子代理也会获得只读符号检索能力（`find_symbol`、`find_referencing_symbols`、`get_symbols_overview`）。Serena 完全可选，不安装时，会话行为完全一致，代码问答仍走内置的 Read/Grep 工具，只是少了这些引导。
-
-先安装一次 Serena，让本地 `serena` 命令进入 `PATH`：
+没有 Serena 时，agent 使用内置 Read/Grep 工具。需要符号工具时，请安装 Serena。
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-然后在 `~/.dsh/.mcp.json`（或项目级 `.mcp.json`）中使用本地命令：
+将服务器加入 `~/.dsh/.mcp.json` 或项目 `.mcp.json`。
 
 ```json
 {
@@ -184,85 +280,105 @@ uv tool install git+https://github.com/oraios/serena@v1.7.0
 }
 ```
 
-不要通过 `uvx --from git+…` 启动：每次 server 启动都会写 `~/.cache/uv`，会被会话沙箱拒绝。
+请使用已安装的二进制。通过 `uvx --from git+…` 启动会写入 `~/.cache/uv`，该写入会被会话沙箱拒绝。
 
-连接状态可通过 `/doctor` 的 `mcp.serena` 检查项查看。
+用 `/doctor` 查看 `mcp.serena` 检查。
 
 ### Hooks
 
-Claude Code 风格 hooks 可以响应会话、用户输入、工具、权限、压缩、任务和子代理生命周期事件。当前支持 command 和 HTTP executor，部分 prompt/agent executor 需要通过配置开关启用。
+Hooks 可响应会话、提示词、工具、权限、上下文压缩、任务和子代理事件；可使用命令及 HTTP 执行器。
 
-仓库跟踪了一个 `hooks.json`，CC preset 会从启动目录加载它，承载本仓开发用 hook。serena 代码智能 hook 随官方 `dsh-cc-agents` 插件分发（带门控；本仓已完成 serena 初始化故会生效），需要在 `PATH` 中安装 `serena-hooks`，详见[本地开发](#本地开发)。
+提示词和 agent 执行器需要开启相应配置，已实现的事件见[兼容矩阵](docs/cc-parity-matrix.md)。
 
-当前桥接的事件集见[兼容矩阵](docs/cc-parity-matrix.md)。
+CC preset 会从启动目录加载本仓库跟踪的 `hooks.json`，其中包含开发用 hooks。
+
+可选的 `dsh-cc-agents` 插件包含 Serena hooks，前置条件见[本地开发](#本地开发)。
 
 ## 斜杠命令
 
-CC preset 提供的命令包括：
+CC preset 包含以下命令。用 `/help` 查看当前安装构建中的命令。
 
 ```text
-/agents            管理可继续对话的后台子代理
-/auto-mode         查看 auto 权限模式的默认值、配置与裁定记录
-/branch            管理 worktree 分支
-/commit-split      提交拆分建议（仅预演，不提交）
-/compact           压缩会话上下文
-/config            查看或修改配置
-/cost              token / 费用信息
-/diff              查看 CLAUDE.md / settings 差异
-/doctor            会话健康检查（--verbose / --json）
-/export            把当前会话转录写入文件
-/help              列出所有命令或查看单个命令的帮助
-/init              扫描项目并生成 CLAUDE.md
-/learn             把反复出现的纠正沉淀为工作区记忆
-/mcp               管理 MCP 连接
-/memory            查看记忆
-/onboard           重新运行首次配置（清除 onboarding 免打扰标记）
-/permissions       查看或修改权限模式/规则
-/plugin            管理插件
-/provider          管理模型供应商（列表/添加/删除、轮换密钥、设为默认）
-/release-notes     查看版本说明
-/rename            为当前会话钉一个显式标题
-/resume            恢复中断的会话
-/skills            查看已安装技能
-/stats             会话事件日志统计（轮次、工具、token）
-/status            环境和会话状态
-/tasks             查看任务和后台作业
-/version           查看版本信息
+/agents            manage continuable background agents
+/auto-mode         inspect the auto permission mode (defaults, config, decision review)
+/branch            worktree branch management
+/commit-split      propose an atomic-commit split of the working tree (dry-run)
+/compact           compact the session context
+/config            inspect or change settings
+/cost              token / cost information
+/diff              inspect CLAUDE.md / settings differences
+/doctor            session health report (--verbose / --json)
+/export            write the session transcript to a file
+/help              list commands or show one command's help
+/init              scan a project and scaffold CLAUDE.md
+/learn             distill recurring corrections into workspace memory
+/mcp               manage MCP connections
+/memory            inspect memories
+/onboard           re-run the first-run setup (clears the onboarding opt-out)
+/permissions       inspect or change permission mode/rules
+/plugin            manage plugins
+/provider          manage LLM providers (list/add/remove, rotate keys, set default)
+/release-notes     show release notes
+/rename            pin an explicit title on the current session
+/resume            resume an interrupted session
+/skills            list installed skills
+/stats             session event-log stats (turns, tools, tokens)
+/status            environment and session status
+/tasks             inspect current tasks/jobs
+/version           show version information
 ```
 
-TUI 还提供 todo 查看、审批、排队输入、对话导出、用量/上下文显示和本地 shell 命令等终端交互。
+共享 preset 还包含 `/preset`，VWA preset 另外提供 `/vwa` 项目命令。
 
-`/provider` 在覆盖层中管理已配置的模型供应商：`/provider list` 列出当前路由，`/provider add <preset-id>` 通过向导添加内置预设（Moonshot、Z.AI/智谱、DeepSeek）或完全自定义的端点；每个路由的详情页支持轮换密钥、刷新模型列表、设为默认和删除。API 密钥通过掩码输入框录入并保存到凭据存储（`~/.dsh/.credentials.yaml`），不写入 settings；由环境变量提供的密钥只读展示。变更对新会话立即生效（凭据按请求解析）；当前会话保持原供应商，直到用 `/model` 重新选择。
+TUI 还提供任务列表、审批、排队提示词、会话导出、用量显示和本地 shell 命令。
 
-### 首次启动引导
+### 配置 provider
 
-新装环境还没配置模型时，boot seed 会以无默认路由落定，TUI 自动打开 provider 面板：选一个预设、粘贴 API key（只存进凭据存储）、设默认模型，然后就能开始用。用 `Esc` 关掉面板只跳过本次会话，下次启动还会再弹。要永久关闭，在 `~/.dsh/settings.json` 的用户 settings 名字空间下设置 `cc-onboarding.suppressed: true`，随时可以用 `/onboard` 重新打开。非交互（非 TTY）运行不会触发这个流程，只显示普通的 "No model configured" 提示。
+用 `/provider list` 查看路由，用 `/provider add <preset-id>` 添加 Moonshot、Z.AI/智谱、DeepSeek 或自定义端点。
 
-## 使用你需要的模型
+provider 面板可更换密钥、刷新模型列表、选择默认值和移除路由。
 
-Claude Code 风格 Agent 定义通常通过别名引用模型：
+请在掩码输入框中填写密钥。密钥保存在 `~/.dsh/.credentials.yaml`，不写入 settings。
+
+环境变量提供的密钥在面板中为只读。凭证按请求解析，默认值变更对新会话生效。
+
+用 `/model` 更改当前会话的模型路由。
+
+### 首次启动
+
+没有默认模型时，TUI 会打开 provider 面板。请选择 provider、输入密钥并设置默认模型。
+
+Esc 仅跳过当前会话的设置，下次启动仍会出现该面板。
+
+在用户设置中设定 `cc-onboarding.suppressed: true` 可关闭自动引导，用 `/onboard` 可再次启用。
+
+非 TTY 运行不会打开面板，而是显示未配置模型的提示。
+
+## 模型别名
+
+agent 定义可选择一个别名。
 
 ```yaml
 model: sonnet
 ```
 
-`dsh-cc` 可以把这些别名路由到部署中配置的 provider/model：
+配置的路由决定实际 provider 和模型。
 
 ```text
-sonnet / draft      -> <provider>/<通用编程模型>
-opus / blueprint    -> <provider>/<推理模型>
-haiku / sketch      -> <provider>/<快速模型>
-fable / masterplan  -> <provider>/<最强推理模型>
-architect           -> 继承主 Agent 路由（规划/编排）
-gauge               -> 类型化决策低价 lane（System One 模型；非生成用途）
-inherit             -> 继承主 Agent 路由
+sonnet / draft      -> <provider>/<general coding model>
+opus / blueprint    -> <provider>/<reasoning model>
+haiku / sketch      -> <provider>/<fast model>
+fable / masterplan  -> <provider>/<maximum-reasoning model>
+architect           -> parent agent route (planning / orchestration)
+gauge               -> typed-decision cheap lane (System One models; not generative)
+inherit             -> parent agent route
 ```
 
-别名只是配置，不会硬编码到某家模型供应商。你可以保留稳定的 Agent 定义，同时根据自己的环境、成本和任务特点选择实际模型。
+别名属于配置，不绑定固定厂商。未配置的内置别名通常继承父路由。
 
-### 使用 dsh-cc 开发 dsh-cc
+### 模型配置示例
 
-本项目当前的日常开发使用下面的映射：
+仓库开发配置采用以下映射。这是示例，不是强制默认值。
 
 | 别名 | 模型 |
 | --- | --- |
@@ -270,34 +386,26 @@ inherit             -> 继承主 Agent 路由
 | `opus` / `blueprint` | `glm-5.3` |
 | `sonnet` / `draft` | `glm-5.3-flash` |
 | `haiku` / `sketch` | `deepseek-v4-flash-0731` |
-| `gauge` | `jev`（System One 决策车道，输出类型化判定，非生成用途） |
-| `architect` | 继承主线程模型 |
+| `gauge` | `jev` （System One 决策通道：类型化判定，不生成正文） |
+| `architect` | inherit（主线程） |
 
-这只是项目自身的真实配置，不是强制默认值。用户可以映射到 DeepSeek Harness 部署支持的其他模型。
+## 产品边界
 
-## 与其他方案有什么不同？
+Claude Code 是独立产品；dsh-cc 将类似工作流加入 DeepSeek Harness 运行时。
 
-### 与 Claude Code 相比
+模型路由器负责切换模型路由，本插件栈还增加 UI、命令、工具、记忆、子代理、hooks、权限、会话和 worktree。
 
-Claude Code 是完整的编程 Agent 产品。`dsh-cc` 则把许多熟悉的交互模式带到 DeepSeek Harness，让部署方自行控制模型、工具、插件、权限和 Agent 组合。
+大部分功能由外部插件提供，少数组件因所需扩展点仍为内部接口而包含上游源码副本。
 
-### 与 DeepSeek Harness fork 相比
+## CC 模式
 
-本仓库主要以外部插件栈的方式提供能力。大部分功能通过 dsh profile 安装和组合，减少上游演进时维护长期 fork 的成本。
+`tui` profile 的默认 preset 是 CC；dsh 内置的四种模式保持原有行为。
 
-少数组件因为依赖 DeepSeek Harness 当前尚未开放的内部扩展点而包含 vendored 实现，具体见下面的[架构](#架构)章节。
+其他 profile 可通过 preset selector 选择 CC，或将其配置为默认值。
 
-### 与模型/API Router 相比
+`/preset vwa` 可以改变后续新会话的已保存默认值；返回 CC 可使用 `/preset cc`。
 
-模型路由代理只负责切换模型。`dsh-cc` 扩展的是整个 Agent 运行时和开发体验，包括 UI、命令、工具、记忆、子代理、hooks、MCP、权限、会话和 worktree 工作流。
-
-## CC Mode
-
-CC Mode 是一个额外的 dsh Agent preset，不会改变 dsh 原有四种模式的行为。
-
-在 `tui` profile 中，CC Mode 默认启用；在其他 profile 中，可以通过 preset selector 选择，或配置为默认 Agent preset。
-
-终端 profile 默认使用全屏模式。单次关闭全屏模式：
+终端 profile 默认全屏运行。单次使用普通界面模式，可执行以下命令。
 
 ```sh
 DSH_CCTUI_UI_MODE=regular dsh --profile tui
@@ -305,19 +413,17 @@ DSH_CCTUI_UI_MODE=regular dsh --profile tui
 
 ## 配置
 
-profile 仍然是普通的 dsh 组合。自定义覆盖可以放在：
+Profile 使用标准的 dsh 组合方式，本地 profile 覆盖项可放在以下文件中。
 
 ```text
 ~/.dsh/profiles/tui/cordis.patch.yml
 ```
 
-它会在已安装 bundle 之后应用。模型别名、权限、settings 优先级、hooks、记忆和 TUI 行为都由对应插件的配置项控制。
-
-精确语义以各 package README 和[兼容矩阵](docs/cc-parity-matrix.md)为准。
+覆盖项在已安装 bundles 之后应用。各包 README 说明设置优先级、模型路由、权限、hooks、记忆和 TUI 行为。
 
 ### 自定义状态栏
 
-在 `tui` profile 中，你可以用自定义 shell 命令替换内置的底部状态栏（与 Claude Code 兼容）。该配置块可以放在用户文件 `~/.dsh/settings.json` 或项目文件 `.claude/settings.json` 中：
+在 `tui` 中可用 shell 命令替换底部状态栏；配置可放在用户设置或项目 `.claude/settings.json` 中。
 
 ```json
 {
@@ -330,54 +436,60 @@ profile 仍然是普通的 dsh 组合。自定义覆盖可以放在：
 }
 ```
 
-与 Claude Code checkout 共享的项目 `.claude/settings.json` 文件可以直接使用；如果同时存在 camelCase 的 `statusLine` 和 dsh 原生的 kebab 风格 `statusline` 键，dsh 原生键优先。
+如果两个键同时存在，dsh 原生 `statusline` 的优先级高于兼容键 `statusLine`。
 
-命令会在 stdin 上收到与 Claude Code 兼容的 JSON 会话负载（契约见 [CC statusline 文档](https://code.claude.com/docs/en/statusline)）；dsh-cc 只提供能真实取到来源的字段。命令 stdout 的前几行（最多 3 行）会成为状态栏内容（ANSI 转义原样透传）；失败或输出为空时渲染为空白行。命令会在会话启动/恢复、新消息、mode 和模型变化时重新运行，此外还按 `refreshInterval` 定时器运行，单位为**秒**（最小值 1）。脚本的环境中会带上 `COLUMNS`/`LINES`。
+命令从 stdin 接收 JSON 会话数据，仅包含[状态栏契约](https://code.claude.com/docs/en/statusline)中当前可提供的字段。
 
-当前限制：最多渲染输出的前 3 行（CC 会渲染每一行）。settings 文件会被监听并热更新，运行中会话之外对 `settings.json` 的修改无需重启即生效；当 `command` 本身变化时，状态栏命令会立刻重新运行。
+stdout 的前三行成为状态栏，ANSI 转义序列保留。执行失败或输出为空时显示空行。
 
-## 兼容性与已知限制
+命令会在启动、恢复、新消息、模式变更、模型变更和每个刷新周期执行。
 
-项目目标是提供**实用的 Claude Code 风格工作流兼容性**，而不是逐字节模拟 Claude Code。
+`refreshInterval` 的单位为秒，最小值为 1；环境中提供 `COLUMNS` 和 `LINES`。
 
-部分 hook 事件、后台子代理流程、通知/IDE shell 行为和供应商专属功能仍然不完整，或者依赖 DeepSeek Harness 后续开放扩展点。项目会在[兼容矩阵](docs/cc-parity-matrix.md)中明确标注完整、部分支持、缺失和非目标能力。
+设置修改无需重启即可生效，命令变化后会立即重新执行。三行输出限制与 Claude Code 不同。
+
+## 已知限制
+
+兼容目标是实现有用的功能，而非完整复制 Claude Code。部分 hook 事件、后台工作流、IDE 功能和厂商专有能力仍不完整。
+
+当前状态见[兼容矩阵](docs/cc-parity-matrix.md)。
 
 ## 架构
 
-本仓库是一个由小插件和 bundle 组成的 monorepo，按职责分组：
+包按职责分组。
 
 ```text
 packages/
-  settings/       settings 级联、迁移、名字空间
-  interaction/    斜杠命令、权限规则、交互类插件
-  mcp/            MCP 客户端与配置
-  hooks/          hook 协议与 CC 桥接
-  core/           工具注册表、ToolSearch、NotebookEdit、StructuredOutput、Sleep、workflow、web-fetch
-  skill/          SKILL.md 支持
-  preset/         CC agent preset 与 agent 资产兼容
-  compat/         plugin 加载器与管理器、模型别名、output styles
-  memory/         CLAUDE.md 记忆与 dream 整理
-  workspace/      worktree 工具与 session-cwd 防护
-  subagent/       coordinator、task 工具、handoff store、resume pins
-  compaction/     压缩分层、成本门、工具调用摘要
-  session/        会话命令（cost、export、stats、learn）与会话取证
-  context/        可逆的工具输出压缩（context-crusher）与压缩后进度重建
-  llm-tuning/     reasoning-fold 与 side-query
-  observability/  cache-health observer、配置快照 sidecar、共享 sidecar IO
-  plugin/         仓内市场的第一方插件
-  test-support/   共享测试基建与评测 harness（不发布）
-  bundle/         可安装的 profile bundle
-  ui/             终端 UI 与 vendored 的 pi-tui 渲染器
-  launcher/       dsh-cc 可执行程序
+  settings/       settings cascade, migrations, namespaces
+  interaction/    slash commands, permission rules, interaction plugins
+  mcp/            MCP client and configuration
+  hooks/          hook protocol and CC bridge
+  core/           tool registry, ToolSearch, NotebookEdit, StructuredOutput, Sleep, workflow, web-fetch
+  skill/          SKILL.md support
+  preset/         CC agent preset and agent compatibility
+  compat/         plugin loader and manager, model aliases, output styles
+  memory/         CLAUDE.md memory and dream consolidation
+  workspace/      worktree tool and session-cwd guard
+  subagent/       coordinator, task tool, handoff store, resume pins
+  compaction/     compaction tiers, cost gate, tool-use summaries
+  session/        session commands (cost, export, stats, learn) and forensics
+  context/        reversible tool-output compression (context-crusher) and post-compact progress rebuild
+  llm-tuning/     reasoning-fold and side-query
+  observability/  cache-health observer, config snapshot sidecar, shared sidecar IO
+  plugin/         first-party plugins of the in-repo marketplace
+  test-support/   shared test fixtures and eval harnesses (not published)
+  bundle/         installable profile bundles
+  ui/             terminal UI and the vendored pi-tui renderer
+  launcher/       the dsh-cc executable
 ```
 
-大部分 package 是普通的仓外 dsh 插件。
+源码副本涉及工具注册表、MCP 客户端、hook 协议、Claude Code hook 桥接和 pi-tui 渲染器。
 
-少数 package 在需要私有或内部扩展点、无法靠组合表达时会 vendor 上游代码。目前包括 tools 注册表、MCP 客户端、hook 协议和 Claude Code hook bridge，它们运行时以独立包名挂载并保持既有服务接口；`ui/` 下另有 vendored 的 pi-tui 终端渲染器，纯净性由 `check:vendor-purity` 门禁保证。
+运行时包使用独立名称并保留服务接口。`check:vendor-purity` 门禁检查 pi-tui 的源码边界。
 
 ## 本地开发
 
-本仓库默认在 `../deepseek-harness` 存在同级 DeepSeek Harness checkout，用于本地 `link:` 依赖开发：
+按锁文件安装工作区依赖。
 
 ```sh
 pnpm install --frozen-lockfile
@@ -385,21 +497,25 @@ pnpm run typecheck
 pnpm test
 ```
 
-### Serena（`serena-hooks` 在 `PATH` 上）
+### Serena hooks
 
-serena 代码智能 hook 有两件：裸读/裸搜爆发后的 PreToolUse 提醒，以及会话结束时按会话清理 hook 状态。它们随官方 `dsh-cc-agents` 插件分发（门控契约见插件 README 的 *Serena hooks* 一节）。本仓已完成 serena 初始化（跟踪了 `.serena/project.yml`），启用插件且 `serena-hooks` 在 `PATH` 上即会生效：
+官方 agents 插件包含 Serena 提醒和会话清理 hooks，前置条件见其 [README](packages/plugin/dsh-cc-agents/README.zh.md#serena-hooks)。
 
 ```sh
 uv tool install git+https://github.com/oraios/serena@v1.7.0
 ```
 
-这个 pin 提供 `serena`、`serena-agent` 和 `serena-hooks` 三个命令。插件的门控 wrapper 把 hook 状态钉在项目内（`SERENA_HOME=<repo>/.serena`）：serena 默认状态目录（`~/.serena/hook_data`）在会话沙箱可写面之外，且 serena 会吞掉失败，不钉住则提醒计数器永不持久化、hook 静默空转。状态按会话 id 落在 `.serena/hook_data/`（已 gitignore），会话销毁时删除。
+本仓库包含 `.serena/project.yml`。插件启用且 `serena-hooks` 位于 PATH 时，hooks 可以运行。
 
-本仓自己跟踪的 `hooks.json` 只保留引用 `scripts/hooks/` 的仓库开发用 hook（编辑后诊断提醒、serena 失败看门狗）。
+Hooks 使用 `SERENA_HOME=<repo>/.serena`，使其状态位于会话沙箱的写入边界内。
 
-健康检查和索引仍是一次性的 `uvx` 命令，见 [docs/code-intelligence-health.md](docs/code-intelligence-health.md)。
+默认 home 可能不可写，且 Serena 可能不报告此错误。请勿将 `.serena/hook_data/` 加入版本控制。
 
-要在真实 profile 中测试未发布的本地构建：
+所固定的安装版本还提供 `serena` 和 `serena-agent`。健康检查和索引使用一次性 uvx 命令。
+
+这些命令见[代码智能健康检查](docs/code-intelligence-health.md)。
+
+用以下命令在真实 profile 中测试未发布包。
 
 ```sh
 pnpm run build
@@ -407,39 +523,32 @@ bash scripts/sync-local-profile.sh web
 dsh web
 ```
 
-同步后 `dsh-cc --version` 会显示 `-dev+<commit>[.dirty]` 标签标识源码树；通过 npm 更新启动器会自动让 profile 回退到商店发布的 bundle。
+开发同步后，`dsh-cc --version` 显示 `-dev+<commit>[.dirty]`；通过 npm 更新启动器会将 profile 恢复到已发布 bundles。
 
-要验证生产 bundle 组合在用户级环境里确实能启动（全新 `DSH_HOME`、harness 自愈回退、伪 TTY、无 LLM 调用），跑 presubmit 和 publish 共用的同一道门：
+交付前运行生产启动检查。它使用临时 DSH_HOME 和伪终端，不调用模型。
 
 ```sh
 pnpm smoke:profile-boot
 ```
 
-CC preset 无需单独安装：`tui` profile 的 bundle patch 直接向 harness
-agent-preset registry 声明 `cc` 名册，组合内容由随 bundle 装入 profile
-`node_modules` 的 `@dsh-cc/preset-cc` 提供。
+Bundles 已包含 `@dsh-cc/preset-cc`，无需单独安装 CC preset。依赖规则和离线开发见[开发说明](docs/dev.md)。
 
-更多离线开发细节和仓库特有的依赖规则见 **[docs/dev.md](docs/dev.md)**。
+## 包与发布
 
-## Packages 与版本发布
+已发布包使用 `@dsh-cc` npm scope。根包为私有包，可安装包通过仓库发布工具发布。
 
-已发布插件使用 `@dsh-cc` npm scope。根 monorepo package 为 private；可安装 package 由仓库发布工具分别发布。
+参见[发布流程](docs/release.md)。
 
-发布流程详见 **[docs/release.md](docs/release.md)**。
+## 项目状态
 
-## 项目状态与参与方式
+上游变化可能影响本项目的接口和兼容性，可用兼容矩阵查看已实现功能和已知缺口。
 
-`dsh-cc` 会跟随仍处于快速演进阶段的 DeepSeek Harness 更新，兼容边界可能随着上游扩展点变化。
+英文文档请遵循 [ASD-STE100 写作规范](docs/i18n/ste100.md)，并保持每份中文 README 与英文版本语义一致。
 
-如果某个工作流与 Claude Code 表现不同，请先查看[兼容矩阵](docs/cc-parity-matrix.md)，确认它属于已实现、部分支持、非目标还是尚未实现。欢迎提交：
+欢迎提供复现步骤、`/doctor --json` 输出、带测试的针对性修复、扩展提案和真实项目示例。
 
-- 带复现步骤和 `/doctor --json` 输出的兼容性报告；
-- 聚焦单项能力的 bug 修复或测试；
-- 能减少 vendored 代码的上游扩展点提案；
-- 来自真实项目的模型路由和工作流实践。
+[提交 issue](https://github.com/dsh-cc/dsh-cc/issues) · [查看 PR](https://github.com/dsh-cc/dsh-cc/pulls)
 
-**[提交 Issue](https://github.com/dsh-cc/dsh-cc/issues) · [查看 Pull Requests](https://github.com/dsh-cc/dsh-cc/pulls)**
-
-## License
+## 许可证
 
 [Apache-2.0](LICENSE)
