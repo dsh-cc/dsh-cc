@@ -44,11 +44,13 @@ For every workspace `packages/<group>/<pkg>/package.json`:
 
 ## Pre-commit hook 环境与锁文件护栏
 
-git 会向 hook 环境注入仓库绑定变量,其中 `GIT_INDEX_FILE` 在 pre-commit 中是**相对顶层目录**的 `.git/index`;子孙进程若以其他 cwd 调 git(真仓库测试、临时仓库 fixture,或 `git worktree add` 内部在 linked worktree 重跑 reset——那里 `.git` 是指针文件)会按自己的 cwd 重解析,读写错位的 index 乃至真仓库 index。`.husky/pre-commit` 因此在 gate 前 `unset` 整个 repo-pinning 变量族;脚本自带 `set -e`,直接 `sh .husky/pre-commit` 裸调用时各 gate 同样全部生效(husky 的正式提交路径本就是 `sh -e`)。
+本地 pre-commit 只跑秒级静态 gate(spec-deps / identity / publish / readme / marketplace / size / tui-boundary / deep-imports / vendor-purity / capabilities / parity 等纯 node 脚本)。typecheck、bundle、check:exports、全量 vitest、subagent-paste 与 profile-boot smoke 交给 CI presubmit(合并门禁);需要时本地按需手动跑。
+
+git 会向 hook 环境注入仓库绑定变量,其中 `GIT_INDEX_FILE` 在 pre-commit 中是**相对顶层目录**的 `.git/index`;子孙进程若以其他 cwd 调 git(真仓库测试、临时仓库 fixture,或 `git worktree add` 内部在 linked worktree 重跑 reset——那里 `.git` 是指针文件)会按自己的 cwd 重解析,读写错位的 index 乃至真仓库 index。`.husky/pre-commit` 因此在 gate 前 `unset` 整个 repo-pinning 变量族(CI 与按需手跑的测试同理);脚本自带 `set -e`,直接 `sh .husky/pre-commit` 裸调用时各 gate 同样全部生效(husky 的正式提交路径本就是 `sh -e`)。
 
 **新增任何 spawn 真 git(或其他读环境外部命令)的测试,必须在 spec 模块顶同样 strip 该变量族**(参考 `packages/workspace/tool-git-worktree/tests/integration.spec.ts` 顶部)。
 
-锁文件卫生:pre-commit 在 gate 前后各查一次 `git diff --quiet -- pnpm-lock.yaml`(worktree vs index),任何未暂存漂移立即拦截 —— 改 workspace 依赖须 `pnpm install`(仅限获得显式授权的环境)并把 `pnpm-lock.yaml` 与 package.json 改动放进**同一 commit** stage。正常 `git commit` 不再需要 `--no-verify`:hook 全绿是提交前提而非可选项。
+锁文件卫生:pre-commit 在 gate 前查一次 `git diff --quiet -- pnpm-lock.yaml`(worktree vs index),任何未暂存漂移立即拦截 —— 改 workspace 依赖须 `pnpm install`(仅限获得显式授权的环境)并把 `pnpm-lock.yaml` 与 package.json 改动放进**同一 commit** stage。正常 `git commit` 不再需要 `--no-verify`:hook 全绿是提交前提而非可选项。
 
 ## Dependency declaration contract for tests
 

@@ -1,74 +1,43 @@
-# Local gates = the commands listed below, mirroring
-# .github/workflows/presubmit.yml one-to-one.
-#   check:exports runs after bundle:client in presubmit/publish; locally it
-#   runs at the equivalent position (typecheck produces each package's lib/
-#   first, then bundle:client adds lib/client.js) and blocks the "exports
-#   points at a lib target that doesn't exist" class (#112: serena-first was
-#   missing a tsconfig reference).
-#   typecheck ≡ the tsc -b half of build (same tsconfig.packages.json);
-#   build additionally runs bundle:client afterwards to produce
-#   lib/client.js (tsdown; this repo gitignores lib/, typecheck is left
-#   unchanged — the bundle is re-run only before commits so a local profile
-#   sync picks up the browser bundle too).
-#   No lint-staged on purpose: the repo has no eslint/prettier, so there is
-#   no staged-only check to run.
+# Local pre-commit = seconds-level static gates only. Typecheck, bundle,
+# check:exports, the full vitest suite, subagent-paste and the profile-boot
+# smoke run in CI (.github/workflows/presubmit.yml), which is the merge gate.
+# Run any of them locally on demand (pnpm typecheck / pnpm test / …).
 # Worktree self-heal: worktrees have no node_modules (gitignored); before
 # the first commit, run `pnpm install --frozen-lockfile` automatically if
 # dependencies aren't installed (hard-links from the global store — see
 # docs/dev.md).
 set -e   # husky's real commit path already runs sh -e; this guards bare
-         # invocation (see below) and husky-version drift
+         # invocation and husky-version drift
 
 # git injects repo-bound variables into hook environments
-# (GIT_INDEX_FILE=.git/index, relative to the top level; other versions add
-# GIT_DIR/GIT_PREFIX etc.). Descendant processes that invoke git from a
-# non-top-level cwd (temp-repo tests; `git worktree add` re-running reset
-# inside the linked worktree, where .git is a pointer file) resolve against
-# their own cwd and read/write a misaligned index. Unset them all so in-gate
-# git behaves like manual invocation. Unsetting an unset variable is a no-op.
+# (GIT_INDEX_FILE=.git/index, relative to the top level). Descendant
+# processes that invoke git from another cwd would resolve a misaligned
+# index; unset the whole family so in-gate git behaves like manual
+# invocation (docs/dev.md).
 unset GIT_INDEX_FILE GIT_PREFIX GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR \
       GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE
 
-# Lockfile guard: before and after the gates, pnpm-lock.yaml must have
-# neither unstaged drift nor a conflict state. Changing workspace
-# dependencies requires `pnpm install` and staging pnpm-lock.yaml in the
-# same commit.
-lockfile_guard() {
-  if ! git diff --quiet -- pnpm-lock.yaml; then
-    echo "pre-commit: pnpm-lock.yaml has unstaged drift or a conflict state ($1)." >&2
-    echo "  regenerate and stage it (pnpm install && git add pnpm-lock.yaml)" >&2
-    echo "  or revert it (git restore pnpm-lock.yaml), then recommit." >&2
-    exit 1
-  fi
-}
-lockfile_guard before-gates
+# Lockfile guard: pnpm-lock.yaml must have neither unstaged drift nor a
+# conflict state. Changing workspace dependencies requires `pnpm install`
+# and staging pnpm-lock.yaml in the same commit.
+if ! git diff --quiet -- pnpm-lock.yaml; then
+  echo "pre-commit: pnpm-lock.yaml has unstaged drift or a conflict state." >&2
+  echo "  regenerate and stage it (pnpm install && git add pnpm-lock.yaml)" >&2
+  echo "  or revert it (git restore pnpm-lock.yaml), then recommit." >&2
+  exit 1
+fi
 
 if [ ! -e node_modules ]; then pnpm install --frozen-lockfile; fi
 
-# --- Pure static gates (no node_modules needed; same order as presubmit) ---
-pnpm check:spec-deps
-pnpm check:publish
-pnpm check:readme
-pnpm check:marketplace
-pnpm check:size
-pnpm check:tui-boundary
-pnpm check:deep-imports
-pnpm check:vendor-purity
-
-# --- Gates needing js-yaml (node_modules present by now) ---
-# capability manifest validation + README/matrix generated artifacts must
-# not drift (run `pnpm docs:parity` after changing the manifest)
-pnpm check:capabilities
-pnpm check:parity
-# Paired self-tests for the two checkers (presubmit also runs them after
-# capabilities/parity)
-pnpm test:capabilities
-
-# --- Build + tests ---
-pnpm typecheck
-pnpm run bundle:client
-pnpm check:exports
-pnpm test
-pnpm check:subagent-paste
-
-lockfile_guard after-gates
+# Static gates, same order as presubmit (plain node, no build needed).
+node scripts/check-spec-deps.mjs
+node scripts/check-project-identity.mjs
+node scripts/check-publish-manifests.mjs
+node scripts/check-readme.mjs
+node scripts/marketplace.test.mjs
+node scripts/check-file-size.mjs
+node scripts/check-tui-boundary.mjs
+node scripts/check-deep-src-imports.mjs
+node scripts/check-vendor-purity.mjs
+node scripts/check-capability-evidence.mjs
+node scripts/generate-parity-matrix.mjs --check
