@@ -16,7 +16,7 @@
  * @module @dsh-cc/vwa-argument/schema
  */
 
-import Ajv2020 from 'ajv/dist/2020'
+import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020'
 import authorSchemaJson from './contracts/author.schema.json' with { type: 'json' }
 import receiptV2SchemaJson from './contracts/receipt-v2.schema.json' with { type: 'json' }
 import reviewSchemaJson from './contracts/review.schema.json' with { type: 'json' }
@@ -69,6 +69,23 @@ export const validateAssessment = ajv.getSchema<unknown>(
 ) ?? (() => { throw new Error('vwa-argument: Assessment schema not registered') })()
 
 export const validateReceiptV2 = receiptCompiled
+
+/** Lazily compiled per-$defs validators over the author contract (§5: the JSON Schema is the single rule source). */
+const authorDefCache = new Map<string, ValidateFunction>()
+
+/** Validate one object against `author.schema.json#/$defs/<def>` (strict Ajv; errors via `.errors`). */
+export function authorDefValidator(def: string): ValidateFunction {
+  const cached = authorDefCache.get(def)
+  if (cached !== undefined) return cached
+  const compiled = ajv.compile({ $ref: `https://dsh-cc.dev/schemas/vwa-argument/author.schema.json#/$defs/${def}` })
+  authorDefCache.set(def, compiled)
+  return compiled
+}
+
+/** Collected Ajv error text for one failed author-def validation. */
+export function ajvErrors(validate: ValidateFunction): string {
+  return (validate.errors ?? []).map((e) => `${e.instancePath} ${e.message ?? ''}`).join('; ')
+}
 
 /**
  * UTF-16 code-unit length (§4): the normative string limit count, distinct

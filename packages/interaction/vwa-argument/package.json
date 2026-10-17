@@ -28,6 +28,7 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {
+    "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/settings-ns": "workspace:^",
     "@dsh-cc/settings-provider": "workspace:^",
     "@dsh-cc/vwa-evidence": "workspace:^",

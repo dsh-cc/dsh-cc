@@ -2386,6 +2386,9 @@ importers:
 
   packages/interaction/vwa-argument:
     dependencies:
+      '@dsh-cc/session-cwd':
+        specifier: workspace:^
+        version: link:../../workspace/session-cwd
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
