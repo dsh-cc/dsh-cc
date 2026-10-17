@@ -19,6 +19,7 @@ import { registerArgumentTools, semanticEnabled, type ToolRegistrar } from './to
 import { CaptureRegistry } from './sources.ts'
 import { readUserSettingsSync, registerSettings } from './settings.ts'
 import { registerVwaArgumentService } from './report.ts'
+import { registerVwaCommand } from './commands.ts'
 
 export {
   DEFAULT_VWA_ARGUMENT_SETTINGS,
@@ -49,6 +50,19 @@ export {
 } from './schema.ts'
 
 export * from './types.ts'
+export {
+  executeVwa,
+  parseVwaArgs,
+  readPointer,
+  registerVwaCommand,
+  writePointer,
+  type CurrentProjectPointer,
+  type ParsedVwaArgs,
+  type VwaCommandDeps,
+  type VwaSubcommand,
+  VWA_SUBCOMMANDS,
+  VWA_USAGE,
+} from './commands.ts'
 export {
   buildReverseIndex,
   dependencyDigest,
@@ -215,6 +229,26 @@ export const inject: string[] = []
  */
 export function apply(ctx: Context): void {
   registerSettings(ctx)
+  // The /vwa command is USER-SURFACE (§10.2): it is registered regardless of
+  // the semantic-enabled tool gate — /vwa init is how a user starts lane 2.
+  // Tools stay gated below.
+  try {
+    const workspaceRootOf = (agent: unknown): string | undefined => {
+      try {
+        return getSessionCwd(agent as never) ?? undefined
+      } catch {
+        return undefined
+      }
+    }
+    ctx.inject(['commands'], (commands: unknown) => {
+      registerVwaCommand(
+        { commands: commands as { register(definition: unknown): unknown } },
+        { workspaceRoot: workspaceRootOf },
+      )
+    })
+  } catch {
+    // Fail-soft: the command must never break mounting.
+  }
   try {
     const dshHome = (ctx as unknown as { dshHomePath?: () => string | undefined }).dshHomePath?.()
     if (dshHome === undefined || !semanticEnabled(dshHome)) return

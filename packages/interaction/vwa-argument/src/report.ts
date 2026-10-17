@@ -60,6 +60,8 @@ export interface DeliveryCheck {
   reviewRunIds: Id[]
   sources: { sourceId: Id; snapshotHash: Hash; evidenceIds: Id[] }[]
   eligibleForReviewed: boolean
+  /** Active (non-disagreement, non-rejected) severity counts, §16.1/§17.2. */
+  findingCounts: { blocker: number; major: number; minor: number }
   pendingRunIds: Id[]
 }
 
@@ -191,6 +193,7 @@ export class VwaArgumentService {
         audit: stageVerdict(records, ['extract', 'align']),
       },
       metrics, assessments, findings, reviewRunIds,
+      findingCounts: activeFindingCounts(findings, readAdjudications(this.deps.root, projectId)),
       sources: snapshot.sources.map((source) => ({
         sourceId: source.id, snapshotHash: source.snapshotHash,
         evidenceIds: snapshot.evidence.filter((ev) => ev.sourceId === source.id).map((ev) => ev.id),
@@ -289,6 +292,80 @@ function readAllRecords(root: string, projectId: string): (ReviewRecord & { kind
   return out
 }
 
+/** Queued/running review runs (§16.1 pendingRunIds) — also the /vwa status face. */
+export function readPendingRuns(root: string, projectId: string): Id[] {
+  return pendingRuns(root, projectId)
+}
+
+/** All review records for one project (the /vwa adjudicate lookup face). */
+export function readReviewRecords(root: string, projectId: string): (ReviewRecord & { kind?: 'disagreement' })[] {
+  return readAllRecords(root, projectId)
+}
+
+/**
+ * The current dependency digest for a project HEAD (§18: human
+ * signature/adjudication bind it and expire when content changes).
+ */
+export function currentDependencyDigest(root: string, projectId: string): Hash | undefined {
+  const head = new ProjectStore(root, projectId).readHead()
+  if (!head.ok) return undefined
+  const snapshot = head.data.snapshot
+  const index = buildReverseIndex(snapshot)
+  const records = readAllRecords(root, projectId)
+  const reviewRunIds = [...new Set(records.map((record) => record.runId))]
+  return dependencyDigest(index, snapshot.claims.map((claim) => claim.id), reviewRunIds)
+}
+
+/**
+ * Append one adjudication record (the /vwa adjudicate write path, §18).
+ * signer is always 'user'; validateAdjudicationSource re-verified on read.
+ */
+export function appendAdjudication(root: string, projectId: string, record: AdjudicationRecord): void {
+  validateAdjudicationSource(record)
+  const path = join(root, '.dsh', 'vwa', projectId, 'adjudications.json')
+  let prior: { adjudications?: AdjudicationRecord[] } = { adjudications: [] }
+  if (existsSync(path)) {
+    try {
+      prior = JSON.parse(readFileSync(path, 'utf8')) as { adjudications?: AdjudicationRecord[] }
+      if (!Array.isArray(prior.adjudications)) prior = { adjudications: [] }
+    } catch {
+      prior = { adjudications: [] }
+    }
+  }
+  prior.adjudications = [...(prior.adjudications ?? []), record]
+  mkdirSync(join(root, '.dsh', 'vwa', projectId), { recursive: true })
+  writeFileSync(path, stableJson(prior), 'utf8')
+}
+
+/** Signature record face (§18). */
+export interface Signature {
+  signatureId: Id
+  artifactId: Id
+  artifactHash: Hash
+  graphHash: Hash
+  receiptHash: Hash
+  policyHash: Hash
+  signer: 'user'
+  ts: string
+}
+
+/** Append one user signature (§18) — /vwa sign is the only writer. */
+export function appendSignature(root: string, projectId: string, signature: Signature): void {
+  const path = join(root, '.dsh', 'vwa', projectId, 'signatures.json')
+  let prior: { signatures?: Signature[] } = { signatures: [] }
+  if (existsSync(path)) {
+    try {
+      prior = JSON.parse(readFileSync(path, 'utf8')) as { signatures?: Signature[] }
+      if (!Array.isArray(prior.signatures)) prior = { signatures: [] }
+    } catch {
+      prior = { signatures: [] }
+    }
+  }
+  prior.signatures = [...(prior.signatures ?? []), signature]
+  mkdirSync(join(root, '.dsh', 'vwa', projectId), { recursive: true })
+  writeFileSync(path, stableJson(prior), 'utf8')
+}
+
 function pendingRuns(root: string, projectId: string): Id[] {
   const base = join(root, '.dsh', 'vwa', projectId, 'review-runs')
   if (!existsSync(base)) return []
@@ -355,6 +432,24 @@ function loadEvaluation(root: string, projectId: string, evaluationId: string): 
   } catch {
     return undefined
   }
+}
+
+/** Active severity counts (§17.2): disagreement findings and rejected adjudications are not active. */
+function activeFindingCounts(
+  findings: (Finding & { kind?: string })[],
+  adjudications: AdjudicationRecord[],
+): { blocker: number; major: number; minor: number } {
+  const rejected = new Set(adjudications.filter((record) => record.decision === 'reject').map((record) => record.findingId))
+  let blocker = 0
+  let major = 0
+  let minor = 0
+  for (const finding of findings) {
+    if (finding.kind === 'disagreement' || rejected.has(finding.id)) continue
+    if (finding.severity === 'blocker') blocker += 1
+    else if (finding.severity === 'major') major += 1
+    else minor += 1
+  }
+  return { blocker, major, minor }
 }
 
 /** Cordis service registration (name `vwa-argument`; vwa-evidence consumes it structurally in slice 5). */

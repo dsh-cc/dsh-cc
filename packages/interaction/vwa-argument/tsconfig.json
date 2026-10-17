@@ -13,6 +13,9 @@
       "path": "../vwa-evidence"
     },
     {
+      "path": "../command-usage"
+    },
+    {
       "path": "../../settings/settings-ns"
     },
     {

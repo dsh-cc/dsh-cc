@@ -27,6 +27,7 @@ import {
   type EvaluatorState,
 } from './evaluator.ts'
 import { DEFAULT_VWA_EVIDENCE_SETTINGS, readUserSettingsSync, type VwaEvidenceSettings } from './settings.ts'
+import { resolveDeliveryProvider } from './vwa-delivery.ts'
 
 /** Adapter: gates' Executor face over the harness ShellExecutor (§4.3 seam). */
 export function shellExecutorOf(shell: ShellExecutor): Executor {
@@ -57,6 +58,12 @@ export interface VwaDeps {
   exec: Executor
   state: EvaluatorState
   debug(message: string): void
+  /**
+   * The vwa-argument delivery provider (§16.2), resolved per dispatch via
+   * cordis duck-typing (§3 cycle-break; the service may mount after this
+   * plugin). Undefined ⇒ lane-1-only turns.
+   */
+  deliveryProvider?(): unknown
 }
 
 /** Create the `agent/turn-stopping` handler. Never throws into the loop. */
@@ -76,6 +83,8 @@ export function createTurnStoppingHandler(deps: VwaDeps) {
         state: deps.state,
         debug: deps.debug,
         signal: payload.signal,
+        // Hot per-dispatch resolution, duck-typed — no package import (§3).
+        deliveryProvider: resolveDeliveryProvider(deps.deliveryProvider?.()),
       })
     } catch (error: unknown) {
       deps.debug(`vwa-evidence: turn-stopping handler failed: ${String(error)}`)
@@ -126,6 +135,7 @@ export function registerEvaluator(ctx: import('@deepseek-ai/cordis').Context, sh
       : shellExecutorOf(shell),
     state,
     debug,
+    deliveryProvider: () => ctx,
   })
   ctx.on('agent/turn-stopping', handler as never)
 }

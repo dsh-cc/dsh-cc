@@ -2386,6 +2386,9 @@ importers:
 
   packages/interaction/vwa-argument:
     dependencies:
+      '@dsh-cc/command-usage':
+        specifier: workspace:^
+        version: link:../command-usage
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
@@ -2408,6 +2411,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-commands':
+        specifier: link:../../../../deepseek-harness/packages/interaction/commands
+        version: link:../../../../deepseek-harness/packages/interaction/commands
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm

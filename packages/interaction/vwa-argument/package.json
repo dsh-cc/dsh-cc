@@ -34,7 +34,8 @@
     "@dsh-cc/settings-provider": "workspace:^",
     "@dsh-cc/vwa-evidence": "workspace:^",
     "ajv": "^8.20.0",
-    "markdown-it": "^14.1.0"
+    "markdown-it": "^14.1.0",
+    "@dsh-cc/command-usage": "workspace:^"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",
@@ -42,7 +43,8 @@
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/settings-provider": "workspace:^",
     "vitest": "^4.1.8",
-    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm"
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands"
   },
   "publishConfig": {
     "access": "public"
