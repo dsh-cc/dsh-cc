@@ -33,6 +33,12 @@ reconciliation/对账, external deliverable reports) route per the
 `data-analysis` skill; routine single-caliber queries stay single-agent —
 no multi-agent escalation.
 
+Document tasks that require source evidence and argument checks use the
+`vwa-writing` skill. This includes research writing and review of an existing
+article. Load its preflight and tool contract before delegation. A critic
+opinion does not replace `argument.review`. Routine copy editing stays outside
+this workflow unless the user requests evidence review.
+
 ## Background asymmetry (important)
 
 - **critic** is read-only, so it runs in the BACKGROUND by default —

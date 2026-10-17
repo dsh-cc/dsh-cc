@@ -13,6 +13,8 @@
  * completed review run for the bound artifact.
  */
 import { createRequire } from 'node:module'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -282,6 +284,31 @@ describe('agent.vwa.cordis.yml lane-2 group (semantic-enabled real boot)', () =>
         mode: 'draft',
       })
       if (!init.ok) throw new Error(init.message)
+      VwaArgument.writePointer(workspaceRoot, projectId, init.data.workspaceIdentity)
+      const catalog = (root as unknown as { tools: { schemas(): { name: string }[] } }).tools.schemas()
+      const prerequisites = JSON.parse(
+        execFileSync(
+          process.execPath,
+          [
+            fileURLToPath(
+              new URL('../../../plugin/dsh-cc-agents/skills/vwa-writing/scripts/preflight.mjs', import.meta.url),
+            ),
+            '--workspace',
+            workspaceRoot,
+            '--dsh-home',
+            (root as unknown as { dshHomePath(): string }).dshHomePath(),
+            '--tools',
+            catalog.map((t) => t.name).join(','),
+          ],
+          { encoding: 'utf8' },
+        ),
+      )
+      expect(prerequisites).toMatchObject({
+        status: 'ready-for-tools',
+        projectId,
+        revision: 1,
+        reviewerAlias: 'reviewer',
+      })
       const text = 'The council voted to close the port on 3 May.\n'
       writeFileSync(join(workspaceRoot, 'minutes.md'), text, 'utf8')
       await exec('read', { file_path: join(workspaceRoot, 'minutes.md') })
