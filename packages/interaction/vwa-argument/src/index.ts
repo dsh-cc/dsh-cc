@@ -1,9 +1,10 @@
 /**
  * @dsh-cc/vwa-argument — VWA lane-2 argumentation contracts (design
- * docs/plans/2026-10-16-vwa-evidence-argument.md). Slice 1 (P0): package
- * face, JSON Schema contracts + Ajv validation entry, settings namespace.
- * The feature is INERT and DEFAULT-OFF: `apply` registers settings and
- * nothing else — no listeners, no tools, no review runs yet (§23 P0).
+ * docs/plans/2026-10-16-vwa-evidence-argument.md). DEFAULT-OFF (§13): with
+ * `semantic-enabled: false`, `apply` registers only the settings namespace
+ * and the /vwa command. When enabled it adds the author tools, the
+ * per-session capture wiring, per-call review collaborators (review-host.ts)
+ * and the workspace-bound `vwa-argument` delivery service.
  *
  * Ownership boundaries (§3): `@dsh-cc/vwa-evidence` stays the sole receipt
  * writer and does NOT import this package; this package imports it one-way
@@ -219,17 +220,17 @@ export {
 export const name = 'vwa-argument'
 
 /**
- * No services injected at load: the tool mount is conditional on the
- * semantic-enabled feature gate (§13) and happens inside apply.
+ * No services injected at load: the tool/command mounts use their own
+ * ctx.inject sub-plugins, and llm/jobs are read per call through the guarded
+ * ctx.get path so a host without them still mounts (review answers
+ * REVIEW_UNAVAILABLE).
  */
 export const inject: string[] = []
 
 /**
- * Mount the plugin: the settings namespace (§23 P0) plus, only when
+ * Mount the plugin: the settings namespace and /vwa plus, only when
  * `vwa-argument.semantic-enabled` is true in the raw settings file, the
- * three author tools (§10.3/§10.4/§10.5) through the `tools` service.
- * Workspace-root and capture-event wiring stays at the turn seam (a later
- * slice mirrors vwa-evidence's wiring.ts); cc/lane-1 is unchanged.
+ * lane-2 tools, capture wiring and delivery service. cc/lane-1 is unchanged.
  * @param ctx - the plug context.
  */
 export function apply(ctx: Context): void {

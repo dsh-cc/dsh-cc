@@ -50,12 +50,21 @@
   〔src:ws:packages/interaction/vwa-argument/src/schema.ts#L1-L40〕。
 - **设置**（`src/settings.ts`）：命名空间 `vwa-argument`，§13 表中的扁平
   kebab 键。`semantic-enabled` 默认为 **false**；全部评审预算遵循 §13。
+  `review-alias`（默认 `sonnet`）指定评审所走的模型别名，绝不写具体模型 id。
   与 vwa-evidence 相同的双半模式：`registerNamespaceSafe` 供 /config 使用，
   外加对 `<dshHome>/settings.json` 的失败回退原始热读
   （`readUserSettingsSync`）
   〔src:ws:packages/interaction/vwa-argument/src/settings.ts#L1-L50〕。
+- **宿主接线**（`src/review-host.ts`、`src/capture-wiring.ts`；仅在
+  `semantic-enabled` 时生效）：`argument.review` 每次调用时解析 `llm`、
+  `jobs` 与 `review-alias` 路由（宿主缺服务时返回带原因的
+  `REVIEW_UNAVAILABLE`）；`tools/post-execute` 监听器把 `read`/`write`/
+  `edit`/`web_fetch` 写入按会话隔离的采集登记表；绑定产物从调用方工作区读取；
+  `vwa-argument` 交付服务经 `forWorkspace(root)` 绑定到调用方工作区
+  〔src:ws:packages/interaction/vwa-argument/src/review-host.ts#L1-L20〕。
 - **Preset**（`packages/preset/cc/agent.vwa.cordis.yml`）：插件仅挂载于
-  vwa 闭包 —— cc preset 刻意不含该行。
+  vwa 闭包 —— cc preset 刻意不含该行 —— 与 vwa-evidence 同处 `vwa-lanes`
+  组，组的 `isolate` 覆盖 `vwa-argument` 服务。
 
 不在本包内：回执写入（vwa-evidence 是唯一写入方），以及冻结的语义评分器
 `humanities-scorer@1` 与 humanities 金标集（`@dsh-cc/vwa-eval`，§22.2）。

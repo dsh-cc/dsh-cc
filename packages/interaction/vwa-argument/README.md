@@ -56,12 +56,23 @@ disabled the tools are not registered and the feature is inert.
   〔src:ws:packages/interaction/vwa-argument/src/schema.ts#L1-L40〕.
 - **Settings** (`src/settings.ts`): namespace `vwa-argument`, flat kebab
   keys per the §13 table. `semantic-enabled` defaults to **false**; all
-  review budgets follow §13. Same dual-half idiom as vwa-evidence:
+  review budgets follow §13. `review-alias` (default `sonnet`) names the
+  model ALIAS the reviewer routes through — never a concrete model id. Same dual-half idiom as vwa-evidence:
   `registerNamespaceSafe` for /config UX plus a fail-soft raw hot-read of
   `<dshHome>/settings.json` (`readUserSettingsSync`)
   〔src:ws:packages/interaction/vwa-argument/src/settings.ts#L1-L50〕.
+- **Host wiring** (`src/review-host.ts`, `src/capture-wiring.ts`; only when
+  `semantic-enabled`): `argument.review` resolves `llm`, `jobs` and the
+  `review-alias` route PER CALL (a missing host service answers
+  `REVIEW_UNAVAILABLE` with the reason); a `tools/post-execute` listener
+  feeds a per-session capture registry from `read`/`write`/`edit`/`web_fetch`;
+  bound artifacts are read from the caller's workspace; the `vwa-argument`
+  delivery service binds to the caller's workspace via `forWorkspace(root)`
+  〔src:ws:packages/interaction/vwa-argument/src/review-host.ts#L1-L20〕.
 - **Preset** (`packages/preset/cc/agent.vwa.cordis.yml`): the plugin mounts
-  ONLY in the vwa closure — the cc preset deliberately lacks the row.
+  ONLY in the vwa closure — the cc preset deliberately lacks the row — in
+  the `vwa-lanes` group together with vwa-evidence, under an `isolate`
+  realm covering the `vwa-argument` service.
 
 Not in this package: receipt writing (vwa-evidence is the sole writer) and
 the frozen semantic scorer `humanities-scorer@1` with the humanities gold
