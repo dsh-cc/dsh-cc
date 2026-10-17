@@ -263,6 +263,14 @@ jobs:
         working-directory: dsh-cc
         run: pnpm check:exports
 
+      # Every packed artifact must resolve its own relative imports (issue
+      # #249: lib/classes.js imported ../data/classes.json, never packed).
+      # Needs built lib/ on disk — hence after typecheck, not in the
+      # pre-install static job.
+      - name: Publish artifacts (check:artifacts)
+        working-directory: dsh-cc
+        run: pnpm check:artifacts
+
       # Real-boot smoke (v0.4.1 incident class: "merged green, boot crashes for
       # every user"): sync the built packages into a throwaway DSH_HOME profile
       # and require the TUI's first frame. Zero LLM calls; needs the harness

@@ -15,6 +15,7 @@
     "typecheck": "tsc -b tsconfig.packages.json",
     "test": "vitest run",
     "test:e2e": "python3 packages/ui/tui/scripts/e2e/run_core.py",
+    "check:artifacts": "node scripts/check-publish-artifacts.mjs && node scripts/check-publish-artifacts.test.mjs",
     "check:exports": "node scripts/check-export-targets.mjs",
     "check:capabilities": "node scripts/check-capability-evidence.mjs",
     "check:parity": "node scripts/generate-parity-matrix.mjs --check",

@@ -1,7 +1,7 @@
 /**
  * Failure-class table loader and the pure `classify` decision core (design
  * doc docs/plans/2026-10-09-verify-before-retry.md §3.2). The table lives in
- * `data/classes.json` (first-match precedence, table order); this module
+ * `src/classes.json` (first-match precedence, table order); this module
  * loads it once and evaluates a tool outcome against it. Every value-field
  * read is type-guarded — persistent-bash and pwsh results can be plain
  * strings. Pure and side-effect-free.
@@ -11,7 +11,7 @@
 
 import { isRecoveryCandidate } from '@dsh-cc/post-edit-verify'
 import type { ToolExecutionResult } from '@dsh-cc/tools'
-import tableData from '../data/classes.json' with { type: 'json' }
+import tableData from './classes.json' with { type: 'json' }
 import { firstShellToken, secondShellToken, stripLeadingAssignments } from './shell-words.ts'
 
 /** One row of the failure-class table. */

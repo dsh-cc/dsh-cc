@@ -22,4 +22,4 @@ Key `retry-attendant` in the user-layer `settings.json`:
 
 ## Status
 
-Implemented. Failure-class table (`data/classes.json` + `classify`), effect-fields digest projection, pre-execute identical-retry escalation, and M1/M2 wiring are all in place, with composition pins in `packages/preset/cc`. Promoted to default ON on 2026-10-16 after the production dogfood cleared the design doc §5 gate; the escalation/observe split can be tuned via the `escalate` key.
+Implemented. Failure-class table (`src/classes.json` + `classify`) 〔src:ws:packages/interaction/retry-attendant/src/classes.ts#L14-L15〕, effect-fields digest projection, pre-execute identical-retry escalation, and M1/M2 wiring are all in place, with composition pins in `packages/preset/cc`. Promoted to default ON on 2026-10-16 after the production dogfood cleared the design doc §5 gate 〔src:ws:packages/interaction/retry-attendant/src/settings.ts#L35-L52〕; the escalation/observe split can be tuned via the `escalate` key 〔src:ws:packages/interaction/retry-attendant/src/settings.ts#L35-L52〕.

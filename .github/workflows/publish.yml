@@ -177,6 +177,12 @@ jobs:
         working-directory: dsh-cc
         run: pnpm check:exports
 
+      # Last line of defense before publishing: every packed artifact must
+      # resolve its own relative imports (issue #249 class).
+      - name: Publish artifacts (check:artifacts)
+        working-directory: dsh-cc
+        run: pnpm check:artifacts
+
       - name: Unit tests (vitest)
         working-directory: dsh-cc
         run: pnpm test

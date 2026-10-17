@@ -21,7 +21,7 @@ declare module '@deepseek-ai/dsh-session/types' {
     /** Log-only dogfood telemetry for the retry-attendant (§6 falsification metrics). */
     'retry-attendant/event': {
       kind: 'guidance' | 'escalation'
-      /** The failure class that fired (see data/classes.json). */
+      /** The failure class that fired (see src/classes.json). */
       class: string
       /** The tool call name the outcome belonged to. */
       tool: string
