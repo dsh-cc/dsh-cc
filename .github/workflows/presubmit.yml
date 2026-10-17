@@ -37,7 +37,8 @@ name: PreSubmit
 
 on:
   pull_request:
-    branches: [main]
+    # Exercise stacked VWA PRs against their immediate dependency as well as main.
+    branches: [main, 'split/vwa-*']
   push:
     branches: [main]
 
