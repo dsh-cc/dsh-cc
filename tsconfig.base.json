@@ -38,6 +38,9 @@
       "@dsh-cc/vwa-evidence": [
         "./packages/interaction/vwa-evidence/src/index.ts"
       ],
+      "@dsh-cc/vwa-argument": [
+        "./packages/interaction/vwa-argument/src/index.ts"
+      ],
       "@dsh-cc/vwa-eval": [
         "./packages/evaluation/vwa-eval/src/index.ts"
       ],

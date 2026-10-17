@@ -1,0 +1,1068 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-cc.dev/schemas/vwa-argument/review.schema.json",
+  "title": "VWA lane-2 review records (design docs/plans/2026-10-16-vwa-evidence-argument.md \u00a76, \u00a711.4, \u00a712)",
+  "$defs": {
+    "Hash": {
+      "$ref": "author.schema.json#/$defs/Hash"
+    },
+    "Span": {
+      "$ref": "author.schema.json#/$defs/Span"
+    },
+    "Uuid": {
+      "$ref": "author.schema.json#/$defs/Uuid"
+    },
+    "Ref": {
+      "$ref": "author.schema.json#/$defs/Ref"
+    },
+    "Rfc3339": {
+      "$ref": "author.schema.json#/$defs/Rfc3339"
+    },
+    "RunId": {
+      "type": "string",
+      "pattern": "^run_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "TaskId": {
+      "type": "string",
+      "pattern": "^task_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "FindingId": {
+      "type": "string",
+      "pattern": "^finding_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "RecordId": {
+      "type": "string",
+      "pattern": "^rec_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "EvidenceId": {
+      "type": "string",
+      "pattern": "^ev_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "ClaimId": {
+      "type": "string",
+      "pattern": "^cl_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "Verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "needs-review",
+        "not-run"
+      ]
+    },
+    "Support": {
+      "enum": [
+        "direct",
+        "inferential",
+        "partial",
+        "contradicted",
+        "irrelevant",
+        "unknown"
+      ]
+    },
+    "Adequacy": {
+      "enum": [
+        "robust",
+        "adequate",
+        "weak",
+        "none"
+      ]
+    },
+    "MechanicalStatus": {
+      "enum": [
+        "pass",
+        "fail",
+        "not-run",
+        "inapplicable"
+      ]
+    },
+    "ReviewJobStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "incomplete",
+        "cancelled",
+        "budget-exhausted"
+      ]
+    },
+    "Finding": {
+      "type": "object",
+      "description": "\u00a76 Finding. Finding IDs are generated and substituted by the runtime; code is a \u00a78 rule ID or an AUDIT_* code (closed set enforced by policy, not here).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "targetIds",
+        "severity",
+        "explanation",
+        "evidenceIds",
+        "artifactSpans",
+        "repair"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/FindingId"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "targetIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "maxItems": 1000
+        },
+        "severity": {
+          "enum": [
+            "blocker",
+            "major",
+            "minor"
+          ]
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceId"
+          },
+          "maxItems": 1000
+        },
+        "artifactSpans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 1000
+        },
+        "repair": {
+          "enum": [
+            "add-evidence",
+            "narrow-claim",
+            "qualify",
+            "repair-argument",
+            "address-issue",
+            "remove",
+            "manual-review"
+          ]
+        },
+        "kind": {
+          "const": "disagreement"
+        }
+      }
+    },
+    "Check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleId",
+        "result",
+        "rationale",
+        "evidenceIds"
+      ],
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "result": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceId"
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "ResponseBase": {
+      "type": "object",
+      "required": [
+        "rubricVersion",
+        "findings"
+      ],
+      "properties": {
+        "rubricVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "ResponseTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetId",
+        "checks"
+      ],
+      "properties": {
+        "targetId": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Check"
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "SourcesResponse": {
+      "type": "object",
+      "description": "\u00a76 SourcesResponse: support/adequacy fields MUST NOT appear on the sources stage.",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "rubricVersion",
+        "findings",
+        "targets"
+      ],
+      "properties": {
+        "stage": {
+          "const": "sources"
+        },
+        "rubricVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "maxItems": 1000
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResponseTarget"
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "ClaimsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "rubricVersion",
+        "findings",
+        "targets"
+      ],
+      "properties": {
+        "stage": {
+          "const": "claims"
+        },
+        "rubricVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "maxItems": 1000
+        },
+        "targets": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "targetId",
+              "checks",
+              "searchSufficiency"
+            ],
+            "properties": {
+              "targetId": {
+                "$ref": "#/$defs/Uuid"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Check"
+                },
+                "maxItems": 1000
+              },
+              "searchSufficiency": {
+                "enum": [
+                  "checked",
+                  "not-checked"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "SupportResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "rubricVersion",
+        "findings",
+        "targets"
+      ],
+      "properties": {
+        "stage": {
+          "const": "support"
+        },
+        "rubricVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "maxItems": 1000
+        },
+        "targets": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "targetId",
+              "checks",
+              "support",
+              "adequacy",
+              "evidenceRelations"
+            ],
+            "properties": {
+              "targetId": {
+                "$ref": "#/$defs/Uuid"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Check"
+                },
+                "maxItems": 1000
+              },
+              "support": {
+                "$ref": "#/$defs/Support"
+              },
+              "adequacy": {
+                "$ref": "#/$defs/Adequacy"
+              },
+              "evidenceRelations": {
+                "type": "array",
+                "maxItems": 1000,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "evidenceId",
+                    "support",
+                    "rationale"
+                  ],
+                  "properties": {
+                    "evidenceId": {
+                      "$ref": "#/$defs/EvidenceId"
+                    },
+                    "support": {
+                      "$ref": "#/$defs/Support"
+                    },
+                    "rationale": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ArgumentsResponse": {
+      "type": "object",
+      "description": "\u00a76 ArgumentsResponse: an Argument target has adequacy; an Issue target has issueImpact/issueResolution and MUST NOT have adequacy (\u00a711.4).",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "rubricVersion",
+        "findings",
+        "targets"
+      ],
+      "properties": {
+        "stage": {
+          "const": "arguments"
+        },
+        "rubricVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "maxItems": 1000
+        },
+        "targets": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "targetId",
+                  "checks",
+                  "adequacy"
+                ],
+                "properties": {
+                  "targetId": {
+                    "$ref": "#/$defs/Uuid"
+                  },
+                  "checks": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Check"
+                    },
+                    "maxItems": 1000
+                  },
+                  "adequacy": {
+                    "$ref": "#/$defs/Adequacy"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "targetId",
+                  "checks",
+                  "issueImpact",
+                  "issueResolution"
+                ],
+                "properties": {
+                  "targetId": {
+                    "$ref": "#/$defs/Uuid"
+                  },
+                  "checks": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/Check"
+                    },
+                    "maxItems": 1000
+                  },
+                  "issueImpact": {
+                    "enum": [
+                      "none",
+                      "qualify",
+                      "downgrade",
+                      "invalidate"
+                    ]
+                  },
+                  "issueResolution": {
+                    "enum": [
+                      "accepted",
+                      "rejected",
+                      "unresolved"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "ReviewResponse": {
+      "description": "\u00a76 per-stage discriminated union. The extract variant lives in ExtractionRecord (\u00a711.4); the align variant is AlignResponse (the audit variant that includes alignment).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/SourcesResponse"
+        },
+        {
+          "$ref": "#/$defs/ClaimsResponse"
+        },
+        {
+          "$ref": "#/$defs/SupportResponse"
+        },
+        {
+          "$ref": "#/$defs/ArgumentsResponse"
+        },
+        {
+          "$ref": "#/$defs/AlignResponse"
+        }
+      ]
+    },
+    "ReviewRecord": {
+      "type": "object",
+      "description": "\u00a76 ReviewRecord.",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "stage",
+        "targetRefs",
+        "dependencyDigest",
+        "contractHash",
+        "policyHash",
+        "reviewerConfigHash",
+        "promptHash",
+        "inputHash",
+        "status",
+        "inputTokens",
+        "outputTokens",
+        "startedAt",
+        "endedAt"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/RunId"
+        },
+        "stage": {
+          "enum": [
+            "sources",
+            "claims",
+            "support",
+            "arguments",
+            "audit",
+            "extract",
+            "align"
+          ]
+        },
+        "targetRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ref"
+          },
+          "maxItems": 1000
+        },
+        "dependencyDigest": {
+          "$ref": "#/$defs/Hash"
+        },
+        "artifactHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "contractHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "policyHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "reviewerConfigHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "promptHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "inputHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "responseHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "response": {
+          "$ref": "#/$defs/ReviewResponse"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "error",
+            "cancelled",
+            "budget-exhausted"
+          ]
+        },
+        "inputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "startedAt": {
+          "$ref": "#/$defs/Rfc3339"
+        },
+        "endedAt": {
+          "$ref": "#/$defs/Rfc3339"
+        },
+        "errorCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "kind": {
+          "const": "disagreement"
+        },
+        "coreClaimIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClaimId"
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "ExtractedAtomicClaim": {
+      "type": "object",
+      "description": "\u00a76 ExtractedAtomicClaim (runtime-derived). NOT the extract-stage wrapper \u2014 that is ExtractionRecord (\u00a711.4).",
+      "additionalProperties": false,
+      "required": [
+        "extractionId",
+        "claimId",
+        "span",
+        "quote",
+        "kind"
+      ],
+      "properties": {
+        "extractionId": {
+          "$ref": "#/$defs/RecordId"
+        },
+        "claimId": {
+          "$ref": "#/$defs/ClaimId"
+        },
+        "span": {
+          "$ref": "#/$defs/Span"
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12000
+        },
+        "kind": {
+          "enum": [
+            "fact",
+            "source-report",
+            "interpretation",
+            "causal",
+            "intent",
+            "evaluation"
+          ]
+        }
+      }
+    },
+    "ExtractedItem": {
+      "type": "object",
+      "description": "\u00a711.4/\u00a712 ExtractedItem (model output before runtime derivation).",
+      "additionalProperties": false,
+      "required": [
+        "span",
+        "exactText",
+        "atomicClaims",
+        "isQuotation"
+      ],
+      "properties": {
+        "span": {
+          "$ref": "#/$defs/Span"
+        },
+        "exactText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12000
+        },
+        "atomicClaims": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "text",
+              "kind",
+              "scope",
+              "importance"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "kind": {
+                "enum": [
+                  "fact",
+                  "source-report",
+                  "interpretation",
+                  "causal",
+                  "intent",
+                  "evaluation"
+                ]
+              },
+              "scope": {
+                "$ref": "author.schema.json#/$defs/Scope"
+              },
+              "importance": {
+                "enum": [
+                  "core",
+                  "supporting"
+                ]
+              }
+            }
+          }
+        },
+        "isQuotation": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ExtractionRecord": {
+      "type": "object",
+      "description": "\u00a711.4 ExtractionRecord: ReviewRecord system fields with stage fixed to 'extract' and response = {items}.",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "stage",
+        "targetRefs",
+        "dependencyDigest",
+        "contractHash",
+        "policyHash",
+        "reviewerConfigHash",
+        "promptHash",
+        "inputHash",
+        "status",
+        "inputTokens",
+        "outputTokens",
+        "startedAt",
+        "endedAt",
+        "response"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/$defs/RunId"
+        },
+        "stage": {
+          "const": "extract"
+        },
+        "targetRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ref"
+          },
+          "maxItems": 1000
+        },
+        "dependencyDigest": {
+          "$ref": "#/$defs/Hash"
+        },
+        "contractHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "policyHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "reviewerConfigHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "promptHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "inputHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "error",
+            "cancelled",
+            "budget-exhausted"
+          ]
+        },
+        "inputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "startedAt": {
+          "$ref": "#/$defs/Rfc3339"
+        },
+        "endedAt": {
+          "$ref": "#/$defs/Rfc3339"
+        },
+        "errorCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "items"
+          ],
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ExtractedItem"
+              },
+              "maxItems": 1000
+            }
+          }
+        },
+        "kind": {
+          "const": "disagreement"
+        },
+        "coreClaimIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClaimId"
+          },
+          "maxItems": 1000
+        },
+        "artifactHash": {
+          "$ref": "#/$defs/Hash"
+        }
+      }
+    },
+    "AdjudicationRecord": {
+      "type": "object",
+      "description": "\u00a76 AdjudicationRecord (human adjudication; signer is always 'user').",
+      "additionalProperties": false,
+      "required": [
+        "adjudicationId",
+        "findingId",
+        "decision",
+        "reason",
+        "signer",
+        "ts",
+        "dependencyDigest",
+        "overrides"
+      ],
+      "properties": {
+        "adjudicationId": {
+          "$ref": "#/$defs/RecordId"
+        },
+        "findingId": {
+          "$ref": "#/$defs/FindingId"
+        },
+        "decision": {
+          "enum": [
+            "accept",
+            "reject"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "signer": {
+          "const": "user"
+        },
+        "ts": {
+          "$ref": "#/$defs/Rfc3339"
+        },
+        "dependencyDigest": {
+          "$ref": "#/$defs/Hash"
+        },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ruleId",
+            "targetId",
+            "runId"
+          ],
+          "properties": {
+            "ruleId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetId": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "runId": {
+              "$ref": "#/$defs/RunId"
+            }
+          }
+        }
+      }
+    },
+    "Assessment": {
+      "type": "object",
+      "description": "\u00a76 Assessment (derived; never written by author tools).",
+      "additionalProperties": false,
+      "required": [
+        "claimId",
+        "supportGrade",
+        "opposition",
+        "disposition",
+        "reviewState",
+        "reviewRunIds",
+        "rationale"
+      ],
+      "properties": {
+        "claimId": {
+          "$ref": "#/$defs/ClaimId"
+        },
+        "supportGrade": {
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "U"
+          ]
+        },
+        "opposition": {
+          "enum": [
+            "not-checked",
+            "none-found",
+            "material",
+            "decisive"
+          ]
+        },
+        "disposition": {
+          "enum": [
+            "supported",
+            "contested",
+            "underdetermined",
+            "refuted"
+          ]
+        },
+        "reviewState": {
+          "enum": [
+            "current",
+            "stale",
+            "not-run",
+            "incomplete"
+          ]
+        },
+        "reviewRunIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunId"
+          },
+          "maxItems": 1000
+        },
+        "rationale": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "maxItems": 1000
+        }
+      }
+    },
+    "AlignEntry": {
+      "type": "object",
+      "description": "\u00a711.4 alignment entry: one extracted item, exactly once. For relation 'new' claimIds MUST be empty; for exact/equivalent/stronger/broader they MUST be non-empty and valid.",
+      "additionalProperties": false,
+      "required": [
+        "extractedId",
+        "claimIds",
+        "relation",
+        "rationale"
+      ],
+      "properties": {
+        "extractedId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "claimIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ClaimId"
+          },
+          "maxItems": 1000
+        },
+        "relation": {
+          "enum": [
+            "exact",
+            "equivalent",
+            "stronger",
+            "broader",
+            "new"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      }
+    },
+    "AlignResponse": {
+      "type": "object",
+      "description": "\u00a711.4 align response: findings plus the alignment array. Other stages MUST NOT include an alignment field.",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "rubricVersion",
+        "findings",
+        "targets",
+        "alignment"
+      ],
+      "properties": {
+        "stage": {
+          "const": "align"
+        },
+        "rubricVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "maxItems": 1000
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResponseTarget"
+          },
+          "maxItems": 1000
+        },
+        "alignment": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AlignEntry"
+          },
+          "maxItems": 1000
+        }
+      }
+    }
+  },
+  "$ref": "#/$defs/ReviewResponse"
+}

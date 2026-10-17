@@ -131,6 +131,9 @@
       "path": "./packages/interaction/vwa-evidence"
     },
     {
+      "path": "./packages/interaction/vwa-argument"
+    },
+    {
       "path": "./packages/evaluation/vwa-eval"
     },
     {

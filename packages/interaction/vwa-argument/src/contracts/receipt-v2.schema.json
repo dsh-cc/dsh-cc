@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-cc.dev/schemas/vwa-argument/receipt-v2.schema.json",
+  "title": "VWA v2 receipt row (design docs/plans/2026-10-16-vwa-evidence-argument.md §16.1). The ReceiptV2 TS type is owned by @dsh-cc/vwa-evidence (the sole receipt writer); this schema is the validation face it consumes.",
+  "$defs": {
+    "Hash": { "$ref": "author.schema.json#/$defs/Hash" },
+    "Span": { "$ref": "author.schema.json#/$defs/Span" },
+    "Uuid": { "$ref": "author.schema.json#/$defs/Uuid" },
+    "MechanicalStatus": { "$ref": "review.schema.json#/$defs/MechanicalStatus" },
+    "Verdict": { "$ref": "review.schema.json#/$defs/Verdict" },
+    "Assessment": { "$ref": "review.schema.json#/$defs/Assessment" },
+    "SourceUse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "snapshotHash", "evidenceIds"],
+      "properties": {
+        "sourceId": { "type": "string", "pattern": "^src_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+        "snapshotHash": { "$ref": "#/$defs/Hash" },
+        "evidenceIds": { "type": "array", "items": { "type": "string", "pattern": "^ev_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" }, "maxItems": 1000 }
+      }
+    },
+    "ReceiptClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claimId", "spans", "sources", "assessment"],
+      "properties": {
+        "claimId": { "type": "string", "pattern": "^cl_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+        "spans": { "type": "array", "items": { "$ref": "#/$defs/Span" }, "maxItems": 1000 },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/SourceUse" }, "maxItems": 1000 },
+        "assessment": { "$ref": "#/$defs/Assessment" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "receiptId", "ts", "sessionId", "projectId", "projectRevision", "artifactId", "artifactPath", "artifactHash", "graphHash", "policyHash", "reviewerConfigHash", "claims", "numbers", "gates", "checks", "metrics", "reviewRunIds", "findingCounts", "report", "provenance", "delivery", "overall", "nudge"],
+  "properties": {
+    "v": { "const": 2 },
+    "receiptId": { "type": "string", "pattern": "^rec_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "ts": { "type": "integer", "minimum": 0, "description": "Epoch milliseconds; mirrors the v1 row shape." },
+    "sessionId": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "projectId": { "type": "string", "pattern": "^prj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "projectRevision": { "type": "integer", "minimum": 1 },
+    "artifactId": { "type": "string", "pattern": "^art_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+    "artifactPath": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "artifactHash": { "$ref": "#/$defs/Hash" },
+    "graphHash": { "$ref": "#/$defs/Hash" },
+    "policyHash": { "$ref": "#/$defs/Hash" },
+    "reviewerConfigHash": { "$ref": "#/$defs/Hash" },
+    "claims": { "type": "array", "items": { "$ref": "#/$defs/ReceiptClaim" }, "maxItems": 1000 },
+    "numbers": {
+      "type": "array",
+      "description": "Exact existing NumberEntry export from @dsh-cc/vwa-evidence; the writer validates with its own type, this schema only pins the receipt row shape.",
+      "items": { "type": "object" },
+      "maxItems": 1000
+    },
+    "gates": {
+      "type": "array",
+      "description": "Exact existing GateEntry export from @dsh-cc/vwa-evidence.",
+      "items": { "type": "object" },
+      "maxItems": 1000
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mechanical", "evidence", "argument", "audit"],
+      "properties": {
+        "mechanical": { "$ref": "#/$defs/MechanicalStatus" },
+        "evidence": { "$ref": "#/$defs/Verdict" },
+        "argument": { "$ref": "#/$defs/Verdict" },
+        "audit": { "$ref": "#/$defs/Verdict" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mappedAtomicClaims", "extractedAtomicClaims", "reviewedCoreClaims", "coreClaims"],
+      "properties": {
+        "mappedAtomicClaims": { "type": "integer", "minimum": 0 },
+        "extractedAtomicClaims": { "type": "integer", "minimum": 0 },
+        "reviewedCoreClaims": { "type": "integer", "minimum": 0 },
+        "coreClaims": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "reviewRunIds": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^run_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+      "maxItems": 1000
+    },
+    "pendingRunIds": {
+      "type": "array",
+      "description": "Present when review runs are queued/running (§16.1).",
+      "items": { "type": "string", "pattern": "^run_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+      "maxItems": 1000
+    },
+    "findingCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blocker", "major", "minor"],
+      "properties": {
+        "blocker": { "type": "integer", "minimum": 0 },
+        "major": { "type": "integer", "minimum": 0 },
+        "minor": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "hash"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "hash": { "$ref": "#/$defs/Hash" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs", "parentHash"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "description": "Deduplicated, sorted list of all sources actually used for this artifact (§16.1).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sourceId", "revisionHash"],
+            "properties": {
+              "sourceId": { "type": "string", "pattern": "^src_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" },
+              "revisionHash": { "$ref": "#/$defs/Hash" }
+            }
+          },
+          "maxItems": 1000
+        },
+        "parentHash": { "type": "string", "description": "receiptHash of the previous read-back receipt; '' for the first (§16.1).", "pattern": "^[0-9a-f]{0,64}$" }
+      }
+    },
+    "delivery": { "enum": ["draft", "reviewed", "delivered-unverified", "delivered-reviewed"] },
+    "overall": { "enum": ["pass", "fail", "abstained"] },
+    "nudge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["round"],
+      "properties": {
+        "round": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
