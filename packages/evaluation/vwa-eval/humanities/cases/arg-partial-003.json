@@ -1,0 +1,15 @@
+{
+  "id": "arg-partial-003",
+  "domain": "research-argumentative",
+  "synthetic": true,
+  "clean": false,
+  "adjudicated": true,
+  "claims": [
+    { "id": "claim-a1", "span": [0, 55], "kind": "factual", "text": "Corpus size correlates with annotation speed in the pilot.", "core": true },
+    { "id": "claim-a2", "span": [60, 120], "kind": "interpretive", "text": "The correlation therefore generalizes to full-scale annotation.", "core": false }
+  ],
+  "support": [
+    { "evidenceId": "ev-table1", "targetClaimId": "claim-a1", "support": "partial" },
+    { "evidenceId": "ev-table1", "targetClaimId": "claim-a2", "support": "contradicted" }
+  ]
+}

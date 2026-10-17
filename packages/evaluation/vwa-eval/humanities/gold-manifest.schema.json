@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-cc.dev/schemas/vwa-eval/humanities-gold-manifest@1.json",
+  "title": "VWA humanities gold manifest (docs/plans/2026-10-16-vwa-evidence-argument.md §22.2)",
+  "type": "object",
+  "required": ["schema", "scorer", "frozenAt", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "vwa-eval/humanities-gold-manifest@1" },
+    "scorer": { "const": "humanities-scorer@1" },
+    "frozenAt": { "type": "string", "format": "date" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "domain": { "enum": ["historical", "literary", "research-argumentative"] },
+    "split": { "enum": ["dev", "holdout"] },
+    "claim": {
+      "type": "object",
+      "required": ["id", "span", "kind", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^claim-[a-z0-9-]+$" },
+        "span": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 2, "maxItems": 2 },
+        "kind": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "core": { "type": "boolean" }
+      }
+    },
+    "support": {
+      "type": "object",
+      "required": ["evidenceId", "targetClaimId", "support"],
+      "additionalProperties": false,
+      "properties": {
+        "evidenceId": { "type": "string", "pattern": "^ev-[a-z0-9-]+$" },
+        "targetClaimId": { "type": "string", "pattern": "^claim-[a-z0-9-]+$" },
+        "support": { "enum": ["direct", "inferential", "partial", "contradicted", "irrelevant"] }
+      }
+    },
+    "case": {
+      "type": "object",
+      "required": ["id", "domain", "synthetic", "split", "sha256", "clean"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "domain": { "$ref": "#/$defs/domain" },
+        "synthetic": { "type": "boolean", "description": "true for model-generated material; real excerpts MUST be legally usable" },
+        "split": { "$ref": "#/$defs/split" },
+        "clean": { "type": "boolean", "description": "true when the case has no errors/gaps (clean positive)" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "adjudicated": { "type": "boolean", "description": "dual annotation adjudicated; unadjudicated cases are excluded from hard metrics (§22.2)" },
+        "bodyPath": { "type": "string", "description": "repo-relative path to the body text snapshot" },
+        "claims": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+        "support": { "type": "array", "items": { "$ref": "#/$defs/support" } }
+      }
+    }
+  }
+}
