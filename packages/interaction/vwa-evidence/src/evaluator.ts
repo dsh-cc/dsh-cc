@@ -44,7 +44,16 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import type { Executor } from './gates.ts'
 import { evaluateArtifact, type EvaluationResult } from './pipeline.ts'
-import { nudgeBudgetConsumed, receiptLedgerPath, sha256Hex, staleAgainst, writeReceipt, type ReceiptRow } from './receipt.ts'
+import {
+  nudgeBudgetConsumed,
+  receiptLedgerPath,
+  sha256Hex,
+  staleAgainst,
+  writeReceipt,
+  type AnyReceiptRow,
+} from './receipt.ts'
+import { boundArtifactMap, evaluateBoundArtifact } from './bound-eval.ts'
+import type { VwaArgumentDeliveryProvider } from './vwa-delivery.ts'
 import { isWhitelistedRel } from './verify.ts'
 import type { VwaEvidenceSettings } from './settings.ts'
 
@@ -111,6 +120,11 @@ export interface EvaluateTurnOptions {
   now?: () => number | undefined
   /** Abort signal of the turn (payload.signal): an abort discards the round. */
   signal?: AbortSignal | undefined
+  /**
+   * The vwa-argument delivery provider (§16.2), resolved duck-typed per
+   * dispatch. Undefined / absent service ⇒ lane-1-only (v1 path unchanged).
+   */
+  deliveryProvider?: VwaArgumentDeliveryProvider | undefined
 }
 
 export type TurnOutcome =
@@ -206,7 +220,7 @@ async function deriveArtifacts(
 async function pendingArtifacts(
   allEdits: readonly string[],
   windowSet: ReadonlySet<string>,
-  rows: readonly ReceiptRow[],
+  rows: readonly AnyReceiptRow[],
 ): Promise<string[]> {
   const pending: string[] = []
   for (const path of allEdits) {
@@ -242,14 +256,22 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
     // whitelist ∩ inside-workspace filtered.
     const windowEdits = editedPaths(events, startIdx + 1, judgedIdx, options.workspaceRoot)
     const ledgerPath = receiptLedgerPath(options.dshHome, sessionId)
-    const rows = await readJsonl<ReceiptRow>(ledgerPath).catch(() => [] as ReceiptRow[])
+    // Discriminated union read (§16.1): callers filter by row.v; nothing
+    // here casts the whole ledger to v1.
+    const rows = (await readJsonl<unknown>(ledgerPath).catch(() => [] as unknown[])) as AnyReceiptRow[]
+    // Bound lane-2 artifacts (§16.2 step 2): editing paths ∪ project-bound
+    // artifacts ∪ pending, deduped by realpath. No pointer / provider ⇒ lane 1 only.
+    const bound = boundArtifactMap(options, events, debug)
     const windowArtifacts = await deriveArtifacts(windowEdits, options.workspaceRoot)
     const pending = await pendingArtifacts(
       editedPaths(events, 0, events.length - 1, options.workspaceRoot),
       new Set(windowEdits),
       rows,
     )
-    const artifacts = await deriveArtifacts([...windowArtifacts, ...pending], options.workspaceRoot)
+    const artifacts = await deriveArtifacts(
+      [...windowArtifacts, ...pending, ...[...bound.values()].map(entry => entry.absolutePath)],
+      options.workspaceRoot,
+    )
     if (artifacts.length === 0) return { action: 'skip', reason: 'no-artifacts' }
 
     const turnKey = `${sessionId}|${options.turn}`
@@ -257,6 +279,17 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
     const nudged: string[] = []
     for (const artifactPath of artifacts) {
       options.signal?.throwIfAborted()
+      const realKey = await realpath(artifactPath).catch(() => artifactPath)
+      const boundEntry = bound.get(realKey) ?? bound.get(artifactPath)
+      if (boundEntry !== undefined) {
+        // §16.2 lane-2 path: the vwa-argument provider owns the checks.
+        const outcome = await evaluateBoundArtifact(options, {
+          sessionId, turnKey, ledgerPath, rows, events, artifactPath, boundEntry,
+        })
+        if (outcome.receiptWritten) receipts++
+        if (outcome.nudged) nudged.push(outcome.artifactId)
+        continue
+      }
       let text: string
       try {
         text = await readFile(artifactPath, 'utf8')
