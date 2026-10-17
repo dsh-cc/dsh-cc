@@ -14,7 +14,7 @@
 /** One live ambiguous-outcome entry. */
 export interface RetryEntry {
   recordedAt: number
-  /** The failure class that fired (data/classes.json). */
+  /** The failure class that fired (src/classes.json). */
   class: string
   /** The tool call name the outcome belonged to. */
   tool: string

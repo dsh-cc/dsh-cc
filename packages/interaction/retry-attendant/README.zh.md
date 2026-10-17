@@ -22,4 +22,4 @@
 
 ## 状态
 
-已完整实现：失败分类表（`data/classes.json` + `classify`）、效果字段摘要投影、pre-execute 相同重试升级与 M1/M2 接线均已落地，组合位置由 `packages/preset/cc` 钉死。2026-10-16 生产 dogfood 通过设计文档 §5 门后转默认开启；可用 `escalate` 键调节拦截/只观察档。
+已完整实现：失败分类表（`src/classes.json` + `classify`）、效果字段摘要投影、pre-execute 相同重试升级与 M1/M2 接线均已落地，组合位置由 `packages/preset/cc` 钉死。2026-10-16 生产 dogfood 通过设计文档 §5 门后转默认开启；可用 `escalate` 键调节拦截/只观察档。
