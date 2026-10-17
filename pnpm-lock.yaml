@@ -3026,6 +3026,9 @@ importers:
       '@dsh-cc/turn-rules':
         specifier: workspace:^
         version: link:../../interaction/turn-rules
+      '@dsh-cc/vwa-argument':
+        specifier: workspace:^
+        version: link:../../interaction/vwa-argument
       '@dsh-cc/vwa-evidence':
         specifier: workspace:^
         version: link:../../interaction/vwa-evidence

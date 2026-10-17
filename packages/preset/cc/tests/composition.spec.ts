@@ -739,23 +739,26 @@ describe('agent.vwa.cordis.yml composition', () => {  const vwaDoc = expandInclu
     expect(prefix).toContain('〔src:ws:<path>#La-Lb〕')
   })
 
+  /** Rows of a closure with cordis:group children flattened in. */
+  const flat = (rows: any[]): any[] => rows.flatMap((r) => (r.name === 'cordis:group' && Array.isArray(r.config) ? [r, ...r.config] : [r]))
+
   it('carries the vwa-evidence row ONLY in the vwa closure (VWA plan §4.4/§4.5)', () => {
     // The turn-stopping evaluator mounts only in VWA mode: the cc closure and
     // the shared body deliberately lack the row, so cc sessions stay
-    // untouched. Top-level placement is the judged precedent (command-preset
-    // passed smoke that way — plain plugin, no Service).
-    expect(vwaDoc.some((r) => r.id === 'vwa-evidence' && r.name === '@dsh-cc/vwa-evidence')).toBe(true)
-    expect(doc.some((r) => r.id === 'vwa-evidence')).toBe(false)
-    expect(expandIncludes(sharedCordisPath).some((r) => r.id === 'vwa-evidence')).toBe(false)
+    // untouched. It sits in the vwa-lanes group so its scoped read of the
+    // vwa-argument service stays inside that service's isolate realm.
+    expect(flat(vwaDoc).some((r) => r.id === 'vwa-evidence' && r.name === '@dsh-cc/vwa-evidence')).toBe(true)
+    expect(flat(doc).some((r) => r.id === 'vwa-evidence')).toBe(false)
+    expect(flat(expandIncludes(sharedCordisPath)).some((r) => r.id === 'vwa-evidence')).toBe(false)
   })
 
   it('carries the vwa-argument row ONLY in the vwa closure (VWA split plan §23)', () => {
-    // The lane-2 argumentation plugin mounts only in VWA mode, same precedent
-    // as vwa-evidence: the cc closure and the shared body deliberately lack
-    // the row (default-off settings keep it inert until enabled, §13).
-    expect(vwaDoc.some((r) => r.id === 'vwa-argument' && r.name === '@dsh-cc/vwa-argument')).toBe(true)
-    expect(doc.some((r) => r.id === 'vwa-argument')).toBe(false)
-    expect(expandIncludes(sharedCordisPath).some((r) => r.id === 'vwa-argument')).toBe(false)
+    // The lane-2 argumentation plugin mounts only in VWA mode, inside the
+    // vwa-lanes group whose isolate realm covers its `vwa-argument` service
+    // (default-off settings keep it inert until enabled, §13).
+    expect(flat(vwaDoc).some((r) => r.id === 'vwa-argument' && r.name === '@dsh-cc/vwa-argument')).toBe(true)
+    expect(flat(doc).some((r) => r.id === 'vwa-argument')).toBe(false)
+    expect(flat(expandIncludes(sharedCordisPath)).some((r) => r.id === 'vwa-argument')).toBe(false)
   })
 })
 

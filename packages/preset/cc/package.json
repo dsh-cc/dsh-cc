@@ -88,7 +88,8 @@
     "@dsh-cc/reasoning-fold": "workspace:^",
     "@dsh-cc/progress-rebuild": "workspace:^",
     "@dsh-cc/retry-attendant": "workspace:^",
-    "@dsh-cc/vwa-evidence": "workspace:^"
+    "@dsh-cc/vwa-evidence": "workspace:^",
+    "@dsh-cc/vwa-argument": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",

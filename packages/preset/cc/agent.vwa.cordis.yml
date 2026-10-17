@@ -28,19 +28,34 @@
 - id: command-preset
   name: '@dsh-cc/command-preset'
 
-# The vwa-evidence turn-stopping evaluator (VWA plan §4.4/§4.5), mounted ONLY
-# here — the cc preset deliberately lacks this row (§4.4: cc sessions stay
-# untouched; `vwa-evidence.enabled:false` is only an off valve inside vwa).
-# Top-level row placement is the judged precedent: command-preset passed
-# smoke that way (plain plugin, publishes no Service; `inject = ['shell']`
-# post-edit-verify idiom for the §4.3 gate C execution seam).
-- id: vwa-evidence
-  name: '@dsh-cc/vwa-evidence'
-
-# The vwa-argument lane-2 argumentation plugin (VWA split plan
+# The VWA evidence lanes (VWA plan §4.4/§4.5; split plan
 # docs/plans/2026-10-16-vwa-evidence-argument.md §23), mounted ONLY here —
-# same precedent as vwa-evidence: plain plugin (settings namespace + tools +
-# the /vwa command), publishes no Service; `vwa-argument.semantic-enabled`
-# defaults to false, so mounting changes nothing until enabled (§13).
-- id: vwa-argument
-  name: '@dsh-cc/vwa-argument'
+# the cc preset deliberately lacks these rows (cc sessions stay untouched;
+# `vwa-evidence.enabled:false` is only an off valve inside vwa).
+#
+# - vwa-evidence: the lane-1 turn-stopping evaluator. Plain plugin, publishes
+#   no Service; `inject = ['shell']` (post-edit-verify idiom) for the §4.3
+#   gate C execution seam.
+# - vwa-argument: the lane-2 argumentation plugin (settings namespace, the
+#   /vwa command, and — only when `vwa-argument.semantic-enabled` is true —
+#   the author tools, the capture wiring, and the `vwa-argument` delivery
+#   SERVICE (§13; default-off, so mounting changes nothing until enabled).
+#
+# Because vwa-argument publishes a Service, the pair sits in a group whose
+# `isolate` realm covers it (the agent.shared.cordis.yml service-row rule:
+# without it the service lands in the root realm and the preset mount
+# rejects it as leaked). vwa-evidence must share the realm: it reads the
+# service with a scoped ctx.get, which cannot cross an isolate boundary. It
+# resolves the service per turn, so the row order inside the group does not
+# matter.
+- id: vwa-lanes
+  name: cordis:group
+  group: true
+  isolate:
+    vwa-argument: true
+  config:
+    - id: vwa-evidence
+      name: '@dsh-cc/vwa-evidence'
+
+    - id: vwa-argument
+      name: '@dsh-cc/vwa-argument'
