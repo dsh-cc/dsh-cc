@@ -19,6 +19,13 @@ on:
 permissions:
   contents: read
 
+# Every run: step uses `bash -eo pipefail` (GitHub's default without an
+# explicit shell is `bash -e`, which lets `cmd | tee log` mask cmd's failure).
+# Enforced by scripts/check-workflow-pipefail.mjs.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   freshness:
     runs-on: ubuntu-latest

@@ -55,6 +55,13 @@ concurrency:
   group: presubmit-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# Every run: step uses `bash -eo pipefail` (GitHub's default without an
+# explicit shell is `bash -e`, which lets `cmd | tee log` mask cmd's failure).
+# Enforced by scripts/check-workflow-pipefail.mjs.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   presubmit:
     runs-on: ubuntu-latest
@@ -101,6 +108,12 @@ jobs:
         if: github.event_name == 'pull_request'
         working-directory: dsh-cc
         run: node scripts/check-eval-gate.mjs
+
+      # Every workflow runs steps under pipefail (defaults.run.shell: bash);
+      # pure static, before install.
+      - name: Workflow pipefail (check:workflow-pipefail)
+        working-directory: dsh-cc
+        run: node scripts/check-workflow-pipefail.mjs && node scripts/check-workflow-pipefail.test.mjs
 
       - name: Canonical project identity (check:identity)
         working-directory: dsh-cc
@@ -244,9 +257,9 @@ jobs:
       # Expected — not guaranteed — on cache-hit runs (measured ~1m pre-step
       # prefix leaves ~4m slack under the 30m job cap); a cold-cache hung
       # suite can still lose artifacts (accepted residual, stated in §5).
-      # Default bash shell carries pipefail, so the step exit status stays
-      # vitest's. The junit XML is best-effort (end-of-run writer); the tee'd
-      # log is the expected artifact.
+      # The workflow-level `defaults.run.shell: bash` supplies pipefail, so the
+      # step exit status stays vitest's, not tee's. The junit XML is
+      # best-effort (end-of-run writer); the tee'd log is the expected artifact.
       - name: Unit tests (vitest)
         working-directory: dsh-cc
         timeout-minutes: 25

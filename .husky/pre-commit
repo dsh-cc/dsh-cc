@@ -41,3 +41,4 @@ node scripts/check-deep-src-imports.mjs
 node scripts/check-vendor-purity.mjs
 node scripts/check-capability-evidence.mjs
 node scripts/generate-parity-matrix.mjs --check
+node scripts/check-workflow-pipefail.mjs
