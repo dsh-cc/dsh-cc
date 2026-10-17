@@ -23,7 +23,10 @@ import type { Id, ReviewResponse } from './types.ts'
 
 /** The harness `llm` service face this adapter needs (no hard service import). */
 export interface ReviewLlmFace {
-  prepareCall(config: { provider: string; model: string; maxTokens?: number }, signal?: AbortSignal): Promise<PreparedLlmCall>
+  prepareCall(
+    config: { provider: string; model: string; maxTokens?: number },
+    signal?: AbortSignal,
+  ): Promise<PreparedLlmCall>
 }
 
 /** A resolved one-shot route for reviewer calls. */
@@ -52,6 +55,8 @@ export interface PreparedReviewCall {
 
 /** Appendix A ReviewModelAdapter. */
 export interface ReviewModelAdapter {
+  /** Freeze provider registration and effective configuration before hashing. */
+  initialize?(maxOutputTokens: number, signal: AbortSignal): Promise<void>
   prepareReviewCall(input: {
     messages: ReviewMessages
     responseSchema: object
@@ -83,30 +88,56 @@ export function createReviewAdapter(options: {
   route: ReviewerRoute
   /** true (default): host token-meter heuristic chars/4 labeled 'tokenizer'; false: byte count. */
   tokenizerAvailable?: boolean
+  countTokens?(messages: ReviewMessages): Promise<number>
 }): ReviewModelAdapter {
-  const tokenizerAvailable = options.tokenizerAvailable ?? true
+  const tokenizerAvailable = options.countTokens !== undefined
+  let pending: PreparedLlmCall | undefined
+  let effectiveConfig: Record<string, unknown> | undefined
+  const freeze = async (maxTokens: number, signal: AbortSignal): Promise<PreparedLlmCall> => {
+    const call = await options.llm.prepareCall(
+      { provider: options.route.provider, model: options.route.model, maxTokens },
+      signal,
+    )
+    const config = JSON.parse(JSON.stringify(call.config)) as Record<string, unknown>
+    if (effectiveConfig && JSON.stringify(config) !== JSON.stringify(effectiveConfig))
+      throw new ReviewInvalidError('reviewer configuration changed during the run')
+    effectiveConfig = config
+    return call
+  }
   const toWire = (messages: ReviewMessages) => ({
     ...(messages.some((m) => m.role === 'system')
-      ? { system: messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n') }
+      ? {
+          system: messages
+            .filter((m) => m.role === 'system')
+            .map((m) => m.content)
+            .join('\n\n'),
+        }
       : {}),
-    messages: messages.filter((m) => m.role !== 'system').map((m) => createUserMessage({
-      content: [{ type: 'text', text: m.content }],
-      source: { kind: 'user' as const },
-    })),
+    messages: messages
+      .filter((m) => m.role !== 'system')
+      .map((m) =>
+        createUserMessage({
+          content: [{ type: 'text', text: m.content }],
+          source: { kind: 'user' as const },
+        }),
+      ),
   })
   return {
+    async initialize(maxTokens, signal) {
+      pending ??= await freeze(maxTokens, signal)
+    },
     async prepareReviewCall(input) {
-      const prepared: PreparedLlmCall = await options.llm.prepareCall(
-        { provider: options.route.provider, model: options.route.model, maxTokens: input.maxOutputTokens },
-        input.signal,
-      )
+      const reserved = pending
+      pending = undefined
+      const prepared = reserved ?? (await freeze(input.maxOutputTokens, input.signal))
       const wire = toWire(input.messages)
       const requestOptions: GenerateOptions = {
+        ...prepared.config,
         provider: prepared.config.provider,
         model: prepared.config.model,
         messages: wire.messages,
         tools: forcedRespondTools(input.responseSchema),
-        maxTokens: input.maxOutputTokens,
+        maxTokens: prepared.config.maxTokens ?? input.maxOutputTokens,
         ...(wire.system === undefined ? {} : { system: wire.system }),
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       }
@@ -136,10 +167,13 @@ export function createReviewAdapter(options: {
             // Transient transport failure: the runner retries once (§13).
             throw new Error(`review dispatch failed: ${finish.kind}`)
           }
-          // Prefer the forced `respond` tool call; fall back to raw text.
-          const call = assembler.blocks().find((block) => block.type === 'tool-call') as { type: 'tool-call'; arguments: string } | undefined
-          const raw = call !== undefined ? call.arguments
-            : assembler.blocks().filter((block) => block.type === 'text').map((block) => (block as { text: string }).text).join('')
+          const calls = assembler.blocks().filter((block) => block.type === 'tool-call') as {
+            name: string
+            arguments: string
+          }[]
+          if (calls.length !== 1 || calls[0]!.name !== 'respond')
+            throw new ReviewInvalidError('expected exactly one respond tool call')
+          const raw = calls[0]!.arguments
           if (raw.length === 0) throw new ReviewInvalidError('empty review response')
           const usage = assembler.usage
           return {
@@ -156,12 +190,12 @@ export function createReviewAdapter(options: {
         model: options.route.model,
         promptTemplates: TEMPLATE_VERSION,
         tokenizer: tokenizerAvailable ? 'tokenizer' : 'bytes-upper-bound',
+        ...(effectiveConfig ? { effectiveConfig } : {}),
       }
     },
     async countInput(messages) {
       if (tokenizerAvailable) {
-        const chars = messages.reduce((sum, m) => sum + m.content.length, 0)
-        return { tokens: Math.ceil(chars / 4), method: 'tokenizer' }
+        return { tokens: await options.countTokens!(messages), method: 'tokenizer' }
       }
       const bytes = Buffer.from(messages.map((m) => m.content).join(''), 'utf8').length
       return { tokens: bytes, method: 'bytes-upper-bound' }
@@ -185,11 +219,34 @@ export function parseReviewResponse(raw: string): ReviewResponse {
 
 /** §8 rule ids + the runtime-only finding codes (§11.4). */
 const KNOWN_RULES = new Set([
-  'SOURCE-01', 'SOURCE-02', 'SOURCE-03', 'EVID-01', 'EVID-02', 'SUP-01', 'SUP-02',
-  'ARG-01', 'ARG-02', 'HIST-01', 'CAUSE-01', 'INTENT-01', 'INTERP-01', 'EVAL-01',
-  'ISSUE-01', 'AUDIT-01', 'AUDIT-02', 'AUDIT-03', 'AUDIT-04', 'AUDIT-05',
+  'SOURCE-01',
+  'SOURCE-02',
+  'SOURCE-03',
+  'EVID-01',
+  'EVID-02',
+  'SUP-01',
+  'SUP-02',
+  'ARG-01',
+  'ARG-02',
+  'HIST-01',
+  'CAUSE-01',
+  'INTENT-01',
+  'INTERP-01',
+  'EVAL-01',
+  'ISSUE-01',
+  'AUDIT-01',
+  'AUDIT-02',
+  'AUDIT-03',
+  'AUDIT-04',
+  'AUDIT-05',
 ])
-const FINDING_CODES = new Set([...KNOWN_RULES, 'AUDIT_NEW_CLAIM', 'AUDIT_STRONGER', 'AUDIT_BROADER', 'REVIEWER_DISAGREEMENT'])
+const FINDING_CODES = new Set([
+  ...KNOWN_RULES,
+  'AUDIT_NEW_CLAIM',
+  'AUDIT_STRONGER',
+  'AUDIT_BROADER',
+  'REVIEWER_DISAGREEMENT',
+])
 
 /** One dispatched task's validation inputs (the envelope the task was sent with). */
 export interface ReviewTaskContract {
@@ -216,7 +273,12 @@ export function validateTaskResponse(response: ReviewResponse, contract: ReviewT
   if (response.stage !== contract.stage) {
     throw new ReviewInvalidError(`stage mismatch: expected ${contract.stage}, got ${response.stage}`)
   }
+  const seenTargets = new Set<string>()
   for (const target of response.targets) {
+    if (seenTargets.has(target.targetId)) throw new ReviewInvalidError(`duplicate target ${target.targetId}`)
+    seenTargets.add(target.targetId)
+    if (!contract.requiredRules.has(target.targetId))
+      throw new ReviewInvalidError(`unexpected response target ${target.targetId}`)
     if (!contract.targetIds.has(target.targetId)) {
       throw new ReviewInvalidError(`fabricated target id ${target.targetId}`)
     }
@@ -224,10 +286,13 @@ export function validateTaskResponse(response: ReviewResponse, contract: ReviewT
     const seen = new Set<string>()
     for (const check of target.checks) {
       if (!KNOWN_RULES.has(check.ruleId)) throw new ReviewInvalidError(`unknown rule ${check.ruleId}`)
-      if (!required.has(check.ruleId)) throw new ReviewInvalidError(`rule ${check.ruleId} not required for target ${target.targetId}`)
+      if (!required.has(check.ruleId))
+        throw new ReviewInvalidError(`rule ${check.ruleId} not required for target ${target.targetId}`)
+      if (seen.has(check.ruleId)) throw new ReviewInvalidError(`duplicate rule ${check.ruleId}`)
       seen.add(check.ruleId)
       for (const evidenceId of check.evidenceIds) {
-        if (!contract.knownEvidenceIds.has(evidenceId)) throw new ReviewInvalidError(`fabricated evidence id ${evidenceId}`)
+        if (!contract.knownEvidenceIds.has(evidenceId))
+          throw new ReviewInvalidError(`fabricated evidence id ${evidenceId}`)
       }
     }
     // Contradictory combo (§7.1): fail together with adequacy robust/adequate.
@@ -242,15 +307,42 @@ export function validateTaskResponse(response: ReviewResponse, contract: ReviewT
       }
       const expected = contract.groupEvidenceIds?.get(target.targetId) ?? []
       const covered = new Set(target.evidenceRelations.map((r) => r.evidenceId))
-      if (expected.some((id) => !covered.has(id)) || covered.size !== expected.length) {
-        throw new ReviewInvalidError(`evidenceRelations for ${target.targetId} must cover exactly the group's evidenceIds`)
+      if (
+        expected.some((id) => !covered.has(id)) ||
+        covered.size !== expected.length ||
+        target.evidenceRelations.length !== expected.length
+      ) {
+        throw new ReviewInvalidError(
+          `evidenceRelations for ${target.targetId} must cover exactly the group's evidenceIds`,
+        )
       }
       for (const relation of target.evidenceRelations) {
-        if (!contract.knownEvidenceIds.has(relation.evidenceId)) throw new ReviewInvalidError(`fabricated evidence id ${relation.evidenceId}`)
+        if (!contract.knownEvidenceIds.has(relation.evidenceId))
+          throw new ReviewInvalidError(`fabricated evidence id ${relation.evidenceId}`)
       }
     }
+    if (response.stage === 'arguments' && target.targetId.startsWith('arg_') && !('adequacy' in target))
+      throw new ReviewInvalidError('argument target requires adequacy')
+    if (
+      response.stage === 'arguments' &&
+      target.targetId.startsWith('iss_') &&
+      (!('issueImpact' in target) || !('issueResolution' in target) || 'adequacy' in target)
+    )
+      throw new ReviewInvalidError('issue target requires impact and resolution only')
+    if (
+      response.stage === 'arguments' &&
+      'issueImpact' in target &&
+      target.issueImpact === 'invalidate' &&
+      target.checks.every((c) => c.evidenceIds.length === 0) &&
+      !response.findings.some(
+        (f) => f.targetIds.includes(target.targetId) && (f.evidenceIds.length > 0 || f.explanation.trim().length > 0),
+      )
+    )
+      throw new ReviewInvalidError('decisive issue requires located evidence or an explicit inference contradiction')
     if (response.stage === 'arguments' && !('adequacy' in target) && !('issueImpact' in target)) {
-      throw new ReviewInvalidError(`arguments target ${target.targetId} must carry adequacy or issueImpact/issueResolution`)
+      throw new ReviewInvalidError(
+        `arguments target ${target.targetId} must carry adequacy or issueImpact/issueResolution`,
+      )
     }
   }
   // Required-rule closure (R1-03): every dispatched rule must appear exactly
@@ -264,9 +356,12 @@ export function validateTaskResponse(response: ReviewResponse, contract: ReviewT
     }
   }
   for (const finding of response.findings) {
+    if ('kind' in finding || finding.code === 'REVIEWER_DISAGREEMENT')
+      throw new ReviewInvalidError('reviewer disagreement is runtime-generated only')
     if (!FINDING_CODES.has(finding.code)) throw new ReviewInvalidError(`unknown finding code ${finding.code}`)
     for (const id of finding.targetIds) {
-      if (!contract.targetIds.has(id) && !contract.knownEvidenceIds.has(id)) throw new ReviewInvalidError(`fabricated finding target ${id}`)
+      if (!contract.targetIds.has(id) && !contract.knownEvidenceIds.has(id))
+        throw new ReviewInvalidError(`fabricated finding target ${id}`)
     }
     for (const id of finding.evidenceIds) {
       if (!contract.knownEvidenceIds.has(id)) throw new ReviewInvalidError(`fabricated finding evidence ${id}`)

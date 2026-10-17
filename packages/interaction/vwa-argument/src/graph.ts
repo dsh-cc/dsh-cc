@@ -159,7 +159,8 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
   if (mutation.op === 'set-contract') {
     validateDef('ProjectContract', mutation.contract)
     if (mutation.contract.question.trim() === '') reject('SCHEMA_INVALID', 'contract.question must be non-empty')
-    graph.snapshot.contract = mutation.contract
+    const reviewSettings = graph.snapshot.contract.reviewSettings
+    graph.snapshot.contract = { ...mutation.contract, ...(reviewSettings ? { reviewSettings } : {}) }
     contractChanged = true // §15: contract change invalidates all project semantic reviews.
     changedIds.push('contract')
   } else if (mutation.op === 'upsert') {

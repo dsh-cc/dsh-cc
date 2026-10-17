@@ -14,13 +14,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { readJsonl } from '@dsh-cc/sidecar-io'
-import {
-  createEvaluatorState,
-  evaluateTurnStopping,
-  type EvaluatorState,
-} from '../src/evaluator.ts'
+import { createEvaluatorState, evaluateTurnStopping, type EvaluatorState } from '../src/evaluator.ts'
 import { isWhitelistedRel } from '../src/verify.ts'
-import { nudgeBudgetConsumed, receiptHashOf, receiptLedgerPath, staleAgainst, type ReceiptV2 } from '../src/receipt.ts'
+import {
+  sha256Hex,
+  nudgeBudgetConsumed,
+  receiptHashOf,
+  receiptLedgerPath,
+  staleAgainst,
+  type ReceiptV2,
+} from '../src/receipt.ts'
 import {
   buildReceiptV2,
   deliveryState,
@@ -95,7 +98,11 @@ function fakeProvider(input: {
       if (input.failCheckWith !== undefined) throw input.failCheckWith
       return { evaluationId: `eval_${calls}`, bindingDigest: 'd'.repeat(64), check: input.check }
     },
-    renderReport: async () => ({ text: input.reportText ?? '# report\n', reportHash: 'r'.repeat(64), bindingDigest: 'd'.repeat(64) }),
+    renderReport: async () => ({
+      text: input.reportText ?? '# report\n',
+      reportHash: sha256Hex(input.reportText ?? '# report\n'),
+      bindingDigest: 'd'.repeat(64),
+    }),
   }
 }
 
@@ -182,10 +189,17 @@ describe('v2 receipt write path (§16.1, D15)', () => {
     const { appendJsonl } = await import('@dsh-cc/sidecar-io')
     const ledger = receiptLedgerPath(e.home, 'sess')
     const oldRow = buildReceiptV2({
-      sessionId: 'sess', ts: 1, receiptId: 'rec_' + '1'.repeat(32), projectId,
-      artifactPath: join(e.root, 'docs/a.md'), events: [], workspaceRoot: e.root,
-      parentHash: '', report: { path: '.dsh/vwa/x/reports/a.md', hash: 'r'.repeat(64) },
-      check, neverRun: false,
+      sessionId: 'sess',
+      ts: 1,
+      receiptId: 'rec_' + '1'.repeat(32),
+      projectId,
+      artifactPath: join(e.root, 'docs/a.md'),
+      events: [],
+      workspaceRoot: e.root,
+      parentHash: '',
+      report: { path: '.dsh/vwa/x/reports/a.md', hash: 'r'.repeat(64) },
+      check,
+      neverRun: false,
     })
     await appendJsonl(ledger, JSON.parse(JSON.stringify(oldRow)))
     // Simulated write failure: the ledger FILE becomes unwritable, so the
@@ -207,6 +221,17 @@ describe('v2 receipt write path (§16.1, D15)', () => {
 })
 
 describe('bound turn-end integration (§16.2)', () => {
+  it('report rendering failure writes no success receipt', async () => {
+    const e = await env()
+    await bindProject(e.root)
+    const provider = fakeProvider({ check: makeCheck() })
+    provider.renderReport = async () => {
+      throw new Error('report unavailable')
+    }
+    const { outcome } = await runTurn(e, [userEvent(), assistantEvent(1)], provider)
+    expect(outcome.receipts).toBe(0)
+    expect(await v2Rows(e.home)).toHaveLength(0)
+  })
   it('a failing bound artifact writes overall fail and nudges with targets + the suggested argument.review payload', async () => {
     const e = await env()
     await bindProject(e.root)
@@ -268,11 +293,21 @@ describe('bound turn-end integration (§16.2)', () => {
     // Two v1 rows with nudges = 2 already spent against a budget of 2: the
     // bound artifact's mechanical fail must NOT consume a third nudge.
     const ledger = receiptLedgerPath(e.home, 'sess')
-    const v1 = (i: number) => JSON.stringify({
-      v: 1, ts: 1, sessionId: 'sess', artifactId: `a${i}`, artifactPath: `/w/a${i}.md`, artifactHash: 'h',
-      claims: [], numbers: [], gates: [], provenance: { inputs: [], parentHash: '' },
-      overall: 'fail', nudge: { round: 1 },
-    })
+    const v1 = (i: number) =>
+      JSON.stringify({
+        v: 1,
+        ts: 1,
+        sessionId: 'sess',
+        artifactId: `a${i}`,
+        artifactPath: `/w/a${i}.md`,
+        artifactHash: 'h',
+        claims: [],
+        numbers: [],
+        gates: [],
+        provenance: { inputs: [], parentHash: '' },
+        overall: 'fail',
+        nudge: { round: 1 },
+      })
     await mkdir(join(e.home, 'vwa-receipts'), { recursive: true })
     await writeFile(ledger, `${v1(1)}\n${v1(2)}\n`, 'utf8')
     const rows = (await readJsonl<unknown>(ledger)) as never[]
@@ -295,15 +330,31 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
   it('staleAgainst skips v2 rows; nudgeBudgetConsumed counts both versions (D20)', () => {
     const path = '/w/a.md'
     const v1row = {
-      v: 1, ts: 1, sessionId: 's', artifactId: 'a', artifactPath: path, artifactHash: 'old',
-      claims: [], numbers: [], gates: [], provenance: { inputs: [], parentHash: '' },
-      overall: 'fail', nudge: { round: 1 },
+      v: 1,
+      ts: 1,
+      sessionId: 's',
+      artifactId: 'a',
+      artifactPath: path,
+      artifactHash: 'old',
+      claims: [],
+      numbers: [],
+      gates: [],
+      provenance: { inputs: [], parentHash: '' },
+      overall: 'fail',
+      nudge: { round: 1 },
     }
     const v2row = buildReceiptV2({
-      sessionId: 's', ts: 2, receiptId: 'rec_' + '5'.repeat(32), projectId: 'prj_' + '9'.repeat(32),
-      artifactPath: path, events: [], workspaceRoot: '/w', parentHash: '',
+      sessionId: 's',
+      ts: 2,
+      receiptId: 'rec_' + '5'.repeat(32),
+      projectId: 'prj_' + '9'.repeat(32),
+      artifactPath: path,
+      events: [],
+      workspaceRoot: '/w',
+      parentHash: '',
       report: { path: '.dsh/x.md', hash: 'r'.repeat(64) },
-      check: makeCheck({ artifactHash: 'new' }), neverRun: false,
+      check: makeCheck({ artifactHash: 'new' }),
+      neverRun: false,
     })
     v2row.nudge.round = 1
     // The v1 staleness face ignores v2 rows entirely (§16.1): the v1 row
@@ -314,11 +365,27 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
     expect(nudgeBudgetConsumed([v1row, v2row])).toBe(2)
   })
   it('D17-full: the mechanical mapping lands in checks.mechanical verbatim (style not-run, exec inapplicable)', () => {
-    expect(overallOf(makeCheck({ checks: { mechanical: 'not-run', evidence: 'pass', argument: 'pass', audit: 'pass' } }), false)).toBe('abstained')
-    expect(overallOf(makeCheck({ checks: { mechanical: 'inapplicable', evidence: 'pass', argument: 'pass', audit: 'pass' } }), false)).toBe('pass')
+    expect(
+      overallOf(
+        makeCheck({ checks: { mechanical: 'not-run', evidence: 'pass', argument: 'pass', audit: 'pass' } }),
+        false,
+      ),
+    ).toBe('abstained')
+    expect(
+      overallOf(
+        makeCheck({ checks: { mechanical: 'inapplicable', evidence: 'pass', argument: 'pass', audit: 'pass' } }),
+        false,
+      ),
+    ).toBe('pass')
     const row = buildReceiptV2({
-      sessionId: 's', ts: 1, receiptId: 'rec_' + '6'.repeat(32), projectId: 'prj_' + '9'.repeat(32),
-      artifactPath: '/w/a.md', events: [], workspaceRoot: '/w', parentHash: '',
+      sessionId: 's',
+      ts: 1,
+      receiptId: 'rec_' + '6'.repeat(32),
+      projectId: 'prj_' + '9'.repeat(32),
+      artifactPath: '/w/a.md',
+      events: [],
+      workspaceRoot: '/w',
+      parentHash: '',
       report: { path: '.dsh/x', hash: 'r'.repeat(64) },
       check: makeCheck({ checks: { mechanical: 'inapplicable', evidence: 'pass', argument: 'pass', audit: 'pass' } }),
       neverRun: false,
@@ -332,8 +399,12 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
   })
   it('delivery states follow §17.3: only the real presented event advances; otherwise delivery unconfirmed', () => {
     const base = {
-      workspaceRoot: '/w', events: [] as unknown[], artifactPath: '/w/a.md',
-      artifactHash: 'h'.repeat(64), reportPath: '.dsh/vwa/p/reports/a.md', reportHash: 'r'.repeat(64),
+      workspaceRoot: '/w',
+      events: [] as unknown[],
+      artifactPath: '/w/a.md',
+      artifactHash: 'h'.repeat(64),
+      reportPath: '.dsh/vwa/p/reports/a.md',
+      reportHash: 'r'.repeat(64),
     }
     expect(deliveryState({ ...base, eligibleForReviewed: true })).toBe('reviewed')
     expect(deliveryState({ ...base, eligibleForReviewed: false })).toBe('draft')
@@ -345,7 +416,12 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
     // A bare provider (no forWorkspace host face) is not the published service.
     expect(resolveDeliveryProvider({ get: () => provider }, '/w')).toBeUndefined()
     const roots: string[] = []
-    const host = { forWorkspace: (root: string) => { roots.push(root); return provider } }
+    const host = {
+      forWorkspace: (root: string) => {
+        roots.push(root)
+        return provider
+      },
+    }
     expect(resolveDeliveryProvider({ get: () => host }, '/w')).toBe(provider)
     expect(roots).toEqual(['/w'])
   })

@@ -24,6 +24,7 @@ export interface ReviewBudget {
 export interface ReviewTaskService {
   /** false → per-owner cap overflow (REVIEW_UNAVAILABLE). */
   start(taskId: string, label: string, run: (signal: AbortSignal) => Promise<void>): boolean
+  hostId?(taskId: string): string | undefined
   cancel(taskId: string): void
   get(taskId: string): 'running' | 'settled' | 'unknown'
   emitProgress(event: { runId: Id; stage: string; message: string }): void
@@ -37,19 +38,19 @@ export interface ReviewTaskService {
 export function createHostTaskService(
   jobs:
     | {
-      start(spec: {
-        kind: string
-        label: string
-        owner?: unknown
-        run(job: { id: string; updateProgress(line: string): void }): {
-          cancel(reason?: string): void
-          done: Promise<{ status: string; detail?: string }>
-        }
-      }): string | { id: string }
-      kill(id: string, caller?: unknown, reason?: string): string
-      get(id: string): { status: string }
-      list(caller?: unknown): unknown[]
-    }
+        start(spec: {
+          kind: string
+          label: string
+          owner?: unknown
+          run(job: { id: string; updateProgress(line: string): void }): {
+            cancel(reason?: string): void
+            done: Promise<{ status: string; detail?: string }>
+          }
+        }): string | { id: string }
+        kill(id: string, caller?: unknown, reason?: string): string
+        get(id: string): { status: string }
+        list(caller?: unknown): unknown[]
+      }
     | undefined,
   owner?: unknown,
   onProgress?: (event: { runId: Id; stage: string; message: string }) => void,
@@ -62,7 +63,14 @@ export function createHostTaskService(
     start(taskId, label, run) {
       try {
         const ownerJobs = jobs.list?.(owner) as unknown[] | undefined
-        if (Array.isArray(ownerJobs) && ownerJobs.length >= 10) return false // §13 per-owner cap
+        if (
+          Array.isArray(ownerJobs) &&
+          ownerJobs.filter((j) => {
+            const status = (j as { status?: string }).status
+            return status === 'running' || status === 'stopping'
+          }).length >= 10
+        )
+          return false // §13 per-owner cap
       } catch {
         // Owner enumeration is advisory; fall through to the start attempt.
       }
@@ -87,6 +95,9 @@ export function createHostTaskService(
       } catch {
         return false
       }
+    },
+    hostId(taskId) {
+      return jobIds.get(taskId)
     },
     cancel(taskId) {
       // Cancellation travels through the host registry: jobs.kill(runId).
@@ -118,8 +129,15 @@ export class BudgetTracker {
   outputTokens = 0
   private readonly deadline: number
 
-  constructor(readonly budget: ReviewBudget, private readonly now: () => number = Date.now) {
+  constructor(
+    readonly budget: ReviewBudget,
+    private readonly now: () => number = Date.now,
+  ) {
     this.deadline = now() + budget.wallMs
+  }
+
+  remainingMs(): number {
+    return Math.max(0, this.deadline - this.now())
   }
 
   wallExceeded(): boolean {
@@ -146,4 +164,3 @@ export class BudgetTracker {
     this.outputTokens += actual?.outputTokens ?? this.budget.maxOutputTokensPerCall
   }
 }
-

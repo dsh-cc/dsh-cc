@@ -98,10 +98,12 @@ export async function evaluateBoundArtifact(
   options.signal?.throwIfAborted()
   let check: DeliveryCheckLike
   let evaluationId: string
+  let bindingDigest: string
   try {
     const frozen = await provider.checkForDelivery(ctx.boundEntry.projectId, ctx.boundEntry.artifactId)
     check = frozen.check
     evaluationId = frozen.evaluationId
+    bindingDigest = frozen.bindingDigest
   } catch (error: unknown) {
     // Stale binding (D16: body written via shell after binding) — no
     // receipt (the full v2 row needs the frozen check), but the closed
@@ -111,14 +113,17 @@ export async function evaluateBoundArtifact(
   }
   const neverRun = check.reviewRunIds.length === 0
   const pending = check.pendingRunIds.length > 0
-  const reportRelative = `.dsh/vwa/${ctx.boundEntry.projectId}/reports/${check.artifactId}.md`
+  const reportRelative = `docs/vwa-reports/${ctx.boundEntry.projectId}/${check.artifactId}.review.md`
   // Report written FIRST (§16.1a); its hash enters the receipt.
   let report = { path: reportRelative, hash: sha256Hex('') }
   try {
     const rendered = await provider.renderReport(ctx.boundEntry.projectId, check.artifactId, evaluationId, 'markdown')
+    if (rendered.bindingDigest !== bindingDigest || rendered.reportHash !== sha256Hex(rendered.text))
+      throw new Error('rendered report does not match its frozen binding and hash')
     report = writeBoundReport(options.workspaceRoot, ctx.boundEntry.projectId, rendered.text, check.artifactId)
   } catch (error: unknown) {
-    debug(`vwa-evidence: report rendering failed for ${check.artifactId} (receipt carries the empty-file hash): ${String(error)}`)
+    debug(`vwa-evidence: report rendering failed for ${check.artifactId}: ${String(error)}`)
+    return { artifactId: check.artifactId, receiptWritten: false, nudged: false }
   }
   const parentHash = lastV2ReceiptHash(ctx.rows, ctx.artifactPath)
   const row = buildReceiptV2({
@@ -135,13 +140,15 @@ export async function evaluateBoundArtifact(
     neverRun,
   })
   // Never-run/pending → no nudge ever (§16.2); otherwise the closed trigger.
-  const trigger = !neverRun && !pending && row.overall === 'fail'
+  const trigger =
+    !neverRun && !pending && (row.overall === 'fail' || check.assessments.some((a) => a.reviewState === 'stale'))
   const artifactKey = `${ctx.turnKey}|${ctx.artifactPath}`
   const sessionSpent = Math.max(nudgeBudgetConsumed(ctx.rows), options.state.latch.get(ctx.sessionId) ?? 0)
-  const fire = trigger
-    && !options.state.perArtifact.has(artifactKey)
-    && (options.state.perTurn.get(ctx.turnKey) ?? 0) < 2
-    && sessionSpent < options.settings['nudge-budget']
+  const fire =
+    trigger &&
+    !options.state.perArtifact.has(artifactKey) &&
+    (options.state.perTurn.get(ctx.turnKey) ?? 0) < 2 &&
+    sessionSpent < options.settings['nudge-budget']
   const receipt: ReceiptV2 = row
   if (fire) {
     options.state.perArtifact.add(artifactKey)
@@ -149,6 +156,7 @@ export async function evaluateBoundArtifact(
     options.state.latch.set(ctx.sessionId, Math.max(options.state.latch.get(ctx.sessionId) ?? 0, sessionSpent) + 1)
     receipt.nudge.round = 1
   }
+  options.signal?.throwIfAborted()
   const written = await writeReceiptV2(ctx.ledgerPath, receipt)
   if (!written.ok) {
     // D15: a failed read-back is never presented as a receipt; the round
@@ -161,12 +169,17 @@ export async function evaluateBoundArtifact(
 }
 
 /** The stale-binding nudge (D16): budget-guarded, no receipt row (no frozen check exists). */
-async function nudgeStaleBinding(options: EvaluateTurnOptions, ctx: BoundEvalContext, error: unknown): Promise<BoundOutcome> {
+async function nudgeStaleBinding(
+  options: EvaluateTurnOptions,
+  ctx: BoundEvalContext,
+  error: unknown,
+): Promise<BoundOutcome> {
   const artifactKey = `${ctx.turnKey}|${ctx.artifactPath}`
   const sessionSpent = Math.max(nudgeBudgetConsumed(ctx.rows), options.state.latch.get(ctx.sessionId) ?? 0)
-  const fire = !options.state.perArtifact.has(artifactKey)
-    && (options.state.perTurn.get(ctx.turnKey) ?? 0) < 2
-    && sessionSpent < options.settings['nudge-budget']
+  const fire =
+    !options.state.perArtifact.has(artifactKey) &&
+    (options.state.perTurn.get(ctx.turnKey) ?? 0) < 2 &&
+    sessionSpent < options.settings['nudge-budget']
   if (!fire) return { artifactId: ctx.boundEntry.artifactId, receiptWritten: false, nudged: false }
   options.state.perArtifact.add(artifactKey)
   options.state.perTurn.set(ctx.turnKey, (options.state.perTurn.get(ctx.turnKey) ?? 0) + 1)
@@ -176,10 +189,12 @@ async function nudgeStaleBinding(options: EvaluateTurnOptions, ctx: BoundEvalCon
     `suggested: re-bind the artifact in project ${ctx.boundEntry.projectId}, then run argument.review for it. (vwa-evidence)`,
   ]
   try {
-    options.agent.inject?.(createUserMessage({
-      content: [{ type: 'text', text: parts.join(' ') }],
-      source: { kind: VWA_EVIDENCE_SOURCE_KIND },
-    }))
+    options.agent.inject?.(
+      createUserMessage({
+        content: [{ type: 'text', text: parts.join(' ') }],
+        source: { kind: VWA_EVIDENCE_SOURCE_KIND },
+      }),
+    )
   } catch (injectError: unknown) {
     options.debug(`vwa-evidence: inject failed: ${String(injectError)}`)
   }
@@ -200,12 +215,13 @@ function injectBoundNudge(
     'Self-repair once, then continue. (vwa-evidence)',
   ]
   try {
-    agent.inject?.(createUserMessage({
-      content: [{ type: 'text', text: parts.join('\n') }],
-      source: { kind: VWA_EVIDENCE_SOURCE_KIND },
-    }))
+    agent.inject?.(
+      createUserMessage({
+        content: [{ type: 'text', text: parts.join('\n') }],
+        source: { kind: VWA_EVIDENCE_SOURCE_KIND },
+      }),
+    )
   } catch (error: unknown) {
     debug(`vwa-evidence: inject failed: ${String(error)}`)
   }
 }
-

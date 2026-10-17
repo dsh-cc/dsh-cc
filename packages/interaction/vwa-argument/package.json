@@ -20,7 +20,8 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib"
+    "lib",
+    "prompts"
   ],
   "license": "Apache-2.0",
   "peerDependencies": {

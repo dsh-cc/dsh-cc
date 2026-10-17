@@ -1,3 +1,4 @@
+import { defaultContract } from './command-host.ts'
 /**
  * The human-facing `/vwa` command (design
  * docs/plans/2026-10-16-vwa-evidence-argument.md §10.2, §17.3, §18).
@@ -38,6 +39,8 @@
  * @module @dsh-cc/vwa-argument/commands
  */
 
+import type { FrozenReviewSettings } from './review-config.ts'
+import { receiptHashOf, type ReceiptV2 } from '@dsh-cc/vwa-evidence'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
@@ -55,7 +58,7 @@ import {
   VwaArgumentService,
   type Signature,
 } from './report.ts'
-import type { AdjudicationRecord, Finding, Hash, Id, ProjectSnapshot } from './types.ts'
+import type { AdjudicationRecord, Finding, Hash, Id } from './types.ts'
 
 /** The closed subcommand enum (§10.2). */
 export const VWA_SUBCOMMANDS = ['init', 'status', 'import', 'sign', 'adjudicate', 'repair'] as const
@@ -71,6 +74,10 @@ export interface CurrentProjectPointer {
 /** Workspace root for the executing agent (the /vwa command deps face). */
 export interface VwaCommandDeps {
   workspaceRoot(agent: unknown): string | undefined
+  reviewSettings?(): FrozenReviewSettings
+  defaultMode?(): 'draft' | 'reviewed'
+  readReceipt?(agent: unknown, hash: string): ReceiptV2 | undefined
+  delivery?(root: string, agent: unknown): VwaArgumentService
 }
 
 /** Parse error or a parsed subcommand invocation (closed grammar). */
@@ -87,14 +94,21 @@ export const VWA_USAGE = [
 ].join('\n')
 
 export function parseVwaArgs(rawInput: string): ParsedVwaArgs {
-  const parts = rawInput.trim().split(/\s+/).filter((part) => part !== '')
+  const parts = rawInput
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part !== '')
   if (parts.length === 0) return { ok: false, usage: VWA_USAGE }
   const [sub = '', ...rest] = parts
   if (!(VWA_SUBCOMMANDS as readonly string[]).includes(sub)) {
     return { ok: false, usage: `unknown /vwa subcommand "${sub}".\n${VWA_USAGE}` }
   }
   const limits: Record<VwaSubcommand, number> = {
-    init: 1, status: 0, import: 1, sign: 2, repair: 1,
+    init: 1,
+    status: 0,
+    import: 1,
+    sign: 2,
+    repair: 1,
     // adjudicate: reason = the rest of the line (one argument slot).
     adjudicate: 3,
   }
@@ -139,19 +153,6 @@ export function writePointer(root: string, projectId: Id, workspaceIdentity: Has
   renameSync(tmp, join(dir, 'current-project.json'))
 }
 
-/** The default contract candidate for `/vwa init` (displayed, never auto-searched). */
-function defaultContract(question: string): ProjectSnapshot['contract'] {
-  return {
-    question,
-    language: 'en',
-    domain: 'research',
-    requiredQuestions: [],
-    plannedCorpus: [],
-    expectedCoreTopics: [],
-    mode: 'draft',
-  }
-}
-
 /** Deterministic failures (path/hash/quote mismatch) can never be adjudicated away (§18). */
 const DETERMINISTIC_FINDING_PREFIXES = ['MECH', 'EVID-01', 'HIST-04']
 
@@ -160,9 +161,14 @@ function isDeterministicFinding(finding: Finding): boolean {
 }
 
 /** Find one finding by id across all completed review records. */
-export function findFinding(root: string, projectId: string, findingId: string): (Finding & { kind?: string; runId?: string }) | undefined {
+export function findFinding(
+  root: string,
+  projectId: string,
+  findingId: string,
+): (Finding & { kind?: string; runId?: string }) | undefined {
   for (const record of readReviewRecords(root, projectId)) {
-    const finding = record.response?.findings.find((candidate) => candidate.id === findingId)
+    const finding =
+      record.stage === 'extract' ? undefined : record.response?.findings.find((candidate) => candidate.id === findingId)
     if (finding !== undefined) return { ...finding, runId: record.runId }
   }
   return undefined
@@ -178,18 +184,31 @@ export async function executeVwa(
   if (root === undefined) return { kind: 'error', text: '/vwa requires a workspace; none is bound to this session.' }
   try {
     switch (parsed.sub) {
-      case 'init': return vwaInit(root, parsed.rest[0])
-      case 'status': return vwaStatus(root)
-      case 'import': return vwaImport(root, parsed.rest[0] ?? '')
-      case 'repair': return vwaRepair(root, parsed.rest[0] ?? '')
+      case 'init':
+        return vwaInit(root, parsed.rest[0], deps.reviewSettings?.(), deps.defaultMode?.())
+      case 'status':
+        return vwaStatus(root)
+      case 'import':
+        return vwaImport(root, parsed.rest[0] ?? '')
+      case 'repair':
+        return vwaRepair(root, parsed.rest[0] ?? '')
       case 'sign': {
         const pointer = readPointer(root)
-        if (pointer === undefined) return { kind: 'error', text: '/vwa sign requires a current project (/vwa init first).' }
-        return vwaSign(root, pointer.projectId, parsed.rest[0] ?? '', parsed.rest[1] ?? '')
+        if (pointer === undefined)
+          return { kind: 'error', text: '/vwa sign requires a current project (/vwa init first).' }
+        return vwaSign(
+          root,
+          pointer.projectId,
+          parsed.rest[0] ?? '',
+          parsed.rest[1] ?? '',
+          deps.readReceipt?.(agent, parsed.rest[1] ?? ''),
+          deps.delivery?.(root, agent),
+        )
       }
       case 'adjudicate': {
         const pointer = readPointer(root)
-        if (pointer === undefined) return { kind: 'error', text: '/vwa adjudicate requires a current project (/vwa init first).' }
+        if (pointer === undefined)
+          return { kind: 'error', text: '/vwa adjudicate requires a current project (/vwa init first).' }
         const [findingId, decision, ...reasonParts] = parsed.rest
         if (decision !== 'accept' && decision !== 'reject') {
           return { kind: 'error', text: 'usage: /vwa adjudicate <findingId> accept|reject <reason>' }
@@ -198,21 +217,30 @@ export async function executeVwa(
       }
     }
   } catch (error: unknown) {
-    return { kind: 'error', text: `/vwa ${parsed.sub} failed: ${error instanceof Error ? error.message : String(error)}` }
+    return {
+      kind: 'error',
+      text: `/vwa ${parsed.sub} failed: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
   return { kind: 'error', text: 'unreachable' }
 }
 
-function vwaInit(root: string, projectId: string | undefined): CommandResult {
+function vwaInit(
+  root: string,
+  projectId: string | undefined,
+  reviewSettings?: FrozenReviewSettings,
+  mode: 'draft' | 'reviewed' = 'draft',
+): CommandResult {
   if (projectId !== undefined) {
     const head = new ProjectStore(root, projectId).readHead()
-    if (!head.ok) return { kind: 'error', text: `project "${projectId}" does not exist or is unreadable: ${head.message}` }
+    if (!head.ok)
+      return { kind: 'error', text: `project "${projectId}" does not exist or is unreadable: ${head.message}` }
     writePointer(root, projectId, head.data.snapshot.workspaceIdentity)
     return { kind: 'success', text: `Current VWA project is now "${projectId}" (revision ${head.data.head.revision}).` }
   }
   const newId = `prj_${randomUUID()}`
-  const contract = defaultContract('(set the project question with argument.update: contract)')
-  const result = new ProjectStore(root, newId).init(contract)
+  const contract = { ...defaultContract('(set the project question with argument.update: contract)'), mode }
+  const result = new ProjectStore(root, newId).init(contract, reviewSettings)
   if (!result.ok) return { kind: 'error', text: `project creation failed: ${result.message}` }
   writePointer(root, newId, result.data.workspaceIdentity)
   return {
@@ -229,11 +257,17 @@ function vwaInit(root: string, projectId: string | undefined): CommandResult {
 function vwaStatus(root: string): CommandResult {
   const pointer = readPointer(root)
   if (pointer === undefined) {
-    return { kind: 'success', text: 'No current VWA project pointer (`.dsh/vwa/current-project.json` is missing or corrupt); lane-1 evaluation only.' }
+    return {
+      kind: 'success',
+      text: 'No current VWA project pointer (`.dsh/vwa/current-project.json` is missing or corrupt); lane-1 evaluation only.',
+    }
   }
   const head = new ProjectStore(root, pointer.projectId).readHead()
   if (!head.ok) {
-    return { kind: 'error', text: `current project "${pointer.projectId}" is not readable (STORE_CORRUPT candidates available via /vwa repair): ${head.message}` }
+    return {
+      kind: 'error',
+      text: `current project "${pointer.projectId}" is not readable (STORE_CORRUPT candidates available via /vwa repair): ${head.message}`,
+    }
   }
   const snapshot = head.data.snapshot
   const pending = readPendingRuns(root, pointer.projectId)
@@ -272,10 +306,14 @@ function vwaImport(root: string, relativeDirectory: string): CommandResult {
       continue
     }
     const hash = sha256Hex(readFileSync(path, 'utf8'))
-    if (hash !== artifact.contentHash) failures.push(`artifact ${artifact.id}: bytes changed after binding (re-bind required)`)
+    if (hash !== artifact.contentHash)
+      failures.push(`artifact ${artifact.id}: bytes changed after binding (re-bind required)`)
   }
   if (failures.length > 0) {
-    return { kind: 'error', text: `import REJECTED — verification failures (the pointer is unchanged):\n${failures.map((line) => `  - ${line}`).join('\n')}` }
+    return {
+      kind: 'error',
+      text: `import REJECTED — verification failures (the pointer is unchanged):\n${failures.map((line) => `  - ${line}`).join('\n')}`,
+    }
   }
   writePointer(root, pointer.projectId, head.data.snapshot.workspaceIdentity)
   return {
@@ -288,23 +326,62 @@ function vwaImport(root: string, relativeDirectory: string): CommandResult {
 }
 
 /** The /vwa sign transaction (§18). */
-export async function vwaSign(root: string, projectId: string, artifactId: string, receiptHash: string): Promise<CommandResult> {
+export async function vwaSign(
+  root: string,
+  projectId: string,
+  artifactId: string,
+  receiptHash: string,
+  receipt?: ReceiptV2,
+  service?: VwaArgumentService,
+): Promise<CommandResult> {
   if (!/^[0-9a-f]{64}$/.test(receiptHash)) {
     return { kind: 'error', text: 'receiptHash must be a 64-hex SHA-256 digest.' }
   }
+  if (
+    !receipt ||
+    receiptHashOf(receipt) !== receiptHash ||
+    receipt.projectId !== projectId ||
+    receipt.artifactId !== artifactId
+  )
+    return { kind: 'error', text: 'No existing receipt with this hash is available in the calling session.' }
   let check: Awaited<ReturnType<VwaArgumentService['checkForDelivery']>>['check']
   try {
-    check = (await new VwaArgumentService({ root }).checkForDelivery(projectId, artifactId)).check
+    check = (await (service ?? new VwaArgumentService({ root })).checkForDelivery(projectId, artifactId)).check
   } catch (error: unknown) {
-    return { kind: 'error', text: `consistency check failed for ${artifactId}: ${error instanceof Error ? error.message : String(error)}` }
+    return {
+      kind: 'error',
+      text: `consistency check failed for ${artifactId}: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
+  if (
+    receipt.artifactHash !== check.artifactHash ||
+    receipt.graphHash !== check.graphHash ||
+    receipt.policyHash !== check.policyHash ||
+    receipt.reviewerConfigHash !== check.reviewerConfigHash
+  )
+    return { kind: 'error', text: 'Receipt inputs are no longer current; generate a new receipt before signing.' }
+  try {
+    if (sha256Hex(readFileSync(join(root, receipt.report.path), 'utf8')) !== receipt.report.hash)
+      return { kind: 'error', text: 'The receipt report is missing or changed.' }
+  } catch {
+    return { kind: 'error', text: 'The receipt report is missing or changed.' }
+  }
+  if (check.findings.some((f) => f.code === 'EVID-01'))
+    return { kind: 'error', text: 'Source integrity failed; the receipt cannot be signed.' }
   const signature: Signature = {
     signatureId: `sig_${randomUUID()}`,
-    artifactId, artifactHash: check.artifactHash, graphHash: check.graphHash,
-    receiptHash, policyHash: check.policyHash, signer: 'user', ts: new Date().toISOString(),
+    artifactId,
+    artifactHash: check.artifactHash,
+    graphHash: check.graphHash,
+    receiptHash,
+    policyHash: check.policyHash,
+    signer: 'user',
+    ts: new Date().toISOString(),
   }
   appendSignature(root, projectId, signature)
-  const knownGaps = check.eligibleForReviewed ? '' : ' NOTE: the machine checks have NOT passed — this signature only means "the user reviewed the version with known gaps"; it changes no checks, grades, or overall.'
+  const knownGaps = check.eligibleForReviewed
+    ? ''
+    : ' NOTE: the machine checks have NOT passed — this signature only means "the user reviewed the version with known gaps"; it changes no checks, grades, or overall.'
   return {
     kind: 'success',
     text: `Signed ${artifactId} (receipt ${receiptHash.slice(0, 12)}…, artifact ${check.artifactHash.slice(0, 12)}…). Signature ${signature.signatureId}.${knownGaps}`,
@@ -312,7 +389,13 @@ export async function vwaSign(root: string, projectId: string, artifactId: strin
 }
 
 /** The /vwa adjudicate transaction (§18). */
-export async function vwaAdjudicate(root: string, projectId: string, findingId: string, decision: 'accept' | 'reject', reason: string): Promise<CommandResult> {
+export async function vwaAdjudicate(
+  root: string,
+  projectId: string,
+  findingId: string,
+  decision: 'accept' | 'reject',
+  reason: string,
+): Promise<CommandResult> {
   if (reason.trim() === '') {
     return { kind: 'error', text: 'adjudication requires a non-empty reason (§18).' }
   }
@@ -321,7 +404,10 @@ export async function vwaAdjudicate(root: string, projectId: string, findingId: 
     return { kind: 'error', text: `finding "${findingId}" not found among this project's review records.` }
   }
   if (isDeterministicFinding(finding)) {
-    return { kind: 'error', text: `finding ${findingId} (${finding.code}) is a deterministic failure (path/hash/quote); it cannot be overridden by adjudication.` }
+    return {
+      kind: 'error',
+      text: `finding ${findingId} (${finding.code}) is a deterministic failure (path/hash/quote); it cannot be overridden by adjudication.`,
+    }
   }
   const dependencyDigest = currentDependencyDigest(root, projectId)
   if (dependencyDigest === undefined) {
@@ -329,15 +415,23 @@ export async function vwaAdjudicate(root: string, projectId: string, findingId: 
   }
   const record: AdjudicationRecord = {
     adjudicationId: `adj_${randomUUID()}`,
-    findingId, decision, reason: reason.trim(), signer: 'user', ts: new Date().toISOString(),
+    findingId,
+    decision,
+    reason: reason.trim(),
+    signer: 'user',
+    ts: new Date().toISOString(),
     dependencyDigest,
     overrides: { ruleId: finding.code, targetId: finding.targetIds[0] ?? '', runId: finding.runId ?? '' },
   }
   appendAdjudication(root, projectId, record)
-  const effect = decision === 'reject'
-    ? 'The finding is removed from the active set and the rule shows pass (human-adjudicated); grades are recomputed by policy on the next checkForDelivery. The original review record is NOT rewritten.'
-    : 'The finding stays active and still needs fixing (accept is not ignore).'
-  return { kind: 'success', text: `Adjudication ${record.adjudicationId} recorded: ${decision} ${findingId}. ${effect}` }
+  const effect =
+    decision === 'reject'
+      ? 'The finding is removed from the active set and the rule shows pass (human-adjudicated); grades are recomputed by policy on the next checkForDelivery. The original review record is NOT rewritten.'
+      : 'The finding stays active and still needs fixing (accept is not ignore).'
+  return {
+    kind: 'success',
+    text: `Adjudication ${record.adjudicationId} recorded: ${decision} ${findingId}. ${effect}`,
+  }
 }
 
 function vwaRepair(root: string, projectId: string): CommandResult {
@@ -345,17 +439,26 @@ function vwaRepair(root: string, projectId: string): CommandResult {
   const candidates = store.recoveryCandidates()
   if (candidates.length === 0) {
     const head = store.readHead()
-    if (head.ok) return { kind: 'success', text: `project "${projectId}" HEAD is healthy (revision ${head.data.head.revision}); no repair needed.` }
+    if (head.ok)
+      return {
+        kind: 'success',
+        text: `project "${projectId}" HEAD is healthy (revision ${head.data.head.revision}); no repair needed.`,
+      }
     return { kind: 'error', text: `no self-verifying recovery candidates for "${projectId}": ${head.message}` }
   }
   const newest = candidates[0]
-  const list = candidates.map((candidate) => `  - revision ${candidate.revision} (${candidate.revisionPath})`).join('\n')
+  const list = candidates
+    .map((candidate) => `  - revision ${candidate.revision} (${candidate.revisionPath})`)
+    .join('\n')
   if (newest === undefined) {
     return { kind: 'error', text: `no self-verifying recovery candidates for "${projectId}".` }
   }
   const repaired = store.repair(newest.revisionPath)
   if (!repaired.ok) {
-    return { kind: 'error', text: `candidates (newest first):\n${list}\n\nadopting ${newest.revisionPath} FAILED: ${repaired.message}` }
+    return {
+      kind: 'error',
+      text: `candidates (newest first):\n${list}\n\nadopting ${newest.revisionPath} FAILED: ${repaired.message}`,
+    }
   }
   return {
     kind: 'success',
@@ -368,14 +471,19 @@ function vwaRepair(root: string, projectId: string): CommandResult {
  * registry only dispatches human UI lines (source is always `user`, §10.2),
  * and the handler closes the grammar before any side effect.
  */
-export function registerVwaCommand(ctx: { commands: { register(definition: unknown): unknown } }, deps: VwaCommandDeps): void {
-  ctx.commands.register(helpable({
-    name: 'vwa',
-    description: 'VWA lane-2 project commands (init/status/import/sign/adjudicate/repair)',
-    handler: async (invocation: CommandInvocation): Promise<CommandResult> => {
-      const parsed = parseVwaArgs(invocation.rawInput)
-      if (!parsed.ok) return { kind: 'error', text: parsed.usage }
-      return executeVwa(deps, invocation.agent, parsed)
-    },
-  }))
+export function registerVwaCommand(
+  ctx: { commands: { register(definition: unknown): unknown } },
+  deps: VwaCommandDeps,
+): void {
+  ctx.commands.register(
+    helpable({
+      name: 'vwa',
+      description: 'VWA lane-2 project commands (init/status/import/sign/adjudicate/repair)',
+      handler: async (invocation: CommandInvocation): Promise<CommandResult> => {
+        const parsed = parseVwaArgs(invocation.rawInput)
+        if (!parsed.ok) return { kind: 'error', text: parsed.usage }
+        return executeVwa(deps, invocation.agent, parsed)
+      },
+    }),
+  )
 }

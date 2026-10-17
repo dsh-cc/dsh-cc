@@ -192,26 +192,63 @@ describe('delivery hard conditions', () => {
     expect(row.delivery).toBe('reviewed')
     expect((await writeReceiptV2(join(f.root, 'receipt.jsonl'), row)).ok).toBe(true)
   })
-  it('human rejection recomputes only the named semantic finding and expires when inputs change',async()=>{
-    const f=fixture(),prepare=f.adapter.prepareReviewCall.bind(f.adapter)
-    f.adapter.prepareReviewCall=async req=>{
-      const call=await prepare(req),stage=JSON.parse(req.messages[1]!.content).stage
-      if(stage!=='claims')return call
-      return {...call,dispatch:async()=>{
-        const result=await call.dispatch(),response=JSON.parse(result.raw)
-        response.targets[0].checks[0].result='fail'
-        response.findings=[{id:`finding_${randomUUID()}`,code:'HIST-01',targetIds:[f.claim.id],severity:'major',explanation:'a disputed type judgment',evidenceIds:[],artifactSpans:[],repair:'qualify'}]
-        return {...result,raw:JSON.stringify(response)}
-      }}
+  it('human rejection recomputes only the named semantic finding and expires when inputs change', async () => {
+    const f = fixture(),
+      prepare = f.adapter.prepareReviewCall.bind(f.adapter)
+    f.adapter.prepareReviewCall = async (req) => {
+      const call = await prepare(req),
+        stage = JSON.parse(req.messages[1]!.content).stage
+      if (stage !== 'claims') return call
+      return {
+        ...call,
+        dispatch: async () => {
+          const result = await call.dispatch(),
+            response = JSON.parse(result.raw)
+          response.targets[0].checks[0].result = 'fail'
+          response.findings = [
+            {
+              id: `finding_${randomUUID()}`,
+              code: 'HIST-01',
+              targetIds: [f.claim.id],
+              severity: 'major',
+              explanation: 'a disputed type judgment',
+              evidenceIds: [],
+              artifactSpans: [],
+              repair: 'qualify',
+            },
+          ]
+          return { ...result, raw: JSON.stringify(response) }
+        },
+      }
     }
-    const run=await f.run(),service=new VwaArgumentService({root:f.root})
-    expect((await service.checkForDelivery(f.projectId,f.artifactId)).check.eligibleForReviewed).toBe(false)
-    const finding=run.records.flatMap(r=>r.stage==='extract'?[]:r.response?.findings??[])[0]!
-    const {appendAdjudication,currentDependencyDigest}=await import('../src/report.ts')
-    appendAdjudication(f.root,f.projectId,{adjudicationId:`adj_${randomUUID()}`,findingId:finding.id,decision:'reject',reason:'user checked the type distinction',signer:'user',ts:new Date().toISOString(),dependencyDigest:currentDependencyDigest(f.root,f.projectId)!,overrides:{ruleId:'HIST-01',targetId:f.claim.id,runId:run.runId}})
-    expect((await service.checkForDelivery(f.projectId,f.artifactId)).check.eligibleForReviewed).toBe(true)
-    f.store.withTransaction({expectedRevision:2,requestId:randomUUID(),payloadHash:'changed',applyFn(s){s.claims[0]!.text+=' Changed.';s.claims[0]!.entityVersion++;return {result:{}}}})
-    expect((await service.checkForDelivery(f.projectId,f.artifactId)).check.eligibleForReviewed).toBe(false)
+    const run = await f.run(),
+      service = new VwaArgumentService({ root: f.root })
+    expect((await service.checkForDelivery(f.projectId, f.artifactId)).check.eligibleForReviewed).toBe(false)
+    const finding = run.records.flatMap((r) => (r.stage === 'extract' ? [] : (r.response?.findings ?? [])))[0]!
+    const { appendAdjudication, currentDependencyDigest } = await import('../src/report.ts')
+    appendAdjudication(f.root, f.projectId, {
+      adjudicationId: `adj_${randomUUID()}`,
+      findingId: finding.id,
+      decision: 'reject',
+      reason: 'user checked the type distinction',
+      signer: 'user',
+      ts: new Date().toISOString(),
+      dependencyDigest: currentDependencyDigest(f.root, f.projectId)!,
+      overrides: { ruleId: 'HIST-01', targetId: f.claim.id, runId: run.runId },
+    })
+    const approved = (await service.checkForDelivery(f.projectId, f.artifactId)).check
+    expect(approved.eligibleForReviewed, JSON.stringify(approved)).toBe(true)
+    f.store.withTransaction({
+      expectedRevision: 2,
+      requestId: randomUUID(),
+      payloadHash: 'changed',
+      applyFn(s) {
+        s.claims[0]!.text += ' Changed.'
+        s.claims[0]!.entityVersion++
+        return { result: {} }
+      },
+    })
+    expect((await service.checkForDelivery(f.projectId, f.artifactId)).check.eligibleForReviewed).toBe(false)
   })
   it('a partial sources-only review cannot imply complete evidence or argument review', async () => {
     const f = fixture(),

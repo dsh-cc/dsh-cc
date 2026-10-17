@@ -17,10 +17,11 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { isAbsolute, resolve, sep } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
 import type { ProjectSnapshot, Source } from './types.ts'
 import { VwaFail, fail, type ProjectStore, type Result, type StagedFile } from './store.ts'
+import { rootBlocks } from './review-plan.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 
 /** One trusted capture/write event observed by the host wiring. */
@@ -92,7 +93,10 @@ export class CaptureRegistry {
    * capture body → tool-event (upgrade rule); otherwise unverified — never
    * guessed.
    */
-  classify(path: string, bytes: Buffer): { kind: 'tool-event' | 'user-file' | 'unverified'; capturedAt: string; eventRef?: string } {
+  classify(
+    path: string,
+    bytes: Buffer,
+  ): { kind: 'tool-event' | 'user-file' | 'unverified'; capturedAt: string; eventRef?: string } {
     const absolute = resolve(path)
     const eventRefOf = (source: string): string =>
       `${source}:${sha256Hex(stableJson({ path: absolute, size: bytes.length }))}`
@@ -110,7 +114,8 @@ export class CaptureRegistry {
       const source = this.captureOfBytes(bytes, i)
       if (source !== undefined) {
         return {
-          kind: 'tool-event', capturedAt: event.at,
+          kind: 'tool-event',
+          capturedAt: event.at,
           eventRef: eventRefOf(`${source.tool}->${event.tool}`),
         }
       }
@@ -171,15 +176,19 @@ const MAX_SOURCE_BYTES = 8 * 1024 * 1024
  */
 export function readSourceBytes(root: string, path: string): { bytes: Buffer; text: string; hash: string } {
   if (!isAbsolute(path)) throw new VwaFail(fail('PATH_OUT_OF_BOUNDS', 'path must be absolute'))
-  const relative = path.replace(/\\/g, '/').replace(/^\//, '').split('/')
-  if (relative[0] === '.dsh' && relative[1] === 'vwa'
-    || (relative[0] === 'docs' && (relative[1] === 'vwa-sources' || relative[1] === 'vwa-reports'))) {
-    throw new VwaFail(fail('PATH_OUT_OF_BOUNDS', `path is inside the runtime output tree and cannot be a source (D22): ${path}`))
-  }
   let resolved: string
   try {
     const resolvedRoot = realpathSync(root)
     resolved = realpathSync(path)
+    const segments = relative(resolvedRoot, resolved).split(sep)
+    if (
+      (segments[0] === '.dsh' && segments[1] === 'vwa') ||
+      (segments[0] === 'docs' && (segments[1] === 'vwa-sources' || segments[1] === 'vwa-reports'))
+    ) {
+      throw new VwaFail(
+        fail('PATH_OUT_OF_BOUNDS', `path is inside the runtime output tree and cannot be a source (D22): ${path}`),
+      )
+    }
     if (!resolved.startsWith(resolvedRoot + sep) && resolved !== resolvedRoot) {
       throw new VwaFail(fail('PATH_OUT_OF_BOUNDS', `path escapes the workspace root: ${path}`))
     }
@@ -277,7 +286,9 @@ export function registerSourceApply(
       authenticityBasisEvidenceIds: input.metadata.authenticityBasisEvidenceIds ?? [],
     }
     if (metadata.authenticity === 'documented' && metadata.authenticityBasisEvidenceIds.length === 0) {
-      throw new VwaFail(fail('SCHEMA_INVALID', 'documented authenticity requires non-empty authenticityBasisEvidenceIds'))
+      throw new VwaFail(
+        fail('SCHEMA_INVALID', 'documented authenticity requires non-empty authenticityBasisEvidenceIds'),
+      )
     }
     for (const parentId of metadata.lineage.parentSourceIds) {
       if (!snapshot.sources.some((source) => source.id === parentId)) {
@@ -285,6 +296,9 @@ export function registerSourceApply(
       }
     }
 
+    for (const evidenceId of metadata.authenticityBasisEvidenceIds)
+      if (!snapshot.evidence.some((e) => e.id === evidenceId))
+        throw new VwaFail(fail('REFERENCE_INVALID', `unknown authenticity evidence ${evidenceId}`))
     // Dedup by hash + completed metadata, excluding the runtime capturedAt (§10.3).
     const dedupKey = sha256Hex(stableJson({ hash: read.hash, metadata }))
     const existing = snapshot.sources.find((source) => sourceDedupKey(source) === dedupKey)
@@ -303,11 +317,15 @@ export function registerSourceApply(
       const evidenceId = `ev_${crypto.randomUUID()}`
       evidenceIds.push({ clientKey: excerpt.clientKey, evidenceId })
       const evidence = {
-        id: evidenceId, entityVersion: 1, createdAt: now, updatedAt: now,
-        sourceId, sourceSnapshotHash: snapshotHash,
+        id: evidenceId,
+        entityVersion: 1,
+        createdAt: now,
+        updatedAt: now,
+        sourceId,
+        sourceSnapshotHash: snapshotHash,
         span: excerpt.span,
         quote: read.text.slice(excerpt.span.start, excerpt.span.end),
-        contextSpan: excerpt.contextSpan ?? excerpt.span,
+        contextSpan: excerpt.contextSpan ?? defaultContext(read.text, excerpt.span),
         originalLocation: excerpt.originalLocation,
         transformation: excerpt.transformation,
         transformationNote: excerpt.transformationNote,
@@ -321,7 +339,10 @@ export function registerSourceApply(
       entityVersion: existing !== undefined ? existing.entityVersion : 1,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      snapshotPath, snapshotHash, acquisition, ...metadata,
+      snapshotPath,
+      snapshotHash,
+      acquisition,
+      ...metadata,
     }
     const validateSource = authorDefValidator('Source')
     if (!validateSource(source)) {
@@ -347,10 +368,17 @@ function storeRootOf(store: ProjectStore): string {
 /** Dedup key of a stored Source: snapshot hash + author metadata, minus capturedAt (§10.3). */
 function sourceDedupKey(source: Source): string {
   const metadata = {
-    title: source.title, creators: source.creators, publication: source.publication,
-    originalLocator: source.originalLocator, edition: source.edition, language: source.language,
-    origin: source.origin, material: source.material, lineage: source.lineage,
-    authenticity: source.authenticity, authenticityBasisEvidenceIds: source.authenticityBasisEvidenceIds,
+    title: source.title,
+    creators: source.creators,
+    publication: source.publication,
+    originalLocator: source.originalLocator,
+    edition: source.edition,
+    language: source.language,
+    origin: source.origin,
+    material: source.material,
+    lineage: source.lineage,
+    authenticity: source.authenticity,
+    authenticityBasisEvidenceIds: source.authenticityBasisEvidenceIds,
   }
   return sha256Hex(stableJson({ hash: source.snapshotHash, metadata }))
 }
@@ -359,7 +387,10 @@ function sourceDedupKey(source: Source): string {
  * Mechanical currency check (§15): a source snapshot must never change; an
  * externally modified snapshot file is a mechanical failure, not staleness.
  */
-export function verifySnapshot(store: ProjectStore, source: { snapshotPath: string; snapshotHash: string }): Result<{ hash: string }> {
+export function verifySnapshot(
+  store: ProjectStore,
+  source: { snapshotPath: string; snapshotHash: string },
+): Result<{ hash: string }> {
   const relative = source.snapshotPath.split('/').pop() ?? ''
   try {
     const bytes = readFileSync(resolve(store.snapshotDir, relative))
@@ -375,4 +406,13 @@ export function verifySnapshot(store: ProjectStore, source: { snapshotPath: stri
   } catch (error: unknown) {
     return fail('NOT_FOUND', `cannot read snapshot: ${String(error)}`)
   }
+}
+
+/** Include the containing blocks and their immediate neighbours, without truncation. */
+function defaultContext(text: string, span: { start: number; end: number }): { start: number; end: number } {
+  const blocks = rootBlocks(text)
+  const first = blocks.findIndex((b) => span.start >= b.start && span.start < b.end)
+  const last = blocks.findIndex((b) => span.end > b.start && span.end <= b.end)
+  if (first < 0 || last < 0) return span
+  return { start: blocks[Math.max(0, first - 1)]!.start, end: blocks[Math.min(blocks.length - 1, last + 1)]!.end }
 }

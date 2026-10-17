@@ -20,7 +20,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { sha256Hex, type AssessmentEntry, type MechanicalStatus, type ReceiptV2, type Verdict } from './receipt.ts'
 import type { EvalEvent } from './evaluator.ts'
 
@@ -56,6 +56,12 @@ export interface DeliveryCheckLike {
   pendingRunIds: string[]
   sources: { sourceId: string; snapshotHash: string; evidenceIds: string[] }[]
   eligibleForReviewed: boolean
+  gates?: ReceiptV2['gates']
+  claimBindings?: {
+    claimId: string
+    spans: [number, number][]
+    sources: { sourceId: string; snapshotHash: string; evidenceIds: string[] }[]
+  }[]
   findingCounts: { blocker: number; major: number; minor: number }
 }
 
@@ -67,11 +73,17 @@ export interface VwaArgumentDeliveryProvider {
   /** Bound artifacts of the current project (artifactId + workspace-relative path). */
   listBoundArtifacts(projectId: string): { artifactId: string; path: string }[]
   /** Freeze the current evaluation inputs and return the delivery check handle. */
-  checkForDelivery(projectId: string, artifactId: string):
-    Promise<{ evaluationId: string; bindingDigest: string; check: DeliveryCheckLike }>
+  checkForDelivery(
+    projectId: string,
+    artifactId: string,
+  ): Promise<{ evaluationId: string; bindingDigest: string; check: DeliveryCheckLike }>
   /** Render the report bound to the frozen evaluation (report written BEFORE the receipt, §16.1a). */
-  renderReport(projectId: string, artifactId: string, evaluationId: string, format: 'markdown' | 'json'):
-    Promise<{ text: string; reportHash: string; bindingDigest: string }>
+  renderReport(
+    projectId: string,
+    artifactId: string,
+    evaluationId: string,
+    format: 'markdown' | 'json',
+  ): Promise<{ text: string; reportHash: string; bindingDigest: string }>
 }
 
 /**
@@ -80,7 +92,7 @@ export interface VwaArgumentDeliveryProvider {
  * cwd, so no single root is correct process-wide).
  */
 export interface VwaArgumentDeliveryHost {
-  forWorkspace(workspaceRoot: string): unknown
+  forWorkspace(workspaceRoot: string, agent?: unknown): unknown
 }
 
 /**
@@ -90,11 +102,15 @@ export interface VwaArgumentDeliveryHost {
  * (fail-soft; lane 1 is unchanged). Resolved per dispatch, so mount order of
  * vwa-evidence vs vwa-argument does not matter (same isolate realm).
  */
-export function resolveDeliveryProvider(ctx: unknown, workspaceRoot: string): VwaArgumentDeliveryProvider | undefined {
+export function resolveDeliveryProvider(
+  ctx: unknown,
+  workspaceRoot: string,
+  agent?: unknown,
+): VwaArgumentDeliveryProvider | undefined {
   try {
     const host = (ctx as { get?(name: string): unknown }).get?.('vwa-argument') as VwaArgumentDeliveryHost | undefined
     if (host === undefined || typeof host !== 'object' || typeof host.forWorkspace !== 'function') return undefined
-    const candidate = host.forWorkspace(workspaceRoot) as VwaArgumentDeliveryProvider | undefined
+    const candidate = host.forWorkspace(workspaceRoot, agent) as VwaArgumentDeliveryProvider | undefined
     if (candidate === undefined || typeof candidate !== 'object') return undefined
     if (typeof candidate.listBoundArtifacts !== 'function') return undefined
     if (typeof candidate.checkForDelivery !== 'function') return undefined
@@ -167,14 +183,18 @@ export function deliveryState(input: {
   reportPath: string
   reportHash: string
 }): ReceiptV2Delivery {
-  let presented = false
+  let bodyPresented = false,
+    reportPresented = false
+  const artifact = resolve(input.workspaceRoot, input.artifactPath)
+  const report = resolve(input.workspaceRoot, input.reportPath)
   for (const file of presentedFiles(input.events)) {
-    const absolute = join(input.workspaceRoot, file.path)
-    const hash = fileHash(absolute)
-    if (hash === input.artifactHash || (input.reportPath !== '' && hash === input.reportHash)) presented = true
+    const absolute = resolve(input.workspaceRoot, file.path),
+      hash = fileHash(absolute)
+    if (absolute === artifact && hash === input.artifactHash) bodyPresented = true
+    if (input.reportPath && absolute === report && hash === input.reportHash) reportPresented = true
   }
-  if (presented && input.eligibleForReviewed) return 'delivered-reviewed'
-  if (presented) return 'delivered-unverified'
+  if (bodyPresented && reportPresented) return input.eligibleForReviewed ? 'delivered-reviewed' : 'delivered-unverified'
+
   return input.eligibleForReviewed ? 'reviewed' : 'draft'
 }
 
@@ -187,17 +207,19 @@ type ReceiptV2Delivery = ReceiptV2['delivery']
  * the report hash is the empty-file digest and the gap is disclosed to the
  * debug sink by the caller.
  */
-export function writeBoundReport(workspaceRoot: string, projectId: string, text: string, artifactId: string): { path: string; hash: string } {
-  const absoluteDir = join(workspaceRoot, '.dsh', 'vwa', projectId, 'reports')
-  const absolute = join(absoluteDir, `${artifactId}.md`)
-  const relativePath = `.dsh/vwa/${projectId}/reports/${artifactId}.md`
-  try {
-    mkdirSync(absoluteDir, { recursive: true })
-    writeFileSync(absolute, text, 'utf8')
-    return { path: relativePath, hash: sha256Hex(text) }
-  } catch {
-    return { path: relativePath, hash: sha256Hex('') }
-  }
+export function writeBoundReport(
+  workspaceRoot: string,
+  projectId: string,
+  text: string,
+  artifactId: string,
+): { path: string; hash: string } {
+  const absoluteDir = join(workspaceRoot, 'docs', 'vwa-reports', projectId)
+  const relativePath = `docs/vwa-reports/${projectId}/${artifactId}.review.md`
+  const absolute = join(workspaceRoot, relativePath)
+  mkdirSync(absoluteDir, { recursive: true })
+  writeFileSync(absolute, text, 'utf8')
+  if (fileHash(absolute) !== sha256Hex(text)) throw new Error('report read-back failed')
+  return { path: relativePath, hash: sha256Hex(text) }
 }
 
 /** Exists only for tests/providers that pre-check report rendering. */
@@ -229,13 +251,18 @@ export interface BuildReceiptV2Input {
  * pending rows carry pendingRunIds and overall abstained (§16.2).
  */
 export function overallOf(check: DeliveryCheckLike, neverRun: boolean): 'pass' | 'fail' | 'abstained' {
-  if (neverRun) return 'abstained'
+  if (neverRun || check.pendingRunIds.length > 0) return 'abstained'
   const layers = [check.checks.evidence, check.checks.argument, check.checks.audit]
   if (check.checks.mechanical === 'fail') return 'fail'
   if (layers.includes('fail')) return 'fail'
   if (check.findingCounts.blocker > 0 || check.findingCounts.major > 0) return 'fail'
-  if (check.eligibleForReviewed && check.checks.mechanical !== 'not-run'
-    && !layers.includes('needs-review') && !layers.includes('not-run')) return 'pass'
+  if (
+    check.eligibleForReviewed &&
+    check.checks.mechanical !== 'not-run' &&
+    !layers.includes('needs-review') &&
+    !layers.includes('not-run')
+  )
+    return 'pass'
   return 'abstained'
 }
 
@@ -257,14 +284,14 @@ export function buildReceiptV2(input: BuildReceiptV2Input): ReceiptV2 {
     graphHash: check.graphHash,
     policyHash: check.policyHash,
     reviewerConfigHash: check.reviewerConfigHash,
-    claims: check.assessments.map(assessment => ({
+    claims: check.assessments.map((assessment) => ({
       claimId: assessment.claimId,
-      spans: [],
-      sources: [],
+      spans: check.claimBindings?.find((b) => b.claimId === assessment.claimId)?.spans ?? [],
+      sources: check.claimBindings?.find((b) => b.claimId === assessment.claimId)?.sources ?? [],
       assessment,
     })),
     numbers: [],
-    gates: [],
+    gates: check.gates ?? [],
     checks: check.checks,
     metrics: check.metrics,
     reviewRunIds: [...check.reviewRunIds],
@@ -308,11 +335,20 @@ export function boundNudgeTargets(projectId: string, check: DeliveryCheckLike, n
   if (neverRun) return [`review has never run for ${check.artifactId}`]
   const targets: string[] = []
   if (check.checks.mechanical === 'fail') targets.push('mechanical checks fail')
-  for (const [layer, verdict] of [['evidence', check.checks.evidence], ['argument', check.checks.argument], ['audit', check.checks.audit]] as const) {
+  for (const [layer, verdict] of [
+    ['evidence', check.checks.evidence],
+    ['argument', check.checks.argument],
+    ['audit', check.checks.audit],
+  ] as const) {
     if (verdict === 'fail' || verdict === 'needs-review') targets.push(`${layer} checks: ${verdict}`)
   }
-  const active = check.findings.filter(finding => (finding.severity === 'blocker' || finding.severity === 'major') && finding.kind !== 'disagreement')
+  const active = check.findings.filter(
+    (finding) => (finding.severity === 'blocker' || finding.severity === 'major') && finding.kind !== 'disagreement',
+  )
   for (const finding of active.slice(0, 10)) targets.push(`${finding.severity} ${finding.id}: ${finding.explanation}`)
   if (check.pendingRunIds.length > 0) targets.push(`pending review runs: ${check.pendingRunIds.join(', ')}`)
-  return [`suggested: argument.review {projectId: "${projectId}", artifactId: "${check.artifactId}", stages: ["sources","support","claims","arguments","audit"]}`, ...targets]
+  return [
+    `suggested: argument.review {projectId: "${projectId}", expectedRevision: ${check.projectRevision}, requestId: "<new UUID v4>", input: {artifactId: "${check.artifactId}", stage: "all"}}`,
+    ...targets,
+  ]
 }

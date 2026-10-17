@@ -6,11 +6,14 @@ import { initWorkspace } from './helpers.ts'
 import { BUDGET, fakeAdapter } from './review-helpers.ts'
 
 describe('review request reservation', () => {
-  it('rejects invalid public identifiers and non-integer revisions as structured failures',async()=>{
-    const f=fixture()
-    expect(await f.call({...f.args,projectId:'prj_../../escape'})).toMatchObject({ok:false,code:'SCHEMA_INVALID'})
-    expect(await f.call({...f.args,requestId:'../escape'})).toMatchObject({ok:false,code:'SCHEMA_INVALID'})
-    expect(await f.call({...f.args,expectedRevision:1.5})).toMatchObject({ok:false,code:'SCHEMA_INVALID'})
+  it('rejects invalid public identifiers and non-integer revisions as structured failures', async () => {
+    const f = fixture()
+    expect(await f.call({ ...f.args, projectId: 'prj_../../escape' })).toMatchObject({
+      ok: false,
+      code: 'SCHEMA_INVALID',
+    })
+    expect(await f.call({ ...f.args, requestId: '../escape' })).toMatchObject({ ok: false, code: 'SCHEMA_INVALID' })
+    expect(await f.call({ ...f.args, expectedRevision: 1.5 })).toMatchObject({ ok: false, code: 'SCHEMA_INVALID' })
   })
   function fixture() {
     const f = initWorkspace(),

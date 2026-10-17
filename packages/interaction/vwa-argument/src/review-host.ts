@@ -43,8 +43,11 @@ export function budgetFrom(settings: VwaArgumentSettings): ReviewBudget {
  * no route at all (REVIEW_UNAVAILABLE).
  */
 export function resolveReviewerRoute(ctx: Context, alias: string, agent: unknown): ReviewerRoute | undefined {
-  const parent = (agent as { session?: { requestHeader?(): { config?: { provider?: string; model?: string } } | undefined } } | undefined)
-    ?.session?.requestHeader?.()?.config
+  const parent = (
+    agent as
+      | { session?: { requestHeader?(): { config?: { provider?: string; model?: string } } | undefined } }
+      | undefined
+  )?.session?.requestHeader?.()?.config
   let filled: ReviewerRoute | undefined
   try {
     filled = toOneShotRoute(resolveAlias(ctx, alias), parent)
@@ -53,7 +56,12 @@ export function resolveReviewerRoute(ctx: Context, alias: string, agent: unknown
     return undefined
   }
   if (filled !== undefined) return filled
-  if (parent?.provider !== undefined && parent.model !== undefined && parent.provider.length > 0 && parent.model.length > 0) {
+  if (
+    parent?.provider !== undefined &&
+    parent.model !== undefined &&
+    parent.provider.length > 0 &&
+    parent.model.length > 0
+  ) {
     return { provider: parent.provider, model: parent.model }
   }
   return undefined
@@ -75,12 +83,23 @@ export function createReviewFactory(ctx: Context, dshHome: string): (agent: unkn
     if (jobs === undefined) return fail('REVIEW_UNAVAILABLE', 'no background jobs service is mounted on the host', true)
     const route = resolveReviewerRoute(ctx, settings['review-alias'], agent)
     if (route === undefined) {
-      return fail('REVIEW_UNAVAILABLE', `review alias "${settings['review-alias']}" resolves to no model route and the session has none to inherit`, true)
+      return fail(
+        'REVIEW_UNAVAILABLE',
+        `review alias "${settings['review-alias']}" resolves to no model route and the session has none to inherit`,
+        true,
+      )
     }
     return {
       adapter: createReviewAdapter({ llm, route }),
       budget: budgetFrom(settings),
-      tasks: createHostTaskService(jobs),
+      tasks: createHostTaskService(
+        jobs,
+        (agent as { ctx?: unknown; session?: { id?: string } })?.ctx
+          ? (agent as { session?: { id?: string } }).session?.id
+          : undefined,
+      ),
+      maxArtifactChars: settings['review-max-artifact-chars'],
+      maxContextChars: settings['review-max-context-chars-per-task'],
     }
   }
 }

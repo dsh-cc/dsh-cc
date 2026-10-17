@@ -10,9 +10,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import {
-  AuditInvalidError, executeAudit, extractionUnits, stripClaimMarkers, validateAlignment,
-} from '../src/audit.ts'
+import { AuditInvalidError, executeAudit, extractionUnits, stripClaimMarkers, validateAlignment } from '../src/audit.ts'
 import { rootBlocks } from '../src/review-plan.ts'
 import type { ReviewModelAdapter, ReviewMessages } from '../src/review-adapter.ts'
 import type { AlignEnvelope, ExtractEnvelope } from '../src/audit.ts'
@@ -35,7 +33,16 @@ function auditAdapter(options: {
         dispatch: async () => {
           const index = call++
           if (index === 0) return { raw: JSON.stringify({ items: options.items }), inputTokens: 5, outputTokens: 7 }
-          return { raw: JSON.stringify(options.align(envelope as AlignEnvelope)), inputTokens: 6, outputTokens: 8 }
+          const response = options.align(envelope as AlignEnvelope)
+          const rules = (envelope as { requiredRules?: { targetId: string; ruleId: string }[] }).requiredRules
+          if (rules)
+            response.targets = [...new Set(rules.map((r) => r.targetId))].map((targetId) => ({
+              targetId,
+              checks: rules
+                .filter((r) => r.targetId === targetId)
+                .map((r) => ({ ruleId: r.ruleId, result: 'pass', rationale: 'reviewed', evidenceIds: [] })),
+            }))
+          return { raw: JSON.stringify(response), inputTokens: 6, outputTokens: 8 }
         },
       }
     },
@@ -52,18 +59,26 @@ function item(text: string, artifactText: string, importance: 'core' | 'supporti
   return {
     span: { start, end: start + text.length },
     exactText: text,
-    atomicClaims: [{ text: `atomic:${text}`, kind: 'fact', scope: { subject: 's', corpus: [], time: '', geography: '', exclusions: [] }, importance }],
+    atomicClaims: [
+      {
+        text: `atomic:${text}`,
+        kind: 'fact',
+        scope: { subject: 's', corpus: [], time: 'unspecified', geography: 'unspecified', exclusions: [] },
+        importance,
+      },
+    ],
     isQuotation: false,
   }
 }
 
-const ARTIFACT = '# Title\n\nPerson A claimed in memoirs to have opposed the plan. The minutes record only the vote.\n\n## Conclusion\n\nThe record is insufficient to confirm this.\n'
+const ARTIFACT =
+  '# Title\n\nPerson A claimed in memoirs to have opposed the plan. The minutes record only the vote.\n\n## Conclusion\n\nThe record is insufficient to confirm this.\n'
 
 function auditInput(artifact: string, snapshot: ProjectSnapshot, adapter: ReviewModelAdapter) {
   return {
     adapter,
     runId: `run_${randomUUID()}`,
-    artifact: { id: snapshot.artifacts[0]?.id ?? 'art_x', path: 'docs/a.md', text: artifact },
+    artifact: { id: snapshot.artifacts[0]?.id ?? `art_${randomUUID()}`, path: 'docs/a.md', text: artifact },
     snapshot,
     rubricVersion: 'humanities-v1',
     contractHash: 'c'.repeat(64),
@@ -81,7 +96,11 @@ describe('extraction units — CommonMark AST root children', () => {
   it('a list with blank lines stays ONE root block (the parser AST, not a blank-line split)', () => {
     const text = 'Intro paragraph.\n\n- item one\n\n- item two\n\nClosing paragraph.'
     const blocks = rootBlocks(text)
-    expect(blocks.map((block) => block.body.trim().split('\n')[0])).toEqual(['Intro paragraph.', '- item one', 'Closing paragraph.'])
+    expect(blocks.map((block) => block.body.trim().split('\n')[0])).toEqual([
+      'Intro paragraph.',
+      '- item one',
+      'Closing paragraph.',
+    ])
   })
 
   it('headings are detected on root blocks', () => {
@@ -144,23 +163,74 @@ describe('align relation rules', () => {
   const derivations = [{ extractedId: 'ext_1' }, { extractedId: 'ext_2' }]
 
   it('relation new with non-empty claimIds is invalid', () => {
-    expect(() => validateAlignment({ stage: 'align', rubricVersion: 'r', findings: [], targets: [], alignment: [{ extractedId: 'ext_1', claimIds: ['cl_x'], relation: 'new', rationale: 'r' }] }, derivations, [])).toThrow(AuditInvalidError)
+    expect(() =>
+      validateAlignment(
+        {
+          stage: 'align',
+          rubricVersion: 'r',
+          findings: [],
+          targets: [],
+          alignment: [{ extractedId: 'ext_1', claimIds: ['cl_x'], relation: 'new', rationale: 'r' }],
+        },
+        derivations,
+        [],
+      ),
+    ).toThrow(AuditInvalidError)
   })
 
   it('non-new relations require non-empty valid claimIds', () => {
-    expect(() => validateAlignment({ stage: 'align', rubricVersion: 'r', findings: [], targets: [], alignment: [{ extractedId: 'ext_1', claimIds: [], relation: 'exact', rationale: 'r' }] }, derivations, ['cl_a'])).toThrow(AuditInvalidError)
-    expect(() => validateAlignment({ stage: 'align', rubricVersion: 'r', findings: [], targets: [], alignment: [{ extractedId: 'ext_1', claimIds: ['cl_unknown'], relation: 'exact', rationale: 'r' }] }, derivations, ['cl_a'])).toThrow(AuditInvalidError)
+    expect(() =>
+      validateAlignment(
+        {
+          stage: 'align',
+          rubricVersion: 'r',
+          findings: [],
+          targets: [],
+          alignment: [{ extractedId: 'ext_1', claimIds: [], relation: 'exact', rationale: 'r' }],
+        },
+        derivations,
+        ['cl_a'],
+      ),
+    ).toThrow(AuditInvalidError)
+    expect(() =>
+      validateAlignment(
+        {
+          stage: 'align',
+          rubricVersion: 'r',
+          findings: [],
+          targets: [],
+          alignment: [{ extractedId: 'ext_1', claimIds: ['cl_unknown'], relation: 'exact', rationale: 'r' }],
+        },
+        derivations,
+        ['cl_a'],
+      ),
+    ).toThrow(AuditInvalidError)
   })
 
   it('each extracted item appears exactly once', () => {
-    expect(() => validateAlignment({ stage: 'align', rubricVersion: 'r', findings: [], targets: [], alignment: [] }, derivations, [])).toThrow(AuditInvalidError)
-    expect(() => validateAlignment({
-      stage: 'align', rubricVersion: 'r', findings: [], targets: [],
-      alignment: [
-        { extractedId: 'ext_1', claimIds: ['cl_a'], relation: 'exact', rationale: 'r' },
-        { extractedId: 'ext_1', claimIds: ['cl_a'], relation: 'exact', rationale: 'r' },
-      ],
-    }, derivations, ['cl_a'])).toThrow(AuditInvalidError)
+    expect(() =>
+      validateAlignment(
+        { stage: 'align', rubricVersion: 'r', findings: [], targets: [], alignment: [] },
+        derivations,
+        [],
+      ),
+    ).toThrow(AuditInvalidError)
+    expect(() =>
+      validateAlignment(
+        {
+          stage: 'align',
+          rubricVersion: 'r',
+          findings: [],
+          targets: [],
+          alignment: [
+            { extractedId: 'ext_1', claimIds: ['cl_a'], relation: 'exact', rationale: 'r' },
+            { extractedId: 'ext_1', claimIds: ['cl_a'], relation: 'exact', rationale: 'r' },
+          ],
+        },
+        derivations,
+        ['cl_a'],
+      ),
+    ).toThrow(AuditInvalidError)
   })
 })
 
@@ -172,9 +242,15 @@ describe('executeAudit — findings, core discovery, span validation', () => {
     const adapter = auditAdapter({
       items: [item('The minutes record only the vote.', ARTIFACT, 'core')],
       align: (envelope) => ({
-        stage: 'align', rubricVersion: 'humanities-v1', findings: [], targets: [],
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
         alignment: envelope.items.map((entry: { extractedId: string }) => ({
-          extractedId: entry.extractedId, claimIds: [], relation: 'new', rationale: 'unregistered',
+          extractedId: entry.extractedId,
+          claimIds: [],
+          relation: 'new',
+          rationale: 'unregistered',
         })),
       }),
     })
@@ -216,13 +292,27 @@ describe('executeAudit — findings, core discovery, span validation', () => {
     const claim = makeClaim('fact')
     const snapshot = makeSnapshot({ claims: [claim] })
     snapshot.artifacts.push({
-      id: 'art_x', entityVersion: 1, createdAt: '', updatedAt: '', path: 'docs/a.md', contentHash: 'h',
+      id: 'art_x',
+      entityVersion: 1,
+      createdAt: '',
+      updatedAt: '',
+      path: 'docs/a.md',
+      contentHash: 'h',
       occurrences: [{ claimId: claim.id, span: { start: 0, end: 5 }, exactText: 'WRONG' }],
       outline: [],
     })
-    const adapter = auditAdapter({ items: [], align: () => ({ stage: 'align', rubricVersion: 'r', findings: [], targets: [], alignment: [] }) })
+    const adapter = auditAdapter({
+      items: [],
+      align: () => ({ stage: 'align', rubricVersion: 'r', findings: [], targets: [], alignment: [] }),
+    })
     let calls = 0
-    const counting: ReviewModelAdapter = { ...adapter, prepareReviewCall: async (...args) => { calls += 1; return adapter.prepareReviewCall(...args) } }
+    const counting: ReviewModelAdapter = {
+      ...adapter,
+      prepareReviewCall: async (...args) => {
+        calls += 1
+        return adapter.prepareReviewCall(...args)
+      },
+    }
     await expect(executeAudit(auditInput(ARTIFACT, snapshot, counting))).rejects.toThrow(AuditInvalidError)
     expect(calls).toBe(0) // broken input never spends model budget (§11.1)
   })
@@ -233,9 +323,15 @@ describe('executeAudit — findings, core discovery, span validation', () => {
     const adapter = auditAdapter({
       items: [item('Person A claimed in memoirs to have opposed the plan.', ARTIFACT)],
       align: (envelope) => ({
-        stage: 'align', rubricVersion: 'humanities-v1', findings: [], targets: [],
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
         alignment: envelope.items.map((entry: { extractedId: string }) => ({
-          extractedId: entry.extractedId, claimIds: [claim.id], relation: 'stronger', rationale: 'stance stronger',
+          extractedId: entry.extractedId,
+          claimIds: [claim.id],
+          relation: 'stronger',
+          rationale: 'stance stronger',
         })),
       }),
     })
@@ -249,14 +345,20 @@ describe('executeAudit — findings, core discovery, span validation', () => {
 })
 
 function dummyAtomic(): ExtractedItem['atomicClaims'][number] {
-  return { text: 'atomic', kind: 'fact', scope: { subject: 's', corpus: [], time: '', geography: '', exclusions: [] }, importance: 'supporting' }
+  return {
+    text: 'atomic',
+    kind: 'fact',
+    scope: { subject: 's', corpus: [], time: 'unspecified', geography: 'unspecified', exclusions: [] },
+    importance: 'supporting',
+  }
 }
 
 // ---- worked example §20 (historical narrative) ----
 
 describe('worked example §20 — historical narrative', () => {
   const problematicBody = '甲当时确实反对方案。'
-  const revisedBody = '# Title\n\n甲在回忆中声称曾反对方案。同期记录不足以确认这一点。\n\n## Conclusion\n\n同期记录不足以确认这一点。'
+  const revisedBody =
+    '# Title\n\n甲在回忆中声称曾反对方案。同期记录不足以确认这一点。\n\n## Conclusion\n\n同期记录不足以确认这一点。'
 
   function historySnapshot(): ProjectSnapshot {
     const c1 = makeClaim('source-report', '甲在回忆中声称曾反对方案')
@@ -273,17 +375,23 @@ describe('worked example §20 — historical narrative', () => {
     const adapter = auditAdapter({
       items: [item(problematicBody, `# Title\n\n${problematicBody}\n\n## Conclusion\n\n同期记录不足以确认这一点。`)],
       align: (envelope) => ({
-        stage: 'align', rubricVersion: 'humanities-v1', findings: [], targets: [],
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
         // 'stronger': the body asserts the fact outright; the graph only
         // carries the attributed memoir claim — located to the exact span.
         alignment: envelope.items.map((entry: { extractedId: string }) => ({
           extractedId: entry.extractedId,
           claimIds: [snapshot.claims.find((claim: Claim) => claim.kind === 'fact')!.id],
-          relation: 'stronger', rationale: 'body asserts the fact; the record does not hold it',
+          relation: 'stronger',
+          rationale: 'body asserts the fact; the record does not hold it',
         })),
       }),
     })
-    const outcome = await executeAudit(auditInput(`# Title\n\n${problematicBody}\n\n## Conclusion\n\n同期记录不足以确认这一点。`, snapshot, adapter))
+    const outcome = await executeAudit(
+      auditInput(`# Title\n\n${problematicBody}\n\n## Conclusion\n\n同期记录不足以确认这一点。`, snapshot, adapter),
+    )
     expect(outcome.findings).toHaveLength(1)
     expect(outcome.findings[0]!.code).toBe('AUDIT_STRONGER')
     expect(outcome.findings[0]!.severity).toBe('major')
@@ -297,12 +405,25 @@ describe('worked example §20 — historical narrative', () => {
     const adapter = auditAdapter({
       items: [item('甲在回忆中声称曾反对方案。', revisedBody), item('同期记录不足以确认这一点。', revisedBody)],
       align: (envelope) => ({
-        stage: 'align', rubricVersion: 'humanities-v1', findings: [], targets: [],
-        alignment: envelope.items.map((entry: { extractedId: string; quote: string }) => (
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
+        alignment: envelope.items.map((entry: { extractedId: string; quote: string }) =>
           entry.quote.startsWith('甲在回忆中')
-            ? { extractedId: entry.extractedId, claimIds: [c1.id], relation: 'exact', rationale: 'verbatim attribution' }
-            : { extractedId: entry.extractedId, claimIds: [], relation: 'new', rationale: 'qualified claim not yet registered' }
-        )),
+            ? {
+                extractedId: entry.extractedId,
+                claimIds: [c1.id],
+                relation: 'exact',
+                rationale: 'verbatim attribution',
+              }
+            : {
+                extractedId: entry.extractedId,
+                claimIds: [],
+                relation: 'new',
+                rationale: 'qualified claim not yet registered',
+              },
+        ),
       }),
     })
     const outcome = await executeAudit(auditInput(revisedBody, snapshot, adapter))
@@ -324,11 +445,18 @@ describe('worked example §21 — literary interpretation', () => {
     const adapter = auditAdapter({
       items: [item(body, body)],
       align: (envelope) => ({
-        stage: 'align', rubricVersion: 'humanities-v1', findings: [], targets: [],
-        alignment: [{
-          extractedId: envelope.items[0]!.extractedId, claimIds: [c1.id], relation: 'broader',
-          rationale: 'body universalizes beyond the declared T1–T3 scope',
-        }],
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
+        alignment: [
+          {
+            extractedId: envelope.items[0]!.extractedId,
+            claimIds: [c1.id],
+            relation: 'broader',
+            rationale: 'body universalizes beyond the declared T1–T3 scope',
+          },
+        ],
       }),
     })
     const outcome = await executeAudit(auditInput(body, snapshot, adapter))
@@ -349,20 +477,43 @@ describe('audit via executeReviewRun (stage union)', () => {
     const adapter = auditAdapter({
       items: [item('The minutes record only the vote.', ARTIFACT, 'core')],
       align: (envelope) => ({
-        stage: 'align', rubricVersion: 'humanities-v1', findings: [], targets: [],
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
         alignment: envelope.items.map((entry: { extractedId: string }) => ({
-          extractedId: entry.extractedId, claimIds: [], relation: 'new', rationale: 'unregistered core claim',
+          extractedId: entry.extractedId,
+          claimIds: [],
+          relation: 'new',
+          rationale: 'unregistered core claim',
         })),
       }),
     })
     const outcome = await executeReviewRun({
-      deps: { root: '/tmp/unused-audit-root', adapter, budget: { maxCallsPerRun: 40, maxInputTokensPerRun: 1e6, maxOutputTokensPerRun: 1e6, maxOutputTokensPerCall: 3000, wallMs: 60000, callTimeoutMs: 5000, concurrency: 2 }, contractHash: 'c'.repeat(64) },
-      runId: `run_${randomUUID()}`, requestId: `req-${randomUUID()}`, stages: ['audit'],
-      targetClaimIds: [], snapshot, signal: new AbortController().signal,
-      artifact: { id: snapshot.artifacts[0]?.id ?? 'art_x', path: 'docs/a.md', text: ARTIFACT },
+      deps: {
+        root: '/tmp/unused-audit-root',
+        adapter,
+        budget: {
+          maxCallsPerRun: 40,
+          maxInputTokensPerRun: 1e6,
+          maxOutputTokensPerRun: 1e6,
+          maxOutputTokensPerCall: 3000,
+          wallMs: 60000,
+          callTimeoutMs: 5000,
+          concurrency: 2,
+        },
+        contractHash: 'c'.repeat(64),
+      },
+      runId: `run_${randomUUID()}`,
+      requestId: `req-${randomUUID()}`,
+      stages: ['audit'],
+      targetClaimIds: [],
+      snapshot,
+      signal: new AbortController().signal,
+      artifact: { id: snapshot.artifacts[0]?.id ?? `art_${randomUUID()}`, path: 'docs/a.md', text: ARTIFACT },
       maxUnitChars: 48_000,
     })
-    expect(outcome.status).toBe('completed')
+    expect(outcome.status).toBe('incomplete')
     expect(outcome.newCoreDiscovered).toBe(true)
     expect(outcome.auditMetrics?.extractedAtomicClaims).toBe(1)
     expect(outcome.records.some((record) => record.stage === 'extract')).toBe(true)
@@ -373,9 +524,26 @@ describe('audit via executeReviewRun (stage union)', () => {
     const { executeReviewRun } = await import('../src/review-runner.ts')
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
     const outcome = await executeReviewRun({
-      deps: { root: '/tmp/unused-audit2', adapter: auditAdapter({ items: [], align: () => ({}) }) as never, budget: { maxCallsPerRun: 40, maxInputTokensPerRun: 1e6, maxOutputTokensPerRun: 1e6, maxOutputTokensPerCall: 3000, wallMs: 60000, callTimeoutMs: 5000, concurrency: 2 }, contractHash: 'c'.repeat(64) },
-      runId: `run_${randomUUID()}`, requestId: `req-${randomUUID()}`, stages: ['audit'],
-      targetClaimIds: [], snapshot, signal: new AbortController().signal,
+      deps: {
+        root: '/tmp/unused-audit2',
+        adapter: auditAdapter({ items: [], align: () => ({}) }) as never,
+        budget: {
+          maxCallsPerRun: 40,
+          maxInputTokensPerRun: 1e6,
+          maxOutputTokensPerRun: 1e6,
+          maxOutputTokensPerCall: 3000,
+          wallMs: 60000,
+          callTimeoutMs: 5000,
+          concurrency: 2,
+        },
+        contractHash: 'c'.repeat(64),
+      },
+      runId: `run_${randomUUID()}`,
+      requestId: `req-${randomUUID()}`,
+      stages: ['audit'],
+      targetClaimIds: [],
+      snapshot,
+      signal: new AbortController().signal,
     })
     expect(outcome.status).toBe('incomplete')
   })

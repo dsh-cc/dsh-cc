@@ -289,6 +289,7 @@
         }
       }
     },
+    "FrozenReviewSettings": {"type": "object", "additionalProperties": false, "required": ["budget", "maxArtifactChars", "maxContextChars"], "properties": {"budget": {"type": "object", "additionalProperties": false, "required": ["maxCallsPerRun", "maxInputTokensPerRun", "maxOutputTokensPerRun", "maxOutputTokensPerCall", "wallMs", "callTimeoutMs", "concurrency"], "properties": {"maxCallsPerRun": {"type": "integer", "minimum": 1, "maximum": 200}, "maxInputTokensPerRun": {"type": "integer", "minimum": 1000, "maximum": 1000000}, "maxOutputTokensPerRun": {"type": "integer", "minimum": 1000, "maximum": 200000}, "maxOutputTokensPerCall": {"type": "integer", "minimum": 256, "maximum": 16000}, "wallMs": {"type": "integer", "minimum": 1000, "maximum": 900000}, "callTimeoutMs": {"type": "integer", "minimum": 1000, "maximum": 120000}, "concurrency": {"type": "integer", "minimum": 1, "maximum": 4}}}, "maxArtifactChars": {"type": "integer", "minimum": 1000}, "maxContextChars": {"type": "integer", "minimum": 1000}}},
     "ProjectContract": {
       "type": "object",
       "description": "§5.2 ProjectContract.",
@@ -313,7 +314,8 @@
         },
         "plannedCorpus": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 },
         "expectedCoreTopics": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 512 }, "maxItems": 1000 },
-        "mode": { "enum": ["draft", "reviewed"] }
+        "mode": { "enum": ["draft", "reviewed"] },
+        "reviewSettings": { "$ref": "#/$defs/FrozenReviewSettings" }
       }
     },
     "ProjectSnapshot": {

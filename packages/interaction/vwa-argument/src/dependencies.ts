@@ -14,10 +14,28 @@
  */
 
 import { sha256Hex, stableJson } from './schema.ts'
-import type { Artifact, Argument, Claim, Evidence, EvidenceGroup, Issue, ProjectSnapshot, SearchLog, Source } from './types.ts'
+import type {
+  Artifact,
+  Argument,
+  Claim,
+  Evidence,
+  EvidenceGroup,
+  Issue,
+  ProjectSnapshot,
+  SearchLog,
+  Source,
+} from './types.ts'
 
 /** All author entity kinds keyed by their ProjectSnapshot array field. */
-export type EntityKind = 'sources' | 'evidence' | 'claims' | 'groups' | 'arguments' | 'issues' | 'searches' | 'artifacts'
+export type EntityKind =
+  | 'sources'
+  | 'evidence'
+  | 'claims'
+  | 'groups'
+  | 'arguments'
+  | 'issues'
+  | 'searches'
+  | 'artifacts'
 
 /** One entity in the index; entities are discriminated by the snapshot array they came from. */
 export type AnyEntity = Source | Evidence | Claim | EvidenceGroup | Argument | Issue | SearchLog | Artifact
@@ -55,7 +73,16 @@ export function entityContentHash(entity: AnyEntity): string {
 
 /** Locate an entity (any kind) by id; undefined when absent. */
 export function findEntity(index: ReverseIndex, id: string): { kind: EntityKind; entity: AnyEntity } | undefined {
-  for (const kind of ['sources', 'evidence', 'claims', 'groups', 'arguments', 'issues', 'searches', 'artifacts'] as const) {
+  for (const kind of [
+    'sources',
+    'evidence',
+    'claims',
+    'groups',
+    'arguments',
+    'issues',
+    'searches',
+    'artifacts',
+  ] as const) {
     const entity = index[kind].get(id)
     if (entity !== undefined) return { kind, entity }
   }
@@ -67,7 +94,10 @@ export function findEntity(index: ReverseIndex, id: string): { kind: EntityKind;
  * rests on — claim→(groups→evidence→source, arguments→premises) — each as
  * `{id, entityVersion, contentHash}`, sorted by id.
  */
-export function dependencyEntries(index: ReverseIndex, targetIds: string[]): { id: string; entityVersion: number; contentHash: string }[] {
+export function dependencyEntries(
+  index: ReverseIndex,
+  targetIds: string[],
+): { id: string; entityVersion: number; contentHash: string }[] {
   const seen = new Set<string>()
   const entries: { id: string; entityVersion: number; contentHash: string }[] = []
   const visit = (kind: EntityKind, id: string): void => {
@@ -87,14 +117,17 @@ export function dependencyEntries(index: ReverseIndex, targetIds: string[]): { i
       case 'claims': {
         const claim = entity as Claim
         for (const argumentId of index.arguments.values()) {
-          if (argumentId.premiseClaimIds.includes(id) || argumentId.conclusionClaimId === id) {
+          if (argumentId.conclusionClaimId === id) {
             visit('arguments', argumentId.id)
           }
         }
         for (const group of index.groups.values()) {
-          if (group.targetClaimId === id) for (const evId of group.evidenceIds) visit('evidence', evId)
+          if (group.targetClaimId === id) visit('groups', group.id)
         }
         for (const sourceId of claim.scope.corpus) visit('sources', sourceId)
+        for (const issue of index.issues.values())
+          if (issue.targetId === id || issue.relatedClaimIds.includes(id)) visit('issues', issue.id)
+        for (const search of index.searches.values()) if (search.targetIds.includes(id)) visit('searches', search.id)
         break
       }
       case 'groups': {
@@ -105,21 +138,41 @@ export function dependencyEntries(index: ReverseIndex, targetIds: string[]): { i
         visit('sources', (entity as Evidence).sourceId)
         break
       }
+      case 'sources': {
+        const source = entity as Source
+        for (const parent of source.lineage.parentSourceIds) visit('sources', parent)
+        for (const ev of source.authenticityBasisEvidenceIds) visit('evidence', ev)
+        break
+      }
+      case 'issues': {
+        const issue = entity as Issue
+        for (const ev of issue.evidenceIds) visit('evidence', ev)
+        break
+      }
       default:
         break
     }
   }
-  for (const id of targetIds) visit('claims', id)
+  for (const id of targetIds) {
+    const found = findEntity(index, id)
+    if (found) visit(found.kind, id)
+  }
   entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   return entries
 }
 
 /** §11.4 digest: stableJson hash over the sorted dependency entries + upstream record hashes. */
-export function dependencyDigest(index: ReverseIndex, targetIds: string[], upstreamRecordHashes: string[] = []): string {
-  return sha256Hex(stableJson({
-    dependencies: dependencyEntries(index, targetIds),
-    upstreamRecordHashes: [...upstreamRecordHashes].sort(),
-  }))
+export function dependencyDigest(
+  index: ReverseIndex,
+  targetIds: string[],
+  upstreamRecordHashes: string[] = [],
+): string {
+  return sha256Hex(
+    stableJson({
+      dependencies: dependencyEntries(index, targetIds),
+      upstreamRecordHashes: [...upstreamRecordHashes].sort(),
+    }),
+  )
 }
 
 /**

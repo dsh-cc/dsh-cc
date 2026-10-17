@@ -48,18 +48,18 @@ const SettingsObject = z.object({
   'semantic-enabled': z.boolean().default(false),
   'semantic-mode': z.union([z.const('draft'), z.const('reviewed')]).default('draft'),
   'review-alias': z.string().default('sonnet'),
-  'review-max-calls-per-run': z.number().min(1).max(200).default(40),
-  'review-max-input-tokens-per-run': z.number().min(1000).max(1_000_000).default(160_000),
-  'review-max-output-tokens-per-run': z.number().min(1000).max(200_000).default(24_000),
-  'review-max-output-tokens-per-call': z.number().min(256).max(16_000).default(3000),
-  'review-max-wall-ms': z.number().min(1000).max(900_000).default(180_000),
-  'review-call-timeout-ms': z.number().min(1000).max(120_000).default(45_000),
-  'review-concurrency': z.number().min(1).max(4).default(2),
-  'review-max-artifact-chars': z.number().min(1000).default(120_000),
-  'review-max-context-chars-per-task': z.number().min(1000).default(48_000),
-  'project-max-entities': z.number().min(1).default(10_000),
+  'review-max-calls-per-run': z.number().step(1).min(1).max(200).default(40),
+  'review-max-input-tokens-per-run': z.number().step(1).min(1000).max(1_000_000).default(160_000),
+  'review-max-output-tokens-per-run': z.number().step(1).min(1000).max(200_000).default(24_000),
+  'review-max-output-tokens-per-call': z.number().step(1).min(256).max(16_000).default(3000),
+  'review-max-wall-ms': z.number().step(1).min(1000).max(900_000).default(180_000),
+  'review-call-timeout-ms': z.number().step(1).min(1000).max(120_000).default(45_000),
+  'review-concurrency': z.number().step(1).min(1).max(4).default(2),
+  'review-max-artifact-chars': z.number().step(1).min(1000).default(120_000),
+  'review-max-context-chars-per-task': z.number().step(1).min(1000).default(48_000),
+  'project-max-entities': z.number().step(1).min(1).default(10_000),
   // Fixed cap per design (§13); the schema range keeps a sane guard only.
-  'repair-max-rounds-per-artifact-turn': z.number().min(0).max(10).default(1),
+  'repair-max-rounds-per-artifact-turn': z.number().step(1).min(0).max(10).default(1),
 })
 
 /**
@@ -67,8 +67,7 @@ const SettingsObject = z.object({
  * convention) so a genuinely absent namespace value stays absent instead of
  * materializing defaults into the cascade.
  */
-export const SettingsSchema: z<Record<string, unknown>> =
-  opt(SettingsObject) as unknown as z<Record<string, unknown>>
+export const SettingsSchema: z<Record<string, unknown>> = opt(SettingsObject) as unknown as z<Record<string, unknown>>
 
 /** Ship defaults (§13): semantic OFF, draft mode, the review budget table. */
 export const DEFAULT_VWA_ARGUMENT_SETTINGS: VwaArgumentSettings = {
@@ -118,8 +117,10 @@ function resolveSection(section: Record<string, unknown>): VwaArgumentSettings {
   return {
     'semantic-enabled': resolved['semantic-enabled'] === true,
     'semantic-mode': resolved['semantic-mode'] === 'reviewed' ? 'reviewed' : 'draft',
-    'review-alias': typeof resolved['review-alias'] === 'string' && resolved['review-alias'].length > 0
-      ? resolved['review-alias'] : defaults['review-alias'],
+    'review-alias':
+      typeof resolved['review-alias'] === 'string' && resolved['review-alias'].length > 0
+        ? resolved['review-alias']
+        : defaults['review-alias'],
     'review-max-calls-per-run': num('review-max-calls-per-run'),
     'review-max-input-tokens-per-run': num('review-max-input-tokens-per-run'),
     'review-max-output-tokens-per-run': num('review-max-output-tokens-per-run'),

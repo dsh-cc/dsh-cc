@@ -1,9 +1,7 @@
 # @dsh-cc/vwa-argument
 
 Verifiable Workspace Agent (VWA) lane-2 argumentation (design:
-`docs/plans/2026-10-16-vwa-evidence-argument.md`). The package is complete
-as of slice P5: contracts, store/graph, review pipeline, tools, the `/vwa`
-command, v2 receipts, and the report renderer. Semantic review stays
+`docs/plans/2026-10-16-vwa-evidence-argument.md`). The package provides contracts, store/graph, review pipeline, author and report tools, the `/vwa` command, v2 receipts, and the report renderer. Semantic quality remains experimental until the human gold set and live-model acceptance are completed; deterministic integration tests do not establish semantic accuracy. Semantic review stays
 **default-off** (`vwa-argument.semantic-enabled: false`, §13); when it is
 disabled the tools are not registered and the feature is inert.
 
@@ -36,7 +34,7 @@ disabled the tools are not registered and the feature is inert.
   `evidence.register` (source snapshot + excerpts, runtime-read quotes),
   `evidence.search_log` (1–50 search-log entries, no searching performed),
   `argument.update` (atomic full-graph mutation union), `argument.review`
-  (background semantic review over a stage)
+  (background semantic review over a stage), and `argument.report` (deterministic Markdown/JSON, optional write under `docs/vwa-reports/<projectId>/`; no model calls)
   〔src:ws:packages/interaction/vwa-argument/src/tools.ts#L1-L40〕.
 - **Command** (`src/commands.ts`): the closed-grammar `/vwa
   <init|status|import|sign|adjudicate|repair>` command — human-only source
@@ -56,7 +54,7 @@ disabled the tools are not registered and the feature is inert.
   〔src:ws:packages/interaction/vwa-argument/src/schema.ts#L1-L40〕.
 - **Settings** (`src/settings.ts`): namespace `vwa-argument`, flat kebab
   keys per the §13 table. `semantic-enabled` defaults to **false**; all
-  review budgets follow §13. `review-alias` (default `sonnet`) names the
+  review budgets follow §13 and are frozen into `contract.reviewSettings` at project initialization; contract edits preserve these runtime-owned limits. `review-alias` (default `sonnet`) names the
   model ALIAS the reviewer routes through — never a concrete model id. Same dual-half idiom as vwa-evidence:
   `registerNamespaceSafe` for /config UX plus a fail-soft raw hot-read of
   `<dshHome>/settings.json` (`readUserSettingsSync`)
@@ -77,3 +75,13 @@ disabled the tools are not registered and the feature is inert.
 Not in this package: receipt writing (vwa-evidence is the sole writer) and
 the frozen semantic scorer `humanities-scorer@1` with the humanities gold
 set (`@dsh-cc/vwa-eval`, §22.2).
+
+## Delivery and validation
+
+A completed call is not a passed review. Delivery selects records matching the current task dependencies, contract, policy, prompt, and effective prepared model configuration. Relevant changes expire old judgments; unrelated author changes do not invalidate independent support tasks. Conflicting same-input judgments remain visible and cannot be erased by a newer pass. Negative support propagates through the weakest required premise; alternative support paths are evaluated independently.
+
+`all` runs sources, support, claims, arguments and full-text extract/align. Every provider schema is self-contained, extraction responses are strictly validated, and alignment requires AUDIT-01 through AUDIT-05. Attempts, including audit calls and repairs, reserve and persist budget before dispatch; interrupted reservations remain charged after restart. Project limits are frozen at init; model routes are resolved per call and their effective prepared options enter review identity.
+
+Mechanical gates inspect the caller's actual workspace files. Optional unavailable style checks are disclosed separately; link checks and used executable-code checks remain required. Snapshot/hash/quote failures block semantic delivery. Reports retain current assessments, explicit warrants and premises, limitations, unresolved issues, and the experimental calibration status. Only presentation of both exact body/report paths with current hashes advances delivery; a report failure cannot produce a success receipt. Signatures require a matching existing receipt from the user's session, and human adjudication expires when its bound inputs change.
+
+See `docs/vwa/lane2-validation.md` for acceptance coverage and the remaining human calibration requirements. The package test suite includes a real Cordis mount through `all`, report/receipt checks, and unpacked npm-package asset loading. The semantic feature remains default-off.

@@ -14,61 +14,60 @@
 
 import type { ReverseIndex } from './dependencies.ts'
 import type {
-  Adequacy, AdjudicationRecord, Argument, Assessment, Check, Claim, EvidenceGroup,
+  Adequacy,
+  AdjudicationRecord,
+  Argument,
+  Assessment,
+  Check,
+  Claim,
+  EvidenceGroup,
   ReviewRecord,
 } from './types.ts'
 import type { Id, Support } from './types.ts'
 
 /** Bumped whenever a §7.1/§7.2 normative behavior of this module changes. */
-export const POLICY_VERSION = 'humanities-v1-policy@1'
+export const POLICY_VERSION = 'humanities-v1-policy@2'
 
 /** The digested per-target review results the policy grades against. */
 export interface ReviewDigest {
   /** support stage: group id → reviewed relation. */
-  groups: Map<Id, { support: Support; adequacy: Adequacy; checks: Check[] }>
+  groups: Map<
+    Id,
+    {
+      support: Support
+      adequacy: Adequacy
+      checks: Check[]
+      evidenceRelations?: { evidenceId: Id; support: Support; rationale: string }[]
+    }
+  >
   /** claims stage: claim id → type-rule checks + search sufficiency. */
   claims: Map<Id, { checks: Check[]; searchSufficiency: 'checked' | 'not-checked' }>
   /** arguments stage: argument id → adequacy; issue id → impact/resolution. */
   arguments: Map<Id, { adequacy?: Adequacy; checks: Check[] }>
-  issues: Map<Id, { issueImpact?: 'none' | 'qualify' | 'downgrade' | 'invalidate'; issueResolution?: 'accepted' | 'rejected' | 'unresolved'; checks: Check[] }>
+  issues: Map<
+    Id,
+    {
+      issueImpact?: 'none' | 'qualify' | 'downgrade' | 'invalidate'
+      issueResolution?: 'accepted' | 'rejected' | 'unresolved'
+      checks: Check[]
+    }
+  >
   /** sources stage: source id → SOURCE-* checks. */
   sources: Map<Id, { checks: Check[] }>
 }
 
-/** Extract the per-target payloads policy consumes out of completed records. */
-export function digestRecords(records: ReviewRecord[]): ReviewDigest {
-  const digest: ReviewDigest = { groups: new Map(), claims: new Map(), arguments: new Map(), issues: new Map(), sources: new Map() }
-  for (const record of records) {
-    if (record.status !== 'completed' || record.response === undefined) continue
-    for (const target of record.response.targets) {
-      const base = { checks: target.checks }
-      if (record.response.stage === 'support' && 'support' in target && 'adequacy' in target) {
-        digest.groups.set(target.targetId, { support: target.support, adequacy: target.adequacy, checks: target.checks })
-      } else if (record.response.stage === 'claims' && 'searchSufficiency' in target) {
-        digest.claims.set(target.targetId, { checks: target.checks, searchSufficiency: target.searchSufficiency })
-      } else if (record.response.stage === 'arguments') {
-        if ('adequacy' in target) digest.arguments.set(target.targetId, { adequacy: target.adequacy, checks: target.checks })
-        else if ('issueImpact' in target) {
-          digest.issues.set(target.targetId, { issueImpact: target.issueImpact, issueResolution: target.issueResolution, checks: target.checks })
-        }
-      } else if (record.response.stage === 'sources') {
-        digest.sources.set(target.targetId, base)
-      }
-    }
-  }
-  return digest
-}
+export { digestRecords } from './policy-digest.ts'
 
 export type Grade = 'A' | 'B' | 'C' | 'U'
 
 const ADEQUACY_GRADE: Record<Adequacy, Grade> = { robust: 'A', adequate: 'B', weak: 'C', none: 'U' }
-const minGrade = (a: Grade, b: Grade): Grade => (gradeRank(a) <= gradeRank(b) ? a : b)
+const minGrade = (a: Grade, b: Grade): Grade => (gradeRank(a) >= gradeRank(b) ? a : b)
 const gradeRank = (g: Grade): number => ({ A: 0, B: 1, C: 2, U: 3 })[g]
 const capAt = (grade: Grade, cap: Grade): Grade => (gradeRank(grade) > gradeRank(cap) ? grade : cap)
 
 /** The path kinds of §7.1 rule 0: a direct group path or one argument path. */
 export type SupportPath =
-  | { kind: 'group'; group: EvidenceGroup }
+  | { kind: 'group'; group: EvidenceGroup; evidenceId?: Id }
   | { kind: 'argument'; argument: Argument }
 
 /**
@@ -95,7 +94,7 @@ export function supportPaths(index: ReverseIndex, claimId: Id): SupportPath[] {
       paths.push({ kind: 'group', group })
     } else {
       // any-group: one candidate path per member (§7.1 rule 0).
-      for (const _evidenceId of group.evidenceIds) paths.push({ kind: 'group', group })
+      for (const evidenceId of group.evidenceIds) paths.push({ kind: 'group', group, evidenceId })
     }
   }
   for (const argument of index.arguments.values()) {
@@ -117,7 +116,8 @@ export interface PolicyWorld {
 /** §7.2 opposition total order (R1-31): decisive > material > not-checked > none-found. */
 export type Opposition = Assessment['opposition']
 const OPPOSITION_RANK: Record<Opposition, number> = { decisive: 0, material: 1, 'not-checked': 2, 'none-found': 3 }
-export const strongestOpposition = (a: Opposition, b: Opposition): Opposition => (OPPOSITION_RANK[a] <= OPPOSITION_RANK[b] ? a : b)
+export const strongestOpposition = (a: Opposition, b: Opposition): Opposition =>
+  OPPOSITION_RANK[a] <= OPPOSITION_RANK[b] ? a : b
 
 /**
  * §7.2: aggregate per claim over current issue reviews. `accepted` issue
@@ -151,7 +151,8 @@ export function dispositionFor(grade: Grade, opposition: Opposition): Assessment
 function adjudicatedRuleIds(world: PolicyWorld): Set<string> {
   const out = new Set<string>()
   for (const adjudication of world.adjudications ?? []) {
-    if (adjudication.decision === 'reject') out.add(`${adjudication.overrides.ruleId}@${adjudication.overrides.targetId}`)
+    if (adjudication.decision === 'reject')
+      out.add(`${adjudication.overrides.ruleId}@${adjudication.overrides.targetId}`)
   }
   return out
 }
@@ -165,10 +166,15 @@ const failed = (checks: Check[], ruleId: string, adjudicated: Set<string>): bool
 const checkTarget = (_checks: Check[], _ruleId: string): string => ''
 
 /** §8.2 type-rule id per claim kind; undefined for kinds without a type rule. */
-export const typeRuleFor = (claim: Claim): string | undefined => ({
-  fact: 'HIST-01', 'source-report': 'HIST-01', causal: 'CAUSE-01',
-  intent: 'INTENT-01', interpretation: 'INTERP-01', evaluation: 'EVAL-01',
-}[claim.kind])
+export const typeRuleFor = (claim: Claim): string | undefined =>
+  ({
+    fact: 'HIST-01',
+    'source-report': 'HIST-01',
+    causal: 'CAUSE-01',
+    intent: 'INTENT-01',
+    interpretation: 'INTERP-01',
+    evaluation: 'EVAL-01',
+  })[claim.kind]
 
 /** The scheme a claim kind requires for full strength (§7.1 rule 5 table). */
 const REQUIRED_SCHEMES: Record<Claim['kind'], string[]> = {
@@ -181,11 +187,18 @@ const REQUIRED_SCHEMES: Record<Claim['kind'], string[]> = {
 }
 
 /** Grade of one direct group path (§7.1 rule 2). */
-function gradeGroupPath(world: PolicyWorld, group: EvidenceGroup, adjudicated: Set<string>): { grade: Grade; rationale: string[] } {
+function gradeGroupPath(
+  world: PolicyWorld,
+  group: EvidenceGroup,
+  adjudicated: Set<string>,
+  candidate?: Id,
+): { grade: Grade; rationale: string[] } {
   const rationale: string[] = [`group ${group.id} (${group.mode})`]
   const review = world.digest.groups.get(group.id)
   if (review === undefined) return { grade: 'U', rationale: [...rationale, 'no current complete support review'] }
-  const support: Support = review.support
+  const support: Support = candidate
+    ? (review.evidenceRelations?.find((r) => r.evidenceId === candidate)?.support ?? review.support)
+    : review.support
   if (support === 'irrelevant' || support === 'contradicted' || support === 'unknown') {
     return { grade: 'U', rationale: [...rationale, `support ${support}`] }
   }
@@ -200,16 +213,27 @@ function gradeGroupPath(world: PolicyWorld, group: EvidenceGroup, adjudicated: S
     grade = capAt(grade, 'C')
     rationale.push('SUP-02 fail → path caps at C')
   }
-  for (const evidenceId of group.evidenceIds) {
+  for (const evidenceId of candidate ? [candidate] : group.evidenceIds) {
     const evidence = world.index.evidence.get(evidenceId)
     const source = evidence === undefined ? undefined : world.index.sources.get(evidence.sourceId)
     if (source === undefined) continue
+    const source02Passed = world.digest.sources
+      .get(source.id)
+      ?.checks.some((c) => c.ruleId === 'SOURCE-02' && c.result === 'pass')
+    if (
+      (source.authenticity === 'questioned' && !source02Passed) ||
+      (world.index.claims.get(group.targetClaimId)?.kind !== 'source-report' &&
+        (source.origin === 'agent-generated' || source.acquisition.kind === 'unverified'))
+    )
+      grade = capAt(grade, 'C')
     if (failed(world.digest.sources.get(source.id)?.checks ?? [], 'EVID-01', adjudicated)) {
       return { grade: 'U', rationale: [...rationale, `EVID-01 blocker on ${evidenceId} → path U`] }
     }
-    if (failed(world.digest.sources.get(source.id)?.checks ?? [], 'SOURCE-01', adjudicated)
-      || failed(world.digest.sources.get(source.id)?.checks ?? [], 'SOURCE-02', adjudicated)
-      || failed(world.digest.sources.get(source.id)?.checks ?? [], 'SOURCE-03', adjudicated)) {
+    if (
+      failed(world.digest.sources.get(source.id)?.checks ?? [], 'SOURCE-01', adjudicated) ||
+      failed(world.digest.sources.get(source.id)?.checks ?? [], 'SOURCE-02', adjudicated) ||
+      failed(world.digest.sources.get(source.id)?.checks ?? [], 'SOURCE-03', adjudicated)
+    ) {
       grade = capAt(grade, 'C')
       rationale.push(`SOURCE rule fail on ${source.id} → path caps at C`)
     }
@@ -269,20 +293,28 @@ export function gradeClaim(world: PolicyWorld, claim: Claim): { grade: Grade; ra
 
   let strongest: Grade = 'U'
   let strongestRationale: string[] = []
+  let strongestPath: SupportPath | undefined
   for (const path of paths) {
     let grade: Grade
     let pathRationale: string[]
     if (path.kind === 'group') {
-      ;({ grade, rationale: pathRationale } = gradeGroupPath(world, path.group, adjudicated))
+      ;({ grade, rationale: pathRationale } = gradeGroupPath(world, path.group, adjudicated, path.evidenceId))
     } else {
       // Premise grades come from the recursive rule; a missing required
       // premise record is U (ARG-01 catches the registration failure).
       pathRationale = []
-      grade = gradeArgumentPath(world, path.argument, adjudicated, new Map(path.argument.premiseClaimIds.map((p) => [p, gradeOf(p)])), pathRationale)
+      grade = gradeArgumentPath(
+        world,
+        path.argument,
+        adjudicated,
+        new Map(path.argument.premiseClaimIds.map((p) => [p, gradeOf(p)])),
+        pathRationale,
+      )
     }
     if (gradeRank(grade) < gradeRank(strongest)) {
       strongest = grade
       strongestRationale = pathRationale
+      strongestPath = path
     }
   }
   rationale.push(...strongestRationale)
@@ -298,8 +330,9 @@ export function gradeClaim(world: PolicyWorld, claim: Claim): { grade: Grade; ra
     }
   }
   // Rule 5: kind-specific claims without a matching-scheme argument cap at C.
-  const hasSchemeArgument = [...world.index.arguments.values()]
-    .some((a) => a.conclusionClaimId === claim.id && REQUIRED_SCHEMES[claim.kind].includes(a.scheme))
+  const hasSchemeArgument = [...world.index.arguments.values()].some(
+    (a) => a.conclusionClaimId === claim.id && REQUIRED_SCHEMES[claim.kind].includes(a.scheme),
+  )
   if (!hasSchemeArgument && claim.kind !== 'fact' && claim.kind !== 'source-report') {
     strongest = capAt(strongest, 'C')
     rationale.push(`no ${REQUIRED_SCHEMES[claim.kind].join('|')} argument → cap C (rule 5)`)
@@ -307,12 +340,12 @@ export function gradeClaim(world: PolicyWorld, claim: Claim): { grade: Grade; ra
   // Rule 6 caps: questioned sources without a passed SOURCE-02, and
   // agent-generated/unverified external-fact paths, cap at C.
   const pathSourceIds = new Set<Id>()
-  for (const path of paths) {
+  for (const path of strongestPath ? [strongestPath] : []) {
     const groupIds = path.kind === 'group' ? [path.group.id] : path.argument.evidenceGroupIds
     for (const groupId of groupIds) {
       const group = world.index.groups.get(groupId)
       if (group === undefined) continue
-      for (const evidenceId of group.evidenceIds) {
+      for (const evidenceId of path.kind === 'group' && path.evidenceId ? [path.evidenceId] : group.evidenceIds) {
         const evidence = world.index.evidence.get(evidenceId)
         if (evidence !== undefined) pathSourceIds.add(evidence.sourceId)
       }
@@ -323,24 +356,21 @@ export function gradeClaim(world: PolicyWorld, claim: Claim): { grade: Grade; ra
       }
     }
   }
-  for (const sourceId of pathSourceIds) {
-    const source = world.index.sources.get(sourceId)
-    if (source === undefined) continue
-    const source02Passed = (world.digest.sources.get(sourceId)?.checks ?? []).some((c) => c.ruleId === 'SOURCE-02' && c.result === 'pass')
-    if (source.authenticity === 'questioned' && !source02Passed) {
-      strongest = capAt(strongest, 'C')
-      rationale.push(`source ${sourceId} questioned without SOURCE-02 pass → cap C (rule 6)`)
-    }
-    if (source.origin === 'agent-generated' || source.acquisition.kind === 'unverified') {
-      strongest = capAt(strongest, 'C')
-      rationale.push(`source ${sourceId} ${source.origin === 'agent-generated' ? 'agent-generated' : 'unverified'} → cap C (rule 6)`)
-    }
-  }
   // Rule 7: additional A conditions — unmet-but-not-failed downgrades to B.
   if (strongest === 'A') {
-    const issuesInForce = oppositionFor(world, claim.id, adjudicated) !== 'none-found' && oppositionFor(world, claim.id, adjudicated) !== 'not-checked'
-    const source01AllPass = [...pathSourceIds].every((id) => !(world.digest.sources.get(id)?.checks ?? []).some((c) => c.ruleId === 'SOURCE-01' && c.result === 'fail'))
-    if (claimReview?.searchSufficiency === 'not-checked' || !world.executedSearchClaimIds.has(claim.id) || issuesInForce || !source01AllPass) {
+    const issuesInForce =
+      oppositionFor(world, claim.id, adjudicated) !== 'none-found' &&
+      oppositionFor(world, claim.id, adjudicated) !== 'not-checked'
+    const source01AllPass = [...pathSourceIds].every(
+      (id) =>
+        !(world.digest.sources.get(id)?.checks ?? []).some((c) => c.ruleId === 'SOURCE-01' && c.result === 'fail'),
+    )
+    if (
+      claimReview?.searchSufficiency === 'not-checked' ||
+      !world.executedSearchClaimIds.has(claim.id) ||
+      issuesInForce ||
+      !source01AllPass
+    ) {
       strongest = 'B'
       rationale.push('an A condition is unmet but not failed → downgrade to B (rule 7)')
     }
@@ -370,7 +400,9 @@ export function reviewStateFor(
   requiredStageTargets: { stage: ReviewRecord['stage']; targetId: Id }[],
   records: ReviewRecord[],
 ): Assessment['reviewState'] {
-  const relevant = records.filter((r) => requiredStageTargets.some((t) => r.stage === t.stage && r.targetRefs.some((ref) => ref.id === t.targetId)))
+  const relevant = records.filter((r) =>
+    requiredStageTargets.some((t) => r.stage === t.stage && r.targetRefs.some((ref) => ref.id === t.targetId)),
+  )
   if (relevant.length === 0) return 'not-run'
   return relevant.every((r) => r.status === 'completed') ? 'current' : 'incomplete'
 }
@@ -390,7 +422,12 @@ export function computeAssessments(world: PolicyWorld): Assessment[] {
       supportGrade: grade,
       opposition,
       disposition: dispositionFor(grade, opposition),
-      reviewState: paths === 0 ? 'not-run' : 'current',
+      reviewState:
+        paths === 0 || !claimHasReviews(world, claim.id)
+          ? 'not-run'
+          : claimReviewComplete(world, claim.id)
+            ? 'current'
+            : 'incomplete',
       reviewRunIds: [...runIds],
       rationale,
     }
@@ -411,4 +448,39 @@ export function activeMajorCount(
     else if (finding.severity === 'major') major += 1
   }
   return { blocker, major }
+}
+
+/** All required checks must be present and completed, independently of support strength. */
+function claimHasReviews(world: PolicyWorld, id: Id): boolean {
+  return (
+    world.digest.claims.has(id) ||
+    [...world.index.groups.values()].some((g) => g.targetClaimId === id && world.digest.groups.has(g.id))
+  )
+}
+function claimReviewComplete(world: PolicyWorld, id: Id): boolean {
+  const claim = world.index.claims.get(id)
+  if (claim === undefined) return false
+  const rule = typeRuleFor(claim)
+  const own = world.digest.claims.get(id)
+  if (rule && !own?.checks.some((c) => c.ruleId === rule && (c.result === 'pass' || c.result === 'fail'))) return false
+  const checks = [...(own?.checks ?? [])]
+  for (const group of world.index.groups.values()) {
+    if (group.targetClaimId !== id) continue
+    const review = world.digest.groups.get(group.id)
+    if (!review || review.support === 'unknown') return false
+    checks.push(...review.checks)
+    for (const evId of group.evidenceIds) {
+      const srcId = world.index.evidence.get(evId)?.sourceId
+      const source = srcId && world.digest.sources.get(srcId)
+      if (!source) return false
+      checks.push(...source.checks)
+    }
+  }
+  for (const argument of world.index.arguments.values()) {
+    if (argument.conclusionClaimId !== id) continue
+    const review = world.digest.arguments.get(argument.id)
+    if (!review) return false
+    checks.push(...review.checks)
+  }
+  return checks.every((c) => c.result === 'pass' || c.result === 'fail')
 }

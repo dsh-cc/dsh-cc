@@ -17,7 +17,17 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, writeSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { sha256Hex, stableJson, validateReviewResponse } from './schema.ts'
 import type { Finding, Hash, Id, ReviewJobStatus, ReviewRecord, ReviewResponse } from './types.ts'
@@ -34,6 +44,8 @@ export interface UsageRow {
 }
 
 /** Disk layout handle for one project's review runs (§14.1). */
+const PROCESS_NONCE = randomUUID()
+
 export class ReviewRunStore {
   private readonly base: string
 
@@ -51,39 +63,84 @@ export class ReviewRunStore {
     return this.runDir(runId)
   }
 
-  writeRequest(runId: string, request: {
-    schemaVersion: 1
-    requestId: string
-    runId: Id
-    stage: string
-    targetClaimIds: Id[]
-    artifactId?: Id
-    status: ReviewJobStatus
-    inputTokens: number
-    outputTokens: number
-    calls: number
-    startedAt: string
-    endedAt?: string
-  }): void {
+  writeRequest(
+    runId: string,
+    request: {
+      schemaVersion: 1
+      requestId: string
+      runId: Id
+      stage: string
+      targetClaimIds: Id[]
+      artifactId?: Id
+      payloadHash?: Hash
+      taskId?: string
+      processId?: number
+      processNonce?: string
+      status: ReviewJobStatus
+      inputTokens: number
+      outputTokens: number
+      calls: number
+      startedAt: string
+      endedAt?: string
+    },
+  ): void {
     this.writeAtomic(join(this.runDir(runId), 'request.json'), request)
   }
 
-  readRequest(runId: string): (Parameters<ReviewRunStore['writeRequest']>[1]) | undefined {
-    return this.readJson(join(this.runDir(runId), 'request.json')) as Parameters<ReviewRunStore['writeRequest']>[1] | undefined
+  readRequest(runId: string): Parameters<ReviewRunStore['writeRequest']>[1] | undefined {
+    return this.readJson(join(this.runDir(runId), 'request.json')) as
+      | Parameters<ReviewRunStore['writeRequest']>[1]
+      | undefined
+  }
+
+  /** Persist a reservation before the host can schedule the callback. */
+  reserveRequest(runId: string, request: Parameters<ReviewRunStore['writeRequest']>[1]): void {
+    this.initRun(runId)
+    this.writeRequest(runId, { ...request, processId: process.pid, processNonce: PROCESS_NONCE })
   }
 
   /** §14.3 restart rule: a persisted `running` run becomes `incomplete` on load. */
-  loadRequest(runId: string): (Parameters<ReviewRunStore['writeRequest']>[1]) | undefined {
-    const request = this.readRequest(runId)
-    if (request?.status === 'running') return { ...request, status: 'incomplete' }
+  loadRequest(runId: string): Parameters<ReviewRunStore['writeRequest']>[1] | undefined {
+    let request = this.readRequest(runId)
+    if (request) {
+      const usage = this.readUsage(runId)
+      const attempts = new Map<string, UsageRow>()
+      for (const row of usage)
+        if (row.kind !== 'reused' && (row.inputTokens > 0 || row.outputTokens > 0))
+          attempts.set(`${row.taskId}:${row.seq}`, row)
+      request = {
+        ...request,
+        calls: Math.max(request.calls, attempts.size),
+        inputTokens: Math.max(
+          request.inputTokens,
+          [...attempts.values()].reduce((n, r) => n + r.inputTokens, 0),
+        ),
+        outputTokens: Math.max(
+          request.outputTokens,
+          [...attempts.values()].reduce((n, r) => n + r.outputTokens, 0),
+        ),
+      }
+    }
+    if (request?.status === 'running' || request?.status === 'queued') {
+      let alive = request.processId === process.pid && request.processNonce === PROCESS_NONCE
+      if (request.processId !== undefined && request.processId !== process.pid) {
+        try {
+          process.kill(request.processId, 0)
+          alive = true
+        } catch {
+          alive = false
+        }
+      }
+      if (!alive) return { ...request, status: 'incomplete' }
+    }
     return request
   }
 
   /** Locate an existing run by requestId (§10.6: same requestId never re-calls the model). */
-  findRunByRequestId(requestId: string): (Parameters<ReviewRunStore['writeRequest']>[1]) | undefined {
+  findRunByRequestId(requestId: string): Parameters<ReviewRunStore['writeRequest']>[1] | undefined {
     if (!existsSync(this.base)) return undefined
     for (const runId of readdirSync(this.base)) {
-      const request = this.readRequest(runId)
+      const request = this.loadRequest(runId)
       if (request?.requestId === requestId) return request
     }
     return undefined
@@ -92,7 +149,11 @@ export class ReviewRunStore {
   /** §14.3 record write: temp + fsync + rename, then read-back hash verification. */
   writeRecord(runId: string, record: ReviewRecord & { kind?: 'disagreement' }): { ok: true; recordHash: Hash } {
     const recordHash = sha256Hex(stableJson(record))
-    this.writeAtomic(join(this.runDir(runId), 'records', `${record.runId}_${randomUUID()}.json`), { recordHash, record })
+    const path = join(this.runDir(runId), 'records', `${record.runId}_${randomUUID()}.json`)
+    this.writeAtomic(path, { recordHash, record })
+    const stored = this.readJson(path) as { recordHash?: string; record?: unknown } | undefined
+    if (stored?.recordHash !== recordHash || sha256Hex(stableJson(stored.record)) !== recordHash)
+      throw new Error('review record read-back failed')
     return { ok: true, recordHash }
   }
 
@@ -101,13 +162,43 @@ export class ReviewRunStore {
     if (!existsSync(dir)) return []
     const out: (ReviewRecord & { kind?: 'disagreement' })[] = []
     for (const file of readdirSync(dir)) {
-      const parsed = this.readJson(join(dir, file)) as { recordHash?: Hash; record?: ReviewRecord & { kind?: 'disagreement' } } | undefined
+      const parsed = this.readJson(join(dir, file)) as
+        | { recordHash?: Hash; record?: ReviewRecord & { kind?: 'disagreement' } }
+        | undefined
       if (parsed?.record === undefined) continue
       // §14.2: hash-mismatched records never enter current.
       if (sha256Hex(stableJson(parsed.record)) !== parsed.recordHash) continue
       out.push(parsed.record)
     }
     return out
+  }
+
+  writeOutcome(runId: string, outcome: unknown): void {
+    this.writeAtomic(join(this.runDir(runId), 'outcome.json'), { hash: sha256Hex(stableJson(outcome)), outcome })
+  }
+  readOutcome(runId: string): unknown {
+    const stored = this.readJson(join(this.runDir(runId), 'outcome.json')) as
+      | { hash?: string; outcome?: unknown }
+      | undefined
+    return stored?.outcome !== undefined && sha256Hex(stableJson(stored.outcome)) === stored.hash
+      ? stored.outcome
+      : undefined
+  }
+
+  readUsage(runId: string): UsageRow[] {
+    try {
+      return readFileSync(join(this.runDir(runId), 'usage.jsonl'), 'utf8')
+        .split('\n')
+        .flatMap((line) => {
+          try {
+            return [JSON.parse(line) as UsageRow]
+          } catch {
+            return []
+          }
+        })
+    } catch {
+      return []
+    }
   }
 
   appendUsage(runId: string, row: UsageRow): void {
@@ -154,20 +245,22 @@ export function cacheKey(input: {
   reviewerConfigHash: Hash
   promptHash: Hash
 }): Hash {
-  return sha256Hex(stableJson({
-    stage: input.stage,
-    targetRefs: input.targetRefs,
-    dependencyDigest: input.dependencyDigest,
-    contractHash: input.contractHash,
-    policyHash: input.policyHash,
-    reviewerConfigHash: input.reviewerConfigHash,
-    promptHash: input.promptHash,
-  }))
+  return sha256Hex(
+    stableJson({
+      stage: input.stage,
+      targetRefs: input.targetRefs,
+      dependencyDigest: input.dependencyDigest,
+      contractHash: input.contractHash,
+      policyHash: input.policyHash,
+      reviewerConfigHash: input.reviewerConfigHash,
+      promptHash: input.promptHash,
+    }),
+  )
 }
 
 /** A record is reusable only when completed, schema-valid, with ALL required checks (§11.3). */
 export function recordReusable(record: ReviewRecord, requiredRuleIds: ReadonlySet<string>): boolean {
-  if (record.status !== 'completed' || record.response === undefined) return false
+  if (record.stage === 'extract' || record.status !== 'completed' || record.response === undefined) return false
   if (!validateReviewResponse(record.response)) return false
   const seen = new Set<string>()
   for (const target of (record.response as ReviewResponse).targets) {
@@ -202,9 +295,10 @@ export function detectDisagreement(
   next: ReviewRecord | undefined,
 ): { disagreement: boolean; failStands: boolean } {
   const fingerprints = prior
-    .filter((record) => record.status === 'completed' && record.response !== undefined)
+    .filter((record) => record.stage !== 'extract' && record.status === 'completed' && record.response !== undefined)
     .map((record) => verdictFingerprint(record.response as ReviewResponse))
-  if (next?.response !== undefined) fingerprints.push(verdictFingerprint(next.response as ReviewResponse))
+  if (next?.stage !== 'extract' && next?.response !== undefined)
+    fingerprints.push(verdictFingerprint(next.response as ReviewResponse))
   if (fingerprints.length < 2) {
     const anyFail = fingerprints.some((f) => [...f.values()].some((v) => v === 'fail'))
     return { disagreement: false, failStands: anyFail }
@@ -230,7 +324,8 @@ export function disagreementFinding(targetIds: Id[]): Finding & { kind: 'disagre
     code: 'REVIEWER_DISAGREEMENT',
     targetIds,
     severity: 'major',
-    explanation: 'Review runs over identical inputs produced differing verdicts; aggregated to needs-review pending human adjudication.',
+    explanation:
+      'Review runs over identical inputs produced differing verdicts; aggregated to needs-review pending human adjudication.',
     evidenceIds: [],
     artifactSpans: [],
     repair: 'manual-review',

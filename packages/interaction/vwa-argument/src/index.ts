@@ -20,7 +20,9 @@ import { registerArgumentTools, semanticEnabled, type ToolRegistrar } from './to
 import { registerCaptureWiring, readWorkspaceArtifact, SessionCaptures } from './capture-wiring.ts'
 import { readUserSettingsSync, registerSettings } from './settings.ts'
 import { registerVwaArgumentService } from './report.ts'
+import { commandDeps } from './command-host.ts'
 import { registerVwaCommand } from './commands.ts'
+import { hostDeliveryDeps } from './host-delivery.ts'
 import { createReviewFactory } from './review-host.ts'
 
 export {
@@ -107,7 +109,13 @@ export {
   type ToolDeps,
   type ToolRegistrar,
 } from './tools.ts'
-export { captureEventOf, readWorkspaceArtifact, registerCaptureWiring, sessionKeyOf, SessionCaptures } from './capture-wiring.ts'
+export {
+  captureEventOf,
+  readWorkspaceArtifact,
+  registerCaptureWiring,
+  sessionKeyOf,
+  SessionCaptures,
+} from './capture-wiring.ts'
 export { budgetFrom, createReviewFactory, resolveReviewerRoute } from './review-host.ts'
 export {
   fail,
@@ -251,7 +259,7 @@ export function apply(ctx: Context): void {
     ctx.inject(['commands'], (injected: Context) => {
       registerVwaCommand(
         { commands: (injected as unknown as { commands: { register(definition: unknown): unknown } }).commands },
-        { workspaceRoot: workspaceRootOf },
+        commandDeps(ctx, workspaceRootOf),
       )
     })
   } catch {
@@ -273,12 +281,16 @@ export function apply(ctx: Context): void {
     // Appendix A: the frozen-handle service, registered structurally
     // (vwa-evidence consumes it via cordis `ctx.get` in slice 5).
     // Bound to the caller's workspace per call (forWorkspace), never process.cwd().
-    registerVwaArgumentService(ctx as unknown as { provide(name: string, value: unknown): unknown })
+    const deliveryHost = registerVwaArgumentService(
+      ctx as unknown as { provide(name: string, value: unknown): unknown },
+      (agent, root) => hostDeliveryDeps(ctx, dshHome, agent, root),
+    )
     ctx.inject(['tools'], (injected: Context) => {
       registerArgumentTools(
         { tools: (injected as unknown as { tools: { register: ToolRegistrar['register'] } }).tools },
         {
           workspaceRoot,
+          report: (root, agent) => deliveryHost.forWorkspace(root, agent),
           captures: (agent: unknown) => captures.for(agent),
           artifactTexts: new Map(),
           readArtifact: readWorkspaceArtifact,

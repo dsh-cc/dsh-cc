@@ -27,19 +27,34 @@ import { randomUUID, createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { sha256Hex, stableJson } from './schema.ts'
-import { buildReverseIndex, dependencyDigest } from './dependencies.ts'
-import { activeMajorCount, computeAssessments, digestRecords } from './policy.ts'
-import { policyHash } from './review-runner.ts'
+
+import {
+  evaluateDelivery,
+  defaultGates,
+  artifactText,
+  projectDependencyDigest,
+  activeAdjudications,
+} from './delivery-check.ts'
 import { ProjectStore } from './store.ts'
-import { computeCoreSet } from './review-plan.ts'
+
 import { ReviewRunStore } from './review-run-store.ts'
 import {
-  mapMechanical, renderReportJson, renderReportMarkdown, reportHashOf, stageVerdict,
-  type GateEntry, type ReportInput,
+  renderReportJson,
+  renderReportMarkdown,
+  reportHashOf,
+  type GateEntry,
+  type ReportInput,
 } from './report-render.ts'
 import type {
-  AdjudicationRecord, Assessment, Finding, Hash, Id, MechanicalStatus,
-  ProjectSnapshot, ReviewRecord, Verdict,
+  AdjudicationRecord,
+  Assessment,
+  Finding,
+  Hash,
+  Id,
+  MechanicalStatus,
+  ProjectSnapshot,
+  ReviewRecord,
+  Verdict,
 } from './types.ts'
 
 export { HONESTY, REPORT_TEMPLATE, mapMechanical, renderReportMarkdown, renderReportJson } from './report-render.ts'
@@ -60,6 +75,12 @@ export interface DeliveryCheck {
   reviewRunIds: Id[]
   sources: { sourceId: Id; snapshotHash: Hash; evidenceIds: Id[] }[]
   eligibleForReviewed: boolean
+  gates?: import('@dsh-cc/vwa-evidence').GateEntry[]
+  claimBindings?: {
+    claimId: Id
+    spans: [number, number][]
+    sources: { sourceId: Id; snapshotHash: Hash; evidenceIds: Id[] }[]
+  }[]
   /** Active (non-disagreement, non-rejected) severity counts, §16.1/§17.2. */
   findingCounts: { blocker: number; major: number; minor: number }
   pendingRunIds: Id[]
@@ -80,13 +101,16 @@ export interface FrozenEvaluation {
   outputTokens: number
   calls: number
   modelId: string
+  gates: GateEntry[]
+  artifactText: string
 }
 
 export interface VwaArgumentServiceDeps {
   root: string
   reviewerConfigHash?: Hash
   /** Raw gate entries for the mechanical mapping (host-provided). */
-  gates?(artifactPath: string): GateEntry[]
+  gates?(artifactPath: string, root: string): GateEntry[] | Promise<GateEntry[]>
+  currentReviewerConfigHash?(projectId: Id): Promise<Hash>
 }
 
 /** A stale-handle / changed-input condition (Appendix A). */
@@ -98,34 +122,25 @@ export class InputChangedError extends Error {
   }
 }
 
-/** §17.2 candidate predicate (the receipt read-back part is slice 5). */
-function eligibleForReviewed(check: Omit<DeliveryCheck, 'eligibleForReviewed' | 'pendingRunIds'>): boolean {
-  const { blocker, major } = activeMajorCount(check.findings.map((finding) => ({ ...finding })), [])
-  const layer = (verdict: Verdict): boolean => verdict === 'pass'
-  const layersPass = check.checks.mechanical === 'inapplicable' || check.checks.mechanical === 'pass'
-  return blocker === 0 && major === 0 && layersPass
-    && layer(check.checks.evidence) && layer(check.checks.argument) && layer(check.checks.audit)
-    && check.metrics.extractedAtomicClaims > 0
-    && check.metrics.mappedAtomicClaims === check.metrics.extractedAtomicClaims
-    && check.metrics.coreClaims > 0
-    && check.metrics.reviewedCoreClaims === check.metrics.coreClaims
-    && check.assessments.every((assessment) => assessment.reviewState === 'current')
-}
-
 /** bindingDigest = SHA256(stableJson({…})) per §16.1a. */
 export function computeBindingDigest(
   check: Omit<DeliveryCheck, 'eligibleForReviewed' | 'pendingRunIds'>,
   adjudications: AdjudicationRecord[],
 ): Hash {
-  return sha256Hex(stableJson({
-    artifactHash: check.artifactHash,
-    graphHash: check.graphHash,
-    dependencyDigest: check.dependencyDigest,
-    policyHash: check.policyHash,
-    reviewerConfigHash: check.reviewerConfigHash,
-    reviewRecordHashes: check.reviewRunIds,
-    activeAdjudicationHashes: adjudications.map((record) => sha256Hex(stableJson(record))).sort(),
-  }))
+  return sha256Hex(
+    stableJson({
+      artifactHash: check.artifactHash,
+      graphHash: check.graphHash,
+      dependencyDigest: check.dependencyDigest,
+      policyHash: check.policyHash,
+      reviewerConfigHash: check.reviewerConfigHash,
+      reviewRecordHashes: check.reviewRunIds,
+      checks: check.checks,
+      metrics: check.metrics,
+      findingCounts: check.findingCounts,
+      activeAdjudicationHashes: adjudications.map((record) => sha256Hex(stableJson(record))).sort(),
+    }),
+  )
 }
 
 /** The Appendix A service; registered as the cordis service `vwa-argument`. */
@@ -143,68 +158,54 @@ export class VwaArgumentService {
    * Compute the DeliveryCheck from HEAD + ACTUAL bytes and freeze it
    * (Appendix A: no body modification, no model calls, no receipt writes).
    */
-  async checkForDelivery(projectId: Id, artifactId: Id): Promise<{ evaluationId: Id; bindingDigest: Hash; check: DeliveryCheck }> {
+  async checkForDelivery(
+    projectId: Id,
+    artifactId: Id,
+  ): Promise<{ evaluationId: Id; bindingDigest: Hash; check: DeliveryCheck }> {
     const store = new ProjectStore(this.deps.root, projectId)
     const head = store.readHead()
     if (!head.ok) throw new InputChangedError(`cannot read HEAD for ${projectId}: ${head.message}`)
     const snapshot = head.data.snapshot
     const artifact = snapshot.artifacts.find((art) => art.id === artifactId)
-    if (artifact === undefined) throw new InputChangedError(`artifact ${artifactId} is not bound in project ${projectId}`)
+    if (artifact === undefined)
+      throw new InputChangedError(`artifact ${artifactId} is not bound in project ${projectId}`)
     const absolute = join(this.deps.root, artifact.path)
     if (!existsSync(absolute)) throw new InputChangedError(`artifact file ${artifact.path} is missing`)
-    const text = readFileSync(absolute, 'utf8')
+    const text = artifactText(this.deps.root, artifact.path)
     const artifactHash = createHash('sha256').update(text, 'utf8').digest('hex')
     if (artifactHash !== artifact.contentHash) {
       // D16 (store level): bytes changed after binding → re-bind/re-audit required.
       throw new InputChangedError('artifact bytes changed after binding; re-bind and re-audit are required')
     }
 
-    const index = buildReverseIndex(snapshot)
     const records = readAllRecords(this.deps.root, projectId)
-    const digest = digestRecords(records)
-    const assessments = computeAssessments({
-      index, claims: snapshot.claims, digest,
-      executedSearchClaimIds: new Set(snapshot.searches.filter((search) => search.state === 'executed').flatMap((search) => search.targetIds)),
+    const gates =
+      (await this.deps.gates?.(artifact.path, this.deps.root)) ?? (await defaultGates(this.deps.root, artifact.path))
+    const reviewerConfigHash = (await this.deps.currentReviewerConfigHash?.(projectId)) ?? this.deps.reviewerConfigHash
+    const adjudications = activeAdjudications(snapshot, records, readAdjudications(this.deps.root, projectId))
+    const check = evaluateDelivery({
+      root: this.deps.root,
+      snapshot,
+      artifactId,
+      text,
+      records,
+      adjudications,
+      pendingRunIds: pendingRuns(this.deps.root, projectId),
+      gates,
+      ...(reviewerConfigHash ? { reviewerConfigHash } : {}),
     })
-    const findings = records.flatMap((record) => record.response?.findings ?? [])
-    const reviewRunIds = [...new Set(records.map((record) => record.runId))]
-    const pendingRunIds = pendingRuns(this.deps.root, projectId)
-    const depDigest = dependencyDigest(index, snapshot.claims.map((claim) => claim.id), reviewRunIds)
-    const reviewerConfigHash = this.deps.reviewerConfigHash ?? sha256Hex(stableJson({ reviewer: 'unconfigured' }))
-    const core = computeCoreSet({
-      index, artifactText: text,
-      requiredQuestionTexts: snapshot.contract.requiredQuestions.map((question) => question.text),
-    })
-    const gates = this.deps.gates?.(artifact.path) ?? []
-    const metrics = {
-      mappedAtomicClaims: mappedCount(records),
-      extractedAtomicClaims: extractedCount(records),
-      reviewedCoreClaims: [...core].filter((claimId) =>
-        assessments.find((assessment) => assessment.claimId === claimId)?.reviewState === 'current').length,
-      coreClaims: core.size,
-    }
-    const base: Omit<DeliveryCheck, 'eligibleForReviewed' | 'pendingRunIds'> = {
-      artifactId, artifactHash, projectRevision: head.data.head.revision, graphHash: head.data.head.graphHash,
-      dependencyDigest: depDigest, policyHash: policyHash(), reviewerConfigHash,
-      checks: {
-        mechanical: mapMechanical(gates),
-        evidence: stageVerdict(records, ['sources', 'support']),
-        argument: stageVerdict(records, ['claims', 'arguments']),
-        audit: stageVerdict(records, ['extract', 'align']),
-      },
-      metrics, assessments, findings, reviewRunIds,
-      findingCounts: activeFindingCounts(findings, readAdjudications(this.deps.root, projectId)),
-      sources: snapshot.sources.map((source) => ({
-        sourceId: source.id, snapshotHash: source.snapshotHash,
-        evidenceIds: snapshot.evidence.filter((ev) => ev.sourceId === source.id).map((ev) => ev.id),
-      })),
-    }
-    const adjudications = readAdjudications(this.deps.root, projectId)
-    const bindingDigest = computeBindingDigest(base, adjudications)
-    const check: DeliveryCheck = { ...base, eligibleForReviewed: eligibleForReviewed(base), pendingRunIds }
+    const bindingDigest = computeBindingDigest(check, adjudications)
     const evaluationId = `eval_${randomUUID()}`
     const frozen: FrozenEvaluation = {
-      evaluationId, projectId, artifactId, bindingDigest, check, snapshot, adjudications,
+      evaluationId,
+      projectId,
+      artifactId,
+      bindingDigest,
+      check,
+      snapshot,
+      adjudications,
+      gates,
+      artifactText: text,
       inputTokens: records.reduce((sum, record) => sum + record.inputTokens, 0),
       outputTokens: records.reduce((sum, record) => sum + record.outputTokens, 0),
       calls: records.length,
@@ -219,7 +220,12 @@ export class VwaArgumentService {
    * INPUT_CHANGED with ONE retry; still changing → failure, never a
    * "passed" report (Appendix A).
    */
-  async renderReport(projectId: Id, artifactId: Id, evaluationId: Id, format: 'markdown' | 'json'): Promise<{ text: string; reportHash: Hash; bindingDigest: Hash }> {
+  async renderReport(
+    projectId: Id,
+    artifactId: Id,
+    evaluationId: Id,
+    format: 'markdown' | 'json',
+  ): Promise<{ text: string; reportHash: Hash; bindingDigest: Hash }> {
     const frozen = loadEvaluation(this.deps.root, projectId, evaluationId)
     if (frozen === undefined) {
       // D15: the read-back identifies the failure — no old row is mistaken for current.
@@ -235,7 +241,9 @@ export class VwaArgumentService {
       }
       if (liveBinding === frozen.bindingDigest) break
       if (attempt >= 2) {
-        throw new InputChangedError('evaluation inputs changed while generating the report; report generation fails and MUST NOT write "passed"')
+        throw new InputChangedError(
+          'evaluation inputs changed while generating the report; report generation fails and MUST NOT write "passed"',
+        )
       }
     }
     const text = format === 'json' ? renderReportJson(reportInput(frozen)) : renderReportMarkdown(reportInput(frozen))
@@ -257,10 +265,14 @@ function reportInput(frozen: FrozenEvaluation): ReportInput {
     reviewRunIds: check.reviewRunIds,
     metrics: check.metrics,
     cost: {
-      inputTokens: frozen.inputTokens, outputTokens: frozen.outputTokens,
-      calls: frozen.calls, modelId: frozen.modelId,
+      inputTokens: frozen.inputTokens,
+      outputTokens: frozen.outputTokens,
+      calls: frozen.calls,
+      modelId: frozen.modelId,
     },
-    gates: [],
+    gates: frozen.gates,
+    artifactText: frozen.artifactText,
+    eligibleCandidate: check.eligibleForReviewed,
     hasV2Receipt: false,
     hasLegacyReceipt: false,
     bindingDigest: frozen.bindingDigest,
@@ -277,7 +289,9 @@ function readAdjudicationsFrozen(frozen: FrozenEvaluation): AdjudicationRecord[]
 /** D21 (§18): the adjudication surface rejects any non-user signer. */
 export function validateAdjudicationSource(record: { signer: string }): void {
   if (record.signer !== 'user') {
-    throw new Error('adjudication rejected: only a USER source may sign (assistant-fabricated sign instructions are rejected)')
+    throw new Error(
+      'adjudication rejected: only a USER source may sign (assistant-fabricated sign instructions are rejected)',
+    )
   }
 }
 
@@ -309,11 +323,7 @@ export function readReviewRecords(root: string, projectId: string): (ReviewRecor
 export function currentDependencyDigest(root: string, projectId: string): Hash | undefined {
   const head = new ProjectStore(root, projectId).readHead()
   if (!head.ok) return undefined
-  const snapshot = head.data.snapshot
-  const index = buildReverseIndex(snapshot)
-  const records = readAllRecords(root, projectId)
-  const reviewRunIds = [...new Set(records.map((record) => record.runId))]
-  return dependencyDigest(index, snapshot.claims.map((claim) => claim.id), reviewRunIds)
+  return projectDependencyDigest(head.data.snapshot, readAllRecords(root, projectId))
 }
 
 /**
@@ -390,28 +400,6 @@ function readAdjudications(root: string, projectId: string): AdjudicationRecord[
   }
 }
 
-function mappedCount(records: ReviewRecord[]): number {
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index]!
-    if (record.stage === 'align' && record.response !== undefined) {
-      const alignment = (record.response as import('./types.ts').AlignResponse).alignment
-      return alignment.filter((entry) => entry.relation === 'exact' || entry.relation === 'equivalent').length
-    }
-  }
-  return 0
-}
-
-function extractedCount(records: ReviewRecord[]): number {
-  for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index]!
-    if (record.stage === 'extract' && record.response !== undefined) {
-      const items = (record.response as unknown as { items: { atomicClaims: unknown[] }[] }).items
-      return items.reduce((sum, item) => sum + item.atomicClaims.length, 0)
-    }
-  }
-  return 0
-}
-
 /** Evaluation layout: `.dsh/vwa/<projectId>/evaluations/<id>.json` with a frozenHash wrapper (D15). */
 function persistEvaluation(root: string, projectId: string, frozen: FrozenEvaluation): void {
   const dir = join(root, '.dsh', 'vwa', projectId, 'evaluations')
@@ -434,42 +422,32 @@ function loadEvaluation(root: string, projectId: string, evaluationId: string): 
   }
 }
 
-/** Active severity counts (§17.2): disagreement findings and rejected adjudications are not active. */
-function activeFindingCounts(
-  findings: (Finding & { kind?: string })[],
-  adjudications: AdjudicationRecord[],
-): { blocker: number; major: number; minor: number } {
-  const rejected = new Set(adjudications.filter((record) => record.decision === 'reject').map((record) => record.findingId))
-  let blocker = 0
-  let major = 0
-  let minor = 0
-  for (const finding of findings) {
-    if (finding.kind === 'disagreement' || rejected.has(finding.id)) continue
-    if (finding.severity === 'blocker') blocker += 1
-    else if (finding.severity === 'major') major += 1
-    else minor += 1
-  }
-  return { blocker, major, minor }
-}
-
 /**
  * The published `vwa-argument` service: one process-wide host, bound to a
  * workspace PER CALL. The store lives under the caller's session cwd, which
  * differs per session/worktree/subagent, so the root is never fixed at mount.
  */
 export class VwaArgumentHost {
-  constructor(private readonly deps: Omit<VwaArgumentServiceDeps, 'root'> = {}) {}
+  constructor(
+    private readonly deps:
+      | Omit<VwaArgumentServiceDeps, 'root'>
+      | ((agent: unknown, root: string) => Omit<VwaArgumentServiceDeps, 'root'>) = {},
+  ) {}
 
   /** The delivery provider bound to one workspace root (the caller's session cwd). */
-  forWorkspace(root: string): VwaArgumentService {
-    return new VwaArgumentService({ ...this.deps, root })
+  forWorkspace(root: string, agent?: unknown): VwaArgumentService {
+    return new VwaArgumentService({ ...(typeof this.deps === 'function' ? this.deps(agent, root) : this.deps), root })
   }
 }
 
 /** Cordis service registration (name `vwa-argument`; vwa-evidence binds it per workspace). */
 export function registerVwaArgumentService(
   ctx: { provide(name: string, value: unknown): unknown },
-  deps: Omit<VwaArgumentServiceDeps, 'root'> = {},
-): void {
-  ctx.provide('vwa-argument', new VwaArgumentHost(deps))
+  deps:
+    | Omit<VwaArgumentServiceDeps, 'root'>
+    | ((agent: unknown, root: string) => Omit<VwaArgumentServiceDeps, 'root'>) = {},
+): VwaArgumentHost {
+  const host = new VwaArgumentHost(deps)
+  ctx.provide('vwa-argument', host)
+  return host
 }

@@ -21,11 +21,7 @@
 import type { ShellExecRequest, ShellExecutor } from '@deepseek-ai/dsh-shell'
 import { getSessionCwd } from '@dsh-cc/session-cwd'
 import { DEFAULT_GATE_TIMEOUT_MS, type Executor } from './gates.ts'
-import {
-  createEvaluatorState,
-  evaluateTurnStopping,
-  type EvaluatorState,
-} from './evaluator.ts'
+import { createEvaluatorState, evaluateTurnStopping, type EvaluatorState } from './evaluator.ts'
 import { DEFAULT_VWA_EVIDENCE_SETTINGS, readUserSettingsSync, type VwaEvidenceSettings } from './settings.ts'
 import { resolveDeliveryProvider } from './vwa-delivery.ts'
 
@@ -84,7 +80,7 @@ export function createTurnStoppingHandler(deps: VwaDeps) {
         debug: deps.debug,
         signal: payload.signal,
         // Hot per-dispatch resolution, duck-typed — no package import (§3).
-        deliveryProvider: resolveDeliveryProvider(deps.deliveryProvider?.(), workspaceRoot),
+        deliveryProvider: resolveDeliveryProvider(deps.deliveryProvider?.(), workspaceRoot, agent),
       })
     } catch (error: unknown) {
       deps.debug(`vwa-evidence: turn-stopping handler failed: ${String(error)}`)
@@ -128,11 +124,12 @@ export function registerEvaluator(ctx: import('@deepseek-ai/cordis').Context, sh
         return undefined
       }
     },
-    exec: shell === undefined
-      ? async () => {
-          throw new Error('no shell service on the host context (§4.3 seam absent)')
-        }
-      : shellExecutorOf(shell),
+    exec:
+      shell === undefined
+        ? async () => {
+            throw new Error('no shell service on the host context (§4.3 seam absent)')
+          }
+        : shellExecutorOf(shell),
     state,
     debug,
     deliveryProvider: () => ctx,

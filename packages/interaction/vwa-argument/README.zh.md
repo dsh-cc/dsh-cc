@@ -1,8 +1,7 @@
 # @dsh-cc/vwa-argument
 
 可验证工作区智能体（VWA）lane-2 论证包（设计：
-`docs/plans/2026-10-16-vwa-evidence-argument.md`）。切片 P5 后功能已完整：
-契约、存储/论证图、评审流水线、工具、`/vwa` 命令、v2 回执与报告渲染器。
+`docs/plans/2026-10-16-vwa-evidence-argument.md`）。本包提供契约、存储/论证图、评审流水线、作者与报告工具、`/vwa` 命令、v2 回执与报告渲染器。人工金标集和真实模型验收完成前，语义质量仍属实验性；确定性集成测试通过不等于语义准确率已达标。
 语义评审保持**默认关闭**（`vwa-argument.semantic-enabled: false`，§13）；
 关闭时工具不注册，功能保持惰性。
 
@@ -32,7 +31,7 @@
   `evidence.register`（来源快照与摘录，引文由运行时读取）、
   `evidence.search_log`（1–50 条检索记录，本身不执行检索）、
   `argument.update`（原子全图变更联合）、`argument.review`
-  （按阶段的后台语义评审）
+  （按阶段的后台语义评审）、`argument.report`（确定性 Markdown/JSON，可写入 `docs/vwa-reports/<projectId>/`，不调用模型）
   〔src:ws:packages/interaction/vwa-argument/src/tools.ts#L1-L40〕。
 - **命令**（`src/commands.ts`）：封闭语法的 `/vwa
   <init|status|import|sign|adjudicate|repair>` 命令 —— 仅限人类来源
@@ -49,7 +48,7 @@
   （§3 —— 反向导入被禁止且不存在）
   〔src:ws:packages/interaction/vwa-argument/src/schema.ts#L1-L40〕。
 - **设置**（`src/settings.ts`）：命名空间 `vwa-argument`，§13 表中的扁平
-  kebab 键。`semantic-enabled` 默认为 **false**；全部评审预算遵循 §13。
+  kebab 键。`semantic-enabled` 默认为 **false**；全部评审预算遵循 §13，并在项目初始化时冻结到 `contract.reviewSettings`；修改研究契约会保留这些运行时管理的限额。
   `review-alias`（默认 `sonnet`）指定评审所走的模型别名，绝不写具体模型 id。
   与 vwa-evidence 相同的双半模式：`registerNamespaceSafe` 供 /config 使用，
   外加对 `<dshHome>/settings.json` 的失败回退原始热读
@@ -68,3 +67,13 @@
 
 不在本包内：回执写入（vwa-evidence 是唯一写入方），以及冻结的语义评分器
 `humanities-scorer@1` 与 humanities 金标集（`@dsh-cc/vwa-eval`，§22.2）。
+
+## 交付与验证
+
+调用完成不代表评审通过。交付只采用任务依赖、契约、策略、提示词和实际 prepared 模型配置仍匹配的记录。相关输入变化使旧判断失效；无关作者变更不会使独立支持任务失效。同输入下的评审分歧会保留，后来的 pass 不能擦除此前的 fail。必要前提按最弱支持等级传播，不同备选支持路径分别评价。
+
+`all` 依次运行来源、支持关系、论断、论证和全文抽取/对齐。发送给 provider 的 schema 自包含，抽取响应接受严格校验，对齐必须返回 AUDIT-01 至 AUDIT-05。包括审计与修复重试在内的每次调用，均在派发前预留并持久化预算；进程中断后的预留不会变成免费调用。项目限额初始化后冻结；模型路由每次解析，实际 prepared 配置参与评审身份。
+
+机械检查读取调用方工作区的实际文件。未安装的可选风格检查单独披露；链接检查和实际使用的可执行代码检查仍是必要条件。快照、哈希、引文失败阻止语义交付。报告保留当前评估、明确的前提与推论依据、限制、未解决问题和实验性校准状态。必须同时展示正文与报告的准确路径并匹配当前哈希，才推进交付状态；报告失败不能生成成功回执。签名要求用户会话中真实存在且匹配的回执；人工裁决随所绑定输入变化而失效。
+
+验收覆盖和人工校准要求见 `docs/vwa/lane2-validation.md`。测试包含真实 Cordis 挂载下的 `all` 流程、报告与回执检查，以及 npm 包解包后的资源加载。语义功能保持默认关闭。

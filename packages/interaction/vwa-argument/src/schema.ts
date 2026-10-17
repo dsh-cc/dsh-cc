@@ -16,7 +16,7 @@
  * @module @dsh-cc/vwa-argument/schema
  */
 
-import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020'
+import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020.js'
 import authorSchemaJson from './contracts/author.schema.json' with { type: 'json' }
 import receiptV2SchemaJson from './contracts/receipt-v2.schema.json' with { type: 'json' }
 import reviewSchemaJson from './contracts/review.schema.json' with { type: 'json' }
@@ -40,33 +40,47 @@ ajv.addSchema(authorSchemaJson)
 ajv.addSchema(reviewSchemaJson)
 const receiptCompiled = ajv.compile(receiptV2SchemaJson)
 
-export const validateProjectSnapshot = ajv.getSchema<unknown>(
-  'https://dsh-cc.dev/schemas/vwa-argument/author.schema.json#/$defs/ProjectSnapshot',
-) ?? (() => { throw new Error('vwa-argument: ProjectSnapshot schema not registered') })()
+export const validateProjectSnapshot =
+  ajv.getSchema<unknown>('https://dsh-cc.dev/schemas/vwa-argument/author.schema.json#/$defs/ProjectSnapshot') ??
+  (() => {
+    throw new Error('vwa-argument: ProjectSnapshot schema not registered')
+  })()
 
-export const validateReviewResponse = ajv.getSchema<unknown>(
-  'https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ReviewResponse',
-) ?? (() => { throw new Error('vwa-argument: ReviewResponse schema not registered') })()
+export const validateReviewResponse =
+  ajv.getSchema<unknown>('https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ReviewResponse') ??
+  (() => {
+    throw new Error('vwa-argument: ReviewResponse schema not registered')
+  })()
 
-export const validateReviewRecord = ajv.getSchema<unknown>(
-  'https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ReviewRecord',
-) ?? (() => { throw new Error('vwa-argument: ReviewRecord schema not registered') })()
+export const validateReviewRecord =
+  ajv.getSchema<unknown>('https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ReviewRecord') ??
+  (() => {
+    throw new Error('vwa-argument: ReviewRecord schema not registered')
+  })()
 
-export const validateExtractionRecord = ajv.getSchema<unknown>(
-  'https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ExtractionRecord',
-) ?? (() => { throw new Error('vwa-argument: ExtractionRecord schema not registered') })()
+export const validateExtractionRecord =
+  ajv.getSchema<unknown>('https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ExtractionRecord') ??
+  (() => {
+    throw new Error('vwa-argument: ExtractionRecord schema not registered')
+  })()
 
-export const validateExtractedAtomicClaim = ajv.getSchema<unknown>(
-  'https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ExtractedAtomicClaim',
-) ?? (() => { throw new Error('vwa-argument: ExtractedAtomicClaim schema not registered') })()
+export const validateExtractedAtomicClaim =
+  ajv.getSchema<unknown>('https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/ExtractedAtomicClaim') ??
+  (() => {
+    throw new Error('vwa-argument: ExtractedAtomicClaim schema not registered')
+  })()
 
-export const validateAdjudicationRecord = ajv.getSchema<unknown>(
-  'https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/AdjudicationRecord',
-) ?? (() => { throw new Error('vwa-argument: AdjudicationRecord schema not registered') })()
+export const validateAdjudicationRecord =
+  ajv.getSchema<unknown>('https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/AdjudicationRecord') ??
+  (() => {
+    throw new Error('vwa-argument: AdjudicationRecord schema not registered')
+  })()
 
-export const validateAssessment = ajv.getSchema<unknown>(
-  'https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/Assessment',
-) ?? (() => { throw new Error('vwa-argument: Assessment schema not registered') })()
+export const validateAssessment =
+  ajv.getSchema<unknown>('https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/Assessment') ??
+  (() => {
+    throw new Error('vwa-argument: Assessment schema not registered')
+  })()
 
 export const validateReceiptV2 = receiptCompiled
 
@@ -131,4 +145,12 @@ const HASH_RE = /^[0-9a-f]{64}$/
 /** Explicit Hash rule (§4): SHA-256, lowercase, 64 hex characters. */
 export function isHash(text: string): boolean {
   return HASH_RE.test(text)
+}
+
+/** Validate extract responses with the registered review document and its author references. */
+export function reviewDefValidator(def: string): ValidateFunction {
+  return (
+    ajv.getSchema(`https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/${def}`) ??
+    ajv.compile({ $ref: `https://dsh-cc.dev/schemas/vwa-argument/review.schema.json#/$defs/${def}` })
+  )
 }

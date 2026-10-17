@@ -50,6 +50,7 @@ export function claimClosure(index: ReverseIndex, targetClaimIds: Id[]): Set<Id>
     closure.add(claimId)
     for (const argument of index.arguments.values()) {
       if (argument.premiseClaimIds.includes(claimId)) visit(argument.conclusionClaimId)
+      if (argument.conclusionClaimId === claimId) argument.premiseClaimIds.forEach(visit)
     }
   }
   for (const id of targetClaimIds) visit(id)
@@ -57,7 +58,10 @@ export function claimClosure(index: ReverseIndex, targetClaimIds: Id[]): Set<Id>
 }
 
 /** Evidence of the groups targeting the closure claims, grouped per group. */
-function groupsOfClaims(index: ReverseIndex, claims: ReadonlySet<Id>): Map<Id, { groupIds: Id[]; evidenceIds: Id[]; sourceIds: Id[] }> {
+function groupsOfClaims(
+  index: ReverseIndex,
+  claims: ReadonlySet<Id>,
+): Map<Id, { groupIds: Id[]; evidenceIds: Id[]; sourceIds: Id[] }> {
   const out = new Map<Id, { groupIds: Id[]; evidenceIds: Id[]; sourceIds: Id[] }>()
   const ensure = (claimId: Id) => {
     let entry = out.get(claimId)
@@ -87,7 +91,9 @@ function groupsOfClaims(index: ReverseIndex, claims: ReadonlySet<Id>): Map<Id, {
  * depth 0 (nesting +1/-1 accounting), so lists/quotes/fences stay ONE block.
  * Fallback: unparseable/empty input → the whole text as one block.
  */
-export function rootBlocks(text: string): { start: number; end: number; heading: { level: number; text: string } | undefined; body: string }[] {
+export function rootBlocks(
+  text: string,
+): { start: number; end: number; heading: { level: number; text: string } | undefined; body: string }[] {
   const lineStarts: number[] = []
   let offset = 0
   for (const line of text.split('\n')) {
@@ -95,7 +101,8 @@ export function rootBlocks(text: string): { start: number; end: number; heading:
     offset += line.length + 1
   }
   const lineEnd = (line: number): number => Math.min((lineStarts[line] ?? text.length + 1) - 1, text.length)
-  const blocks: { start: number; end: number; heading: { level: number; text: string } | undefined; body: string }[] = []
+  const blocks: { start: number; end: number; heading: { level: number; text: string } | undefined; body: string }[] =
+    []
   let depth = 0
   for (const token of blockMd.parse(text, {})) {
     if (token.nesting === 1) {
@@ -106,11 +113,15 @@ export function rootBlocks(text: string): { start: number; end: number; heading:
           const body = text.slice(start, end)
           // Heading TEXT comes from the block's first line (the heading_open
           // token itself carries no inline content).
-          const heading = token.type === 'heading_open'
-            ? (/^(#{1,6})\s+(.*)$/.exec(body.split('\n', 1)[0] ?? ''))
-              ? { level: Number(token.tag.slice(1)) || 1, text: (/^(#{1,6})\s+(.*)$/.exec(body.split('\n', 1)[0] ?? ''))![2]!.trim() }
-              : { level: Number(token.tag.slice(1)) || 1, text: '' }
-            : undefined
+          const heading =
+            token.type === 'heading_open'
+              ? /^(#{1,6})\s+(.*)$/.exec(body.split('\n', 1)[0] ?? '')
+                ? {
+                    level: Number(token.tag.slice(1)) || 1,
+                    text: /^(#{1,6})\s+(.*)$/.exec(body.split('\n', 1)[0] ?? '')![2]!.trim(),
+                  }
+                : { level: Number(token.tag.slice(1)) || 1, text: '' }
+              : undefined
           blocks.push({ start, end, heading, body })
         }
       }
@@ -136,6 +147,7 @@ export function computeCoreSet(input: {
   requiredQuestionTexts: readonly string[]
   /** Plan-time extraction findings mapped claimId → spans (slice-4 seam; empty until P3). */
   extractionCoreClaimIds?: readonly Id[]
+  artifactId?: Id
 }): Set<Id> {
   const core = new Set<Id>()
   for (const id of input.extractionCoreClaimIds ?? []) core.add(id)
@@ -149,17 +161,31 @@ export function computeCoreSet(input: {
     if (heading === undefined) continue
     if (heading.level >= 2 && conclusionRe.test(heading.text)) lastConclusion = i
   }
-  const sectionClaims = (blockIndex: number): void => {
+  const sectionClaims = (blockIndex: number, headingOnly = false): void => {
     if (blockIndex < 0) return
-    for (const occurrenceClaimId of sectionOccurrenceClaims(input.index, blocks, blockIndex)) core.add(occurrenceClaimId)
+    for (const occurrenceClaimId of sectionOccurrenceClaims(
+      input.index,
+      blocks,
+      blockIndex,
+      input.artifactId,
+      headingOnly,
+    ))
+      core.add(occurrenceClaimId)
   }
 
-  sectionClaims(firstHeading1)
+  sectionClaims(firstHeading1, true)
   for (let i = 0; i < blocks.length; i += 1) {
     if (blocks[i]?.heading !== undefined && abstractRe.test(blocks[i]!.heading!.text)) sectionClaims(i)
   }
   sectionClaims(lastConclusion)
-  // Claims whose outline goal sections answer requiredQuestions (§12.1).
+  for (const artifact of input.index.artifacts.values()) {
+    if (input.artifactId && artifact.id !== input.artifactId) continue
+    for (const section of artifact.outline) {
+      if (input.requiredQuestionTexts.some((q) => section.goal.includes(q) || q.includes(section.goal)))
+        section.claimIds.forEach((id) => core.add(id))
+    }
+  }
+  // Required-question matching without an outline is conservative.
   for (const claim of input.index.claims.values()) {
     if (input.requiredQuestionTexts.some((q) => claim.text.includes(q) || q.includes(claim.text))) core.add(claim.id)
   }
@@ -174,13 +200,21 @@ function sectionOccurrenceClaims(
   index: ReverseIndex,
   blocks: { start: number; end: number }[],
   blockIndex: number,
+  artifactId?: Id,
+  headingOnly = false,
 ): Set<Id> {
   const out = new Set<Id>()
-  const block = blocks[blockIndex]
+  const block = blocks[blockIndex] as { start: number; end: number; heading?: { level: number } } | undefined
   if (block === undefined) return out
+  const next = blocks.slice(blockIndex + 1).find((b) => {
+    const h = (b as { heading?: { level: number } }).heading
+    return h && h.level <= (block.heading?.level ?? 1)
+  })
+  const end = headingOnly ? block.end : (next?.start ?? Infinity)
   for (const artifact of index.artifacts.values()) {
+    if (artifactId !== undefined && artifact.id !== artifactId) continue
     for (const occurrence of artifact.occurrences) {
-      if (occurrence.span.start >= block.start && occurrence.span.start < block.end) out.add(occurrence.claimId)
+      if (occurrence.span.start >= block.start && occurrence.span.start < end) out.add(occurrence.claimId)
     }
   }
   return out
@@ -222,7 +256,10 @@ export function planStage(input: {
         stage: 'sources',
         targetRefs: [{ id: sourceId, entityVersion: input.index.sources.get(sourceId)!.entityVersion }],
         targetIds: [sourceId],
-        requiredRules: [{ targetId: sourceId, ruleId: rules[0]! }, ...rules.slice(1).map((r) => ({ targetId: sourceId, ruleId: r }))],
+        requiredRules: [
+          { targetId: sourceId, ruleId: rules[0]! },
+          ...rules.slice(1).map((r) => ({ targetId: sourceId, ruleId: r })),
+        ],
         envelope: { target: input.index.sources.get(sourceId) },
       }
     })
@@ -238,15 +275,23 @@ export function planStage(input: {
         targetRefs: [{ id: group.id, entityVersion: group.entityVersion }],
         targetIds: [group.id, ...group.evidenceIds],
         requiredRules: rules.map((ruleId) => ({ targetId: group.id, ruleId })),
-        envelope: { target: group, evidence: group.evidenceIds.map((id) => input.index.evidence.get(id)) },
+        envelope: {
+          target: group,
+          claim: input.index.claims.get(group.targetClaimId),
+          evidence: group.evidenceIds.map((id) => input.index.evidence.get(id)),
+        },
       })
     }
     return tasks
   }
   if (input.stage === 'claims') {
     const typeRule: Record<string, string> = {
-      fact: 'HIST-01', 'source-report': 'HIST-01', causal: 'CAUSE-01',
-      intent: 'INTENT-01', interpretation: 'INTERP-01', evaluation: 'EVAL-01',
+      fact: 'HIST-01',
+      'source-report': 'HIST-01',
+      causal: 'CAUSE-01',
+      intent: 'INTENT-01',
+      interpretation: 'INTERP-01',
+      evaluation: 'EVAL-01',
     }
     return input.snapshot.claims
       .filter((claim) => claims.has(claim.id) && typeRule[claim.kind] !== undefined)
@@ -272,7 +317,11 @@ export function planStage(input: {
         { targetId: argument.id, ruleId: 'ARG-01' },
         { targetId: argument.id, ruleId: 'ARG-02' },
       ],
-      envelope: { target: argument, premises: argument.premiseClaimIds.map((id) => input.index.claims.get(id)) },
+      envelope: {
+        target: argument,
+        conclusion: input.index.claims.get(argument.conclusionClaimId),
+        premises: argument.premiseClaimIds.map((id) => input.index.claims.get(id)),
+      },
     })
   }
   for (const issue of input.index.issues.values()) {

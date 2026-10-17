@@ -32,13 +32,7 @@ export interface Entity {
   updatedAt: string
 }
 
-export type ClaimKind =
-  | 'fact'
-  | 'source-report'
-  | 'interpretation'
-  | 'causal'
-  | 'intent'
-  | 'evaluation'
+export type ClaimKind = 'fact' | 'source-report' | 'interpretation' | 'causal' | 'intent' | 'evaluation'
 
 export interface Scope {
   subject: string
@@ -143,6 +137,8 @@ export interface Artifact extends Entity {
 }
 
 export interface ProjectContract {
+  /** Runtime-owned limits, frozen at initialization. */
+  reviewSettings?: import('./review-config.ts').FrozenReviewSettings
   question: string
   language: string
   domain: 'history' | 'literature' | 'research'
@@ -251,10 +247,10 @@ export interface AlignResponse extends ResponseBase {
 
 export type ReviewResponse = SourcesResponse | ClaimsResponse | SupportResponse | ArgumentsResponse | AlignResponse
 
-export interface ReviewRecord {
+export interface SemanticReviewRecord {
   runId: Id
   /** 'extract'/'align' are the §12 audit sub-stage records; 'audit' is the aggregate stage. */
-  stage: 'sources' | 'claims' | 'support' | 'arguments' | 'audit' | 'extract' | 'align'
+  stage: 'sources' | 'claims' | 'support' | 'arguments' | 'audit' | 'align'
   targetRefs: Ref[]
   dependencyDigest: Hash
   artifactHash?: Hash
@@ -264,6 +260,8 @@ export interface ReviewRecord {
   promptHash: Hash
   inputHash: Hash
   responseHash?: Hash
+  kind?: 'disagreement'
+  coreClaimIds?: Id[]
   response?: ReviewResponse
   status: 'completed' | 'error' | 'cancelled' | 'budget-exhausted'
   inputTokens: number
@@ -290,9 +288,14 @@ export interface ExtractedItem {
 }
 
 /** Extract-stage response wrapper (§11.4): ReviewRecord system fields, stage 'extract', response `{items}`. */
+export type ReviewRecord = SemanticReviewRecord | ExtractionRecord
+
 export interface ExtractionRecord {
   runId: Id
   stage: 'extract'
+  artifactHash?: Hash
+  kind?: 'disagreement'
+  coreClaimIds?: Id[]
   targetRefs: Ref[]
   dependencyDigest: Hash
   contractHash: Hash

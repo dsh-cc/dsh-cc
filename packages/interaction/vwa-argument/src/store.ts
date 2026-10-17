@@ -19,6 +19,7 @@
  * @module @dsh-cc/vwa-argument/store
  */
 
+import { freezeReviewSettings, type FrozenReviewSettings } from './review-config.ts'
 import { randomUUID } from 'node:crypto'
 import {
   closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync,
@@ -195,7 +196,10 @@ export class ProjectStore {
   }
 
   /** Create the project: dirs, workspace nonce, HEAD at revision 1, empty graph (§14.1). */
-  init(contract: ProjectSnapshot['contract']): Result<{ workspaceIdentity: string }> {
+  init(
+    contract: ProjectSnapshot['contract'],
+    reviewSettings: FrozenReviewSettings = freezeReviewSettings(),
+  ): Result<{ workspaceIdentity: string }> {
     if (existsSync(join(this.dir, 'HEAD.json'))) {
       return fail('SCHEMA_INVALID', `project ${this.projectId} already exists`)
     }
@@ -207,7 +211,7 @@ export class ProjectStore {
     this.writeAtomic(join(this.dir, 'workspace.json'), { schemaVersion: 1, projectId: this.projectId, workspaceIdentity })
     const snapshot: ProjectSnapshot = {
       schemaVersion: 1, projectId: this.projectId, revision: 1, workspaceIdentity,
-      contract, sources: [], evidence: [], claims: [], groups: [], arguments: [],
+      contract: { ...contract, reviewSettings }, sources: [], evidence: [], claims: [], groups: [], arguments: [],
       issues: [], searches: [], artifacts: [],
     }
     this.writeCommittedRevision(snapshot, '', 'init')
