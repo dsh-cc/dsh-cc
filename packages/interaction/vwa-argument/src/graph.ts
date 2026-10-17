@@ -64,6 +64,8 @@ export class GraphContext {
     readonly snapshot: ProjectSnapshot,
     readonly maxEntities: number,
     snapshotTexts?: Map<Id, string>,
+    /** Fallback artifact reader (the caller's workspace bytes) when the map has no entry. */
+    private readonly artifactReader?: (path: string) => string | undefined,
   ) {
     this.snapshotTexts = snapshotTexts ?? new Map()
     this.artifactTexts = new Map()
@@ -89,7 +91,7 @@ export class GraphContext {
   }
 
   artifactText(path: string): string {
-    const text = this.artifactTexts.get(path)
+    const text = this.artifactTexts.get(path) ?? this.artifactReader?.(path)
     if (text === undefined) throw new VwaFail(fail('NOT_FOUND', `artifact text for ${path} was not provided to the transaction`))
     return text
   }

@@ -264,6 +264,17 @@ describe('vwa-argument real mount: capture and artifact sources (§10.3/§10.5)'
     expect(await registerSource(b, agent, projectId, path)).toBe('unverified')
   })
 
+  it('D23 on the real pipeline: model-authored bytes written then read back stay unverified', async () => {
+    const b = await boot()
+    const root = workspace()
+    const agent = b.agentAt(root)
+    const projectId = initProject(root)
+    const path = join(root, 'fabricated.md')
+    await b.exec('write', { file_path: path, content: 'A quotation nobody ever published.\n' }, agent)
+    await b.exec('read', { file_path: path }, agent)
+    expect(await registerSource(b, agent, projectId, path)).toBe('unverified')
+  })
+
   it('web_fetch body written byte-identically to a file upgrades that file to tool-event', async () => {
     const b = await boot()
     const root = workspace()

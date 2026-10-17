@@ -16,7 +16,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { getSessionCwd } from '@dsh-cc/session-cwd'
 import { registerArgumentTools, semanticEnabled, type ToolRegistrar } from './tools.ts'
-import { CaptureRegistry } from './sources.ts'
+import { registerCaptureWiring, readWorkspaceArtifact, SessionCaptures } from './capture-wiring.ts'
 import { readUserSettingsSync, registerSettings } from './settings.ts'
 import { registerVwaArgumentService } from './report.ts'
 import { registerVwaCommand } from './commands.ts'
@@ -106,6 +106,7 @@ export {
   type ToolDeps,
   type ToolRegistrar,
 } from './tools.ts'
+export { captureEventOf, readWorkspaceArtifact, registerCaptureWiring, sessionKeyOf, SessionCaptures } from './capture-wiring.ts'
 export { budgetFrom, createReviewFactory, resolveReviewerRoute } from './review-host.ts'
 export {
   fail,
@@ -257,7 +258,16 @@ export function apply(ctx: Context): void {
   try {
     const dshHome = (ctx as unknown as { dshHomePath?: () => string | undefined }).dshHomePath?.()
     if (dshHome === undefined || !semanticEnabled(dshHome)) return
-    const captures = new CaptureRegistry()
+    const workspaceRoot = (agent: unknown): string | undefined => {
+      try {
+        return getSessionCwd(agent as never) ?? undefined
+      } catch {
+        return undefined
+      }
+    }
+    // §10.3: trusted capture events come from the host tool pipeline, per session.
+    const captures = new SessionCaptures()
+    registerCaptureWiring(ctx, captures, workspaceRoot)
     // Appendix A: the frozen-handle service, registered structurally
     // (vwa-evidence consumes it via cordis `ctx.get` in slice 5).
     registerVwaArgumentService(
@@ -268,15 +278,10 @@ export function apply(ctx: Context): void {
       registerArgumentTools(
         { tools: (injected as unknown as { tools: { register: ToolRegistrar['register'] } }).tools },
         {
-          workspaceRoot: (agent: unknown) => {
-            try {
-              return getSessionCwd(agent as never) ?? undefined
-            } catch {
-              return undefined
-            }
-          },
-          captures,
+          workspaceRoot,
+          captures: (agent: unknown) => captures.for(agent),
           artifactTexts: new Map(),
+          readArtifact: readWorkspaceArtifact,
           snapshotTexts: new Map(),
           maxEntities: readUserSettingsSync(dshHome)['project-max-entities'],
           // §13/Appendix A: llm + jobs + alias route resolved per call (review-host.ts).

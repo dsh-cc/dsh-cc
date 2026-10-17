@@ -63,7 +63,8 @@ export type Result<T> = Ok<T> | Fail
 
 /** Build one failure result. */
 export function fail(code: Fail['code'], message: string, retryable = false, details?: unknown): Fail {
-  return { ok: false, code, message, retryable, details }
+  // Omit an absent `details`: tool results must be lossless JSON (no undefined).
+  return details === undefined ? { ok: false, code, message, retryable } : { ok: false, code, message, retryable, details }
 }
 
 /** HEAD document (§14.1). */

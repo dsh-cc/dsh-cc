@@ -52,8 +52,13 @@ export interface ToolDefinition {
 export interface ToolDeps {
   /** Workspace root for the executing agent (session cwd; undefined → refuse). */
   workspaceRoot(agent: unknown): string | undefined
-  /** Session capture registry for trusted-event projection (§10.3). */
-  captures: CaptureRegistry
+  /** Capture registry for trusted-event projection (§10.3): fixed, or per calling session. */
+  captures: CaptureRegistry | ((agent: unknown) => CaptureRegistry)
+  /**
+   * Artifact bytes by workspace-relative path when `artifactTexts` has no
+   * entry (production: the caller's workspace file, capture-wiring.ts).
+   */
+  readArtifact?(root: string, path: string): string | undefined
   /** Bound-artifact text by path (bind-artifact reads it, §10.5). */
   artifactTexts: Map<string, string>
   /** Source snapshot texts by sourceId (quote validation, §5.1). */
@@ -138,7 +143,8 @@ function runTool(
     requestId: args.requestId,
     payloadHash,
     applyFn: (snapshot) => {
-      const graph = new GraphContext(snapshot, deps.maxEntities, deps.snapshotTexts)
+      const reader = deps.readArtifact === undefined ? undefined : (path: string) => deps.readArtifact?.(root, path)
+      const graph = new GraphContext(snapshot, deps.maxEntities, deps.snapshotTexts, reader)
       for (const [path, text] of deps.artifactTexts) graph.artifactTexts.set(path, text)
       return apply(snapshot, graph)
     },
@@ -161,7 +167,8 @@ export function registerArgumentTools(registrar: { tools: { register(definition:
     expectedRevision: COMMON_PARAMS.expectedRevision,
     requestId: COMMON_PARAMS.requestId,
   })
-  const finish = (result: Result<unknown>): unknown => result
+  // Tool values must be lossless JSON: normalize away undefined members.
+  const finish = (result: Result<unknown>): unknown => JSON.parse(JSON.stringify(result)) as unknown
 
   registrar.tools.register({
     name: 'evidence.register',
@@ -179,7 +186,7 @@ export function registerArgumentTools(registrar: { tools: { register(definition:
       return finish(runTool(deps, args, exec as ExecContext, { op: 'register', input: args.input }, (snapshot) => {
         const applied = registerSourceApply(
           new ProjectStore(deps.workspaceRoot(exec.agent) as string, args.projectId),
-          deps.captures,
+          typeof deps.captures === 'function' ? deps.captures(exec.agent) : deps.captures,
           args.input as never,
         )(snapshot)
         return { result: applied.result, files: applied.files }
@@ -325,7 +332,7 @@ export function registerArgumentTools(registrar: { tools: { register(definition:
         if (bound === undefined) {
           return fail('SCHEMA_INVALID', 'the audit stage requires exactly one bound artifact (pass artifactId when several are bound)', false)
         }
-        const text = deps.artifactTexts.get(bound.path)
+        const text = deps.artifactTexts.get(bound.path) ?? deps.readArtifact?.(root, bound.path)
         if (text === undefined) return fail('INPUT_CHANGED', `artifact text for ${bound.path} is not available to the runtime`, true)
         artifact = { id: bound.id, path: bound.path, text }
       }

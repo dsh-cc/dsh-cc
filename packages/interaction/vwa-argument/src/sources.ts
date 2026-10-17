@@ -42,18 +42,46 @@ const UPGRADE_TOOLS: ReadonlySet<CaptureEvent['tool']> = new Set(['write', 'edit
 export class CaptureRegistry {
   private readonly events: CaptureEvent[] = []
 
+  /** @param maxEvents - retention cap; the oldest events are dropped first. */
+  constructor(private readonly maxEvents: number = Number.POSITIVE_INFINITY) {}
+
   /** Record one host-observed tool event (the wiring calls this from the tool pipeline). */
   record(event: CaptureEvent): void {
     this.events.push(event)
+    if (this.events.length > this.maxEvents) this.events.splice(0, this.events.length - this.maxEvents)
   }
 
-  /** Latest event of a path with these exact bytes, newest first. */
-  private matching(path: string, tools: ReadonlySet<CaptureEvent['tool']>, bytes: Buffer): CaptureEvent | undefined {
+  /** Latest trusted capture whose body bytes equal these, at any path/URL, recorded before `before`. */
+  private captureOfBytes(bytes: Buffer, before: number): CaptureEvent | undefined {
+    for (let i = before - 1; i >= 0; i -= 1) {
+      const event = this.events[i]
+      if (event !== undefined && event.bytes.equals(bytes) && this.trusted(i)) return event
+    }
+    return undefined
+  }
+
+  /**
+   * D23: a whitelist capture is TRUSTED only when no earlier same-session
+   * write/edit produced the same bytes — reading back model-authored bytes
+   * (write → read) is an echo, not an acquisition.
+   */
+  private trusted(index: number): boolean {
+    const event = this.events[index]
+    if (event === undefined || !CAPTURE_WHITELIST.has(event.tool)) return false
+    for (let j = 0; j < index; j += 1) {
+      const earlier = this.events[j]
+      if (earlier !== undefined && UPGRADE_TOOLS.has(earlier.tool) && earlier.bytes.equals(event.bytes)) return false
+    }
+    return true
+  }
+
+  /** Latest trusted capture of a path with these exact bytes, newest first. */
+  private matching(path: string, bytes: Buffer): CaptureEvent | undefined {
     const absolute = resolve(path)
     for (let i = this.events.length - 1; i >= 0; i -= 1) {
       const event = this.events[i]
       if (event === undefined) continue
-      if (event.path === absolute && tools.has(event.tool) && event.bytes.equals(bytes)) return event
+      if (event.path === absolute && event.bytes.equals(bytes) && this.trusted(i)) return event
     }
     return undefined
   }
@@ -68,16 +96,18 @@ export class CaptureRegistry {
     const absolute = resolve(path)
     const eventRefOf = (source: string): string =>
       `${source}:${sha256Hex(stableJson({ path: absolute, size: bytes.length }))}`
-    const capture = this.matching(absolute, CAPTURE_WHITELIST, bytes)
+    const capture = this.matching(absolute, bytes)
     if (capture !== undefined) {
       return { kind: 'tool-event', capturedAt: capture.at, eventRef: eventRefOf(capture.tool) }
     }
-    // Upgrade rule (§10.3): a same-session write/edit byte-identical to a capture body.
+    // Upgrade rule (§10.3): a same-session write/edit of THIS path whose bytes
+    // equal a whitelist capture body — the capture may come from any path or
+    // URL (a web_fetch body saved to a file is the canonical case).
     for (let i = this.events.length - 1; i >= 0; i -= 1) {
       const event = this.events[i]
       if (event === undefined) continue
       if (!UPGRADE_TOOLS.has(event.tool) || event.path !== absolute || !event.bytes.equals(bytes)) continue
-      const source = this.matching(absolute, CAPTURE_WHITELIST, bytes)
+      const source = this.captureOfBytes(bytes, i)
       if (source !== undefined) {
         return {
           kind: 'tool-event', capturedAt: event.at,
@@ -90,7 +120,7 @@ export class CaptureRegistry {
 
   /** Whether a whitelist capture of this exact body exists (D23 guard input). */
   hasCaptureOf(path: string, bytes: Buffer): boolean {
-    return this.matching(path, CAPTURE_WHITELIST, bytes) !== undefined
+    return this.matching(path, bytes) !== undefined
   }
 }
 
