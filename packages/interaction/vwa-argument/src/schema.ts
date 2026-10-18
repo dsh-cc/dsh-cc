@@ -25,6 +25,9 @@ import type { Span } from './types.ts'
 
 export { sha256Hex, stableJson }
 
+/** Lossless JSON value (structural twin of `@dsh-util-values`' JsonValue). */
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
+
 /** Strict Ajv instance with the Draft 2020-12 entry point (§25). */
 const ajv = new Ajv2020({
   strict: true,

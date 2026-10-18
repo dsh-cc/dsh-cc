@@ -9,26 +9,39 @@ export interface ToolArgs {
   input: Record<string, unknown>
 }
 
-export const RESULT_SCHEMA: Record<string, unknown> = {
+/**
+ * Output envelope for all five lane-2 tools, as a ValueSchemaSpec (compiled by
+ * defineTool). Success = {ok, projectId, revision, data}; Fail = {ok:false,
+ * code, message, retryable} plus optional details. `data` assumes an object
+ * shape (all current call sites); widen to {type:'json'} if a replayed scalar
+ * ever appears.
+ */
+export const RESULT_SCHEMA = {
   type: 'object',
+  additionalProperties: false,
   properties: {
-    ok: { type: 'boolean' },
+    ok: { type: 'boolean', required: true },
     projectId: { type: 'string' },
     revision: { type: 'integer' },
-    data: { type: 'object' },
+    data: { type: 'object', additionalProperties: true },
     code: { type: 'string' },
     message: { type: 'string' },
     retryable: { type: 'boolean' },
+    details: { type: 'json' },
   },
-  required: ['ok'],
-}
+} as const
 
 export const COMMON_PARAMS = {
   projectId: { type: 'string', required: true, description: 'Project id (prj_…)' },
   expectedRevision: { type: 'integer', required: true, description: 'Current project revision (CAS guard)' },
   requestId: { type: 'string', required: true, description: 'UUID v4 idempotency key' },
-  input: { type: 'object', required: true, description: 'Operation body (per the VWA lane-2 tool contract)' },
-}
+  input: {
+    type: 'object',
+    additionalProperties: true,
+    required: true,
+    description: 'Operation body (per the VWA lane-2 tool contract)',
+  },
+} as const
 
 export function toText(value: unknown): { type: 'text'; text: string }[] {
   return [{ type: 'text', text: stableJson(value) }]

@@ -1,3 +1,4 @@
+import { defineTool, ToolArgsError, type ToolDefinition, type ToolRunContext } from '@dsh-cc/tools'
 import { COMMON_PARAMS, RESULT_SCHEMA, guard, toText, type ToolArgs } from './tool-input.ts'
 /**
  * Author-facing tools (design docs/plans/2026-10-16-vwa-evidence-argument.md
@@ -9,9 +10,9 @@ import { COMMON_PARAMS, RESULT_SCHEMA, guard, toText, type ToolArgs } from './to
  * input = the §10 body minus system fields; `requestId` idempotency
  * (§10.1/D07) is enforced by the store's operation records.
  *
- * Tools are plain ToolDefinition-compatible objects (raw JSON-Schema
- * parameters + `output.schema/render`), the contract `ctx.tools.register`
- * enforces; the defineTool DSL adds nothing this slice needs.
+ * Tools are built with defineTool so the flat parameter DSL is compiled to a
+ * model-facing JSON Schema (a flat spec degrades to `{}` on CC-compat
+ * backends); withSchemaEnvelope keeps §10.1 envelope semantics.
  *
  * @module @dsh-cc/vwa-argument/tools
  */
@@ -23,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readUserSettingsSync } from './settings.ts'
-import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
+import { sha256Hex, stableJson, authorDefValidator, ajvErrors, type JsonValue } from './schema.ts'
 import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
@@ -39,16 +40,21 @@ export interface ToolRegistrar {
   register(definition: ToolDefinition): unknown
 }
 
-/** ToolDefinition-compatible shape this slice registers. */
-export interface ToolDefinition {
-  name: string
-  description: string
-  parameters: Record<string, unknown>
-  output: {
-    schema: Record<string, unknown>
-    render(args: unknown, value: unknown): { type: 'text'; text: string }[]
+export type { ToolDefinition } from '@dsh-cc/tools'
+
+/** Wrap a defineTool result so shape rejections keep the §10.1 SCHEMA_INVALID envelope (not a thrown ToolArgsError). */
+export function withSchemaEnvelope(tool: ToolDefinition): ToolDefinition {
+  return {
+    ...tool,
+    async execute(args: unknown, exec: ToolRunContext) {
+      try {
+        return await tool.execute(args, exec)
+      } catch (error) {
+        if (error instanceof ToolArgsError) return fail('SCHEMA_INVALID', error.violations.join('; '))
+        throw error
+      }
+    },
   }
-  execute(args: unknown, exec: ExecContext): Promise<unknown>
 }
 
 /** Collaborators injected per mount; tests substitute fakes. */
@@ -132,24 +138,27 @@ export function registerArgumentTools(
   registrar: { tools: { register(definition: ToolDefinition): unknown } },
   deps: ToolDeps,
 ): void {
-  registrar.tools.register(reportTool(deps))
+  registrar.tools.register(withSchemaEnvelope(reportTool(deps)))
   const common = () => ({
     projectId: COMMON_PARAMS.projectId,
     expectedRevision: COMMON_PARAMS.expectedRevision,
     requestId: COMMON_PARAMS.requestId,
   })
-  // Tool values must be lossless JSON: normalize away undefined members.
-  const finish = (result: Result<unknown>): unknown => JSON.parse(JSON.stringify(result)) as unknown
+  // Tool values must be lossless JSON (normalize away undefined); typed `never`
+  // so the defineTool-inferred execute return type accepts the uniform envelope.
+  const finish = (result: Result<unknown>): never => JSON.parse(JSON.stringify(result)) as never
 
-  registrar.tools.register({
-    name: 'evidence.register',
-    description:
+  registrar.tools.register(
+    withSchemaEnvelope(
+      defineTool({
+        name: 'evidence.register',
+        description:
       'Register a source snapshot and optional evidence excerpts for a VWA lane-2 project. ' +
       'The snapshot is an exact byte copy of the cited file; quotes are read by the runtime ' +
       'from the given UTF-16 spans and are never passed by the model.',
     parameters: {
       ...common(),
-      input: { type: 'object', required: true, description: 'body: {path, metadata, excerpts}' },
+      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {path, metadata, excerpts}' },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
@@ -166,17 +175,22 @@ export function registerArgumentTools(
         }),
       )
     },
-  })
+      }),
+    ),
+  )
 
-  registrar.tools.register({
-    name: 'evidence.search_log',
-    description:
+  registrar.tools.register(
+    withSchemaEnvelope(
+      defineTool({
+        name: 'evidence.search_log',
+        description:
       'Record 1–50 search-log entries for a VWA lane-2 project. This tool performs no searches; ' +
       'it validates and atomically records already-executed (or planned/failed) search events.',
     parameters: {
       ...common(),
       input: {
         type: 'object',
+        additionalProperties: true,
         required: true,
         description: 'body: {entries: 1–50 SearchLog bodies minus system fields}',
       },
@@ -222,11 +236,15 @@ export function registerArgumentTools(
         }),
       )
     },
-  })
+      }),
+    ),
+  )
 
-  registrar.tools.register({
-    name: 'argument.update',
-    description:
+  registrar.tools.register(
+    withSchemaEnvelope(
+      defineTool({
+        name: 'argument.update',
+        description:
       'Atomically mutate a VWA lane-2 argument graph: set the project contract, upsert claims/' +
       'evidence groups/arguments/issues, or bind the artifact. Full-graph validation runs before ' +
       'commit; failures report a stable error code and never partially commit.',
@@ -234,6 +252,7 @@ export function registerArgumentTools(
       ...common(),
       input: {
         type: 'object',
+        additionalProperties: true,
         required: true,
         description: 'Mutation union: {op: set-contract|upsert|bind-artifact, …}',
       },
@@ -249,17 +268,21 @@ export function registerArgumentTools(
         }),
       )
     },
-  })
+      }),
+    ),
+  )
 
-  registrar.tools.register({
-    name: 'argument.review',
-    description:
+  registrar.tools.register(
+    withSchemaEnvelope(
+      defineTool({
+        name: 'argument.review',
+        description:
       'Run a lane-2 semantic review stage (sources|support|claims|arguments|all) over the current graph ' +
       'revision. Registers a background run and returns immediately; the run NEVER modifies the body or ' +
       'the author graph. Repeating the same requestId returns the run state without re-calling the model.',
     parameters: {
       ...common(),
-      input: { type: 'object', required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage}' },
+      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage}' },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
@@ -295,10 +318,12 @@ export function registerArgumentTools(
                   completion: existing.status === 'completed' ? ('completed' as const) : ('incomplete' as const),
                   status: existing.status,
                   runId: existing.runId,
-                  records,
+                  // ReviewRecord is a named interface without an implicit index
+                  // signature; the envelope schema only needs JSON-serializability.
+                  records: records as unknown as JsonValue[],
                   ...(runStore.readOutcome(existing.runId) === undefined
                     ? {}
-                    : { result: runStore.readOutcome(existing.runId) }),
+                    : { result: runStore.readOutcome(existing.runId) as JsonValue }),
                   usage: {
                     calls: existing.calls,
                     inputTokens: existing.inputTokens,
@@ -426,7 +451,9 @@ export function registerArgumentTools(
         data: { completion: 'started' as const, runId, taskId: tasks.hostId?.(taskId) ?? taskId },
       }
     },
-  })
+      }),
+    ),
+  )
 }
 
 /**

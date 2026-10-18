@@ -37,6 +37,7 @@
     "ajv": "^8.20.0",
     "markdown-it": "^14.1.0",
     "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/tools": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^"
   },
   "devDependencies": {
