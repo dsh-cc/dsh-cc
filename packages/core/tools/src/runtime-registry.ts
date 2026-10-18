@@ -29,6 +29,19 @@ export function register(rt: ToolRuntimeCore, definition: ToolDefinition): () =>
     throw new TypeError(`tool "${name}" must declare output { schema, render, presentationMeta? }`)
   }
   assertSupportedJsonSchema(output.schema)
+  // Warn-only tripwire: a flat parameter spec (the repo DSL) or an external
+  // schema outside the enforced subset would otherwise degrade silently to a
+  // model-facing {}. Undefined/null is skipped — external MCP tools may omit
+  // inputSchema, and asserting on undefined would throw a noise TypeError.
+  if (definition.parameters !== undefined && definition.parameters !== null) {
+    try {
+      assertSupportedJsonSchema(definition.parameters)
+    } catch (error) {
+      rt.ctx.logger.warn(
+        `tool "${name}" parameters is not a supported JSON Schema; the model-facing schema may degrade (${String(error)})`,
+      )
+    }
+  }
   const timeoutMs = definition.timeoutMs
   if (timeoutMs !== undefined
     && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
