@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, ToolCallId, HarnessError, type ContentBlock  } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -232,6 +232,21 @@ describe('ToolRuntime', () => {
 
     expect(() => ctx.tools.register(missingOutput))
       .toThrow('must declare output { schema, render, presentationMeta? }')
+  })
+
+  it('warns once when a raw registration carries flat-spec parameters, but still registers', async () => {
+    const ctx = await setup()
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => ctx.logger)
+    // Flat spec (the repo DSL, valid only through defineTool's compiler):
+    // root lacks type:'object' and the property node carries `required`.
+    ctx.tools.register({
+      ...echoTool,
+      name: 'flat-tool',
+      parameters: { foo: { type: 'string', required: true } } as unknown as typeof echoTool.parameters,
+    })
+    expect(ctx.tools.get('flat-tool')).toBeDefined()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('flat-tool')
   })
 
   it('rejects lossy and schema-mismatched body values before post-execute', async () => {

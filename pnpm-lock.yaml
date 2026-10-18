@@ -2039,7 +2039,7 @@ importers:
         version: link:../../../../deepseek-harness/packages/core/session
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: link:../../../../../../../../deepseek-harness/packages/session/session-persistence-jsonl
-        version: link:../../../../../../deepseek-harness/packages/session/session-persistence-jsonl
+        version: link:../../../../../../../../deepseek-harness/packages/session/session-persistence-jsonl
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2401,6 +2401,9 @@ importers:
       '@dsh-cc/settings-provider':
         specifier: workspace:^
         version: link:../../settings/settings-provider
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
       '@dsh-cc/vwa-evidence':
         specifier: workspace:^
         version: link:../vwa-evidence

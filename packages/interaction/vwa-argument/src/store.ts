@@ -26,7 +26,7 @@ import {
   renameSync, rmSync, statSync, unlinkSync, writeSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { sha256Hex, stableJson } from './schema.ts'
+import { sha256Hex, stableJson, type JsonValue } from './schema.ts'
 import { acquireLock as acquireProjectLock } from './lock.ts'
 import type { ProjectSnapshot } from './types.ts'
 
@@ -42,7 +42,7 @@ export interface Fail {
     | 'REVIEW_UNAVAILABLE' | 'REVIEW_INVALID' | 'BUDGET_EXHAUSTED' | 'CANCELLED'
   message: string
   retryable: boolean
-  details?: unknown
+  details?: JsonValue
 }
 
 /** Thrown by transaction apply functions to produce a uniform failure (§10.1). */
@@ -63,7 +63,7 @@ export interface Ok<T> {
 export type Result<T> = Ok<T> | Fail
 
 /** Build one failure result. */
-export function fail(code: Fail['code'], message: string, retryable = false, details?: unknown): Fail {
+export function fail(code: Fail['code'], message: string, retryable = false, details?: JsonValue): Fail {
   // Omit an absent `details`: tool results must be lossless JSON (no undefined).
   return details === undefined ? { ok: false, code, message, retryable } : { ok: false, code, message, retryable, details }
 }
