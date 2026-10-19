@@ -20,6 +20,8 @@ import { taskDependencyDigest } from './review-input.ts'
 import { currentReviews } from './review-current.ts'
 import { policyHash, promptHash } from './review-contract.ts'
 import { auditInputHash, effectiveAuditUnitChars, hasReusableAudit } from './audit-reuse.ts'
+import { cycleBudgetRefusal, cycleUsage } from './review-cycle.ts'
+import type { ReviewBudget } from './review-budget.ts'
 import { fail, type Fail } from './store.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewRecord } from './types.ts'
@@ -81,6 +83,10 @@ export interface ContinuePlanInput {
   /** Audit unit sizing (same defaults as the runner) — part of the audit cache key. */
   maxUnitChars?: number
   maxContextChars?: number
+  /** Frozen per-cycle budget; when present, a spent cycle refuses with BUDGET_EXHAUSTED. */
+  budget?: ReviewBudget
+  /** The run asking (runner guard): excluded from its own cycle's spend. */
+  runId?: Id
 }
 
 /** Plan every non-audit stage task with its cache key, over the persisted history as of now. */
@@ -178,12 +184,15 @@ export function reusableRecord(
 }
 
 /**
- * §A.2 synchronous tool pre-check: undefined when the continue run has work;
- * otherwise the NOTHING_TO_CONTINUE refusal. The runner's in-run guard calls
+ * §A.2 synchronous tool pre-check: undefined when the continue run has work
+ * and its review cycle has budget left; otherwise NOTHING_TO_CONTINUE or
+ * BUDGET_EXHAUSTED. The runner's in-run guard calls
  * the same function, so the tool and the runner cannot diverge.
  */
 export function continuePreCheck(input: ContinuePlanInput): Fail | undefined {
-  return continueHasWork(input) ? undefined : nothingToContinue()
+  if (!continueHasWork(input)) return nothingToContinue()
+  if (input.budget === undefined) return undefined
+  return cycleBudgetRefusal(input.budget, cycleUsage(input.root, input.snapshot.projectId, input.runId))
 }
 
 /** The single NOTHING_TO_CONTINUE refusal shared by the tool pre-check, the runner guard and replay. */

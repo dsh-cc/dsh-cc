@@ -27,6 +27,7 @@ import { currentReviews } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
+import { cycleUsage, remainingCycleBudget } from './review-cycle.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
@@ -99,7 +100,11 @@ export async function executeReviewRun(input: {
   const { deps, snapshot, runId } = input
   const store = new ReviewRunStore(deps.root, snapshot.projectId)
   store.initRun(runId)
-  const budget = new BudgetTracker(deps.budget, deps.now)
+  // §A.4: a continue run spends only what its review cycle has left (review-cycle.ts).
+  const runBudget = input.continueMode
+    ? remainingCycleBudget(deps.budget, cycleUsage(deps.root, snapshot.projectId, runId))
+    : deps.budget
+  const budget = new BudgetTracker(runBudget, deps.now)
   const records: ReviewRecord[] = [],
     findings: unknown[] = []
   const history = allRecords(deps.root, snapshot.projectId)
@@ -113,6 +118,7 @@ export async function executeReviewRun(input: {
     stage: input.stages.join('+'),
     targetClaimIds: input.targetClaimIds,
     ...(input.artifact ? { artifactId: input.artifact.id } : {}),
+    ...(input.continueMode ? { continue: true } : {}),
     status: 'running' as ReviewJobStatus,
     inputTokens: 0,
     outputTokens: 0,
@@ -157,7 +163,7 @@ export async function executeReviewRun(input: {
   const caller = new ReviewCaller(
     deps.adapter,
     budget,
-    deps.budget,
+    runBudget,
     input.signal,
     (row) => {
       store.appendUsage(runId, { runId, ...row })
@@ -226,10 +232,12 @@ export async function executeReviewRun(input: {
       ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
       ...(input.maxUnitChars === undefined ? {} : { maxUnitChars: input.maxUnitChars }),
       ...(deps.maxContextChars === undefined ? {} : { maxContextChars: deps.maxContextChars }),
+      budget: deps.budget,
+      runId,
     }
     if (input.continueMode) {
       const refusal = continuePreCheck(continueInput)
-      if (refusal) return finish('completed', refusal)
+      if (refusal) return finish(refusal.code === 'BUDGET_EXHAUSTED' ? 'budget-exhausted' : 'completed', refusal)
     }
     for (const stage of input.stages) {
       input.signal.throwIfAborted()

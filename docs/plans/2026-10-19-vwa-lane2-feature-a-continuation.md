@@ -203,6 +203,21 @@ mismatch), as documented in the skill.
   > you want a second opinion on completed tasks — use a fresh request
   > without `continue`.
 
+- Review-cycle budget (post-review amendment). A continuation never grants a
+  fresh budget. A review cycle is the project's latest fresh request plus the
+  continue requests after it; all of them share one frozen budget for calls,
+  input tokens and output tokens (wall clock stays per run). A continue run
+  gets only the cycle's remainder, and is refused with `BUDGET_EXHAUSTED`
+  (retryable: false) before reservation when one more call does not fit.
+  Continuing after `budget-exhausted` is therefore useful only when the cycle
+  still has spend left (for example a wall-clock stop). See `review-cycle.ts`.
+- Audit reuse (post-review amendment). Audit records carry the full audit
+  identity as `inputHash` (artifact bytes, audit dependency digest, frozen
+  core set, contract, policy, extract/align prompts, reviewer config, unit
+  size). A continue run whose semantic tasks and audit all have reusable
+  completed records is refused with `NOTHING_TO_CONTINUE`, including
+  `stage: "all"`.
+
 ### A.5 Cache key safety
 
 Cross-request reuse is safe because the extended cache key is content-addressed:

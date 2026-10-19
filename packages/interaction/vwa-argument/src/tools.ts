@@ -283,7 +283,8 @@ export function registerArgumentTools(
       'revision. Registers a background run and returns immediately; the run NEVER modifies the body or ' +
       'the author graph. Repeating the same requestId returns the run state without re-calling the model. ' +
       'Pass input.continue=true (with a NEW requestId) after an incomplete run to re-execute only tasks ' +
-      'without a reusable completed record; refused with NOTHING_TO_CONTINUE when everything already passed.',
+      'without a reusable completed record (audit included); refused with NOTHING_TO_CONTINUE when everything ' +
+      'already completed, or BUDGET_EXHAUSTED when the review cycle budget (shared with the fresh request) is spent.',
     parameters: {
       ...common(),
       input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage, continue?: boolean}' },
@@ -396,6 +397,7 @@ export function registerArgumentTools(
               targetClaimIds: resolveTargetClaimIds(snapshot, body),
               ...(artifact === undefined ? {} : { artifact: { id: artifact.id, text: artifact.text } }),
               ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
+              budget: review.budget,
             })
           : undefined
       // Initialization yields: another identical request may have reserved a
@@ -410,6 +412,7 @@ export function registerArgumentTools(
         stage: stages.join('+'),
         targetClaimIds: resolveTargetClaimIds(snapshot, body),
         payloadHash,
+        ...(body.continue === true ? { continue: true } : {}),
         taskId,
         status: 'queued',
         inputTokens: 0,

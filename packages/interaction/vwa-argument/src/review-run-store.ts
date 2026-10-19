@@ -73,6 +73,8 @@ export class ReviewRunStore {
       targetClaimIds: Id[]
       artifactId?: Id
       payloadHash?: Hash
+      /** §A.4: a continue request draws on its review cycle's budget (review-cycle.ts). */
+      continue?: boolean
       taskId?: string
       processId?: number
       processNonce?: string
