@@ -99,7 +99,9 @@ export function reviewContext(input: {
     claims: input.snapshot.claims.filter((c) => ids.has(c.id)),
     issues: input.snapshot.issues.filter((i) => ids.has(i.id)),
     searches: input.snapshot.searches.filter((s) => ids.has(s.id)),
-    currentReviews: upstreamRecords(index, input.task, input.records),
+    // Persisted reuse copies remain available for provenance, but must not
+    // consume model context repeatedly under the same semantic cache key.
+    currentReviews: deduplicateBySemanticHash(upstreamRecords(index, input.task, input.records)),
   }
 }
 export function taskEnvelope(input: {

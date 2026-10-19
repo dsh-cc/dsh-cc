@@ -28,6 +28,7 @@ import { randomUUID } from 'node:crypto'
 import { sha256Hex, stableJson } from './schema.ts'
 import { loadPrompt, responseSchemaFor, promptHash, RULES } from './review-contract.ts'
 import { auditDependencyDigest } from './review-current.ts'
+import { deduplicateBySemanticHash } from './review-input.ts'
 import { AUDIT_RULE_IDS, auditInputHash, auditUnitChars } from './audit-reuse.ts'
 import { buildReverseIndex } from './dependencies.ts'
 import { computeCoreSet } from './review-plan.ts'
@@ -281,7 +282,7 @@ export async function executeAudit(input: {
       ruleId,
     })),
     ruleDefinitions: Object.fromEntries(Object.entries(RULES).filter(([id]) => id.startsWith('AUDIT-'))),
-    currentReviewRecords: input.records ?? [],
+    currentReviewRecords: deduplicateBySemanticHash(input.records ?? []),
     issues: snapshot.issues,
     groups: snapshot.groups,
     arguments: snapshot.arguments,
