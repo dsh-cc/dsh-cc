@@ -311,6 +311,31 @@ describe('tool registration (§13 gate surface)', () => {
       .findRunByRequestId(requestIdMap.get('r-init-failed')!)).toBeUndefined()
   })
 
+  it('reserves only one run when identical continuations initialize concurrently', async () => {
+    let starts = 0
+    const { tools, workspace } = mount({
+      review: () => {
+        const collaborators = reviewCollaborators([])
+        collaborators.adapter.initialize = async () => { await Promise.resolve() }
+        collaborators.tasks.start = () => { starts++; return true }
+        return collaborators
+      },
+    })
+    await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: 1, requestId: 'u-concurrent',
+      input: { op: 'upsert', creates: [{ clientKey: 'c1', type: 'claim', body: CLAIM_BODY }], updates: [], deletes: [] },
+    })
+    const args = {
+      projectId: workspace.projectId, expectedRevision: 2, requestId: 'r-concurrent',
+      input: { stage: 'claims', continue: true },
+    }
+    const results = await Promise.all([call(tools.get('argument.review') as ToolDefinition, args),
+      call(tools.get('argument.review') as ToolDefinition, args)])
+    expect(results.every((r) => r.ok)).toBe(true)
+    expect((results[0].data as { runId: string }).runId).toBe((results[1].data as { runId: string }).runId)
+    expect(starts).toBe(1)
+  })
+
   it('absent input.continue keeps the fresh-run behavior (re-executes completed tasks)', async () => {
     const { tools, workspace } = mount({
       review: reviewWithScript([(req) => stepFor(req, 5)]),

@@ -3,7 +3,7 @@ import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson, validateReviewResponse } from './schema.ts'
 import { policyHash, promptHash } from './review-contract.ts'
 import { planStage, type ReviewStage } from './review-plan.ts'
-import { taskDependencyDigest } from './review-input.ts'
+import { deduplicateBySemanticHash, semanticRecordHash, taskDependencyDigest } from './review-input.ts'
 import { detectDisagreement, disagreementFinding } from './review-run-store.ts'
 import type { Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
 
@@ -111,9 +111,10 @@ export function auditDependencyDigest(snapshot: ProjectSnapshot, artifactId: Id,
       groups: snapshot.groups,
       arguments: snapshot.arguments,
       issues: snapshot.issues,
-      upstream: records
-        .filter((r) => ['sources', 'support', 'claims', 'arguments'].includes(r.stage))
-        .map((r) => sha256Hex(stableJson(r)))
+      upstream: deduplicateBySemanticHash(
+        records.filter((r) => ['sources', 'support', 'claims', 'arguments'].includes(r.stage)),
+      )
+        .map(semanticRecordHash)
         .sort(),
     }),
   )

@@ -181,6 +181,20 @@ export function continuePreCheck(input: {
   )
 }
 
+/** Freeze the effective reviewer config before the tool hashes or reserves anything. */
+export async function prepareContinuePreCheck(input: Parameters<typeof continuePreCheck>[0] & {
+  adapter: Pick<ReviewModelAdapter, 'configFingerprint' | 'initialize'>
+  maxOutputTokens: number
+  signal: AbortSignal
+}): Promise<Fail | undefined> {
+  try {
+    await input.adapter.initialize?.(input.maxOutputTokens, input.signal)
+  } catch {
+    return fail('REVIEW_UNAVAILABLE', 'reviewer initialization failed; retry the request', true)
+  }
+  return continuePreCheck(input)
+}
+
 /**
  * §10.6 target defaulting: an empty targetClaimIds means every claim with an
  * occurrence in the bound artifact (the named one, or the only one); with no

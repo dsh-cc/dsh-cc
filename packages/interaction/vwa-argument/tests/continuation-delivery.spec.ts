@@ -42,14 +42,16 @@ describe('continuation audit delivery', () => {
       },
     })
     expect(first.status).toBe('incomplete')
-    const adapter = fakeAdapter([
-      () => ({ raw: claimsResponse(b.id, 'pass'), inputTokens: 5 }),
+    const auditSteps: Parameters<typeof fakeAdapter>[0] = [
       () => ({ raw: JSON.stringify({ items: [] }), inputTokens: 5 }),
       (req) => ({ raw: JSON.stringify({
         stage: 'align', rubricVersion: 'humanities-v1', findings: [], alignment: [],
         targets: [{ targetId: artifact.id, checks: JSON.parse(req.messages[1]!.content).requiredRules
           .map((r: { ruleId: string }) => ({ ruleId: r.ruleId, result: 'pass', rationale: 'reviewed', evidenceIds: [] })) }],
       }), inputTokens: 5 }),
+    ]
+    const adapter = fakeAdapter([
+      () => ({ raw: claimsResponse(b.id, 'pass'), inputTokens: 5 }), ...auditSteps,
     ])
     const second = await executeReviewRun({
       ...base, runId: `run_${randomUUID()}`, requestId: randomUUID(), continueMode: true,
@@ -66,5 +68,19 @@ describe('continuation audit delivery', () => {
       pendingRunIds: [], adjudications: [],
     })
     expect(report.checks.audit).toBe('pass')
+
+    // An audit-only continuation must also use current historical judgments,
+    // rather than hashing an empty list just because this run has no claims tasks.
+    const auditOnly = await executeReviewRun({
+      ...base, stages: ['audit'], runId: `run_${randomUUID()}`, requestId: randomUUID(), continueMode: true,
+      deps: { root, adapter: fakeAdapter(auditSteps), budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) },
+    })
+    expect(auditOnly.status).toBe('completed')
+    const latestAudit = auditOnly.records.find((r) => r.stage === 'extract')!
+    expect(latestAudit.dependencyDigest).toBe(auditDependencyDigest(snapshot, artifact.id, selected))
+    expect(evaluateDelivery({
+      root, snapshot, artifactId: artifact.id, text: artifact.text, records: allRecords(root, snapshot.projectId),
+      pendingRunIds: [], adjudications: [],
+    }).checks.audit).toBe('pass')
   })
 })

@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readUserSettingsSync } from './settings.ts'
-import { sha256Hex, stableJson, authorDefValidator, ajvErrors, type JsonValue } from './schema.ts'
+import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
 import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
@@ -32,8 +32,9 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
-import { continuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
+import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
+import { replayReviewRequest } from './review-request.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
 
 /** The minimal registration face of the harness tool runtime (no hard dep). */
@@ -307,36 +308,12 @@ export function registerArgumentTools(
       const payloadHash = sha256Hex(stableJson({ expectedRevision: args.expectedRevision, input: args.input }))
       // §10.6: same requestId running → {completion:'running'}; same requestId
       // finished → the stored result; continuing requires a NEW requestId.
-      const existing = runStore.findRunByRequestId(args.requestId)
-      if (existing !== undefined) {
-        if (existing.payloadHash !== undefined && existing.payloadHash !== payloadHash)
-          return fail('IDEMPOTENCY_CONFLICT', 'requestId was used with a different review payload')
-        const records = runStore.readRecords(existing.runId)
-        return {
-          ok: true,
-          projectId: args.projectId,
-          revision: head.data.head.revision,
-          data:
-            existing.status === 'running' || existing.status === 'queued'
-              ? { completion: 'running' as const, runId: existing.runId, taskId: existing.taskId ?? existing.runId }
-              : {
-                  completion: existing.status === 'completed' ? ('completed' as const) : ('incomplete' as const),
-                  status: existing.status,
-                  runId: existing.runId,
-                  // ReviewRecord is a named interface without an implicit index
-                  // signature; the envelope schema only needs JSON-serializability.
-                  records: records as unknown as JsonValue[],
-                  ...(runStore.readOutcome(existing.runId) === undefined
-                    ? {}
-                    : { result: runStore.readOutcome(existing.runId) as JsonValue }),
-                  usage: {
-                    calls: existing.calls,
-                    inputTokens: existing.inputTokens,
-                    outputTokens: existing.outputTokens,
-                  },
-                },
-        }
-      }
+      const replay = () => replayReviewRequest({
+        store: runStore, requestId: args.requestId, payloadHash,
+        projectId: args.projectId, revision: head.data.head.revision,
+      })
+      const existing = replay()
+      if (existing !== undefined) return existing
       // §11.1: requests that no longer match expectedRevision fail BEFORE any model call.
       if (args.expectedRevision !== head.data.head.revision) {
         return fail(
@@ -408,9 +385,11 @@ export function registerArgumentTools(
       // request, via the shared pre-check (the runner's guard uses the same logic).
       const refusal =
         body.continue === true
-          ? continuePreCheck({
+          ? await prepareContinuePreCheck({
               root,
               adapter: review.adapter,
+              maxOutputTokens: review.budget.maxOutputTokensPerCall,
+              signal: exec.signal,
               contractHash: sha256Hex(stableJson(snapshot.contract)),
               snapshot,
               stages,
@@ -418,6 +397,10 @@ export function registerArgumentTools(
               ...(artifact === undefined ? {} : { artifact: { id: artifact.id, text: artifact.text } }),
             })
           : undefined
+      // Initialization yields: another identical request may have reserved a
+      // run meanwhile. Replay (or reject its payload) before reserving ours.
+      const concurrent = replay()
+      if (concurrent !== undefined) return concurrent
       if (refusal !== undefined) return refusal
       runStore.reserveRequest(runId, {
         schemaVersion: 1,

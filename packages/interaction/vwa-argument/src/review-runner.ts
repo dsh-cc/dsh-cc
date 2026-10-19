@@ -254,7 +254,9 @@ export async function executeReviewRun(input: {
           maxUnitChars: input.maxUnitChars ?? deps.maxContextChars ?? 48_000,
           signal: input.signal,
           caller,
-          records,
+          // Audit and delivery must see the same current judgments, including
+          // prior second opinions; semantic digests collapse reused copies.
+          records: currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records,
           coreClaimIds: [...frozenCore],
         })
         save(audit.extractionRecord)
