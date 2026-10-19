@@ -395,6 +395,7 @@ export function registerArgumentTools(
               stages,
               targetClaimIds: resolveTargetClaimIds(snapshot, body),
               ...(artifact === undefined ? {} : { artifact: { id: artifact.id, text: artifact.text } }),
+              ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
             })
           : undefined
       // Initialization yields: another identical request may have reserved a
