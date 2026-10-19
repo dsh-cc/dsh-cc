@@ -211,6 +211,33 @@ describe('retry termination diagnostics and cleanup', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
+  it.each([0, 2])('preserves %i completed attempts when input counting fails', async (attempts) => {
+    const b = budget()
+    const tracker = new BudgetTracker(b)
+    const rows: Omit<UsageRow, 'runId'>[] = []
+    const adapter = stubAdapter(100, [() => ({ raw: '{}' })])
+    const count = adapter.countInput.bind(adapter)
+    const failure = new Error('tokenizer unavailable')
+    adapter.countInput = vi.fn(async (messages) => {
+      if (tracker.calls === attempts) throw failure
+      return count(messages)
+    })
+    const prepare = vi.spyOn(adapter, 'prepareReviewCall')
+    const pending = new ReviewCaller(adapter, tracker, b, new AbortController().signal,
+      (row) => rows.push(row)).call('t1', MESSAGES, {}, () => {
+        throw new ReviewInvalidError('bad shape')
+      }).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    const error = await pending
+    expect(error).toBe(failure)
+    expect(error).toMatchObject({ retryAttempts: attempts })
+    expect(prepare).toHaveBeenCalledTimes(attempts)
+    expect(adapter.countInput).toHaveBeenCalledTimes(attempts + 1)
+    expect(rows.filter((row) => row.kind === 'reserved')).toHaveLength(attempts)
+    expect(rows).toHaveLength(attempts * 2)
+    expect(tracker.calls).toBe(attempts)
+  })
+
   it.each(['local', 'shared'] as const)('settles completed usage before backoff releases the %s budget to a peer', async (kind) => {
     const b = budget({ maxOutputTokensPerRun: 3010 })
     const tracker = new BudgetTracker(b)

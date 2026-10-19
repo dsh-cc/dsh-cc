@@ -178,6 +178,34 @@ describe('D19 — a new request cannot brush out a fail without adjudication', (
 })
 
 describe('B.2.1 — error records carry structured errorDetail', () => {
+  it.each([0, 2])('persists %i completed attempts when input counting fails', async (attempts) => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fakeAdapter([() => ({ raw: '{' })])
+    const count = adapter.countInput.bind(adapter)
+    adapter.countInput = async (messages) => {
+      if (adapter.state.dispatches === attempts) throw new Error('tokenizer unavailable')
+      return count(messages)
+    }
+    const input = runnerInput(root, snapshot, ['claims'])
+    vi.useFakeTimers()
+    try {
+      const pending = executeReviewRun({ ...input, deps: { ...input.deps, adapter } })
+      await vi.runAllTimersAsync()
+      const outcome = await pending
+      const expected = {
+        errorCode: 'REVIEW_UNAVAILABLE',
+        errorDetail: { message: 'tokenizer unavailable', retryAttempts: attempts },
+      }
+      expect(adapter.state.dispatches).toBe(attempts)
+      expect(outcome.records[0]).toMatchObject(expected)
+      const saved = new ReviewRunStore(root, snapshot.projectId).readRecords(input.runId)
+      expect(saved[0]).toMatchObject(expected)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('persists zero attempts for a context refusal before dispatch', async () => {
     const { root } = workspace()
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })

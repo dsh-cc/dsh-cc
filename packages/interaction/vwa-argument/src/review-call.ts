@@ -79,7 +79,13 @@ export class ReviewCaller {
     let firstSeq = -1
     for (;;) {
       this.signal.throwIfAborted()
-      const counted = await this.adapter.countInput([...request, { role: 'user', content: JSON.stringify(schema) }])
+      let counted: Awaited<ReturnType<ReviewModelAdapter['countInput']>>
+      try {
+        counted = await this.adapter.countInput([...request, { role: 'user', content: JSON.stringify(schema) }])
+      } catch (error) {
+        // Counting failed before reservation or dispatch; only earlier attempts count.
+        throw this.attach(error, attempts)
+      }
       // Local counters and the durable ledger row must be updated inside the
       // shared cycle lock, before another run can observe the available spend.
       const reserve = () => {
