@@ -1,6 +1,6 @@
 # Auto-dream never fires: drop the `sessions` service dependency, scan the session store
 
-**Status:** **Implemented** — PR #109 (2026-09-22, open). Critic cold review round 1
+**Status:** **Implemented** — PR #109 (merged 2026-09-22). Critic cold review round 1
 (2026-09-22, AMEND: fs-seam prefix reads impossible → scanner reads via
 `node:fs`; v3 header contract pinned from a real stream; memo caches the
 unfiltered list; scan-stats + dogfood gates) incorporated before

@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readUserSettingsSync } from './settings.ts'
-import { sha256Hex, stableJson, authorDefValidator, ajvErrors, type JsonValue } from './schema.ts'
+import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
 import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
@@ -32,7 +32,10 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
+import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
+import { replayReviewRequest } from './review-request.ts'
+import { reserveCycleRequest } from './review-cycle.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
 
 /** The minimal registration face of the harness tool runtime (no hard dep). */
@@ -279,16 +282,21 @@ export function registerArgumentTools(
         description:
       'Run a lane-2 semantic review stage (sources|support|claims|arguments|all) over the current graph ' +
       'revision. Registers a background run and returns immediately; the run NEVER modifies the body or ' +
-      'the author graph. Repeating the same requestId returns the run state without re-calling the model.',
+      'the author graph. Repeating the same requestId returns the run state without re-calling the model. ' +
+      'Pass input.continue=true (with a NEW requestId) after an incomplete run to re-execute only tasks ' +
+      'without a reusable completed record (audit included); refused with NOTHING_TO_CONTINUE when everything ' +
+      'already completed, or BUDGET_EXHAUSTED when the review cycle budget (shared with the fresh request) is spent.',
     parameters: {
       ...common(),
-      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage}' },
+      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage, continue?: boolean}' },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
       const args = guard(raw)
       if ('ok' in args) return args
-      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string }
+      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string; continue?: boolean }
+      if (body.continue !== undefined && typeof body.continue !== 'boolean')
+        return fail('SCHEMA_INVALID', 'input.continue must be a boolean when present')
       const stage = body.stage
       if (stage === undefined || (stage !== 'all' && stage !== 'audit' && !REVIEW_STAGES.has(stage))) {
         return fail('SCHEMA_INVALID', `stage must be sources|support|claims|arguments|all|audit, got ${String(stage)}`)
@@ -302,36 +310,12 @@ export function registerArgumentTools(
       const payloadHash = sha256Hex(stableJson({ expectedRevision: args.expectedRevision, input: args.input }))
       // §10.6: same requestId running → {completion:'running'}; same requestId
       // finished → the stored result; continuing requires a NEW requestId.
-      const existing = runStore.findRunByRequestId(args.requestId)
-      if (existing !== undefined) {
-        if (existing.payloadHash !== undefined && existing.payloadHash !== payloadHash)
-          return fail('IDEMPOTENCY_CONFLICT', 'requestId was used with a different review payload')
-        const records = runStore.readRecords(existing.runId)
-        return {
-          ok: true,
-          projectId: args.projectId,
-          revision: head.data.head.revision,
-          data:
-            existing.status === 'running' || existing.status === 'queued'
-              ? { completion: 'running' as const, runId: existing.runId, taskId: existing.taskId ?? existing.runId }
-              : {
-                  completion: existing.status === 'completed' ? ('completed' as const) : ('incomplete' as const),
-                  status: existing.status,
-                  runId: existing.runId,
-                  // ReviewRecord is a named interface without an implicit index
-                  // signature; the envelope schema only needs JSON-serializability.
-                  records: records as unknown as JsonValue[],
-                  ...(runStore.readOutcome(existing.runId) === undefined
-                    ? {}
-                    : { result: runStore.readOutcome(existing.runId) as JsonValue }),
-                  usage: {
-                    calls: existing.calls,
-                    inputTokens: existing.inputTokens,
-                    outputTokens: existing.outputTokens,
-                  },
-                },
-        }
-      }
+      const replay = () => replayReviewRequest({
+        store: runStore, requestId: args.requestId, payloadHash,
+        projectId: args.projectId, revision: head.data.head.revision,
+      })
+      const existing = replay()
+      if (existing !== undefined) return existing
       // §11.1: requests that no longer match expectedRevision fail BEFORE any model call.
       if (args.expectedRevision !== head.data.head.revision) {
         return fail(
@@ -399,13 +383,43 @@ export function registerArgumentTools(
           return fail('INPUT_CHANGED', `artifact text for ${bound.path} is not available to the runtime`, true)
         artifact = { id: bound.id, path: bound.path, text }
       }
-      runStore.reserveRequest(runId, {
+      // §A.2: continue on a fully completed plan is refused BEFORE reserving the
+      // request, via the shared pre-check (the runner's guard uses the same logic).
+      const refusal =
+        body.continue === true
+          ? await prepareContinuePreCheck({
+              root,
+              adapter: review.adapter,
+              maxOutputTokens: review.budget.maxOutputTokensPerCall,
+              signal: exec.signal,
+              contractHash: sha256Hex(stableJson(snapshot.contract)),
+              snapshot,
+              stages,
+              targetClaimIds: resolveTargetClaimIds(snapshot, body),
+              ...(artifact === undefined ? {} : { artifact: { id: artifact.id, text: artifact.text } }),
+              ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
+              budget: review.budget,
+            })
+          : undefined
+      // Initialization yields: another identical request may have reserved a
+      // run meanwhile. Replay (or reject its payload) before reserving ours.
+      const concurrent = replay()
+      if (concurrent !== undefined) return concurrent
+      // §11.1 again after the await: an author write may have moved HEAD, which
+      // also makes a refusal computed over the old snapshot meaningless.
+      const current = store.readHead()
+      if (!current.ok) return current
+      if (current.data.head.revision !== args.expectedRevision)
+        return fail('REVISION_CONFLICT', `expectedRevision ${args.expectedRevision} is not HEAD ${current.data.head.revision}`, true)
+      if (refusal !== undefined) return refusal
+      const reserved = reserveCycleRequest(root, args.projectId, runId, {
         schemaVersion: 1,
         requestId: args.requestId,
         runId,
         stage: stages.join('+'),
         targetClaimIds: resolveTargetClaimIds(snapshot, body),
         payloadHash,
+        ...(body.continue === true ? { continue: true } : {}),
         taskId,
         status: 'queued',
         inputTokens: 0,
@@ -413,6 +427,7 @@ export function registerArgumentTools(
         calls: 0,
         startedAt: new Date().toISOString(),
       })
+      if ('ok' in reserved) return reserved
       const started = tasks.start(taskId, runId, async (signal) => {
         await executeReviewRun({
           deps: {
@@ -435,6 +450,7 @@ export function registerArgumentTools(
           snapshot,
           signal,
           ...(artifact === undefined ? {} : { artifact }),
+          ...(body.continue === true ? { continueMode: true } : {}),
         })
       })
       if (!started) {
@@ -454,26 +470,6 @@ export function registerArgumentTools(
       }),
     ),
   )
-}
-
-/**
- * §10.6 target defaulting: an empty targetClaimIds means every claim with an
- * occurrence in the bound artifact (the named one, or the only one); with no
- * bound artifact, every project claim.
- */
-export function resolveTargetClaimIds(
-  snapshot: ProjectSnapshot,
-  body: { artifactId?: string; targetClaimIds?: string[] },
-): Id[] {
-  if (body.targetClaimIds !== undefined && body.targetClaimIds.length > 0) return body.targetClaimIds
-  const artifact =
-    body.artifactId !== undefined
-      ? snapshot.artifacts.find((candidate) => candidate.id === body.artifactId)
-      : snapshot.artifacts.length === 1
-        ? snapshot.artifacts[0]
-        : undefined
-  if (artifact !== undefined) return [...new Set(artifact.occurrences.map((occurrence) => occurrence.claimId))]
-  return snapshot.claims.map((claim) => claim.id)
 }
 
 /** True when the lane-2 feature gate is on in the raw settings file (§13). */

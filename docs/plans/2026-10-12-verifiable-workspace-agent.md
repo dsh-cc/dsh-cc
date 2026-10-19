@@ -1,7 +1,7 @@
 # Verifiable Workspace Agent (VWA): deliverables with machine-checkable evidence receipts (design)
 
 - Date: 2026-10-12
-- Status: draft v4; three-seat blind review converged (internal critic GO, Codex GO, Grok GO). User sign-off pending. NOT yet implemented.
+- Status: implemented (lane-1 MVP: P1 carrier + P2 evidence substrate) — PR #241 (merged 2026-10-13); verified by live acceptance runs. Lane-2 evidence/argumentation is covered separately by `docs/plans/2026-10-16-vwa-evidence-argument.md`. Design: draft v4; three-seat blind review converged (internal critic GO, Codex GO, Grok GO).
 - Scope legend: `H/` prefixes paths in the sibling harness repo (`deepseek-harness`, pin 0.2.0-rc.2); unprefixed paths live in this repo. Harness packages are vendored inside this repo with different line numbers, so every anchor states its repo.
 
 ## 0. Decisions

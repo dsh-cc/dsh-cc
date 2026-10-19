@@ -3,13 +3,12 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson } from './schema.ts'
-import { planStage, computeCoreSet, type ReviewStage, type ReviewTask } from './review-plan.ts'
+import { planStage, type ReviewStage, type ReviewTask } from './review-plan.ts'
 import {
   ReviewRunStore,
   cacheKey,
   detectDisagreement,
   disagreementFinding,
-  recordReusable,
 } from './review-run-store.ts'
 import {
   ReviewInvalidError,
@@ -22,22 +21,19 @@ import {
 import { BudgetTracker, type ReviewBudget } from './review-tasks.ts'
 import { ReviewCaller, ReviewBudgetError } from './review-call.ts'
 import { executeAudit } from './audit.ts'
-import { ProjectStore } from './store.ts'
+import { ProjectStore, type Fail } from './store.ts'
 import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-input.ts'
 import { currentReviews } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
-import type {
-  Hash,
-  Id,
-  ProjectSnapshot,
-  ReviewJobStatus,
-  ReviewRecord,
-  ReviewErrorDetail,
-} from './types.ts'
+import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
+import { reserveCycleCall, reserveCycleRequest } from './review-cycle.ts'
+import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord, ReviewErrorDetail } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
 export { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor } from './review-contract.ts'
+// Re-exported for existing importers; the implementation lives in review-continue.ts.
+export { collectCachedRecords } from './review-continue.ts'
 
 /** Public envelope constructor retained for tools inspecting planned inputs. */
 export function buildEnvelope(input: {
@@ -84,6 +80,8 @@ export interface ReviewRunOutcome {
   newCoreDiscovered?: boolean
   newClaimProposals?: unknown[]
   auditMetrics?: { extractedAtomicClaims: number; mappedAtomicClaims: number }
+  /** Set when the run refused to execute anything (replay returns this failure). */
+  refusal?: Fail
 }
 /** Run independently of the authoring turn. No graph or artifact writes. */
 export async function executeReviewRun(input: {
@@ -96,10 +94,14 @@ export async function executeReviewRun(input: {
   signal: AbortSignal
   artifact?: { id: Id; path: string; text: string }
   maxUnitChars?: number
+  /** §A.2: continue mode — reuse completed records across requestIds. */
+  continueMode?: boolean
 }): Promise<ReviewRunOutcome> {
   const { deps, snapshot, runId } = input
   const store = new ReviewRunStore(deps.root, snapshot.projectId)
   store.initRun(runId)
+  // Per-run counters enforce liveness; every dispatch also reserves against
+  // the aggregate cycle ledger under a cross-process lock.
   const budget = new BudgetTracker(deps.budget, deps.now)
   const records: ReviewRecord[] = [],
     findings: unknown[] = []
@@ -114,18 +116,19 @@ export async function executeReviewRun(input: {
     stage: input.stages.join('+'),
     targetClaimIds: input.targetClaimIds,
     ...(input.artifact ? { artifactId: input.artifact.id } : {}),
+    ...(input.continueMode ? { continue: true } : {}),
     status: 'running' as ReviewJobStatus,
     inputTokens: 0,
     outputTokens: 0,
     calls: 0,
     startedAt,
   }
-  store.reserveRequest(runId, request)
-  Object.assign(request, store.readRequest(runId))
+  const reserved = reserveCycleRequest(deps.root, snapshot.projectId, runId, request)
+  if (!('ok' in reserved)) Object.assign(request, reserved)
   let coreDiscovered = false,
     newClaimProposals: unknown[] = [],
     auditMetrics: ReviewRunOutcome['auditMetrics']
-  const finish = (status: ReviewJobStatus): ReviewRunOutcome => {
+  const finish = (status: ReviewJobStatus, refusal?: Fail): ReviewRunOutcome => {
     const totals = { inputTokens: budget.inputTokens, outputTokens: budget.outputTokens, calls: budget.calls }
     store.writeOutcome(runId, {
       status,
@@ -134,6 +137,7 @@ export async function executeReviewRun(input: {
       newClaimProposals,
       ...(coreDiscovered ? { newCoreDiscovered: true } : {}),
       ...(auditMetrics ? { auditMetrics } : {}),
+      ...(refusal ? { refusal } : {}),
     })
     store.writeRequest(runId, {
       ...request,
@@ -151,6 +155,7 @@ export async function executeReviewRun(input: {
       ...totals,
       ...(coreDiscovered ? { newCoreDiscovered: true } : {}),
       ...(auditMetrics ? { auditMetrics } : {}),
+      ...(refusal ? { refusal } : {}),
     }
   }
   const caller = new ReviewCaller(
@@ -168,6 +173,9 @@ export async function executeReviewRun(input: {
       })
     },
     deps.maxContextChars ?? 48_000,
+    (tokens, reserve) => 'ok' in reserved ? false : reserveCycleCall(
+      deps.root, snapshot.projectId, reserved.cycleId, deps.budget, tokens, reserve,
+    ),
   )
   let configHash = ''
   const save = (record: ReviewRecord) => {
@@ -200,6 +208,7 @@ export async function executeReviewRun(input: {
     },
   })
   try {
+    if ('ok' in reserved) return finish('incomplete', reserved)
     input.signal.throwIfAborted()
     await deps.adapter.initialize?.(deps.budget.maxOutputTokensPerCall, input.signal)
     configHash = sha256Hex(stableJson(deps.adapter.configFingerprint()))
@@ -212,17 +221,36 @@ export async function executeReviewRun(input: {
         for (const ev of snapshot.evidence.filter((e) => e.sourceId === source.id))
           validateEvidenceAgainstSnapshot(ev, text)
       }
-    const frozenCore = computeCoreSet({
+    const frozenCore = frozenCoreSet({
+      root: deps.root,
       index,
-      artifactText: input.artifact?.text ?? '',
-      requiredQuestionTexts: snapshot.contract.requiredQuestions.map((q) => q.text),
+      snapshot,
+      history,
+      ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
     })
-    // Previous extraction can add coreness for a subsequent run over the same body.
-    if (input.artifact)
-      for (const r of history) {
-        if (r.stage !== 'align' || r.artifactHash !== sha256Hex(input.artifact.text)) continue
-        for (const id of r.coreClaimIds ?? []) if (index.claims.has(id)) frozenCore.add(id)
-      }
+    // §A.2 guard, shared with the tool pre-check: a continue run where every
+    // planned task AND the requested audit already have reusable completed
+    // records refuses to re-execute anything. When work remains, the audit
+    // always re-executes: fresh upstream judgments change its dependency
+    // digest, so a completed audit can only be reused through this guard.
+    const continueInput = {
+      root: deps.root,
+      adapter: deps.adapter,
+      contractHash: deps.contractHash,
+      snapshot,
+      stages: input.stages,
+      targetClaimIds: input.targetClaimIds,
+      ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
+      ...(input.maxUnitChars === undefined ? {} : { maxUnitChars: input.maxUnitChars }),
+      ...(deps.maxContextChars === undefined ? {} : { maxContextChars: deps.maxContextChars }),
+      budget: deps.budget,
+      runId,
+      history,
+    }
+    if (input.continueMode) {
+      const refusal = continuePreCheck(continueInput)
+      if (refusal) return finish(refusal.code === 'BUDGET_EXHAUSTED' ? 'budget-exhausted' : 'completed', refusal)
+    }
     for (const stage of input.stages) {
       input.signal.throwIfAborted()
       if (budget.wallExceeded()) return finish('incomplete')
@@ -230,6 +258,9 @@ export async function executeReviewRun(input: {
         if (!input.artifact) return finish('incomplete')
         if (input.artifact.text.length > (deps.maxArtifactChars ?? 120_000))
           throw new ReviewInvalidError('artifact exceeds review-max-artifact-chars; full audit refused')
+        // Audit and delivery must see the same current judgments, including
+        // prior second opinions; semantic digests collapse reused copies.
+        const auditRecords = currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records
         const audit = await executeAudit({
           adapter: deps.adapter,
           runId,
@@ -243,7 +274,7 @@ export async function executeReviewRun(input: {
           maxUnitChars: input.maxUnitChars ?? deps.maxContextChars ?? 48_000,
           signal: input.signal,
           caller,
-          records,
+          records: auditRecords,
           coreClaimIds: [...frozenCore],
         })
         save(audit.extractionRecord)
@@ -270,6 +301,7 @@ export async function executeReviewRun(input: {
             const key = cacheKey({
               stage,
               targetRefs: task.targetRefs,
+              requiredRules: task.requiredRules,
               dependencyDigest: dep,
               contractHash: deps.contractHash,
               policyHash: policyHash(),
@@ -278,11 +310,20 @@ export async function executeReviewRun(input: {
             })
             const prior = history.filter((r) => r.inputHash === key)
             const ownRuns = new Set(requestRuns(deps.root, snapshot.projectId, input.requestId))
-            const reusable = prior.find(
-              (r) => ownRuns.has(r.runId) && recordReusable(r, new Set(task.requiredRules.map((r) => r.ruleId))),
-            )
+            const reusable = reusableRecord(prior, task, input.continueMode === true, ownRuns)
             if (reusable) {
               save({ ...reusable, runId })
+              // §A.3.5: reused records appear in the ledger with zero tokens.
+              if (input.continueMode === true)
+                store.appendUsage(runId, {
+                  runId,
+                  taskId: task.taskId,
+                  seq: budget.calls,
+                  kind: 'reused',
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  method: 'tokenizer',
+                })
               return
             }
             const envelope = taskEnvelope({
@@ -420,6 +461,9 @@ export async function executeReviewRun(input: {
       )
         return finish('incomplete')
     }
+    // §A.3.6: in continue mode a run reaches 'completed' only when every
+    // planned task has a fresh or reused completed record — any task without
+    // one fails the stage loop and finishes 'incomplete' via existing logic.
     return finish(coreDiscovered ? 'incomplete' : 'completed')
   } catch (error) {
     const stage = input.stages.at(-1) ?? 'audit'
@@ -430,17 +474,6 @@ export async function executeReviewRun(input: {
   }
 }
 import { randomUUID as cryptoUuid } from 'node:crypto'
-function allRecords(root: string, projectId: string): ReviewRecord[] {
-  const store = new ReviewRunStore(root, projectId)
-  try {
-    return readdirSync(join(root, '.dsh', 'vwa', projectId, 'review-runs')).flatMap((id) => store.readRecords(id))
-  } catch {
-    return []
-  }
-}
-export function collectCachedRecords(root: string, projectId: string, key: Hash): ReviewRecord[] {
-  return allRecords(root, projectId).filter((r) => r.inputHash === key)
-}
 function requestRuns(root: string, projectId: string, requestId: string): Id[] {
   const store = new ReviewRunStore(root, projectId)
   try {

@@ -1,6 +1,6 @@
 # Memory index pressure → forced consolidation (dream) trigger
 
-**Status:** **Implemented** — PR #102 (2026-09-22, open). Critic cold review round 1
+**Status:** **Implemented** — PR #102 (merged 2026-09-22). Critic cold review round 1
 (2026-09-22: blocking #1/#4 stamp `lastForcedAt` before lock acquisition,
 major #2 dead fork-write-back arm point dropped, major #3 queued sentence
 gated on arming success, minors #5–#8) incorporated before implementation.

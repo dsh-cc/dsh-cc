@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { collectCachedRecords, executeReviewRun } from '../src/review-runner.ts'
-import { ReviewRunStore, recordReusable } from '../src/review-run-store.ts'
+import { ReviewRunStore, cacheKey, recordReusable } from '../src/review-run-store.ts'
 import { activeMajorCount } from '../src/policy.ts'
 import type { ReviewRecord } from '../src/types.ts'
 import {
@@ -217,5 +217,39 @@ describe('cache reuse (§11.3)', () => {
     expect(adapter.state.dispatches).toBe(before) // reused, no new dispatch
     expect(completedRecord(second.records).response).toBeDefined()
     expect(first.records.length).toBe(1)
+  })
+})
+
+describe('cacheKey requiredRules extension (§A.3.1)', () => {
+  const base = {
+    stage: 'sources',
+    targetRefs: [{ id: 'src_x', entityVersion: 1 }],
+    dependencyDigest: 'd'.repeat(64),
+    contractHash: 'c'.repeat(64),
+    policyHash: 'p'.repeat(64),
+    reviewerConfigHash: 'r'.repeat(64),
+    promptHash: 'm'.repeat(64),
+  }
+  it('differing requiredRules yield different keys', () => {
+    const a = cacheKey({ ...base, requiredRules: [{ targetId: 'src_x', ruleId: 'SOURCE-01' }] })
+    const b = cacheKey({ ...base, requiredRules: [{ targetId: 'src_x', ruleId: 'SOURCE-03' }] })
+    expect(b).not.toBe(a)
+  })
+  it('order-permuted equal requiredRules yield the same key', () => {
+    const a = cacheKey({
+      ...base,
+      requiredRules: [
+        { targetId: 'src_x', ruleId: 'SOURCE-01' },
+        { targetId: 'src_y', ruleId: 'SOURCE-02' },
+      ],
+    })
+    const b = cacheKey({
+      ...base,
+      requiredRules: [
+        { targetId: 'src_y', ruleId: 'SOURCE-02' },
+        { targetId: 'src_x', ruleId: 'SOURCE-01' },
+      ],
+    })
+    expect(b).toBe(a)
   })
 })

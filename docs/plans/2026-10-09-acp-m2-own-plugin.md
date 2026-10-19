@@ -2,7 +2,8 @@
 
 Status: reviewed — three-seat blind review converged all-GO (r1 full review,
 r2 delta round, r3 micro-confirmation; ledger §11). User decision to build
-M2 recorded in §1. Awaiting user sign-off before implementation (PR-B).
+M2 recorded in §1. Implemented — PR #228 (M2-core: own `@dsh-cc/acp` plugin,
+`cc-acp` profile bundle, launcher), merged 2026-10-10.
 
 ## 1. Background and problem
 

@@ -1,6 +1,6 @@
 # Auto-dream dispatch diagnostics + lock hygiene（R4 取证先行）
 
-2026-09-22 · 状态：待评审 · 上游事实：PR #102（pressure 机制）、PR #109（session-scan 修复）、同日下午两次受控触发实证
+2026-09-22 · 状态：已实现 — PR #111（surfacing dream dispatch failures + throw 时回滚锁，merged 2026-09-22；`packages/memory/memory-consolidation/src/diagnostics.ts`）· 上游事实：PR #102（pressure 机制）、PR #109（session-scan 修复）、同日下午两次受控触发实证
 
 ## 1. 问题与证据（全部实测定案）
 
