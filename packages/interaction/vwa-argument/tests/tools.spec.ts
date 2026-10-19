@@ -768,3 +768,55 @@ describe('argument.review continue with stage all (§A.2 audit reuse)', () => {
     expect(dispatches).toEqual({ claims: 1, extract: 2, align: 2 })
   })
 })
+
+describe('argument.review continue within the review-cycle budget (§13, §A.4)', () => {
+  /** A project whose frozen budget allows `calls` model calls, with claims a, b, c. */
+  async function project(calls: number, failFor: () => string | undefined) {
+    const made = makeWorkspace()
+    made.store.init(CONTRACT, freezeReviewSettings({ ...DEFAULT_VWA_ARGUMENT_SETTINGS, 'review-max-calls-per-run': calls }))
+    const state = { dispatches: 0 }
+    const { tools, workspace } = mount({
+      review: reviewWithScript([
+        (req) => {
+          state.dispatches++
+          return stepFor(req, 5, () => {
+            const target = (JSON.parse((req.messages[1] as { content: string }).content) as { targets: { id: string }[] }).targets[0]!.id
+            return target === failFor()
+          })
+        },
+      ]),
+    }, made)
+    const made2 = (await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: 1, requestId: `u-${uuid()}`,
+      input: {
+        op: 'upsert',
+        creates: ['a', 'b', 'c'].map((k) => ({ clientKey: k, type: 'claim', body: { ...CLAIM_BODY, text: `Claim ${k}` } })),
+        updates: [], deletes: [],
+      },
+    })) as { data: { changedIds: string[] } }
+    return { tools, workspace, state, ids: made2.data.changedIds }
+  }
+  const run = async (tools: Map<string, ToolDefinition>, projectId: string, requestId: string, input: Record<string, unknown>) =>
+    call(tools.get('argument.review') as ToolDefinition, { projectId, expectedRevision: 2, requestId, input })
+
+  it('a continuation spends only what the cycle has left, then is refused with BUDGET_EXHAUSTED', async () => {
+    let failing: string | undefined
+    const { tools, workspace, state, ids } = await project(4, () => failing)
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    // Fresh run: claim 1 passes, claim 2 fails twice (the caller retries once) → 3 of 4 calls, incomplete.
+    failing = ids[1]
+    const first = await run(tools, workspace.projectId, 'cycle-1', { stage: 'claims' })
+    expect((await settle(store, (first.data as { runId: string }).runId))).toMatchObject({ status: 'incomplete', calls: 3 })
+    // Infra failure fixed: the continuation may use only the 1 remaining call.
+    failing = undefined
+    const second = await run(tools, workspace.projectId, 'cycle-2', { stage: 'claims', continue: true })
+    expect(second.ok).toBe(true)
+    expect((await settle(store, (second.data as { runId: string }).runId))).toMatchObject({ status: 'budget-exhausted', calls: 1 })
+    expect(state.dispatches).toBe(4)
+    // Nothing left in the cycle: refused before reserving, no model call.
+    const third = await run(tools, workspace.projectId, 'cycle-3', { stage: 'claims', continue: true })
+    expect(third).toMatchObject({ ok: false, code: 'BUDGET_EXHAUSTED', retryable: false })
+    expect(store.findRunByRequestId(requestIdMap.get('cycle-3')!)).toBeUndefined()
+    expect(state.dispatches).toBe(4)
+  })
+})
