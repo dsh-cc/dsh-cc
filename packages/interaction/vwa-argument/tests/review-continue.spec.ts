@@ -172,9 +172,9 @@ describe('continue mode — reuse across requestIds (§A.2)', () => {
     expect(second.status).toBe('completed')
   })
 
-  it('does not refuse a continue run that includes the audit stage (§A.2)', async () => {
-    // Audit tasks are never reusable, so a continuation including audit always
-    // has fresh work — the NOTHING_TO_CONTINUE guard must not fire. The fake
+  it('does not refuse a continue run whose audit has never completed (§A.2)', async () => {
+    // No completed audit exists under this audit key, so the continuation has
+    // fresh work — the NOTHING_TO_CONTINUE guard must not fire. The fake
     // adapter answers with a claims-shaped response, so the audit stage itself
     // errors after dispatch (errorRecord → 'incomplete'); what matters here is
     // that audit work was ATTEMPTED instead of the guard short-circuiting to
@@ -194,7 +194,7 @@ describe('continue mode — reuse across requestIds (§A.2)', () => {
     expect(second.status).toBe('incomplete')
   })
 
-  it('continuePreCheck returns undefined for audit-only continue (tool-level guard)', () => {
+  it('continuePreCheck returns undefined for an audit-only continue with no completed audit (tool-level guard)', () => {
     const { root } = workspace()
     const claim = makeClaim('fact')
     const snapshot = makeSnapshot({ claims: [claim] })
