@@ -41,6 +41,8 @@ export interface UsageRow {
   inputTokens: number
   outputTokens: number
   method: 'tokenizer' | 'bytes-upper-bound'
+  /** B.2.4: on retry rows, `${taskId}:${seq}` of the original attempt. */
+  retryOf?: string
 }
 
 /** Disk layout handle for one project's review runs (§14.1). */

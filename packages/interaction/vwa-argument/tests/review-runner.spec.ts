@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { collectCachedRecords, executeReviewRun } from '../src/review-runner.ts'
 import { ReviewRunStore, recordReusable } from '../src/review-run-store.ts'
 import { activeMajorCount } from '../src/policy.ts'
@@ -53,14 +53,21 @@ describe('D13b — present-rule needs-review inside a completed record', () => {
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
     const fakeClaimId = `cl_${'1'.repeat(8)}-1111-4111-8111-${'1'.repeat(12)}`
     const adapter = fakeAdapter([() => ({ raw: claimsResponse(fakeClaimId, 'pass') })])
-    const outcome = await executeReviewRun({ ...runnerInput(root, snapshot, ['claims']), deps: { ...runnerInput(root, snapshot, ['claims']).deps, adapter } })
+    // B.2.4: invalid responses now retry with backoff — virtualize the sleeps.
+    vi.useFakeTimers()
+    const run = executeReviewRun({ ...runnerInput(root, snapshot, ['claims']), deps: { ...runnerInput(root, snapshot, ['claims']).deps, adapter } })
+    await vi.runAllTimersAsync()
+    const outcome = await run
     const record = outcome.records[0]!
     expect(record.status).toBe('error')
     expect(record.errorCode).toBe('REVIEW_INVALID')
     expect(recordReusable(record, new Set(['HIST-01']))).toBe(false)
     // §11.3: the invalid record never enters the cache — a second run dispatches again.
     const before = adapter.state.dispatches
-    const second = await executeReviewRun({ ...runnerInput(root, snapshot, ['claims']), requestId: 'req-2', deps: { ...runnerInput(root, snapshot, ['claims']).deps, adapter } })
+    const run2 = executeReviewRun({ ...runnerInput(root, snapshot, ['claims']), requestId: 'req-2', deps: { ...runnerInput(root, snapshot, ['claims']).deps, adapter } })
+    await vi.runAllTimersAsync()
+    const second = await run2
+    vi.useRealTimers()
     expect(second.records[0]?.inputHash).toBeDefined()
     expect(adapter.state.dispatches).toBeGreaterThan(before)
   })
@@ -103,10 +110,15 @@ describe('D14 — budget / timeout / cancel / restart', () => {
         setTimeout(() => reject(new Error('dispatch hung')), 50)
       }),
     ])
-    const outcome = await executeReviewRun({
+    // B.2.4: transient timeouts now retry with a 5s backoff — virtualize the sleeps.
+    vi.useFakeTimers()
+    const run = executeReviewRun({
       ...runnerInput(root, snapshot, ['claims']),
       deps: { ...runnerInput(root, snapshot, ['claims']).deps, adapter, budget: { ...BUDGET, callTimeoutMs: 10 } },
     })
+    await vi.runAllTimersAsync()
+    const outcome = await run
+    vi.useRealTimers()
     const record = outcome.records[0]!
     expect(record.errorCode).toBe('REVIEW_UNAVAILABLE')
     // Reserved output was charged for the timed-out task (§13).
@@ -162,6 +174,31 @@ describe('D19 — a new request cannot brush out a fail without adjudication', (
     // The original fail record is NOT silently cleared.
     const failRecords = new ReviewRunStore(root, snapshot.projectId).readRecords(first.runId)
     expect(failRecords.some((record) => record.response?.targets[0]?.checks[0]?.result === 'fail')).toBe(true)
+  })
+})
+
+describe('B.2.1 — error records carry structured errorDetail', () => {
+  it('a dispatch failure surfaces message, httpStatus and retryAttempts in the error record', async () => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const boom: Error & { detail?: { message: string; httpStatus: number; providerCode: string } } =
+      new Error('review dispatch failed: upstream unavailable')
+    boom.detail = { message: 'upstream unavailable', httpStatus: 503, providerCode: 'overloaded' }
+    const adapter = fakeAdapter([() => { throw boom }])
+    // Transport errors are transient → one retry with a 5s backoff — virtualize the sleeps.
+    vi.useFakeTimers()
+    const run = executeReviewRun({ ...runnerInput(root, snapshot, ['claims']), deps: { ...runnerInput(root, snapshot, ['claims']).deps, adapter } })
+    await vi.runAllTimersAsync()
+    const outcome = await run
+    vi.useRealTimers()
+    const record = outcome.records[0]!
+    expect(record.errorCode).toBe('REVIEW_UNAVAILABLE')
+    expect(record.errorDetail).toMatchObject({
+      message: 'review dispatch failed: upstream unavailable',
+      httpStatus: 503,
+      providerCode: 'overloaded',
+      retryAttempts: 2,
+    })
   })
 })
 
