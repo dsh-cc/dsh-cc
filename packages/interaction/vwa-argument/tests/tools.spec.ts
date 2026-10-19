@@ -7,7 +7,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerArgumentTools, type ToolDefinition } from '../src/tools.ts'
 import type { ToolDeps } from '../src/tools.ts'
 import { CaptureRegistry } from '../src/sources.ts'
@@ -17,6 +17,10 @@ import { DEFAULT_VWA_ARGUMENT_SETTINGS } from '../src/settings.ts'
 import { BUDGET, claimsResponse, fakeAdapter } from './review-helpers.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import type { ReviewMessages } from '../src/review-adapter.ts'
+
+// Background review fixtures must advance the caller's retry backoffs.
+beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }))
+afterEach(() => vi.useRealTimers())
 
 /** One dispatch step: pass the target claim it was called with (or throw). */
 function stepFor(req: { messages: ReviewMessages }, tokens: number, throwWhen: () => boolean = () => false) {
@@ -50,10 +54,11 @@ function reviewCollaborators(script: Parameters<typeof fakeAdapter>[0]) {
 
 /** Poll the run request until it leaves queued/running. */
 async function settle(store: ReviewRunStore, runId: string, attempts = 500) {
+  await vi.runAllTimersAsync()
   for (let i = 0; i < attempts; i++) {
     const request = store.readRequest(runId)
     if (request && request.status !== 'queued' && request.status !== 'running') return request
-    await new Promise((resolve) => setTimeout(resolve, 5))
+    await vi.advanceTimersByTimeAsync(5)
   }
   throw new Error(`run ${runId} did not settle`)
 }

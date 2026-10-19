@@ -5,6 +5,7 @@
  * @module tests/review-call
  */
 
+import { getEventListeners } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ReviewConfigDriftError, ReviewInvalidError, ReviewTruncatedError,
@@ -202,5 +203,57 @@ describe('B.2.4 — class-aware retry loop', () => {
       if (row.seq === firstSeq) expect(row.retryOf).toBeUndefined()
       else expect(row.retryOf).toBe(`t1:${firstSeq}`)
     }
+  })
+})
+
+
+describe('retry termination diagnostics and cleanup', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it.each(['local', 'shared'] as const)('%s budget rejection preserves completed attempts', async (kind) => {
+    const b = budget({ maxCallsPerRun: kind === 'local' ? 2 : 40 })
+    const tracker = new BudgetTracker(b)
+    const rows: Omit<UsageRow, 'runId'>[] = []
+    const caller = new ReviewCaller(
+      stubAdapter(100, [() => ({ raw: '{}' })]), tracker, b,
+      new AbortController().signal, (row) => rows.push(row), 48_000,
+      kind === 'shared' ? (_tokens, reserve) => tracker.calls < 2 && reserve() : undefined,
+    )
+    const pending = caller.call('t1', MESSAGES, {}, () => { throw new ReviewInvalidError('bad') })
+      .catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await pending).toMatchObject({ code: 'BUDGET_EXHAUSTED', retryAttempts: 2 })
+    expect(rows.filter((row) => row.kind === 'reserved')).toHaveLength(2)
+    expect(tracker.calls).toBe(2)
+  })
+
+  it('a rejected initial reservation reports zero attempts', async () => {
+    const b = budget({ maxCallsPerRun: 0 })
+    const caller = new ReviewCaller(stubAdapter(100, [() => ({ raw: '{}' })]),
+      new BudgetTracker(b), b, new AbortController().signal, () => {})
+    await expect(caller.call('t1', MESSAGES, {}, parseOk))
+      .rejects.toMatchObject({ code: 'BUDGET_EXHAUSTED', retryAttempts: 0 })
+  })
+
+  it.each(['success', 'exhausted', 'cancelled'] as const)('cleans backoff listeners after %s', async (outcome) => {
+    const ac = new AbortController()
+    const b = budget()
+    const caller = new ReviewCaller(stubAdapter(100, [() => ({ raw: '{}' })]),
+      new BudgetTracker(b), b, ac.signal, () => {})
+    let parses = 0
+    const pending = caller.call('t1', MESSAGES, {}, () => {
+      if (++parses === 2 && outcome === 'success') return { ok: 1 }
+      throw new ReviewInvalidError('bad')
+    }).catch((error: unknown) => error)
+    if (outcome === 'cancelled') {
+      await vi.advanceTimersByTimeAsync(500)
+      expect(getEventListeners(ac.signal, 'abort')).toHaveLength(1)
+      ac.abort()
+    }
+    await vi.runAllTimersAsync()
+    await pending
+    expect(getEventListeners(ac.signal, 'abort')).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

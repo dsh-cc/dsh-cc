@@ -259,7 +259,7 @@ export interface ReviewErrorDetail {
   providerRetryAfterMs?: number
   /** Last 2000 chars of model raw output (parse/schema failures only). */
   rawResponseTail?: string
-  /** How many attempts were made (1 = no retry). */
+  /** How many attempts were made (0 = refused before dispatch, 1 = no retry). */
   retryAttempts: number
 }
 

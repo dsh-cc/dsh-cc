@@ -178,6 +178,29 @@ describe('D19 — a new request cannot brush out a fail without adjudication', (
 })
 
 describe('B.2.1 — error records carry structured errorDetail', () => {
+  it('persists the actual attempts when the next retry exceeds the budget', async () => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fakeAdapter([() => ({ raw: '{' })])
+    const input = runnerInput(root, snapshot, ['claims'])
+    vi.useFakeTimers()
+    try {
+      const run = executeReviewRun({ ...input, deps: {
+        ...input.deps, adapter, budget: { ...BUDGET, maxCallsPerRun: 2 },
+      } })
+      await vi.runAllTimersAsync()
+      const outcome = await run
+      expect(adapter.state.dispatches).toBe(2)
+      expect(outcome.records[0]).toMatchObject({
+        errorCode: 'BUDGET_EXHAUSTED', errorDetail: { retryAttempts: 2 },
+      })
+      const saved = new ReviewRunStore(root, snapshot.projectId).readRecords(input.runId)
+      expect(saved[0]?.errorDetail?.retryAttempts).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('a dispatch failure surfaces message, httpStatus and retryAttempts in the error record', async () => {
     const { root } = workspace()
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })

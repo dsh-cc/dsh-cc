@@ -48,16 +48,20 @@ export class ReviewCaller {
   /** Abortable backoff sleep (B.2.4). */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      const abort = () => reject(this.signal.reason ?? new Error('review cancelled'))
-      if (this.signal.aborted) return abort()
+      if (this.signal.aborted) {
+        reject(this.signal.reason ?? new Error('review cancelled'))
+        return
+      }
+      const abort = () => {
+        clearTimeout(timer)
+        this.signal.removeEventListener('abort', abort)
+        reject(this.signal.reason ?? new Error('review cancelled'))
+      }
       const timer = setTimeout(() => {
         this.signal.removeEventListener('abort', abort)
         resolve()
       }, ms)
-      this.signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        abort()
-      }, { once: true })
+      this.signal.addEventListener('abort', abort, { once: true })
     })
   }
 
@@ -94,9 +98,8 @@ export class ReviewCaller {
         return true
       }
       if (!(this.reserveShared ? this.reserveShared(counted.tokens, reserve) : reserve()))
-        throw new ReviewBudgetError('review budget exhausted')
+        throw this.attach(new ReviewBudgetError('review budget exhausted'), attempts)
       const seq = this.tracker.calls
-
       const timeout = new AbortController()
       const signal = AbortSignal.any([this.signal, timeout.signal])
       let timer: ReturnType<typeof setTimeout> | undefined
