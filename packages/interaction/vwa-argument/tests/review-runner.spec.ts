@@ -178,6 +178,20 @@ describe('D19 — a new request cannot brush out a fail without adjudication', (
 })
 
 describe('B.2.1 — error records carry structured errorDetail', () => {
+  it('persists zero attempts for a context refusal before dispatch', async () => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fakeAdapter([() => ({ raw: '{}' })])
+    const input = runnerInput(root, snapshot, ['claims'])
+    const outcome = await executeReviewRun({ ...input, deps: { ...input.deps, adapter, maxContextChars: 1 } })
+    expect(adapter.state.dispatches).toBe(0)
+    expect(outcome.records[0]).toMatchObject({
+      errorCode: 'CONTEXT_TOO_LARGE', errorDetail: { retryAttempts: 0 },
+    })
+    const saved = new ReviewRunStore(root, snapshot.projectId).readRecords(input.runId)
+    expect(saved[0]?.errorDetail?.retryAttempts).toBe(0)
+  })
+
   it('persists the actual attempts when the next retry exceeds the budget', async () => {
     const { root } = workspace()
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })

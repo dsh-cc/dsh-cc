@@ -211,6 +211,47 @@ describe('retry termination diagnostics and cleanup', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
+  it.each(['local', 'shared'] as const)('settles completed usage before backoff releases the %s budget to a peer', async (kind) => {
+    const b = budget({ maxOutputTokensPerRun: 3010 })
+    const tracker = new BudgetTracker(b)
+    const ledger = new Map<string, number>()
+    const rows: Omit<UsageRow, 'runId'>[] = []
+    const usage = (row: Omit<UsageRow, 'runId'>) => {
+      rows.push(row)
+      ledger.set(`${row.taskId}:${row.seq}`, row.outputTokens)
+    }
+    const reserveShared = (_tokens: number, reserve: () => boolean) =>
+      [...ledger.values()].reduce((sum, tokens) => sum + tokens, 0) + b.maxOutputTokensPerCall <= b.maxOutputTokensPerRun && reserve()
+    const adapter = stubAdapter(100, [() => ({ raw: '{}', outputTokens: 10 })])
+    const first = new ReviewCaller(adapter, tracker, b, new AbortController().signal, usage,
+      48_000, kind === 'shared' ? reserveShared : undefined)
+    let parses = 0
+    const pending = first.call('first', MESSAGES, {}, () => {
+      if (++parses === 1) throw new ReviewInvalidError('bad shape')
+      return { ok: 1 }
+    }).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(0) // first dispatch completed, inside its 1s backoff
+    const settledBeforeBackoff = rows.some((row) => row.taskId === 'first' && row.kind === 'actual')
+    const peer = new ReviewCaller(adapter, kind === 'local' ? tracker : new BudgetTracker(b), b,
+      new AbortController().signal, usage, 48_000, kind === 'shared' ? reserveShared : undefined)
+    const peerResult = await peer.call('peer', MESSAGES, {}, JSON.parse).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    await pending
+    expect(settledBeforeBackoff).toBe(true)
+    expect(peerResult).toMatchObject({ raw: {}, outputTokens: 10 })
+  })
+
+  it('reports zero attempts when context is refused before dispatch', async () => {
+    const b = budget()
+    const prepare = vi.fn()
+    const adapter = { ...stubAdapter(100, []), prepareReviewCall: prepare }
+    const caller = new ReviewCaller(adapter, new BudgetTracker(b), b,
+      new AbortController().signal, () => {}, 1)
+    await expect(caller.call('t1', MESSAGES, {}, parseOk))
+      .rejects.toMatchObject({ code: 'CONTEXT_TOO_LARGE', retryAttempts: 0 })
+    expect(prepare).not.toHaveBeenCalled()
+  })
+
   it.each(['local', 'shared'] as const)('%s budget rejection preserves completed attempts', async (kind) => {
     const b = budget({ maxCallsPerRun: kind === 'local' ? 2 : 40 })
     const tracker = new BudgetTracker(b)

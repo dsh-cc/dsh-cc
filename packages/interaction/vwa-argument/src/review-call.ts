@@ -72,7 +72,7 @@ export class ReviewCaller {
     parse: (raw: string) => T,
   ): Promise<CallResult<T>> {
     if (messages.reduce((n, m) => n + m.content.length, 0) > this.maxContextChars) {
-      throw new ReviewContextError('review context exceeds the configured limit; no evidence was truncated')
+      throw this.attach(new ReviewContextError('review context exceeds the configured limit; no evidence was truncated'), 0)
     }
     let request = messages
     let attempts = 0
@@ -104,6 +104,7 @@ export class ReviewCaller {
       const signal = AbortSignal.any([this.signal, timeout.signal])
       let timer: ReturnType<typeof setTimeout> | undefined
       let result: { raw: string; inputTokens?: number; outputTokens?: number } | undefined
+      let retry: { error: unknown; backoff: number } | undefined
       try {
         // B.2.3: scale with input size (2ms/token), floored at the setting, capped at 4x.
         // counted.tokens may be a byte upper bound when no tokenizer — still the safe direction.
@@ -149,17 +150,7 @@ export class ReviewCaller {
         if (cls === 'truncation' || cls === 'permanent' || attempts >= maxAttempts || this.tracker.wallExceeded()) {
           throw this.attach(error, attempts)
         }
-        // Backoff respects the wall clock: skip the sleep when the remaining wall is shorter,
-        // skip the retry entirely when no wall remains.
-        if (this.tracker.remainingMs() > 0 && this.tracker.remainingMs() < backoff) {
-          // proceed immediately without sleeping
-        } else {
-          try {
-            await this.sleep(backoff)
-          } catch {
-            throw this.attach(error, attempts) // aborted during backoff — surface the attempt's error
-          }
-        }
+        retry = { error, backoff }
         if (cls === 'invalid') {
           request = [
             ...messages,
@@ -181,6 +172,19 @@ export class ReviewCaller {
           method: counted.method,
           ...(seq !== firstSeq ? { retryOf: `${taskId}:${firstSeq}` } : {}),
         })
+      }
+      // Settle usage and persist the ledger before yielding to backoff, so peers
+      // can reserve against actual spend rather than this completed call's cap.
+      if (retry) {
+        const remaining = this.tracker.remainingMs()
+        if (remaining <= 0) throw this.attach(retry.error, attempts)
+        if (remaining >= retry.backoff) {
+          try {
+            await this.sleep(retry.backoff)
+          } catch {
+            throw this.attach(retry.error, attempts)
+          }
+        }
       }
     }
   }
