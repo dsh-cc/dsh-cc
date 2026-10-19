@@ -139,7 +139,8 @@ export function continueIncludesAudit(stages: ReviewStage[]): boolean {
  * widens reuse to any run and picks deterministically: most recent `endedAt`
  * first, tie-broken by recordHash (sha256 of the stable record) ascending.
  * A completed record with a `fail` verdict IS reusable (fail-stands) —
- * recordReusable implements that; no verdict filtering here.
+ * recordReusable implements that; no verdict filtering here. Disagreement
+ * marker copies are excluded in both modes.
  */
 export function reusableRecord(
   prior: ReviewRecord[],
@@ -148,7 +149,11 @@ export function reusableRecord(
   ownRuns: ReadonlySet<string>,
 ): ReviewRecord | undefined {
   const required = new Set(task.requiredRules.map((r) => r.ruleId))
-  const eligible = prior.filter((r) => recordReusable(r, required) && (continueMode || ownRuns.has(r.runId)))
+  // A disagreement marker is a runtime copy whose findings REPLACE the real
+  // judgment's; it shares endedAt/inputHash, so it must never be a reuse source.
+  const eligible = prior.filter(
+    (r) => r.kind !== 'disagreement' && recordReusable(r, required) && (continueMode || ownRuns.has(r.runId)),
+  )
   if (!continueMode) return eligible[0]
   return [...eligible].sort(
     (a, b) =>
