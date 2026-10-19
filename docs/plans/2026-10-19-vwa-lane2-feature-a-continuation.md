@@ -249,6 +249,11 @@ mismatch), as documented in the skill.
   size). A continue run whose semantic tasks and audit all have reusable
   completed records is refused with `NOTHING_TO_CONTINUE`, including
   `stage: "all"`.
+  The shared audit dependency digest includes every search log passed to
+  alignment, including project-wide searches outside semantic task
+  dependencies. Adding, editing or deleting a search invalidates both audit
+  reuse and delivery eligibility for the old audit. Audits written with the
+  previous digest must run again once.
 
 ### A.5 Cache key safety
 

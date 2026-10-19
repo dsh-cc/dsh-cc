@@ -119,6 +119,10 @@ export function auditDependencyDigest(snapshot: ProjectSnapshot, artifactId: Id,
       groups: snapshot.groups,
       arguments: snapshot.arguments,
       issues: snapshot.issues,
+      // Alignment receives all search logs, including project-wide searches
+      // outside semantic task dependencies. Both reuse and delivery must
+      // invalidate when these model-visible inputs change.
+      searches: snapshot.searches,
       upstream: deduplicateBySemanticHash(
         records.filter((r) => ['sources', 'support', 'claims', 'arguments'].includes(r.stage)),
       )
