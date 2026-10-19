@@ -662,3 +662,104 @@ describe('argument.update (§10.5)', () => {
     expect(result.data.contractChanged).toBe(true)
   })
 })
+
+/**
+ * A per-call review collaborator whose fake model answers by envelope stage:
+ * claims pass, extract finds nothing, align passes every required AUDIT rule.
+ * `dispatches` counts model calls per stage across every mount call.
+ */
+function stageAwareReview(dispatches: Record<string, number>) {
+  return () =>
+    reviewCollaborators([
+      (req) => {
+        const envelope = JSON.parse((req.messages[1] as { content: string }).content) as {
+          stage: string
+          targets?: { id: string }[]
+          requiredRules?: { targetId: string; ruleId: string }[]
+        }
+        dispatches[envelope.stage] = (dispatches[envelope.stage] ?? 0) + 1
+        if (envelope.stage === 'extract') return { raw: JSON.stringify({ items: [] }), inputTokens: 5 }
+        if (envelope.stage === 'align') {
+          const targetId = envelope.requiredRules![0]!.targetId
+          return {
+            raw: JSON.stringify({
+              stage: 'align', rubricVersion: 'humanities-v1', findings: [], alignment: [],
+              targets: [{
+                targetId,
+                checks: envelope.requiredRules!.map((r) => ({ ruleId: r.ruleId, result: 'pass', rationale: 'reviewed', evidenceIds: [] })),
+              }],
+            }),
+            inputTokens: 5,
+          }
+        }
+        return { raw: claimsResponse(envelope.targets![0]!.id, 'pass'), inputTokens: 5 }
+      },
+    ])
+}
+
+describe('argument.review continue with stage all (§A.2 audit reuse)', () => {
+  /** One claim plus a bound artifact; returns the revision after binding. */
+  async function boundProject(tools: Map<string, ToolDefinition>, workspace: ReturnType<typeof initWorkspace>, deps: ToolDeps) {
+    const update = tools.get('argument.update') as ToolDefinition
+    const made = (await call(update, {
+      projectId: workspace.projectId, expectedRevision: 1, requestId: `u-${uuid()}`,
+      input: { op: 'upsert', creates: [{ clientKey: 'c1', type: 'claim', body: CLAIM_BODY }], updates: [], deletes: [] },
+    })) as { data: { changedIds: string[] } }
+    const claimId = made.data.changedIds[0]!
+    deps.artifactTexts.set('report.md', 'The body states one fact.\n')
+    const bind = await call(update, {
+      projectId: workspace.projectId, expectedRevision: 2, requestId: `bind-${uuid()}`,
+      input: { op: 'bind-artifact', path: 'report.md', occurrences: occurrence(claimId), outline: [] },
+    })
+    expect(bind.ok).toBe(true)
+    return { revision: bind.revision as number, claimId }
+  }
+  /** The claim occurs at the same span in both artifact versions used below. */
+  const occurrence = (claimId: string) => [{ claimId, span: { start: 4, end: 8 }, exactText: 'body' }]
+
+  it('refuses NOTHING_TO_CONTINUE without a model call once every stage and the audit are complete', async () => {
+    const dispatches: Record<string, number> = {}
+    const { tools, workspace, deps } = mount({ review: stageAwareReview(dispatches) })
+    const { revision, claimId } = await boundProject(tools, workspace, deps)
+    const review = tools.get('argument.review') as ToolDefinition
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    const first = await call(review, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: 'all-first', input: { stage: 'all' },
+    })
+    expect((await settle(store, (first.data as { runId: string }).runId))?.status).toBe('completed')
+    expect(dispatches).toEqual({ claims: 1, extract: 1, align: 1 })
+    const again = await call(review, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: 'all-continue',
+      input: { stage: 'all', continue: true },
+    })
+    expect(again).toMatchObject({ ok: false, code: 'NOTHING_TO_CONTINUE', retryable: false })
+    expect(dispatches).toEqual({ claims: 1, extract: 1, align: 1 })
+    expect(store.findRunByRequestId(requestIdMap.get('all-continue')!)).toBeUndefined()
+  })
+
+  it('reruns only the audit when only the audit inputs (artifact bytes) changed', async () => {
+    const dispatches: Record<string, number> = {}
+    const { tools, workspace, deps } = mount({ review: stageAwareReview(dispatches) })
+    const { revision, claimId } = await boundProject(tools, workspace, deps)
+    const review = tools.get('argument.review') as ToolDefinition
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    const first = await call(review, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: 'all-1', input: { stage: 'all' },
+    })
+    await settle(store, (first.data as { runId: string }).runId)
+    deps.artifactTexts.set('report.md', 'The body states one fact, more carefully.\n')
+    const rebind = await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: 'rebind',
+      input: { op: 'bind-artifact', path: 'report.md', occurrences: occurrence(claimId), outline: [] },
+    })
+    expect(rebind.ok).toBe(true)
+    const next = await call(review, {
+      projectId: workspace.projectId, expectedRevision: rebind.revision, requestId: 'all-2',
+      input: { stage: 'all', continue: true },
+    })
+    expect(next.ok).toBe(true)
+    expect((await settle(store, (next.data as { runId: string }).runId))?.status).toBe('completed')
+    // Claims are reused; extract + align re-execute over the new bytes.
+    expect(dispatches).toEqual({ claims: 1, extract: 2, align: 2 })
+  })
+})

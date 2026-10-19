@@ -69,14 +69,23 @@ describe('continuation audit delivery', () => {
     })
     expect(report.checks.audit).toBe('pass')
 
-    // An audit-only continuation must also use current historical judgments,
-    // rather than hashing an empty list just because this run has no claims tasks.
+    // An audit-only continuation over unchanged inputs reuses the completed
+    // audit: its cache key hashes the current historical judgments (not an
+    // empty list), so it matches and nothing is re-executed.
+    const continueAdapter = fakeAdapter(auditSteps)
     const auditOnly = await executeReviewRun({
       ...base, stages: ['audit'], runId: `run_${randomUUID()}`, requestId: randomUUID(), continueMode: true,
+      deps: { root, adapter: continueAdapter, budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) },
+    })
+    expect(continueAdapter.state.dispatches).toBe(0)
+    expect(auditOnly.refusal).toMatchObject({ code: 'NOTHING_TO_CONTINUE' })
+    // A fresh audit-only run (no continue) also digests the historical judgments.
+    const fresh = await executeReviewRun({
+      ...base, stages: ['audit'], runId: `run_${randomUUID()}`, requestId: randomUUID(),
       deps: { root, adapter: fakeAdapter(auditSteps), budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) },
     })
-    expect(auditOnly.status).toBe('completed')
-    const latestAudit = auditOnly.records.find((r) => r.stage === 'extract')!
+    expect(fresh.status).toBe('completed')
+    const latestAudit = fresh.records.find((r) => r.stage === 'extract')!
     expect(latestAudit.dependencyDigest).toBe(auditDependencyDigest(snapshot, artifact.id, selected))
     expect(evaluateDelivery({
       root, snapshot, artifactId: artifact.id, text: artifact.text, records: allRecords(root, snapshot.projectId),
