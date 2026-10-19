@@ -26,15 +26,7 @@ import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-
 import { currentReviews } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
-import {
-  allRecords,
-  continueHasWork,
-  continueIncludesAudit,
-  frozenCoreSet,
-  nothingToContinue,
-  planContinueTasks,
-  reusableRecord,
-} from './review-continue.ts'
+import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
@@ -219,26 +211,26 @@ export async function executeReviewRun(input: {
       snapshot,
       ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
     })
-    // §A.2 guard (shared with the tool pre-check via planContinueTasks/
-    // continueHasWork): a continue run where EVERY planned task already has a
-    // reusable completed record refuses to re-execute anything. Audit stages
-    // always carry fresh work and suppress the guard.
-    if (
-      input.continueMode &&
-      !continueIncludesAudit(input.stages) &&
-      !continueHasWork({
-      planned: planContinueTasks({
-        root: deps.root,
-        adapter: deps.adapter,
-        contractHash: deps.contractHash,
-        snapshot,
-        stages: input.stages,
-        targetClaimIds: input.targetClaimIds,
-        ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
-      }),
-      history,
-    }))
-      return finish('completed', nothingToContinue())
+    // §A.2 guard, shared with the tool pre-check: a continue run where every
+    // planned task AND the requested audit already have reusable completed
+    // records refuses to re-execute anything. When work remains, the audit
+    // always re-executes: fresh upstream judgments change its dependency
+    // digest, so a completed audit can only be reused through this guard.
+    const continueInput = {
+      root: deps.root,
+      adapter: deps.adapter,
+      contractHash: deps.contractHash,
+      snapshot,
+      stages: input.stages,
+      targetClaimIds: input.targetClaimIds,
+      ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
+      ...(input.maxUnitChars === undefined ? {} : { maxUnitChars: input.maxUnitChars }),
+      ...(deps.maxContextChars === undefined ? {} : { maxContextChars: deps.maxContextChars }),
+    }
+    if (input.continueMode) {
+      const refusal = continuePreCheck(continueInput)
+      if (refusal) return finish('completed', refusal)
+    }
     for (const stage of input.stages) {
       input.signal.throwIfAborted()
       if (budget.wallExceeded()) return finish('incomplete')
@@ -246,6 +238,9 @@ export async function executeReviewRun(input: {
         if (!input.artifact) return finish('incomplete')
         if (input.artifact.text.length > (deps.maxArtifactChars ?? 120_000))
           throw new ReviewInvalidError('artifact exceeds review-max-artifact-chars; full audit refused')
+        // Audit and delivery must see the same current judgments, including
+        // prior second opinions; semantic digests collapse reused copies.
+        const auditRecords = currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records
         const audit = await executeAudit({
           adapter: deps.adapter,
           runId,
@@ -259,9 +254,7 @@ export async function executeReviewRun(input: {
           maxUnitChars: input.maxUnitChars ?? deps.maxContextChars ?? 48_000,
           signal: input.signal,
           caller,
-          // Audit and delivery must see the same current judgments, including
-          // prior second opinions; semantic digests collapse reused copies.
-          records: currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records,
+          records: auditRecords,
           coreClaimIds: [...frozenCore],
         })
         save(audit.extractionRecord)

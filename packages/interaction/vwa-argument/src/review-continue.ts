@@ -19,6 +19,7 @@ import { ReviewRunStore, cacheKey, recordReusable } from './review-run-store.ts'
 import { taskDependencyDigest } from './review-input.ts'
 import { currentReviews } from './review-current.ts'
 import { policyHash, promptHash } from './review-contract.ts'
+import { auditInputHash, effectiveAuditUnitChars, hasReusableAudit } from './audit-reuse.ts'
 import { fail, type Fail } from './store.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewRecord } from './types.ts'
@@ -68,8 +69,8 @@ export function frozenCoreSet(input: {
   return core
 }
 
-/** Plan every non-audit stage task with its cache key, over the persisted history as of now. */
-export function planContinueTasks(input: {
+/** Inputs shared by the tool pre-check and the runner guard. */
+export interface ContinuePlanInput {
   root: string
   adapter: Pick<ReviewModelAdapter, 'configFingerprint'>
   contractHash: Hash
@@ -77,7 +78,13 @@ export function planContinueTasks(input: {
   stages: ReviewStage[]
   targetClaimIds: Id[]
   artifact?: { id: Id; text: string }
-}): PlannedTask[] {
+  /** Audit unit sizing (same defaults as the runner) — part of the audit cache key. */
+  maxUnitChars?: number
+  maxContextChars?: number
+}
+
+/** Plan every non-audit stage task with its cache key, over the persisted history as of now. */
+export function planContinueTasks(input: ContinuePlanInput): PlannedTask[] {
   const index = buildReverseIndex(input.snapshot)
   const history = allRecords(input.root, input.snapshot.projectId)
   const configHash = sha256Hex(stableJson(input.adapter.configFingerprint()))
@@ -89,9 +96,7 @@ export function planContinueTasks(input: {
   })
   const out: PlannedTask[] = []
   for (const stage of input.stages) {
-    // §A.2 caveat: audit/align records are never reusable (recordReusable
-    // excludes 'extract'), so a continue run including 'audit' always has
-    // fresh work — the NOTHING_TO_CONTINUE guard naturally won't fire.
+    // The audit is keyed separately (audit-reuse.ts; see continueHasWork).
     if (stage === 'audit') continue
     const tasks = planStage({ stage, snapshot: input.snapshot, index, targetClaimIds: input.targetClaimIds, core })
     for (const task of tasks) {
@@ -115,22 +120,33 @@ export function planContinueTasks(input: {
   return out
 }
 
-/** §A.2 guard: true when at least one planned task lacks a reusable completed record. */
-export function continueHasWork(input: { planned: PlannedTask[]; history: ReviewRecord[] }): boolean {
-  return input.planned.some(({ inputHash, task }) => {
-    const required = new Set(task.requiredRules.map((r) => r.ruleId))
-    return !input.history.some((r) => r.inputHash === inputHash && recordReusable(r, required))
-  })
-}
-
 /**
- * True when the requested stages include the audit stage: audit tasks are
- * planned and executed outside the per-target cache-key path, and their
- * records are never reusable, so such a continuation ALWAYS has fresh work —
- * the NOTHING_TO_CONTINUE guard must not fire (§A.2 "every planned task").
+ * §A.2 guard: true when at least one planned semantic task lacks a reusable
+ * completed record, or the requested audit has no reusable completed audit
+ * under its full input key (artifact bytes, audit dependency digest, core set,
+ * contract, policy, prompts, reviewer config, unit size).
  */
-export function continueIncludesAudit(stages: ReviewStage[]): boolean {
-  return stages.includes('audit')
+export function continueHasWork(input: ContinuePlanInput): boolean {
+  const history = allRecords(input.root, input.snapshot.projectId)
+  const semantic = planContinueTasks(input).some(({ inputHash, task }) => {
+    const required = new Set(task.requiredRules.map((r) => r.ruleId))
+    return !history.some((r) => r.inputHash === inputHash && r.kind !== 'disagreement' && recordReusable(r, required))
+  })
+  if (semantic || !input.stages.includes('audit')) return semantic
+  // Without a bound artifact the runner ends 'incomplete'; never refuse that as "nothing to do".
+  if (input.artifact === undefined) return true
+  const configHash = sha256Hex(stableJson(input.adapter.configFingerprint()))
+  const core = frozenCoreSet({ root: input.root, index: buildReverseIndex(input.snapshot), snapshot: input.snapshot, artifact: input.artifact })
+  const inputHash = auditInputHash({
+    snapshot: input.snapshot,
+    artifact: input.artifact,
+    records: currentReviews(input.snapshot, history, input.targetClaimIds, configHash).records,
+    coreClaimIds: core,
+    contractHash: input.contractHash,
+    reviewerConfigHash: configHash,
+    unitChars: effectiveAuditUnitChars(input),
+  })
+  return !hasReusableAudit(history, inputHash)
 }
 
 /**
@@ -163,23 +179,11 @@ export function reusableRecord(
 
 /**
  * §A.2 synchronous tool pre-check: undefined when the continue run has work;
- * otherwise the NOTHING_TO_CONTINUE refusal. Uses the same planning logic as
- * the runner's guard, so the tool and the runner cannot diverge.
+ * otherwise the NOTHING_TO_CONTINUE refusal. The runner's in-run guard calls
+ * the same function, so the tool and the runner cannot diverge.
  */
-export function continuePreCheck(input: {
-  root: string
-  adapter: Pick<ReviewModelAdapter, 'configFingerprint'>
-  contractHash: Hash
-  snapshot: ProjectSnapshot
-  stages: ReviewStage[]
-  targetClaimIds: Id[]
-  artifact?: { id: Id; text: string }
-}): Fail | undefined {
-  // Audit stages always carry fresh work (§A.2; see continueIncludesAudit).
-  if (continueIncludesAudit(input.stages)) return undefined
-  const planned = planContinueTasks(input)
-  if (continueHasWork({ planned, history: allRecords(input.root, input.snapshot.projectId) })) return undefined
-  return nothingToContinue()
+export function continuePreCheck(input: ContinuePlanInput): Fail | undefined {
+  return continueHasWork(input) ? undefined : nothingToContinue()
 }
 
 /** The single NOTHING_TO_CONTINUE refusal shared by the tool pre-check, the runner guard and replay. */
