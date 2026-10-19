@@ -2,7 +2,7 @@
 
 - Document version: 1.1
 - Date: 2026-10-16
-- Status: Design specification; reviewed by three blind seats (see § Review ledger); not implemented. This document defines target behavior; it does not claim that any feature is implemented or has been tested.
+- Status: implemented — landed as the `@dsh-cc/vwa-argument` package via PR #255 (argument data/storage foundations), PR #256 (review/audit/grading engine), and PR #257 (tools/report/receipt/preset delivery), all merged 2026-10-17; the lane-2 tool-schema bypass was fixed in PR #262. Reviewed by three blind seats (see § Review ledger). Known follow-ups are tracked as the lane-2 hardening features under `docs/plans/2026-10-19-vwa-lane2-feature-*.md`.
 - Scope: VWA lane 2 — historical analysis, literary criticism, research syntheses, and argumentative essays that require evidence support.
 - Code baseline: `dsh-cc/dsh-cc@29a157b71194e274db47cdd551092e0c714b562f`. The baseline and the working branch MUST be re-diffed before implementation begins.
 - Preceding design: [Verifiable Workspace Agent (fixed baseline)](https://github.com/dsh-cc/dsh-cc/blob/29a157b71194e274db47cdd551092e0c714b562f/docs/plans/2026-10-12-verifiable-workspace-agent.md). The blob SHA of the original design file is listed in Section 25, for content identification only.
