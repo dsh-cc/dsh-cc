@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { replayReviewRequest } from '../src/review-request.ts'
 import { continuePreCheck, reusableRecord } from '../src/review-continue.ts'
@@ -279,5 +279,31 @@ describe('deterministic record selection (§A.3.2)', () => {
     expect(recordReusable(failed, required)).toBe(true)
     expect(reusableRecord([failed], { requiredRules: [{ targetId: claim.id, ruleId: 'HIST-01' }] } as never, true, new Set()))
       .toBe(failed)
+  })
+})
+
+describe('continue planning I/O (§A.2 pre-check cost)', () => {
+  it('reads each persisted run\'s records once per pre-check and once per continue run', async () => {
+    const { root } = workspace()
+    const a = makeClaim('fact'), b = makeClaim('fact')
+    const snapshot = makeSnapshot({ claims: [a, b] })
+    const artifact = { id: `art_${randomUUID()}`, path: 'docs/a.md', text: '# Body\n\nSome text.\n' }
+    const prior = await executeReviewRun(runner(root, snapshot, fakeAdapter([step({ tokens: 5, throwFor: b.id })])))
+    const spy = vi.spyOn(ReviewRunStore.prototype, 'readRecords')
+    try {
+      continuePreCheck({
+        root, adapter: fakeAdapter([]), contractHash: 'c'.repeat(64), snapshot,
+        stages: ['claims', 'audit'], targetClaimIds: [a.id, b.id], artifact, budget: BUDGET,
+      })
+      expect(spy.mock.calls.filter(([runId]) => runId === prior.runId)).toHaveLength(1)
+      spy.mockClear()
+      await executeReviewRun({
+        ...runner(root, snapshot, fakeAdapter([step({ tokens: 5 })])),
+        stages: ['claims', 'audit'], artifact, continueMode: true,
+      })
+      expect(spy.mock.calls.filter(([runId]) => runId === prior.runId)).toHaveLength(1)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
