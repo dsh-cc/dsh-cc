@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest'
 import { registerArgumentTools, type ToolDefinition } from '../src/tools.ts'
 import type { ToolDeps } from '../src/tools.ts'
 import { CaptureRegistry } from '../src/sources.ts'
-import { CONTRACT, initWorkspace, uuid } from './helpers.ts'
+import { CONTRACT, initWorkspace, makeWorkspace, uuid } from './helpers.ts'
+import { freezeReviewSettings } from '../src/review-config.ts'
+import { DEFAULT_VWA_ARGUMENT_SETTINGS } from '../src/settings.ts'
 import { BUDGET, claimsResponse, fakeAdapter } from './review-helpers.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import type { ReviewMessages } from '../src/review-adapter.ts'
@@ -58,12 +60,11 @@ async function settle(store: ReviewRunStore, runId: string, attempts = 500) {
 import { fail } from '../src/store.ts'
 
 /** Mount the tools against a fresh initialized workspace; return them by name. */
-function mount(overrides: Partial<ToolDeps> = {}): {
+function mount(overrides: Partial<ToolDeps> = {}, workspace = initWorkspace()): {
   tools: Map<string, ToolDefinition>
   workspace: ReturnType<typeof initWorkspace>
   deps: ToolDeps
 } {
-  const workspace = initWorkspace()
   const captured: ToolDefinition[] = []
   const deps: ToolDeps = {
     workspaceRoot: () => workspace.root,
@@ -719,7 +720,11 @@ describe('argument.review continue with stage all (§A.2 audit reuse)', () => {
 
   it('refuses NOTHING_TO_CONTINUE without a model call once every stage and the audit are complete', async () => {
     const dispatches: Record<string, number> = {}
-    const { tools, workspace, deps } = mount({ review: stageAwareReview(dispatches) })
+    // A non-default frozen context size: the audit unit size is part of the
+    // audit key, so the pre-check must size units exactly as the runner does.
+    const made = makeWorkspace()
+    made.store.init(CONTRACT, freezeReviewSettings({ ...DEFAULT_VWA_ARGUMENT_SETTINGS, 'review-max-context-chars-per-task': 20_000 }))
+    const { tools, workspace, deps } = mount({ review: stageAwareReview(dispatches) }, made)
     const { revision, claimId } = await boundProject(tools, workspace, deps)
     const review = tools.get('argument.review') as ToolDefinition
     const store = new ReviewRunStore(workspace.root, workspace.projectId)
