@@ -239,6 +239,7 @@ export class ReviewRunStore {
 export function cacheKey(input: {
   stage: string
   targetRefs: { id: Id; entityVersion: number }[]
+  requiredRules: { targetId: Id; ruleId: string }[]
   dependencyDigest: Hash
   contractHash: Hash
   policyHash: Hash
@@ -249,6 +250,9 @@ export function cacheKey(input: {
     stableJson({
       stage: input.stage,
       targetRefs: input.targetRefs,
+      requiredRules: [...input.requiredRules].sort(
+        (a, b) => a.targetId.localeCompare(b.targetId) || a.ruleId.localeCompare(b.ruleId),
+      ),
       dependencyDigest: input.dependencyDigest,
       contractHash: input.contractHash,
       policyHash: input.policyHash,
