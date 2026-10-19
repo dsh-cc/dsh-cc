@@ -32,6 +32,7 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
+import { continuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
 
@@ -279,16 +280,20 @@ export function registerArgumentTools(
         description:
       'Run a lane-2 semantic review stage (sources|support|claims|arguments|all) over the current graph ' +
       'revision. Registers a background run and returns immediately; the run NEVER modifies the body or ' +
-      'the author graph. Repeating the same requestId returns the run state without re-calling the model.',
+      'the author graph. Repeating the same requestId returns the run state without re-calling the model. ' +
+      'Pass input.continue=true (with a NEW requestId) after an incomplete run to re-execute only tasks ' +
+      'without a reusable completed record; refused with NOTHING_TO_CONTINUE when everything already passed.',
     parameters: {
       ...common(),
-      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage}' },
+      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage, continue?: boolean}' },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
       const args = guard(raw)
       if ('ok' in args) return args
-      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string }
+      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string; continue?: boolean }
+      if (body.continue !== undefined && typeof body.continue !== 'boolean')
+        return fail('SCHEMA_INVALID', 'input.continue must be a boolean when present')
       const stage = body.stage
       if (stage === undefined || (stage !== 'all' && stage !== 'audit' && !REVIEW_STAGES.has(stage))) {
         return fail('SCHEMA_INVALID', `stage must be sources|support|claims|arguments|all|audit, got ${String(stage)}`)
@@ -399,6 +404,21 @@ export function registerArgumentTools(
           return fail('INPUT_CHANGED', `artifact text for ${bound.path} is not available to the runtime`, true)
         artifact = { id: bound.id, path: bound.path, text }
       }
+      // §A.2: continue on a fully completed plan is refused BEFORE reserving the
+      // request, via the shared pre-check (the runner's guard uses the same logic).
+      const refusal =
+        body.continue === true
+          ? continuePreCheck({
+              root,
+              adapter: review.adapter,
+              contractHash: sha256Hex(stableJson(snapshot.contract)),
+              snapshot,
+              stages,
+              targetClaimIds: resolveTargetClaimIds(snapshot, body),
+              ...(artifact === undefined ? {} : { artifact: { id: artifact.id, text: artifact.text } }),
+            })
+          : undefined
+      if (refusal !== undefined) return refusal
       runStore.reserveRequest(runId, {
         schemaVersion: 1,
         requestId: args.requestId,
@@ -435,6 +455,7 @@ export function registerArgumentTools(
           snapshot,
           signal,
           ...(artifact === undefined ? {} : { artifact }),
+          ...(body.continue === true ? { continueMode: true } : {}),
         })
       })
       if (!started) {
@@ -454,26 +475,6 @@ export function registerArgumentTools(
       }),
     ),
   )
-}
-
-/**
- * §10.6 target defaulting: an empty targetClaimIds means every claim with an
- * occurrence in the bound artifact (the named one, or the only one); with no
- * bound artifact, every project claim.
- */
-export function resolveTargetClaimIds(
-  snapshot: ProjectSnapshot,
-  body: { artifactId?: string; targetClaimIds?: string[] },
-): Id[] {
-  if (body.targetClaimIds !== undefined && body.targetClaimIds.length > 0) return body.targetClaimIds
-  const artifact =
-    body.artifactId !== undefined
-      ? snapshot.artifacts.find((candidate) => candidate.id === body.artifactId)
-      : snapshot.artifacts.length === 1
-        ? snapshot.artifacts[0]
-        : undefined
-  if (artifact !== undefined) return [...new Set(artifact.occurrences.map((occurrence) => occurrence.claimId))]
-  return snapshot.claims.map((claim) => claim.id)
 }
 
 /** True when the lane-2 feature gate is on in the raw settings file (§13). */

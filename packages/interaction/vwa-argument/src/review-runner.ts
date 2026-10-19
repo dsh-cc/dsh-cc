@@ -3,13 +3,12 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson } from './schema.ts'
-import { planStage, computeCoreSet, type ReviewStage, type ReviewTask } from './review-plan.ts'
+import { planStage, type ReviewStage, type ReviewTask } from './review-plan.ts'
 import {
   ReviewRunStore,
   cacheKey,
   detectDisagreement,
   disagreementFinding,
-  recordReusable,
 } from './review-run-store.ts'
 import {
   ReviewInvalidError,
@@ -27,10 +26,20 @@ import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-
 import { currentReviews } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
+import {
+  allRecords,
+  continueHasWork,
+  continueIncludesAudit,
+  frozenCoreSet,
+  planContinueTasks,
+  reusableRecord,
+} from './review-continue.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
 export { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor } from './review-contract.ts'
+// Re-exported for existing importers; the implementation lives in review-continue.ts.
+export { collectCachedRecords } from './review-continue.ts'
 
 /** Public envelope constructor retained for tools inspecting planned inputs. */
 export function buildEnvelope(input: {
@@ -89,6 +98,8 @@ export async function executeReviewRun(input: {
   signal: AbortSignal
   artifact?: { id: Id; path: string; text: string }
   maxUnitChars?: number
+  /** §A.2: continue mode — reuse completed records across requestIds. */
+  continueMode?: boolean
 }): Promise<ReviewRunOutcome> {
   const { deps, snapshot, runId } = input
   const store = new ReviewRunStore(deps.root, snapshot.projectId)
@@ -197,17 +208,32 @@ export async function executeReviewRun(input: {
         for (const ev of snapshot.evidence.filter((e) => e.sourceId === source.id))
           validateEvidenceAgainstSnapshot(ev, text)
       }
-    const frozenCore = computeCoreSet({
+    const frozenCore = frozenCoreSet({
+      root: deps.root,
       index,
-      artifactText: input.artifact?.text ?? '',
-      requiredQuestionTexts: snapshot.contract.requiredQuestions.map((q) => q.text),
+      snapshot,
+      ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
     })
-    // Previous extraction can add coreness for a subsequent run over the same body.
-    if (input.artifact)
-      for (const r of history) {
-        if (r.stage !== 'align' || r.artifactHash !== sha256Hex(input.artifact.text)) continue
-        for (const id of r.coreClaimIds ?? []) if (index.claims.has(id)) frozenCore.add(id)
-      }
+    // §A.2 guard (shared with the tool pre-check via planContinueTasks/
+    // continueHasWork): a continue run where EVERY planned task already has a
+    // reusable completed record refuses to re-execute anything. Audit stages
+    // always carry fresh work and suppress the guard.
+    if (
+      input.continueMode &&
+      !continueIncludesAudit(input.stages) &&
+      !continueHasWork({
+      planned: planContinueTasks({
+        root: deps.root,
+        adapter: deps.adapter,
+        contractHash: deps.contractHash,
+        snapshot,
+        stages: input.stages,
+        targetClaimIds: input.targetClaimIds,
+        ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
+      }),
+      history,
+    }))
+      return finish('completed')
     for (const stage of input.stages) {
       input.signal.throwIfAborted()
       if (budget.wallExceeded()) return finish('incomplete')
@@ -255,6 +281,7 @@ export async function executeReviewRun(input: {
             const key = cacheKey({
               stage,
               targetRefs: task.targetRefs,
+              requiredRules: task.requiredRules,
               dependencyDigest: dep,
               contractHash: deps.contractHash,
               policyHash: policyHash(),
@@ -263,11 +290,20 @@ export async function executeReviewRun(input: {
             })
             const prior = history.filter((r) => r.inputHash === key)
             const ownRuns = new Set(requestRuns(deps.root, snapshot.projectId, input.requestId))
-            const reusable = prior.find(
-              (r) => ownRuns.has(r.runId) && recordReusable(r, new Set(task.requiredRules.map((r) => r.ruleId))),
-            )
+            const reusable = reusableRecord(prior, task, input.continueMode === true, ownRuns)
             if (reusable) {
               save({ ...reusable, runId })
+              // §A.3.5: reused records appear in the ledger with zero tokens.
+              if (input.continueMode === true)
+                store.appendUsage(runId, {
+                  runId,
+                  taskId: task.taskId,
+                  seq: budget.calls,
+                  kind: 'reused',
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  method: 'tokenizer',
+                })
               return
             }
             const envelope = taskEnvelope({
@@ -405,6 +441,9 @@ export async function executeReviewRun(input: {
       )
         return finish('incomplete')
     }
+    // §A.3.6: in continue mode a run reaches 'completed' only when every
+    // planned task has a fresh or reused completed record — any task without
+    // one fails the stage loop and finishes 'incomplete' via existing logic.
     return finish(coreDiscovered ? 'incomplete' : 'completed')
   } catch (error) {
     const stage = input.stages.at(-1) ?? 'audit'
@@ -415,17 +454,6 @@ export async function executeReviewRun(input: {
   }
 }
 import { randomUUID as cryptoUuid } from 'node:crypto'
-function allRecords(root: string, projectId: string): ReviewRecord[] {
-  const store = new ReviewRunStore(root, projectId)
-  try {
-    return readdirSync(join(root, '.dsh', 'vwa', projectId, 'review-runs')).flatMap((id) => store.readRecords(id))
-  } catch {
-    return []
-  }
-}
-export function collectCachedRecords(root: string, projectId: string, key: Hash): ReviewRecord[] {
-  return allRecords(root, projectId).filter((r) => r.inputHash === key)
-}
 function requestRuns(root: string, projectId: string, requestId: string): Id[] {
   const store = new ReviewRunStore(root, projectId)
   try {

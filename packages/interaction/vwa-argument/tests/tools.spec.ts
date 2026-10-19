@@ -12,7 +12,49 @@ import { registerArgumentTools, type ToolDefinition } from '../src/tools.ts'
 import type { ToolDeps } from '../src/tools.ts'
 import { CaptureRegistry } from '../src/sources.ts'
 import { CONTRACT, initWorkspace, uuid } from './helpers.ts'
-import { BUDGET, fakeAdapter } from './review-helpers.ts'
+import { BUDGET, claimsResponse, fakeAdapter } from './review-helpers.ts'
+import { ReviewRunStore } from '../src/review-run-store.ts'
+import type { ReviewMessages } from '../src/review-adapter.ts'
+
+/** One dispatch step: pass the target claim it was called with (or throw). */
+function stepFor(req: { messages: ReviewMessages }, tokens: number, throwWhen: () => boolean = () => false) {
+  const targetId = (JSON.parse((req.messages[1] as { content: string }).content) as { targets: { id: string }[] })
+    .targets[0]!.id
+  if (throwWhen()) throw new Error('boom')
+  return { raw: claimsResponse(targetId, 'pass'), inputTokens: tokens }
+}
+
+/** A per-call review collaborator whose adapter consumes the given script. */
+function reviewWithScript(
+  script: Parameters<typeof fakeAdapter>[0],
+): () => ReturnType<typeof reviewCollaborators> {
+  return () => reviewCollaborators(script)
+}
+function reviewCollaborators(script: Parameters<typeof fakeAdapter>[0]) {
+  return {
+    adapter: fakeAdapter(script),
+    budget: BUDGET,
+    tasks: {
+      start: (_taskId: string, _label: string, run: (signal: AbortSignal) => Promise<void>) => {
+        void run(new AbortController().signal)
+        return true
+      },
+      cancel: () => {},
+      get: () => 'settled',
+      emitProgress: () => {},
+    },
+  }
+}
+
+/** Poll the run request until it leaves queued/running. */
+async function settle(store: ReviewRunStore, runId: string, attempts = 500) {
+  for (let i = 0; i < attempts; i++) {
+    const request = store.readRequest(runId)
+    if (request && request.status !== 'queued' && request.status !== 'running') return request
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error(`run ${runId} did not settle`)
+}
 import { fail } from '../src/store.ts'
 
 /** Mount the tools against a fresh initialized workspace; return them by name. */
@@ -157,6 +199,131 @@ describe('tool registration (§13 gate surface)', () => {
     })
     expect(result.ok).toBe(false)
     expect(result.code).toBe('STORE_IO_FAILED')
+  })
+
+  it('input.continue threads continueMode and reuses completed records across requestIds (§A.3.7)', async () => {
+    const { tools, workspace } = mount({
+      review: () => {
+        let scriptDispatches = 0
+        return reviewCollaborators([
+          (req) => {
+            if (scriptDispatches++ > 0) throw new Error('boom')
+            return stepFor(req, 10)
+          },
+        ])
+      },
+    })
+    const update = tools.get('argument.update') as ToolDefinition
+    await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'u-1',
+      input: {
+        op: 'upsert',
+        creates: [
+          { clientKey: 'c1', type: 'claim', body: CLAIM_BODY },
+          { clientKey: 'c2', type: 'claim', body: { ...CLAIM_BODY, text: 'Claim two' } },
+        ],
+        updates: [],
+        deletes: [],
+      },
+    })
+    // Run 1: one claim passes, the other fails → incomplete.
+    const first = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-first',
+      input: { stage: 'claims' },
+    })
+    expect(first.ok).toBe(true)
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    const firstRunId = (first.data as { runId: string }).runId
+    const firstSettled = await settle(store, firstRunId)
+    expect(firstSettled?.status).toBe('incomplete')
+    // Continue with a new requestId: only the failed claim is re-executed.
+    const second = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-continue',
+      input: { stage: 'claims', continue: true },
+    })
+    expect(second.ok).toBe(true)
+    const secondRunId = (second.data as { runId: string }).runId
+    expect((await settle(store, secondRunId))?.status).toBe('completed')
+    // §A.3.5: the reused record appears in the new run's usage ledger.
+    expect(store.readUsage(secondRunId).some((row) => row.kind === 'reused')).toBe(true)
+  })
+
+  it('refuses input.continue when every planned task already has a completed record (§A.2)', async () => {
+    const { tools, workspace } = mount({
+      review: reviewWithScript([(req) => stepFor(req, 5)]),
+    })
+    const update = tools.get('argument.update') as ToolDefinition
+    await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'u-1',
+      input: { op: 'upsert', creates: [{ clientKey: 'c1', type: 'claim', body: CLAIM_BODY }], updates: [], deletes: [] },
+    })
+    const first = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-first',
+      input: { stage: 'claims' },
+    })
+    expect(first.ok).toBe(true)
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    expect((await settle(store, (first.data as { runId: string }).runId))?.status).toBe('completed')
+    const second = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-continue',
+      input: { stage: 'claims', continue: true },
+    })
+    expect(second).toMatchObject({ ok: false, code: 'NOTHING_TO_CONTINUE', retryable: false })
+    expect(second.message).toContain('second opinion')
+  })
+
+  it('absent input.continue keeps the fresh-run behavior (re-executes completed tasks)', async () => {
+    const { tools, workspace } = mount({
+      review: reviewWithScript([(req) => stepFor(req, 5)]),
+    })
+    const update = tools.get('argument.update') as ToolDefinition
+    await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'u-1',
+      input: { op: 'upsert', creates: [{ clientKey: 'c1', type: 'claim', body: CLAIM_BODY }], updates: [], deletes: [] },
+    })
+    const first = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-1',
+      input: { stage: 'claims' },
+    })
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    await settle(store, (first.data as { runId: string }).runId)
+    const second = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-2',
+      input: { stage: 'claims' },
+    })
+    expect(second.ok).toBe(true)
+    // A fresh requestId without continue re-executed the completed task (spent tokens).
+    const secondState = await settle(store, (second.data as { runId: string }).runId)
+    expect(secondState?.inputTokens).toBeGreaterThan(0)
+  })
+
+  it('rejects a non-boolean input.continue', async () => {
+    const { tools, workspace } = mount()
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'r-x',
+      input: { stage: 'claims', continue: 'yes' },
+    })
+    expect(result).toMatchObject({ ok: false, code: 'SCHEMA_INVALID' })
   })
 })
 

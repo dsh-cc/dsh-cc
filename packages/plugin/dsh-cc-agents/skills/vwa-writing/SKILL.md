@@ -90,6 +90,13 @@ If the job fails, the budget ends, or required evidence is absent, stop the revi
 Report the unresolved items and the actual status.
 Do not invent a completed review or a replacement grade.
 
+After a run ends `incomplete`, `budget-exhausted`, or `cancelled`, call
+`argument.review` again with a new requestId and `input.continue: true`
+to re-execute only the failed tasks. This is not a repair cycle and does
+not count against the repair budget. Do not pass `continue: true` when
+you want a second opinion on completed tasks — use a fresh request
+without `continue`.
+
 ## 6. Make and present the report
 
 Call `argument.report` for the current artifact with `format: "markdown"` and `write: true`.
