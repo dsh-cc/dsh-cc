@@ -4,7 +4,7 @@
  * crash-recovery repair leg (§3.3). Tests never touch the real ~/.dsh or
  * ~/.claude — every leg uses tmp homes via the PathInputs seam.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, basename, join } from 'node:path'
@@ -256,15 +256,44 @@ describe('home resolution (§3.3)', () => {
 })
 
 describe('consumer join (§5 item 1 selection rule on a real two-row file)', () => {
+  // appendedAt is Date.now() in the sync listener (capture.ts). Two captures
+  // can land in one real millisecond, so the clock is controlled: distinct
+  // stamps here, an explicitly forced tie in the next case.
   it('rows from two constructions of the same id select per the §3.4 rule', async () => {
     const deps = makeDeps()
-    await capture(deps, 'resume')
-    await capture(deps, 'resume')
+    const clock = vi.spyOn(Date, 'now')
+    try {
+      clock.mockReturnValueOnce(1_000_000)
+      await capture(deps, 'resume')
+      clock.mockReturnValueOnce(1_000_005)
+      await capture(deps, 'resume')
+    } finally {
+      clock.mockRestore()
+    }
     const rows = readRows('resume')
     expect(rows.map((row) => row.seq)).toEqual([1, 2])
     const [first, second] = rows
+    expect(first!.appendedAt).toBe(1_000_000)
+    expect(second!.appendedAt).toBe(1_000_005)
     expect(selectRow(rows, first!.appendedAt - 1)).toBeNull()
     expect(selectRow(rows, first!.appendedAt)?.seq).toBe(1)
     expect(selectRow(rows, second!.appendedAt)?.seq).toBe(2)
   })
+
+  it('same-millisecond constructions tie-break by seq (§3.4: later row wins)', async () => {
+    const deps = makeDeps()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    try {
+      await capture(deps, 'resume')
+      await capture(deps, 'resume')
+    } finally {
+      clock.mockRestore()
+    }
+    const rows = readRows('resume')
+    expect(rows.map((row) => row.seq)).toEqual([1, 2])
+    expect(rows.map((row) => row.appendedAt)).toEqual([1_000_000, 1_000_000])
+    expect(selectRow(rows, 999_999)).toBeNull()
+    expect(selectRow(rows, 1_000_000)?.seq).toBe(2)
+  })
+
 })
