@@ -215,6 +215,7 @@ export async function executeReviewRun(input: {
       root: deps.root,
       index,
       snapshot,
+      history,
       ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
     })
     // §A.2 guard, shared with the tool pre-check: a continue run where every
@@ -234,6 +235,7 @@ export async function executeReviewRun(input: {
       ...(deps.maxContextChars === undefined ? {} : { maxContextChars: deps.maxContextChars }),
       budget: deps.budget,
       runId,
+      history,
     }
     if (input.continueMode) {
       const refusal = continuePreCheck(continueInput)

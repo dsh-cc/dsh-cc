@@ -48,13 +48,15 @@ export function collectCachedRecords(root: string, projectId: string, key: Hash)
 
 /**
  * Frozen core set: contract coreness plus coreness discovered by prior align
- * records over the same artifact bytes (§A.3.4).
+ * records over the same artifact bytes (§A.3.4). Pass `history` when the
+ * caller already read it; otherwise it is read here.
  */
 export function frozenCoreSet(input: {
   root: string
   index: ReturnType<typeof buildReverseIndex>
   snapshot: ProjectSnapshot
   artifact?: { id: Id; text: string }
+  history?: ReviewRecord[]
 }): Set<Id> {
   const core = computeCoreSet({
     index: input.index,
@@ -63,7 +65,7 @@ export function frozenCoreSet(input: {
   })
   if (input.artifact) {
     const artifactHash = sha256Hex(input.artifact.text)
-    for (const r of allRecords(input.root, input.snapshot.projectId)) {
+    for (const r of input.history ?? allRecords(input.root, input.snapshot.projectId)) {
       if (r.stage !== 'align' || r.artifactHash !== artifactHash) continue
       for (const id of r.coreClaimIds ?? []) if (input.index.claims.has(id)) core.add(id)
     }
@@ -87,26 +89,44 @@ export interface ContinuePlanInput {
   budget?: ReviewBudget
   /** The run asking (runner guard): excluded from its own cycle's spend. */
   runId?: Id
+  /** Persisted history the caller already read (read once per check otherwise). */
+  history?: ReviewRecord[]
 }
 
-/** Plan every non-audit stage task with its cache key, over the persisted history as of now. */
-export function planContinueTasks(input: ContinuePlanInput): PlannedTask[] {
+/** Everything planning derives from history, computed once per check. */
+interface PlanningContext {
+  history: ReviewRecord[]
+  index: ReturnType<typeof buildReverseIndex>
+  configHash: Hash
+  core: Set<Id>
+  /** Current upstream judgments over history (planning only sees persisted records). */
+  upstream: ReviewRecord[]
+}
+
+function planningContext(input: ContinuePlanInput): PlanningContext {
+  const history = input.history ?? allRecords(input.root, input.snapshot.projectId)
   const index = buildReverseIndex(input.snapshot)
-  const history = allRecords(input.root, input.snapshot.projectId)
   const configHash = sha256Hex(stableJson(input.adapter.configFingerprint()))
   const core = frozenCoreSet({
     root: input.root,
     index,
     snapshot: input.snapshot,
+    history,
     ...(input.artifact ? { artifact: input.artifact } : {}),
   })
+  const upstream = currentReviews(input.snapshot, history, input.targetClaimIds, configHash).records
+  return { history, index, configHash, core, upstream }
+}
+
+/** Plan every non-audit stage task with its cache key, over the persisted history as of now. */
+export function planContinueTasks(input: ContinuePlanInput, context = planningContext(input)): PlannedTask[] {
+  const { index, configHash, core, upstream } = context
   const out: PlannedTask[] = []
   for (const stage of input.stages) {
     // The audit is keyed separately (audit-reuse.ts; see continueHasWork).
     if (stage === 'audit') continue
     const tasks = planStage({ stage, snapshot: input.snapshot, index, targetClaimIds: input.targetClaimIds, core })
     for (const task of tasks) {
-      const upstream = currentReviews(input.snapshot, history, input.targetClaimIds, configHash).records
       out.push({
         stage,
         task,
@@ -133,23 +153,22 @@ export function planContinueTasks(input: ContinuePlanInput): PlannedTask[] {
  * contract, policy, prompts, reviewer config, unit size).
  */
 export function continueHasWork(input: ContinuePlanInput): boolean {
-  const history = allRecords(input.root, input.snapshot.projectId)
-  const semantic = planContinueTasks(input).some(({ inputHash, task }) => {
+  const context = planningContext(input)
+  const { history } = context
+  const semantic = planContinueTasks(input, context).some(({ inputHash, task }) => {
     const required = new Set(task.requiredRules.map((r) => r.ruleId))
     return !history.some((r) => r.inputHash === inputHash && r.kind !== 'disagreement' && recordReusable(r, required))
   })
   if (semantic || !input.stages.includes('audit')) return semantic
   // Without a bound artifact the runner ends 'incomplete'; never refuse that as "nothing to do".
   if (input.artifact === undefined) return true
-  const configHash = sha256Hex(stableJson(input.adapter.configFingerprint()))
-  const core = frozenCoreSet({ root: input.root, index: buildReverseIndex(input.snapshot), snapshot: input.snapshot, artifact: input.artifact })
   const inputHash = auditInputHash({
     snapshot: input.snapshot,
     artifact: input.artifact,
-    records: currentReviews(input.snapshot, history, input.targetClaimIds, configHash).records,
-    coreClaimIds: core,
+    records: context.upstream,
+    coreClaimIds: context.core,
     contractHash: input.contractHash,
-    reviewerConfigHash: configHash,
+    reviewerConfigHash: context.configHash,
     unitChars: effectiveAuditUnitChars(input),
   })
   return !hasReusableAudit(history, inputHash)
