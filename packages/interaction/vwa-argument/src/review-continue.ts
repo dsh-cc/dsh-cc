@@ -232,8 +232,11 @@ export async function prepareContinuePreCheck(input: Parameters<typeof continueP
   try {
     await input.adapter.initialize?.(input.maxOutputTokens, input.signal)
   } catch {
+    // A cancelled request is final for this requestId (§10.1 table), never "retry".
+    if (input.signal.aborted) return fail('CANCELLED', 'the review request was cancelled during reviewer initialization', false)
     return fail('REVIEW_UNAVAILABLE', 'reviewer initialization failed; retry the request', true)
   }
+  if (input.signal.aborted) return fail('CANCELLED', 'the review request was cancelled during reviewer initialization', false)
   return continuePreCheck(input)
 }
 

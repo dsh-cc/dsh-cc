@@ -404,6 +404,12 @@ export function registerArgumentTools(
       // run meanwhile. Replay (or reject its payload) before reserving ours.
       const concurrent = replay()
       if (concurrent !== undefined) return concurrent
+      // §11.1 again after the await: an author write may have moved HEAD, which
+      // also makes a refusal computed over the old snapshot meaningless.
+      const current = store.readHead()
+      if (!current.ok) return current
+      if (current.data.head.revision !== args.expectedRevision)
+        return fail('REVISION_CONFLICT', `expectedRevision ${args.expectedRevision} is not HEAD ${current.data.head.revision}`, true)
       if (refusal !== undefined) return refusal
       runStore.reserveRequest(runId, {
         schemaVersion: 1,
