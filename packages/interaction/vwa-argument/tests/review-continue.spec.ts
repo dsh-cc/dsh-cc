@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { continuePreCheck, reusableRecord } from '../src/review-continue.ts'
-import { ReviewRunStore, recordReusable } from '../src/review-run-store.ts'
+import { ReviewRunStore, disagreementFinding, recordReusable } from '../src/review-run-store.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
 import type { ReviewRecord } from '../src/types.ts'
 import {
@@ -230,6 +230,34 @@ describe('deterministic record selection (§A.3.2)', () => {
     const hashes = [sha256Hex(stableJson(first)), sha256Hex(stableJson(second))].sort()
     const picked = reusableRecord([first, second], { requiredRules: [{ targetId: claim.id, ruleId: 'HIST-01' }] } as never, true, new Set())
     expect(sha256Hex(stableJson(picked!))).toBe(hashes[0])
+  })
+  it('never reuses the disagreement marker copy, even when it wins the endedAt/recordHash tie-break', () => {
+    // review-runner saves a disagreement marker as {...record, kind: 'disagreement'}
+    // with the SAME endedAt and inputHash, whose findings replace the judgment's.
+    // Construct the marker so its recordHash sorts first: the tie-break alone
+    // would pick it and the real findings would be lost.
+    const claim = makeClaim('fact')
+    const real = record('2026-10-19T00:00:00.000Z', 'fail', claim)
+    const realFinding = {
+      id: 'finding_00000000-0000-4000-8000-000000000000', code: 'HIST-01', targetIds: [claim.id], severity: 'major',
+      explanation: 'the record does not show the decision', evidenceIds: [], artifactSpans: [], repair: 'add-evidence',
+    }
+    real.response = { ...real.response!, findings: [realFinding] } as never
+    let marker: ReviewRecord | undefined
+    for (let i = 0; marker === undefined; i++) {
+      const candidate = {
+        ...real,
+        kind: 'disagreement' as const,
+        response: { ...real.response!, findings: [{ ...disagreementFinding([claim.id]), id: `finding_00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}` }] },
+      } as ReviewRecord
+      if (sha256Hex(stableJson(candidate)) < sha256Hex(stableJson(real))) marker = candidate
+    }
+    const task = { requiredRules: [{ targetId: claim.id, ruleId: 'HIST-01' }] } as never
+    for (const prior of [[real, marker], [marker, real]]) {
+      const picked = reusableRecord(prior, task, true, new Set())
+      expect(picked?.kind).toBeUndefined()
+      expect(picked?.response?.findings).toEqual([realFinding])
+    }
   })
   it('fail records are reusable (fail-stands)', () => {
     const claim = makeClaim('fact')
