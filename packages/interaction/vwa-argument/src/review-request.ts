@@ -1,5 +1,5 @@
 /** Replay a reserved review request without initializing or dispatching a model. */
-import { fail } from './store.ts'
+import { fail, type Fail } from './store.ts'
 import type { ReviewRunStore } from './review-run-store.ts'
 import type { Hash, Id } from './types.ts'
 import type { JsonValue } from './schema.ts'
@@ -17,6 +17,9 @@ export function replayReviewRequest(input: {
   if (existing.payloadHash !== undefined && existing.payloadHash !== input.payloadHash)
     return fail('IDEMPOTENCY_CONFLICT', 'requestId was used with a different review payload')
   const outcome = store.readOutcome(existing.runId)
+  // A run that refused to execute replays its refusal, never an empty review.
+  const refusal = (outcome as { refusal?: Fail } | undefined)?.refusal
+  if (refusal?.ok === false) return fail(refusal.code, refusal.message, refusal.retryable, { runId: existing.runId })
   return {
     ok: true as const,
     projectId: input.projectId,

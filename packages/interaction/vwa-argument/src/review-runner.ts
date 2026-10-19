@@ -21,7 +21,7 @@ import {
 import { BudgetTracker, type ReviewBudget } from './review-tasks.ts'
 import { ReviewCaller, ReviewBudgetError } from './review-call.ts'
 import { executeAudit } from './audit.ts'
-import { ProjectStore } from './store.ts'
+import { ProjectStore, type Fail } from './store.ts'
 import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-input.ts'
 import { currentReviews } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
@@ -31,6 +31,7 @@ import {
   continueHasWork,
   continueIncludesAudit,
   frozenCoreSet,
+  nothingToContinue,
   planContinueTasks,
   reusableRecord,
 } from './review-continue.ts'
@@ -86,6 +87,8 @@ export interface ReviewRunOutcome {
   newCoreDiscovered?: boolean
   newClaimProposals?: unknown[]
   auditMetrics?: { extractedAtomicClaims: number; mappedAtomicClaims: number }
+  /** Set when the run refused to execute anything (replay returns this failure). */
+  refusal?: Fail
 }
 /** Run independently of the authoring turn. No graph or artifact writes. */
 export async function executeReviewRun(input: {
@@ -129,7 +132,7 @@ export async function executeReviewRun(input: {
   let coreDiscovered = false,
     newClaimProposals: unknown[] = [],
     auditMetrics: ReviewRunOutcome['auditMetrics']
-  const finish = (status: ReviewJobStatus): ReviewRunOutcome => {
+  const finish = (status: ReviewJobStatus, refusal?: Fail): ReviewRunOutcome => {
     const totals = { inputTokens: budget.inputTokens, outputTokens: budget.outputTokens, calls: budget.calls }
     store.writeOutcome(runId, {
       status,
@@ -138,6 +141,7 @@ export async function executeReviewRun(input: {
       newClaimProposals,
       ...(coreDiscovered ? { newCoreDiscovered: true } : {}),
       ...(auditMetrics ? { auditMetrics } : {}),
+      ...(refusal ? { refusal } : {}),
     })
     store.writeRequest(runId, {
       ...request,
@@ -155,6 +159,7 @@ export async function executeReviewRun(input: {
       ...totals,
       ...(coreDiscovered ? { newCoreDiscovered: true } : {}),
       ...(auditMetrics ? { auditMetrics } : {}),
+      ...(refusal ? { refusal } : {}),
     }
   }
   const caller = new ReviewCaller(
@@ -233,7 +238,7 @@ export async function executeReviewRun(input: {
       }),
       history,
     }))
-      return finish('completed')
+      return finish('completed', nothingToContinue())
     for (const stage of input.stages) {
       input.signal.throwIfAborted()
       if (budget.wallExceeded()) return finish('incomplete')

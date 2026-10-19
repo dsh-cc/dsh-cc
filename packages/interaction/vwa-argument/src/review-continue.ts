@@ -179,6 +179,11 @@ export function continuePreCheck(input: {
   if (continueIncludesAudit(input.stages)) return undefined
   const planned = planContinueTasks(input)
   if (continueHasWork({ planned, history: allRecords(input.root, input.snapshot.projectId) })) return undefined
+  return nothingToContinue()
+}
+
+/** The single NOTHING_TO_CONTINUE refusal shared by the tool pre-check, the runner guard and replay. */
+export function nothingToContinue(): Fail {
   return fail(
     'NOTHING_TO_CONTINUE',
     'All planned tasks already have completed records. Use a fresh request (without continue) for an explicit second opinion.',
