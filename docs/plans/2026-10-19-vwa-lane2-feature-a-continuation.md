@@ -211,6 +211,27 @@ mismatch), as documented in the skill.
   (retryable: false) before reservation when one more call does not fit.
   Continuing after `budget-exhausted` is therefore useful only when the cycle
   still has spend left (for example a wall-clock stop). See `review-cycle.ts`.
+  - Each admitted request persists `cycleId` and `cycleSequence`. A fresh
+    request uses its run ID as its cycle ID and increments the project-local
+    sequence. A continuation binds to the latest admitted cycle. The runner
+    preserves the queued request's identity and admission timestamp, even if
+    another fresh request is admitted before it starts. Clock values and
+    random run IDs never determine cycle membership.
+  - Admission and per-call budget reservation use the same exclusive-create
+    filesystem lock, separate from the author write lock. Before every model
+    attempt (including retries and audit calls), the caller reads reconciled
+    cycle spend, checks the exact counted input and reserved output, and
+    persists its reservation before releasing that lock. No await or model
+    dispatch occurs inside the critical section. Concurrent runs and separate
+    processes therefore share one allowance; a losing reservation dispatches
+    no call and ends `budget-exhausted`. Pre-checks are advisory snapshots;
+    the per-call reservation is authoritative.
+  - Requests written before cycle IDs existed are conservatively charged to
+    one legacy cycle. Their original ordering cannot be recovered reliably,
+    so no legacy spend is dropped based on tied clocks or UUID ordering.
+    A fresh request opens a separate identified cycle. Reconciled in-flight
+    reservations still count after a crash; the lock follows the existing
+    dead-holder reclaim rule and is never reclaimed merely by age.
 - Audit reuse (post-review amendment). Audit records carry the full audit
   identity as `inputHash` (artifact bytes, audit dependency digest, frozen
   core set, contract, policy, extract/align prompts, reviewer config, unit

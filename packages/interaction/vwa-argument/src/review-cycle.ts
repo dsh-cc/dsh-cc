@@ -1,10 +1,10 @@
 /**
  * Review-cycle budget (§13, §A.4): a continuation never grants a fresh budget.
  *
- * A review cycle is the project's most recent fresh request (one without
- * `continue`) plus every continue request after it. All runs of a cycle share
+ * A fresh request (one without `continue`) opens an identified review cycle;
+ * continuations bind to the latest cycle at admission. All runs of a cycle share
  * ONE frozen budget for model calls, input tokens and output tokens; a
- * continue run receives only what the cycle has left. Wall-clock time stays
+ * continue run can reserve only what the cycle has left. Wall-clock time stays
  * per run (a liveness limit, not spend). A continuation whose cycle cannot
  * fit one more call is refused with BUDGET_EXHAUSTED before anything is
  * reserved. A fresh request (a second opinion, or a review after a repair)
@@ -19,7 +19,8 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { ReviewRunStore } from './review-run-store.ts'
-import { fail, type Fail } from './store.ts'
+import { fail, VwaFail, type Fail } from './store.ts'
+import { acquireLock, releaseLock } from './lock.ts'
 import type { ReviewBudget } from './review-budget.ts'
 import type { Id } from './types.ts'
 
@@ -29,34 +30,105 @@ export interface CycleUsage {
   outputTokens: number
 }
 
-/** Spend of the current review cycle, excluding `excludeRunId` (the run asking). */
-export function cycleUsage(root: string, projectId: Id, excludeRunId?: Id): CycleUsage {
+type Request = Parameters<ReviewRunStore['writeRequest']>[1]
+type CycleRequest = Request & { cycleId: Id; cycleSequence: number }
+const LEGACY_CYCLE = 'legacy-before-cycle-ids'
+
+function requests(root: string, projectId: Id): Request[] {
   const store = new ReviewRunStore(root, projectId)
-  let runIds: string[]
+  let ids: string[]
   try {
-    runIds = readdirSync(join(root, '.dsh', 'vwa', projectId, 'review-runs'))
-  } catch {
-    runIds = []
+    ids = readdirSync(join(root, '.dsh', 'vwa', projectId, 'review-runs'))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error // Never turn an unreadable ledger into free budget.
   }
-  const requests = runIds
-    .filter((id) => id !== excludeRunId)
-    .flatMap((id) => {
-      const request = store.loadRequest(id)
-      return request ? [request] : []
-    })
-    .sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.runId.localeCompare(b.runId))
-  let start = 0
-  requests.forEach((request, i) => {
-    if (request.continue !== true) start = i
+  return ids.flatMap((id) => {
+    const request = store.loadRequest(id)
+    return request ? [request] : []
   })
-  return requests.slice(start).reduce<CycleUsage>(
-    (sum, r) => ({
+}
+
+function latestCycle(all: Request[]): { cycleId: Id; cycleSequence: number } {
+  const latest = all.reduce<Request | undefined>(
+    (best, r) => (r.cycleSequence ?? 0) > (best?.cycleSequence ?? 0) ? r : best, undefined,
+  )
+  return { cycleId: latest?.cycleId ?? LEGACY_CYCLE, cycleSequence: latest?.cycleSequence ?? 0 }
+}
+
+/** Short cross-process critical section: no model calls or awaits while held. */
+function withBudgetLock<T>(root: string, projectId: Id, action: () => T): T {
+  const dir = join(root, '.dsh', 'vwa', projectId, 'review-budget')
+  const refusal = acquireLock(dir)
+  if (refusal) throw new VwaFail(refusal)
+  try { return action() } finally { releaseLock(dir) }
+}
+
+/**
+ * Assign cycle membership atomically at admission, before a host may queue
+ * the run. Fresh requests open a monotonic cycle; continuations bind to the
+ * latest admitted cycle. A runner preserves its queued identity, even if a
+ * newer fresh request has since opened another cycle. Wall clocks and UUID
+ * ordering never determine membership.
+ */
+export function reserveCycleRequest(
+  root: string, projectId: Id, runId: Id, request: Request,
+): CycleRequest | Fail {
+  try {
+    return withBudgetLock(root, projectId, () => {
+      const store = new ReviewRunStore(root, projectId)
+      const prior = store.readRequest(runId)
+      const latest = latestCycle(requests(root, projectId))
+      const identity = prior?.cycleId !== undefined
+        ? { cycleId: prior.cycleId, cycleSequence: prior.cycleSequence ?? 0 }
+        : request.continue === true
+          ? latest
+          : { cycleId: runId, cycleSequence: latest.cycleSequence + 1 }
+      const reserved = { ...request, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
+      store.reserveRequest(runId, reserved)
+      return reserved
+    })
+  } catch (error) {
+    if (error instanceof VwaFail) return error.fail
+    return fail('STORE_IO_FAILED', `review cycle admission failed: ${String(error)}`, true)
+  }
+}
+
+/**
+ * Spend of a specific cycle, or the latest admitted one. An asking run stays
+ * bound to its own cycle and is excluded from the returned spend. Legacy
+ * requests have no reliable cycle identity: conservatively charge ALL of
+ * them to one legacy cycle. A new fresh request opens an independent cycle.
+ */
+export function cycleUsage(root: string, projectId: Id, excludeRunId?: Id, cycleId?: Id): CycleUsage {
+  const all = requests(root, projectId)
+  const own = all.find((r) => r.runId === excludeRunId)
+  const selected = cycleId ?? (own ? own.cycleId ?? LEGACY_CYCLE : latestCycle(all).cycleId)
+  return all.filter((r) => r.runId !== excludeRunId && (r.cycleId ?? LEGACY_CYCLE) === selected)
+    .reduce<CycleUsage>((sum, r) => ({
       calls: sum.calls + r.calls,
       inputTokens: sum.inputTokens + r.inputTokens,
       outputTokens: sum.outputTokens + r.outputTokens,
-    }),
-    { calls: 0, inputTokens: 0, outputTokens: 0 },
-  )
+    }), { calls: 0, inputTokens: 0, outputTokens: 0 })
+}
+
+/**
+ * Check aggregate spend and persist the caller's reservation in ONE critical
+ * section. The callback must synchronously reserve locally and append its
+ * durable usage row BEFORE returning. Other runs see that row before they
+ * can reserve; a crash after it is written still counts against the cycle.
+ */
+export function reserveCycleCall(
+  root: string, projectId: Id, cycleId: Id, budget: ReviewBudget, inputTokens: number,
+  reserve: () => boolean,
+): boolean {
+  return withBudgetLock(root, projectId, () => {
+    const used = cycleUsage(root, projectId, undefined, cycleId)
+    if (used.calls + 1 > budget.maxCallsPerRun ||
+        used.inputTokens + inputTokens > budget.maxInputTokensPerRun ||
+        used.outputTokens + budget.maxOutputTokensPerCall > budget.maxOutputTokensPerRun) return false
+    return reserve()
+  })
 }
 
 /** The budget a continue run may still spend in its cycle. */

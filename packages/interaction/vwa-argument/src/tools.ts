@@ -35,6 +35,7 @@ import { executeReviewRun } from './review-runner.ts'
 import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
 import { replayReviewRequest } from './review-request.ts'
+import { reserveCycleRequest } from './review-cycle.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
 
 /** The minimal registration face of the harness tool runtime (no hard dep). */
@@ -411,7 +412,7 @@ export function registerArgumentTools(
       if (current.data.head.revision !== args.expectedRevision)
         return fail('REVISION_CONFLICT', `expectedRevision ${args.expectedRevision} is not HEAD ${current.data.head.revision}`, true)
       if (refusal !== undefined) return refusal
-      runStore.reserveRequest(runId, {
+      const reserved = reserveCycleRequest(root, args.projectId, runId, {
         schemaVersion: 1,
         requestId: args.requestId,
         runId,
@@ -426,6 +427,7 @@ export function registerArgumentTools(
         calls: 0,
         startedAt: new Date().toISOString(),
       })
+      if ('ok' in reserved) return reserved
       const started = tasks.start(taskId, runId, async (signal) => {
         await executeReviewRun({
           deps: {

@@ -27,7 +27,7 @@ import { currentReviews } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
-import { cycleUsage, remainingCycleBudget } from './review-cycle.ts'
+import { reserveCycleCall, reserveCycleRequest } from './review-cycle.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
@@ -100,11 +100,9 @@ export async function executeReviewRun(input: {
   const { deps, snapshot, runId } = input
   const store = new ReviewRunStore(deps.root, snapshot.projectId)
   store.initRun(runId)
-  // §A.4: a continue run spends only what its review cycle has left (review-cycle.ts).
-  const runBudget = input.continueMode
-    ? remainingCycleBudget(deps.budget, cycleUsage(deps.root, snapshot.projectId, runId))
-    : deps.budget
-  const budget = new BudgetTracker(runBudget, deps.now)
+  // Per-run counters enforce liveness; every dispatch also reserves against
+  // the aggregate cycle ledger under a cross-process lock.
+  const budget = new BudgetTracker(deps.budget, deps.now)
   const records: ReviewRecord[] = [],
     findings: unknown[] = []
   const history = allRecords(deps.root, snapshot.projectId)
@@ -125,8 +123,8 @@ export async function executeReviewRun(input: {
     calls: 0,
     startedAt,
   }
-  store.reserveRequest(runId, request)
-  Object.assign(request, store.readRequest(runId))
+  const reserved = reserveCycleRequest(deps.root, snapshot.projectId, runId, request)
+  if (!('ok' in reserved)) Object.assign(request, reserved)
   let coreDiscovered = false,
     newClaimProposals: unknown[] = [],
     auditMetrics: ReviewRunOutcome['auditMetrics']
@@ -163,7 +161,7 @@ export async function executeReviewRun(input: {
   const caller = new ReviewCaller(
     deps.adapter,
     budget,
-    runBudget,
+    deps.budget,
     input.signal,
     (row) => {
       store.appendUsage(runId, { runId, ...row })
@@ -175,6 +173,9 @@ export async function executeReviewRun(input: {
       })
     },
     deps.maxContextChars ?? 48_000,
+    (tokens, reserve) => 'ok' in reserved ? false : reserveCycleCall(
+      deps.root, snapshot.projectId, reserved.cycleId, deps.budget, tokens, reserve,
+    ),
   )
   let configHash = ''
   const save = (record: ReviewRecord) => {
@@ -199,6 +200,7 @@ export async function executeReviewRun(input: {
     errorCode: input.signal.aborted ? 'CANCELLED' : ((error as { code?: string })?.code ?? 'REVIEW_UNAVAILABLE'),
   })
   try {
+    if ('ok' in reserved) return finish('incomplete', reserved)
     input.signal.throwIfAborted()
     await deps.adapter.initialize?.(deps.budget.maxOutputTokensPerCall, input.signal)
     configHash = sha256Hex(stableJson(deps.adapter.configFingerprint()))

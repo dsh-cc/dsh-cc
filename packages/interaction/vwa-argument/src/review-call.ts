@@ -22,6 +22,7 @@ export class ReviewCaller {
     readonly signal: AbortSignal,
     readonly usage: (row: Omit<UsageRow, 'runId'>) => void,
     readonly maxContextChars = 48_000,
+    readonly reserveShared?: (inputTokens: number, reserve: () => boolean) => boolean,
   ) {}
 
   async call<T>(
@@ -37,17 +38,23 @@ export class ReviewCaller {
     for (let attempt = 0; attempt < 2; attempt++) {
       this.signal.throwIfAborted()
       const counted = await this.adapter.countInput([...request, { role: 'user', content: JSON.stringify(schema) }])
-      if (!this.tracker.reserve(counted.tokens)) throw new ReviewBudgetError('review budget exhausted')
+      // Local counters and the durable ledger row must be updated inside the
+      // shared cycle lock, before another run can observe the available spend.
+      const reserve = () => {
+        if (!this.tracker.reserve(counted.tokens)) return false
+        this.usage({
+          taskId,
+          seq: this.tracker.calls,
+          kind: 'reserved',
+          inputTokens: counted.tokens,
+          outputTokens: this.budget.maxOutputTokensPerCall,
+          method: counted.method,
+        })
+        return true
+      }
+      if (!(this.reserveShared ? this.reserveShared(counted.tokens, reserve) : reserve()))
+        throw new ReviewBudgetError('review budget exhausted')
       const seq = this.tracker.calls
-      // Persist the reserve BEFORE dispatch, so a process crash cannot make an in-flight call free.
-      this.usage({
-        taskId,
-        seq,
-        kind: 'reserved',
-        inputTokens: counted.tokens,
-        outputTokens: this.budget.maxOutputTokensPerCall,
-        method: counted.method,
-      })
       const timeout = new AbortController()
       const signal = AbortSignal.any([this.signal, timeout.signal])
       let timer: ReturnType<typeof setTimeout> | undefined

@@ -1,9 +1,11 @@
 /** Review-cycle accounting must survive tied clocks and overlapping requests. */
+import { fork } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { cycleUsage } from '../src/review-cycle.ts'
+import { cycleUsage, reserveCycleRequest } from '../src/review-cycle.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { BUDGET, claimsResponse, fakeAdapter, makeClaim, makeSnapshot } from './review-helpers.ts'
@@ -83,14 +85,89 @@ describe('review-cycle budget regressions', () => {
       await run('run_b_new', 2, false)
     } finally { release() }
     expect((await continuation).status).toBe('completed')
-    const first = store.readRequest('run_z_first') as { cycleId?: string } | undefined
-    const continued = store.readRequest('run_a_continue') as { cycleId?: string } | undefined
-    const newer = store.readRequest('run_b_new') as { cycleId?: string } | undefined
+    const first = store.readRequest('run_z_first')
+    const continued = store.readRequest('run_a_continue')
+    const newer = store.readRequest('run_b_new')
     expect(first?.cycleId).toBe('run_z_first')
     expect(continued?.cycleId).toBe(first?.cycleId)
     expect(newer?.cycleId).toBe('run_b_new')
+    expect(first?.cycleSequence).toBe(1)
+    expect(continued?.cycleSequence).toBe(1)
+    expect(newer?.cycleSequence).toBe(2)
     expect(cycleUsage(root, snapshot.projectId, 'run_a_continue').calls).toBe(1)
     expect(cycleUsage(root, snapshot.projectId).calls).toBe(1)
+  })
+
+  it.each([
+    { maxCallsPerRun: 2 }, { maxInputTokensPerRun: 20 }, { maxOutputTokensPerRun: 40 },
+  ])('reserves the final allowance atomically across separate processes: %j', async (limit) => {
+    const root = workspace(), projectId = 'project'
+    const store = new ReviewRunStore(root, projectId)
+    const budget = { ...BUDGET, maxOutputTokensPerCall: 20, ...limit }
+    for (const [runId, continuation, calls] of [['fresh', false, 1], ['c1', true, 0], ['c2', true, 0]] as const) {
+      const reserved = reserveCycleRequest(root, projectId, runId, {
+        schemaVersion: 1, requestId: runId, runId, stage: 'claims', targetClaimIds: [],
+        continue: continuation, status: 'completed', calls,
+        inputTokens: calls * 10, outputTokens: calls * 20, startedAt: '2026-10-19T00:00:00.000Z',
+      })
+      expect('ok' in reserved).toBe(false)
+    }
+    const children = ['c1', 'c2'].map((id) => fork(
+      fileURLToPath(new URL('./fixtures/cycle-reservation-worker.ts', import.meta.url)),
+      [root, projectId, id, 'fresh', JSON.stringify(budget)],
+      { execArgv: ['--import=tsx'], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] },
+    ))
+    try {
+      await Promise.all(children.map((child) => new Promise<void>((resolve, reject) => {
+        child.once('message', (message) => {
+          if ((message as { ready?: boolean }).ready) resolve()
+          else reject(new Error(JSON.stringify(message)))
+        })
+        child.once('error', reject)
+        child.once('exit', (code) => reject(new Error(`worker exited before ready: ${code}`)))
+      })))
+      const results = children.map((child) => new Promise<{ allowed: boolean }>((resolve, reject) => {
+        child.once('message', (message) => {
+          if ('error' in (message as object)) reject(new Error(JSON.stringify(message)))
+          else resolve(message as { allowed: boolean })
+        })
+        child.once('error', reject)
+        child.once('exit', (code) => reject(new Error(`worker exited before result: ${code}`)))
+      }))
+      children.forEach((child) => child.send('reserve'))
+      expect((await Promise.all(results)).filter((result) => result.allowed)).toHaveLength(1)
+      // In-flight reservations count even though neither worker settled usage.
+      expect(cycleUsage(root, projectId)).toEqual({ calls: 2, inputTokens: 20, outputTokens: 40 })
+    } finally { children.forEach((child) => child.kill()) }
+  }, 15_000)
+
+  it('preserves queued legacy membership and the admission timestamp after a new cycle opens', () => {
+    const root = workspace(), projectId = 'project'
+    const store = new ReviewRunStore(root, projectId)
+    const request = {
+      schemaVersion: 1 as const, requestId: 'old', runId: 'old', stage: 'claims', targetClaimIds: [],
+      status: 'completed' as const, calls: 2, inputTokens: 20, outputTokens: 40,
+      startedAt: '2026-10-19T00:00:00.000Z',
+    }
+    store.initRun('old')
+    store.writeRequest('old', request)
+    const queued = reserveCycleRequest(root, projectId, 'queued', {
+      ...request, requestId: 'queued', runId: 'queued', continue: true,
+      status: 'queued', calls: 0, inputTokens: 0, outputTokens: 0,
+    })
+    expect('ok' in queued).toBe(false)
+    const fresh = reserveCycleRequest(root, projectId, 'fresh', {
+      ...request, requestId: 'fresh', runId: 'fresh', calls: 0, inputTokens: 0, outputTokens: 0,
+    })
+    expect('ok' in fresh).toBe(false)
+    const started = reserveCycleRequest(root, projectId, 'queued', {
+      ...store.readRequest('queued')!, status: 'running', startedAt: '2026-10-19T00:01:00.000Z',
+    })
+    expect(started).toMatchObject({
+      cycleId: 'legacy-before-cycle-ids', cycleSequence: 0, startedAt: request.startedAt,
+    })
+    expect(cycleUsage(root, projectId, 'queued')).toEqual({ calls: 2, inputTokens: 20, outputTokens: 40 })
+    expect(cycleUsage(root, projectId)).toEqual({ calls: 0, inputTokens: 0, outputTokens: 0 })
   })
 
 })

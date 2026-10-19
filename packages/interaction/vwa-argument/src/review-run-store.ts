@@ -75,6 +75,9 @@ export class ReviewRunStore {
       payloadHash?: Hash
       /** §A.4: a continue request draws on its review cycle's budget (review-cycle.ts). */
       continue?: boolean
+      /** Stable admission-time identity; absent only on legacy requests. */
+      cycleId?: Id
+      cycleSequence?: number
       taskId?: string
       processId?: number
       processNonce?: string
