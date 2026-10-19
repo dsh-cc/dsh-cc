@@ -3,8 +3,8 @@ import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson, validateReviewResponse } from './schema.ts'
 import { policyHash, promptHash } from './review-contract.ts'
 import { planStage, type ReviewStage } from './review-plan.ts'
-import { taskDependencyDigest } from './review-input.ts'
-import { detectDisagreement, disagreementFinding } from './review-run-store.ts'
+import { deduplicateBySemanticHash, semanticRecordHash, taskDependencyDigest } from './review-input.ts'
+import { cacheKey, detectDisagreement, disagreementFinding } from './review-run-store.ts'
 import type { Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
 
 export interface CurrentReviews {
@@ -38,7 +38,15 @@ export function currentReviews(
           r.promptHash === promptHash(stage) &&
           (reviewer === undefined || r.reviewerConfigHash === reviewer) &&
           r.dependencyDigest === expected &&
-          stableJson(r.targetRefs) === stableJson(task.targetRefs),
+          stableJson(r.targetRefs) === stableJson(task.targetRefs) &&
+          // Scope-dependent rules are part of task identity, just as in the
+          // runner and continuation planner. A different scope is historical,
+          // not a conflicting second opinion on the current task.
+          r.inputHash === cacheKey({
+            stage, targetRefs: task.targetRefs, requiredRules: task.requiredRules,
+            dependencyDigest: expected, contractHash, policyHash: policyHash(),
+            reviewerConfigHash: r.reviewerConfigHash, promptHash: promptHash(stage),
+          }),
       )
       const valid = candidates.filter(
         (r) => r.status === 'completed' && r.response && validateReviewResponse(r.response),
@@ -111,9 +119,14 @@ export function auditDependencyDigest(snapshot: ProjectSnapshot, artifactId: Id,
       groups: snapshot.groups,
       arguments: snapshot.arguments,
       issues: snapshot.issues,
-      upstream: records
-        .filter((r) => ['sources', 'support', 'claims', 'arguments'].includes(r.stage))
-        .map((r) => sha256Hex(stableJson(r)))
+      // Alignment receives all search logs, including project-wide searches
+      // outside semantic task dependencies. Both reuse and delivery must
+      // invalidate when these model-visible inputs change.
+      searches: snapshot.searches,
+      upstream: deduplicateBySemanticHash(
+        records.filter((r) => ['sources', 'support', 'claims', 'arguments'].includes(r.stage)),
+      )
+        .map(semanticRecordHash)
         .sort(),
     }),
   )

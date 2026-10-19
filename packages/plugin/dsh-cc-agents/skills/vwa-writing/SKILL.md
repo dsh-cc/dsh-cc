@@ -82,11 +82,23 @@ Inspect findings and current assessments before a repair.
 Keep the user's source scope and edit authorization during a repair.
 After a body or graph change, use the current revision and rebind as needed.
 Allow one repair-and-review cycle unless the user requests more.
-Keep all review attempts within the frozen project budget.
+Each fresh request (without `continue`) opens a review cycle with the frozen project budget.
+Continuations share that cycle's budget; they never add to it.
 Do not raise frozen limits or erase findings to obtain a pass.
 For review-only tasks, report proposed repairs without changing the body.
 
-If the job fails, the budget ends, or required evidence is absent, stop the review loop.
+After a run ends `incomplete`, `budget-exhausted`, or `cancelled`, you may call
+`argument.review` again with a new requestId and `input.continue: true`
+to re-execute only the tasks without a completed record, the audit included.
+The continuation spends only what is left of the same cycle's budget.
+This is not a repair cycle and does not count against the repair budget.
+Do not pass `continue: true` when you want a second opinion on completed tasks.
+Use a fresh request without `continue` for that, within the repair rules.
+
+Stop the review loop when the job fails without a continuable status,
+when `argument.review` returns `BUDGET_EXHAUSTED` (the cycle budget is spent),
+or when required evidence is absent.
+`NOTHING_TO_CONTINUE` means every task already has a completed record; read the current results instead.
 Report the unresolved items and the actual status.
 Do not invent a completed review or a replacement grade.
 

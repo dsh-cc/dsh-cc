@@ -82,6 +82,10 @@ cacheKey = SHA256(stableJson({
 Existing records without `requiredRules` in their key are NOT reusable after
 this change (their keys don't match). This is a one-time invalidation on
 upgrade; the design doc §11.3 cache key formula is amended accordingly.
+Current-result selection and disagreement detection use this same complete
+key, not only the dependency digest and target references. Records from a
+different required-rule scope remain historical. Same-key conflicting
+judgments remain current and retain fail protection.
 
 **A.3.2 Deterministic record selection.** When multiple completed records
 share a cache key (the disagreement case), `prior.find(...)` returns the
@@ -167,6 +171,13 @@ This ensures that a reused record does not change downstream digests: the
 original and the copy are semantically identical, so deduplication collapses
 them to one entry.
 
+Model inputs follow the same semantic deduplication rule. The task context
+(`context.currentReviews`) and audit alignment context
+(`currentReviewRecords`) include one copy per semantic hash. Persisted reuse
+copies remain intact for provenance and adjudication. Distinct judgments,
+including conflicting verdicts, are not collapsed. Repeated continuations
+must not grow model context solely by copying completed records.
+
 **A.3.4 Intra-run scoping.** The `history` array is loaded once at run start
 (review-runner.ts:99). Cross-request reuse in continue mode only affects which
 records from prior runs are eligible; records produced within the current run
@@ -202,6 +213,47 @@ mismatch), as documented in the skill.
   > not count against the repair budget. Do not pass `continue: true` when
   > you want a second opinion on completed tasks — use a fresh request
   > without `continue`.
+
+- Review-cycle budget (post-review amendment). A continuation never grants a
+  fresh budget. A review cycle is the project's latest fresh request plus the
+  continue requests after it; all of them share one frozen budget for calls,
+  input tokens and output tokens (wall clock stays per run). A continue run
+  gets only the cycle's remainder, and is refused with `BUDGET_EXHAUSTED`
+  (retryable: false) before reservation when one more call does not fit.
+  Continuing after `budget-exhausted` is therefore useful only when the cycle
+  still has spend left (for example a wall-clock stop). See `review-cycle.ts`.
+  - Each admitted request persists `cycleId` and `cycleSequence`. A fresh
+    request uses its run ID as its cycle ID and increments the project-local
+    sequence. A continuation binds to the latest admitted cycle. The runner
+    preserves the queued request's identity and admission timestamp, even if
+    another fresh request is admitted before it starts. Clock values and
+    random run IDs never determine cycle membership.
+  - Admission and per-call budget reservation use the same exclusive-create
+    filesystem lock, separate from the author write lock. Before every model
+    attempt (including retries and audit calls), the caller reads reconciled
+    cycle spend, checks the exact counted input and reserved output, and
+    persists its reservation before releasing that lock. No await or model
+    dispatch occurs inside the critical section. Concurrent runs and separate
+    processes therefore share one allowance; a losing reservation dispatches
+    no call and ends `budget-exhausted`. Pre-checks are advisory snapshots;
+    the per-call reservation is authoritative.
+  - Requests written before cycle IDs existed are conservatively charged to
+    one legacy cycle. Their original ordering cannot be recovered reliably,
+    so no legacy spend is dropped based on tied clocks or UUID ordering.
+    A fresh request opens a separate identified cycle. Reconciled in-flight
+    reservations still count after a crash; the lock follows the existing
+    dead-holder reclaim rule and is never reclaimed merely by age.
+- Audit reuse (post-review amendment). Audit records carry the full audit
+  identity as `inputHash` (artifact bytes, audit dependency digest, frozen
+  core set, contract, policy, extract/align prompts, reviewer config, unit
+  size). A continue run whose semantic tasks and audit all have reusable
+  completed records is refused with `NOTHING_TO_CONTINUE`, including
+  `stage: "all"`.
+  The shared audit dependency digest includes every search log passed to
+  alignment, including project-wide searches outside semantic task
+  dependencies. Adding, editing or deleting a search invalidates both audit
+  reuse and delivery eligibility for the old audit. Audits written with the
+  previous digest must run again once.
 
 ### A.5 Cache key safety
 

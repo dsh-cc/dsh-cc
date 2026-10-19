@@ -35,13 +35,40 @@ export function upstreamRecords(index: ReverseIndex, task: ReviewTask, records: 
     .filter((r) => ORDER.indexOf(r.stage) < ORDER.indexOf(task.stage) && r.targetRefs.some((ref) => ids.has(ref.id)))
     .sort((a, b) => stableJson(a).localeCompare(stableJson(b)))
 }
+/** Hash of a record's semantic content only; run metadata (runId, timestamps, token counts) excluded. */
+export function semanticRecordHash(r: ReviewRecord): Hash {
+  return sha256Hex(
+    stableJson({
+      stage: r.stage,
+      targetRefs: r.targetRefs,
+      dependencyDigest: r.dependencyDigest,
+      contractHash: r.contractHash,
+      policyHash: r.policyHash,
+      reviewerConfigHash: r.reviewerConfigHash,
+      promptHash: r.promptHash,
+      inputHash: r.inputHash,
+      status: r.status,
+      response: r.response,
+    }),
+  )
+}
+/** Collapse records that are semantically identical (e.g. original + reused copy). */
+export function deduplicateBySemanticHash(records: ReviewRecord[]): ReviewRecord[] {
+  const seen = new Set<Hash>()
+  return records.filter((r) => {
+    const hash = semanticRecordHash(r)
+    if (seen.has(hash)) return false
+    seen.add(hash)
+    return true
+  })
+}
 export function taskDependencyDigest(index: ReverseIndex, task: ReviewTask, records: ReviewRecord[]): Hash {
   return sha256Hex(
     stableJson({
       graph: dependencyDigest(index, taskDependencyIds(index, task)),
       task: task.envelope,
-      upstream: upstreamRecords(index, task, records)
-        .map((r) => sha256Hex(stableJson(r)))
+      upstream: deduplicateBySemanticHash(upstreamRecords(index, task, records))
+        .map((r) => semanticRecordHash(r))
         .sort(),
     }),
   )
@@ -72,7 +99,9 @@ export function reviewContext(input: {
     claims: input.snapshot.claims.filter((c) => ids.has(c.id)),
     issues: input.snapshot.issues.filter((i) => ids.has(i.id)),
     searches: input.snapshot.searches.filter((s) => ids.has(s.id)),
-    currentReviews: upstreamRecords(index, input.task, input.records),
+    // Persisted reuse copies remain available for provenance, but must not
+    // consume model context repeatedly under the same semantic cache key.
+    currentReviews: deduplicateBySemanticHash(upstreamRecords(index, input.task, input.records)),
   }
 }
 export function taskEnvelope(input: {

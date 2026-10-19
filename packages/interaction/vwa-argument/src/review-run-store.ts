@@ -73,6 +73,11 @@ export class ReviewRunStore {
       targetClaimIds: Id[]
       artifactId?: Id
       payloadHash?: Hash
+      /** §A.4: a continue request draws on its review cycle's budget (review-cycle.ts). */
+      continue?: boolean
+      /** Stable admission-time identity; absent only on legacy requests. */
+      cycleId?: Id
+      cycleSequence?: number
       taskId?: string
       processId?: number
       processNonce?: string
@@ -239,6 +244,7 @@ export class ReviewRunStore {
 export function cacheKey(input: {
   stage: string
   targetRefs: { id: Id; entityVersion: number }[]
+  requiredRules: { targetId: Id; ruleId: string }[]
   dependencyDigest: Hash
   contractHash: Hash
   policyHash: Hash
@@ -249,6 +255,9 @@ export function cacheKey(input: {
     stableJson({
       stage: input.stage,
       targetRefs: input.targetRefs,
+      requiredRules: [...input.requiredRules].sort(
+        (a, b) => a.targetId.localeCompare(b.targetId) || a.ruleId.localeCompare(b.ruleId),
+      ),
       dependencyDigest: input.dependencyDigest,
       contractHash: input.contractHash,
       policyHash: input.policyHash,

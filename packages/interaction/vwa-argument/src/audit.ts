@@ -28,6 +28,8 @@ import { randomUUID } from 'node:crypto'
 import { sha256Hex, stableJson } from './schema.ts'
 import { loadPrompt, responseSchemaFor, promptHash, RULES } from './review-contract.ts'
 import { auditDependencyDigest } from './review-current.ts'
+import { deduplicateBySemanticHash } from './review-input.ts'
+import { AUDIT_RULE_IDS, auditInputHash, auditUnitChars } from './audit-reuse.ts'
 import { buildReverseIndex } from './dependencies.ts'
 import { computeCoreSet } from './review-plan.ts'
 import type { ReviewCaller } from './review-call.ts'
@@ -110,16 +112,27 @@ export async function executeAudit(input: {
 }): Promise<AuditOutcome> {
   const { artifact, snapshot, runId } = input
   const stripped = stripClaimMarkers(artifact.text)
-  const units = extractionUnits(
-    stripped.text,
-    Math.min(
-      input.maxUnitChars,
-      input.caller ? Math.max(1, Math.floor(input.caller.maxContextChars / 2)) : input.maxUnitChars,
-    ),
-  )
+  const unitChars = auditUnitChars(input.maxUnitChars, input.caller?.maxContextChars)
+  const units = extractionUnits(stripped.text, unitChars)
   const taskId = `task_${randomUUID()}`
   const artifactHash = sha256Hex(artifact.text)
-  const inputHash = sha256Hex(stableJson({ artifactHash, units: units.length, contract: snapshot.contract }))
+  const effectiveCoreClaimIds = input.coreClaimIds ?? [
+    ...computeCoreSet({
+      index: buildReverseIndex(snapshot),
+      artifactText: artifact.text,
+      requiredQuestionTexts: snapshot.contract.requiredQuestions.map((q) => q.text),
+    }),
+  ]
+  // §A.2: the full audit identity, shared with continuation reuse (audit-reuse.ts).
+  const inputHash = auditInputHash({
+    snapshot,
+    artifact,
+    records: input.records ?? [],
+    coreClaimIds: effectiveCoreClaimIds,
+    contractHash: input.contractHash,
+    reviewerConfigHash: input.reviewerConfigHash,
+    unitChars,
+  })
 
   const dispatch = async (
     prompt: string,
@@ -264,23 +277,17 @@ export async function executeAudit(input: {
     occurrences,
     artifact: artifact.text,
     outline: boundArtifact?.outline ?? [],
-    requiredRules: ['AUDIT-01', 'AUDIT-02', 'AUDIT-03', 'AUDIT-04', 'AUDIT-05'].map((ruleId) => ({
+    requiredRules: AUDIT_RULE_IDS.map((ruleId) => ({
       targetId: artifact.id,
       ruleId,
     })),
     ruleDefinitions: Object.fromEntries(Object.entries(RULES).filter(([id]) => id.startsWith('AUDIT-'))),
-    currentReviewRecords: input.records ?? [],
+    currentReviewRecords: deduplicateBySemanticHash(input.records ?? []),
     issues: snapshot.issues,
     groups: snapshot.groups,
     arguments: snapshot.arguments,
     searches: snapshot.searches,
-    effectiveCoreClaimIds: input.coreClaimIds ?? [
-      ...computeCoreSet({
-        index: buildReverseIndex(snapshot),
-        artifactText: artifact.text,
-        requiredQuestionTexts: snapshot.contract.requiredQuestions.map((q) => q.text),
-      }),
-    ],
+    effectiveCoreClaimIds,
     budget: { maxOutputTokens: input.maxOutputTokens },
   }
   const alignPromptHash = promptHash('align')
@@ -295,7 +302,7 @@ export async function executeAudit(input: {
     validateTaskResponse(alignResponse, {
       stage: 'align',
       targetIds: new Set([artifact.id, ...snapshot.claims.map((c) => c.id)]),
-      requiredRules: new Map([[artifact.id, new Set(['AUDIT-01', 'AUDIT-02', 'AUDIT-03', 'AUDIT-04', 'AUDIT-05'])]]),
+      requiredRules: new Map([[artifact.id, new Set<string>(AUDIT_RULE_IDS)]]),
       knownEvidenceIds: new Set(snapshot.evidence.map((e) => e.id)),
     })
   alignResponse.alignment = derivations.map(
