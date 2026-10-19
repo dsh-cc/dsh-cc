@@ -820,3 +820,57 @@ describe('argument.review continue within the review-cycle budget (§13, §A.4)'
     expect(state.dispatches).toBe(4)
   })
 })
+
+describe('argument.review continue pre-check await (§10.6, §11.1)', () => {
+  it('a cancellation during reviewer initialization returns CANCELLED, not a retryable REVIEW_UNAVAILABLE', async () => {
+    const controller = new AbortController()
+    const { tools, workspace } = mount({
+      review: () => {
+        const collaborators = reviewCollaborators([])
+        collaborators.adapter.initialize = async () => {
+          controller.abort(new Error('user cancelled'))
+          throw new Error('initialization aborted')
+        }
+        return collaborators
+      },
+    })
+    const requestId = uuid()
+    const result = await (tools.get('argument.review') as ToolDefinition).execute(
+      { projectId: workspace.projectId, expectedRevision: 1, requestId, input: { stage: 'claims', continue: true } },
+      { signal: controller.signal } as never,
+    )
+    expect(result).toMatchObject({ ok: false, code: 'CANCELLED', retryable: false })
+    expect(new ReviewRunStore(workspace.root, workspace.projectId).findRunByRequestId(requestId)).toBeUndefined()
+  })
+
+  it('re-checks expectedRevision after the initialization await and reserves nothing on a conflict', async () => {
+    let tools: Map<string, ToolDefinition> | undefined
+    const mounted = mount({
+      review: () => {
+        const collaborators = reviewCollaborators([])
+        // A concurrent author write lands while the reviewer initializes.
+        collaborators.adapter.initialize = async () => {
+          const head = mounted.workspace.store.readHead()
+          if (!head.ok) throw new Error(head.message)
+          const write = await call(tools!.get('argument.update') as ToolDefinition, {
+            projectId: mounted.workspace.projectId, expectedRevision: head.data.head.revision, requestId: `u-${uuid()}`,
+            input: { op: 'upsert', creates: [{ clientKey: 'c2', type: 'claim', body: { ...CLAIM_BODY, text: 'Late claim' } }], updates: [], deletes: [] },
+          })
+          expect(write.ok).toBe(true)
+        }
+        return collaborators
+      },
+    })
+    tools = mounted.tools
+    const { workspace } = mounted
+    await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: 1, requestId: 'u-rev',
+      input: { op: 'upsert', creates: [{ clientKey: 'c1', type: 'claim', body: CLAIM_BODY }], updates: [], deletes: [] },
+    })
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: 2, requestId: 'r-rev', input: { stage: 'claims', continue: true },
+    })
+    expect(result).toMatchObject({ ok: false, code: 'REVISION_CONFLICT', retryable: true })
+    expect(new ReviewRunStore(workspace.root, workspace.projectId).findRunByRequestId(requestIdMap.get('r-rev')!)).toBeUndefined()
+  })
+})
