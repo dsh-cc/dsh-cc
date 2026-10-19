@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
+import { replayReviewRequest } from '../src/review-request.ts'
 import { continuePreCheck, reusableRecord } from '../src/review-continue.ts'
 import { ReviewRunStore, disagreementFinding, recordReusable } from '../src/review-run-store.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
@@ -100,9 +101,22 @@ describe('continue mode — reuse across requestIds (§A.2)', () => {
     const snapshot = makeSnapshot({ claims: [claim] })
     await executeReviewRun(runner(root, snapshot, fakeAdapter([step({ tokens: 5 })])))
     const guardAdapter = fakeAdapter([() => ({ raw: claimsResponse(claim.id, 'pass') })])
-    const second = await executeReviewRun({ ...runner(root, snapshot, guardAdapter), continueMode: true })
+    const args = { ...runner(root, snapshot, guardAdapter), continueMode: true }
+    const second = await executeReviewRun(args)
     expect(guardAdapter.state.dispatches).toBe(0)
-    expect(second.status).toBe('completed')
+    // The in-run guard (reached when the tool pre-check lost a race) records an
+    // explicit refusal rather than an empty 'completed' review.
+    expect(second.refusal).toMatchObject({ code: 'NOTHING_TO_CONTINUE', retryable: false })
+    expect(second.records).toEqual([])
+    // Replaying the same requestId surfaces the same refusal the tool pre-check returns.
+    const replay = replayReviewRequest({
+      store: new ReviewRunStore(root, snapshot.projectId),
+      requestId: args.requestId,
+      payloadHash: 'p'.repeat(64),
+      projectId: snapshot.projectId,
+      revision: snapshot.revision,
+    })
+    expect(replay).toMatchObject({ ok: false, code: 'NOTHING_TO_CONTINUE', retryable: false })
   })
 
   it('reuses a prior fail record (fail-stands) without re-execution', async () => {
