@@ -1,6 +1,6 @@
 # VWA lane-2 Hardening — Feature B: Review Channel Diagnostics and Retry Hardening
 
-## Status: Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off pending.
+## Status: Implemented — PR #266 (open, pending merge). Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off given to implement.
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problems 2, 3 and 4 from the tui-40b4 session.
