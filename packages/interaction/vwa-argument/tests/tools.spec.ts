@@ -254,9 +254,18 @@ describe('tool registration (§13 gate surface)', () => {
     expect(store.readUsage(secondRunId).some((row) => row.kind === 'reused')).toBe(true)
   })
 
-  it('refuses input.continue when every planned task already has a completed record (§A.2)', async () => {
+  it('freezes the reviewer configuration before refusing a completed continuation (§A.2)', async () => {
     const { tools, workspace } = mount({
-      review: reviewWithScript([(req) => stepFor(req, 5)]),
+      review: () => {
+        const collaborators = reviewCollaborators([(req) => stepFor(req, 5)])
+        let initialized = false
+        collaborators.adapter.initialize = async () => { initialized = true }
+        collaborators.adapter.configFingerprint = () => ({
+          provider: 'fake', model: 'fake-model',
+          ...(initialized ? { effectiveConfig: { maxTokens: BUDGET.maxOutputTokensPerCall } } : {}),
+        })
+        return collaborators
+      },
     })
     const update = tools.get('argument.update') as ToolDefinition
     await call(update, {
@@ -282,6 +291,24 @@ describe('tool registration (§13 gate surface)', () => {
     })
     expect(second).toMatchObject({ ok: false, code: 'NOTHING_TO_CONTINUE', retryable: false })
     expect(second.message).toContain('second opinion')
+    expect(store.findRunByRequestId(requestIdMap.get('r-continue')!)).toBeUndefined()
+  })
+
+  it('returns a retryable refusal without reserving a request if reviewer initialization fails', async () => {
+    const { tools, workspace } = mount({
+      review: () => {
+        const collaborators = reviewCollaborators([])
+        collaborators.adapter.initialize = async () => { throw new Error('provider unavailable') }
+        return collaborators
+      },
+    })
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: 1, requestId: 'r-init-failed',
+      input: { stage: 'claims', continue: true },
+    })
+    expect(result).toMatchObject({ ok: false, code: 'REVIEW_UNAVAILABLE', retryable: true })
+    expect(new ReviewRunStore(workspace.root, workspace.projectId)
+      .findRunByRequestId(requestIdMap.get('r-init-failed')!)).toBeUndefined()
   })
 
   it('absent input.continue keeps the fresh-run behavior (re-executes completed tasks)', async () => {
