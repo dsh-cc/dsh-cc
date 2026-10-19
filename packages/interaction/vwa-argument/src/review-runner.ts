@@ -27,7 +27,14 @@ import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-
 import { currentReviews } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
-import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord } from './types.ts'
+import type {
+  Hash,
+  Id,
+  ProjectSnapshot,
+  ReviewJobStatus,
+  ReviewRecord,
+  ReviewErrorDetail,
+} from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
 export { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor } from './review-contract.ts'
@@ -183,6 +190,14 @@ export async function executeReviewRun(input: {
     startedAt,
     endedAt: new Date().toISOString(),
     errorCode: input.signal.aborted ? 'CANCELLED' : ((error as { code?: string })?.code ?? 'REVIEW_UNAVAILABLE'),
+    errorDetail: {
+      ...((error as { detail?: ReviewErrorDetail })?.detail ?? {}),
+      message: String((error as { message?: string })?.message ?? error).slice(0, 500),
+      ...((error as { rawResponse?: string })?.rawResponse === undefined
+        ? {}
+        : { rawResponseTail: (error as { rawResponse: string }).rawResponse }),
+      retryAttempts: (error as { retryAttempts?: number })?.retryAttempts ?? 1,
+    },
   })
   try {
     input.signal.throwIfAborted()
