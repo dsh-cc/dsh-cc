@@ -40,7 +40,7 @@ export interface Fail {
     | 'CONTEXT_TOO_LARGE' | 'LIMIT_EXCEEDED' | 'STORE_CORRUPT'
     | 'STORE_IO_FAILED' | 'LOCK_BUSY' | 'IDEMPOTENCY_CONFLICT' | 'NOT_FOUND'
     | 'REVIEW_UNAVAILABLE' | 'REVIEW_INVALID' | 'BUDGET_EXHAUSTED' | 'CANCELLED'
-    | 'NOTHING_TO_CONTINUE'
+    | 'NOTHING_TO_CONTINUE' | 'BUDGET_INSUFFICIENT'
   message: string
   retryable: boolean
   details?: JsonValue

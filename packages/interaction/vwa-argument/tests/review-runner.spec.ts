@@ -386,3 +386,74 @@ describe('cacheKey requiredRules extension (§A.3.1)', () => {
     expect(b).toBe(a)
   })
 })
+
+/** One schema-valid claims response covering EVERY target the task carried. */
+function batchedClaimsResponse(claimIds: string[], result: 'pass'): string {
+  return JSON.stringify({
+    stage: 'claims',
+    rubricVersion: 'humanities-v1',
+    findings: [],
+    targets: claimIds.map((targetId) => ({
+      targetId,
+      checks: [{ ruleId: 'HIST-01', result, rationale: 'r', evidenceIds: [] }],
+      searchSufficiency: 'checked',
+    })),
+  })
+}
+
+describe('Feature C — claims batching (§C.2.2/§C.2.3)', () => {
+  function batchedFixture() {
+    const { root } = workspace()
+    const claims = [makeClaim('fact'), makeClaim('fact'), makeClaim('fact')]
+    const snapshot = makeSnapshot({
+      claims,
+      contract: {
+        ...makeSnapshot().contract,
+        reviewSettings: { budget: BUDGET, maxArtifactChars: 120_000, maxContextChars: 48_000, claimsBatchSize: 2 },
+      },
+    })
+    const adapter = fakeAdapter([
+      (req) => {
+        const envelope = JSON.parse(req.messages[1]!.content) as {
+          dependencies: { targets?: { id: string }[]; target?: { id: string } }
+        }
+        const targets = envelope.dependencies.targets ?? [envelope.dependencies.target!]
+        return { raw: batchedClaimsResponse(targets.map((t) => t.id), 'pass') }
+      },
+    ])
+    const run = (continueMode = false, requestId?: string) =>
+      executeReviewRun({
+        deps: { root, adapter, budget: BUDGET, contractHash: 'c'.repeat(64) },
+        runId: `run_${randomUUID()}`,
+        requestId: requestId ?? `req-${Math.random()}`,
+        stages: ['claims'],
+        targetClaimIds: claims.map((c) => c.id),
+        snapshot,
+        signal: new AbortController().signal,
+        ...(continueMode ? { continueMode: true } : {}),
+      })
+    return { snapshot, adapter, run }
+  }
+
+  it('runs one adapter call per batch; records carry multi-target targetRefs', async () => {
+    const f = batchedFixture()
+    const outcome = await f.run()
+    expect(outcome.status).toBe('completed')
+    expect(f.adapter.state.dispatches).toBe(2) // 3 claims, batch 2 → 2 tasks
+    expect(outcome.records.filter((r) => r.status === 'completed')).toHaveLength(2)
+    expect(outcome.records[0]!.targetRefs).toHaveLength(2)
+    expect(outcome.records[0]!.response?.targets).toHaveLength(2)
+  })
+
+  it('continue mode with batching reuses the batched records and dispatches nothing', async () => {
+    const f = batchedFixture()
+    const first = await f.run(false, 'req-batch')
+    expect(first.status).toBe('completed')
+    const before = f.adapter.state.dispatches
+    const second = await f.run(true, 'req-batch-2')
+    // §C.2.1 continue exemption: every planned task is reusable → the run
+    // reuses everything and no new call is dispatched.
+    expect(second.status).toBe('completed')
+    expect(f.adapter.state.dispatches).toBe(before)
+  })
+})

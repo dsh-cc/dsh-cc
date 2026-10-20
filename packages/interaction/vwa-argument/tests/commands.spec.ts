@@ -25,6 +25,8 @@ import { appendAdjudication, appendSignature, currentDependencyDigest, validateA
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { ProjectStore } from '../src/store.ts'
 import { initWorkspace } from './helpers.ts'
+import { CaptureRegistry } from '../src/sources.ts'
+import { registerArgumentTools } from '../src/tools.ts'
 import type { Finding, ReviewRecord } from '../src/types.ts'
 import { NOW, uuid } from './review-helpers.ts'
 
@@ -103,6 +105,68 @@ describe('/vwa init + status (§10.2 pointer)', () => {
     expect(result.text).toContain('Revision 1')
     expect(result.text).toContain('Pending review runs: none')
     expect(readPendingRuns(made.root, made.projectId)).toEqual([])
+  })
+})
+
+describe('/vwa init budget capacity guidance (Feature C §C.2.4)', () => {
+  it('project creation reports the frozen budget capacity and batch-size guidance', async () => {
+    const { root } = initWorkspace()
+    const result = await run(root, 'init')
+    expect(result.kind).toBe('success')
+    // Ship defaults: 24000/3000 → 8 full calls, floor(8 / 1.5) = 5 with headroom.
+    expect(result.text).toContain('Budget capacity (frozen at init): 8 full calls')
+    expect(result.text).toContain('50% retry headroom ≈ 5 review calls per run.')
+    expect(result.text).toContain('Suggested claims batch size: 2')
+    expect(result.text).toContain('review-claims-batch-size')
+    expect(result.text).not.toContain('increase the budget on this project')
+  })
+
+  it('the pointer-switch branch carries no capacity guidance', async () => {
+    const made = initWorkspace()
+    const result = await run(made.root, `init ${made.projectId}`)
+    expect(result.kind).toBe('success')
+    expect(result.text).not.toContain('Budget capacity')
+    expect(result.text).not.toContain('review-claims-batch-size')
+  })
+
+  it('set-contract (argument.update) never returns a budget estimate', async () => {
+    const made = initWorkspace()
+    const captured: import('../src/tools.ts').ToolDefinition[] = []
+    registerArgumentTools(
+      {
+        tools: {
+          register: (definition) => {
+            captured.push(definition)
+          },
+        },
+      },
+      {
+        workspaceRoot: () => made.root,
+        captures: new CaptureRegistry(),
+        artifactTexts: new Map(),
+        snapshotTexts: new Map(),
+        maxEntities: 10_000,
+      },
+    )
+    const update = captured.find((d) => d.name === 'argument.update')!
+    const result = (await update.execute(
+      {
+        projectId: made.projectId,
+        expectedRevision: 1,
+        requestId: randomUUID(),
+        input: {
+          op: 'set-contract',
+          contract: {
+            question: 'q', language: 'en', domain: 'history', mode: 'draft',
+            requiredQuestions: [], plannedCorpus: [], expectedCoreTopics: [],
+          },
+        },
+      },
+      { signal: new AbortController().signal },
+    )) as { ok: boolean; data?: unknown }
+    expect(result.ok).toBe(true)
+    expect(JSON.stringify(result)).not.toContain('budgetEstimate')
+    expect(JSON.stringify(result)).not.toContain('Budget capacity')
   })
 })
 

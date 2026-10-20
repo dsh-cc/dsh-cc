@@ -25,7 +25,7 @@ export function currentReviews(
   const index = buildReverseIndex(snapshot)
   const contractHash = sha256Hex(stableJson(snapshot.contract))
   for (const stage of ['sources', 'support', 'claims', 'arguments'] as const) {
-    const tasks = planStage({ stage, snapshot, index, targetClaimIds: targets, core: new Set() })
+    const tasks = planStage({ stage, snapshot, index, targetClaimIds: targets, core: new Set(), claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1 })
     const verdicts: Verdict[] = []
     for (const task of tasks) {
       const expected = taskDependencyDigest(index, task, records)
@@ -97,7 +97,7 @@ export function currentReviews(
   }
   if (stages.claims === 'pass') {
     for (const stage of ['sources', 'support'] as const)
-      if (planStage({ stage, snapshot, index, targetClaimIds: targets, core: new Set() }).length === 0)
+      if (planStage({ stage, snapshot, index, targetClaimIds: targets, core: new Set(), claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1 }).length === 0)
         stages[stage] = 'pass'
   }
   return { records, historical: all.filter((r) => !records.includes(r)), findings, stages }

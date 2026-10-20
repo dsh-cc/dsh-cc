@@ -264,22 +264,22 @@ jobs:
         working-directory: dsh-cc
         run: pnpm check:exports
 
-      # Every packed artifact must resolve its own relative imports (issue
-      # #249: lib/classes.js imported ../data/classes.json, never packed).
-      # Needs built lib/ on disk — hence after typecheck, not in the
-      # pre-install static job.
-      - name: Publish artifacts (check:artifacts)
-        working-directory: dsh-cc
-        run: pnpm check:artifacts
-
       # Real-boot smoke (v0.4.1 incident class: "merged green, boot crashes for
       # every user"): sync the built packages into a throwaway DSH_HOME profile
       # and require the TUI's first frame. Zero LLM calls; needs the harness
       # build:lib output above, python3 (pty) and rsync from the runner image.
       - name: Profile boot smoke (smoke:profile-boot)
         working-directory: dsh-cc
-        timeout-minutes: 5
+        # Leave room for diagnostics/cleanup after the unchanged 180s + 90s boot budgets.
+        timeout-minutes: 6
         run: pnpm smoke:profile-boot
+
+      # Boot first so startup failures surface before the slower npm-pack checks.
+      # Every packed artifact must resolve its own relative imports (issue
+      # #249: lib/classes.js imported ../data/classes.json, never packed).
+      - name: Publish artifacts (check:artifacts)
+        working-directory: dsh-cc
+        run: pnpm check:artifacts
 
       # Observability add-on (docs/plans/2026-10-03-ci-test-stability.md §5):
       # the 25m step cap kills the hang-all case so the upload below still

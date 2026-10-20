@@ -1,6 +1,6 @@
 /**
  * Watcher wiring for the settings cascade: chokidar setup over the concrete
- * settings files and their parent directories, the write-settle
+ * settings files, the write-settle
  * (`awaitWriteFinish`) tuning resolution, and the dispose closer. Kept apart
  * from the provider so the provider file stays on its seam (merge + persist)
  * and the watcher mechanics stay testable in isolation.
@@ -9,7 +9,7 @@
 
 import { watch as chokidarWatch } from 'chokidar'
 import { canonicalizeWatchPath } from '@deepseek-ai/dsh-home-paths'
-import { dirname } from 'node:path'
+import { watchFile, unwatchFile, type Stats } from 'node:fs'
 
 /** Watcher write-settle tuning (chokidar `awaitWriteFinish`). */
 export interface WatchTuning {
@@ -21,6 +21,7 @@ export interface WatchTuning {
 
 /** Watcher write-settle window in milliseconds (mirrors the harness file provider's default). */
 const DEBOUNCE_MS = 100
+const READY_TIMEOUT_MS = 5_000
 
 /** Resolve the watch tuning from plugin config; defaults (100/10) mirror the file provider. */
 export function resolveWatchTuning(
@@ -32,28 +33,18 @@ export function resolveWatchTuning(
   }
 }
 
-/**
- * Every concrete settings FILE path worth watching, canonicalized and
- * deduped. The result also carries each file's parent directory: chokidar
- * v4 emits nothing for a watched path whose parent directory does not yet
- * exist, so a settings file created after boot (e.g. the project
- * `.claude/settings.json`) is only seen through its directory watch.
- */
+/** Canonicalize and deduplicate the concrete settings files, including absent ones. */
 export async function resolveWatchPaths(
   paths: ReadonlyArray<string | undefined>,
-): Promise<{ files: string[]; dirs: string[] }> {
+): Promise<{ files: string[] }> {
   const concrete = paths.filter((path): path is string => path !== undefined)
-  const canonical = [...new Set(await Promise.all(concrete.map(path => canonicalizeWatchPath(path))))]
-  return {
-    files: canonical,
-    dirs: [...new Set(canonical.map(path => dirname(path)))],
-  }
+  return { files: [...new Set(await Promise.all(concrete.map(path => canonicalizeWatchPath(path))))] }
 }
 
 /** Options for {@link startWatchers}. */
 export interface WatchersOptions {
-  /** Files and parent dirs to watch (from {@link resolveWatchPaths}). */
-  paths: { files: string[]; dirs: string[] }
+  /** Concrete files to watch (from {@link resolveWatchPaths}). */
+  paths: { files: string[] }
   /** Resolved write-settle tuning. */
   tuning: WatchTuning
   /** Called on every settled watcher event (and once at ready). */
@@ -63,36 +54,49 @@ export interface WatchersOptions {
 }
 
 /**
- * Watch the settings files and their parent directories; returns the closer.
- * Both watchers share one `awaitWriteFinish` window: writeJsonAtomic commits
- * via rename, so the dir-derived events must settle the same window as the
- * file events or renames bypass the debounce entirely.
+ * Start optional hot reload and return its closer immediately. Native scans
+ * and queued reloads must never gate service/plugin initialization. Poll the
+ * concrete files as a fallback: unlike directory watches this also survives
+ * missing parents, directory removal, and recreation without a rescan gap.
  */
 export function startWatchers(options: WatchersOptions): () => Promise<void> {
   const { paths, tuning, refresh, onError } = options
-  const awaitWriteFinish = {
-    stabilityThreshold: tuning.stabilityThresholdMs,
-    pollInterval: tuning.pollIntervalMs,
+  const watcher = chokidarWatch(paths.files, {
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: tuning.stabilityThresholdMs, pollInterval: tuning.pollIntervalMs },
+  })
+  let closed = false
+  let reconciliation: ReturnType<typeof setTimeout> | undefined
+  const reconcile = () => {
+    if (closed) return
+    clearTimeout(reconciliation)
+    reconciliation = setTimeout(() => { if (!closed) refresh() }, tuning.stabilityThresholdMs)
   }
-  const watcher = chokidarWatch(paths.files, { ignoreInitial: true, awaitWriteFinish })
-  // Parent directories are watched at depth 0: a plain dir watch would
-  // recurse (a settings file may live directly in $HOME), which is both a
-  // boot-cost and a noise problem. Depth 0 still reports direct children,
-  // which is all the creation-after-boot case needs.
-  const dirWatcher = chokidarWatch(paths.dirs, { ignoreInitial: true, depth: 0, awaitWriteFinish })
-  for (const w of [watcher, dirWatcher]) {
-    w.on('all', refresh)
-    w.on('ready', () => {
-      // The base init's load raced the watcher's own setup: a change written
-      // between that read and the watcher becoming active never fires an
-      // event. One reconcile at ready closes the gap.
-      refresh()
-    })
-    w.on('error', (error) => {
-      onError(error)
-    })
-  }
+  const readyDeadline = setTimeout(() => {
+    if (closed) return
+    onError(new Error(`settings-cascade: file watcher did not become ready within ${READY_TIMEOUT_MS}ms`))
+    reconcile()
+  }, READY_TIMEOUT_MS)
+  watcher.on('all', () => { if (!closed) refresh() })
+  watcher.on('ready', () => { clearTimeout(readyDeadline); reconcile() })
+  watcher.on('error', error => {
+    clearTimeout(readyDeadline)
+    if (!closed) { onError(error); reconcile() }
+  })
+  const polls = paths.files.map(path => {
+    const listener = (current: Stats, previous: Stats) => {
+      if (current.mtimeMs === previous.mtimeMs && current.ctimeMs === previous.ctimeMs
+        && current.size === previous.size && current.ino === previous.ino && current.nlink === previous.nlink) return
+      reconcile()
+    }
+    watchFile(path, { persistent: false, interval: Math.max(100, tuning.pollIntervalMs) }, listener)
+    return { path, listener }
+  })
   return async () => {
-    await Promise.all([watcher.close(), dirWatcher.close()])
+    closed = true
+    clearTimeout(readyDeadline)
+    clearTimeout(reconciliation)
+    for (const { path, listener } of polls) unwatchFile(path, listener)
+    await watcher.close()
   }
 }

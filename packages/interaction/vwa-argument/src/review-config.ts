@@ -5,6 +5,8 @@ export interface FrozenReviewSettings {
   budget: ReviewBudget
   maxArtifactChars: number
   maxContextChars: number
+  // Feature C §C.2.2: frozen at init; 1 = no batching.
+  claimsBatchSize: number
 }
 export function freezeReviewSettings(
   settings: VwaArgumentSettings = DEFAULT_VWA_ARGUMENT_SETTINGS,
@@ -21,5 +23,6 @@ export function freezeReviewSettings(
     },
     maxArtifactChars: settings['review-max-artifact-chars'],
     maxContextChars: settings['review-max-context-chars-per-task'],
+    claimsBatchSize: settings['review-claims-batch-size'],
   }
 }

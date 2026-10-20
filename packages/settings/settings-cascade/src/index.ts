@@ -348,7 +348,7 @@ export class SettingsCascadeProvider extends SettingsProvider {
   }
 
   /** Every concrete settings FILE path worth watching (see {@link resolveWatchPaths}). */
-  private watchPaths(): Promise<{ files: string[]; dirs: string[] }> {
+  private watchPaths(): Promise<{ files: string[] }> {
     return resolveWatchPaths([
       this.spec.sources.userSettings,
       this.spec.sources.projectSettings,

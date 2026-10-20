@@ -125,7 +125,10 @@ export function planContinueTasks(input: ContinuePlanInput, context = planningCo
   for (const stage of input.stages) {
     // The audit is keyed separately (audit-reuse.ts; see continueHasWork).
     if (stage === 'audit') continue
-    const tasks = planStage({ stage, snapshot: input.snapshot, index, targetClaimIds: input.targetClaimIds, core })
+    const tasks = planStage({
+      stage, snapshot: input.snapshot, index, targetClaimIds: input.targetClaimIds, core,
+      claimsBatchSize: input.snapshot.contract.reviewSettings?.claimsBatchSize ?? 1,
+    })
     for (const task of tasks) {
       out.push({
         stage,

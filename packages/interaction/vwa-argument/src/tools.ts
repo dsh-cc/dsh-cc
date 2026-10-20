@@ -32,6 +32,7 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
+import { reviewBudgetRefusal } from './feasibility.ts'
 import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
 import { replayReviewRequest } from './review-request.ts'
@@ -412,6 +413,10 @@ export function registerArgumentTools(
       if (current.data.head.revision !== args.expectedRevision)
         return fail('REVISION_CONFLICT', `expectedRevision ${args.expectedRevision} is not HEAD ${current.data.head.revision}`, true)
       if (refusal !== undefined) return refusal
+      // Continue preparation freezes the effective reviewer fingerprint before
+      // feasibility hashes tasks and exempts reusable records. Never reserve first.
+      const infeasible = reviewBudgetRefusal({ root, review, snapshot, stages, body, ...(artifact === undefined ? {} : { artifact }) })
+      if (infeasible) return infeasible
       const reserved = reserveCycleRequest(root, args.projectId, runId, {
         schemaVersion: 1,
         requestId: args.requestId,

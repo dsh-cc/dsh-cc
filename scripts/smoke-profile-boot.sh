@@ -148,7 +148,10 @@ import os, pty, sys
 
 cli, profile = sys.argv[1], sys.argv[2]
 os.environ['TERM'] = 'xterm-256color'
-st = pty.spawn(['node', cli, '--profile', profile])
+os.environ['NODE_DEBUG'] = 'esm'
+print('[smoke] starting node under PTY', flush=True)
+st = pty.spawn(['node', '--report-on-signal', '--report-exclude-env', '--report-exclude-network',
+                '--report-directory=' + os.environ['DSH_HOME'], cli, '--profile', profile])
 os._exit(os.waitstatus_to_exitcode(st) if st >= 0 else 1)
 PY
   local pid=$!
@@ -164,6 +167,21 @@ PY
       return 0
     fi
     if [ "$waited" -ge "$budget" ]; then
+      # Capture where the real child is waiting before terminating the relay.
+      for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+        kill -USR2 "$child" 2>/dev/null || true
+      done
+      sleep 1
+      python3 - "$dsh_home" <<'PY' >>"$out" 2>&1
+import glob, json, os, sys
+for path in glob.glob(os.path.join(sys.argv[1], 'report.*.json')):
+    with open(path) as source:
+        report = json.load(source)
+    print('[smoke] node diagnostic:', json.dumps({
+        'javascriptStack': report.get('javascriptStack'),
+        'handles': [h for h in report.get('libuv', []) if h.get('is_active')],
+    }))
+PY
       kill -TERM "$pid" 2>/dev/null; sleep 5; kill -KILL "$pid" 2>/dev/null
       wait "$pid" 2>/dev/null || true
       return 1                                 # marker never came

@@ -274,15 +274,34 @@ describe('agent.vwa.cordis.yml lane-2 group (semantic-enabled real boot)', () =>
         return result.value
       }
       const projectId = `prj_${randomUUID()}`
-      const init = new VwaArgument.ProjectStore(workspaceRoot, projectId).init({
-        question: 'What closed the port?',
-        language: 'en',
-        domain: 'history',
-        requiredQuestions: [{ id: 'q1', text: 'Is the closure documented?' }],
-        plannedCorpus: [],
-        expectedCoreTopics: ['port'],
-        mode: 'draft',
-      })
+      // The default frozen budget (24k output tokens/run) is now guarded by the
+      // Feature C pre-flight feasibility check; this fixture's graph plans 6
+      // calls (9 with retry headroom), so init with a roomier budget.
+      const init = new VwaArgument.ProjectStore(workspaceRoot, projectId).init(
+        {
+          question: 'What closed the port?',
+          language: 'en',
+          domain: 'history',
+          requiredQuestions: [{ id: 'q1', text: 'Is the closure documented?' }],
+          plannedCorpus: [],
+          expectedCoreTopics: ['port'],
+          mode: 'draft',
+        },
+        {
+          budget: {
+            maxCallsPerRun: 40,
+            maxInputTokensPerRun: 160_000,
+            maxOutputTokensPerRun: 200_000,
+            maxOutputTokensPerCall: 3_000,
+            wallMs: 180_000,
+            callTimeoutMs: 45_000,
+            concurrency: 2,
+          },
+          maxArtifactChars: 120_000,
+          maxContextChars: 48_000,
+          claimsBatchSize: 1,
+        },
+      )
       if (!init.ok) throw new Error(init.message)
       VwaArgument.writePointer(workspaceRoot, projectId, init.data.workspaceIdentity)
       const catalog = (root as unknown as { tools: { schemas(): { name: string }[] } }).tools.schemas()

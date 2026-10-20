@@ -167,6 +167,8 @@ export function planStage(input: {
   index: ReverseIndex
   targetClaimIds: Id[]
   core: ReadonlySet<Id>
+  // Feature C §C.2.2: >1 groups consecutive claim tasks into one batched task.
+  claimsBatchSize?: number
 }): ReviewTask[] {
   const claims = claimClosure(input.index, input.targetClaimIds)
   const perClaim = groupsOfClaims(input.index, claims)
@@ -233,7 +235,7 @@ export function planStage(input: {
       interpretation: 'INTERP-01',
       evaluation: 'EVAL-01',
     }
-    return input.snapshot.claims
+    const claimTasks: ReviewTask[] = input.snapshot.claims
       .filter((claim) => claims.has(claim.id) && typeRule[claim.kind] !== undefined)
       .map((claim) => ({
         taskId: `task_${randomUUID()}`,
@@ -243,6 +245,28 @@ export function planStage(input: {
         requiredRules: [{ targetId: claim.id, ruleId: typeRule[claim.kind]! }],
         envelope: { target: claim, searches: input.snapshot.searches.filter((s) => s.targetIds.includes(claim.id)) },
       }))
+    const batchSize = input.claimsBatchSize ?? 1
+    if (batchSize <= 1) return claimTasks
+    // Feature C (design §C.2.2): batch consecutive claims into one task.
+    // Batched envelope uses the plural `targets` array (consumed as
+    // `dependencies.targets` by the outer envelope); the single-claim
+    // envelope shape stays unchanged so existing cache keys do not move.
+    const batched: ReviewTask[] = []
+    for (let i = 0; i < claimTasks.length; i += batchSize) {
+      const batch = claimTasks.slice(i, i + batchSize)
+      batched.push({
+        taskId: `task_${randomUUID()}`,
+        stage: 'claims',
+        targetRefs: batch.flatMap((t) => t.targetRefs),
+        targetIds: batch.flatMap((t) => t.targetIds),
+        requiredRules: batch.flatMap((t) => t.requiredRules),
+        envelope: {
+          targets: batch.map((t) => (t.envelope as { target: unknown }).target),
+          searches: batch.flatMap((t) => (t.envelope as { searches: unknown[] }).searches),
+        },
+      })
+    }
+    return batched
   }
   // arguments: one task per argument, one per issue with a target in scope.
   const tasks: ReviewTask[] = []

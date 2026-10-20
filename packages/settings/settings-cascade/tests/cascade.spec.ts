@@ -261,6 +261,8 @@ describe('parallel source loading', () => {
       const bootPromise = boot({ userSettingsPath: user, projectSettingsPath: project, localSettingsPath: local, flagSettingsPath: flag })
       // Without completing any read, more than one read must already be in flight.
       await expect.poll(() => gate.pending.length, { timeout: 1000 }).toBeGreaterThanOrEqual(2)
+      // Only hold the initial load; startup also reconciles after watchers are ready.
+      gate.armed = false
       while (gate.pending.length > 0) gate.pending.pop()!()
       await bootPromise
     } finally {

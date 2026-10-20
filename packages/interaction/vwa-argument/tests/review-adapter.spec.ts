@@ -316,3 +316,41 @@ describe('B.2.2/B.2.4 — channel diagnostics and retry classification', () => {
     await expect(adapter.prepareReviewCall!(input)).rejects.toBeInstanceOf(ReviewConfigDriftError)
   })
 })
+
+describe('Feature C — multi-target claims responses (§C.2.2)', () => {
+  const ids = ['cl_11111111-1111-4111-8111-111111111111', 'cl_22222222-2222-4222-8222-222222222222']
+  const contract = (): ReviewTaskContract => ({
+    stage: 'claims',
+    targetIds: new Set(ids),
+    requiredRules: new Map(ids.map((id) => [id, new Set(['HIST-01'])])),
+    knownEvidenceIds: new Set(),
+  })
+  const batchedResponse = (): ReviewResponse =>
+    parseReviewResponse(
+      JSON.stringify({
+        stage: 'claims',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: ids.map((targetId) => ({
+          targetId,
+          checks: [{ ruleId: 'HIST-01', result: 'pass', rationale: 'r', evidenceIds: [] }],
+          searchSufficiency: 'checked',
+        })),
+      }),
+    )
+
+  it('a response with one entry per batched target validates', () => {
+    expect(() => validateTaskResponse(batchedResponse(), contract())).not.toThrow()
+  })
+
+  it('a single-target response against a multi-target contract fails (missing required rule)', () => {
+    const single = parseReviewResponse(claimsResponse(ids[0]!, 'pass'))
+    expectReviewInvalid(single, contract())
+    try {
+      validateTaskResponse(single, contract())
+      throw new Error('expected rejection')
+    } catch (error) {
+      expect((error as Error).message).toContain(`missing required rule HIST-01 for target ${ids[1]}`)
+    }
+  })
+})

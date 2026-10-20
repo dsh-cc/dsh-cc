@@ -168,6 +168,24 @@ describe('settings cascade hot reload', () => {
     }, { timeout: 5_000 * scale })
   }, OUTER_STD_MS)
 
+  it.each([
+    ['projectSettingsPath', 'settings.json'],
+    ['localSettingsPath', 'settings.local.json'],
+  ] as const)('watches %s through missing nested directories and their recreation', async (key, filename) => {
+    const projectDir = await tempDir('dsh-cascade-watch-nested-')
+    const directory = join(projectDir, '.claude', 'nested')
+    const path = join(directory, filename)
+    const ctx = await boot({ projectDir, [key]: path })
+    const scope = theme(ctx)
+
+    await writeDoc(path, { 'ui-theme': { theme: 'created' } })
+    await vi.waitFor(() => expect(scope.get().theme).toBe('created'), { timeout: 5_000 * scale })
+    await rm(join(projectDir, '.claude'), { recursive: true })
+    await vi.waitFor(() => expect(scope.get().theme).toBe('dark'), { timeout: 5_000 * scale })
+    await writeDoc(path, { 'ui-theme': { theme: 'recreated' } })
+    await vi.waitFor(() => expect(scope.get().theme).toBe('recreated'), { timeout: 5_000 * scale })
+  }, OUTER_MALFORMED_MS)
+
   it('keeps the last good document on malformed JSON and recovers on the fix', async () => {
     const ctx = await boot()
     await writeDoc(userPath(ctx), { 'ui-theme': { theme: 'light' } })
