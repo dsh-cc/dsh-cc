@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { executeReviewRun } from '../src/review-runner.ts'
+import { runReviewWithTimers } from './review-timer-helpers.ts'
 import { VwaArgumentService } from '../src/report.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { registerArgumentTools } from '../src/tools.ts'
@@ -345,7 +346,7 @@ describe('delivery hard conditions', () => {
         }
       },
     ])
-    const outcome = await executeReviewRun({
+    const outcome = await runReviewWithTimers({
       deps: { root: f.root, adapter, budget: BUDGET, contractHash: '' },
       runId: `run_${randomUUID()}`,
       requestId: randomUUID(),
@@ -356,6 +357,10 @@ describe('delivery hard conditions', () => {
       signal: new AbortController().signal,
     })
     expect(outcome.status).toBe('incomplete')
-    expect(outcome.records.some((r) => r.errorCode === 'REVIEW_INVALID')).toBe(true)
+    expect(outcome.calls).toBe(4) // One extraction and three rejected alignment attempts.
+    expect(adapter.state.dispatches).toBe(4)
+    expect(outcome.records.at(-1)).toMatchObject({
+      errorCode: 'REVIEW_INVALID', errorDetail: { retryAttempts: 3 },
+    })
   })
 })
