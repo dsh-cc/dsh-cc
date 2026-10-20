@@ -9,11 +9,12 @@
  * registration call patterns and fails when a matching file's owning package
  * is missing from TOOL_PACKAGE_MANIFEST.
  */
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
+import { findToolPackages } from './tool-schema-discovery.ts'
 import { assertSupportedJsonSchema, type ToolDefinition } from '@dsh-cc/tools'
 import { CaptureRegistry } from '../../../interaction/vwa-argument/src/sources.ts'
 import { registerArgumentTools } from '../../../interaction/vwa-argument/src/tools.ts'
@@ -283,48 +284,9 @@ const EXCLUDED_PACKAGES: Record<string, string> = {
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 
-/** All first-party packages whose src uses defineTool(/tools.register(. */
-function findToolPackages(): string[] {
-  const pkgRoot = join(REPO_ROOT, 'packages')
-  const offenders = new Set<string>()
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === 'lib' || entry.name === 'dist') continue
-      const full = join(dir, entry.name)
-      if (entry.isDirectory()) {
-        walk(full)
-        continue
-      }
-      if (!entry.name.endsWith('.ts') || entry.name.endsWith('.spec.ts') || entry.name.endsWith('.d.ts')) continue
-      if (!/\/src\//.test(full.slice(pkgRoot.length))) continue
-      const source = readFileSync(full, 'utf8')
-      if (!/\bdefineTool\(|tools\.register\(/.test(source)) continue
-      const pkg = owningPackageName(full)
-      if (pkg !== undefined && !MANIFEST_PACKAGES.has(pkg) && !(pkg in EXCLUDED_PACKAGES)) offenders.add(pkg)
-    }
-  }
-  walk(pkgRoot)
-  return [...offenders].sort()
-}
-
-/** Name of the nearest enclosing package.json, or undefined outside one. */
-function owningPackageName(file: string): string | undefined {
-  let dir = file
-  for (;;) {
-    const parent = join(dir, '..')
-    if (parent === dir) return undefined
-    dir = parent
-    try {
-      return JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).name as string
-    } catch {
-      // No package.json at this level; keep walking up.
-    }
-  }
-}
-
 describe('CI tool-schema regression gate (design §F.2.1)', () => {
   it('every first-party tool-registering package is in TOOL_PACKAGE_MANIFEST', () => {
-    expect(findToolPackages(), 'package(s) not in TOOL_PACKAGE_MANIFEST').toEqual([])
+    expect(findToolPackages(REPO_ROOT, MANIFEST_PACKAGES, EXCLUDED_PACKAGES), 'package(s) not in TOOL_PACKAGE_MANIFEST').toEqual([])
   })
 
   for (const entry of TOOL_PACKAGE_MANIFEST) {

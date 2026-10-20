@@ -30,6 +30,8 @@ type JsonSchemaScalarType = Exclude<JsonSchemaType, 'object' | 'array'>
  * combinations before a caller treats the node as trusted.
  */
 export interface JsonSchemaNode {
+  /** Schema dialect identifier, ignored for value validation. */
+  $schema?: string
   /** Omit with no constraints for any JSON value, or use `oneOf`. */
   type?: JsonSchemaType
   /** Exactly one branch must validate; at least two branches are required. */
@@ -275,6 +277,9 @@ function checkSchemaNode(root: unknown, rootPath: string, violations: string[], 
     }
     if (Object.hasOwn(node, 'title') && typeof node.title !== 'string') {
       violations.push(`${path}.title must be a string`)
+    }
+    if (Object.hasOwn(node, '$schema') && typeof node.$schema !== 'string') {
+      violations.push(`${path}.$schema must be a string`)
     }
 
     const hasType = Object.hasOwn(node, 'type')

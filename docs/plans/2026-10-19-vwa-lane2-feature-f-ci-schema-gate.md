@@ -6,7 +6,8 @@ Implementation note (adjudicated during delivery): beyond §F.2.3's fixture
 migration, one shared-subset fix was required — `$schema` was added to the
 annotation keywords in `json-schema.ts`, because the MCP SDK's zod→JSON
 conversion emits `$schema` on every external server schema and the hardened
-tripwire would otherwise reject all MCP tools in test mode.
+tripwire would otherwise reject all MCP tools in test mode. The shared
+validator requires `$schema` to be a string, including at nested schema nodes.
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problem 12 from the tui-40b4 session.
@@ -69,8 +70,11 @@ A new test file `packages/core/tools/tests/tool-schema-gate.spec.ts` that:
    (tools.ts:137-139).
 
    The manifest is maintained manually. A coverage check verifies the
-   manifest against a glob of `packages/**/src/**/*.ts` for `tools.register(`
-   or `defineTool(` calls: any file matching whose package is NOT in the
+   manifest against a walk of `packages/**/src/**/*.ts` using TypeScript AST
+   call detection for `tools.register` or `defineTool`. Source path segments
+   accept both Windows and POSIX separators. Whitespace and line breaks do
+   not affect detection; comments and string literals are ignored. Any file
+   with a matching call whose package is NOT in the
    manifest causes the test to fail with "package X not in
    TOOL_PACKAGE_MANIFEST".
 
