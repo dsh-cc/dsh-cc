@@ -54,7 +54,10 @@ import type {
   Id,
   MechanicalStatus,
   ProjectSnapshot,
+  ReviewFailure,
   ReviewRecord,
+  ReviewStage,
+  StageProgress,
   Verdict,
 } from './types.ts'
 
@@ -85,6 +88,10 @@ export interface DeliveryCheck {
   /** Active (non-disagreement, non-rejected) severity counts, §16.1/§17.2. */
   findingCounts: { blocker: number; major: number; minor: number }
   pendingRunIds: Id[]
+  /** Feature D §D.2.1: per-stage review progress (full record store). */
+  stageProgress: Record<ReviewStage, StageProgress>
+  /** Feature D §D.2.2: per-task failure detail. */
+  failures: ReviewFailure[]
 }
 
 /** Frozen inputs of one evaluation (persisted + hash-verified on read-back, D15). */
@@ -276,6 +283,8 @@ function reportInput(frozen: FrozenEvaluation): ReportInput {
     },
     gates: frozen.gates,
     artifactText: frozen.artifactText,
+    stageProgress: check.stageProgress,
+    failures: check.failures,
     eligibleCandidate: check.eligibleForReviewed,
     hasV2Receipt: false,
     hasLegacyReceipt: false,

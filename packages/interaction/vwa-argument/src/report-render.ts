@@ -20,7 +20,10 @@ import type {
   Id,
   MechanicalStatus,
   ProjectSnapshot,
+  ReviewFailure,
   ReviewRecord,
+  ReviewStage,
+  StageProgress,
   Verdict,
 } from './types.ts'
 
@@ -118,6 +121,9 @@ export interface ReportInput {
   artifactText?: string
   eligibleCandidate?: boolean
   coreClaimIds?: Id[]
+  /** Feature D §D.2.1/§D.2.2: stage progress + failure detail (absent in legacy frozen inputs). */
+  stageProgress?: Record<ReviewStage, StageProgress>
+  failures?: ReviewFailure[]
 }
 
 function escape(text: string): string {
@@ -141,6 +147,10 @@ function statusOf(input: ReportInput): string {
   if (input.eligibleCandidate || input.hasV2Receipt)
     return 'reviewed candidate (receipt status is provided by the delivery summary)'
   if (input.hasLegacyReceipt) return HONESTY.legacy
+  // Feature D §D.2.4: partially reviewed (some stage has completed tasks)
+  // is distinct from "never started" (draft).
+  if (input.stageProgress && Object.values(input.stageProgress).some((p) => p.completed > 0))
+    return 'review-in-progress'
   return 'draft'
 }
 
@@ -179,6 +189,32 @@ export function renderReportMarkdown(input: ReportInput): string {
   if (notExecuted.length > 0) lines.push(`Not executed: ${notExecuted.join('; ')}.`, '')
   for (const gate of input.gates)
     lines.push(`Gate ${gate.gate}: ${gate.status}${gate.detail ? ` — ${escape(gate.detail)}` : ''}`)
+  // Feature D §D.2.3: stage-level review progress, between the checks table
+  // and the findings list. The "### Failures" block is rendered only when
+  // there are failures (an empty failures table carries no information).
+  if (input.stageProgress) {
+    lines.push('## Review progress', '')
+    lines.push('| stage | completed | failed | not run | last run |', '| --- | --- | --- | --- | --- |')
+    for (const [stage, progress] of Object.entries(input.stageProgress)) {
+      const categories = [
+        progress.channelErrors > 0 ? `channel ${progress.channelErrors}` : '',
+        progress.schemaErrors > 0 ? `schema ${progress.schemaErrors}` : '',
+        progress.budgetErrors > 0 ? `budget ${progress.budgetErrors}` : '',
+      ].filter(Boolean)
+      lines.push(
+        `| ${stage} | ${progress.completed}/${progress.total} | ${progress.failed}${categories.length ? ` (${categories.join(', ')})` : ''} | ${progress.notRun} | ${progress.lastRunStatus ?? '—'} |`,
+      )
+    }
+    lines.push('')
+    if (input.failures?.length) {
+      lines.push('### Failures', '', '| stage | targets | error | detail |', '| --- | --- | --- | --- |')
+      for (const failure of input.failures)
+        lines.push(
+          `| ${failure.stage} | ${escape(failure.targetIds.join(', '))} | ${failure.errorCode} | ${escape(failure.errorDetail?.message ?? '')} |`,
+        )
+      lines.push('')
+    }
+  }
   // Part 3 — core conclusion table.
   lines.push('## 3. Core conclusions', '')
   lines.push('| ID | claim | support | dispute | review freshness |', '| --- | --- | --- | --- | --- |')

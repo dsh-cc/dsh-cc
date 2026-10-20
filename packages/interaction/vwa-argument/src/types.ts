@@ -18,6 +18,9 @@
 
 export type Hash = string
 export type Id = string
+
+/** Review stages; 'audit' is planned/extracted in audit.ts, not by planStage. */
+export type ReviewStage = 'sources' | 'support' | 'claims' | 'arguments' | 'audit'
 export type Span = { start: number; end: number }
 
 export interface Ref {
@@ -328,6 +331,30 @@ export interface ExtractionRecord {
   errorCode?: string
   errorDetail?: ReviewErrorDetail
   response: { items: ExtractedItem[] }
+}
+
+/** One failed task surfaced in the report (Feature D §D.2.2). */
+export interface ReviewFailure {
+  runId: Id
+  stage: ReviewStage
+  targetIds: Id[]
+  errorCode: string
+  errorDetail?: ReviewErrorDetail
+  endedAt: string
+}
+
+/** Per-stage review progress for the report (Feature D §D.2.1). */
+export interface StageProgress {
+  /** Planned task count from planStage, accounting for claims batching. */
+  total: number
+  completed: number
+  failed: number
+  notRun: number
+  /** Status of the most recent record touching this stage. */
+  lastRunStatus?: string
+  channelErrors: number
+  schemaErrors: number
+  budgetErrors: number
 }
 
 export interface AdjudicationRecord {

@@ -10,6 +10,7 @@ import { computeCoreSet, planStage } from './review-plan.ts'
 import { computeAssessments, digestRecords, activeMajorCount } from './policy.ts'
 import { mapMechanical, stageVerdict, type GateEntry } from './report-render.ts'
 import { policyHash, promptHash } from './review-contract.ts'
+import { computeStageProgress } from './review-progress.ts'
 import { verifySnapshot } from './sources.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { ProjectStore } from './store.ts'
@@ -145,6 +146,16 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   const { snapshot, artifactId, text } = input
   const { index, artifact, core, targets } = deliveryScope(snapshot, artifactId, text)
   const selected = currentReviews(snapshot, input.records, targets, input.reviewerConfigHash)
+  // Feature D §D.2.1: stage progress from the FULL record store (failed
+  // records included), planned with the same batch size as the runner.
+  const { stageProgress, failures } = computeStageProgress({
+    snapshot,
+    index,
+    core,
+    targets,
+    records: input.records,
+    claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1,
+  })
   const contractHash = sha256Hex(stableJson(snapshot.contract)),
     artifactHash = sha256Hex(text)
   const expectedAudit = auditDependencyDigest(snapshot, artifactId, selected.records)
@@ -383,6 +394,8 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     })),
     findingCounts,
     eligibleForReviewed,
+    stageProgress,
+    failures,
   }
 }
 /** Realpath and UTF-8 checks apply at every read, including after bind-time symlink changes. */

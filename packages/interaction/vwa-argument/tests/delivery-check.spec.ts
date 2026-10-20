@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { evaluateDelivery } from '../src/delivery-check.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
+import { ReviewContextError } from '../src/review-call.ts'
 import { BUDGET, fakeAdapter, makeArgument, makeClaim, makeSnapshot } from './review-helpers.ts'
 
 /** One schema-valid claims response covering EVERY target the task carried. */
@@ -172,5 +173,66 @@ describe('Feature C — delivery per-claim assessments over batched claims recor
       expect(assessment.reviewState).toBe('stale')
       expect(assessment.reviewRunIds).not.toContain(outcome.runId)
     }
+  })
+})
+
+describe('Feature D — report stage progress and failure detail (§D.2)', () => {
+  it('stageProgress accounts for batching and separates completed/failed/not-run', async () => {
+    // 4 claims at batch size 2 → 2 planned tasks; one batch passes, one fails.
+    const claims = [makeClaim('fact', 'A.'), makeClaim('fact', 'B.'), makeClaim('fact', 'C.'), makeClaim('fact', 'D.')]
+    const f = fixture(2, claims)
+    const adapter = fakeAdapter([
+      (req) => {
+        const envelope = JSON.parse(req.messages[1]!.content) as {
+          dependencies: { targets?: { id: string }[] }
+        }
+        const targets = envelope.dependencies.targets ?? []
+        if (targets.some((t) => t.id === claims[2]!.id))
+          // Permanent class: no retry/backoff, and it exercises the budget bucket.
+          throw new ReviewContextError('context exceeds the per-call limit')
+        return { raw: batchedClaimsResponse(targets.map((t) => t.id), 'pass') }
+      },
+    ])
+    const outcome = await executeReviewRun({
+      deps: { root: f.root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+      runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['claims'],
+      targetClaimIds: claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
+    })
+    const check = evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: outcome.records, pendingRunIds: [], adjudications: [],
+    })
+    expect(check.stageProgress.claims).toMatchObject({
+      total: 2, completed: 1, failed: 1, notRun: 0,
+      channelErrors: 0, schemaErrors: 0, budgetErrors: 1, lastRunStatus: 'error',
+    })
+    // Empty stages are planned with zero tasks and never reviewed.
+    expect(check.stageProgress.sources).toMatchObject({ total: 0, completed: 0, failed: 0, notRun: 0 })
+  })
+
+  it('failures carry the Feature B errorDetail from the error record', async () => {
+    const f = fixture(3, [makeClaim('fact', 'A.'), makeClaim('fact', 'B.'), makeClaim('fact', 'C.')])
+    const adapter = fakeAdapter([
+      () => {
+        // Permanent class: no retry/backoff; budget bucket classification.
+        throw new ReviewContextError('context exceeds the per-call limit')
+      },
+    ])
+    const outcome = await executeReviewRun({
+      deps: { root: f.root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+      runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['claims'],
+      targetClaimIds: f.claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
+    })
+    const check = evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: outcome.records, pendingRunIds: [], adjudications: [],
+    })
+    expect(check.stageProgress.claims).toMatchObject({ total: 1, completed: 0, failed: 1, notRun: 0 })
+    expect(check.failures).toHaveLength(1)
+    expect(check.failures[0]).toMatchObject({
+      stage: 'claims', errorCode: 'CONTEXT_TOO_LARGE', runId: outcome.runId,
+    })
+    expect(check.failures[0]!.errorDetail).toMatchObject({ message: 'context exceeds the per-call limit' })
+    expect(check.failures[0]!.targetIds).toEqual(expect.arrayContaining(f.claims.map((c) => c.id)))
   })
 })

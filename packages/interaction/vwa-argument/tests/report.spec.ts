@@ -12,11 +12,12 @@ import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { HONESTY, mapMechanical, renderReportMarkdown } from '../src/report-render.ts'
+import { HONESTY, mapMechanical, renderReportJson, renderReportMarkdown, type ReportInput } from '../src/report-render.ts'
 import { InputChangedError, validateAdjudicationSource, VwaArgumentService } from '../src/report.ts'
 import { readSourceBytes } from '../src/sources.ts'
 import { ProjectStore } from '../src/store.ts'
 import { initWorkspace } from './helpers.ts'
+import { makeSnapshot } from './review-helpers.ts'
 import type { ProjectSnapshot } from '../src/types.ts'
 
 const ARTIFACT = '# Title\n\nThe policy shipped on 2026-10-16 with coverage at 90%.\n\n## Conclusion\n\nThe evidence is insufficient to confirm the causal claim.\n'
@@ -252,5 +253,77 @@ describe('D22 — runtime output trees are excluded from source registration', (
     '/x/docs/vwa-reports/report.md',
   ])('rejects %s', (path) => {
     expect(() => readSourceBytes('/x', path)).toThrow()
+  })
+})
+
+// Feature D (§D.2.3/§D.2.4): a minimal report input for the render-only tests.
+function progressInput(parts: Partial<ReportInput> = {}): ReportInput {
+  return {
+    snapshot: makeSnapshot(),
+    artifactId: 'art_x',
+    artifactHash: 'a'.repeat(64),
+    bindingDigest: 'b'.repeat(64),
+    checks: { mechanical: 'pass', evidence: 'not-run', argument: 'not-run', audit: 'not-run' },
+    assessments: [],
+    findings: [],
+    adjudications: [],
+    reviewRunIds: [],
+    metrics: { mappedAtomicClaims: 0, extractedAtomicClaims: 0, reviewedCoreClaims: 0, coreClaims: 0 },
+    cost: { inputTokens: 0, outputTokens: 0, calls: 0, modelId: 'unpinned' },
+    gates: [],
+    reportVersion: 'vwa-argument-report@1',
+    ...parts,
+  }
+}
+
+describe('Feature D — review progress section and statuses (§D.2.3/§D.2.4)', () => {
+  const stageProgress = {
+    sources: { total: 3, completed: 3, failed: 0, notRun: 0, lastRunStatus: 'completed', channelErrors: 0, schemaErrors: 0, budgetErrors: 0 },
+    support: { total: 5, completed: 4, failed: 1, notRun: 0, lastRunStatus: 'error', channelErrors: 1, schemaErrors: 0, budgetErrors: 0 },
+    claims: { total: 2, completed: 0, failed: 0, notRun: 2, channelErrors: 0, schemaErrors: 0, budgetErrors: 0 },
+    arguments: { total: 0, completed: 0, failed: 0, notRun: 0, channelErrors: 0, schemaErrors: 0, budgetErrors: 0 },
+    audit: { total: 0, completed: 0, failed: 0, notRun: 0, channelErrors: 0, schemaErrors: 0, budgetErrors: 0 },
+  }
+  const failures = [{
+    runId: 'run_1', stage: 'support' as const, targetIds: ['grp_abc'],
+    errorCode: 'REVIEW_UNAVAILABLE', errorDetail: { message: 'HTTP 502 (attempt 2/2)', retryAttempts: 2 },
+    endedAt: '2026-10-19T00:00:00.000Z',
+  }]
+
+  it('renders the progress table between the checks table and the findings list', () => {
+    const text = renderReportMarkdown(progressInput({ stageProgress, failures }))
+    const positions = [
+      '## 2. Checks (mechanical / evidence / argument / audit)',
+      '## Review progress',
+      '## 3. Core conclusions',
+    ].map((needle) => text.indexOf(needle))
+    expect(positions.every((position) => position > 0)).toBe(true)
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+    expect(text).toContain('| support | 4/5 | 1 (channel 1) | 0 | error |')
+    expect(text).toContain('| claims | 0/2 | 0 | 2 | — |')
+    expect(text).toContain('### Failures')
+    expect(text).toContain('| support | grp_abc | REVIEW_UNAVAILABLE | HTTP 502 (attempt 2/2) |')
+  })
+
+  it('omits the Failures block when there are no failures', () => {
+    const text = renderReportMarkdown(progressInput({ stageProgress }))
+    expect(text).toContain('## Review progress')
+    expect(text).not.toContain('### Failures')
+  })
+
+  it('review-in-progress when a stage has completed tasks but delivery is not eligible', () => {
+    const text = renderReportMarkdown(progressInput({ stageProgress }))
+    expect(text).toContain('Status: review-in-progress')
+  })
+
+  it('stays draft when nothing has completed', () => {
+    const text = renderReportMarkdown(progressInput())
+    expect(text).toContain('Status: draft')
+  })
+
+  it('the JSON variant includes stageProgress and failures verbatim', () => {
+    const parsed = JSON.parse(renderReportJson(progressInput({ stageProgress, failures }))) as ReportInput
+    expect(parsed.stageProgress).toEqual(stageProgress)
+    expect(parsed.failures).toEqual(failures)
   })
 })
