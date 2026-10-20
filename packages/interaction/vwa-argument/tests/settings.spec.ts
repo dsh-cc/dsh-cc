@@ -46,11 +46,29 @@ describe('DEFAULT_VWA_ARGUMENT_SETTINGS (§13 table)', () => {
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-context-chars-per-task']).toBe(48_000)
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['project-max-entities']).toBe(10_000)
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['repair-max-rounds-per-artifact-turn']).toBe(1)
+    expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-claims-batch-size']).toBe(1)
   })
 
   it('uses the vwa-argument namespace with flat kebab keys', () => {
     expect(SETTINGS_NAMESPACE).toBe('vwa-argument')
     expect(Object.keys(DEFAULT_VWA_ARGUMENT_SETTINGS).every((k) => k === k.toLowerCase() && k.includes('-'))).toBe(true)
+  })
+})
+
+describe('review-claims-batch-size (Feature C §C.2.2)', () => {
+  it('reads values in the 1–4 range and keeps the default 1', async () => {
+    const three = await tempHome({ [SETTINGS_NAMESPACE]: { 'review-claims-batch-size': 3 } })
+    expect(readUserSettingsSync(three)['review-claims-batch-size']).toBe(3)
+    const four = await tempHome({ [SETTINGS_NAMESPACE]: { 'review-claims-batch-size': 4 } })
+    expect(readUserSettingsSync(four)['review-claims-batch-size']).toBe(4)
+    expect(readUserSettingsSync(join(tmpdir(), 'vwa-argument-absent-home'))['review-claims-batch-size']).toBe(1)
+  })
+
+  it('rejects 0 and 5 by falling back to the default 1', async () => {
+    const zero = await tempHome({ [SETTINGS_NAMESPACE]: { 'review-claims-batch-size': 0 } })
+    expect(readUserSettingsSync(zero)['review-claims-batch-size']).toBe(1)
+    const five = await tempHome({ [SETTINGS_NAMESPACE]: { 'review-claims-batch-size': 5 } })
+    expect(readUserSettingsSync(five)['review-claims-batch-size']).toBe(1)
   })
 })
 

@@ -37,6 +37,7 @@ export interface VwaArgumentSettings {
   'review-concurrency': number
   'review-max-artifact-chars': number
   'review-max-context-chars-per-task': number
+  'review-claims-batch-size': number
   'project-max-entities': number
   'repair-max-rounds-per-artifact-turn': number
 }
@@ -57,6 +58,8 @@ const SettingsObject = z.object({
   'review-concurrency': z.number().step(1).min(1).max(4).default(2),
   'review-max-artifact-chars': z.number().step(1).min(1000).default(120_000),
   'review-max-context-chars-per-task': z.number().step(1).min(1000).default(48_000),
+  // Claims batching (Feature C §C.2.2): 1 = current per-claim behavior.
+  'review-claims-batch-size': z.number().step(1).min(1).max(4).default(1),
   'project-max-entities': z.number().step(1).min(1).default(10_000),
   // Fixed cap per design (§13); the schema range keeps a sane guard only.
   'repair-max-rounds-per-artifact-turn': z.number().step(1).min(0).max(10).default(1),
@@ -83,6 +86,7 @@ export const DEFAULT_VWA_ARGUMENT_SETTINGS: VwaArgumentSettings = {
   'review-concurrency': 2,
   'review-max-artifact-chars': 120_000,
   'review-max-context-chars-per-task': 48_000,
+  'review-claims-batch-size': 1,
   'project-max-entities': 10_000,
   'repair-max-rounds-per-artifact-turn': 1,
 }
@@ -130,6 +134,7 @@ function resolveSection(section: Record<string, unknown>): VwaArgumentSettings {
     'review-concurrency': num('review-concurrency'),
     'review-max-artifact-chars': num('review-max-artifact-chars'),
     'review-max-context-chars-per-task': num('review-max-context-chars-per-task'),
+    'review-claims-batch-size': num('review-claims-batch-size'),
     'project-max-entities': num('project-max-entities'),
     'repair-max-rounds-per-artifact-turn': num('repair-max-rounds-per-artifact-turn'),
   }
