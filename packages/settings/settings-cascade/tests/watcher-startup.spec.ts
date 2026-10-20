@@ -87,4 +87,32 @@ describe('settings watcher startup', () => {
     await close()
     for (const watcher of state.watchers) expect(watcher.close).toHaveBeenCalledOnce()
   })
+
+  it('does not block service startup when a watcher never reports ready or error', async () => {
+    vi.useFakeTimers()
+    try {
+      const input = options()
+      let close: (() => Promise<void>) | undefined
+      const startup = startWatchers(input).then((closer) => { close = closer })
+      state.watchers[1]!.emit('ready')
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(close).toBeUndefined()
+      expect(input.onError).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(close).toBeTypeOf('function')
+      expect(input.onError).toHaveBeenCalledOnce()
+      expect(input.onError).toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining('file watcher'),
+      }))
+      await startup
+      // A late ready signal still reconciles and leaves change delivery active.
+      state.watchers[0]!.emit('ready')
+      state.watchers[0]!.emit('all', 'change', settingsPath)
+      expect(input.refresh).toHaveBeenCalledTimes(3)
+      await close!()
+      for (const watcher of state.watchers) expect(watcher.close).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

@@ -22,6 +22,8 @@ export interface WatchTuning {
 
 /** Watcher write-settle window in milliseconds (mirrors the harness file provider's default). */
 const DEBOUNCE_MS = 100
+/** Hot reload is optional: a silent watcher must not block the plugin tree. */
+const READY_TIMEOUT_MS = 5_000
 
 /** Resolve the watch tuning from plugin config; defaults (100/10) mirror the file provider. */
 export function resolveWatchTuning(
@@ -78,7 +80,7 @@ export interface WatchersOptions {
 
 /**
  * Watch the settings files and their parent directories; resolves with the
- * closer only after both watchers finish their initial scans.
+ * closer after both initial scans finish or their non-fatal startup deadlines.
  * Both watchers share one `awaitWriteFinish` window: writeJsonAtomic commits
  * via rename, so the dir-derived events must settle the same window as the
  * file events or renames bypass the debounce entirely.
@@ -99,19 +101,24 @@ export async function startWatchers(options: WatchersOptions): Promise<() => Pro
   }
   // Poll this small, filtered tree as a fallback for dropped native events.
   const dirWatcher = chokidarWatch(paths.dirs, { ignoreInitial: true, ignored, usePolling: true, awaitWriteFinish })
-  await Promise.all([watcher, dirWatcher].map((w) => new Promise<void>((resolve) => {
+  await Promise.all(([['file', watcher], ['directory', dirWatcher]] as const).map(([kind, w]) => new Promise<void>((resolve) => {
+    const finish = () => { clearTimeout(timer); resolve() }
+    const timer = setTimeout(() => {
+      onError(new Error(`settings-cascade: ${kind} watcher did not become ready within ${READY_TIMEOUT_MS}ms; continuing startup`))
+      resolve()
+    }, READY_TIMEOUT_MS)
     w.on('all', refresh)
     w.on('ready', () => {
       // The base init's load raced the watcher's own setup: a change written
       // between that read and the watcher becoming active never fires an
       // event. One reconcile at ready closes the gap.
       refresh()
-      resolve()
+      finish()
     })
     w.on('error', (error) => {
       onError(error)
       // Watch failures stay non-fatal and must not leave service startup hung.
-      resolve()
+      finish()
     })
   })))
   return async () => {
