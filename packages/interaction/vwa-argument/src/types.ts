@@ -350,7 +350,7 @@ export interface StageProgress {
   completed: number
   failed: number
   notRun: number
-  /** Status of the most recent record touching this stage. */
+  /** Status of the most recently ended task; legacy field name retained for JSON compatibility. */
   lastRunStatus?: string
   channelErrors: number
   schemaErrors: number

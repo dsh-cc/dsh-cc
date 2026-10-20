@@ -474,6 +474,33 @@ describe('evidence.register (§10.3)', () => {
     expect(data.driftWarning).toContain('delete the old source and re-register')
   })
 
+  it.each(['path', 'citation'])('D.3: dedup after an edit emits no drift warning (%s locator)', async (locator) => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'versions.txt')
+    const metadata = { ...METADATA, ...(locator === 'path' ? { originalLocator: sourcePath } : {}) }
+    const register = (revision: number) => call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: `version-${revision}`,
+      input: { path: sourcePath, metadata, excerpts: [] },
+    })
+    writeFileSync(sourcePath, 'version A\n', 'utf8')
+    const first = await register(1)
+    expect(first.ok).toBe(true)
+    writeFileSync(sourcePath, 'version B\n', 'utf8')
+    const second = await register(2)
+    expect(second.ok).toBe(true)
+    expect((second.data as { driftWarning?: string }).driftWarning).toBeDefined()
+    const third = await register(3)
+    expect(third.ok).toBe(true)
+    expect(third.data).toMatchObject({ sourceId: (second.data as { sourceId: string }).sourceId, duplicated: true })
+    expect(third.data).not.toHaveProperty('driftWarning')
+    // Reverting to an already registered snapshot is also a dedup, not a new source.
+    writeFileSync(sourcePath, 'version A\n', 'utf8')
+    const reverted = await register(4)
+    expect(reverted.ok).toBe(true)
+    expect(reverted.data).toMatchObject({ sourceId: (first.data as { sourceId: string }).sourceId, duplicated: true })
+    expect(reverted.data).not.toHaveProperty('driftWarning')
+  })
+
   it('D.3: drift is detected from the citation locator when the path is not used as locator', async () => {
     const { tools, workspace } = mount()
     const sourcePath = join(workspace.root, 'cited.txt')

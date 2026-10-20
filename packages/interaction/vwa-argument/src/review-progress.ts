@@ -42,6 +42,16 @@ function classify(errorCode: string | undefined, progress: StageProgress): void 
   else if (BUDGET_CODES.has(errorCode)) progress.budgetErrors += 1
 }
 
+/** Record filenames are random UUIDs, so directory order is never chronology. */
+function lastTaskStatus(records: ReviewRecord[]): ReviewRecord['status'] | undefined {
+  // When timestamps tie, retain the more actionable status, independently of read order.
+  const priority = { completed: 0, cancelled: 1, 'budget-exhausted': 2, error: 3 }
+  return [...records].sort((a, b) =>
+    a.endedAt.localeCompare(b.endedAt) || a.startedAt.localeCompare(b.startedAt) ||
+    priority[a.status] - priority[b.status] || a.runId.localeCompare(b.runId),
+  ).at(-1)?.status
+}
+
 export function computeStageProgress(input: {
   snapshot: ProjectSnapshot
   index: ReverseIndex
@@ -67,12 +77,8 @@ export function computeStageProgress(input: {
   for (const stage of PROGRESS_STAGES) {
     const progress = stageProgress[stage]
     const stageRecords = records.filter((r) => r.stage === stage)
-    if (stageRecords.length > 0) {
-      const last = [...stageRecords].sort(
-        (a, b) => a.startedAt.localeCompare(b.startedAt) || a.runId.localeCompare(b.runId),
-      ).at(-1)!
-      progress.lastRunStatus = last.status
-    }
+    const lastStatus = lastTaskStatus(stageRecords)
+    if (lastStatus) progress.lastRunStatus = lastStatus
     for (const record of stageRecords)
       if (record.status === 'error' || record.status === 'budget-exhausted') {
         classify(record.errorCode, progress)
@@ -115,8 +121,8 @@ export function computeStageProgress(input: {
   // planStage task. Keep both sub-stages and aggregate runner errors visible.
   const progress = stageProgress.audit
   const auditRecords = records.filter((r) => ['audit', 'extract', 'align'].includes(r.stage))
-  const lastAudit = [...auditRecords].sort((a, b) => a.endedAt.localeCompare(b.endedAt) || a.runId.localeCompare(b.runId)).at(-1)
-  if (lastAudit) progress.lastRunStatus = lastAudit.status
+  const lastAuditStatus = lastTaskStatus(auditRecords)
+  if (lastAuditStatus) progress.lastRunStatus = lastAuditStatus
   for (const record of auditRecords) {
     if (record.status !== 'error' && record.status !== 'budget-exhausted') continue
     classify(record.errorCode, progress)

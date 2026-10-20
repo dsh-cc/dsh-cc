@@ -359,12 +359,13 @@ export function registerSourceApply(
     // registration. The input path is not persisted on Source, so match on the
     // stored `originalLocator` against either the incoming path or the incoming
     // locator metadata (the two ways callers identify the same document).
-    const drifted = snapshot.sources.find(
+    // A dedup hit creates no new source, even when older versions remain registered.
+    const drifted = existing === undefined ? snapshot.sources.find(
       (candidate) =>
         candidate.snapshotHash !== read.hash &&
         (candidate.originalLocator === input.path ||
           (input.metadata.originalLocator !== '' && candidate.originalLocator === input.metadata.originalLocator)),
-    )
+    ) : undefined
     const driftWarning =
       drifted === undefined
         ? undefined

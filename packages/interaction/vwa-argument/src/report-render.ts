@@ -194,7 +194,7 @@ export function renderReportMarkdown(input: ReportInput): string {
   // there are failures (an empty failures table carries no information).
   if (input.stageProgress) {
     lines.push('## Review progress', '')
-    lines.push('| stage | completed | failed | not run | last run |', '| --- | --- | --- | --- | --- |')
+    lines.push('| stage | completed | failed | not run | last task |', '| --- | --- | --- | --- | --- |')
     for (const [stage, progress] of Object.entries(input.stageProgress)) {
       const categories = [
         progress.channelErrors > 0 ? `channel ${progress.channelErrors}` : '',

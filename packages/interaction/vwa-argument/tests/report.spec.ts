@@ -299,6 +299,7 @@ describe('Feature D — review progress section and statuses (§D.2.3/§D.2.4)',
     ].map((needle) => text.indexOf(needle))
     expect(positions.every((position) => position > 0)).toBe(true)
     expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+    expect(text).toContain('| stage | completed | failed | not run | last task |')
     expect(text).toContain('| support | 4/5 | 1 (channel 1) | 0 | error |')
     expect(text).toContain('| claims | 0/2 | 0 | 2 | — |')
     expect(text).toContain('### Failures')
