@@ -1,6 +1,6 @@
 # VWA lane-2 Hardening — Feature D: Report Observability and Authoring UX
 
-## Status: Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off pending.
+## Status: Implemented — PR #272 (open, pending merge). Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problems 7, 8, 10 and 11 from the tui-40b4 session.
