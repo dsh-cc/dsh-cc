@@ -125,43 +125,37 @@ export function fitSourceText(
   if (stableJson(cand([entryWith(text)])).length <= maxContextChars) {
     return { text } // fits without windowing
   }
-  // Compute the window from the remaining budget.
-  const baseSize = stableJson(base).length
-  const overhead = 300 // omission marker + windowing metadata (conservative)
-  const availableForSource = maxContextChars - baseSize - overhead
-  if (availableForSource < MIN_SOURCE_WINDOW) {
+  const windowFor = (chars: number) => {
+    const headChars = Math.floor(chars / 2)
+    const tailChars = chars - headChars
+    return {
+      text: text.slice(0, headChars) + marker(headChars, tailChars) + text.slice(-tailChars),
+      windowing: { totalChars: text.length, headChars, tailChars },
+    }
+  }
+  const fits = (window: ReturnType<typeof windowFor>) =>
+    stableJson(cand([entryWith(window.text, window.windowing)])).length <= maxContextChars
+  // Measure the minimum before rejecting: JSON escaping can double (or more)
+  // the serialized size without exhausting the budget for a useful excerpt.
+  let low = MIN_SOURCE_WINDOW
+  let high = Math.min(text.length - 1, maxContextChars)
+  let best = windowFor(low)
+  if (high < low || !fits(best)) {
     throw new ReviewContextError('envelope overhead leaves insufficient room for source text')
   }
-  const headChars = Math.floor(availableForSource / 2)
-  const tailChars = availableForSource - headChars
-  const windowed = text.slice(0, headChars) + marker(headChars, tailChars) + text.slice(-tailChars)
-  // Measure the serialized envelope with the windowed text.
-  const windowedSize = stableJson(
-    cand([entryWith(windowed, { totalChars: text.length, headChars, tailChars })]),
-  ).length
-  if (windowedSize <= maxContextChars) {
-    return { text: windowed, windowing: { totalChars: text.length, headChars, tailChars } }
+  // Search raw window lengths, but make every budget decision using the full
+  // serialized envelope, including sibling entries and windowing metadata.
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    const candidate = windowFor(mid)
+    if (fits(candidate)) {
+      low = mid
+      best = candidate
+    } else {
+      high = mid - 1
+    }
   }
-  // JSON escaping expanded the text beyond the raw char estimate.
-  // Shrink by the overshoot and retry once.
-  const overshoot = windowedSize - maxContextChars
-  const shrunkAvailable = availableForSource - overshoot - 500 // safety margin
-  if (shrunkAvailable < MIN_SOURCE_WINDOW) {
-    throw new ReviewContextError('envelope overhead leaves insufficient room for source text after JSON escaping')
-  }
-  const shrunkHead = Math.floor(shrunkAvailable / 2)
-  const shrunkTail = shrunkAvailable - shrunkHead
-  const shrunkWindowed = text.slice(0, shrunkHead) + marker(shrunkHead, shrunkTail) + text.slice(-shrunkTail)
-  // Measure the shrunk candidate too — the safety margin may not cover
-  // pathological escaping (e.g., text that is 100% newlines).
-  const shrunkCandidate = cand([entryWith(shrunkWindowed, { totalChars: text.length, headChars: shrunkHead, tailChars: shrunkTail })])
-  if (stableJson(shrunkCandidate).length > maxContextChars) {
-    throw new ReviewContextError('envelope overhead leaves insufficient room for source text even after shrinking')
-  }
-  return {
-    text: shrunkWindowed,
-    windowing: { totalChars: text.length, headChars: shrunkHead, tailChars: shrunkTail },
-  }
+  return best
 }
 
 export function reviewContext(input: {

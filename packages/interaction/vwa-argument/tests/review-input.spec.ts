@@ -271,6 +271,27 @@ describe('sources-stage compaction (E.2.2/E.4)', () => {
     expect(JSON.stringify(ctx).length).toBeLessThanOrEqual(LIMIT)
   })
 
+  it.each([
+    ['newlines', 'Text\n' + '\n'.repeat(200_000) + 'End'],
+    ['tabs', 'Text\n' + '\t'.repeat(200_000) + 'End'],
+    ['backslashes', 'Text' + '\\'.repeat(200_000) + 'End'],
+    ['quotes', 'Text' + '"'.repeat(200_000) + 'End'],
+  ])('fits heavily escaped %s while preserving both ends and metadata', (_, text) => {
+    const { snapshot, task } = sourcesFixture(text)
+    const ctx = contextText({ snapshot, task, text, maxContextChars: 48_000 })
+    const source = ctx.sources[0]!
+    expect(JSON.stringify(ctx).length).toBeLessThanOrEqual(48_000)
+    expect(source.windowing!.headChars + source.windowing!.tailChars).toBeGreaterThanOrEqual(2000)
+    expect(source.windowing!.totalChars).toBe(text.length)
+    expect(source.text!.startsWith(text.slice(0, source.windowing!.headChars))).toBe(true)
+    expect(source.text!.endsWith(text.slice(-source.windowing!.tailChars))).toBe(true)
+    expect(source.text).toContain(`${text.length - source.windowing!.headChars - source.windowing!.tailChars} chars omitted`)
+  })
+
+  it('refuses when even a minimum escaped window cannot fit', () => {
+    expect(() => fitSourceText('Text' + '\n'.repeat(20_000), { sources: [] }, 3500)).toThrow(ReviewContextError)
+  })
+
   it('shrinks the window to accommodate fat evidence context slices', () => {
     const { snapshot: base, task, source } = sourcesFixture('x'.repeat(20_000))
     const evidence = { ...makeEvidence(source), contextSpan: { start: 0, end: 3000 } }

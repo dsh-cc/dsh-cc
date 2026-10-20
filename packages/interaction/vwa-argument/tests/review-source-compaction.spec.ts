@@ -43,8 +43,10 @@ describe('sources-stage dependency compaction regressions', () => {
     }
   }
 
-  it('dispatches both large sources for one claim within the whole-message budget', async () => {
-    const text = 'The committee recorded its decision. '.repeat(3000)
+  it.each([
+    ['plain prose', 'The committee recorded its decision. '.repeat(3000)],
+    ['heavily escaped prose', 'Text\n' + '\n'.repeat(200_000) + 'End'],
+  ])('dispatches both large sources with %s within the whole-message budget', async (_, text) => {
     const sources = [makeSource(), makeSource()].map((source) => ({ ...source, snapshotHash: sha256Hex(text) }))
     const evidence = sources.map((source) => ({ ...makeEvidence(source), quote: text.slice(0, 5) }))
     const claim = makeClaim()
