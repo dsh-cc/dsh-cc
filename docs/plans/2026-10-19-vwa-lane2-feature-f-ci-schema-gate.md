@@ -1,6 +1,12 @@
 # VWA lane-2 Hardening — Feature F: CI Tool Schema Regression Gate
 
-## Status: Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off pending.
+## Status: Implemented — PR pending (this branch); three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
+
+Implementation note (adjudicated during delivery): beyond §F.2.3's fixture
+migration, one shared-subset fix was required — `$schema` was added to the
+annotation keywords in `json-schema.ts`, because the MCP SDK's zod→JSON
+conversion emits `$schema` on every external server schema and the hardened
+tripwire would otherwise reject all MCP tools in test mode.
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problem 12 from the tui-40b4 session.
