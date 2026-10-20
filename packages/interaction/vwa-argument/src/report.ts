@@ -34,6 +34,7 @@ import {
   artifactText,
   projectDependencyDigest,
   activeAdjudications,
+  deliveryScope,
 } from './delivery-check.ts'
 import { ProjectStore } from './store.ts'
 
@@ -182,7 +183,10 @@ export class VwaArgumentService {
     const gates =
       (await this.deps.gates?.(artifact.path, this.deps.root)) ?? (await defaultGates(this.deps.root, artifact.path))
     const reviewerConfigHash = (await this.deps.currentReviewerConfigHash?.(projectId)) ?? this.deps.reviewerConfigHash
-    const adjudications = activeAdjudications(snapshot, records, readAdjudications(this.deps.root, projectId))
+    const adjudications = activeAdjudications(
+      snapshot, records, readAdjudications(this.deps.root, projectId),
+      deliveryScope(snapshot, artifactId, text).targets, reviewerConfigHash,
+    )
     const check = evaluateDelivery({
       root: this.deps.root,
       snapshot,

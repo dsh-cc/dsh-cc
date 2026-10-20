@@ -18,7 +18,7 @@ import { DEFAULT_VWA_ARGUMENT_SETTINGS } from '../src/settings.ts'
 import { BUDGET, claimsResponse, fakeAdapter } from './review-helpers.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { executeReviewRun } from '../src/review-runner.ts'
-import type { ReviewMessages } from '../src/review-adapter.ts'
+import { createReviewAdapter, type ReviewLlmFace, type ReviewMessages } from '../src/review-adapter.ts'
 
 // Background review fixtures must advance the caller's retry backoffs.
 beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }))
@@ -921,6 +921,85 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
     return { claimIds: made.data.changedIds, revision: 2 }
   }
 
+  it.each(['unavailable', 'cancelled'] as const)(
+    'preserves an initialization %s refusal even when the full plan exceeds budget',
+    async (failure) => {
+      const controller = new AbortController()
+      const { tools, workspace } = mount({ review: () => {
+        const collaborators = reviewCollaborators([])
+        collaborators.adapter.initialize = async () => {
+          if (failure === 'cancelled') controller.abort()
+          throw new Error('reviewer initialization failed')
+        }
+        return collaborators
+      } })
+      const { revision } = await seedClaims(tools, workspace.projectId, 6)
+      const requestId = uuid()
+      const result = await (tools.get('argument.review') as ToolDefinition).execute({
+        projectId: workspace.projectId, expectedRevision: revision, requestId,
+        input: { stage: 'claims', continue: true },
+      }, { signal: controller.signal } as never)
+      expect(result).toMatchObject(failure === 'cancelled'
+        ? { ok: false, code: 'CANCELLED', retryable: false }
+        : { ok: false, code: 'REVIEW_UNAVAILABLE', retryable: true })
+      expect(new ReviewRunStore(workspace.root, workspace.projectId).findRunByRequestId(requestId)).toBeUndefined()
+    },
+  )
+
+  it('initializes a fresh production adapter before exempting completed work from feasibility', async () => {
+    let dispatches = 0
+    const llm: ReviewLlmFace = {
+      async prepareCall(config) {
+        return {
+          config: { ...config, temperature: 0.2 },
+          retryPolicy: {
+            mode: 'normal', maxRetries: 0, retryableCodes: [],
+            initialDelayMs: 0, maxDelayMs: 0, jitterRatio: 0,
+          },
+          adapterDefaults: {},
+          stream: async function* (options) {
+            dispatches++
+            const content = options.messages[0]!.content
+            const text = content.find((block) => block.type === 'text')
+            if (text?.type !== 'text') throw new Error('missing review envelope')
+            const envelope = JSON.parse(text.text) as { targets: { id: string }[] }
+            const raw = claimsResponse(envelope.targets[0]!.id, 'pass')
+            yield { type: 'block-start' as const, index: 0, blockType: 'tool-call' as const }
+            yield { type: 'block-end' as const, index: 0, block: { type: 'tool-call' as const, id: 'r', name: 'respond', arguments: raw } }
+            yield { type: 'usage' as const, usage: { inputTokens: 10, outputTokens: 10 } }
+            yield { type: 'finish' as const, reason: { kind: 'stop' as const } }
+          },
+        }
+      },
+    }
+    const review = () => ({
+      ...reviewCollaborators([]),
+      adapter: createReviewAdapter({ llm, route: { provider: 'fake', model: 'fake-model' } }),
+    })
+    const { tools, workspace } = mount({ review })
+    const { claimIds, revision } = await seedClaims(tools, workspace.projectId, 6)
+    const tool = tools.get('argument.review') as ToolDefinition
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    const first = await call(tool, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: 'effective-first',
+      input: { stage: 'claims', targetClaimIds: claimIds.slice(0, 4) },
+    })
+    expect(first.ok).toBe(true)
+    expect((await settle(store, (first.data as { runId: string }).runId))?.status).toBe('completed')
+    expect(dispatches).toBe(4)
+    // Two remaining calls fit the frozen 24k budget. Before initialization,
+    // the fingerprint lacks effectiveConfig and wrongly counts all six (27k).
+    const continued = await call(tool, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: 'effective-continue',
+      input: { stage: 'claims', continue: true },
+    })
+    expect(continued.ok).toBe(true)
+    const runId = (continued.data as { runId: string }).runId
+    expect((await settle(store, runId))?.status).toBe('completed')
+    expect(dispatches).toBe(6)
+    expect(store.readUsage(runId).filter((row) => row.kind === 'reused')).toHaveLength(4)
+  })
+
   it('refuses with BUDGET_INSUFFICIENT before reserving when the plan exceeds the frozen budget', async () => {
     const made = tinyWorkspace()
     const { tools, workspace } = mount({ review: reviewWithScript([(req) => stepFor(req, 5)]) }, made)
@@ -955,13 +1034,13 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
 
   it('continue mode exempts reusable tasks; the audit is always counted in full', async () => {
     const made = tinyWorkspace()
-    const { tools, workspace, deps: toolDeps } = mount({ review: reviewWithScript([(req) => stepFor(req, 5)]) }, made)
+    const { tools, workspace, deps: toolDeps } = mount({ review: reviewWithScript([(req) => ({ ...stepFor(req, 5), outputTokens: 5 })]) }, made)
     const { claimIds, revision } = await seedClaims(tools, workspace.projectId, 2)
     // Complete ONE claim task directly (same reviewer fingerprint) so continue
     // has exactly one executable task left: ceil(1.5) = 2 → 6000 ≤ 8000 passes.
     const head = workspace.store.readHead()
     if (!head.ok) throw new Error(head.message)
-    const adapter = fakeAdapter([(req) => stepFor(req, 5)])
+    const adapter = fakeAdapter([(req) => ({ ...stepFor(req, 5), outputTokens: 5 })])
     await executeReviewRun({
       deps: {
         root: workspace.root,
@@ -983,6 +1062,7 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
       input: { stage: 'claims', continue: true },
     })
     expect(result.ok).toBe(true) // 1 executable task fits; the reusable one is exempt
+    expect((await settle(new ReviewRunStore(workspace.root, workspace.projectId), (result.data as { runId: string }).runId))?.status).toBe('completed')
     // With the audit requested, the audit is counted in FULL even in continue
     // mode: 1 claim task + (1 root block + 1 over-long piece + 1 align) = 4
     // calls → 6 with headroom → 18000 > 8000 refused.
@@ -1009,7 +1089,7 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
     })
     expect(denied).toMatchObject({ ok: false, code: 'BUDGET_INSUFFICIENT' })
     // The audit is counted in FULL even in continue mode; the remaining claim
-    // task (0 or 1 by now, racy) is the only executable semantic work.
+    // task (invalidated by binding, if applicable) is the only semantic work.
     expect((denied.details as { plannedCalls: Record<string, number> }).plannedCalls.claims).toBeLessThanOrEqual(1)
     expect((denied.details as { plannedCalls: Record<string, number> }).plannedCalls.audit).toBe(3)
   })

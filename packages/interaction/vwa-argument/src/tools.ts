@@ -384,9 +384,6 @@ export function registerArgumentTools(
           return fail('INPUT_CHANGED', `artifact text for ${bound.path} is not available to the runtime`, true)
         artifact = { id: bound.id, path: bound.path, text }
       }
-      // Feature C §C.2.1: static budget feasibility, before reserving a run.
-      const infeasible = reviewBudgetRefusal({ root, review, snapshot, stages, body, ...(artifact === undefined ? {} : { artifact }) })
-      if (infeasible) return infeasible
       // §A.2: continue on a fully completed plan is refused BEFORE reserving the
       // request, via the shared pre-check (the runner's guard uses the same logic).
       const refusal =
@@ -416,6 +413,10 @@ export function registerArgumentTools(
       if (current.data.head.revision !== args.expectedRevision)
         return fail('REVISION_CONFLICT', `expectedRevision ${args.expectedRevision} is not HEAD ${current.data.head.revision}`, true)
       if (refusal !== undefined) return refusal
+      // Continue preparation freezes the effective reviewer fingerprint before
+      // feasibility hashes tasks and exempts reusable records. Never reserve first.
+      const infeasible = reviewBudgetRefusal({ root, review, snapshot, stages, body, ...(artifact === undefined ? {} : { artifact }) })
+      if (infeasible) return infeasible
       const reserved = reserveCycleRequest(root, args.projectId, runId, {
         schemaVersion: 1,
         requestId: args.requestId,

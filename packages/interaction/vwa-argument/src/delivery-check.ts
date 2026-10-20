@@ -31,11 +31,14 @@ export function activeAdjudications(
   snapshot: ProjectSnapshot,
   records: ReviewRecord[],
   adjudications: AdjudicationRecord[],
+  targets: Id[] = snapshot.claims.map((c) => c.id),
+  reviewerConfigHash?: Hash,
 ): AdjudicationRecord[] {
   const current = currentReviews(
     snapshot,
     records,
-    snapshot.claims.map((c) => c.id),
+    targets,
+    reviewerConfigHash,
   ).records
   return adjudications.filter(
     (a) =>
@@ -125,9 +128,9 @@ export function mechanicalFindings(root: string, snapshot: ProjectSnapshot, arti
       )
   return findings
 }
-export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
-  const { snapshot, artifactId, text } = input,
-    index = buildReverseIndex(snapshot)
+/** One scope for delivery and adjudication: batching makes target scope part of task identity. */
+export function deliveryScope(snapshot: ProjectSnapshot, artifactId: Id, text: string) {
+  const index = buildReverseIndex(snapshot)
   const artifact = snapshot.artifacts.find((a) => a.id === artifactId)!
   const core = computeCoreSet({
     index,
@@ -136,6 +139,11 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     artifactId,
   })
   const targets = [...new Set([...artifact.occurrences.map((o) => o.claimId), ...core])]
+  return { index, artifact, core, targets }
+}
+export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
+  const { snapshot, artifactId, text } = input
+  const { index, artifact, core, targets } = deliveryScope(snapshot, artifactId, text)
   const selected = currentReviews(snapshot, input.records, targets, input.reviewerConfigHash)
   const contractHash = sha256Hex(stableJson(snapshot.contract)),
     artifactHash = sha256Hex(text)
@@ -165,7 +173,7 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   const align = latest.find((r) => r.stage === 'align')
   if (align) for (const id of align.coreClaimIds ?? []) core.add(id)
   const records = [...selected.records, ...latest]
-  const adjudications = activeAdjudications(snapshot, input.records, input.adjudications)
+  const adjudications = activeAdjudications(snapshot, input.records, input.adjudications, targets, input.reviewerConfigHash)
   const rejected = new Set(adjudications.filter((a) => a.decision === 'reject').map((a) => a.findingId))
   const effective = structuredClone(records)
   for (const record of effective) {
