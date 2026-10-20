@@ -367,7 +367,7 @@ export class SettingsCascadeProvider extends SettingsProvider {
       if (this.isClosed()) return
       this.queueRefresh()
     }
-    const closeWatchers = startWatchers({
+    const closeWatchers = await startWatchers({
       paths: await this.watchPaths(),
       tuning: this.watch,
       refresh,
@@ -381,6 +381,8 @@ export class SettingsCascadeProvider extends SettingsProvider {
       await closeWatchers()
       await this.operations
     }
+    // Ready reconciliation is queued; publish it before exposing the service.
+    await this.operations
   }
 
   /**

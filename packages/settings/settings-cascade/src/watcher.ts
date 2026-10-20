@@ -9,7 +9,8 @@
 
 import { watch as chokidarWatch } from 'chokidar'
 import { canonicalizeWatchPath } from '@deepseek-ai/dsh-home-paths'
-import { dirname } from 'node:path'
+import { stat } from 'node:fs/promises'
+import { dirname, resolve, sep } from 'node:path'
 
 /** Watcher write-settle tuning (chokidar `awaitWriteFinish`). */
 export interface WatchTuning {
@@ -34,10 +35,9 @@ export function resolveWatchTuning(
 
 /**
  * Every concrete settings FILE path worth watching, canonicalized and
- * deduped. The result also carries each file's parent directory: chokidar
- * v4 emits nothing for a watched path whose parent directory does not yet
- * exist, so a settings file created after boot (e.g. the project
- * `.claude/settings.json`) is only seen through its directory watch.
+ * deduped. Anchor directory watches at existing ancestors so creation of
+ * missing intermediate directories is observed without chokidar's fallback
+ * to a parent outside the requested depth.
  */
 export async function resolveWatchPaths(
   paths: ReadonlyArray<string | undefined>,
@@ -46,13 +46,27 @@ export async function resolveWatchPaths(
   const canonical = [...new Set(await Promise.all(concrete.map(path => canonicalizeWatchPath(path))))]
   return {
     files: canonical,
-    dirs: [...new Set(canonical.map(path => dirname(path)))],
+    dirs: [...new Set(await Promise.all(canonical.map(existingParent)))],
+  }
+}
+
+async function existingParent(file: string): Promise<string> {
+  let directory = dirname(file)
+  while (true) {
+    try {
+      if (!(await stat(directory)).isDirectory()) throw new Error(`watch ancestor is not a directory: ${directory}`)
+      return directory
+    } catch (error) {
+      const parent = dirname(directory)
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === directory) throw error
+      directory = parent
+    }
   }
 }
 
 /** Options for {@link startWatchers}. */
 export interface WatchersOptions {
-  /** Files and parent dirs to watch (from {@link resolveWatchPaths}). */
+  /** Files and existing ancestor dirs to watch (from {@link resolveWatchPaths}). */
   paths: { files: string[]; dirs: string[] }
   /** Resolved write-settle tuning. */
   tuning: WatchTuning
@@ -63,35 +77,43 @@ export interface WatchersOptions {
 }
 
 /**
- * Watch the settings files and their parent directories; returns the closer.
+ * Watch the settings files and their parent directories; resolves with the
+ * closer only after both watchers finish their initial scans.
  * Both watchers share one `awaitWriteFinish` window: writeJsonAtomic commits
  * via rename, so the dir-derived events must settle the same window as the
  * file events or renames bypass the debounce entirely.
  */
-export function startWatchers(options: WatchersOptions): () => Promise<void> {
+export async function startWatchers(options: WatchersOptions): Promise<() => Promise<void>> {
   const { paths, tuning, refresh, onError } = options
   const awaitWriteFinish = {
     stabilityThreshold: tuning.stabilityThresholdMs,
     pollInterval: tuning.pollIntervalMs,
   }
   const watcher = chokidarWatch(paths.files, { ignoreInitial: true, awaitWriteFinish })
-  // Parent directories are watched at depth 0: a plain dir watch would
-  // recurse (a settings file may live directly in $HOME), which is both a
-  // boot-cost and a noise problem. Depth 0 still reports direct children,
-  // which is all the creation-after-boot case needs.
-  const dirWatcher = chokidarWatch(paths.dirs, { ignoreInitial: true, depth: 0, awaitWriteFinish })
-  for (const w of [watcher, dirWatcher]) {
+  // Follow only ancestors of concrete settings files. A fixed depth misses
+  // files in newly created directories; unrestricted recursion could scan HOME.
+  const ignored = (path: string) => {
+    const normalized = resolve(path)
+    const prefix = normalized.endsWith(sep) ? normalized : normalized + sep
+    return !paths.files.some(file => file === normalized || file.startsWith(prefix))
+  }
+  // Poll this small, filtered tree as a fallback for dropped native events.
+  const dirWatcher = chokidarWatch(paths.dirs, { ignoreInitial: true, ignored, usePolling: true, awaitWriteFinish })
+  await Promise.all([watcher, dirWatcher].map((w) => new Promise<void>((resolve) => {
     w.on('all', refresh)
     w.on('ready', () => {
       // The base init's load raced the watcher's own setup: a change written
       // between that read and the watcher becoming active never fires an
       // event. One reconcile at ready closes the gap.
       refresh()
+      resolve()
     })
     w.on('error', (error) => {
       onError(error)
+      // Watch failures stay non-fatal and must not leave service startup hung.
+      resolve()
     })
-  }
+  })))
   return async () => {
     await Promise.all([watcher.close(), dirWatcher.close()])
   }
