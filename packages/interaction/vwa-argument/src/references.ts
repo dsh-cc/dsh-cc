@@ -73,7 +73,7 @@ export function findReferencesDetailed(graph: GraphContext, id: Id): ReferenceIn
  */
 export function computeDeletionClosure(graph: GraphContext, rootIds: Id[]): Id[] {
   const closure = new Set<Id>(rootIds)
-  const queue = [...rootIds]
+  const queue = [...closure]
   const order: Id[] = []
   while (queue.length > 0) {
     const id = queue.shift()!

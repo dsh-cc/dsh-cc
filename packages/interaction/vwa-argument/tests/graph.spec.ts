@@ -436,6 +436,19 @@ describe('Feature D §D.4.2 cascade delete', () => {
     expect(graph.snapshot.claims.map((claim) => claim.id)).toContain(a.id)
   })
 
+  it('deletes repeated cascade roots and shared referencers exactly once', () => {
+    const { a, b, graph } = buildReferencedClaim()
+    const argumentId = graph.snapshot.arguments[0]!.id
+    const outcome = applyMutation(graph, {
+      op: 'upsert', creates: [], updates: [], deletes: [a.id, b.id, a.id, b.id], cascade: true,
+    })
+    expect(graph.snapshot.claims).toHaveLength(0)
+    expect(graph.snapshot.arguments).toHaveLength(0)
+    expect(outcome.changedIds).toHaveLength(3)
+    expect(new Set(outcome.changedIds)).toEqual(new Set([a.id, b.id, argumentId]))
+    expect(outcome.cascadeDeleted).toEqual([argumentId])
+  })
+
   it('closure handles cross-kind cycles (source lineage ↔ evidence authenticity basis)', () => {
     const made = seedGraphSnapshot()
     const graph = new GraphContext(structuredClone(made.snapshot), 10_000)

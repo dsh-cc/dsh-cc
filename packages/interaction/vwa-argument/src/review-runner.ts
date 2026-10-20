@@ -177,20 +177,20 @@ export async function executeReviewRun(input: {
     records.push(record)
     store.writeRecord(runId, record)
   }
-  const errorRecord = (stage: ReviewStage, error: unknown, task?: ReviewTask): ReviewRecord => ({
+  // Preserve the exact inputs used for dispatch; history and concurrent tasks
+  // may differ from the records available when the call eventually fails.
+  const errorRecord = (stage: ReviewStage, error: unknown, taskInput?: {
+    task: ReviewTask; dependencyDigest: Hash; inputHash: Hash
+  }): ReviewRecord => ({
     runId,
     stage,
-    targetRefs: task?.targetRefs ?? [],
-    dependencyDigest: task ? taskDependencyDigest(index, task, records) : '',
+    targetRefs: taskInput?.task.targetRefs ?? [],
+    dependencyDigest: taskInput?.dependencyDigest ?? '',
     contractHash: deps.contractHash,
     policyHash: policyHash(),
     reviewerConfigHash: configHash,
     promptHash: stage === 'audit' ? '' : promptHash(stage),
-    inputHash: task ? cacheKey({
-      stage, targetRefs: task.targetRefs, requiredRules: task.requiredRules,
-      dependencyDigest: taskDependencyDigest(index, task, records), contractHash: deps.contractHash,
-      policyHash: policyHash(), reviewerConfigHash: configHash, promptHash: promptHash(stage),
-    }) : '',
+    inputHash: taskInput?.inputHash ?? '',
     // Aggregate audit errors need the same artifact/dependency identity as
     // the successful extract/align pair so progress can reject stale runs.
     ...(stage === 'audit' && input.artifact ? {
@@ -407,7 +407,7 @@ export async function executeReviewRun(input: {
                 save({ ...record, kind: 'disagreement', response: { ...result.raw, findings: [finding] } })
               }
             } catch (error) {
-              save(errorRecord(stage, error, task))
+              save(errorRecord(stage, error, { task, dependencyDigest: dep, inputHash: key }))
               throw error
             }
           }),

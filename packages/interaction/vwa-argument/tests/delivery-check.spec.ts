@@ -238,6 +238,39 @@ describe('Feature D — report stage progress and failure detail (§D.2)', () =>
 })
 
 describe('report progress regressions', () => {
+  it('counts a failed argument-only run against the historical claim inputs it reviewed', async () => {
+    const f = fixture(1)
+    const [premise, conclusion] = f.claims
+    f.snapshot.arguments.push(makeArgument(conclusion!.id, [premise!.id], []))
+    const claims = await f.run()
+    expect(claims.status).toBe('completed')
+    const outcome = await executeReviewRun({
+      deps: {
+        root: f.root, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)),
+        adapter: fakeAdapter([(req) => {
+          const envelope = JSON.parse(req.messages[1]!.content) as {
+            context: { currentReviews: { stage: string }[] }
+          }
+          expect(envelope.context.currentReviews).toEqual(expect.arrayContaining([
+            expect.objectContaining({ stage: 'claims' }),
+          ]))
+          throw new ReviewContextError('argument context too large')
+        }]),
+      },
+      runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['arguments'],
+      targetClaimIds: f.claims.map((claim) => claim.id), snapshot: f.snapshot,
+      signal: new AbortController().signal,
+    })
+    expect(outcome.records).toHaveLength(1)
+    expect(outcome.records[0]).toMatchObject({ stage: 'arguments', status: 'error', errorCode: 'CONTEXT_TOO_LARGE' })
+    const check = evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: [...claims.records, ...outcome.records], pendingRunIds: [], adjudications: [],
+    })
+    expect(check.stageProgress.arguments).toMatchObject({ total: 1, completed: 0, failed: 1, notRun: 0 })
+    expect(check.failures).toEqual([expect.objectContaining({ runId: outcome.runId, stage: 'arguments' })])
+  })
+
   it.each(['entity', 'contract', 'dependency', 'reviewer', 'prompt', 'policy', 'scope'] as const)(
     'does not count historical %s inputs as current progress', async (change) => {
       const f = fixture(1)
