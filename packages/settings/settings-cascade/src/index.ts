@@ -348,7 +348,7 @@ export class SettingsCascadeProvider extends SettingsProvider {
   }
 
   /** Every concrete settings FILE path worth watching (see {@link resolveWatchPaths}). */
-  private watchPaths(): Promise<{ files: string[]; dirs: string[] }> {
+  private watchPaths(): Promise<{ files: string[] }> {
     return resolveWatchPaths([
       this.spec.sources.userSettings,
       this.spec.sources.projectSettings,
@@ -367,7 +367,7 @@ export class SettingsCascadeProvider extends SettingsProvider {
       if (this.isClosed()) return
       this.queueRefresh()
     }
-    const closeWatchers = await startWatchers({
+    const closeWatchers = startWatchers({
       paths: await this.watchPaths(),
       tuning: this.watch,
       refresh,
@@ -381,8 +381,6 @@ export class SettingsCascadeProvider extends SettingsProvider {
       await closeWatchers()
       await this.operations
     }
-    // Ready reconciliation is queued; publish it before exposing the service.
-    await this.operations
   }
 
   /**

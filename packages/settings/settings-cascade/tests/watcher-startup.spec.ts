@@ -1,10 +1,11 @@
-/** Watcher initialization must finish before consumers can write settings. */
+/** Optional watcher initialization must never block service startup. */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { watch } from 'chokidar'
+import { join, resolve } from 'node:path'
+import { watchFile, unwatchFile, type Stats } from 'node:fs'
+import { Context } from '@deepseek-ai/cordis'
 
 const state = vi.hoisted(() => ({ watchers: [] as Array<import('node:events').EventEmitter & { close: ReturnType<typeof vi.fn> }> }))
 vi.mock('chokidar', () => ({
@@ -15,103 +16,138 @@ vi.mock('chokidar', () => ({
   }),
 }))
 
-import { resolveWatchPaths, startWatchers } from '../src/watcher.ts'
+vi.mock('node:fs', () => ({ watchFile: vi.fn(), unwatchFile: vi.fn() }))
 
-beforeEach(() => { state.watchers = [] })
+import { startWatchers } from '../src/watcher.ts'
+import { SettingsCascadeProvider } from '../src/index.ts'
+
+beforeEach(() => { state.watchers = []; vi.clearAllMocks() })
 
 const projectRoot = resolve('project')
 const settingsPath = join(projectRoot, '.claude', 'settings.json')
 const options = () => ({
-  paths: { files: [settingsPath], dirs: [projectRoot] },
+  paths: { files: [settingsPath] },
   tuning: { stabilityThresholdMs: 100, pollIntervalMs: 10 },
   refresh: vi.fn(),
   onError: vi.fn(),
 })
 
 describe('settings watcher startup', () => {
-  it('anchors missing settings directories at an existing ancestor', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cascade-watch-root-'))
+  it('does not make provider startup wait for a ready-triggered reload', async () => {
+    let loads = 0
+    let release!: () => void
+    const pendingReload = new Promise<void>((resolve) => { release = resolve })
+    class HeldReloadProvider extends SettingsCascadeProvider {
+      protected override async load(): Promise<Record<string, unknown>> {
+        if (++loads > 1) await pendingReload
+        return super.load()
+      }
+    }
+    const root = await mkdtemp(join(tmpdir(), 'cascade-startup-'))
+    const ctx = new Context()
+    const fiber = ctx.plugin(HeldReloadProvider, { dshHome: root, projectDir: root })
+    let started = false
+    const startup = Promise.resolve(fiber).then(() => { started = true })
     try {
-      const paths = await resolveWatchPaths([join(root, '.claude', 'nested', 'settings.json')])
-      expect(paths.dirs).toEqual([await realpath(root)])
+      await vi.waitFor(() => expect(state.watchers).toHaveLength(1))
+      for (const watcher of state.watchers) watcher.emit('ready')
+      await vi.waitFor(() => expect(loads).toBeGreaterThan(1))
+      await vi.waitFor(() => expect(started).toBe(true), { timeout: 1_000 })
     } finally {
+      release()
+      await startup
+      await fiber.dispose()
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  it('follows only settings branches below the existing ancestor', async () => {
+  it('returns a closer without waiting for any watcher signal', async () => {
     const input = options()
-    const startup = startWatchers(input)
-    const directoryOptions = vi.mocked(watch).mock.calls.at(-1)![1]!
-    expect(directoryOptions.depth).toBeUndefined()
-    expect(directoryOptions.ignored).toBeTypeOf('function')
-    const ignored = directoryOptions.ignored as (path: string) => boolean
-    expect(ignored(projectRoot)).toBe(false)
-    expect(ignored(dirname(settingsPath))).toBe(false)
-    expect(ignored(settingsPath)).toBe(false)
-    expect(ignored(settingsPath + '.backup')).toBe(true)
-    expect(ignored(join(projectRoot, 'node_modules'))).toBe(true)
-    for (const watcher of state.watchers) watcher.emit('ready')
-    await (await startup)()
-  })
-
-  it('waits for both file and directory watchers before finishing setup', async () => {
-    const input = options()
-    let initialized = false
-    const startup = Promise.resolve(startWatchers(input)).then((close) => {
-      initialized = true
-      return close
-    })
-    await Promise.resolve()
-    expect(initialized).toBe(false)
-    state.watchers[0]!.emit('ready')
-    await Promise.resolve()
-    expect(initialized).toBe(false)
-    state.watchers[1]!.emit('ready')
-    const close = await startup
-    expect(initialized).toBe(true)
-    expect(input.refresh).toHaveBeenCalledTimes(2)
+    const close = startWatchers(input)
+    expect(close).toBeTypeOf('function')
+    expect(input.refresh).not.toHaveBeenCalled()
     await close()
     for (const watcher of state.watchers) expect(watcher.close).toHaveBeenCalledOnce()
   })
 
-  it('keeps watcher errors non-fatal without hanging startup or losing cleanup', async () => {
-    const input = options()
-    const startup = startWatchers(input)
-    const error = new Error('watch unavailable')
-    state.watchers[0]!.emit('error', error)
-    state.watchers[1]!.emit('ready')
-    const close = await startup
-    expect(input.onError).toHaveBeenCalledWith(error)
-    expect(input.refresh).toHaveBeenCalledOnce()
-    await close()
-    for (const watcher of state.watchers) expect(watcher.close).toHaveBeenCalledOnce()
-  })
-
-  it('does not block service startup when a watcher never reports ready or error', async () => {
+  it('polls concrete files even when their parent directories do not exist', async () => {
     vi.useFakeTimers()
+    const input = options()
+    const close = startWatchers(input)
     try {
-      const input = options()
-      let close: (() => Promise<void>) | undefined
-      const startup = startWatchers(input).then((closer) => { close = closer })
-      state.watchers[1]!.emit('ready')
-      await vi.advanceTimersByTimeAsync(4_999)
-      expect(close).toBeUndefined()
-      expect(input.onError).not.toHaveBeenCalled()
+      expect(vi.mocked(watchFile)).toHaveBeenCalledWith(settingsPath, expect.objectContaining({ persistent: false }), expect.any(Function))
+      const listener = vi.mocked(watchFile).mock.calls.at(-1)![2]!
+      listener({ mtimeMs: 2 } as Stats, { mtimeMs: 1 } as Stats)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(input.refresh).toHaveBeenCalledOnce()
+    } finally {
+      await close()
+      vi.useRealTimers()
+    }
+  })
+
+  it('coalesces polling changes and cancels pending refresh on disposal', async () => {
+    vi.useFakeTimers()
+    const input = options()
+    const close = startWatchers(input)
+    try {
+      const listener = vi.mocked(watchFile).mock.calls.at(-1)![2]!
+      listener({ mtimeMs: 2 } as Stats, { mtimeMs: 1 } as Stats)
+      await vi.advanceTimersByTimeAsync(99)
+      listener({ mtimeMs: 3 } as Stats, { mtimeMs: 2 } as Stats)
+      await vi.advanceTimersByTimeAsync(99)
+      expect(input.refresh).not.toHaveBeenCalled()
       await vi.advanceTimersByTimeAsync(1)
-      expect(close).toBeTypeOf('function')
+      expect(input.refresh).toHaveBeenCalledOnce()
+      listener({ mtimeMs: 4 } as Stats, { mtimeMs: 3 } as Stats)
+      await close()
+      expect(vi.mocked(unwatchFile)).toHaveBeenCalledWith(settingsPath, listener)
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(input.refresh).toHaveBeenCalledOnce()
+      expect(input.onError).not.toHaveBeenCalled()
+    } finally {
+      await close()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps silent or late native readiness off the boot path', async () => {
+    vi.useFakeTimers()
+    const input = options()
+    const close = startWatchers(input)
+    try {
+      await vi.advanceTimersByTimeAsync(5_000)
       expect(input.onError).toHaveBeenCalledOnce()
-      expect(input.onError).toHaveBeenCalledWith(expect.objectContaining({
-        message: expect.stringContaining('file watcher'),
-      }))
-      await startup
-      // A late ready signal still reconciles and leaves change delivery active.
+      await vi.advanceTimersByTimeAsync(100)
+      expect(input.refresh).toHaveBeenCalledOnce()
+      state.watchers[0]!.emit('ready')
+      await vi.advanceTimersByTimeAsync(100)
+      expect(input.refresh).toHaveBeenCalledTimes(2)
+      await close()
       state.watchers[0]!.emit('ready')
       state.watchers[0]!.emit('all', 'change', settingsPath)
-      expect(input.refresh).toHaveBeenCalledTimes(3)
-      await close!()
-      for (const watcher of state.watchers) expect(watcher.close).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(input.onError).toHaveBeenCalledOnce()
+      expect(input.refresh).toHaveBeenCalledTimes(2)
+      expect(vi.getTimerCount()).toBe(0)
     } finally {
+      await close()
+      vi.useRealTimers()
+    }
+  })
+
+  it('reconciles the initial read even when native watching fails', async () => {
+    vi.useFakeTimers()
+    const input = options()
+    const close = startWatchers(input)
+    try {
+      const error = new Error('native watch unavailable')
+      state.watchers[0]!.emit('error', error)
+      expect(input.onError).toHaveBeenCalledWith(error)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(input.refresh).toHaveBeenCalledOnce()
+    } finally {
+      await close()
       vi.useRealTimers()
     }
   })
