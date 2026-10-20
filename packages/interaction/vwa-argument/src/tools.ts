@@ -32,6 +32,7 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
+import { reviewBudgetRefusal } from './feasibility.ts'
 import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
 import { replayReviewRequest } from './review-request.ts'
@@ -383,6 +384,9 @@ export function registerArgumentTools(
           return fail('INPUT_CHANGED', `artifact text for ${bound.path} is not available to the runtime`, true)
         artifact = { id: bound.id, path: bound.path, text }
       }
+      // Feature C §C.2.1: static budget feasibility, before reserving a run.
+      const infeasible = reviewBudgetRefusal({ root, review, snapshot, stages, body, ...(artifact === undefined ? {} : { artifact }) })
+      if (infeasible) return infeasible
       // §A.2: continue on a fully completed plan is refused BEFORE reserving the
       // request, via the shared pre-check (the runner's guard uses the same logic).
       const refusal =

@@ -202,7 +202,7 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   }
   if (selected.stages.claims === 'pass') {
     for (const stage of ['sources', 'support', 'arguments'] as const)
-      if (planStage({ stage, snapshot, index, targetClaimIds: targets, core }).length === 0)
+      if (planStage({ stage, snapshot, index, targetClaimIds: targets, core, claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1 }).length === 0)
         selected.stages[stage] = 'pass'
   }
   const assessments = computeAssessments({
@@ -217,7 +217,7 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   })
   for (const assessment of assessments) {
     const tasks = (['sources', 'support', 'claims', 'arguments'] as const).flatMap((stage) =>
-      planStage({ stage, snapshot, index, targetClaimIds: [assessment.claimId], core }),
+      planStage({ stage, snapshot, index, targetClaimIds: [assessment.claimId], core, claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1 }),
     )
     const complete = tasks.every((task) =>
       effective.some(

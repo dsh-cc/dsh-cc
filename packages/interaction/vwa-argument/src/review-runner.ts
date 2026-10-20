@@ -286,7 +286,8 @@ export async function executeReviewRun(input: {
         newClaimProposals = audit.newClaimProposals
         continue
       }
-      const tasks = planStage({ stage, snapshot, index, targetClaimIds: input.targetClaimIds, core: frozenCore })
+      // Feature C §C.2.3: all three planStage call sites share the frozen batch size.
+      const tasks = planStage({ stage, snapshot, index, targetClaimIds: input.targetClaimIds, core: frozenCore, claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1 })
       // Independent tasks may overlap. Arguments retain their topological ordering.
       for (let start = 0; start < tasks.length; start += stage === 'arguments' ? 1 : deps.budget.concurrency) {
         const batch = tasks.slice(start, start + (stage === 'arguments' ? 1 : deps.budget.concurrency))

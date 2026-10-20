@@ -12,10 +12,12 @@ import { registerArgumentTools, type ToolDefinition } from '../src/tools.ts'
 import type { ToolDeps } from '../src/tools.ts'
 import { CaptureRegistry } from '../src/sources.ts'
 import { CONTRACT, initWorkspace, makeWorkspace, uuid } from './helpers.ts'
+import { sha256Hex, stableJson } from '../src/schema.ts'
 import { freezeReviewSettings } from '../src/review-config.ts'
 import { DEFAULT_VWA_ARGUMENT_SETTINGS } from '../src/settings.ts'
 import { BUDGET, claimsResponse, fakeAdapter } from './review-helpers.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
+import { executeReviewRun } from '../src/review-runner.ts'
 import type { ReviewMessages } from '../src/review-adapter.ts'
 
 // Background review fixtures must advance the caller's retry backoffs.
@@ -877,5 +879,154 @@ describe('argument.review continue pre-check await (§10.6, §11.1)', () => {
     })
     expect(result).toMatchObject({ ok: false, code: 'REVISION_CONFLICT', retryable: true })
     expect(new ReviewRunStore(workspace.root, workspace.projectId).findRunByRequestId(requestIdMap.get('r-rev')!)).toBeUndefined()
+  })
+})
+
+describe('argument.review static budget feasibility (Feature C §C.2.1)', () => {
+  /** A project frozen with a deliberately tiny output budget. */
+  function tinyWorkspace() {
+    const made = makeWorkspace()
+    const frozen = made.store.init(
+      CONTRACT,
+      freezeReviewSettings({
+        ...DEFAULT_VWA_ARGUMENT_SETTINGS,
+        'review-max-output-tokens-per-run': 8000,
+        'review-max-output-tokens-per-call': 3000,
+        'review-call-timeout-ms': 5000,
+        'review-concurrency': 2,
+      }),
+    )
+    if (!frozen.ok) throw new Error(frozen.message)
+    return made
+  }
+
+  async function seedClaims(tools: Map<string, ToolDefinition>, projectId: string, count: number) {
+    const update = tools.get('argument.update') as ToolDefinition
+    const made = (await call(update, {
+      projectId,
+      expectedRevision: 1,
+      requestId: `seed-${count}`,
+      input: {
+        op: 'upsert',
+        creates: Array.from({ length: count }, (_v, i) => ({
+          clientKey: `c${i}`,
+          type: 'claim',
+          body: { ...CLAIM_BODY, text: `Claim ${i}` },
+        })),
+        updates: [],
+        deletes: [],
+      },
+    })) as { ok: boolean; data: { changedIds: string[] } }
+    if (!made.ok) throw new Error('seed failed')
+    return { claimIds: made.data.changedIds, revision: 2 }
+  }
+
+  it('refuses with BUDGET_INSUFFICIENT before reserving when the plan exceeds the frozen budget', async () => {
+    const made = tinyWorkspace()
+    const { tools, workspace } = mount({ review: reviewWithScript([(req) => stepFor(req, 5)]) }, made)
+    await seedClaims(tools, workspace.projectId, 2) // 2 unbatched claims tasks
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-feas',
+      input: { stage: 'claims' },
+    })
+    expect(result).toMatchObject({ ok: false, code: 'BUDGET_INSUFFICIENT', retryable: false })
+    const details = result.details as {
+      plannedCalls: Record<string, number>
+      executableCalls: number
+      estimatedWithRetries: number
+      estimatedOutputTokens: number
+      budgetOutputTokens: number
+      estimatedWallMs: number
+      suggestedClaimsBatchSize: number
+    }
+    // Per-stage breakdown; claims counted after batching (batch size 1 → 2).
+    expect(details.plannedCalls).toEqual({ sources: 0, support: 0, claims: 2, arguments: 0, audit: 0 })
+    expect(details.executableCalls).toBe(2)
+    expect(details.estimatedWithRetries).toBe(3) // ceil(2 * 1.5)
+    expect(details.estimatedOutputTokens).toBe(9000) // 3 * 3000 > 8000
+    expect(details.budgetOutputTokens).toBe(8000)
+    // Wall estimate uses the 4x call-timeout ceiling: ceil(2 * 5000 * 4 / 2).
+    expect(details.estimatedWallMs).toBe(20000)
+    // clamp(floor(3000 / 1500), 1, 4)
+    expect(details.suggestedClaimsBatchSize).toBe(2)
+  })
+
+  it('continue mode exempts reusable tasks; the audit is always counted in full', async () => {
+    const made = tinyWorkspace()
+    const { tools, workspace, deps: toolDeps } = mount({ review: reviewWithScript([(req) => stepFor(req, 5)]) }, made)
+    const { claimIds, revision } = await seedClaims(tools, workspace.projectId, 2)
+    // Complete ONE claim task directly (same reviewer fingerprint) so continue
+    // has exactly one executable task left: ceil(1.5) = 2 → 6000 ≤ 8000 passes.
+    const head = workspace.store.readHead()
+    if (!head.ok) throw new Error(head.message)
+    const adapter = fakeAdapter([(req) => stepFor(req, 5)])
+    await executeReviewRun({
+      deps: {
+        root: workspace.root,
+        adapter,
+        budget: BUDGET,
+        contractHash: sha256Hex(stableJson(head.data.snapshot.contract)),
+      },
+      runId: `run_${uuid()}`,
+      requestId: 'pre-run',
+      stages: ['claims'],
+      targetClaimIds: [claimIds[0]!],
+      snapshot: head.data.snapshot,
+      signal: new AbortController().signal,
+    })
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: revision,
+      requestId: 'r-cont',
+      input: { stage: 'claims', continue: true },
+    })
+    expect(result.ok).toBe(true) // 1 executable task fits; the reusable one is exempt
+    // With the audit requested, the audit is counted in FULL even in continue
+    // mode: 1 claim task + (1 root block + 1 over-long piece + 1 align) = 4
+    // calls → 6 with headroom → 18000 > 8000 refused.
+    const update = tools.get('argument.update') as ToolDefinition
+    // bind-artifact validates occurrences against the ACTUAL bytes (D12).
+    toolDeps.artifactTexts.set('report.md', 'The documented shift began in 1789 and spread quickly.\n')
+    const made2 = (await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: revision,
+      requestId: 'bind-cont',
+      input: {
+        op: 'bind-artifact',
+        path: 'report.md',
+        occurrences: [{ claimId: claimIds[0]!, span: { start: 4, end: 26 }, exactText: 'documented shift began' }],
+        outline: [],
+      },
+    })) as { ok: boolean }
+    if (!made2.ok) throw new Error('bind failed')
+    const denied = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: revision + 1,
+      requestId: 'r-cont-2',
+      input: { stage: 'all', continue: true },
+    })
+    expect(denied).toMatchObject({ ok: false, code: 'BUDGET_INSUFFICIENT' })
+    // The audit is counted in FULL even in continue mode; the remaining claim
+    // task (0 or 1 by now, racy) is the only executable semantic work.
+    expect((denied.details as { plannedCalls: Record<string, number> }).plannedCalls.claims).toBeLessThanOrEqual(1)
+    expect((denied.details as { plannedCalls: Record<string, number> }).plannedCalls.audit).toBe(3)
+  })
+
+  it('a sufficient budget passes through with no refusal', async () => {
+    const made = makeWorkspace()
+    const frozen = made.store.init(CONTRACT) // ship defaults: 24000 per run
+    if (!frozen.ok) throw new Error(frozen.message)
+    const { tools, workspace } = mount({ review: reviewWithScript([(req) => stepFor(req, 5)]) }, made)
+    await seedClaims(tools, workspace.projectId, 2)
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'r-ok',
+      input: { stage: 'claims' },
+    })
+    expect(result.ok).toBe(true)
+    expect(result.data).toMatchObject({ completion: 'started' })
   })
 })

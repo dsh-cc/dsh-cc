@@ -39,7 +39,8 @@ import { defaultContract } from './command-host.ts'
  * @module @dsh-cc/vwa-argument/commands
  */
 
-import type { FrozenReviewSettings } from './review-config.ts'
+import { freezeReviewSettings, type FrozenReviewSettings } from './review-config.ts'
+import { suggestedClaimsBatchSize } from './feasibility.ts'
 import { receiptHashOf, type ReceiptV2 } from '@dsh-cc/vwa-evidence'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
@@ -240,6 +241,10 @@ function vwaInit(
   }
   const newId = `prj_${randomUUID()}`
   const contract = { ...defaultContract('(set the project question with argument.update: contract)'), mode }
+  // Feature C §C.2.4: capacity guidance from the FROZEN budget (informational
+  // only; never a suggestion to change an existing project's budget).
+  const frozen = reviewSettings ?? freezeReviewSettings()
+  const maxCallsFittingBudget = Math.floor(frozen.budget.maxOutputTokensPerRun / frozen.budget.maxOutputTokensPerCall)
   const result = new ProjectStore(root, newId).init(contract, reviewSettings)
   if (!result.ok) return { kind: 'error', text: `project creation failed: ${result.message}` }
   writePointer(root, newId, result.data.workspaceIdentity)
@@ -250,6 +255,11 @@ function vwaInit(
       'Contract candidate (default; refine with argument.update):',
       stableJson(contract),
       'Initialization triggered no search or review (§10.2).',
+      `Budget capacity (frozen at init): ${maxCallsFittingBudget} full calls fit the output budget ` +
+        `(${frozen.budget.maxOutputTokensPerRun}/${frozen.budget.maxOutputTokensPerCall}); ` +
+        `with 50% retry headroom ≈ ${Math.floor(maxCallsFittingBudget / 1.5)} review calls per run.`,
+      `Suggested claims batch size: ${suggestedClaimsBatchSize(frozen.budget)} — set review-claims-batch-size BEFORE creating projects ` +
+        'with larger graphs (a project\'s frozen budget cannot be changed after init).',
     ].join('\n'),
   }
 }
