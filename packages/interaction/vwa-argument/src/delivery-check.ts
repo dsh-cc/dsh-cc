@@ -185,7 +185,11 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
             (a) =>
               a.decision === 'reject' &&
               a.overrides.runId === record.runId &&
-              a.overrides.targetId === target.targetId &&
+              // A batched finding can cover several targets; the persisted
+              // override retains only its first target for legacy compatibility.
+              record.response?.findings.some(
+                (f) => f.id === a.findingId && f.targetIds.includes(target.targetId),
+              ) &&
               a.overrides.ruleId === check.ruleId &&
               !record.response?.findings.some(
                 (f) => f.code === check.ruleId && f.targetIds.includes(target.targetId) && !rejected.has(f.id),
