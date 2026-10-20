@@ -38,12 +38,41 @@ export interface ReviewerRoute {
 /** The messages input of Appendix A. */
 export type ReviewMessages = { role: 'system' | 'user'; content: string }[]
 
+/** Optional structured diagnostics attached to adapter failures (B.2.2). */
+export interface ReviewErrorDetail {
+  message: string
+  httpStatus?: number
+  providerCode?: string
+  providerRetryAfterMs?: number
+  rawResponseTail?: string
+}
+
 /** Adapter validation / schema failure — never cached, retryable once (§13). */
 export class ReviewInvalidError extends Error {
   readonly code = 'REVIEW_INVALID'
+  /** Last 2000 chars of the model raw output, when a raw response exists (B.2.2). */
+  rawResponse?: string
   constructor(message: string) {
     super(message)
     this.name = 'ReviewInvalidError'
+  }
+}
+
+/** Output cap hit mid-response — truncated JSON can never parse; permanent (B.2.4). */
+export class ReviewTruncatedError extends Error {
+  readonly code = 'REVIEW_TRUNCATED'
+  constructor() {
+    super('review response truncated: max output tokens reached')
+    this.name = 'ReviewTruncatedError'
+  }
+}
+
+/** Reviewer configuration changed mid-run — permanent, not a model error (B.2.4). */
+export class ReviewConfigDriftError extends Error {
+  readonly code = 'REVIEW_CONFIG_DRIFT'
+  constructor(message = 'reviewer configuration changed during the run') {
+    super(message)
+    this.name = 'ReviewConfigDriftError'
   }
 }
 
@@ -100,7 +129,7 @@ export function createReviewAdapter(options: {
     )
     const config = JSON.parse(JSON.stringify(call.config)) as Record<string, unknown>
     if (effectiveConfig && JSON.stringify(config) !== JSON.stringify(effectiveConfig))
-      throw new ReviewInvalidError('reviewer configuration changed during the run')
+      throw new ReviewConfigDriftError()
     effectiveConfig = config
     return call
   }
@@ -164,9 +193,22 @@ export function createReviewAdapter(options: {
           }
           const finish = assembler.finish
           if (finish.kind === 'error' || finish.kind === 'aborted') {
-            // Transient transport failure: the runner retries once (§13).
-            throw new Error(`review dispatch failed: ${finish.kind}`)
+            // Transport/provider failure: attach the LlmFailure facts as detail (B.2.2).
+            const err: Error & { detail?: ReviewErrorDetail } = new Error(
+              `review dispatch failed: ${finish.failure.message}`,
+            )
+            err.detail = {
+              message: finish.failure.message.slice(0, 500),
+              ...(finish.failure.status === undefined ? {} : { httpStatus: finish.failure.status }),
+              providerCode: finish.failure.code,
+              ...(finish.failure.providerRetryAfterMs === undefined
+                ? {}
+                : { providerRetryAfterMs: finish.failure.providerRetryAfterMs }),
+            }
+            throw err
           }
+          // Truncation is permanent (B.2.4): the response can never parse.
+          if (finish.kind === 'max-tokens') throw new ReviewTruncatedError()
           const calls = assembler.blocks().filter((block) => block.type === 'tool-call') as {
             name: string
             arguments: string
@@ -209,10 +251,14 @@ export function parseReviewResponse(raw: string): ReviewResponse {
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new ReviewInvalidError('response is not valid JSON')
+    const err = new ReviewInvalidError('response is not valid JSON')
+    err.rawResponse = raw.slice(-2000)
+    throw err
   }
   if (!validateReviewResponse(parsed)) {
-    throw new ReviewInvalidError(`response schema mismatch: ${ajvErrors(validateReviewResponse)}`)
+    const err = new ReviewInvalidError(`response schema mismatch: ${ajvErrors(validateReviewResponse)}`)
+    err.rawResponse = raw.slice(-2000)
+    throw err
   }
   return parsed as ReviewResponse
 }

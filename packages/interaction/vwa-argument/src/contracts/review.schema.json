@@ -527,6 +527,20 @@
         }
       ]
     },
+    "ReviewErrorDetail": {
+      "type": "object",
+      "description": "Structured failure diagnostics; zero attempts means refusal before dispatch.",
+      "additionalProperties": false,
+      "required": ["message", "retryAttempts"],
+      "properties": {
+        "message": { "type": "string", "maxLength": 500 },
+        "httpStatus": { "type": "integer" },
+        "providerCode": { "type": "string" },
+        "providerRetryAfterMs": { "type": "number", "minimum": 0 },
+        "rawResponseTail": { "type": "string", "maxLength": 2000 },
+        "retryAttempts": { "type": "integer", "minimum": 0 }
+      }
+    },
     "ReviewRecord": {
       "type": "object",
       "description": "\u00a76 ReviewRecord.",
@@ -622,6 +636,9 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 512
+        },
+        "errorDetail": {
+          "$ref": "#/$defs/ReviewErrorDetail"
         },
         "kind": {
           "const": "disagreement"
@@ -817,6 +834,9 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 512
+        },
+        "errorDetail": {
+          "$ref": "#/$defs/ReviewErrorDetail"
         },
         "response": {
           "type": "object",

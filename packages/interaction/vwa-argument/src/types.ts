@@ -247,6 +247,22 @@ export interface AlignResponse extends ResponseBase {
 
 export type ReviewResponse = SourcesResponse | ClaimsResponse | SupportResponse | ArgumentsResponse | AlignResponse
 
+/** Structured failure diagnostics carried on error records (B.2.1). */
+export interface ReviewErrorDetail {
+  /** Error message, truncated to 500 chars. */
+  message: string
+  /** From finish.failure.status, when available. */
+  httpStatus?: number
+  /** From finish.failure.code. */
+  providerCode?: string
+  /** From finish.failure.providerRetryAfterMs. */
+  providerRetryAfterMs?: number
+  /** Last 2000 chars of model raw output (parse/schema failures only). */
+  rawResponseTail?: string
+  /** How many attempts were made (0 = refused before dispatch, 1 = no retry). */
+  retryAttempts: number
+}
+
 export interface SemanticReviewRecord {
   runId: Id
   /** 'extract'/'align' are the §12 audit sub-stage records; 'audit' is the aggregate stage. */
@@ -269,6 +285,7 @@ export interface SemanticReviewRecord {
   startedAt: string
   endedAt: string
   errorCode?: string
+  errorDetail?: ReviewErrorDetail
 }
 
 /** One extracted atomic claim (runtime-derived). See the module doc: distinct from {@link ExtractionRecord}. */
@@ -309,6 +326,7 @@ export interface ExtractionRecord {
   startedAt: string
   endedAt: string
   errorCode?: string
+  errorDetail?: ReviewErrorDetail
   response: { items: ExtractedItem[] }
 }
 

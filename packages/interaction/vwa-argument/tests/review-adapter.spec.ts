@@ -10,7 +10,9 @@ import {
   forcedRespondTools,
   parseReviewResponse,
   validateTaskResponse,
+  ReviewConfigDriftError,
   ReviewInvalidError,
+  ReviewTruncatedError,
   type ReviewTaskContract,
 } from '../src/review-adapter.ts'
 import { responseSchemaFor } from '../src/review-runner.ts'
@@ -209,5 +211,108 @@ describe('contradictory combos → REVIEW_INVALID (§7.1)', () => {
       }),
     )
     expectReviewInvalid(raw as ReviewResponse, contract)
+  })
+})
+
+/** Streams the given chunks through a one-shot fake PreparedLlmCall (B.2.2 fixtures). */
+function streamAdapter(
+  chunks: unknown[],
+  config: Record<string, unknown> = { provider: 'fake', model: 'fake-model', maxTokens: 512 },
+) {
+  const llm = {
+    async prepareCall() {
+      return {
+        config,
+        stream: async function* () {
+          for (const chunk of chunks) yield chunk
+        },
+      }
+    },
+  }
+  return createReviewAdapter({ llm, route: ROUTE, tokenizerAvailable: false })
+}
+
+describe('B.2.2/B.2.4 — channel diagnostics and retry classification', () => {
+  const dispatch = async (chunks: unknown[]) => {
+    const adapter = streamAdapter(chunks)
+    return adapter.prepareReviewCall({
+      messages: [{ role: 'user', content: 'usr' }],
+      responseSchema: {},
+      maxOutputTokens: 512,
+      signal: new AbortController().signal,
+    })
+  }
+
+  it('dispatch error attaches finish.failure facts as detail', async () => {
+    const failure = {
+      message: 'provider overloaded',
+      code: 'UPSTREAM_ERROR',
+      status: 503,
+      providerRetryAfterMs: 5000,
+    }
+    const prepared = await dispatch([{ type: 'finish', reason: { kind: 'error', failure } }])
+    await expect(prepared.dispatch()).rejects.toMatchObject({
+      message: 'review dispatch failed: provider overloaded',
+      detail: {
+        message: 'provider overloaded',
+        httpStatus: 503,
+        providerCode: 'UPSTREAM_ERROR',
+        providerRetryAfterMs: 5000,
+      },
+    })
+  })
+
+  it('max-tokens finish throws ReviewTruncatedError (permanent, before parse)', async () => {
+    const prepared = await dispatch([{ type: 'finish', reason: { kind: 'max-tokens' } }])
+    const err = await prepared.dispatch().catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ReviewTruncatedError)
+    expect((err as ReviewTruncatedError).code).toBe('REVIEW_TRUNCATED')
+  })
+
+  it('JSON parse failure carries the rawResponse tail', () => {
+    const raw = `x${'y'.repeat(3000)}{"stage":` // truncated JSON, > 2000 chars
+    try {
+      parseReviewResponse(raw)
+      expect.unreachable()
+    } catch (err) {
+      expect(err).toBeInstanceOf(ReviewInvalidError)
+      expect((err as ReviewInvalidError).rawResponse).toBe(raw.slice(-2000))
+      expect((err as ReviewInvalidError).rawResponse!.length).toBe(2000)
+    }
+  })
+
+  it('schema mismatch carries the rawResponse tail', () => {
+    const raw = '{"stage":"wrong"}'
+    try {
+      parseReviewResponse(raw)
+      expect.unreachable()
+    } catch (err) {
+      expect(err).toBeInstanceOf(ReviewInvalidError)
+      expect((err as ReviewInvalidError).rawResponse).toBe(raw)
+      expect((err as ReviewInvalidError).message).toContain('schema mismatch')
+    }
+  })
+
+  it('reviewer config drift throws ReviewConfigDriftError (permanent)', async () => {
+    const llm = {
+      calls: 0,
+      async prepareCall() {
+        this.calls++
+        return {
+          config: { provider: 'fake', model: 'fake-model', maxTokens: 512, temperature: this.calls === 1 ? 0.2 : 0.7 },
+          stream: async function* () {},
+        }
+      },
+    }
+    const adapter = createReviewAdapter({ llm, route: ROUTE, tokenizerAvailable: false })
+    const input = {
+      messages: [{ role: 'user' as const, content: 'usr' }],
+      responseSchema: {},
+      maxOutputTokens: 512,
+      signal: new AbortController().signal,
+    }
+    await adapter.initialize!(512, input.signal) // freeze at temperature 0.2
+    await adapter.prepareReviewCall!(input) // consumes the frozen call
+    await expect(adapter.prepareReviewCall!(input)).rejects.toBeInstanceOf(ReviewConfigDriftError)
   })
 })

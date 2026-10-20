@@ -28,7 +28,7 @@ import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
 import { reserveCycleCall, reserveCycleRequest } from './review-cycle.ts'
-import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord } from './types.ts'
+import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord, ReviewErrorDetail } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
 export { BudgetTracker, createHostTaskService, type ReviewTaskService } from './review-tasks.ts'
 export { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor } from './review-contract.ts'
@@ -198,6 +198,15 @@ export async function executeReviewRun(input: {
     startedAt,
     endedAt: new Date().toISOString(),
     errorCode: input.signal.aborted ? 'CANCELLED' : ((error as { code?: string })?.code ?? 'REVIEW_UNAVAILABLE'),
+    errorDetail: {
+      ...((error as { detail?: ReviewErrorDetail })?.detail ?? {}),
+      message: String((error as { message?: string })?.message ?? error).slice(0, 500),
+      ...((error as { rawResponse?: string })?.rawResponse === undefined
+        ? {}
+        : { rawResponseTail: (error as { rawResponse: string }).rawResponse }),
+      // Caller failures carry their own count; runner validation has not dispatched a call.
+      retryAttempts: (error as { retryAttempts?: number })?.retryAttempts ?? 0,
+    },
   })
   try {
     if ('ok' in reserved) return finish('incomplete', reserved)
