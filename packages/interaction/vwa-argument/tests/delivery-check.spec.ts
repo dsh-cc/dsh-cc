@@ -236,3 +236,101 @@ describe('Feature D — report stage progress and failure detail (§D.2)', () =>
     expect(check.failures[0]!.targetIds).toEqual(expect.arrayContaining(f.claims.map((c) => c.id)))
   })
 })
+
+describe('report progress regressions', () => {
+  it.each(['entity', 'contract', 'dependency', 'reviewer', 'prompt', 'policy', 'scope'] as const)(
+    'does not count historical %s inputs as current progress', async (change) => {
+      const f = fixture(1)
+      const outcome = await f.run()
+      if (change === 'entity') for (const claim of f.snapshot.claims) claim.entityVersion += 1
+      if (change === 'contract') f.snapshot.contract.question += ' Updated.'
+      if (change === 'dependency') f.snapshot.searches.push({
+        id: `srch_${randomUUID()}`, entityVersion: 1, createdAt: '', updatedAt: '',
+        targetIds: f.claims.map((c) => c.id), corpus: [], resultSourceIds: [],
+        query: 'new search', purpose: 'check', tool: 'search', performedAt: '', state: 'executed',
+        inaccessible: [], finding: 'none-found',
+      })
+      if (change === 'prompt') for (const record of outcome.records) record.promptHash = 'old prompt'
+      if (change === 'policy') for (const record of outcome.records) record.policyHash = 'old policy'
+      if (change === 'scope') for (const record of outcome.records) record.inputHash = 'old scope'
+      const check = evaluateDelivery({
+        root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+        records: outcome.records, pendingRunIds: [], adjudications: [],
+        ...(change === 'reviewer' ? { reviewerConfigHash: 'new reviewer' } : {}),
+      })
+      expect(check.stageProgress.claims).toMatchObject({ total: 2, completed: 0, notRun: 2 })
+    },
+  )
+
+  it('does not let a stale failure override a current completed review', async () => {
+    const f = fixture(1)
+    const outcome = await f.run()
+    const stale = {
+      ...outcome.records[0]!, runId: `run_${randomUUID()}`, contractHash: 'old contract',
+      status: 'error' as const, errorCode: 'REVIEW_UNAVAILABLE', endedAt: '2099-01-01',
+    }
+    const check = evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: [...outcome.records, stale], pendingRunIds: [], adjudications: [],
+    })
+    expect(check.stageProgress.claims).toMatchObject({ completed: 2, failed: 0, notRun: 0 })
+    // Historical failures remain available for diagnosis, separate from current task counts.
+    expect(check.failures).toHaveLength(1)
+  })
+
+  it('reports a real audit failure with its artifact target and error detail', async () => {
+    const f = fixture(1)
+    const outcome = await executeReviewRun({
+      deps: { root: f.root, adapter: fakeAdapter([() => { throw new ReviewContextError('audit context too large') }]),
+        budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+      runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['audit'],
+      targetClaimIds: f.claims.map((c) => c.id), snapshot: f.snapshot,
+      artifact: { id: f.artifactId, path: 'report.md', text: f.body }, signal: new AbortController().signal,
+    })
+    const check = evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: outcome.records, pendingRunIds: [], adjudications: [],
+    })
+    expect(check.stageProgress.audit).toMatchObject({ total: 1, completed: 0, failed: 1, notRun: 0, budgetErrors: 1 })
+    expect(check.failures).toEqual([expect.objectContaining({
+      stage: 'audit', targetIds: [f.artifactId], errorCode: 'CONTEXT_TOO_LARGE',
+      errorDetail: expect.objectContaining({ message: 'audit context too large' }),
+    })])
+    // Another artifact must not inherit this task failure.
+    const changed = structuredClone(f.snapshot)
+    changed.artifacts[0]!.entityVersion += 1
+    const stale = evaluateDelivery({
+      root: f.root, snapshot: changed, artifactId: f.artifactId, text: f.body,
+      records: outcome.records, pendingRunIds: [], adjudications: [],
+    })
+    expect(stale.stageProgress.audit).toMatchObject({ completed: 0, failed: 0, notRun: 1 })
+  })
+
+  it('counts a completed same-run extract/align pair as one audit task', async () => {
+    const f = fixture(1)
+    const { auditDependencyDigest } = await import('../src/review-current.ts')
+    const { policyHash, promptHash } = await import('../src/review-contract.ts')
+    const base = {
+      runId: `run_${randomUUID()}`, targetRefs: [{ id: f.artifactId, entityVersion: 1 }],
+      dependencyDigest: auditDependencyDigest(f.snapshot, f.artifactId, []), artifactHash: sha256Hex(f.body),
+      contractHash: sha256Hex(stableJson(f.snapshot.contract)), policyHash: policyHash(),
+      reviewerConfigHash: 'reviewer', inputHash: 'audit-key', status: 'completed' as const,
+      inputTokens: 0, outputTokens: 0, startedAt: '2026-10-20', endedAt: '2026-10-20',
+    }
+    const records: import('../src/types.ts').ReviewRecord[] = [
+      { ...base, stage: 'extract', promptHash: promptHash('extract'), response: { items: [] } },
+      { ...base, stage: 'align', promptHash: promptHash('align'), response: { stage: 'align', rubricVersion: 'humanities-v1', targets: [], findings: [] } },
+    ]
+    const check = (rows = records) => evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: rows, pendingRunIds: [], adjudications: [],
+    })
+    expect(check().stageProgress.audit).toMatchObject({ total: 1, completed: 1, failed: 0, notRun: 0 })
+    expect(check(records.slice(0, 1)).stageProgress.audit).toMatchObject({ completed: 0, notRun: 1 })
+    const splitRuns = structuredClone(records)
+    splitRuns[1]!.runId = `run_${randomUUID()}`
+    expect(check(splitRuns).stageProgress.audit).toMatchObject({ completed: 0, notRun: 1 })
+    f.snapshot.artifacts[0]!.entityVersion += 1
+    expect(check().stageProgress.audit).toMatchObject({ completed: 0, notRun: 1 })
+  })
+})

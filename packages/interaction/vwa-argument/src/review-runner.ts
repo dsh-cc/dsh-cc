@@ -4,12 +4,7 @@ import { join } from 'node:path'
 import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson } from './schema.ts'
 import { planStage, type ReviewStage, type ReviewTask } from './review-plan.ts'
-import {
-  ReviewRunStore,
-  cacheKey,
-  detectDisagreement,
-  disagreementFinding,
-} from './review-run-store.ts'
+import { ReviewRunStore, cacheKey, detectDisagreement, disagreementFinding } from './review-run-store.ts'
 import {
   ReviewInvalidError,
   parseReviewResponse,
@@ -23,7 +18,7 @@ import { ReviewCaller, ReviewBudgetError } from './review-call.ts'
 import { executeAudit } from './audit.ts'
 import { ProjectStore, type Fail } from './store.ts'
 import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-input.ts'
-import { currentReviews } from './review-current.ts'
+import { currentReviews, auditDependencyDigest } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
@@ -191,7 +186,19 @@ export async function executeReviewRun(input: {
     policyHash: policyHash(),
     reviewerConfigHash: configHash,
     promptHash: stage === 'audit' ? '' : promptHash(stage),
-    inputHash: '',
+    inputHash: task ? cacheKey({
+      stage, targetRefs: task.targetRefs, requiredRules: task.requiredRules,
+      dependencyDigest: taskDependencyDigest(index, task, records), contractHash: deps.contractHash,
+      policyHash: policyHash(), reviewerConfigHash: configHash, promptHash: promptHash(stage),
+    }) : '',
+    // Aggregate audit errors need the same artifact/dependency identity as
+    // the successful extract/align pair so progress can reject stale runs.
+    ...(stage === 'audit' && input.artifact ? {
+      targetRefs: [{ id: input.artifact.id, entityVersion: snapshot.artifacts.find((a) => a.id === input.artifact!.id)?.entityVersion ?? 1 }],
+      artifactHash: sha256Hex(input.artifact.text),
+      dependencyDigest: auditDependencyDigest(snapshot, input.artifact.id,
+        currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records),
+    } : {}),
     status: input.signal.aborted ? 'cancelled' : error instanceof ReviewBudgetError ? 'budget-exhausted' : 'error',
     inputTokens: 0,
     outputTokens: 0,

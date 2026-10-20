@@ -2,10 +2,30 @@
 import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson, validateReviewResponse } from './schema.ts'
 import { policyHash, promptHash } from './review-contract.ts'
-import { planStage, type ReviewStage } from './review-plan.ts'
+import { planStage, type ReviewStage, type ReviewTask } from './review-plan.ts'
 import { deduplicateBySemanticHash, semanticRecordHash, taskDependencyDigest } from './review-input.ts'
 import { cacheKey, detectDisagreement, disagreementFinding } from './review-run-store.ts'
 import type { Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
+
+/** Shared task identity for delivery and progress, including scope-dependent rules. */
+export function matchesReviewTask(
+  r: ReviewRecord,
+  task: ReviewTask,
+  expected: { contractHash: Hash; dependencyDigest: Hash; reviewerConfigHash?: Hash },
+): boolean {
+  return r.stage === task.stage &&
+    r.contractHash === expected.contractHash &&
+    r.policyHash === policyHash() &&
+    r.promptHash === promptHash(task.stage) &&
+    (expected.reviewerConfigHash === undefined || r.reviewerConfigHash === expected.reviewerConfigHash) &&
+    r.dependencyDigest === expected.dependencyDigest &&
+    stableJson(r.targetRefs) === stableJson(task.targetRefs) &&
+    r.inputHash === cacheKey({
+      stage: task.stage, targetRefs: task.targetRefs, requiredRules: task.requiredRules,
+      dependencyDigest: expected.dependencyDigest, contractHash: expected.contractHash,
+      policyHash: policyHash(), reviewerConfigHash: r.reviewerConfigHash, promptHash: promptHash(task.stage),
+    })
+}
 
 export interface CurrentReviews {
   records: ReviewRecord[]
@@ -31,21 +51,9 @@ export function currentReviews(
       const expected = taskDependencyDigest(index, task, records)
       const candidates = all.filter(
         (r): r is import('./types.ts').SemanticReviewRecord =>
-          r.stage !== 'extract' &&
-          r.stage === stage &&
-          r.contractHash === contractHash &&
-          r.policyHash === policyHash() &&
-          r.promptHash === promptHash(stage) &&
-          (reviewer === undefined || r.reviewerConfigHash === reviewer) &&
-          r.dependencyDigest === expected &&
-          stableJson(r.targetRefs) === stableJson(task.targetRefs) &&
-          // Scope-dependent rules are part of task identity, just as in the
-          // runner and continuation planner. A different scope is historical,
-          // not a conflicting second opinion on the current task.
-          r.inputHash === cacheKey({
-            stage, targetRefs: task.targetRefs, requiredRules: task.requiredRules,
-            dependencyDigest: expected, contractHash, policyHash: policyHash(),
-            reviewerConfigHash: r.reviewerConfigHash, promptHash: promptHash(stage),
+          r.stage !== 'extract' && matchesReviewTask(r, task, {
+            contractHash, dependencyDigest: expected,
+            ...(reviewer === undefined ? {} : { reviewerConfigHash: reviewer }),
           }),
       )
       const valid = candidates.filter(

@@ -8,6 +8,10 @@
  */
 
 import { planStage } from './review-plan.ts'
+import { currentReviews, matchesReviewTask, auditDependencyDigest } from './review-current.ts'
+import { taskDependencyDigest } from './review-input.ts'
+import { sha256Hex, stableJson } from './schema.ts'
+import { policyHash, promptHash } from './review-contract.ts'
 import type { ReverseIndex } from './dependencies.ts'
 import type { Id, ProjectSnapshot, ReviewFailure, ReviewRecord, ReviewStage, StageProgress } from './types.ts'
 
@@ -31,11 +35,6 @@ function zero(): StageProgress {
   }
 }
 
-/** Batched task identity: the sorted ref-id set (same identity the runner signs). */
-function refKey(refs: { id: Id }[]): string {
-  return refs.map((r) => r.id).sort().join(',')
-}
-
 function classify(errorCode: string | undefined, progress: StageProgress): void {
   if (errorCode === undefined) return
   if (CHANNEL_CODES.has(errorCode)) progress.channelErrors += 1
@@ -50,6 +49,8 @@ export function computeStageProgress(input: {
   targets: Id[]
   records: ReviewRecord[]
   claimsBatchSize: number
+  reviewerConfigHash?: string
+  artifact?: { id: Id; text: string }
 }): { stageProgress: Record<ReviewStage, StageProgress>; failures: ReviewFailure[] } {
   const stageProgress: Record<ReviewStage, StageProgress> = {
     sources: zero(),
@@ -61,6 +62,8 @@ export function computeStageProgress(input: {
   }
   const failures: ReviewFailure[] = []
   const records = input.records.filter((r) => r.kind !== 'disagreement')
+  const current = currentReviews(input.snapshot, records, input.targets, input.reviewerConfigHash).records
+  const contractHash = sha256Hex(stableJson(input.snapshot.contract))
   for (const stage of PROGRESS_STAGES) {
     const progress = stageProgress[stage]
     const stageRecords = records.filter((r) => r.stage === stage)
@@ -92,8 +95,14 @@ export function computeStageProgress(input: {
     })
     progress.total = tasks.length
     for (const task of tasks) {
-      const key = refKey(task.targetRefs)
-      const matching = stageRecords.filter((r) => refKey(r.targetRefs) === key)
+      const expected = {
+        contractHash,
+        dependencyDigest: taskDependencyDigest(input.index, task, current),
+        ...(input.reviewerConfigHash === undefined ? {} : { reviewerConfigHash: input.reviewerConfigHash }),
+      }
+      const matching = stageRecords.filter((r) =>
+        matchesReviewTask(r, task, expected) && (r.status !== 'completed' || current.includes(r)),
+      )
       const latest = [...matching].sort(
         (a, b) => a.endedAt.localeCompare(b.endedAt) || a.runId.localeCompare(b.runId),
       ).at(-1)
@@ -101,6 +110,39 @@ export function computeStageProgress(input: {
       else if (matching.some((r) => r.status === 'completed')) progress.completed += 1
       else progress.notRun += 1
     }
+  }
+  // Audit is one artifact task implemented by an extract/align pair, not a
+  // planStage task. Keep both sub-stages and aggregate runner errors visible.
+  const progress = stageProgress.audit
+  const auditRecords = records.filter((r) => ['audit', 'extract', 'align'].includes(r.stage))
+  const lastAudit = [...auditRecords].sort((a, b) => a.endedAt.localeCompare(b.endedAt) || a.runId.localeCompare(b.runId)).at(-1)
+  if (lastAudit) progress.lastRunStatus = lastAudit.status
+  for (const record of auditRecords) {
+    if (record.status !== 'error' && record.status !== 'budget-exhausted') continue
+    classify(record.errorCode, progress)
+    failures.push({
+      runId: record.runId, stage: 'audit', targetIds: record.targetRefs.map((ref) => ref.id),
+      errorCode: record.errorCode ?? 'REVIEW_UNAVAILABLE',
+      ...(record.errorDetail ? { errorDetail: record.errorDetail } : {}), endedAt: record.endedAt,
+    })
+  }
+  if (input.artifact) {
+    progress.total = 1
+    const artifact = input.snapshot.artifacts.find((a) => a.id === input.artifact!.id)
+    const digest = auditDependencyDigest(input.snapshot, input.artifact.id, current)
+    const matching = auditRecords.filter((r) =>
+      r.artifactHash === sha256Hex(input.artifact!.text) && r.contractHash === contractHash &&
+      r.policyHash === policyHash() && r.dependencyDigest === digest &&
+      r.targetRefs.some((ref) => ref.id === artifact?.id && ref.entityVersion === artifact.entityVersion) &&
+      (input.reviewerConfigHash === undefined || r.reviewerConfigHash === input.reviewerConfigHash) &&
+      (r.stage === 'audit' ? r.promptHash === '' : r.promptHash === promptHash(r.stage)),
+    )
+    const latest = [...matching].sort((a, b) => a.endedAt.localeCompare(b.endedAt) || a.runId.localeCompare(b.runId)).at(-1)
+    if (latest?.status === 'error' || latest?.status === 'budget-exhausted') progress.failed = 1
+    else if (matching.some((align) => align.stage === 'align' && align.status === 'completed' &&
+      matching.some((extract) => extract.stage === 'extract' && extract.status === 'completed' &&
+        extract.runId === align.runId && extract.inputHash === align.inputHash))) progress.completed = 1
+    progress.notRun = progress.total - progress.completed - progress.failed
   }
   failures.sort((a, b) => a.endedAt.localeCompare(b.endedAt) || a.runId.localeCompare(b.runId))
   return { stageProgress, failures }

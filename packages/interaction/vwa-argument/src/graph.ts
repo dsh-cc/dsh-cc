@@ -204,6 +204,7 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
     } else {
       for (const deleteId of mutation.deletes) {
         deleteEntity(graph, deleteId)
+        changedIds.push(deleteId)
       }
     }
   } else {

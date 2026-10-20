@@ -461,3 +461,14 @@ describe('Feature D §D.4.2 cascade delete', () => {
     expect(outcome.cascadeDeleted).toEqual([evidence.id, src2.id])
   })
 })
+
+it('reports ordinary deleted claims in changedIds and affectedClaimIds', () => {
+  const made = seedGraphSnapshot()
+  const claim = addClaim(made, 'Unreferenced claim')
+  const graph = new GraphContext(structuredClone(liveSnapshot(made)), 10_000)
+  const outcome = applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [claim.id] })
+  expect(graph.snapshot.claims.some((c) => c.id === claim.id)).toBe(false)
+  expect(outcome.changedIds).toEqual([claim.id])
+  expect(outcome.affectedClaimIds).toEqual([claim.id])
+  expect(outcome.cascadeDeleted).toBeUndefined()
+})

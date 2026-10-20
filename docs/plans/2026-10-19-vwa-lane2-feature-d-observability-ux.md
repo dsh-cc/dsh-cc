@@ -71,6 +71,20 @@ stageProgress: Record<ReviewStage, {
 as the runner (Feature C.2.3) — a batched claims stage with 6 claims and
 batch size 3 has `total: 2`, not `total: 6`.
 
+Current task counts use the same task identity as delivery freshness:
+entity versions, dependency digest, contract, policy, prompts, reviewer
+configuration, and scope-dependent rules must match. Historical failures
+remain in the failure list and error buckets, but cannot complete or fail a
+current task. New semantic failure records persist the task input hash;
+legacy unsigned failures remain available as history.
+
+For a bound artifact, `audit.total` is one. Completion requires a completed
+`extract` and `align` pair from the same run and input hash, with current
+artifact, dependency, contract, policy, prompt, and reviewer inputs. Aggregate
+`audit` errors carry artifact references, content hash, and dependency digest;
+they appear in the failure list and count as failed only for matching inputs.
+An extraction record alone does not complete the audit.
+
 Error classification:
 - **Channel**: REVIEW_UNAVAILABLE, REVIEW_TRUNCATED, REVIEW_CONFIG_DRIFT,
   timeout

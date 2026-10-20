@@ -155,6 +155,8 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     targets,
     records: input.records,
     claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1,
+    artifact: { id: artifactId, text },
+    ...(input.reviewerConfigHash === undefined ? {} : { reviewerConfigHash: input.reviewerConfigHash }),
   })
   const contractHash = sha256Hex(stableJson(snapshot.contract)),
     artifactHash = sha256Hex(text)
