@@ -376,7 +376,7 @@ export function registerSourceApply(
         snapshotPath,
         snapshotHash,
         duplicated: existing !== undefined,
-        driftWarning,
+        ...(driftWarning === undefined ? {} : { driftWarning }),
       },
       files,
     }
