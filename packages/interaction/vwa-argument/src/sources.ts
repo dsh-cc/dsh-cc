@@ -162,6 +162,8 @@ export interface RegisterOutcome {
   snapshotPath: string
   snapshotHash: string
   duplicated: boolean
+  /** Present when a prior source with the same original path registered a different snapshot hash (D.3). */
+  driftWarning?: string
 }
 
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024
@@ -352,8 +354,30 @@ export function registerSourceApply(
       snapshot.sources = snapshot.sources.filter((candidate) => candidate.id !== existing.id)
     }
     snapshot.sources.push(source)
+    // D.3: warn when an earlier source for the same original path/locator
+    // registered different file content — the disk file drifted since that
+    // registration. The input path is not persisted on Source, so match on the
+    // stored `originalLocator` against either the incoming path or the incoming
+    // locator metadata (the two ways callers identify the same document).
+    const drifted = snapshot.sources.find(
+      (candidate) =>
+        candidate.snapshotHash !== read.hash &&
+        (candidate.originalLocator === input.path ||
+          (input.metadata.originalLocator !== '' && candidate.originalLocator === input.metadata.originalLocator)),
+    )
+    const driftWarning =
+      drifted === undefined
+        ? undefined
+        : `File content has changed since source ${drifted.id} was registered (hash ${drifted.snapshotHash.slice(0, 8)} → ${read.hash.slice(0, 8)}). The old source's snapshot is unchanged; reviews referencing it used the old content. Register created a new source. To update in place, delete the old source and re-register.`
     return {
-      result: { sourceId, evidenceIds, snapshotPath, snapshotHash, duplicated: existing !== undefined },
+      result: {
+        sourceId,
+        evidenceIds,
+        snapshotPath,
+        snapshotHash,
+        duplicated: existing !== undefined,
+        driftWarning,
+      },
       files,
     }
   }

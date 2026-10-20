@@ -447,6 +447,96 @@ describe('evidence.register (§10.3)', () => {
     if (head.ok) expect(head.data.snapshot.sources[0]?.acquisition.kind).toBe('unverified')
   })
 
+  it('D.3: re-registering an EDITED file at the same path includes a driftWarning', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'drift.txt')
+    writeFileSync(sourcePath, 'original body\n', 'utf8')
+    const first = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'drift-1',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(first.ok).toBe(true)
+    const oldId = (first.data as { sourceId: string }).sourceId
+    writeFileSync(sourcePath, 'edited body\n', 'utf8')
+    const second = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'drift-2',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(second.ok).toBe(true)
+    const data = second.data as { sourceId: string; duplicated: boolean; driftWarning: string }
+    expect(data.sourceId).not.toBe(oldId)
+    expect(data.duplicated).toBe(false)
+    expect(data.driftWarning).toContain(`since source ${oldId} was registered`)
+    expect(data.driftWarning).toContain('delete the old source and re-register')
+  })
+
+  it('D.3: drift is detected from the citation locator when the path is not used as locator', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'cited.txt')
+    writeFileSync(sourcePath, 'cited original\n', 'utf8')
+    // Real registrations carry a citation locator (URL/archive ref), not the local path.
+    const first = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'cited-1',
+      input: { path: sourcePath, metadata: { ...METADATA }, excerpts: [] },
+    })
+    expect(first.ok).toBe(true)
+    const oldId = (first.data as { sourceId: string }).sourceId
+    writeFileSync(sourcePath, 'cited edited\n', 'utf8')
+    const second = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'cited-2',
+      input: { path: sourcePath, metadata: { ...METADATA }, excerpts: [] },
+    })
+    expect(second.ok).toBe(true)
+    const data = second.data as { sourceId: string; driftWarning?: string }
+    expect(data.sourceId).not.toBe(oldId)
+    expect(data.driftWarning).toContain(`since source ${oldId} was registered`)
+  })
+
+  it('D.3: re-registering the SAME unchanged file dedups with no driftWarning', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'same.txt')
+    writeFileSync(sourcePath, 'stable body\n', 'utf8')
+    const first = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'same-1',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    const second = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'same-2',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(second.ok).toBe(true)
+    const data = second.data as { sourceId: string; duplicated: boolean; driftWarning?: string }
+    expect(data.sourceId).toBe((first.data as { sourceId: string }).sourceId)
+    expect(data.duplicated).toBe(true)
+    expect('driftWarning' in data).toBe(false)
+  })
+
+  it('D.3: a genuinely new file has no driftWarning', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'fresh.txt')
+    writeFileSync(sourcePath, 'fresh body\n', 'utf8')
+    const result = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'fresh-1',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(result.ok).toBe(true)
+    expect('driftWarning' in (result.data as object)).toBe(false)
+  })
+
   it('rejects paths outside the workspace root and binary input', async () => {
     const { tools, workspace } = mount()
     const outside = join(initWorkspace().root, 'outside.txt')
