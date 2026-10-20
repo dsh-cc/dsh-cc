@@ -16,6 +16,9 @@ const cases = [
   ['CRLF records', 'name,note\r\nAlice,"hello,\r\nworld"\r\nBob,ok\r\n'],
   ['quoted TSV tab', 'name\tnote\nAlice\t"hello\tworld"\nBob\tok\n'],
   ['tab inside CSV field', 'name,note\nAlice,"hello\tworld"\nBob,ok\n'],
+  ['TSV empty first field', '\tvalue\nx\ty\n'],
+  ['TSV empty first field after blank records', '\n  \r\n\tvalue\r\nx\ty\r\n'],
+  ['TSV empty first record fields', '\t\nx\ty\n'],
 ] as const
 
 describe('quoted structured sources', () => {
@@ -33,12 +36,17 @@ describe('quoted structured sources', () => {
   })
 
   it.each(cases)('refuses oversized %s before model dispatch', async (_, text) => {
-    const fullText = text + text.repeat(5000)
+    const fullText = text + text.repeat(10_000)
     const source = { ...makeSource(), snapshotHash: sha256Hex(fullText) }
     const claim = makeClaim()
     claim.scope.corpus = [source.id]
     const snapshot = makeSnapshot({ sources: [source], claims: [claim] })
-    const adapter = fakeAdapter([])
+    const adapter = fakeAdapter([() => ({ raw: JSON.stringify({
+      stage: 'sources', rubricVersion: 'humanities-v1', findings: [],
+      targets: [{ targetId: source.id, checks: ['SOURCE-01', 'SOURCE-02'].map((ruleId) => ({
+        ruleId, result: 'pass', rationale: 'r', evidenceIds: [],
+      })) }],
+    }) })])
     const outcome = await executeReviewRun({
       deps: {
         root: mkdtempSync(join(tmpdir(), 'vwa-quoted-source-')),

@@ -556,6 +556,34 @@ describe('Feature E — large-source compaction in the runner', () => {
     expect(record.status).toBe('completed')
   })
 
+  it('repairs a windowed source response within the whole-message context budget', async () => {
+    const text = SENTENCE.repeat(3000)
+    const { root } = workspace()
+    const source = { ...makeSource(), snapshotHash: sha256Hex(text) }
+    const claim = citedClaim(source)
+    const snapshot = makeSnapshot({ sources: [source], claims: [claim] })
+    const requests: Array<Array<{ role: string; content: string }>> = []
+    const adapter = fakeAdapter([
+      ({ messages }) => { requests.push(messages); return { raw: '{' } },
+      ({ messages }) => { requests.push(messages); return { raw: sourcesStageResponse(source.id, 'pass') } },
+    ])
+    vi.useFakeTimers()
+    try {
+      const pending = runSources(root, adapter, snapshot, source, text, claim)
+      await vi.runAllTimersAsync()
+      const outcome = await pending
+      expect(outcome.status).toBe('completed')
+      expect(adapter.state.dispatches).toBe(2)
+      expect(requests[1]!.slice(0, -1)).toEqual(requests[0])
+      expect(requests[1]!.at(-1)!.content).toContain('previous response was invalid')
+      expect(JSON.parse(requests[0]![1]!.content).context.sources[0].windowing).toBeDefined()
+      for (const messages of requests)
+        expect(messages.reduce((chars, message) => chars + message.content.length, 0)).toBeLessThanOrEqual(48_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('a structured source larger than the limit finishes incomplete without dispatching', async () => {
     const text = JSON.stringify({ rows: Array.from({ length: 4000 }, (_, i) => ({ id: i, note: 'x'.repeat(60) })) })
     const { root } = workspace()

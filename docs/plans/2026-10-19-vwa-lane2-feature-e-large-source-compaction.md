@@ -44,7 +44,7 @@ function isStructuredData(text: string): boolean {
   // XML: starts with <?xml or <
   if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) return true
   // isDelimitedData scans two non-empty logical records with quote handling.
-  return isDelimitedData(trimmed, ',') || isDelimitedData(trimmed, '\t')
+  return isDelimitedData(text, ',') || isDelimitedData(text, '\t')
 }
 ```
 
@@ -137,10 +137,22 @@ The key invariant: every return path (full text or windowed) is
 measured against the serialized envelope size, not estimated from raw
 character counts.
 
+Delimited-data detection receives the original text: leading tabs are empty
+TSV fields, not whitespace to strip. The logical-record parser skips blank
+records without removing delimiters from non-empty records.
+
 The implementation measures the persisted target entry and the full
 `taskEnvelope` scaffold (including contract, rules, dependencies and budget),
 rather than the bare `{ text }` illustration above. The runner also reserves
-the stage prompt's length from the whole-message context budget.
+the stage prompt's length from the whole-message context budget. Windowed
+prose also reserves space for one bounded repair message when the minimum
+2,000-character window still fits. If only the initial minimum window fits,
+the first attempt may proceed; an oversized repair is refused. Repair diagnostics
+are capped at 512 characters; each retry replaces the prior repair message
+and retains the original task inputs. Before counting input or reserving
+spend, every attempt checks its actual messages against the context limit.
+An oversized repair returns `CONTEXT_TOO_LARGE` with the number of completed
+attempts and does not reserve or dispatch another call.
 
 **Evidence context slices**: for the sources stage, `currentReviews` is empty
 (first stage), so the main risk is evidence slices. Evidence context spans

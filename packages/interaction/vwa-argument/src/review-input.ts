@@ -3,7 +3,7 @@ import { buildReverseIndex, dependencyDigest, dependencyEntries, type ReverseInd
 import { sha256Hex, stableJson } from './schema.ts'
 import { RULES, RUBRIC_VERSION } from './review-contract.ts'
 import type { ReviewTask } from './review-plan.ts'
-import { ReviewContextError } from './review-call.ts'
+import { ReviewContextError, REVIEW_REPAIR_CONTEXT_CHARS } from './review-call.ts'
 import { isDelimitedData } from './structured-data.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewRecord, SourceEnvelopeEntry, SourceWindowing } from './types.ts'
 
@@ -94,7 +94,8 @@ export function isStructuredData(text: string): boolean {
   if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) return true
   // Compare logical records; quoted delimiters and newlines are field content.
   // Try both formats independently: a tab inside a CSV field is not a TSV hint.
-  return isDelimitedData(trimmed, ',') || isDelimitedData(trimmed, '\t')
+  // Leading tabs can be empty TSV fields; the parser skips blank records.
+  return isDelimitedData(text, ',') || isDelimitedData(text, '\t')
 }
 
 /**
@@ -108,6 +109,7 @@ export function fitSourceText(
   // Real source entry (persisted fields + text); candidates must measure the
   // actual entry shape, not a bare { text } stand-in.
   entry?: unknown,
+  reserveContextChars = 0,
 ): { text: string; windowing?: SourceWindowing } {
   const base = envelopeWithoutText as Record<string, unknown>
   const baseCtx = (base as { context?: Record<string, unknown> }).context
@@ -133,14 +135,19 @@ export function fitSourceText(
       windowing: { totalChars: text.length, headChars, tailChars },
     }
   }
-  const fits = (window: ReturnType<typeof windowFor>) =>
-    stableJson(cand([entryWith(window.text, window.windowing)])).length <= maxContextChars
+  const fits = (window: ReturnType<typeof windowFor>, limit: number) =>
+    stableJson(cand([entryWith(window.text, window.windowing)])).length <= limit
   // Measure the minimum before rejecting: JSON escaping can double (or more)
   // the serialized size without exhausting the budget for a useful excerpt.
   let low = MIN_SOURCE_WINDOW
-  let high = Math.min(text.length - 1, maxContextChars)
   let best = windowFor(low)
-  if (high < low || !fits(best)) {
+  // Prefer repair headroom, but do not refuse a useful minimum excerpt that
+  // fits the actual limit. The caller still refuses an oversized repair.
+  const windowLimit = fits(best, maxContextChars - reserveContextChars)
+    ? maxContextChars - reserveContextChars
+    : maxContextChars
+  let high = Math.min(text.length - 1, windowLimit)
+  if (high < low || !fits(best, windowLimit)) {
     throw new ReviewContextError('envelope overhead leaves insufficient room for source text')
   }
   // Search raw window lengths, but make every budget decision using the full
@@ -148,7 +155,7 @@ export function fitSourceText(
   while (low < high) {
     const mid = Math.ceil((low + high) / 2)
     const candidate = windowFor(mid)
-    if (fits(candidate)) {
+    if (fits(candidate, windowLimit)) {
       low = mid
       best = candidate
     } else {
@@ -216,7 +223,9 @@ export function reviewContext(input: {
               `The original remains metadata in the companion review; its own review is still refused.`,
           )
         }
-        const fitted = fitSourceText(text, envelopeWithoutText, input.maxContextChars, entry)
+        // Only windowed prose needs a smaller initial envelope. Preserve full
+        // sources that fit, and never truncate evidence to make room for repair.
+        const fitted = fitSourceText(text, envelopeWithoutText, input.maxContextChars, entry, REVIEW_REPAIR_CONTEXT_CHARS)
         entries[i] = { ...entry, text: fitted.text, ...(fitted.windowing ? { windowing: fitted.windowing } : {}) }
       }
     }
