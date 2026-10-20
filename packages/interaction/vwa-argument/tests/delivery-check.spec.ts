@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { evaluateDelivery } from '../src/delivery-check.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
-import { BUDGET, fakeAdapter, makeClaim, makeSnapshot } from './review-helpers.ts'
+import { BUDGET, fakeAdapter, makeArgument, makeClaim, makeSnapshot } from './review-helpers.ts'
 
 /** One schema-valid claims response covering EVERY target the task carried. */
 function batchedClaimsResponse(claimIds: string[], result: 'pass'): string {
@@ -80,6 +80,54 @@ function fixture(batchSize: number, claims = [makeClaim('fact', 'The council clo
 }
 
 describe('Feature C — delivery per-claim assessments over batched claims records', () => {
+  it.each([1, 2, 3, 4])('keeps interleaved argument dependencies current with batch size %i', async (batchSize) => {
+    const claims = [makeClaim('fact', 'A.'), makeClaim('fact', 'B.'), makeClaim('fact', 'C.')]
+    const f = fixture(batchSize, claims)
+    // Global batches at size 2 are [A, B], [C], while A/C's closure is [A, C].
+    f.snapshot.arguments.push(makeArgument(claims[2]!.id, [claims[0]!.id], []))
+    const adapter = fakeAdapter([(req) => {
+      const envelope = JSON.parse(req.messages[1]!.content) as {
+        stage: 'claims' | 'arguments'
+        requiredRules: { targetId: string; ruleId: string }[]
+      }
+      return { raw: JSON.stringify({
+        stage: envelope.stage, rubricVersion: 'humanities-v1', findings: [],
+        targets: [...new Set(envelope.requiredRules.map((r) => r.targetId))].map((targetId) => ({
+          targetId,
+          checks: envelope.requiredRules.filter((r) => r.targetId === targetId).map(({ ruleId }) => ({
+            ruleId, result: 'pass', rationale: 'reviewed', evidenceIds: [],
+          })),
+          ...(envelope.stage === 'claims' ? { searchSufficiency: 'checked' } : { adequacy: 'adequate' }),
+        })),
+      }) }
+    }])
+    const outcome = await executeReviewRun({
+      deps: { root: f.root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+      runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['claims', 'arguments'],
+      targetClaimIds: claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
+    })
+    expect(outcome.status).toBe('completed')
+    const check = evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: outcome.records, pendingRunIds: [], adjudications: [],
+    })
+    expect(check.checks.argument).toBe('pass')
+    expect(check.assessments).toHaveLength(3)
+    expect(check.assessments.map((a) => a.reviewState)).toEqual(['current', 'current', 'current'])
+
+    // A missing global batch must still leave its claim unreviewed.
+    const withoutLastBatch = outcome.records.filter((r) =>
+      r.stage !== 'claims' || !r.targetRefs.some((ref) => ref.id === claims[2]!.id),
+    )
+    const incomplete = evaluateDelivery({
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      records: withoutLastBatch, pendingRunIds: [], adjudications: [],
+    })
+    expect(incomplete.assessments.find((a) => a.claimId === claims[2]!.id)?.reviewState).not.toBe('current')
+    expect(incomplete.assessments.find((a) => a.claimId === claims[0]!.id)?.reviewState).not.toBe('current')
+    expect(incomplete.checks.argument).not.toBe('pass')
+  })
+
   it('batched records match the per-claim assessment tasks (reviewRunIds populated)', async () => {
     const f = fixture(2)
     const outcome = await f.run()
@@ -94,8 +142,7 @@ describe('Feature C — delivery per-claim assessments over batched claims recor
       adjudications: [],
     })
     const claimsAssessments = check.assessments.filter((a) => f.claims.some((c) => c.id === a.claimId))
-    // The batched record covers both claims' claims-stage tasks (other stages
-    // were not run, so the per-claim review state is incomplete, not current).
+    // The batched record covers both claims; the other stages are inapplicable.
     expect(claimsAssessments.length).toBeGreaterThan(0)
     for (const assessment of claimsAssessments) {
       expect(assessment.reviewRunIds).toContain(outcome.runId)

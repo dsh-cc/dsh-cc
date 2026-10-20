@@ -224,8 +224,11 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     ),
   })
   for (const assessment of assessments) {
+    // Project per-claim requirements without regrouping the global batches.
+    // currentReviews already selected records under the full delivery scope;
+    // an argument closure can span claims covered by different current batches.
     const tasks = (['sources', 'support', 'claims', 'arguments'] as const).flatMap((stage) =>
-      planStage({ stage, snapshot, index, targetClaimIds: [assessment.claimId], core, claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1 }),
+      planStage({ stage, snapshot, index, targetClaimIds: [assessment.claimId], core, claimsBatchSize: 1 }),
     )
     const complete = tasks.every((task) =>
       effective.some(
