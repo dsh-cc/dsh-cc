@@ -69,14 +69,20 @@ A new test file `packages/core/tools/tests/tool-schema-gate.spec.ts` that:
    `tools.register` method — matching the actual registration API
    (tools.ts:137-139).
 
-   The manifest is maintained manually. A coverage check verifies the
-   manifest against a walk of `packages/**/src/**/*.ts` using TypeScript AST
-   call detection for `tools.register` or `defineTool`. Source path segments
-   accept both Windows and POSIX separators. Whitespace and line breaks do
-   not affect detection; comments and string literals are ignored. Any file
-   with a matching call whose package is NOT in the
-   manifest causes the test to fail with "package X not in
-   TOOL_PACKAGE_MANIFEST".
+   The manifest is maintained manually. A source inventory records exact AST
+   call counts per `packages/**/src/**/*.ts` file for `tools.register` and
+   `defineTool`. Added or removed calls fail the gate, even inside an existing
+   package or source file. Comments and strings are ignored; path handling
+   accepts Windows and POSIX separators. Each mount also has a reviewed exact
+   tool-name snapshot, so losing a registration or mounted branch fails CI.
+   When changing a call count, update the corresponding mount and name snapshot
+   together. These checks do not prove execution of every possible configuration;
+   configuration-dependent registration paths need explicit mount cases.
+
+   Exclusions apply only to surveyed files and call counts: the test fixture
+   factory, scenario mock tools, and external MCP schema passthrough. They do
+   not exclude future source files in those packages. The `run_code` factory
+   and the two first-party MCP resource bridge tools are mounted and validated.
 
 2. For each package in the manifest, mounts its tools against a
    CaptureRegistry and asserts for each registered tool:
@@ -107,9 +113,8 @@ Known tool-registering packages (from a survey of `tools.register(` and
 - `packages/memory/memory`
 - `packages/subagent/task`, `packages/subagent/handoff-store`
 - `packages/context/context-crusher`
-- `packages/mcp/mcp-client` (excluded from assertions — MCP tools are
-  external; the manifest entry asserts only that the registration function
-  exists)
+- `packages/mcp/mcp-client` (excluded from assertions — external server input schemas are
+  excluded; first-party resource bridge schemas are mounted and validated)
 
 **F.2.3 Tripwire hardening in test mode.**
 

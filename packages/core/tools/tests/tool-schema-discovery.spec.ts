@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { findToolPackages, isPackageSourcePath } from './tool-schema-discovery.ts'
+import { findToolPackages, isPackageSourcePath, findUncoveredToolSources } from './tool-schema-discovery.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -45,5 +45,30 @@ describe('tool schema gate discovery', () => {
     const root = fixture('defineTool({})')
     expect(findToolPackages(root, new Set(['@dsh-cc/new-tool']), {})).toEqual([])
     expect(findToolPackages(root, new Set(), { '@dsh-cc/new-tool': 'fixture' })).toEqual([])
+  })
+})
+
+const sourcePath = 'packages/core/new-tool/src/index.ts'
+describe('registration source coverage within existing packages', () => {
+  it('rejects a new registration site in an already covered source file', () => {
+    const root = fixture('defineTool({}); if (enabled) tools.register({})')
+    expect(findUncoveredToolSources(root, { [sourcePath]: 1 })).toEqual([
+      `${sourcePath}: expected 1 registration calls, found 2`,
+    ])
+  })
+  it('rejects a new source file in an already covered package', () => {
+    const root = fixture('defineTool({})')
+    writeFileSync(join(root, 'packages/core/new-tool/src/extra.ts'), 'tools.register({})')
+    expect(findUncoveredToolSources(root, { [sourcePath]: 1 })).toEqual([
+      'packages/core/new-tool/src/extra.ts: expected 0 registration calls, found 1',
+    ])
+  })
+  it('detects removal of a surveyed registration site', () => {
+    expect(findUncoveredToolSources(fixture('// removed'), { [sourcePath]: 1 })).toEqual([
+      `${sourcePath}: expected 1 registration calls, found 0`,
+    ])
+  })
+  it('accepts exact site coverage while ignoring examples', () => {
+    expect(findUncoveredToolSources(fixture('defineTool({}); // tools.register({})'), { [sourcePath]: 1 })).toEqual([])
   })
 })

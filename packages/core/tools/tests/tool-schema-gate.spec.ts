@@ -6,15 +6,15 @@
  * to carry a valid, non-degenerate JSON Schema `parameters` — the class of
  * bug PR #262 fixed (a flat spec that degraded silently to `{}` on the
  * model side). A coverage check walks every package src file for the
- * registration call patterns and fails when a matching file's owning package
- * is missing from TOOL_PACKAGE_MANIFEST.
+ * registration call patterns and fails when any file gains or loses a call,
+ * including new entry points inside an existing package.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
-import { findToolPackages } from './tool-schema-discovery.ts'
+import { findUncoveredToolSources } from './tool-schema-discovery.ts'
 import { assertSupportedJsonSchema, type ToolDefinition } from '@dsh-cc/tools'
 import { CaptureRegistry } from '../../../interaction/vwa-argument/src/sources.ts'
 import { registerArgumentTools } from '../../../interaction/vwa-argument/src/tools.ts'
@@ -30,13 +30,14 @@ import { registerMemorySaveTool } from '@dsh-cc/memory'
 import { registerTaskTool } from '../../../subagent/task/src/tool.ts'
 import { registerReleaseAgentTool } from '../../../subagent/task/src/release-agent.ts'
 import { installCoordinatorMode } from '@dsh-cc/coordinator'
-import { publishListedTool } from '../../../mcp/mcp-client/src/defer.ts'
+import { syncResources } from '../../../mcp/mcp-client/src/resources.ts'
+import { createRunCodeTool } from '../src/code-mode.ts'
 // Not in tsconfig.base paths — imported via relative src path (see report).
 import { defineHandoffGetTool, defineHandoffPutTool, HandoffLedger, HandoffStore } from '../../../subagent/handoff-store/src/index.ts'
 import ContextCrusher from '../../../context/context-crusher/src/index.ts'
 
 /** Tools that genuinely take no arguments (empty `parameters.properties`). */
-const NO_ARG_TOOLS = new Set(['worker_tasks'])
+const NO_ARG_TOOLS = new Set(['worker_tasks', 'mcp__schema_gate__list_mcp_resources'])
 
 /** Capture registry shaped exactly like the runtime `ctx.tools` seam. */
 interface CaptureSeam {
@@ -52,7 +53,6 @@ interface CaptureSeam {
 
 function captureSeam(): CaptureSeam {
   const captured: ToolDefinition[] = []
-  const noop = () => () => {}
   return {
     captured,
     tools: {
@@ -123,8 +123,6 @@ interface ManifestEntry {
   /** Exported registration function this entry mounts (informational). */
   registerFn: string
   mount(seam: CaptureSeam): void
-  /** True when the entry asserts only registration existence (no mounted tools). */
-  existenceOnly?: boolean
 }
 
 const TOOL_PACKAGE_MANIFEST: ManifestEntry[] = [
@@ -248,52 +246,85 @@ const TOOL_PACKAGE_MANIFEST: ManifestEntry[] = [
     },
   },
   {
-    // MCP tools carry an external inputSchema passthrough (not first-party
-    // JSON Schema authored here) — the design excludes them from the schema
-    // assertions; the gate only checks the registration function exists.
     packageName: '@dsh-cc/mcp-client',
-    registerFn: 'publishListedTool',
-    existenceOnly: true,
-    mount: () => {
-      expect(typeof publishListedTool).toBe('function')
+    registerFn: 'syncResources',
+    mount: (seam) => {
+      const disposers = syncResources({} as never, fakeContext(seam), 'schema_gate')
+      expect(disposers.size).toBe(2)
+    },
+  },
+  {
+    packageName: '@dsh-cc/tools',
+    registerFn: 'createRunCodeTool',
+    mount: (seam) => {
+      seam.captured.push(createRunCodeTool({} as never, {
+        requireRuntime: () => { throw new Error('schema gate must not execute code') },
+        peekRuntime: () => undefined,
+        maxParallel: 1,
+        shapeDispatchLog: async () => [],
+      }))
     },
   },
 ]
 
-const MANIFEST_PACKAGES = new Set(TOOL_PACKAGE_MANIFEST.map((entry) => entry.packageName))
-
-/**
- * Packages whose src files match the coverage pattern but that register no
- * first-party model-facing tool schema. Keyed by package name; each value is
- * the one-line justification recorded in the gate.
+/** Exact AST call counts, not a package allowlist. Review mounts and expected
+ * tool names whenever a count changes. Exclusions are limited to these files.
+ * Both defineTool and tools.register calls count (including nested calls).
  */
-const EXCLUDED_PACKAGES: Record<string, string> = {
-  // The tools package's own defineTool( uses are internal machinery:
-  // define-tool.ts is the compiler itself, code-mode.ts builds the run_code
-  // bridge definition as a host-invoked factory (createRunCodeTool), and
-  // testing.ts is the defineContentToolFixture test helper.
-  '@dsh-cc/tools':
-    'internal factory/utility: define-tool.ts (compiler), code-mode.ts (run_code factory), testing.ts (test fixture helper)',
-  // MCP tools are external servers' inputSchema passthrough (design §F.2.2).
-  '@dsh-cc/mcp-client': 'external MCP inputSchema passthrough — registration fn existence asserted in the manifest entry',
-  // Test-support packages register mock tool fixtures for scenario runners,
-  // never into a real runtime.
-  '@dsh-cc/cache-trajectory': 'test-support mock tool fixture for cache-trajectory scenario runs',
-  '@dsh-cc/token-efficiency': 'test-support mock tool fixture for token-efficiency scenario runs',
+const TOOL_SOURCE_CALLS: Record<string, number> = {
+  'packages/context/context-crusher/src/index.ts': 2,
+  'packages/core/tool-manage-skill/src/index.ts': 2,
+  'packages/core/tool-notebook-edit/src/index.ts': 2,
+  'packages/core/tool-search/src/index.ts': 2,
+  'packages/core/tool-sleep/src/index.ts': 2,
+  'packages/core/tool-structured-output/src/index.ts': 1,
+  'packages/core/tool-web-fetch/src/index.ts': 2,
+  'packages/core/tool-workflow/src/index.ts': 2,
+  'packages/core/tools/src/code-mode.ts': 1,
+  // Test fixture factory; no model-facing runtime tool.
+  'packages/core/tools/src/testing.ts': 1,
+  'packages/interaction/vwa-argument/src/report-tool.ts': 1,
+  'packages/interaction/vwa-argument/src/tools.ts': 9,
+  // External server inputSchema passthrough only.
+  'packages/mcp/mcp-client/src/defer.ts': 2,
+  'packages/mcp/mcp-client/src/resources.ts': 1,
+  'packages/memory/memory/src/save.ts': 2,
+  'packages/subagent/coordinator/src/index.ts': 8,
+  'packages/subagent/handoff-store/src/index.ts': 2,
+  'packages/subagent/handoff-store/src/tools.ts': 2,
+  'packages/subagent/task/src/release-agent.ts': 2,
+  'packages/subagent/task/src/tool.ts': 2,
+  // Scenario mock tool only.
+  'packages/test-support/cache-trajectory/src/runner.ts': 1,
+  // Scenario mock tools only.
+  'packages/test-support/token-efficiency/src/mock-run.ts': 2,
+  'packages/workspace/tool-git-worktree/src/index.ts': 4,
 }
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 
 describe('CI tool-schema regression gate (design §F.2.1)', () => {
-  it('every first-party tool-registering package is in TOOL_PACKAGE_MANIFEST', () => {
-    expect(findToolPackages(REPO_ROOT, MANIFEST_PACKAGES, EXCLUDED_PACKAGES), 'package(s) not in TOOL_PACKAGE_MANIFEST').toEqual([])
+  it('every registration source has an explicit call-site inventory', () => {
+    expect(findUncoveredToolSources(REPO_ROOT, TOOL_SOURCE_CALLS)).toEqual([])
+  })
+
+  it('covers the first-party code transport and MCP resource bridge', () => {
+    const definitions = TOOL_PACKAGE_MANIFEST.flatMap(entry => {
+      const seam = captureSeam()
+      entry.mount(seam)
+      return seam.captured
+    })
+    expect(definitions.map(def => def.name)).toEqual(expect.arrayContaining([
+      'run_code', 'mcp__schema_gate__list_mcp_resources', 'mcp__schema_gate__read_mcp_resource',
+    ]))
   })
 
   for (const entry of TOOL_PACKAGE_MANIFEST) {
     it(`${entry.packageName}: every mounted tool exposes a valid non-degenerate JSON Schema parameters`, () => {
       const seam = captureSeam()
       entry.mount(seam)
-      if (entry.existenceOnly) return
+      // Exact per-entry tool sets detect missing mounts and dropped branches.
+      expect(seam.captured.map(def => def.name).sort()).toMatchSnapshot(entry.packageName)
       expect(seam.captured.length, `${entry.packageName} registered no tools`).toBeGreaterThan(0)
       for (const definition of seam.captured) {
         const label = `${entry.packageName} tool ${definition.name}`
