@@ -118,11 +118,13 @@ export function fitSourceText(
 ): { text: string; windowing?: SourceWindowing } {
   const base = envelopeWithoutText as Record<string, unknown>
   const baseCtx = (base as { context?: Record<string, unknown> }).context
-  // Design shape: candidates are the envelope with the measured source entry
-  // swapped in. When the base is the full envelope, the sources live in
-  // base.context; without a scaffold the base IS the context object.
-  const cand = (sourceEntries: unknown[]) =>
-    baseCtx === undefined ? { ...base, sources: sourceEntries } : { ...base, context: { ...baseCtx, sources: sourceEntries } }
+  const siblings = (baseCtx ?? base).sources
+  // The base contains sibling sources; each candidate adds the measured
+  // target without dropping those siblings. A scaffold nests them in context.
+  const cand = (sourceEntries: unknown[]) => {
+    const sources = [...(Array.isArray(siblings) ? siblings : []), ...sourceEntries]
+    return baseCtx === undefined ? { ...base, sources } : { ...base, context: { ...baseCtx, sources } }
+  }
   const marker = (head: number, tail: number) => '\n\n[... ' + (text.length - head - tail) + ' chars omitted ...]\n\n'
   const entryWith = (windowText: string, windowing?: SourceWindowing) =>
     ({ ...(entry as object), text: windowText, ...(windowing ? { windowing } : {}) })
@@ -184,7 +186,11 @@ export function reviewContext(input: {
   const sources = input.snapshot.sources.filter((s) => ids.has(s.id))
   const entries: SourceEnvelopeEntry[] = sources.map((source) => ({
     ...source,
-    ...(input.task.stage === 'sources' && input.readSnapshot ? { text: input.readSnapshot(source.id) ?? '' } : {}),
+    // A sources task reviews one target. Dependency sources retain metadata
+    // and evidence slices; their full texts belong to their own reviews.
+    ...(input.task.stage === 'sources' && input.task.targetIds.includes(source.id) && input.readSnapshot
+      ? { text: input.readSnapshot(source.id) ?? '' }
+      : {}),
   }))
   const restContext = {
     evidence: evidence.map((e) => {
@@ -203,40 +209,32 @@ export function reviewContext(input: {
     currentReviews: deduplicateBySemanticHash(upstreamRecords(index, input.task, input.records)),
   }
   if (input.task.stage === 'sources' && input.readSnapshot && input.maxContextChars !== undefined) {
-    // The sources stage plans exactly one source per task, so this loop
-    // normally fits a single entry. Sibling texts are stripped from each
-    // measurement base; if a hypothetical multi-source envelope still
-    // overshoots after per-entry fitting, the caller's total-length check
-    // (review-call) fails safely with CONTEXT_TOO_LARGE.
+    const envelopeWith = (sources: SourceEnvelopeEntry[]) => {
+      const context = { ...restContext, sources }
+      return input.measureScaffold ? { ...input.measureScaffold, context } : context
+    }
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i]!
       if (entry.text === undefined) continue
       const text = entry.text
-      // Base envelope with every inlined text (this one and siblings)
-      // removed; explicit undefined keys are dropped by stableJson.
-      const withoutThis = entries
-        .filter((_, j) => j !== i)
-        .map((e) => (e.text === undefined ? e : { ...e, text: undefined, windowing: undefined }))
-      const contextWithoutText = { ...restContext, sources: withoutThis }
-      const envelopeWithoutText = input.measureScaffold
-        ? { ...input.measureScaffold, context: contextWithoutText }
-        : contextWithoutText
-      // Measure the full candidate first (structured data is never windowed).
-      const fullCandidate =
-        input.measureScaffold
-          ? { ...input.measureScaffold, context: { ...restContext, sources: [entry] } }
-          : { ...restContext, sources: [entry] }
-      if (stableJson(fullCandidate).length > input.maxContextChars) {
+      // Related-source metadata and all evidence slices count toward both
+      // the full-text check and every candidate measured during fitting.
+      const envelopeWithoutText = envelopeWith(entries.filter((_, j) => j !== i))
+      if (stableJson(envelopeWith(entries)).length > input.maxContextChars) {
         if (isStructuredData(text)) {
           throw new ReviewContextError(
             `Source ${entry.id} is structured data (JSON/JSONL/CSV/XML) and exceeds the review context limit. ` +
               `Windowing is not applied to structured data. Register a distilled companion source with ` +
-              `lineage.parentSourceIds: ["${entry.id}"] to proceed.`,
+              `lineage.parentSourceIds: ["${entry.id}"] and cite it instead of the original in claim scope or evidence. ` +
+              `The original remains metadata in the companion review; its own review is still refused.`,
           )
         }
         const fitted = fitSourceText(text, envelopeWithoutText, input.maxContextChars, entry)
         entries[i] = { ...entry, text: fitted.text, ...(fitted.windowing ? { windowing: fitted.windowing } : {}) }
       }
+    }
+    if (stableJson(envelopeWith(entries)).length > input.maxContextChars) {
+      throw new ReviewContextError('envelope overhead leaves insufficient room for source text')
     }
   }
   return {

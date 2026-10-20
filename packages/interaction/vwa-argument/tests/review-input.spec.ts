@@ -10,7 +10,7 @@ import { deduplicateBySemanticHash, semanticRecordHash, taskDependencyDigest } f
 import { fitSourceText, isStructuredData, reviewContext, taskEnvelope } from '../src/review-input.ts'
 import { ReviewContextError } from '../src/review-call.ts'
 import { planStage } from '../src/review-plan.ts'
-import type { ProjectSnapshot, ReviewRecord, ReviewTask, SemanticReviewRecord } from '../src/types.ts'
+import type { ProjectSnapshot, ReviewRecord, ReviewTask, SemanticReviewRecord, SourceEnvelopeEntry } from '../src/types.ts'
 import { makeClaim, makeEvidence, makeGroup, makeSnapshot, makeSource, NOW } from './review-helpers.ts'
 
 function makeRecord(overrides: Partial<SemanticReviewRecord> = {}): SemanticReviewRecord {
@@ -148,6 +148,60 @@ describe('isStructuredData (E.2.1)', () => {
 })
 
 describe('sources-stage compaction (E.2.2/E.4)', () => {
+  it.each([1800, 4000])('fits each target with related-source metadata and intact evidence (%i sentences)', (sentences) => {
+    const text = 'The committee decided. '.repeat(sentences)
+    // Large metadata must count even though the related source has no inlined text.
+    const sources = [makeSource(), {
+      ...makeSource(), creators: Array.from({ length: 14 }, (_, i) => `Author ${i} ${'x'.repeat(480)}`),
+    }]
+    const claim = makeClaim()
+    const evidence = sources.map((source) => ({ ...makeEvidence(source), quote: text.slice(0, 5) }))
+    const snapshot = makeSnapshot({
+      sources, claims: [claim], evidence,
+      groups: [makeGroup(claim.id, evidence.map((e) => e.id))],
+    })
+    const tasks = planStage({ stage: 'sources', snapshot, index: buildReverseIndex(snapshot), targetClaimIds: [claim.id], core: new Set() })
+    expect(tasks).toHaveLength(2)
+    for (const task of tasks) {
+      const envelope = taskEnvelope({
+        stage: 'sources', runId: 'run_multi', task, snapshot, records: [],
+        maxOutputTokens: 3000, maxContextChars: 48_000, readSnapshot: () => text,
+      }) as { context: { sources: SourceEnvelopeEntry[]; evidence: Array<{ quote: string; context: string }> } }
+      expect(JSON.stringify(envelope).length).toBeLessThanOrEqual(48_000)
+      expect(envelope.context.sources).toHaveLength(2)
+      const target = envelope.context.sources.find((s) => s.id === task.targetIds[0])!
+      const related = envelope.context.sources.find((s) => s.id !== target.id)!
+      expect(target.windowing).toBeDefined()
+      expect(target.text).toContain('chars omitted ...]')
+      expect(related).toEqual(sources.find((s) => s.id === related.id))
+      expect(envelope.context.evidence.map((e) => [e.quote, e.context])).toEqual(
+        evidence.map((e) => [e.quote, text.slice(e.contextSpan.start, e.contextSpan.end)]),
+      )
+    }
+  })
+
+  it('reviews a distilled companion without inlining its oversized structured parent', () => {
+    const parent = makeSource()
+    const companion = {
+      ...makeSource(),
+      lineage: { relation: 'derived' as const, parentSourceIds: [parent.id], note: 'Faithful summary of the dataset' },
+    }
+    const claim = makeClaim()
+    claim.scope.corpus = [companion.id]
+    const snapshot = makeSnapshot({ sources: [parent, companion], claims: [claim] })
+    const task = planStage({ stage: 'sources', snapshot, index: buildReverseIndex(snapshot), targetClaimIds: [claim.id], core: new Set() })[0]!
+    const summary = 'The dataset contains 4000 entries. Access and transformation limits are disclosed.'
+    const context = reviewContext({
+      snapshot, task, records: [], maxContextChars: LIMIT,
+      readSnapshot: (id) => id === parent.id ? JSON.stringify({ rows: 'x'.repeat(200_000) }) : summary,
+    }) as { sources: SourceEnvelopeEntry[] }
+    expect(context.sources).toEqual([parent, { ...companion, text: summary }])
+    expect(JSON.stringify(context).length).toBeLessThanOrEqual(LIMIT)
+    // The parent still participates in dependency invalidation.
+    const changed = buildReverseIndex({ ...snapshot, sources: [{ ...parent, snapshotHash: 'b'.repeat(64) }, companion] })
+    expect(taskDependencyDigest(changed, task, [])).not.toBe(taskDependencyDigest(buildReverseIndex(snapshot), task, []))
+  })
+
   const structuredCases: Array<[string, string]> = [
     ['JSON', '{"a": 1, "items": ["xxxxxxxxxx"]}'],
     ['JSONL', '{"a": 1}\n{"b": 2}'],

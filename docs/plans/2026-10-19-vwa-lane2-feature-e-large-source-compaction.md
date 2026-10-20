@@ -84,6 +84,15 @@ When a structured source exceeds the context limit, the tool returns
 When a prose source's contribution to the envelope would exceed the context
 limit, the envelope includes a windowed view instead of the full text.
 
+Each sources-stage task inlines text only for its target source. Dependency
+expansion can include other sources through shared claims, authenticity
+evidence or lineage. These sources retain their metadata and any evidence
+quotes/context slices, without inlining full source text. Their metadata and
+all evidence slices count toward the serialized envelope budget, including
+the initial full-text check and every windowed candidate. The final combined
+envelope is measured before it is returned. Source dependencies remain in
+the digest, so parent changes still invalidate a companion's review.
+
 **Measured sizing**: the window size is computed by measuring the serialized
 envelope (not by estimating from constants), then shrinking the window until
 the envelope fits. The measurement is always performed — even for the
@@ -96,7 +105,8 @@ const MIN_SOURCE_WINDOW = 2000  // chars; below this, windowing is useless
 
 function fitSourceText(text: string, envelopeWithoutText: unknown, maxContextChars: number): { text: string; windowing?: object } {
   // Measure the full envelope with the complete text first.
-  const fullCandidate = { ...envelopeWithoutText, sources: [{ text }] }
+  const siblings = envelopeWithoutText.sources ?? []
+  const fullCandidate = { ...envelopeWithoutText, sources: [...siblings, { text }] }
   if (stableJson(fullCandidate).length <= maxContextChars) {
     return { text }  // fits without windowing
   }
@@ -111,7 +121,7 @@ function fitSourceText(text: string, envelopeWithoutText: unknown, maxContextCha
   const tailChars = availableForSource - headChars
   const windowed = text.slice(0, headChars) + '\n\n[... ' + (text.length - headChars - tailChars) + ' chars omitted ...]\n\n' + text.slice(-tailChars)
   // Measure the serialized envelope with the windowed text.
-  const windowedCandidate = { ...envelopeWithoutText, sources: [{ text: windowed, windowing: { totalChars: text.length, headChars, tailChars } }] }
+  const windowedCandidate = { ...envelopeWithoutText, sources: [...siblings, { text: windowed, windowing: { totalChars: text.length, headChars, tailChars } }] }
   const windowedSize = stableJson(windowedCandidate).length
   if (windowedSize <= maxContextChars) {
     return { text: windowed, windowing: { totalChars: text.length, headChars, tailChars } }
@@ -128,7 +138,7 @@ function fitSourceText(text: string, envelopeWithoutText: unknown, maxContextCha
   const shrunkWindowed = text.slice(0, shrunkHead) + '\n\n[... ' + (text.length - shrunkHead - shrunkTail) + ' chars omitted ...]\n\n' + text.slice(-shrunkTail)
   // Measure the shrunk candidate too — the safety margin may not cover
   // pathological escaping (e.g., text that is 100% newlines).
-  const shrunkCandidate = { ...envelopeWithoutText, sources: [{ text: shrunkWindowed, windowing: { totalChars: text.length, headChars: shrunkHead, tailChars: shrunkTail } }] }
+  const shrunkCandidate = { ...envelopeWithoutText, sources: [...siblings, { text: shrunkWindowed, windowing: { totalChars: text.length, headChars: shrunkHead, tailChars: shrunkTail } }] }
   if (stableJson(shrunkCandidate).length > maxContextChars) {
     throw new ReviewContextError('envelope overhead leaves insufficient room for source text even after shrinking')
   }
@@ -142,6 +152,11 @@ function fitSourceText(text: string, envelopeWithoutText: unknown, maxContextCha
 The key invariant: every return path (full text, windowed, shrunk) is
 measured against the serialized envelope size, not estimated from raw
 character counts.
+
+The implementation measures the persisted target entry and the full
+`taskEnvelope` scaffold (including contract, rules, dependencies and budget),
+rather than the bare `{ text }` illustration above. The runner also reserves
+the stage prompt's length from the whole-message context budget.
 
 **Evidence context slices**: for the sources stage, `currentReviews` is empty
 (first stage), so the main risk is evidence slices. Evidence context spans
@@ -179,14 +194,23 @@ original large source. The derived source IS a separate source (with its own
 snapshot, hash, and review). The lineage field already exists in the data
 model.
 
-No code change is needed for this — it is already possible. The improvement
-is documentation: the skill doc gains a paragraph:
+The companion must be cited instead of the oversized original in claim scope
+or evidence to request its review.
+The original remains registered and participates in dependency metadata and
+invalidation, but its full text is not included in the companion's review.
+Reviewing a companion does not verify its parent's full content or establish
+the parent's authenticity. A separate review of an oversized structured
+original still returns `CONTEXT_TOO_LARGE`.
+
+The skill doc provides this guidance:
 
 > When a source exceeds the review context window, register a distilled
 > companion source with `lineage.parentSourceIds: ["src_original"]`. The
 > companion's text should be a faithful summary or structured extract (e.g.,
-> counts, key passages). Both sources are reviewed independently; the
-> companion's lineage makes the derivation explicit.
+> counts, key passages). Cite the companion instead of the oversized original
+> in claim scope or evidence.
+> Its lineage makes the derivation explicit; reviewing the companion does
+> not verify the full original.
 
 ### E.3 Implementation
 
@@ -223,6 +247,13 @@ is documentation: the skill doc gains a paragraph:
   insufficient window validates.
 - Integration: register a 200KB prose source, run sources stage, assert the
   envelope contains windowed text (not the full 200KB).
+- Regression: two large sources supporting one claim produce separate
+  target reviews that fit the whole-message budget, retaining related
+  metadata and untruncated evidence slices. Include the case where text
+  alone fits but related metadata makes the envelope exceed the limit.
+- Regression: a cited distilled companion of an oversized JSON source
+  dispatches successfully with parent metadata only; parent changes still
+  invalidate its review, and directly reviewing the original still refuses.
 
 ---
 

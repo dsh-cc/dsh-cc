@@ -66,7 +66,7 @@ export interface SourceWindowing {
   tailChars: number
 }
 
-/** Envelope-side source entry: the persisted Source plus optional inlined text and windowing. */
+/** Envelope-side source entry: dependency metadata, with text/windowing only for sources-stage targets. */
 export interface SourceEnvelopeEntry extends Source {
   text?: string
   windowing?: SourceWindowing
