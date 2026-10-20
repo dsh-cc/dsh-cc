@@ -1,6 +1,6 @@
 # VWA lane-2 Hardening — Feature E: Large-Source Compaction
 
-## Status: Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off pending.
+## Status: Implemented — PR #271 (open, pending merge). Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problem 9 from the tui-40b4 session.
