@@ -99,10 +99,10 @@ export interface FakeAdapterState {
 
 /**
  * Scripted fake adapter: each dispatch consumes the next script entry.
- * Entries: a raw response string, an object (usage attached), or a thrower.
+ * Entries return a response (optionally asynchronously), or throw.
  */
 export function fakeAdapter(
-  script: Array<(req: { messages: ReviewMessages; responseSchema: object; maxOutputTokens: number; signal: AbortSignal }) => { raw: string; inputTokens?: number; outputTokens?: number } | never>,
+  script: Array<(req: { messages: ReviewMessages; responseSchema: object; maxOutputTokens: number; signal: AbortSignal }) => Awaited<ReturnType<PreparedReviewCall['dispatch']>> | ReturnType<PreparedReviewCall['dispatch']>>,
   state: FakeAdapterState = { dispatches: 0, prepareCalls: 0, lastMessages: undefined, lastResponseSchema: undefined },
 ): ReviewModelAdapter & { state: FakeAdapterState } {
   return {

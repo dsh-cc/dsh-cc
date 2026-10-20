@@ -244,6 +244,23 @@ describe('retry termination diagnostics and cleanup', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
+  it('preserves the class and response tail of a frozen validation failure', async () => {
+    const failure = new ReviewInvalidError('invalid frozen response')
+    failure.rawResponse = '{'
+    Object.freeze(failure)
+    const b = budget()
+    const caller = new ReviewCaller(stubAdapter(100, [() => ({ raw: '{' })]),
+      new BudgetTracker(b), b, new AbortController().signal, () => {})
+    const pending = caller.call('t1', MESSAGES, {}, () => { throw failure })
+      .catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    const error = await pending
+    expect(error).toBeInstanceOf(ReviewInvalidError)
+    expect(error).toMatchObject({
+      code: 'REVIEW_INVALID', message: 'invalid frozen response', rawResponse: '{', retryAttempts: 3,
+    })
+  })
+
   it.each([0, 2])('preserves %i completed attempts when input counting fails', async (attempts) => {
     const b = budget()
     const tracker = new BudgetTracker(b)

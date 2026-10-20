@@ -200,7 +200,13 @@ export class ReviewCaller {
   private attach(error: unknown, attempts: number): unknown {
     try {
       (error as { retryAttempts?: number }).retryAttempts = attempts
-    } catch { /* frozen exotic error — best effort */ }
-    return error
+      return error
+    } catch {
+      // Host cancellation may throw a string; frozen errors cannot be enriched in place.
+      const wrapped = new Error(String((error as { message?: string })?.message ?? error), { cause: error })
+      if (error instanceof Error) Object.setPrototypeOf(wrapped, Object.getPrototypeOf(error))
+      if (typeof error === 'object' && error !== null) Object.assign(wrapped, error)
+      return Object.assign(wrapped, { retryAttempts: attempts })
+    }
   }
 }

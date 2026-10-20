@@ -204,7 +204,8 @@ export async function executeReviewRun(input: {
       ...((error as { rawResponse?: string })?.rawResponse === undefined
         ? {}
         : { rawResponseTail: (error as { rawResponse: string }).rawResponse }),
-      retryAttempts: (error as { retryAttempts?: number })?.retryAttempts ?? (budget.calls === 0 ? 0 : 1),
+      // Caller failures carry their own count; runner validation has not dispatched a call.
+      retryAttempts: (error as { retryAttempts?: number })?.retryAttempts ?? 0,
     },
   })
   try {

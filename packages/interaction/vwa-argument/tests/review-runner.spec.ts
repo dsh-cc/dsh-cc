@@ -178,6 +178,52 @@ describe('D19 — a new request cannot brush out a fail without adjudication', (
 })
 
 describe('B.2.1 — error records carry structured errorDetail', () => {
+  it('persists zero audit attempts when an earlier stage succeeded but the artifact is refused', async () => {
+    const { root } = workspace()
+    const claim = makeClaim('fact')
+    const snapshot = makeSnapshot({ claims: [claim] })
+    const adapter = fakeAdapter([() => ({ raw: claimsResponse(claim.id, 'pass') })])
+    const input = runnerInput(root, snapshot, ['claims'])
+    const outcome = await executeReviewRun({
+      ...input, stages: ['claims', 'audit'],
+      artifact: { id: `art_${randomUUID()}`, path: 'docs/a.md', text: 'oversized' },
+      deps: { ...input.deps, adapter, maxArtifactChars: 1 },
+    })
+    expect(adapter.state.dispatches).toBe(1)
+    expect(outcome.records[0]?.status).toBe('completed')
+    const expected = { stage: 'audit', errorCode: 'REVIEW_INVALID', errorDetail: { retryAttempts: 0 } }
+    expect(outcome.records.at(-1)).toMatchObject(expected)
+    const saved = new ReviewRunStore(root, snapshot.projectId).readRecords(input.runId)
+    expect(saved.find((record) => record.stage === 'audit')).toMatchObject(expected)
+  })
+
+  it('persists two attempts when the host cancels the second dispatch with a string reason', async () => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fakeAdapter([() => ({ raw: '{' }), () => new Promise<never>(() => {})])
+    const controller = new AbortController()
+    const input = runnerInput(root, snapshot, ['claims'])
+    vi.useFakeTimers()
+    try {
+      const pending = executeReviewRun({
+        ...input, signal: controller.signal, deps: { ...input.deps, adapter },
+      })
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(adapter.state.dispatches).toBe(2)
+      controller.abort('review cancelled')
+      const outcome = await pending
+      expect(outcome.status).toBe('cancelled')
+      const expected = {
+        errorCode: 'CANCELLED', errorDetail: { message: 'review cancelled', retryAttempts: 2 },
+      }
+      expect(outcome.records[0]).toMatchObject(expected)
+      const saved = new ReviewRunStore(root, snapshot.projectId).readRecords(input.runId)
+      expect(saved[0]).toMatchObject(expected)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it.each(['initialize', 'snapshot', 'cancelled'] as const)('persists zero attempts for %s failure before calling the model', async (failure) => {
     const { root } = workspace()
     const source = makeSource()
