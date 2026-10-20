@@ -60,6 +60,8 @@ Record scope, premises, warrants, assumptions, counterevidence, and limits.
 Use the identifiers and revision returned by each successful call.
 Do not invent source identifiers or modify the graph files directly.
 
+When a source exceeds the review context window, register a distilled companion source with `lineage.parentSourceIds: ["src_original"]`. The companion's text should be a faithful summary or structured extract (e.g., counts, key passages). Both sources are reviewed independently; the companion's lineage makes the derivation explicit.
+
 ## 4. Write and bind the body
 
 Use the normal write/edit tools for an authorized body change.

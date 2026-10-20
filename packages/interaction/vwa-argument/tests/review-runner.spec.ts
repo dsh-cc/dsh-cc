@@ -13,7 +13,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { collectCachedRecords, executeReviewRun } from '../src/review-runner.ts'
 import { ReviewRunStore, cacheKey, recordReusable } from '../src/review-run-store.ts'
 import { activeMajorCount } from '../src/policy.ts'
-import type { ReviewRecord } from '../src/types.ts'
+import { sha256Hex, stableJson } from '../src/schema.ts'
+import { taskEnvelope } from '../src/review-input.ts'
+import type { ReviewRecord, ReviewTask } from '../src/types.ts'
 import {
   BUDGET, claimsResponse, completedRecord, fakeAdapter, makeClaim, makeSnapshot, makeSource, type FakeAdapterState,
 } from './review-helpers.ts'
@@ -457,3 +459,136 @@ describe('Feature C — claims batching (§C.2.2/§C.2.3)', () => {
     expect(f.adapter.state.dispatches).toBe(before)
   })
 })
+
+/** A schema-valid sources response covering the source rules the task required. */
+function sourcesStageResponse(sourceId: string, result: 'pass'): string {
+  return JSON.stringify({
+    stage: 'sources',
+    rubricVersion: 'humanities-v1',
+    findings: [],
+    targets: [{
+      targetId: sourceId,
+      checks: [
+        { ruleId: 'SOURCE-01', result, rationale: 'provenance visible in the windowed head', evidenceIds: [] },
+        { ruleId: 'SOURCE-02', result, rationale: 'r', evidenceIds: [] },
+      ],
+    }],
+  })
+}
+
+describe('Feature E — large-source compaction in the runner', () => {
+  const SENTENCE = 'The committee recorded its decision after long deliberation on the matter. '
+  const MIDDLE = 'THIS-SENTENCE-SITS-IN-THE-OMITTED-MIDDLE. '
+
+  function sourcesTask(source: ReturnType<typeof makeSource>): ReviewTask {
+    return {
+      taskId: 'task_e2e',
+      stage: 'sources',
+      targetRefs: [{ id: source.id, entityVersion: source.entityVersion }],
+      targetIds: [source.id],
+      requiredRules: [
+        { targetId: source.id, ruleId: 'SOURCE-01' },
+        { targetId: source.id, ruleId: 'SOURCE-02' },
+      ],
+      envelope: {},
+    }
+  }
+
+  function citedClaim(source: { id: string }) {
+    return { ...makeClaim('fact'), scope: { ...makeClaim('fact').scope, corpus: [source.id] } }
+  }
+
+  function runSources(root: string, adapter: ReturnType<typeof fakeAdapter>, snapshot: ProjectSnapshot_, source: { id: string }, text: string, claim: { id: string }) {
+    return executeReviewRun({
+      deps: { root, adapter, budget: BUDGET, contractHash: 'c'.repeat(64), readSnapshot: () => text },
+      runId: `run_${randomUUID()}`,
+      requestId: `req-${Math.random()}`,
+      stages: ['sources'],
+      targetClaimIds: [claim.id],
+      snapshot,
+      signal: new AbortController().signal,
+    })
+  }
+
+  it('a ~200KB prose source is windowed in the sources envelope, not sent in full', () => {
+    const text = SENTENCE + MIDDLE.repeat(2400) + 'THE-UNIQUE-OMITTED-TOKEN. ' + MIDDLE.repeat(2390) + SENTENCE
+    expect(text.length).toBeGreaterThan(200_000)
+    const { root } = workspace()
+    const source = { ...makeSource(), snapshotHash: sha256Hex(text) }
+    const snapshot = makeSnapshot({ sources: [source], claims: [citedClaim(source)] })
+    const envelope = taskEnvelope({
+      stage: 'sources',
+      runId: 'run_e2e',
+      task: sourcesTask(source),
+      snapshot,
+      records: [],
+      maxOutputTokens: BUDGET.maxOutputTokensPerCall,
+      maxContextChars: 48_000,
+      readSnapshot: () => text,
+    })
+    const serialized = stableJson(envelope) as string
+    // The dispatch fits the context limit and windowing is disclosed.
+    expect(serialized.length).toBeLessThanOrEqual(48_000)
+    expect(serialized).toContain('chars omitted ...]')
+    expect(serialized).not.toContain('THE-UNIQUE-OMITTED-TOKEN.')
+    expect(serialized.length).toBeLessThan(text.length)
+    const sources = (envelope as { context: { sources: { text: string; windowing?: object }[] } }).context.sources
+    expect(sources[0]!.windowing).toBeDefined()
+    // The head carries the provenance-bearing start.
+    expect(sources[0]!.text.startsWith(SENTENCE)).toBe(true)
+    void root
+  })
+
+  it('a ~200KB prose source completes a full runner dispatch at the default context budget', async () => {
+    const text = SENTENCE + MIDDLE.repeat(4800) + SENTENCE
+    const { root } = workspace()
+    const source = { ...makeSource(), snapshotHash: sha256Hex(text) }
+    const claim = citedClaim(source)
+    const snapshot = makeSnapshot({ sources: [source], claims: [claim] })
+    const adapter = fakeAdapter([() => ({ raw: sourcesStageResponse(source.id, 'pass') })])
+    // The windowing budget reserves the stage prompt's headroom, so the
+    // windowed envelope plus system prompt fits the caller's whole-message
+    // check at the default 48K limit and the dispatch completes.
+    const outcome = await runSources(root, adapter, snapshot, source, text, claim)
+    expect(outcome.status).toBe('completed')
+    const record = completedRecord(outcome.records)
+    expect(record.stage).toBe('sources')
+    expect(record.status).toBe('completed')
+  })
+
+  it('a structured source larger than the limit finishes incomplete without dispatching', async () => {
+    const text = JSON.stringify({ rows: Array.from({ length: 4000 }, (_, i) => ({ id: i, note: 'x'.repeat(60) })) })
+    const { root } = workspace()
+    const source = { ...makeSource(), snapshotHash: sha256Hex(text) }
+    const claim = citedClaim(source)
+    const snapshot = makeSnapshot({ sources: [source], claims: [claim] })
+    const adapter = fakeAdapter([() => ({ raw: sourcesStageResponse(source.id, 'pass') })])
+    const outcome = await runSources(root, adapter, snapshot, source, text, claim)
+    // The envelope refuses structured data before any dispatch; the failure
+    // lands as an error record and the run finishes incomplete.
+    expect(outcome.status).toBe('incomplete')
+    expect(adapter.state.dispatches).toBe(0)
+    expect(outcome.records.filter((r) => r.status === 'completed')).toHaveLength(0)
+    const errorRecords = outcome.records.filter((r) => r.status === 'error')
+    expect(errorRecords).toHaveLength(1)
+    expect(errorRecords[0]!.errorCode).toBe('CONTEXT_TOO_LARGE')
+    // The envelope-construction error itself carries the derived-source pointer.
+    try {
+      taskEnvelope({
+        stage: 'sources',
+        runId: 'run_e2e',
+        task: sourcesTask(source),
+        snapshot,
+        records: [],
+        maxOutputTokens: BUDGET.maxOutputTokensPerCall,
+        maxContextChars: 48_000,
+        readSnapshot: () => text,
+      })
+      expect.unreachable('taskEnvelope must reject structured data over the limit')
+    } catch (error) {
+      expect((error as { code?: string }).code).toBe('CONTEXT_TOO_LARGE')
+      expect((error as Error).message).toContain('Register a distilled companion source')
+    }
+  })
+})
+

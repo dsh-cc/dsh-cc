@@ -179,6 +179,40 @@ describe('D13b — present-rule needs-review is completed; fabricated ids are RE
   })
 })
 
+describe('Feature E — windowed sources response with needs-review validates', () => {
+  const sourceId = 'src_00000000-0000-4000-8000-000000000000'
+  const contract: ReviewTaskContract = {
+    stage: 'sources',
+    targetIds: new Set([sourceId]),
+    requiredRules: new Map([[sourceId, new Set(['SOURCE-01', 'SOURCE-02'])]]),
+    knownEvidenceIds: new Set(),
+  }
+
+  it('a sources response with needs-review citing the insufficient windowed excerpt passes parse and validation', () => {
+    const raw = JSON.stringify({
+      stage: 'sources',
+      rubricVersion: 'humanities-v1',
+      findings: [],
+      targets: [{
+        targetId: sourceId,
+        checks: [
+          { ruleId: 'SOURCE-01', result: 'pass', rationale: 'provenance visible in the windowed head', evidenceIds: [] },
+          {
+            ruleId: 'SOURCE-02',
+            result: 'needs-review',
+            rationale: 'The windowed excerpt is insufficient to evaluate SOURCE-02: content assertions fall in the omitted middle.',
+            evidenceIds: [],
+          },
+        ],
+      }],
+    })
+    const response = parseReviewResponse(raw)
+    validateTaskResponse(response, contract) // must NOT throw
+    expect(response.stage).toBe('sources')
+    expect(response.targets[0]!.checks[1]!.result).toBe('needs-review')
+  })
+})
+
 describe('contradictory combos → REVIEW_INVALID (§7.1)', () => {
   it('rejects fail together with adequacy robust on the same target', () => {
     const groupId = 'grp_33333333-3333-4333-8333-333333333333'
