@@ -4,6 +4,7 @@ import { sha256Hex, stableJson } from './schema.ts'
 import { RULES, RUBRIC_VERSION } from './review-contract.ts'
 import type { ReviewTask } from './review-plan.ts'
 import { ReviewContextError } from './review-call.ts'
+import { isDelimitedData } from './structured-data.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewRecord, SourceEnvelopeEntry, SourceWindowing } from './types.ts'
 
 const ORDER = ['sources', 'support', 'claims', 'arguments', 'extract', 'align']
@@ -91,17 +92,9 @@ export function isStructuredData(text: string): boolean {
   }
   // XML: starts with <?xml or <
   if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) return true
-  // CSV/TSV: cross-line consistency — the first two non-empty lines have
-  // the same field count when split by the same delimiter. Prose with
-  // commas fails this check; empty first fields still pass.
-  const lines = trimmed.split('\n').filter((l) => l.trim().length > 0)
-  if (lines.length >= 2) {
-    const delimiter = lines[0]!.includes('\t') ? '\t' : ','
-    const firstFields = lines[0]!.split(delimiter)
-    const secondFields = lines[1]!.split(delimiter)
-    if (firstFields.length >= 2 && firstFields.length === secondFields.length) return true
-  }
-  return false
+  // Compare logical records; quoted delimiters and newlines are field content.
+  // Try both formats independently: a tab inside a CSV field is not a TSV hint.
+  return isDelimitedData(trimmed, ',') || isDelimitedData(trimmed, '\t')
 }
 
 /**

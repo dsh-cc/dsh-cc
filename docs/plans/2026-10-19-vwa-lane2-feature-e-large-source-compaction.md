@@ -43,29 +43,18 @@ function isStructuredData(text: string): boolean {
   try { JSON.parse(firstLine); return true } catch { /* not JSONL */ }
   // XML: starts with <?xml or <
   if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) return true
-  // CSV/TSV: cross-line consistency — the first two non-empty lines have
-  // the same field count when split by the same delimiter.
-  // Known limitation: quoted CSV fields containing delimiters (e.g.,
-  // `"a,b",c\nx,y`) produce inconsistent field counts and are misclassified
-  // as prose. The derived-source path (E.2.3) is the recommended approach
-  // for complex structured data.
-  const lines = trimmed.split('\n').filter((l) => l.trim().length > 0)
-  if (lines.length >= 2) {
-    const delimiter = lines[0]!.includes('\t') ? '\t' : ','
-    const firstFields = lines[0]!.split(delimiter)
-    const secondFields = lines[1]!.split(delimiter)
-    if (firstFields.length >= 2 && firstFields.length === secondFields.length) return true
-  }
-  return false
+  // isDelimitedData scans two non-empty logical records with quote handling.
+  return isDelimitedData(trimmed, ',') || isDelimitedData(trimmed, '\t')
 }
 ```
 
-The CSV/TSV check requires cross-line consistency: the first two non-empty
-lines must have the same field count when split by the same delimiter. This
-correctly rejects prose ("It was the best of times, it was the worst of
-times" has a comma but the next line won't have the same field count) and
-correctly accepts CSV with empty first fields (`,value\nx,y` — both lines
-have 2 fields).
+The CSV/TSV check compares the field counts of the first two non-empty
+logical records, requiring at least two fields. Each delimiter is tested
+independently. Quoted delimiters and CR/LF characters remain field content;
+`""` inside a quoted field represents an escaped quote. Empty first fields
+are accepted. Unclosed quotes, quotes inside unquoted fields, and text after
+a closing quote make that delimiter candidate invalid. This remains a
+format heuristic, not validation of the entire source.
 
 When a structured source exceeds the context limit, the tool returns
 `CONTEXT_TOO_LARGE` with a pointer to the derived-source path (E.2.3):
@@ -214,7 +203,7 @@ The skill doc provides this guidance:
 
 ### E.3 Implementation
 
-1. `review-input.ts`: structured data detection (cross-line consistency for
+1. `review-input.ts`: structured data detection (quote-aware logical-record consistency for
    CSV/TSV); measured windowing in reviewContext for the sources stage;
    fitSourceText helper with measure-and-retry.
 2. `prompts/sources.md`: add windowing paragraph.
@@ -222,6 +211,12 @@ The skill doc provides this guidance:
 4. `types.ts`: add optional `windowing` field to the source envelope type.
 
 ### E.4 Tests
+
+- structured-source-detection.spec.ts: quoted CSV/TSV delimiters, escaped
+  quotes, multiline fields, CRLF and blank records are recognized. Oversized
+  inputs produce a persisted CONTEXT_TOO_LARGE record with the derived-source
+  pointer and zero model calls. Malformed and inconsistent records are rejected
+  by the format heuristic.
 
 - review-input.spec.ts: JSON source > limit → CONTEXT_TOO_LARGE with
   derived-source pointer, no windowing.
