@@ -204,7 +204,7 @@ export async function executeReviewRun(input: {
       ...((error as { rawResponse?: string })?.rawResponse === undefined
         ? {}
         : { rawResponseTail: (error as { rawResponse: string }).rawResponse }),
-      retryAttempts: (error as { retryAttempts?: number })?.retryAttempts ?? 1,
+      retryAttempts: (error as { retryAttempts?: number })?.retryAttempts ?? (budget.calls === 0 ? 0 : 1),
     },
   })
   try {

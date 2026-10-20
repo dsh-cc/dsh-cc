@@ -11,6 +11,7 @@ import {
   ReviewConfigDriftError, ReviewInvalidError, ReviewTruncatedError,
   type PreparedReviewCall, type ReviewMessages, type ReviewModelAdapter,
 } from '../src/review-adapter.ts'
+import { AuditInvalidError, parseExtractResponse } from '../src/audit-input.ts'
 import { BudgetTracker } from '../src/review-tasks.ts'
 import { ReviewCaller } from '../src/review-call.ts'
 import type { ReviewBudget } from '../src/review-runner.ts'
@@ -109,6 +110,38 @@ describe('B.2.4 — class-aware retry loop', () => {
     expect((caught as { retryAttempts?: number }).retryAttempts).toBe(3)
     // 3 timeout timers (1200 each) + backoffs 1s, 4s.
     expect(delays.filter((d) => d !== 1_200)).toEqual([1_000, 4_000])
+  })
+
+  it('repairs audit extraction JSON with the invalid-response retry policy', async () => {
+    const delays = trackTimers()
+    const adapter = stubAdapter(TOKENS, [
+      () => ({ raw: '{' }),
+      () => ({ raw: '{' }),
+      () => ({ raw: '{"items":[]}' }),
+    ])
+    const prepare = vi.spyOn(adapter, 'prepareReviewCall')
+    const b = budget()
+    const caller = new ReviewCaller(adapter, new BudgetTracker(b), b,
+      new AbortController().signal, () => {})
+    const pending = caller.call('extract', MESSAGES, {}, parseExtractResponse)
+      .catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await pending).toMatchObject({ raw: { items: [] } })
+    expect(delays.filter((d) => d !== 1_200)).toEqual([1_000, 4_000])
+    expect(prepare).toHaveBeenCalledTimes(3)
+    for (const [request] of prepare.mock.calls.slice(1)) {
+      expect(request.messages.at(-1)?.content).toContain('previous response was invalid')
+      expect(request.messages.at(-1)?.content).toContain('extract response is not valid JSON')
+    }
+  })
+
+  it('reports three attempts when audit extraction JSON remains invalid', async () => {
+    const pending = make([], [() => ({ raw: '{' })])
+      .call('extract', MESSAGES, {}, parseExtractResponse).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    const error = await pending
+    expect(error).toBeInstanceOf(AuditInvalidError)
+    expect(error).toMatchObject({ code: 'REVIEW_INVALID', retryAttempts: 3 })
   })
 
   it('transient: 2 attempts total with fixed 5s backoff; retry succeeds', async () => {

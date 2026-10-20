@@ -15,7 +15,7 @@ import { ReviewRunStore, cacheKey, recordReusable } from '../src/review-run-stor
 import { activeMajorCount } from '../src/policy.ts'
 import type { ReviewRecord } from '../src/types.ts'
 import {
-  BUDGET, claimsResponse, completedRecord, fakeAdapter, makeClaim, makeSnapshot, type FakeAdapterState,
+  BUDGET, claimsResponse, completedRecord, fakeAdapter, makeClaim, makeSnapshot, makeSource, type FakeAdapterState,
 } from './review-helpers.ts'
 
 function workspace(): { root: string } {
@@ -178,6 +178,28 @@ describe('D19 — a new request cannot brush out a fail without adjudication', (
 })
 
 describe('B.2.1 — error records carry structured errorDetail', () => {
+  it.each(['initialize', 'snapshot', 'cancelled'] as const)('persists zero attempts for %s failure before calling the model', async (failure) => {
+    const { root } = workspace()
+    const source = makeSource()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')], sources: [source] })
+    const adapter = fakeAdapter([() => ({ raw: '{}' })])
+    adapter.initialize = async () => {
+      if (failure === 'initialize') throw new Error('review route unavailable')
+    }
+    const input = runnerInput(root, snapshot, ['claims'])
+    if (failure === 'cancelled') input.signal = AbortSignal.abort(new Error('cancelled before start'))
+    const outcome = await executeReviewRun({ ...input, deps: {
+      ...input.deps, adapter, readSnapshot: () => undefined,
+    } })
+    expect(adapter.state.dispatches).toBe(0)
+    expect(outcome.records[0]?.errorCode).toBe({
+      initialize: 'REVIEW_UNAVAILABLE', snapshot: 'REVIEW_INVALID', cancelled: 'CANCELLED',
+    }[failure])
+    expect(outcome.records[0]?.errorDetail?.retryAttempts).toBe(0)
+    const saved = new ReviewRunStore(root, snapshot.projectId).readRecords(input.runId)
+    expect(saved[0]?.errorDetail?.retryAttempts).toBe(0)
+  })
+
   it.each([0, 2])('persists %i completed attempts when input counting fails', async (attempts) => {
     const { root } = workspace()
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })

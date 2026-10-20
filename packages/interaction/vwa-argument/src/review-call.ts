@@ -25,7 +25,8 @@ function classify(error: unknown): RetryClass {
   if (error instanceof ReviewTruncatedError) return 'truncation'
   if (error instanceof ReviewConfigDriftError) return 'permanent'
   if (error instanceof ReviewBudgetError || error instanceof ReviewContextError) return 'permanent'
-  if (error instanceof ReviewInvalidError) return 'invalid'
+  // Audit extraction uses its own error class with the same validation code.
+  if (error instanceof ReviewInvalidError || (error as { code?: string })?.code === 'REVIEW_INVALID') return 'invalid'
   // Timeout deadline rejection and dispatch/transport errors (carrying `detail`) are transient.
   return 'transient'
 }
