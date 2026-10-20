@@ -234,19 +234,28 @@ describe('ToolRuntime', () => {
       .toThrow('must declare output { schema, render, presentationMeta? }')
   })
 
-  it('warns once when a raw registration carries flat-spec parameters, but still registers', async () => {
+  it('warns in production mode but hard-fails under VITEST when a raw registration carries flat-spec parameters', async () => {
     const ctx = await setup()
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => ctx.logger)
     // Flat spec (the repo DSL, valid only through defineTool's compiler):
     // root lacks type:'object' and the property node carries `required`.
-    ctx.tools.register({
-      ...echoTool,
-      name: 'flat-tool',
-      parameters: { foo: { type: 'string', required: true } } as unknown as typeof echoTool.parameters,
-    })
+    const flat = { foo: { type: 'string', required: true } } as unknown as typeof echoTool.parameters
+    // Production (non-VITEST) behavior stays warn-only.
+    const hadVitest = 'VITEST' in process.env
+    const vitestValue = process.env.VITEST
+    delete process.env.VITEST
+    try {
+      ctx.tools.register({ ...echoTool, name: 'flat-tool', parameters: flat })
+    } finally {
+      if (hadVitest) process.env.VITEST = vitestValue
+    }
     expect(ctx.tools.get('flat-tool')).toBeDefined()
     expect(warn).toHaveBeenCalledTimes(1)
     expect(String(warn.mock.calls[0]?.[0])).toContain('flat-tool')
+    // Test-mode arm of the CI schema gate: registration itself hard-fails.
+    expect(() => ctx.tools.register({ ...echoTool, name: 'flat-tool-2', parameters: flat }))
+      .toThrow(/parameters is not a supported JSON Schema/)
+    expect(ctx.tools.get('flat-tool-2')).toBeUndefined()
   })
 
   it('rejects lossy and schema-mismatched body values before post-execute', async () => {
@@ -2009,11 +2018,20 @@ describe('ToolRuntime', () => {
 
   it('rejects schema projection when a raw registration is not lossless JSON', async () => {
     const ctx = await setup()
-    ctx.tools.register({
-      ...echoTool,
-      name: 'lossy-schema',
-      parameters: { type: 'object', default: Number.NaN },
-    })
+    // Registration only warns in production mode, so the lossy registration
+    // itself happens under the non-VITEST path; projection still rejects it.
+    const hadVitest = 'VITEST' in process.env
+    const vitestValue = process.env.VITEST
+    delete process.env.VITEST
+    try {
+      ctx.tools.register({
+        ...echoTool,
+        name: 'lossy-schema',
+        parameters: { type: 'object', default: Number.NaN },
+      })
+    } finally {
+      if (hadVitest) process.env.VITEST = vitestValue
+    }
 
     expect(() => ctx.tools.schemas())
       .toThrow('tool "lossy-schema" parameters must be lossless JSON before schema projection')

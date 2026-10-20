@@ -84,7 +84,10 @@ const CONSTRAINT_KEYWORDS = new Set([
   'enum',
   'const',
 ])
-const ANNOTATION_KEYWORDS = new Set(['description', 'title', 'default', 'examples'])
+const ANNOTATION_KEYWORDS = new Set(['description', 'title', 'default', 'examples',
+  // Standard identifier keyword the MCP SDK's zod conversion emits on every
+  // external server schema; harmless metadata, no enforcement impact.
+  '$schema'])
 export const SCHEMA_TYPES: readonly JsonSchemaType[] = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']
 
 /* jscpd:ignore-start -- this realm boundary mirrors the session-owned lossless-JSON intrinsic test */
