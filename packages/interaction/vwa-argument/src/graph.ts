@@ -157,7 +157,7 @@ export interface MutationOutcome {
   cascadeDeleted?: Id[]
 }
 
-/** Apply one mutation to the working snapshot in place; full validation on completion (§10.5). */
+/** Valid mutation ops (§D.1); anything else is rejected before dispatch. */
 const VALID_OPS = new Set(['set-contract', 'upsert', 'bind-artifact'])
 
 /** Apply one mutation to the working snapshot in place; full validation on completion (§10.5). */
@@ -195,12 +195,11 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
     // closure BEFORE any deletion; leaves are deleted first. postValidate runs
     // once below, after ALL deletes — intermediate states are never validated.
     if (mutation.cascade === true && mutation.deletes.length > 0) {
-      // Feature D §D.4.2: expand the deletes to the full reference closure
-      // BEFORE any deletion; delete leaves first. postValidate runs once
-      // below, after ALL deletes — intermediate states are never validated.
       const closure = computeDeletionClosure(graph, mutation.deletes)
       for (let i = closure.length - 1; i >= 0; i--) deleteEntity(graph, closure[i]!, true)
       changedIds.push(...closure)
+      // Leaves-first deletion order; the explicitly requested ids are reported
+      // through changedIds, so cascadeDeleted lists only the extra entities.
       cascadeDeleted = closure.slice().reverse().filter((id) => !mutation.deletes.includes(id))
     } else {
       for (const deleteId of mutation.deletes) {
