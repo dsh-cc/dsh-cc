@@ -589,9 +589,57 @@ describe('argument.update (§10.5)', () => {
     })
     expect(deletion.ok).toBe(false)
     expect(deletion.code).toBe('REFERENCE_IN_USE')
-    expect(deletion.message).toContain('argument premise/conclusion')
+    expect(deletion.message).toContain('(premiseClaimIds)')
     const after = workspace.store.readHead()
     if (after.ok) expect(after.data.head.revision).toBe(head.data.head.revision)
+  })
+
+  it('cascade pass-through deletes referencers and lists cascadeDeleted leaf-first (D06/Feature D)', async () => {
+    const { tools, workspace } = mount()
+    const update = tools.get('argument.update') as ToolDefinition
+    const made = (await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'u-2c',
+      input: {
+        op: 'upsert',
+        creates: [
+          { clientKey: 'a', type: 'claim', body: CLAIM_BODY },
+          { clientKey: 'b', type: 'claim', body: { ...CLAIM_BODY, text: 'Claim two' } },
+          {
+            clientKey: 'arg',
+            type: 'argument',
+            body: {
+              premiseClaimIds: [{ $new: 'b' }],
+              evidenceGroupIds: [],
+              conclusionClaimId: { $new: 'a' },
+              scheme: 'causal',
+              warrant: 'w',
+              assumptions: [],
+              limitations: [],
+            },
+          },
+        ],
+        updates: [],
+        deletes: [],
+      },
+    })) as { ok: boolean; data: { changedIds: string[] } }
+    expect(made.ok).toBe(true)
+    const [, claimB, argumentId] = made.data.changedIds
+    const head = workspace.store.readHead()
+    if (!head.ok) throw new Error(head.message)
+    const deletion = (await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: head.data.head.revision,
+      requestId: 'u-3c',
+      input: { op: 'upsert', creates: [], updates: [], deletes: [claimB], cascade: true },
+    })) as { ok: boolean; code?: string; data?: { cascadeDeleted?: string[] } }
+    expect(deletion.ok).toBe(true)
+    expect(deletion.data?.cascadeDeleted).toEqual([argumentId])
+    const after = workspace.store.readHead()
+    if (!after.ok) throw new Error(after.message)
+    expect(after.data.snapshot.arguments).toHaveLength(0)
+    expect(after.data.snapshot.claims.some((claim) => claim.id === claimB)).toBe(false)
   })
 
   it('bind-artifact validates occurrences against the real bytes (D12)', async () => {
