@@ -59,7 +59,17 @@
     "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
     "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "fast-check": "4.8.0"
+    "fast-check": "4.8.0",
+    "@dsh-cc/coordinator": "workspace:^",
+    "@dsh-cc/memory": "workspace:^",
+    "@dsh-cc/tool-git-worktree": "workspace:^",
+    "@dsh-cc/tool-manage-skill": "workspace:^",
+    "@dsh-cc/tool-notebook-edit": "workspace:^",
+    "@dsh-cc/tool-search": "workspace:^",
+    "@dsh-cc/tool-sleep": "workspace:^",
+    "@dsh-cc/tool-structured-output": "workspace:^",
+    "@dsh-cc/tool-web-fetch": "workspace:^",
+    "@dsh-cc/tool-workflow": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

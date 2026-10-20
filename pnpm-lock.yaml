@@ -1153,6 +1153,36 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/coordinator':
+        specifier: workspace:^
+        version: link:../../subagent/coordinator
+      '@dsh-cc/memory':
+        specifier: workspace:^
+        version: link:../../memory/memory
+      '@dsh-cc/tool-git-worktree':
+        specifier: workspace:^
+        version: link:../../workspace/tool-git-worktree
+      '@dsh-cc/tool-manage-skill':
+        specifier: workspace:^
+        version: link:../tool-manage-skill
+      '@dsh-cc/tool-notebook-edit':
+        specifier: workspace:^
+        version: link:../tool-notebook-edit
+      '@dsh-cc/tool-search':
+        specifier: workspace:^
+        version: link:../tool-search
+      '@dsh-cc/tool-sleep':
+        specifier: workspace:^
+        version: link:../tool-sleep
+      '@dsh-cc/tool-structured-output':
+        specifier: workspace:^
+        version: link:../tool-structured-output
+      '@dsh-cc/tool-web-fetch':
+        specifier: workspace:^
+        version: link:../tool-web-fetch
+      '@dsh-cc/tool-workflow':
+        specifier: workspace:^
+        version: link:../tool-workflow
       fast-check:
         specifier: 4.8.0
         version: 4.8.0
