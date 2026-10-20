@@ -52,6 +52,7 @@ export {
 } from './audit-input.ts'
 export type { ExtractionUnit, ExtractEnvelope, AlignEnvelope } from './audit-input.ts'
 import {
+  ReviewInvalidError,
   validateTaskResponse,
   parseReviewResponse,
   type ReviewModelAdapter,
@@ -144,7 +145,16 @@ export async function executeAudit(input: {
       { role: 'system', content: prompt },
       { role: 'user', content: stableJson(envelope) },
     ]
-    if (input.caller) return input.caller.call(taskId, messages, schema, parse)
+    const parseResponse = (raw: string): unknown => {
+      try {
+        return parse(raw)
+      } catch (error) {
+        if (error instanceof AuditInvalidError || error instanceof ReviewInvalidError)
+          error.rawResponse = raw.slice(-2000)
+        throw error
+      }
+    }
+    if (input.caller) return input.caller.call(taskId, messages, schema, parseResponse)
     const call = await input.adapter.prepareReviewCall({
       messages,
       responseSchema: schema,
@@ -152,7 +162,7 @@ export async function executeAudit(input: {
       signal: input.signal,
     })
     const result = await call.dispatch()
-    return { raw: parse(result.raw), inputTokens: result.inputTokens ?? 0, outputTokens: result.outputTokens ?? 0 }
+    return { raw: parseResponse(result.raw), inputTokens: result.inputTokens ?? 0, outputTokens: result.outputTokens ?? 0 }
   }
 
   // ---- occurrence validation FIRST (§11.1: broken input never spends model budget) ----
@@ -209,8 +219,10 @@ export async function executeAudit(input: {
         after: stripped.text.slice(u.span.end, u.context.end),
       })),
     }
-    const raw = await dispatch(extractPrompt, envelope, EXTRACT_RESPONSE_SCHEMA, parseExtractResponse)
-    collected.push(...validateExtractItems((raw.raw as { items?: unknown }).items, stripped.text, batch))
+    const raw = await dispatch(extractPrompt, envelope, EXTRACT_RESPONSE_SCHEMA, (text) => ({
+      items: validateExtractItems((parseExtractResponse(text) as { items?: unknown } | null)?.items, stripped.text, batch),
+    }))
+    collected.push(...(raw.raw as { items: import('./types.ts').ExtractedItem[] }).items)
     extractInputTokens += raw.inputTokens
     extractOutputTokens += raw.outputTokens
   }
@@ -291,20 +303,20 @@ export async function executeAudit(input: {
     budget: { maxOutputTokens: input.maxOutputTokens },
   }
   const alignPromptHash = promptHash('align')
-  const alignRaw = await dispatch(alignPrompt, alignEnvelope, responseSchemaFor('align'), parseReviewResponse)
+  const alignRaw = await dispatch(alignPrompt, alignEnvelope, responseSchemaFor('align'), (raw) => {
+    const response = parseReviewResponse(raw)
+    if (response.stage !== 'align') throw new AuditInvalidError('expected an align response')
+    validateAlignment(response, derivations, snapshot.claims.map((claim) => claim.id))
+    if (input.caller)
+      validateTaskResponse(response, {
+        stage: 'align',
+        targetIds: new Set([artifact.id, ...snapshot.claims.map((c) => c.id)]),
+        requiredRules: new Map([[artifact.id, new Set<string>(AUDIT_RULE_IDS)]]),
+        knownEvidenceIds: new Set(snapshot.evidence.map((e) => e.id)),
+      })
+    return response
+  })
   const alignResponse = alignRaw.raw as import('./types.ts').AlignResponse
-  validateAlignment(
-    alignResponse,
-    derivations,
-    snapshot.claims.map((claim) => claim.id),
-  )
-  if (input.caller)
-    validateTaskResponse(alignResponse, {
-      stage: 'align',
-      targetIds: new Set([artifact.id, ...snapshot.claims.map((c) => c.id)]),
-      requiredRules: new Map([[artifact.id, new Set<string>(AUDIT_RULE_IDS)]]),
-      knownEvidenceIds: new Set(snapshot.evidence.map((e) => e.id)),
-    })
   alignResponse.alignment = derivations.map(
     (d) => alignResponse.alignment.find((a) => a.extractedId === d.extractedId)!,
   )

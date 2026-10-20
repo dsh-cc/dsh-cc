@@ -197,7 +197,9 @@ export function parseExtractResponse(raw: string): unknown {
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new AuditInvalidError('extract response is not valid JSON')
+    const error = new AuditInvalidError('extract response is not valid JSON')
+    error.rawResponse = raw.slice(-2000)
+    throw error
   }
   return parsed
 }
@@ -205,6 +207,8 @@ export function parseExtractResponse(raw: string): unknown {
 /** Extract/align runtime validation failure — never cached (§11.3/§13). */
 export class AuditInvalidError extends Error {
   readonly code = 'REVIEW_INVALID'
+  /** Last 2000 chars of model output for parse and response-validation failures. */
+  rawResponse?: string
   constructor(message: string) {
     super(message)
     this.name = 'AuditInvalidError'
