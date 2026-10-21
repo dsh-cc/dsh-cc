@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { findReusableAudit, hasReusableAudit, auditInputHash } from '../src/audit-reuse.ts'
-import { allRecords } from '../src/review-continue.ts'
+import { allRecords, continuePreCheck } from '../src/review-continue.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
 import { BUDGET, fakeAdapter, makeClaim, makeSnapshot, makeSource, NOW } from './review-helpers.ts'
 import type { AlignEnvelope, ExtractEnvelope } from '../src/audit.ts'
@@ -152,6 +152,67 @@ function findingsWithoutIds(findings: Finding[]): Omit<Finding, 'id'>[] {
 }
 
 describe('F1.2 — runner-side audit reuse in continue mode', () => {
+  it('re-executes a legacy audit with model-owned AUDIT_NEW_CLAIM findings instead of shifting proposal spans', async () => {
+    const w = world()
+    // Extraction coordinates exclude claim markers; proposals must use the
+    // original artifact coordinates, including this marker's width.
+    const marker = `〔claim:${w.claim.id}〕`
+    w.artifact.text = marker + ARTIFACT_TEXT
+    w.snapshot.artifacts[0]!.contentHash = sha256Hex(w.artifact.text)
+    const items = [item('minutes', 'supporting'), item('vote', 'supporting')]
+    const first = await run({
+      ...w, stages: ['claims', 'audit'],
+      adapter: auditWorldAdapter(w.artifact.id, items, { relation: 'new' }),
+    })
+    expect(first.status).toBe('completed')
+    const extract = first.records.find((r) => r.stage === 'extract')!
+    const align = first.records.find((r) => r.stage === 'align')!
+    // Freeze the PRE-VERSION key format independently of auditInputHash:
+    // both records from an old installation used precisely this identity.
+    const legacyHash = sha256Hex(stableJson({
+      stage: 'audit', artifactHash: align.artifactHash,
+      dependencyDigest: align.dependencyDigest, coreClaimIds: [...align.coreClaimIds!].sort(),
+      contractHash: align.contractHash, policyHash: align.policyHash,
+      reviewerConfigHash: align.reviewerConfigHash,
+      promptHashes: { extract: extract.promptHash, align: align.promptHash },
+      unitChars: 24_000,
+    }))
+    const root = mkdtempSync(join(tmpdir(), 'vwa-legacy-audit-'))
+    const store = new ReviewRunStore(root, w.snapshot.projectId)
+    for (const record of first.records) {
+      if (record.stage === 'extract') store.writeRecord(first.runId, { ...record, inputHash: legacyHash })
+      else if (record.stage === 'align') {
+        const response = record.response as import('../src/types.ts').AlignResponse
+        store.writeRecord(first.runId, {
+          ...record, inputHash: legacyHash,
+          response: {
+            ...response,
+            // Old executeAudit appended runtime findings AFTER model findings.
+            findings: [{ ...response.findings[0]!, id: `finding_${randomUUID()}`, artifactSpans: [{ start: 0, end: 1 }] }, ...response.findings],
+          },
+        })
+      } else store.writeRecord(first.runId, record)
+    }
+    const adapter = auditWorldAdapter(w.artifact.id, items, { relation: 'new' })
+    // Exercise the runner even before the fix: the pending source gives the
+    // continuation work independently of the audit cache decision.
+    const continued = await run({ ...w, root, stages: ['audit', 'sources'], continueMode: true, adapter })
+    expect(continued.newClaimProposals).toEqual(items.map((item) => ({
+      text: item.atomicClaims[0]!.text, kind: 'fact', importance: 'supporting',
+      span: { start: marker.length + item.span.start, end: marker.length + item.span.end },
+    })))
+    expect(continued.status).toBe('completed')
+    expect(adapter.state.dispatches).toBe(3) // fresh extract + align, then source
+    expect(store.readUsage(continued.runId).filter((row) => row.kind === 'reused')).toEqual([])
+    // Admission must also see legacy audit-only work, rather than returning
+    // NOTHING_TO_CONTINUE and preventing the runner from refreshing it.
+    expect(continuePreCheck({
+      root, snapshot: w.snapshot, adapter, contractHash: w.contractHash,
+      stages: ['audit'], targetClaimIds: [w.claim.id], artifact: w.artifact,
+      history: allRecords(root, w.snapshot.projectId).filter((r) => r.runId === first.runId),
+    })).toBeUndefined()
+  })
+
   it('continue mode saves reused records + zero-token usage rows and skips audit dispatch', async () => {
     const w = world()
     const firstAdapter = auditWorldAdapter(w.artifact.id, [item(ARTIFACT_TEXT.trim())], { relation: 'exact', claimId: w.claim.id })

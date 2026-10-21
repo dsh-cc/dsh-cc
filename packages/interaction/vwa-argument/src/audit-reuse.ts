@@ -4,9 +4,10 @@
  * An audit (extract + align over one bound artifact) is reusable in continue
  * mode only when every input it was computed from is unchanged: the artifact
  * bytes, the audit dependency digest (graph + current upstream judgments),
- * the frozen core set, the contract, policy, prompts, reviewer config and the
- * extraction unit size. That identity is the audit records' `inputHash`, so
- * the tool pre-check and the runner guard compare one key and cannot diverge.
+ * the frozen core set, the contract, policy, prompts, reviewer config,
+ * extraction unit size and result semantics. That identity is the audit
+ * records' `inputHash`, so the tool pre-check and the runner guard compare
+ * one key and cannot diverge.
  *
  * @module @dsh-cc/vwa-argument/audit-reuse
  */
@@ -43,6 +44,11 @@ export function auditInputHash(input: {
   return sha256Hex(
     stableJson({
       stage: 'audit',
+      // Legacy records may mix model-emitted AUDIT_* findings with runtime
+      // findings. Reconstructing proposals from that order corrupts spans.
+      // Invalidate those records in BOTH admission and runner reuse checks;
+      // version 2 guarantees that these finding codes are runtime-owned.
+      resultVersion: 2,
       artifactHash: sha256Hex(input.artifact.text),
       dependencyDigest: auditDependencyDigest(input.snapshot, input.artifact.id, input.records),
       coreClaimIds: [...new Set(input.coreClaimIds)].sort(),
