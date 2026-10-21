@@ -487,4 +487,40 @@ describe('F1.4 — per-run retry pool', () => {
     // Three dispatches total: two initial attempts + one successful retry.
     expect(dispatches).toBe(3)
   })
+
+  it('a charged-but-never-dispatched retry refunds its unit (context overflow cannot starve peers)', async () => {
+    // Review finding: the pool was debited at the retry DECISION, so a retry
+    // that never dispatches (repair message pushes the context over the
+    // limit) still burned the unit. Reproduction: allowance 1 — task A's
+    // repair overflows the context (no dispatch), then task B's transient
+    // error must still be allowed its retry.
+    const rows: Omit<UsageRow, 'runId'>[] = []
+    const b = budget()
+    let dispatches = 0
+    const dispatch = () => {
+      dispatches += 1
+      if (dispatches === 1) return { raw: '{' } // task A: invalid → repair retry
+      if (dispatches === 2) throw new Error('transient network glitch') // task B first attempt
+      return { raw: '{"items":[]}' } // task B retry succeeds
+    }
+    const caller = new ReviewCaller(
+      stubAdapter(TOKENS, [dispatch, dispatch, dispatch]), new BudgetTracker(b), b,
+      new AbortController().signal, (row) => rows.push(row),
+      // Just above the initial message but below message + repair suffix.
+      MESSAGES[0]!.content.length + 1, undefined, 1,
+    )
+    const pa = caller.call('a', MESSAGES, {}, parseExtractResponse).then(
+      () => 'ok' as const, (error: unknown) => error,
+    )
+    await vi.runAllTimersAsync()
+    const a = await pa
+    expect((a as { code?: string }).code).toBe('CONTEXT_TOO_LARGE') // retry never dispatched
+    const pb = caller.call('b', MESSAGES, {}, parseExtractResponse).then(
+      () => 'ok' as const, (error: unknown) => error,
+    )
+    await vi.runAllTimersAsync()
+    const bb = await pb
+    expect(bb).toBe('ok') // the refunded unit lets task B retry its transient error
+    expect(dispatches).toBe(3) // A:1, B:2 — no retry was actually dispatched for A
+  })
 })

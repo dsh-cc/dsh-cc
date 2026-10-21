@@ -95,11 +95,25 @@ export class ReviewCaller {
     let request = messages
     let attempts = 0
     let firstSeq = -1
+    // F1.4 correction: a retry unit is charged at the retry DECISION but is
+    // only earned when the retry actually reserves and dispatches. Every exit
+    // between the charge and that reservation refunds the unit — a retry that
+    // never went out (context overflow, counting failure, budget/wall refusal,
+    // abort during backoff) must not starve peer tasks of the pool.
+    let chargedRetryUnit = false
+    const refundRetryUnit = () => {
+      if (chargedRetryUnit) {
+        if (this.poolUnits !== undefined) this.poolUnits += 1
+        chargedRetryUnit = false
+      }
+    }
     for (;;) {
+      if (chargedRetryUnit && this.signal.aborted) refundRetryUnit()
       this.signal.throwIfAborted()
       // Repairs append a message: validate the actual attempt before counting
       // or reserving spend, while preserving the completed-attempt count.
       if (request.reduce((n, m) => n + m.content.length, 0) > this.maxContextChars) {
+        refundRetryUnit()
         throw this.attach(new ReviewContextError('review context exceeds the configured limit; no evidence was truncated'), attempts)
       }
       let counted: Awaited<ReturnType<ReviewModelAdapter['countInput']>>
@@ -107,6 +121,7 @@ export class ReviewCaller {
         counted = await this.adapter.countInput([...request, { role: 'user', content: JSON.stringify(schema) }])
       } catch (error) {
         // Counting failed before reservation or dispatch; only earlier attempts count.
+        refundRetryUnit()
         throw this.attach(error, attempts)
       }
       // Local counters and the durable ledger row must be updated inside the
@@ -126,8 +141,12 @@ export class ReviewCaller {
         })
         return true
       }
-      if (!(this.reserveShared ? this.reserveShared(counted.tokens, reserve) : reserve()))
+      if (!(this.reserveShared ? this.reserveShared(counted.tokens, reserve) : reserve())) {
+        refundRetryUnit()
         throw this.attach(new ReviewBudgetError('review budget exhausted'), attempts)
+      }
+      // The attempt is committed (reserved, dispatch follows): the charged unit is earned.
+      chargedRetryUnit = false
       const seq = this.tracker.calls
       const timeout = new AbortController()
       const signal = AbortSignal.any([this.signal, timeout.signal])
@@ -186,6 +205,7 @@ export class ReviewCaller {
           if (this.poolUnits <= 0)
             throw this.attach(new ReviewRetryBudgetError(RETRY_BUDGET_ADVICE), attempts)
           this.poolUnits -= 1
+          chargedRetryUnit = true
         }
         retry = { error, backoff }
         if (cls === 'invalid') {
@@ -214,11 +234,15 @@ export class ReviewCaller {
       // can reserve against actual spend rather than this completed call's cap.
       if (retry) {
         const remaining = this.tracker.remainingMs()
-        if (remaining <= 0) throw this.attach(retry.error, attempts)
+        if (remaining <= 0) {
+          refundRetryUnit()
+          throw this.attach(retry.error, attempts)
+        }
         if (remaining >= retry.backoff) {
           try {
             await this.sleep(retry.backoff)
           } catch {
+            refundRetryUnit()
             throw this.attach(retry.error, attempts)
           }
         }
