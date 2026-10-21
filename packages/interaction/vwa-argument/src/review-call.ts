@@ -6,6 +6,12 @@ import {
 } from './review-adapter.ts'
 import type { UsageRow } from './review-run-store.ts'
 
+const REPAIR_PREFIX = 'The previous response was invalid: '
+const REPAIR_SUFFIX = '. Return a corrected respond call using the same task inputs.'
+const MAX_REPAIR_ERROR_CHARS = 512
+/** Maximum added message size; source windows reserve this space for repair. */
+export const REVIEW_REPAIR_CONTEXT_CHARS = REPAIR_PREFIX.length + MAX_REPAIR_ERROR_CHARS + REPAIR_SUFFIX.length
+
 export class ReviewBudgetError extends Error {
   readonly code = 'BUDGET_EXHAUSTED'
 }
@@ -72,14 +78,16 @@ export class ReviewCaller {
     schema: object,
     parse: (raw: string) => T,
   ): Promise<CallResult<T>> {
-    if (messages.reduce((n, m) => n + m.content.length, 0) > this.maxContextChars) {
-      throw this.attach(new ReviewContextError('review context exceeds the configured limit; no evidence was truncated'), 0)
-    }
     let request = messages
     let attempts = 0
     let firstSeq = -1
     for (;;) {
       this.signal.throwIfAborted()
+      // Repairs append a message: validate the actual attempt before counting
+      // or reserving spend, while preserving the completed-attempt count.
+      if (request.reduce((n, m) => n + m.content.length, 0) > this.maxContextChars) {
+        throw this.attach(new ReviewContextError('review context exceeds the configured limit; no evidence was truncated'), attempts)
+      }
       let counted: Awaited<ReturnType<ReviewModelAdapter['countInput']>>
       try {
         counted = await this.adapter.countInput([...request, { role: 'user', content: JSON.stringify(schema) }])
@@ -163,7 +171,7 @@ export class ReviewCaller {
             ...messages,
             {
               role: 'user',
-              content: `The previous response was invalid: ${String(error)}. Return a corrected respond call using the same task inputs.`,
+              content: REPAIR_PREFIX + String(error).slice(0, MAX_REPAIR_ERROR_CHARS) + REPAIR_SUFFIX,
             },
           ]
         }

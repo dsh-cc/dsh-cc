@@ -62,6 +62,19 @@ export interface Source extends Entity {
   authenticityBasisEvidenceIds: Id[]
 }
 
+/** Windowing disclosure attached to a review-envelope source entry (never persisted on Source). */
+export interface SourceWindowing {
+  totalChars: number
+  headChars: number
+  tailChars: number
+}
+
+/** Envelope-side source entry: dependency metadata, with text/windowing only for sources-stage targets. */
+export interface SourceEnvelopeEntry extends Source {
+  text?: string
+  windowing?: SourceWindowing
+}
+
 export interface Evidence extends Entity {
   sourceId: Id
   sourceSnapshotHash: Hash

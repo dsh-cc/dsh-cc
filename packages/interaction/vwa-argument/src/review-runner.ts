@@ -339,17 +339,29 @@ export async function executeReviewRun(input: {
                 })
               return
             }
-            const envelope = taskEnvelope({
-              stage,
-              runId,
-              task,
-              snapshot,
-              records: upstream,
-              maxOutputTokens: deps.budget.maxOutputTokensPerCall,
-              ...(deps.readSnapshot ? { readSnapshot: deps.readSnapshot } : {}),
-            })
+            // E.2.2: the caller's context limit covers system + user messages,
+            // so the windowing budget must reserve headroom for the stage prompt.
+            const stagePrompt = loadPrompt(stage)
+            let envelope: unknown
+            try {
+              envelope = taskEnvelope({
+                stage,
+                runId,
+                task,
+                snapshot,
+                records: upstream,
+                maxOutputTokens: deps.budget.maxOutputTokensPerCall,
+                maxContextChars: Math.max(1, (deps.maxContextChars ?? 48_000) - stagePrompt.length),
+                ...(deps.readSnapshot ? { readSnapshot: deps.readSnapshot } : {}),
+              })
+            } catch (error) {
+              // Envelope-construction failures (e.g. structured data over the
+              // limit) must land in the records like dispatch failures do.
+              save(errorRecord(stage, error, task))
+              throw error
+            }
             const messages: ReviewMessages = [
-              { role: 'system', content: loadPrompt(stage) },
+              { role: 'system', content: stagePrompt },
               { role: 'user', content: stableJson(envelope) },
             ]
             const knownIds = new Set(taskDependencyIds(index, task))

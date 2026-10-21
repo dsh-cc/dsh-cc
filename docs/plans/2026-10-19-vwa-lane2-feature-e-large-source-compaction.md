@@ -1,6 +1,6 @@
 # VWA lane-2 Hardening — Feature E: Large-Source Compaction
 
-## Status: Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off pending.
+## Status: Implemented — PR #271 (open, pending merge). Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problem 9 from the tui-40b4 session.
@@ -43,29 +43,18 @@ function isStructuredData(text: string): boolean {
   try { JSON.parse(firstLine); return true } catch { /* not JSONL */ }
   // XML: starts with <?xml or <
   if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) return true
-  // CSV/TSV: cross-line consistency — the first two non-empty lines have
-  // the same field count when split by the same delimiter.
-  // Known limitation: quoted CSV fields containing delimiters (e.g.,
-  // `"a,b",c\nx,y`) produce inconsistent field counts and are misclassified
-  // as prose. The derived-source path (E.2.3) is the recommended approach
-  // for complex structured data.
-  const lines = trimmed.split('\n').filter((l) => l.trim().length > 0)
-  if (lines.length >= 2) {
-    const delimiter = lines[0]!.includes('\t') ? '\t' : ','
-    const firstFields = lines[0]!.split(delimiter)
-    const secondFields = lines[1]!.split(delimiter)
-    if (firstFields.length >= 2 && firstFields.length === secondFields.length) return true
-  }
-  return false
+  // isDelimitedData scans two non-empty logical records with quote handling.
+  return isDelimitedData(text, ',') || isDelimitedData(text, '\t')
 }
 ```
 
-The CSV/TSV check requires cross-line consistency: the first two non-empty
-lines must have the same field count when split by the same delimiter. This
-correctly rejects prose ("It was the best of times, it was the worst of
-times" has a comma but the next line won't have the same field count) and
-correctly accepts CSV with empty first fields (`,value\nx,y` — both lines
-have 2 fields).
+The CSV/TSV check compares the field counts of the first two non-empty
+logical records, requiring at least two fields. Each delimiter is tested
+independently. Quoted delimiters and CR/LF characters remain field content;
+`""` inside a quoted field represents an escaped quote. Empty first fields
+are accepted. Unclosed quotes, quotes inside unquoted fields, and text after
+a closing quote make that delimiter candidate invalid. This remains a
+format heuristic, not validation of the entire source.
 
 When a structured source exceeds the context limit, the tool returns
 `CONTEXT_TOO_LARGE` with a pointer to the derived-source path (E.2.3):
@@ -84,6 +73,15 @@ When a structured source exceeds the context limit, the tool returns
 When a prose source's contribution to the envelope would exceed the context
 limit, the envelope includes a windowed view instead of the full text.
 
+Each sources-stage task inlines text only for its target source. Dependency
+expansion can include other sources through shared claims, authenticity
+evidence or lineage. These sources retain their metadata and any evidence
+quotes/context slices, without inlining full source text. Their metadata and
+all evidence slices count toward the serialized envelope budget, including
+the initial full-text check and every windowed candidate. The final combined
+envelope is measured before it is returned. Source dependencies remain in
+the digest, so parent changes still invalidate a companion's review.
+
 **Measured sizing**: the window size is computed by measuring the serialized
 envelope (not by estimating from constants), then shrinking the window until
 the envelope fits. The measurement is always performed — even for the
@@ -96,52 +94,65 @@ const MIN_SOURCE_WINDOW = 2000  // chars; below this, windowing is useless
 
 function fitSourceText(text: string, envelopeWithoutText: unknown, maxContextChars: number): { text: string; windowing?: object } {
   // Measure the full envelope with the complete text first.
-  const fullCandidate = { ...envelopeWithoutText, sources: [{ text }] }
+  const siblings = envelopeWithoutText.sources ?? []
+  const fullCandidate = { ...envelopeWithoutText, sources: [...siblings, { text }] }
   if (stableJson(fullCandidate).length <= maxContextChars) {
     return { text }  // fits without windowing
   }
-  // Compute the window from the remaining budget.
-  const baseSize = stableJson(envelopeWithoutText).length
-  const overhead = 300  // omission marker + windowing metadata (conservative)
-  const availableForSource = maxContextChars - baseSize - overhead
-  if (availableForSource < MIN_SOURCE_WINDOW) {
+  const windowFor = (chars: number) => {
+    const headChars = Math.floor(chars / 2)
+    const tailChars = chars - headChars
+    return {
+      text: text.slice(0, headChars) + '\n\n[... ' + (text.length - chars) + ' chars omitted ...]\n\n' + text.slice(-tailChars),
+      windowing: { totalChars: text.length, headChars, tailChars },
+    }
+  }
+  const fits = (window: ReturnType<typeof windowFor>) =>
+    stableJson({ ...envelopeWithoutText, sources: [...siblings, window] }).length <= maxContextChars
+  let low = MIN_SOURCE_WINDOW
+  let high = Math.min(text.length - 1, maxContextChars)
+  let best = windowFor(low)
+  if (high < low || !fits(best)) {
     throw new ReviewContextError('envelope overhead leaves insufficient room for source text')
   }
-  const headChars = Math.floor(availableForSource / 2)
-  const tailChars = availableForSource - headChars
-  const windowed = text.slice(0, headChars) + '\n\n[... ' + (text.length - headChars - tailChars) + ' chars omitted ...]\n\n' + text.slice(-tailChars)
-  // Measure the serialized envelope with the windowed text.
-  const windowedCandidate = { ...envelopeWithoutText, sources: [{ text: windowed, windowing: { totalChars: text.length, headChars, tailChars } }] }
-  const windowedSize = stableJson(windowedCandidate).length
-  if (windowedSize <= maxContextChars) {
-    return { text: windowed, windowing: { totalChars: text.length, headChars, tailChars } }
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    const candidate = windowFor(mid)
+    if (fits(candidate)) {
+      low = mid
+      best = candidate
+    } else {
+      high = mid - 1
+    }
   }
-  // JSON escaping expanded the text beyond the raw char estimate.
-  // Shrink by the overshoot and retry once.
-  const overshoot = windowedSize - maxContextChars
-  const shrunkAvailable = availableForSource - overshoot - 500  // safety margin
-  if (shrunkAvailable < MIN_SOURCE_WINDOW) {
-    throw new ReviewContextError('envelope overhead leaves insufficient room for source text after JSON escaping')
-  }
-  const shrunkHead = Math.floor(shrunkAvailable / 2)
-  const shrunkTail = shrunkAvailable - shrunkHead
-  const shrunkWindowed = text.slice(0, shrunkHead) + '\n\n[... ' + (text.length - shrunkHead - shrunkTail) + ' chars omitted ...]\n\n' + text.slice(-shrunkTail)
-  // Measure the shrunk candidate too — the safety margin may not cover
-  // pathological escaping (e.g., text that is 100% newlines).
-  const shrunkCandidate = { ...envelopeWithoutText, sources: [{ text: shrunkWindowed, windowing: { totalChars: text.length, headChars: shrunkHead, tailChars: shrunkTail } }] }
-  if (stableJson(shrunkCandidate).length > maxContextChars) {
-    throw new ReviewContextError('envelope overhead leaves insufficient room for source text even after shrinking')
-  }
-  return {
-    text: shrunkWindowed,
-    windowing: { totalChars: text.length, headChars: shrunkHead, tailChars: shrunkTail },
-  }
+  return best
 }
 ```
 
-The key invariant: every return path (full text, windowed, shrunk) is
+Binary search measures each candidate and retains a measured fitting window.
+Only reject when the minimum 2,000-character window cannot fit. Never subtract
+serialized escaping overhead from the raw character count.
+
+The key invariant: every return path (full text or windowed) is
 measured against the serialized envelope size, not estimated from raw
 character counts.
+
+Delimited-data detection receives the original text: leading tabs are empty
+TSV fields, not whitespace to strip. The logical-record parser skips blank
+records without removing delimiters from non-empty records.
+
+The implementation measures the persisted target entry and the full
+`taskEnvelope` scaffold (including contract, rules, dependencies and budget),
+rather than the bare `{ text }` illustration above. The runner also reserves
+the stage prompt's length from the whole-message context budget. Windowed
+prose also reserves space for one bounded repair message when the minimum
+2,000-character window still fits. If only the initial minimum window fits,
+the first attempt may proceed; an oversized repair is refused. Repair diagnostics
+are capped at 512 characters; each retry replaces the prior repair message
+and retains the original task inputs. Before counting input or reserving
+spend, every attempt checks its actual messages against the context limit.
+An oversized repair returns `CONTEXT_TOO_LARGE` with the number of completed
+attempts and does not reserve or dispatch another call.
 
 **Evidence context slices**: for the sources stage, `currentReviews` is empty
 (first stage), so the main risk is evidence slices. Evidence context spans
@@ -179,18 +190,27 @@ original large source. The derived source IS a separate source (with its own
 snapshot, hash, and review). The lineage field already exists in the data
 model.
 
-No code change is needed for this — it is already possible. The improvement
-is documentation: the skill doc gains a paragraph:
+The companion must be cited instead of the oversized original in claim scope
+or evidence to request its review.
+The original remains registered and participates in dependency metadata and
+invalidation, but its full text is not included in the companion's review.
+Reviewing a companion does not verify its parent's full content or establish
+the parent's authenticity. A separate review of an oversized structured
+original still returns `CONTEXT_TOO_LARGE`.
+
+The skill doc provides this guidance:
 
 > When a source exceeds the review context window, register a distilled
 > companion source with `lineage.parentSourceIds: ["src_original"]`. The
 > companion's text should be a faithful summary or structured extract (e.g.,
-> counts, key passages). Both sources are reviewed independently; the
-> companion's lineage makes the derivation explicit.
+> counts, key passages). Cite the companion instead of the oversized original
+> in claim scope or evidence.
+> Its lineage makes the derivation explicit; reviewing the companion does
+> not verify the full original.
 
 ### E.3 Implementation
 
-1. `review-input.ts`: structured data detection (cross-line consistency for
+1. `review-input.ts`: structured data detection (quote-aware logical-record consistency for
    CSV/TSV); measured windowing in reviewContext for the sources stage;
    fitSourceText helper with measure-and-retry.
 2. `prompts/sources.md`: add windowing paragraph.
@@ -198,6 +218,12 @@ is documentation: the skill doc gains a paragraph:
 4. `types.ts`: add optional `windowing` field to the source envelope type.
 
 ### E.4 Tests
+
+- structured-source-detection.spec.ts: quoted CSV/TSV delimiters, escaped
+  quotes, multiline fields, CRLF and blank records are recognized. Oversized
+  inputs produce a persisted CONTEXT_TOO_LARGE record with the derived-source
+  pointer and zero model calls. Malformed and inconsistent records are rejected
+  by the format heuristic.
 
 - review-input.spec.ts: JSON source > limit → CONTEXT_TOO_LARGE with
   derived-source pointer, no windowing.
@@ -223,6 +249,13 @@ is documentation: the skill doc gains a paragraph:
   insufficient window validates.
 - Integration: register a 200KB prose source, run sources stage, assert the
   envelope contains windowed text (not the full 200KB).
+- Regression: two large sources supporting one claim produce separate
+  target reviews that fit the whole-message budget, retaining related
+  metadata and untruncated evidence slices. Include the case where text
+  alone fits but related metadata makes the envelope exceed the limit.
+- Regression: a cited distilled companion of an oversized JSON source
+  dispatches successfully with parent metadata only; parent changes still
+  invalidate its review, and directly reviewing the original still refuses.
 
 ---
 

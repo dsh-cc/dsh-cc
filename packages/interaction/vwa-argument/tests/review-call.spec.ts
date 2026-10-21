@@ -329,6 +329,49 @@ describe('retry termination diagnostics and cleanup', () => {
     expect(prepare).not.toHaveBeenCalled()
   })
 
+  it('refuses an oversized repair before counting or reserving another attempt', async () => {
+    const b = budget()
+    const tracker = new BudgetTracker(b)
+    const rows: Omit<UsageRow, 'runId'>[] = []
+    const adapter = stubAdapter(100, [() => ({ raw: '{}' })])
+    const prepare = vi.spyOn(adapter, 'prepareReviewCall')
+    const count = vi.spyOn(adapter, 'countInput')
+    const reserveShared = vi.fn((_tokens: number, reserve: () => boolean) => reserve())
+    const caller = new ReviewCaller(adapter, tracker, b, new AbortController().signal,
+      (row) => rows.push(row), 48_000, reserveShared)
+    const pending = caller.call('t1', [{ role: 'user', content: 'x'.repeat(48_000) }], {}, () => {
+      throw new ReviewInvalidError('bad shape')
+    }).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await pending).toMatchObject({ code: 'CONTEXT_TOO_LARGE', retryAttempts: 1 })
+    expect(prepare).toHaveBeenCalledTimes(1)
+    expect(count).toHaveBeenCalledTimes(1)
+    expect(reserveShared).toHaveBeenCalledTimes(1)
+    expect(tracker.calls).toBe(1)
+    expect(rows.map((row) => row.kind)).toEqual(['reserved', 'actual'])
+  })
+
+  it('bounds repair diagnostics while retaining the original task messages', async () => {
+    const b = budget()
+    const adapter = stubAdapter(100, [() => ({ raw: '{}' }), () => ({ raw: '{"ok":1}' })])
+    const prepare = vi.spyOn(adapter, 'prepareReviewCall')
+    const original: ReviewMessages = [{ role: 'user', content: 'x'.repeat(47_000) }]
+    let parses = 0
+    const pending = new ReviewCaller(adapter, new BudgetTracker(b), b,
+      new AbortController().signal, () => {}, 48_000).call('t1', original, {}, (raw) => {
+      if (++parses === 1) throw new ReviewInvalidError('invalid shape: ' + 'x'.repeat(100_000))
+      return parseOk(raw)
+    }).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await pending).toMatchObject({ raw: { ok: 1 } })
+    expect(prepare).toHaveBeenCalledTimes(2)
+    const repair = prepare.mock.calls[1]![0].messages
+    expect(repair.slice(0, -1)).toEqual(original)
+    expect(repair.at(-1)!.content).toContain('invalid shape:')
+    expect(repair.at(-1)!.content).toContain('Return a corrected respond call using the same task inputs.')
+    expect(repair.reduce((chars, message) => chars + message.content.length, 0)).toBeLessThanOrEqual(48_000)
+  })
+
   it.each(['local', 'shared'] as const)('%s budget rejection preserves completed attempts', async (kind) => {
     const b = budget({ maxCallsPerRun: kind === 'local' ? 2 : 40 })
     const tracker = new BudgetTracker(b)

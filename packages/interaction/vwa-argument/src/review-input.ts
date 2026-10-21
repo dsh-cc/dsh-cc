@@ -3,7 +3,9 @@ import { buildReverseIndex, dependencyDigest, dependencyEntries, type ReverseInd
 import { sha256Hex, stableJson } from './schema.ts'
 import { RULES, RUBRIC_VERSION } from './review-contract.ts'
 import type { ReviewTask } from './review-plan.ts'
-import type { Hash, Id, ProjectSnapshot, ReviewRecord } from './types.ts'
+import { ReviewContextError, REVIEW_REPAIR_CONTEXT_CHARS } from './review-call.ts'
+import { isDelimitedData } from './structured-data.ts'
+import type { Hash, Id, ProjectSnapshot, ReviewRecord, SourceEnvelopeEntry, SourceWindowing } from './types.ts'
 
 const ORDER = ['sources', 'support', 'claims', 'arguments', 'extract', 'align']
 export function taskDependencyIds(index: ReverseIndex, task: ReviewTask): Id[] {
@@ -73,21 +75,123 @@ export function taskDependencyDigest(index: ReverseIndex, task: ReviewTask, reco
     }),
   )
 }
+const MIN_SOURCE_WINDOW = 2000 // chars; below this, windowing is useless
+
+/** Conservative structured-data detection: windowing is never applied to structured data (E.2.1). */
+export function isStructuredData(text: string): boolean {
+  const trimmed = text.trimStart()
+  // JSON: starts with { or [
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return true
+  // JSONL: first line parses as JSON
+  const firstLine = trimmed.split('\n')[0] ?? ''
+  try {
+    JSON.parse(firstLine)
+    return true
+  } catch {
+    /* not JSONL */
+  }
+  // XML: starts with <?xml or <
+  if (trimmed.startsWith('<?xml') || trimmed.startsWith('<')) return true
+  // Compare logical records; quoted delimiters and newlines are field content.
+  // Try both formats independently: a tab inside a CSV field is not a TSV hint.
+  // Leading tabs can be empty TSV fields; the parser skips blank records.
+  // A leading byte-order mark is an encoding artifact, not content: strip it
+  // for detection only (the snapshot text, evidence offsets and leading tabs
+  // stay untouched) — otherwise the BOM trips the parser's field-start state
+  // before a quoted header and the file is misclassified as prose.
+  const bomStripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+  return isDelimitedData(bomStripped, ',') || isDelimitedData(bomStripped, '\t')
+}
+
+/**
+ * Measured head+tail windowing of a source text against the serialized
+ * envelope (E.2.2). Every return path is measured, never estimated.
+ */
+export function fitSourceText(
+  text: string,
+  envelopeWithoutText: unknown,
+  maxContextChars: number,
+  // Real source entry (persisted fields + text); candidates must measure the
+  // actual entry shape, not a bare { text } stand-in.
+  entry?: unknown,
+  reserveContextChars = 0,
+): { text: string; windowing?: SourceWindowing } {
+  const base = envelopeWithoutText as Record<string, unknown>
+  const baseCtx = (base as { context?: Record<string, unknown> }).context
+  const siblings = (baseCtx ?? base).sources
+  // The base contains sibling sources; each candidate adds the measured
+  // target without dropping those siblings. A scaffold nests them in context.
+  const cand = (sourceEntries: unknown[]) => {
+    const sources = [...(Array.isArray(siblings) ? siblings : []), ...sourceEntries]
+    return baseCtx === undefined ? { ...base, sources } : { ...base, context: { ...baseCtx, sources } }
+  }
+  const marker = (head: number, tail: number) => '\n\n[... ' + (text.length - head - tail) + ' chars omitted ...]\n\n'
+  const entryWith = (windowText: string, windowing?: SourceWindowing) =>
+    ({ ...(entry as object), text: windowText, ...(windowing ? { windowing } : {}) })
+  // Measure the full envelope with the complete text first.
+  if (stableJson(cand([entryWith(text)])).length <= maxContextChars) {
+    return { text } // fits without windowing
+  }
+  const windowFor = (chars: number) => {
+    const headChars = Math.floor(chars / 2)
+    const tailChars = chars - headChars
+    return {
+      text: text.slice(0, headChars) + marker(headChars, tailChars) + text.slice(-tailChars),
+      windowing: { totalChars: text.length, headChars, tailChars },
+    }
+  }
+  const fits = (window: ReturnType<typeof windowFor>, limit: number) =>
+    stableJson(cand([entryWith(window.text, window.windowing)])).length <= limit
+  // Measure the minimum before rejecting: JSON escaping can double (or more)
+  // the serialized size without exhausting the budget for a useful excerpt.
+  let low = MIN_SOURCE_WINDOW
+  let best = windowFor(low)
+  // Prefer repair headroom, but do not refuse a useful minimum excerpt that
+  // fits the actual limit. The caller still refuses an oversized repair.
+  const windowLimit = fits(best, maxContextChars - reserveContextChars)
+    ? maxContextChars - reserveContextChars
+    : maxContextChars
+  let high = Math.min(text.length - 1, windowLimit)
+  if (high < low || !fits(best, windowLimit)) {
+    throw new ReviewContextError('envelope overhead leaves insufficient room for source text')
+  }
+  // Search raw window lengths, but make every budget decision using the full
+  // serialized envelope, including sibling entries and windowing metadata.
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    const candidate = windowFor(mid)
+    if (fits(candidate, windowLimit)) {
+      low = mid
+      best = candidate
+    } else {
+      high = mid - 1
+    }
+  }
+  return best
+}
+
 export function reviewContext(input: {
   snapshot: ProjectSnapshot
   task: ReviewTask
   records: ReviewRecord[]
   readSnapshot?(id: Id): string | undefined
+  maxContextChars?: number
+  /** Full-envelope scaffolding (stage, runId, contract, ...) so measurement covers the whole envelope. */
+  measureScaffold?: Record<string, unknown>
 }): unknown {
   const index = buildReverseIndex(input.snapshot)
   const ids = new Set(dependencyEntries(index, taskDependencyIds(index, input.task)).map((e) => e.id))
   const evidence = input.snapshot.evidence.filter((e) => ids.has(e.id))
   const sources = input.snapshot.sources.filter((s) => ids.has(s.id))
-  return {
-    sources: sources.map((source) => ({
-      ...source,
-      ...(input.task.stage === 'sources' && input.readSnapshot ? { text: input.readSnapshot(source.id) ?? '' } : {}),
-    })),
+  const entries: SourceEnvelopeEntry[] = sources.map((source) => ({
+    ...source,
+    // A sources task reviews one target. Dependency sources retain metadata
+    // and evidence slices; their full texts belong to their own reviews.
+    ...(input.task.stage === 'sources' && input.task.targetIds.includes(source.id) && input.readSnapshot
+      ? { text: input.readSnapshot(source.id) ?? '' }
+      : {}),
+  }))
+  const restContext = {
     evidence: evidence.map((e) => {
       const text = input.readSnapshot?.(e.sourceId)
       return {
@@ -103,6 +207,41 @@ export function reviewContext(input: {
     // consume model context repeatedly under the same semantic cache key.
     currentReviews: deduplicateBySemanticHash(upstreamRecords(index, input.task, input.records)),
   }
+  if (input.task.stage === 'sources' && input.readSnapshot && input.maxContextChars !== undefined) {
+    const envelopeWith = (sources: SourceEnvelopeEntry[]) => {
+      const context = { ...restContext, sources }
+      return input.measureScaffold ? { ...input.measureScaffold, context } : context
+    }
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!
+      if (entry.text === undefined) continue
+      const text = entry.text
+      // Related-source metadata and all evidence slices count toward both
+      // the full-text check and every candidate measured during fitting.
+      const envelopeWithoutText = envelopeWith(entries.filter((_, j) => j !== i))
+      if (stableJson(envelopeWith(entries)).length > input.maxContextChars) {
+        if (isStructuredData(text)) {
+          throw new ReviewContextError(
+            `Source ${entry.id} is structured data (JSON/JSONL/CSV/XML) and exceeds the review context limit. ` +
+              `Windowing is not applied to structured data. Register a distilled companion source with ` +
+              `lineage.parentSourceIds: ["${entry.id}"] and cite it instead of the original in claim scope or evidence. ` +
+              `The original remains metadata in the companion review; its own review is still refused.`,
+          )
+        }
+        // Only windowed prose needs a smaller initial envelope. Preserve full
+        // sources that fit, and never truncate evidence to make room for repair.
+        const fitted = fitSourceText(text, envelopeWithoutText, input.maxContextChars, entry, REVIEW_REPAIR_CONTEXT_CHARS)
+        entries[i] = { ...entry, text: fitted.text, ...(fitted.windowing ? { windowing: fitted.windowing } : {}) }
+      }
+    }
+    if (stableJson(envelopeWith(entries)).length > input.maxContextChars) {
+      throw new ReviewContextError('envelope overhead leaves insufficient room for source text')
+    }
+  }
+  return {
+    sources: entries,
+    ...restContext,
+  }
 }
 export function taskEnvelope(input: {
   stage: string
@@ -112,8 +251,9 @@ export function taskEnvelope(input: {
   records: ReviewRecord[]
   maxOutputTokens: number
   readSnapshot?(id: Id): string | undefined
+  maxContextChars?: number
 }): unknown {
-  return {
+  const scaffold = {
     stage: input.stage,
     runId: input.runId,
     taskId: input.task.taskId,
@@ -124,6 +264,9 @@ export function taskEnvelope(input: {
     targets: input.task.targetRefs,
     dependencies: input.task.envelope,
     budget: { maxOutputTokens: input.maxOutputTokens },
-    context: reviewContext(input),
+  }
+  return {
+    ...scaffold,
+    context: reviewContext({ ...input, measureScaffold: scaffold }),
   }
 }

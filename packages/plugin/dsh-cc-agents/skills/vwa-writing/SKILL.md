@@ -61,6 +61,8 @@ Use the identifiers and revision returned by each successful call.
 Do not invent source identifiers or modify the graph files directly.
 Cascade delete removes all entities that reference the target, including arguments whose premise list references a deleted claim. This is destructive — the response lists every cascade-deleted entity for verification.
 
+When a source exceeds the review context window, register a distilled companion source with `lineage.parentSourceIds: ["src_original"]`. The companion's text should be a faithful summary or structured extract (e.g., counts, key passages). Cite the companion instead of the oversized original in claim scope or evidence to request its review. The original remains registered and contributes dependency metadata and any evidence slices, without inlining its full text in the companion's review. Reviewing the companion does not verify the full original; requesting a separate review of an oversized structured original still returns `CONTEXT_TOO_LARGE`.
+
 ## 4. Write and bind the body
 
 Use the normal write/edit tools for an authorized body change.
