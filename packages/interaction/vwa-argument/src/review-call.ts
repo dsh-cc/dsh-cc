@@ -15,6 +15,13 @@ export const REVIEW_REPAIR_CONTEXT_CHARS = REPAIR_PREFIX.length + MAX_REPAIR_ERR
 export class ReviewBudgetError extends Error {
   readonly code = 'BUDGET_EXHAUSTED'
 }
+/** F1.4: the run's retry pool is empty — no further extra attempts are allowed. */
+export class ReviewRetryBudgetError extends Error {
+  readonly code = 'REVIEW_RETRY_BUDGET'
+}
+/** F1.4 precise recovery advice for REVIEW_RETRY_BUDGET. */
+export const RETRY_BUDGET_ADVICE =
+  'retry headroom exhausted; completed records are kept. If the cycle still has budget, retry with `continue: true` on a new requestId (same cycle, completed records are reused across runs); if the cycle is spent, a fresh request opens a new cycle with a full budget but re-executes the semantic stages (a second opinion).'
 export class ReviewContextError extends Error {
   readonly code = 'CONTEXT_TOO_LARGE'
 }
@@ -30,7 +37,7 @@ type RetryClass = 'invalid' | 'transient' | 'truncation' | 'permanent'
 function classify(error: unknown): RetryClass {
   if (error instanceof ReviewTruncatedError) return 'truncation'
   if (error instanceof ReviewConfigDriftError) return 'permanent'
-  if (error instanceof ReviewBudgetError || error instanceof ReviewContextError) return 'permanent'
+  if (error instanceof ReviewBudgetError || error instanceof ReviewContextError || error instanceof ReviewRetryBudgetError) return 'permanent'
   // Audit extraction uses its own error class with the same validation code.
   if (error instanceof ReviewInvalidError || (error as { code?: string })?.code === 'REVIEW_INVALID') return 'invalid'
   // Timeout deadline rejection and dispatch/transport errors (carrying `detail`) are transient.
@@ -50,7 +57,14 @@ export class ReviewCaller {
     readonly usage: (row: Omit<UsageRow, 'runId'>) => void,
     readonly maxContextChars = 48_000,
     readonly reserveShared?: (inputTokens: number, reserve: () => boolean) => boolean,
-  ) {}
+    /** F1.4 per-run retry pool; undefined = legacy unlimited (absent request field). */
+    readonly retryAllowance?: number,
+  ) {
+    this.poolUnits = retryAllowance
+  }
+
+  /** Remaining pool units; undefined = legacy unlimited. */
+  private poolUnits: number | undefined
 
   /** Abortable backoff sleep (B.2.4). */
   private sleep(ms: number): Promise<void> {
@@ -164,6 +178,14 @@ export class ReviewCaller {
           : (detailOf(error)?.providerRetryAfterMs ?? 5_000)
         if (cls === 'truncation' || cls === 'permanent' || attempts >= maxAttempts || this.tracker.wallExceeded()) {
           throw this.attach(error, attempts)
+        }
+        // F1.4: the pool is checked and debited synchronously (same tick, before
+        // the retry dispatch, no await between check and debit) so concurrent
+        // tasks in a Promise.allSettled batch cannot both claim the last unit.
+        if (this.poolUnits !== undefined) {
+          if (this.poolUnits <= 0)
+            throw this.attach(new ReviewRetryBudgetError(RETRY_BUDGET_ADVICE), attempts)
+          this.poolUnits -= 1
         }
         retry = { error, backoff }
         if (cls === 'invalid') {

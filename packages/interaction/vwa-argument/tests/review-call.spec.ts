@@ -161,7 +161,7 @@ describe('B.2.4 — class-aware retry loop', () => {
     const delays = trackTimers()
     let caught: unknown
     const pending = make([], [() => Promise.reject(new ReviewTruncatedError())])
-      .call('t1', MESSAGES, {}, parseOk).catch((e) => { caught = e })
+      .call('t1', MESSAGES, {}, parseExtractResponse).catch((e) => { caught = e })
     await vi.runAllTimersAsync()
     await pending
     expect(caught).toBeInstanceOf(ReviewTruncatedError)
@@ -173,7 +173,7 @@ describe('B.2.4 — class-aware retry loop', () => {
     const delays = trackTimers()
     let caught: unknown
     const pending = make([], [() => Promise.reject(new ReviewConfigDriftError())])
-      .call('t1', MESSAGES, {}, parseOk).catch((e) => { caught = e })
+      .call('t1', MESSAGES, {}, parseExtractResponse).catch((e) => { caught = e })
     await vi.runAllTimersAsync()
     await pending
     expect(caught).toBeInstanceOf(ReviewConfigDriftError)
@@ -214,7 +214,7 @@ describe('B.2.4 — class-aware retry loop', () => {
     // Never-resolving dispatch: the deadline (clamped to the 100ms wall) fires and
     // exhausts the wall, so no retry and no backoff sleep.
     const pending = make([], [() => new Promise(() => {})], { wallMs: 100 })
-      .call('t1', MESSAGES, {}, parseOk).catch((e) => { caught = e })
+      .call('t1', MESSAGES, {}, parseExtractResponse).catch((e) => { caught = e })
     await vi.runAllTimersAsync()
     await pending
     expect(String(caught)).toContain('review call timeout')
@@ -416,5 +416,75 @@ describe('retry termination diagnostics and cleanup', () => {
     await pending
     expect(getEventListeners(ac.signal, 'abort')).toHaveLength(0)
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('F1.4 — per-run retry pool', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  const TOKENS = 100
+
+  function pooledCaller(
+    rows: Omit<UsageRow, 'runId'>[],
+    dispatches: Array<() => Promise<{ raw: string }> | { raw: string }>,
+    retryAllowance?: number,
+  ): ReviewCaller {
+    const b = budget()
+    return new ReviewCaller(
+      stubAdapter(TOKENS, dispatches), new BudgetTracker(b), b,
+      new AbortController().signal, (row) => rows.push(row), 48_000, undefined, retryAllowance,
+    )
+  }
+
+  it('pool exhausted → REVIEW_RETRY_BUDGET, permanent (no further dispatch)', async () => {
+    let dispatches = 0
+    const pending = pooledCaller([], [() => { dispatches += 1; return { raw: '{' } }], 1)
+      .call('t1', MESSAGES, {}, parseExtractResponse).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    const error = await pending as { code?: string; retryAttempts?: number; message?: string }
+    expect(error.code).toBe('REVIEW_RETRY_BUDGET')
+    expect(error.message).toContain('retry headroom exhausted')
+    // Unit consumed for retry #1 (dispatch 2); retry #2 refused before dispatch.
+    expect(dispatches).toBe(2)
+    expect(error.retryAttempts).toBe(2)
+  })
+
+  it('pool large enough → per-call class ceilings unchanged (invalid: 3 attempts)', async () => {
+    const delays = trackTimers()
+    let caught: unknown
+    const pending = pooledCaller([], [() => ({ raw: '{' })], 2)
+      .call('t1', MESSAGES, {}, parseExtractResponse).catch((e) => { caught = e })
+    await vi.runAllTimersAsync()
+    await pending
+    expect(caught).toMatchObject({ code: 'REVIEW_INVALID', retryAttempts: 3 })
+    expect(delays.filter((d) => d !== 1_200)).toEqual([1_000, 4_000])
+  })
+
+  it('no retryAllowance (legacy) → unlimited, behaves as today', async () => {
+    let caught: unknown
+    const pending = pooledCaller([], [() => ({ raw: '{' })])
+      .call('t1', MESSAGES, {}, parseExtractResponse).catch((e) => { caught = e })
+    await vi.runAllTimersAsync()
+    await pending
+    expect(caught).toMatchObject({ code: 'REVIEW_INVALID', retryAttempts: 3 })
+  })
+
+  it('contention: two in-flight tasks race the last unit — exactly one gets it', async () => {
+    // First dispatch per task fails (invalid); every later dispatch succeeds.
+    let dispatches = 0
+    const dispatch = () => {
+      dispatches += 1
+      if (dispatches <= 2) return { raw: '{' }
+      return { raw: '{"items":[]}' }
+    }
+    const caller = pooledCaller([], [dispatch, dispatch, dispatch], 1)
+    const a = caller.call('t1', MESSAGES, {}, parseExtractResponse).then(() => 'ok' as const, () => 'fail' as const)
+    const b = caller.call('t2', MESSAGES, {}, parseExtractResponse).then(() => 'ok' as const, () => 'fail' as const)
+    await vi.runAllTimersAsync()
+    const results = [await a, await b].sort()
+    expect(results).toEqual(['fail', 'ok'])
+    // Three dispatches total: two initial attempts + one successful retry.
+    expect(dispatches).toBe(3)
   })
 })

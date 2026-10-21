@@ -21,7 +21,7 @@ const PROGRESS_STAGES = ['sources', 'support', 'claims', 'arguments'] as const
 // REVIEW_UNAVAILABLE (the runner has no separate timeout errorCode literal).
 const CHANNEL_CODES = new Set(['REVIEW_UNAVAILABLE', 'REVIEW_TRUNCATED', 'REVIEW_CONFIG_DRIFT'])
 const SCHEMA_CODES = new Set(['REVIEW_INVALID'])
-const BUDGET_CODES = new Set(['BUDGET_EXHAUSTED', 'CONTEXT_TOO_LARGE'])
+const BUDGET_CODES = new Set(['BUDGET_EXHAUSTED', 'CONTEXT_TOO_LARGE', 'REVIEW_RETRY_BUDGET'])
 
 function zero(): StageProgress {
   return {
