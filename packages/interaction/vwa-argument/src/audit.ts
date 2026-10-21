@@ -29,6 +29,7 @@ import { sha256Hex, stableJson } from './schema.ts'
 import { loadPrompt, responseSchemaFor, promptHash, RULES } from './review-contract.ts'
 import { auditDependencyDigest } from './review-current.ts'
 import { deduplicateBySemanticHash } from './review-input.ts'
+import { packExtractionBatches } from './audit-cost.ts'
 import { AUDIT_RULE_IDS, auditInputHash, auditUnitChars } from './audit-reuse.ts'
 import { buildReverseIndex } from './dependencies.ts'
 import { computeCoreSet } from './review-plan.ts'
@@ -194,19 +195,9 @@ export async function executeAudit(input: {
     })),
     budget: { maxOutputTokens: input.maxOutputTokens },
   }
-  const batches: (typeof units)[] = []
-  let batch: typeof units = [],
-    chars = 0
-  for (const unit of units) {
-    if (batch.length && chars + stableJson(unit).length > (input.caller?.maxContextChars ?? Infinity) * 0.7) {
-      batches.push(batch)
-      batch = []
-      chars = 0
-    }
-    batch.push(unit)
-    chars += stableJson(unit).length
-  }
-  if (batch.length || batches.length === 0) batches.push(batch)
+  // Batches packed by the shared cost model (audit-cost.ts) so estimate and
+  // runtime packing cannot diverge; one batch = one model call.
+  const batches = packExtractionBatches(units, input.caller?.maxContextChars ?? Number.POSITIVE_INFINITY)
   const collected: import('./types.ts').ExtractedItem[] = []
   let extractInputTokens = 0,
     extractOutputTokens = 0
@@ -323,24 +314,10 @@ export async function executeAudit(input: {
 
   // ---- runtime findings (§11.4): the three AUDIT codes are fixed major ----
   const findings: Finding[] = [...alignResponse.findings]
-  const alignedItemIds = new Set(
-    alignResponse.alignment
-      .filter((entry) => entry.relation === 'exact' || entry.relation === 'equivalent')
-      .map((entry) => entry.extractedId),
-  )
-  const newClaimProposals: AuditOutcome['newClaimProposals'] = []
-  let newCoreDiscovered = false
   for (const entry of alignResponse.alignment) {
     if (entry.relation !== 'new') continue
     const derivation = derivations.find((d) => d.extractedId === entry.extractedId)!
     for (const atomic of derivation.item.atomicClaims) {
-      newClaimProposals.push({
-        text: atomic.text,
-        kind: atomic.kind,
-        importance: atomic.importance,
-        span: derivation.originalSpan,
-      })
-      if (atomic.importance === 'core') newCoreDiscovered = true // §12.1 core discovery
       findings.push({
         id: `finding_${randomUUID()}`,
         code: 'AUDIT_NEW_CLAIM',
@@ -369,11 +346,6 @@ export async function executeAudit(input: {
   }
 
   const core = new Set(input.coreClaimIds ?? [])
-  for (const d of derivations) {
-    if (!d.item.atomicClaims.some((c) => c.importance === 'core')) continue
-    const mapped = alignResponse.alignment.find((a) => a.extractedId === d.extractedId)?.claimIds ?? []
-    if (input.coreClaimIds && mapped.some((id) => !core.has(id))) newCoreDiscovered = true
-  }
   const discoveredCore = [
     ...new Set([
       ...core,
@@ -414,20 +386,69 @@ export async function executeAudit(input: {
     }))
   })
 
-  const extractedCount = derivations.reduce((sum, d) => sum + d.item.atomicClaims.length, 0)
-  const mappedCount = derivations
-    .filter((d) => alignedItemIds.has(d.extractedId))
-    .reduce((sum, d) => sum + d.item.atomicClaims.length, 0)
-
+  // F1.2: the executed outcome is derived from the persisted records by the
+  // same function the reuse path uses, so the two paths cannot diverge.
   return {
     extractionRecord,
     alignRecord,
-    findings,
     extractedAtomicClaims,
-    newClaimProposals,
-    needsReview: newCoreDiscovered,
-    metrics: { extractedAtomicClaims: extractedCount, mappedAtomicClaims: mappedCount },
+    ...auditOutcomeFromRecords(extractionRecord, alignRecord, input.coreClaimIds ?? []),
   }
+}
+
+/**
+ * Outcome fields derived purely from the persisted extract + align records
+ * (§A.2/F1.2): the executed path calls this on its own records after dispatch
+ * and the reuse path on the reusable pair, so the two cannot diverge. The
+ * stored align response's `alignment` is already ordered by extraction unit
+ * (executeAudit reorders before persisting), so entry i pairs with
+ * `extract.response.items[i]`.
+ */
+export function auditOutcomeFromRecords(
+  extract: ExtractionRecord,
+  align: ReviewRecord,
+  frozenCore: Id[],
+): Pick<AuditOutcome, 'findings' | 'newClaimProposals' | 'needsReview' | 'metrics'> {
+  const items = extract.response.items
+  const response = align.response as import('./types.ts').AlignResponse & { findings: Finding[] }
+  const findings = response.findings
+  const alignment = response.alignment
+  // AUDIT_NEW_CLAIM findings were emitted per 'new' atomic in extraction order;
+  // they carry the original-coordinate span the persisted extract items lack.
+  const newFindings = findings.filter((f) => f.code === 'AUDIT_NEW_CLAIM')
+  const core = new Set(frozenCore)
+  const newClaimProposals: AuditOutcome['newClaimProposals'] = []
+  let proposalIndex = 0
+  let needsReview = false
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!
+    const entry = alignment[i]
+    if (!entry) break
+    if (entry.relation === 'new') {
+      for (const atomic of item.atomicClaims) {
+        const span = newFindings[proposalIndex++]?.artifactSpans[0] ?? item.span
+        newClaimProposals.push({ text: atomic.text, kind: atomic.kind, importance: atomic.importance, span })
+        if (atomic.importance === 'core') needsReview = true // §12.1 core discovery
+      }
+    } else if (
+      item.atomicClaims.some((c) => c.importance === 'core') &&
+      entry.claimIds.some((id) => !core.has(id))
+    ) {
+      needsReview = true
+    }
+  }
+  const metrics = {
+    extractedAtomicClaims: items.reduce((sum, item) => sum + item.atomicClaims.length, 0),
+    mappedAtomicClaims: items.reduce(
+      (sum, item, i) =>
+        sum +
+        (alignment[i] && (alignment[i]!.relation === 'exact' || alignment[i]!.relation === 'equivalent')
+          ? item.atomicClaims.length
+          : 0),
+      0,
+    ),
+  }
+  return { findings, newClaimProposals, needsReview, metrics }
 }
 
 /**

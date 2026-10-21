@@ -8,7 +8,7 @@ import { budgetFeasibilityRefusal } from '../src/feasibility.ts'
 import { continuePreCheck } from '../src/review-continue.ts'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
-import { BUDGET, claimsResponse, fakeAdapter, makeClaim, makeSnapshot } from './review-helpers.ts'
+import { BUDGET, NOW, claimsResponse, fakeAdapter, makeClaim, makeSnapshot } from './review-helpers.ts'
 
 function fixture(maxOutputTokensPerRun = 24_000) {
   const root = mkdtempSync(join(tmpdir(), 'vwa-feasibility-'))
@@ -64,3 +64,116 @@ describe('batched budget feasibility and continuation', () => {
     expect(continuePreCheck(input)).toMatchObject({ code: 'NOTHING_TO_CONTINUE', retryable: false })
   })
 })
+
+// ---- F1.1/F1.3/F1.5: estimate aligned to runtime semantics (design
+// docs/plans/2026-10-21-vwa-feasibility-runtime-alignment.md) ----
+import { ReviewRunStore } from '../src/review-run-store.ts'
+import { auditCostModel } from '../src/audit-cost.ts'
+import { effectiveAuditUnitChars } from '../src/audit-reuse.ts'
+import { estimateReviewCalls, RETRY_ALLOWANCE_FACTOR } from '../src/feasibility.ts'
+
+const RUNNER_CONTEXT = 48_000
+
+function auditText(kind: 'small' | 'over-long' | 'mix'): string {
+  if (kind === 'small') return Array.from({ length: 20 }, (_, i) => `# H${i}\n\nParagraph ${i} is short.\n`).join('\n')
+  if (kind === 'over-long') return `# Big\n\n${'Word sentence. '.repeat(4000)}\n`
+  return `# A\n\nShort opening paragraph.\n\n# Big\n\n${'Word sentence. '.repeat(3000)}\n\n# C\n\nClosing paragraph.\n`
+}
+
+function auditEstimate(text: string, maxContextChars?: number) {
+  return auditCostModel({
+    artifactText: text,
+    maxUnitChars: effectiveAuditUnitChars(maxContextChars === undefined ? {} : { maxContextChars }),
+    maxContextChars: maxContextChars ?? RUNNER_CONTEXT,
+  })
+}
+
+describe('audit cost model alignment (F1.1/F1.3)', () => {
+  const { input } = fixture()
+  const artifactId = 'art_1'
+  for (const kind of ['small', 'over-long', 'mix'] as const) {
+    it(`matches auditCostModel for ${kind} blocks`, () => {
+      const artifact = { id: artifactId, text: auditText(kind) }
+      const model = auditEstimate(artifact.text)
+      const estimate = estimateReviewCalls({
+        ...input, stages: ['claims', 'audit'], artifact, continueMode: false,
+      })
+      expect(estimate.plannedCalls.audit).toBe(model.calls)
+      expect(estimate.auditUnits).toBe(model.units)
+      expect(estimate.plannedCalls.audit).toBe(model.batches + 1)
+      expect(model.calls).toBeGreaterThan(1)
+    })
+  }
+
+  it('uses the runner’s effective context, never Infinity', () => {
+    const artifact = { id: artifactId, text: auditText('mix') }
+    // No explicit caller context → runner default 48_000, and the text spans
+    // more than one batch at 0.7 × 48_000, so a missing context cannot mean
+    // "everything in one batch" (the Infinity fallback).
+    const explicit = estimateReviewCalls({ ...input, stages: ['audit'], artifact, maxContextChars: RUNNER_CONTEXT, continueMode: false })
+    const defaulted = estimateReviewCalls({ ...input, stages: ['audit'], artifact, continueMode: false })
+    expect(defaulted.plannedCalls.audit).toBe(explicit.plannedCalls.audit)
+    expect(defaulted.plannedCalls.audit).toBeGreaterThanOrEqual(2)
+    // A small enforced context packs tighter: strictly more calls.
+    const tight = estimateReviewCalls({ ...input, stages: ['audit'], artifact, maxContextChars: 2_000, continueMode: false })
+    expect(tight.plannedCalls.audit).toBeGreaterThan(defaulted.plannedCalls.audit)
+  })
+
+  it('counts audit in full in continue mode even when an old audit record exists', () => {
+    const artifact = { id: artifactId, text: auditText('small') }
+    const base = { ...input, stages: ['audit'] as const, artifact, continueMode: true }
+    const before = estimateReviewCalls(base)
+    // A completed audit record from a prior run must not zero the estimate:
+    // remaining semantic work can still change the audit dependency digest (F1.3).
+    const store = new ReviewRunStore(input.root, input.snapshot.projectId)
+    store.writeRecord('run_prior', {
+      runId: 'run_prior', stage: 'audit', status: 'completed', inputHash: 'hash_old',
+      createdAt: NOW, response: {},
+    } as never)
+    expect(estimateReviewCalls(base).plannedCalls.audit).toBe(before.plannedCalls.audit)
+    expect(before.plannedCalls.audit).toBeGreaterThan(0)
+  })
+})
+
+describe('retry allowance, per-dimension gating and remaining-cycle budget (F1.5)', () => {
+  const { input } = fixture()
+  const stages = ['claims'] as const
+  const estimate = estimateReviewCalls({ ...input, stages: [...stages], continueMode: false })
+
+  it('applies the shared retry allowance factor', () => {
+    expect(RETRY_ALLOWANCE_FACTOR).toBe(1.5)
+    expect(estimate.estimatedWithRetries).toBe(Math.ceil(estimate.estimatedCalls * RETRY_ALLOWANCE_FACTOR))
+  })
+
+  it('refuses on maxCallsPerRun even when output tokens fit', () => {
+    const budget = { ...input.budget, maxCallsPerRun: estimate.estimatedWithRetries - 1 }
+    const refusal = budgetFeasibilityRefusal({ ...input, stages: [...stages], budget, continueMode: false })
+    expect(refusal).toMatchObject({ code: 'BUDGET_INSUFFICIENT', retryable: false })
+  })
+
+  it('gates continue mode against the remaining cycle budget', () => {
+    // Fresh-cycle headroom: fits.
+    expect(budgetFeasibilityRefusal({ ...input, stages: [...stages], continueMode: true })).toBeUndefined()
+    // Prior runs in the cycle already spent most of it → the same plan refuses.
+    const used = { calls: 0, inputTokens: 0, outputTokens: input.budget.maxOutputTokensPerRun - estimate.estimatedOutputTokens + 1 }
+    const refusal = budgetFeasibilityRefusal({ ...input, stages: [...stages], continueMode: true, remainingCycleUsed: used })
+    expect(refusal).toMatchObject({ code: 'BUDGET_INSUFFICIENT', retryable: false })
+  })
+
+  it('reports the wall without gating on it', () => {
+    // A microscopic wall does NOT refuse; the wall is a runtime-only liveness limit.
+    const budget = { ...input.budget, wallMs: 1 }
+    expect(budgetFeasibilityRefusal({ ...input, stages: [...stages], budget, continueMode: false })).toBeUndefined()
+    // But the wall number is still reported in any refusal detail.
+    const refusing = budgetFeasibilityRefusal({
+      ...input, stages: [...stages],
+      budget: { ...input.budget, maxOutputTokensPerRun: estimate.estimatedOutputTokens - 1 },
+      continueMode: false,
+    })
+    expect(refusing?.details).toMatchObject({
+      estimatedWallMs: estimate.estimatedWallMs,
+      budgetWallMs: input.budget.wallMs,
+    })
+  })
+})
+
