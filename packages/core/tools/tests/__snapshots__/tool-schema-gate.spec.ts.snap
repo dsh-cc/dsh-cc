@@ -1,0 +1,108 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/context-crusher: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/context-crusher 1`] = `
+[
+  "context_retrieve",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/coordinator: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/coordinator 1`] = `
+[
+  "send_to_worker",
+  "spawn_worker",
+  "worker_broadcast",
+  "worker_tasks",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/handoff-store: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/handoff-store 1`] = `
+[
+  "handoff_get",
+  "handoff_put",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/mcp-client: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/mcp-client 1`] = `
+[
+  "mcp__schema_gate__list_mcp_resources",
+  "mcp__schema_gate__read_mcp_resource",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/memory: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/memory 1`] = `
+[
+  "memory_save",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/subagent-task: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/subagent-task 1`] = `
+[
+  "release_agent",
+  "subagent_fork",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-git-worktree: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-git-worktree 1`] = `
+[
+  "EnterWorktree",
+  "ExitWorktree",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-manage-skill: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-manage-skill 1`] = `
+[
+  "manage_skill",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-notebook-edit: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-notebook-edit 1`] = `
+[
+  "NotebookEdit",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-search: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-search 1`] = `
+[
+  "ToolSearch",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-sleep: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-sleep 1`] = `
+[
+  "Sleep",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-structured-output: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-structured-output 1`] = `
+[
+  "StructuredOutput",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-web-fetch: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-web-fetch 1`] = `
+[
+  "web_fetch",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tool-workflow: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tool-workflow 1`] = `
+[
+  "workflow",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tools: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/tools 1`] = `
+[
+  "run_code",
+]
+`;
+
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/vwa-argument: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/vwa-argument 1`] = `
+[
+  "argument.report",
+  "argument.review",
+  "argument.update",
+  "evidence.register",
+  "evidence.search_log",
+]
+`;

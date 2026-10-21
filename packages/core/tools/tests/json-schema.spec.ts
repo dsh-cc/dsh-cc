@@ -70,6 +70,20 @@ describe('the enforced raw JSON Schema subset', () => {
     }
   })
 
+  it('accepts the MCP schema dialect identifier', () => {
+    const schema = { $schema: 'http://json-schema.org/draft-07/schema#', type: 'object' }
+    expect(() => assertSupportedJsonSchema(schema)).not.toThrow()
+  })
+
+  it.each([123, null, {}, [], true].map(value => ({ value })))(
+    'rejects a non-string dialect identifier: $value', ({ value }) => {
+      expect(violationsOf({ $schema: value, type: 'object' }))
+        .toContain('schema.$schema must be a string')
+      expect(violationsOf({ type: 'object', properties: { nested: { $schema: value } } }))
+        .toContain('schema.properties.nested.$schema must be a string')
+    },
+  )
+
   it('retains an object-root guard only at consumers that need it', () => {
     expect(assertedObject({ type: 'object' }).type).toBe('object')
     for (const schema of [{}, { type: 'string' }, { type: 'array' }, { oneOf: [{ type: 'string' }, { type: 'null' }] }]) {

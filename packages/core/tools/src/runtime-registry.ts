@@ -37,6 +37,13 @@ export function register(rt: ToolRuntimeCore, definition: ToolDefinition): () =>
     try {
       assertSupportedJsonSchema(definition.parameters)
     } catch (error) {
+      // Test-mode arm of the CI schema gate: in vitest an unsupported
+      // parameters schema must hard-fail instead of degrading silently.
+      if (process.env.VITEST !== undefined) {
+        throw new Error(
+          `tool "${name}" parameters is not a supported JSON Schema (${String(error)}); fix the schema or route the tool through defineTool`,
+        )
+      }
       rt.ctx.logger.warn(
         `tool "${name}" parameters is not a supported JSON Schema; the model-facing schema may degrade (${String(error)})`,
       )

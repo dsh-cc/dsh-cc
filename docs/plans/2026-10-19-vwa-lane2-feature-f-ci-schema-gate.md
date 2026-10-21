@@ -1,6 +1,13 @@
 # VWA lane-2 Hardening — Feature F: CI Tool Schema Regression Gate
 
-## Status: Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off pending.
+## Status: Implemented — PR pending (this branch); three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
+
+Implementation note (adjudicated during delivery): beyond §F.2.3's fixture
+migration, one shared-subset fix was required — `$schema` was added to the
+annotation keywords in `json-schema.ts`, because the MCP SDK's zod→JSON
+conversion emits `$schema` on every external server schema and the hardened
+tripwire would otherwise reject all MCP tools in test mode. The shared
+validator requires `$schema` to be a string, including at nested schema nodes.
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problem 12 from the tui-40b4 session.
@@ -62,11 +69,20 @@ A new test file `packages/core/tools/tests/tool-schema-gate.spec.ts` that:
    `tools.register` method — matching the actual registration API
    (tools.ts:137-139).
 
-   The manifest is maintained manually. A coverage check verifies the
-   manifest against a glob of `packages/**/src/**/*.ts` for `tools.register(`
-   or `defineTool(` calls: any file matching whose package is NOT in the
-   manifest causes the test to fail with "package X not in
-   TOOL_PACKAGE_MANIFEST".
+   The manifest is maintained manually. A source inventory records exact AST
+   call counts per `packages/**/src/**/*.ts` file for `tools.register` and
+   `defineTool`. Added or removed calls fail the gate, even inside an existing
+   package or source file. Comments and strings are ignored; path handling
+   accepts Windows and POSIX separators. Each mount also has a reviewed exact
+   tool-name snapshot, so losing a registration or mounted branch fails CI.
+   When changing a call count, update the corresponding mount and name snapshot
+   together. These checks do not prove execution of every possible configuration;
+   configuration-dependent registration paths need explicit mount cases.
+
+   Exclusions apply only to surveyed files and call counts: the test fixture
+   factory, scenario mock tools, and external MCP schema passthrough. They do
+   not exclude future source files in those packages. The `run_code` factory
+   and the two first-party MCP resource bridge tools are mounted and validated.
 
 2. For each package in the manifest, mounts its tools against a
    CaptureRegistry and asserts for each registered tool:
@@ -97,9 +113,8 @@ Known tool-registering packages (from a survey of `tools.register(` and
 - `packages/memory/memory`
 - `packages/subagent/task`, `packages/subagent/handoff-store`
 - `packages/context/context-crusher`
-- `packages/mcp/mcp-client` (excluded from assertions — MCP tools are
-  external; the manifest entry asserts only that the registration function
-  exists)
+- `packages/mcp/mcp-client` (excluded from assertions — external server input schemas are
+  excluded; first-party resource bridge schemas are mounted and validated)
 
 **F.2.3 Tripwire hardening in test mode.**
 
