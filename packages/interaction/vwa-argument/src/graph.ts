@@ -20,7 +20,7 @@ import type { Fail } from './store.ts'
 import { buildReverseIndex, findEntity } from './dependencies.ts'
 import type { AnyEntity, EntityKind, ReverseIndex } from './dependencies.ts'
 import { applyBindArtifact } from './artifact.ts'
-import { computeDeletionClosure, findReferencesDetailed } from './references.ts'
+import { computeDeletionClosure, computeDeletionOrder, findReferencesDetailed } from './references.ts'
 import type {
   Argument, Artifact, Claim, Entity, Evidence, EvidenceGroup, Id, Issue, Occurrence,
   ProjectContract, ProjectSnapshot,
@@ -192,15 +192,17 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
       changedIds.push(update.id)
     }
     // Feature D §D.4.2: cascade expands the deletes to the full reference
-    // closure BEFORE any deletion; leaves are deleted first. postValidate runs
-    // once below, after ALL deletes — intermediate states are never validated.
+    // closure BEFORE any deletion; deletion runs in leaves-first dependency
+    // order (a Kahn sort, not a reversed BFS). postValidate runs once below,
+    // after ALL deletes — intermediate states are never validated.
     if (mutation.cascade === true && mutation.deletes.length > 0) {
       const closure = computeDeletionClosure(graph, mutation.deletes)
-      for (let i = closure.length - 1; i >= 0; i--) deleteEntity(graph, closure[i]!, true)
+      const order = computeDeletionOrder(graph, closure)
+      for (const id of order) deleteEntity(graph, id, true)
       changedIds.push(...closure)
-      // Leaves-first deletion order; the explicitly requested ids are reported
-      // through changedIds, so cascadeDeleted lists only the extra entities.
-      cascadeDeleted = closure.slice().reverse().filter((id) => !mutation.deletes.includes(id))
+      // `order` is already leaves-first; the explicitly requested ids are
+      // reported through changedIds, so cascadeDeleted lists only the extras.
+      cascadeDeleted = order.filter((id) => !mutation.deletes.includes(id))
     } else {
       for (const deleteId of mutation.deletes) {
         deleteEntity(graph, deleteId)

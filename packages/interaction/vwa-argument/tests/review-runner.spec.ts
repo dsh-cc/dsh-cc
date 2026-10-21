@@ -224,7 +224,7 @@ describe('B.2.1 — error records carry structured errorDetail', () => {
     }
   })
 
-  it.each(['initialize', 'snapshot', 'cancelled'] as const)('persists zero attempts for %s failure before calling the model', async (failure) => {
+  it.each(['initialize', 'snapshot', 'cancelled'] as const)('records a %s failure at run level without fabricating a stage record', async (failure) => {
     const { root } = workspace()
     const source = makeSource()
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')], sources: [source] })
@@ -238,12 +238,35 @@ describe('B.2.1 — error records carry structured errorDetail', () => {
       ...input.deps, adapter, readSnapshot: () => undefined,
     } })
     expect(adapter.state.dispatches).toBe(0)
-    expect(outcome.records[0]?.errorCode).toBe({
+    // Startup failures never entered a stage, so no task failed: the reason
+    // lives on the run-level refusal, not on a stage error record.
+    expect(outcome.records).toHaveLength(0)
+    expect(outcome.status).toBe(failure === 'cancelled' ? 'cancelled' : 'incomplete')
+    expect(outcome.refusal?.code).toBe({
       initialize: 'REVIEW_UNAVAILABLE', snapshot: 'REVIEW_INVALID', cancelled: 'CANCELLED',
     }[failure])
-    expect(outcome.records[0]?.errorDetail?.retryAttempts).toBe(0)
     const saved = new ReviewRunStore(root, snapshot.projectId).readRecords(input.runId)
-    expect(saved[0]?.errorDetail?.retryAttempts).toBe(0)
+    expect(saved).toHaveLength(0)
+  })
+
+  it('does not attribute a startup validation failure to the audit stage', async () => {
+    const { root } = workspace()
+    const source = makeSource()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')], sources: [source] })
+    const adapter = fakeAdapter([() => ({ raw: '{}' })])
+    const input = { ...runnerInput(root, snapshot, ['sources']), stages: ['sources', 'support', 'claims', 'arguments', 'audit'] as import('../src/types.ts').ReviewStage[] }
+    const outcome = await executeReviewRun({ ...input, deps: {
+      ...input.deps, adapter, readSnapshot: () => undefined,
+    } })
+    expect(adapter.state.dispatches).toBe(0)
+    // Before the fix this fabricated an audit error record with full artifact
+    // identity, so report progress showed audit total=1 failed=1 although the
+    // audit never started (model calls: 0).
+    expect(outcome.records).toHaveLength(0)
+    expect(outcome.records.some((record) => record.stage === 'audit')).toBe(false)
+    expect(outcome.status).toBe('incomplete')
+    expect(outcome.refusal?.code).toBe('REVIEW_INVALID')
+    expect(outcome.refusal?.message).toContain('snapshot missing or changed')
   })
 
   it.each([0, 2])('persists %i completed attempts when input counting fails', async (attempts) => {

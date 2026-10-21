@@ -68,8 +68,7 @@ export function findReferencesDetailed(graph: GraphContext, id: Id): ReferenceIn
 /**
  * Full transitive deletion closure of `rootIds`: every entity the roots
  * reference, recursively. The Set guards cycles (each entity visited once);
- * the returned order is BFS, roots first, so reversal yields leaves-first
- * deletion order.
+ * the returned order is BFS, roots first.
  */
 export function computeDeletionClosure(graph: GraphContext, rootIds: Id[]): Id[] {
   const closure = new Set<Id>(rootIds)
@@ -84,6 +83,46 @@ export function computeDeletionClosure(graph: GraphContext, rootIds: Id[]): Id[]
         queue.push(ref.id)
       }
     }
+  }
+  return order
+}
+
+/**
+ * Leaves-first deletion order of a closure computed by computeDeletionClosure:
+ * every entity that references `id` (its dependents) is ordered before `id`,
+ * so deletion never removes an entity that something still points at. This is
+ * a Kahn sort over the in-closure reference graph, not a reversal of the BFS —
+ * reversing BFS only yields leaves-first for graphs where each BFS level is
+ * independent.
+ *
+ * Determinism: among the entities whose dependents are all deleted, the
+ * latest-discovered (deepest in the BFS) goes first. When a reference cycle
+ * blocks progress, the latest-discovered member is forced out; members of a
+ * cycle cannot satisfy the invariant relative to each other, and the cascade
+ * deletes the whole closure in one transaction either way.
+ */
+export function computeDeletionOrder(graph: GraphContext, closure: Id[]): Id[] {
+  // Dependents of each closure entity, restricted to the closure. Note the
+  // direction: findReferencesDetailed(id) returns the entities that reference
+  // `id`, so each ref IS a dependent of `id`.
+  const dependents = new Map<Id, Set<Id>>(closure.map((id) => [id, new Set<Id>()]))
+  for (const id of closure)
+    for (const ref of findReferencesDetailed(graph, id))
+      if (ref.id !== id && dependents.has(ref.id)) dependents.get(id)!.add(ref.id)
+  const pending = new Set<Id>(closure)
+  const order: Id[] = []
+  while (pending.size > 0) {
+    // `pending` iterates in discovery (BFS) order, so the last eligible match
+    // is the latest-discovered entity with no remaining dependents.
+    let pick: Id | undefined
+    for (const id of pending) if (dependents.get(id)!.size === 0) pick = id
+    if (pick === undefined)
+      for (const id of pending) pick = id // cycle: force the latest-discovered member
+    // pending is non-empty, so the fallback loop always assigns.
+    const chosen = pick as Id
+    order.push(chosen)
+    pending.delete(chosen)
+    for (const set of dependents.values()) set.delete(chosen)
   }
   return order
 }

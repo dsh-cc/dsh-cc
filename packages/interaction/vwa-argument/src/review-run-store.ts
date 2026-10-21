@@ -343,3 +343,15 @@ export function disagreementFinding(targetIds: Id[]): Finding & { kind: 'disagre
     kind: 'disagreement',
   }
 }
+
+/** All run ids of a request, oldest directory order first (for own-run reuse). */
+export function requestRuns(root: string, projectId: string, requestId: string): Id[] {
+  const store = new ReviewRunStore(root, projectId)
+  try {
+    return readdirSync(join(root, '.dsh', 'vwa', projectId, 'review-runs')).filter(
+      (id) => store.readRequest(id)?.requestId === requestId,
+    )
+  } catch {
+    return []
+  }
+}

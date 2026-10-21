@@ -449,6 +449,28 @@ describe('Feature D §D.4.2 cascade delete', () => {
     expect(outcome.cascadeDeleted).toEqual([argumentId])
   })
 
+  it('cascadeDeleted is leaves-first when referencers reference each other (not reversed BFS)', () => {
+    // Reviewer scenario: root R; A and B both reference R; A also references B.
+    // A is the leaf (nothing references A), so A must precede B — reversed BFS
+    // would order [B, A].
+    const made = seedGraphSnapshot()
+    const graph = new GraphContext(structuredClone(liveSnapshot(made)), 10_000)
+    const snapshot = graph.snapshot
+    const root = structuredClone(snapshot.sources[0]!)
+    root.id = 'src_root'
+    snapshot.sources.push(root)
+    const b = structuredClone(snapshot.sources[0]!)
+    b.id = 'src_b'
+    b.lineage.parentSourceIds = [root.id]
+    snapshot.sources.push(b)
+    const a = structuredClone(snapshot.sources[0]!)
+    a.id = 'src_a'
+    a.lineage.parentSourceIds = [root.id, b.id]
+    snapshot.sources.push(a)
+    const outcome = applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [root.id], cascade: true })
+    expect(outcome.cascadeDeleted).toEqual(['src_a', 'src_b'])
+  })
+
   it('closure handles cross-kind cycles (source lineage ↔ evidence authenticity basis)', () => {
     const made = seedGraphSnapshot()
     const graph = new GraphContext(structuredClone(made.snapshot), 10_000)
