@@ -20,6 +20,7 @@ import type { Fail } from './store.ts'
 import { buildReverseIndex, findEntity } from './dependencies.ts'
 import type { AnyEntity, EntityKind, ReverseIndex } from './dependencies.ts'
 import { applyBindArtifact } from './artifact.ts'
+import { computeDeletionClosure, computeDeletionOrder, findReferencesDetailed } from './references.ts'
 import type {
   Argument, Artifact, Claim, Entity, Evidence, EvidenceGroup, Id, Issue, Occurrence,
   ProjectContract, ProjectSnapshot,
@@ -40,6 +41,8 @@ export type Mutation =
     creates: { clientKey: string; type: CreateType; body: Record<string, unknown> }[]
     updates: { id: Id; expectedEntityVersion: number; body: Record<string, unknown> }[]
     deletes: Id[]
+    /** Feature D §D.4.2: when true, deletes expand to the full reference closure. */
+    cascade?: boolean
   }
   | { op: 'bind-artifact'; artifactId?: Id; path: string; occurrences: Occurrence[]; outline: Artifact['outline'] }
 
@@ -98,8 +101,8 @@ export class GraphContext {
 }
 
 /** Throw a uniform failure out of an apply function (no partial commit). */
-function reject(code: Fail['code'], message: string): never {
-  throw new VwaFail(fail(code, message))
+function reject(code: Fail['code'], message: string, details?: import('./schema.ts').JsonValue): never {
+  throw new VwaFail(fail(code, message, false, details))
 }
 
 /** Create an id with the §4 prefix; users cannot specify ids (§4). */
@@ -150,12 +153,26 @@ export interface MutationOutcome {
   changedIds: Id[]
   affectedClaimIds: Id[]
   contractChanged: boolean
+  /** Feature D §D.4.2: cascade-deleted entities in deletion order (leaves first). */
+  cascadeDeleted?: Id[]
 }
+
+/** Valid mutation ops (§D.1); anything else is rejected before dispatch. */
+const VALID_OPS = new Set(['set-contract', 'upsert', 'bind-artifact'])
 
 /** Apply one mutation to the working snapshot in place; full validation on completion (§10.5). */
 export function applyMutation(graph: GraphContext, mutation: Mutation): MutationOutcome {
   const changedIds: Id[] = []
   let contractChanged = false
+  let cascadeDeleted: Id[] | undefined
+  // Feature D §D.1: validate the op enum at the entrance, before dispatch — an
+  // unrecognized op used to fall through to bind-artifact and TypeError.
+  if (typeof mutation.op !== 'string' || !VALID_OPS.has(mutation.op)) {
+    reject('SCHEMA_INVALID', `missing or unknown op: got ${JSON.stringify((mutation as { op?: unknown }).op)}; expected one of set-contract, upsert, bind-artifact`)
+  }
+  if (mutation.op === 'upsert' && (!Array.isArray(mutation.creates) || !Array.isArray(mutation.updates) || !Array.isArray(mutation.deletes))) {
+    reject('SCHEMA_INVALID', 'upsert requires creates, updates, and deletes arrays')
+  }
   if (mutation.op === 'set-contract') {
     validateDef('ProjectContract', mutation.contract)
     if (mutation.contract.question.trim() === '') reject('SCHEMA_INVALID', 'contract.question must be non-empty')
@@ -174,16 +191,30 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
       updateEntity(graph, update, newIds)
       changedIds.push(update.id)
     }
-    for (const deleteId of mutation.deletes) {
-      deleteEntity(graph, deleteId)
-      changedIds.push(deleteId)
+    // Feature D §D.4.2: cascade expands the deletes to the full reference
+    // closure BEFORE any deletion; deletion runs in leaves-first dependency
+    // order (a Kahn sort, not a reversed BFS). postValidate runs once below,
+    // after ALL deletes — intermediate states are never validated.
+    if (mutation.cascade === true && mutation.deletes.length > 0) {
+      const closure = computeDeletionClosure(graph, mutation.deletes)
+      const order = computeDeletionOrder(graph, closure)
+      for (const id of order) deleteEntity(graph, id, true)
+      changedIds.push(...closure)
+      // `order` is already leaves-first; the explicitly requested ids are
+      // reported through changedIds, so cascadeDeleted lists only the extras.
+      cascadeDeleted = order.filter((id) => !mutation.deletes.includes(id))
+    } else {
+      for (const deleteId of mutation.deletes) {
+        deleteEntity(graph, deleteId)
+        changedIds.push(deleteId)
+      }
     }
   } else {
     applyBindArtifact(graph, mutation)
     changedIds.push(mutation.artifactId ?? 'artifact')
   }
   postValidate(graph.snapshot)
-  return { changedIds, affectedClaimIds: affectedClaims(graph, changedIds), contractChanged }
+  return { changedIds, affectedClaimIds: affectedClaims(graph, changedIds), contractChanged, ...(cascadeDeleted ? { cascadeDeleted } : {}) }
 }
 
 function affectedClaims(graph: GraphContext, changedIds: Id[]): Id[] {
@@ -324,11 +355,18 @@ function updateEntity(
   array[position] = updated
 }
 
-function deleteEntity(graph: GraphContext, id: Id): void {
+function deleteEntity(graph: GraphContext, id: Id, cascade = false): void {
   const located = locate(graph, id)
-  const referencing = findReferences(graph, id)
-  if (referencing.length > 0) {
-    reject('REFERENCE_IN_USE', `${id} is still referenced by ${referencing.join(', ')}`)
+  if (!cascade) {
+    const references = findReferencesDetailed(graph, id)
+    if (references.length > 0) {
+      // Feature D §D.4.1: name the concrete referencers and carry them in details.
+      reject(
+        'REFERENCE_IN_USE',
+        `${id} is still referenced by: ${references.map((r) => `${r.kind} ${r.id} (${r.role})`).join(', ')}`,
+        { references: references as unknown as import('./schema.ts').JsonValue },
+      )
+    }
   }
   const array = graph.snapshot[located.kind] as Entity[]
   const position = array.findIndex((candidate) => candidate.id === id)

@@ -301,3 +301,209 @@ describe('contract mutation (§10.5 set-contract)', () => {
     expect(graph.snapshot.contract.mode).toBe('reviewed')
   })
 })
+
+/** Full VwaFail (code, message, details) or throw. */
+function failDetailOf(run: () => unknown): { code: string; message: string; details?: unknown } {
+  try {
+    run()
+  } catch (error: unknown) {
+    if (error instanceof VwaFail) return { code: error.fail.code, message: error.fail.message, details: error.fail.details }
+    throw error
+  }
+  throw new Error('expected a VwaFail')
+}
+
+/** Current committed snapshot — `seedGraphSnapshot().snapshot` goes stale after transactions. */
+function liveSnapshot(made: { store: import('../src/store.ts').ProjectStore }): import('../src/types.ts').ProjectSnapshot {
+  const head = made.store.readHead()
+  if (!head.ok) throw new Error(head.message)
+  return head.data.snapshot
+}
+
+describe('Feature D §D.1 op validation', () => {
+  const graphOf = (): GraphContext => new GraphContext(seedGraphSnapshot().snapshot, 10_000)
+
+  it('missing op → SCHEMA_INVALID naming got and expected ops', () => {
+    const failure = failDetailOf(() => applyMutation(graphOf(), {} as unknown as Mutation))
+    expect(failure.code).toBe('SCHEMA_INVALID')
+    expect(failure.message).toContain('undefined')
+    expect(failure.message).toContain('set-contract')
+  })
+
+  it('unknown op → SCHEMA_INVALID', () => {
+    const failure = failDetailOf(() => applyMutation(graphOf(), { op: 'destroy' } as unknown as Mutation))
+    expect(failure.code).toBe('SCHEMA_INVALID')
+    expect(failure.message).toContain('unknown op')
+    expect(failure.message).toContain('bind-artifact')
+  })
+
+  it('upsert missing creates/updates/deletes → SCHEMA_INVALID', () => {
+    const failure = failDetailOf(() => applyMutation(graphOf(), { op: 'upsert' } as unknown as Mutation))
+    expect(failure.code).toBe('SCHEMA_INVALID')
+    expect(failure.message).toContain('creates, updates, and deletes')
+  })
+
+  it('valid ops still work', () => {
+    const graph = new GraphContext(seedGraphSnapshot().snapshot, 10_000)
+    const outcome = applyMutation(graph, {
+      op: 'upsert',
+      creates: [{
+        clientKey: 'c1', type: 'claim',
+        body: {
+          text: 'ok claim', kind: 'fact', importance: 'supporting', stance: 'asserted',
+          scope: { subject: 's', corpus: [], time: 'unspecified', geography: 'unspecified', exclusions: [] },
+          evaluationCriteria: [],
+        },
+      }],
+      updates: [],
+      deletes: [],
+    })
+    expect(outcome.changedIds).toHaveLength(1)
+  })
+})
+
+describe('Feature D §D.4.1 reference diagnostics', () => {
+  it('REFERENCE_IN_USE names referencer ids and carries details.references', () => {
+    const made = seedGraphSnapshot()
+    const a = addClaim(made, 'claim A')
+    const b = addClaim(made, 'claim B')
+    const graph = new GraphContext(structuredClone(liveSnapshot(made)), 10_000)
+    applyMutation(graph, {
+      op: 'upsert',
+      creates: [{
+        clientKey: 'arg1', type: 'argument',
+        body: { premiseClaimIds: [b.id], evidenceGroupIds: [], conclusionClaimId: a.id, scheme: 'causal', warrant: 'w', assumptions: [], limitations: [] },
+      }],
+      updates: [],
+      deletes: [],
+    })
+    const failure = failDetailOf(() => applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [b.id] }))
+    expect(failure.code).toBe('REFERENCE_IN_USE')
+    expect(failure.message).toContain(`${b.id} is still referenced by:`)
+    expect(failure.message).toMatch(/argument arg_\S+ \(premiseClaimIds\)/)
+    const details = failure.details as { references: { kind: string; id: string; role: string }[] }
+    expect(details.references).toContainEqual({ kind: 'argument', id: expect.stringMatching(/^arg_/), role: 'premiseClaimIds' })
+  })
+
+  it('claim.scope.corpus references are detected with kind claim', () => {
+    const made = seedGraphSnapshot()
+    const a = addClaim(made, 'claim A')
+    const b = addClaim(made, 'claim B')
+    const graph = new GraphContext(structuredClone(liveSnapshot(made)), 10_000)
+    graph.snapshot.claims.find((claim) => claim.id === b.id)!.scope.corpus.push(a.id)
+    const failure = failDetailOf(() => applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [a.id] }))
+    expect(failure.code).toBe('REFERENCE_IN_USE')
+    expect(failure.message).toContain('(scope.corpus)')
+    const details = failure.details as { references: { kind: string; id: string; role: string }[] }
+    expect(details.references).toContainEqual({ kind: 'claim', id: b.id, role: 'scope.corpus' })
+  })
+})
+
+describe('Feature D §D.4.2 cascade delete', () => {
+  function buildReferencedClaim(): { made: ReturnType<typeof seedGraphSnapshot>; a: Claim; b: Claim; graph: GraphContext } {
+    const made = seedGraphSnapshot()
+    const a = addClaim(made, 'claim A')
+    const b = addClaim(made, 'claim B')
+    const graph = new GraphContext(structuredClone(liveSnapshot(made)), 10_000)
+    applyMutation(graph, {
+      op: 'upsert',
+      creates: [{
+        clientKey: 'arg1', type: 'argument',
+        body: { premiseClaimIds: [b.id], evidenceGroupIds: [], conclusionClaimId: a.id, scheme: 'causal', warrant: 'w', assumptions: [], limitations: [] },
+      }],
+      updates: [],
+      deletes: [],
+    })
+    return { made, a, b, graph }
+  }
+
+  it('without cascade, deleting a referenced claim is still REFERENCE_IN_USE', () => {
+    const { b, graph } = buildReferencedClaim()
+    const failure = failDetailOf(() => applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [b.id] }))
+    expect(failure.code).toBe('REFERENCE_IN_USE')
+    expect(graph.snapshot.claims.some((claim) => claim.id === b.id)).toBe(true)
+  })
+
+  it('cascade removes referencing entities recursively; cascadeDeleted is leaf-first', () => {
+    const { a, b, graph } = buildReferencedClaim()
+    const outcome = applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [b.id], cascade: true })
+    expect(graph.snapshot.claims.some((claim) => claim.id === b.id)).toBe(false)
+    expect(graph.snapshot.claims.some((claim) => claim.id === a.id)).toBe(true)
+    expect(graph.snapshot.arguments).toHaveLength(0)
+    const argumentId = outcome.changedIds.find((id) => id.startsWith('arg_'))!
+    expect(outcome.cascadeDeleted).toEqual([argumentId])
+    // postValidate ran once on the final state — the snapshot is consistent.
+    expect(graph.snapshot.claims.map((claim) => claim.id)).toContain(a.id)
+  })
+
+  it('deletes repeated cascade roots and shared referencers exactly once', () => {
+    const { a, b, graph } = buildReferencedClaim()
+    const argumentId = graph.snapshot.arguments[0]!.id
+    const outcome = applyMutation(graph, {
+      op: 'upsert', creates: [], updates: [], deletes: [a.id, b.id, a.id, b.id], cascade: true,
+    })
+    expect(graph.snapshot.claims).toHaveLength(0)
+    expect(graph.snapshot.arguments).toHaveLength(0)
+    expect(outcome.changedIds).toHaveLength(3)
+    expect(new Set(outcome.changedIds)).toEqual(new Set([a.id, b.id, argumentId]))
+    expect(outcome.cascadeDeleted).toEqual([argumentId])
+  })
+
+  it('cascadeDeleted is leaves-first when referencers reference each other (not reversed BFS)', () => {
+    // Reviewer scenario: root R; A and B both reference R; A also references B.
+    // A is the leaf (nothing references A), so A must precede B — reversed BFS
+    // would order [B, A].
+    const made = seedGraphSnapshot()
+    const graph = new GraphContext(structuredClone(liveSnapshot(made)), 10_000)
+    const snapshot = graph.snapshot
+    const root = structuredClone(snapshot.sources[0]!)
+    root.id = 'src_root'
+    snapshot.sources.push(root)
+    const b = structuredClone(snapshot.sources[0]!)
+    b.id = 'src_b'
+    b.lineage.parentSourceIds = [root.id]
+    snapshot.sources.push(b)
+    const a = structuredClone(snapshot.sources[0]!)
+    a.id = 'src_a'
+    a.lineage.parentSourceIds = [root.id, b.id]
+    snapshot.sources.push(a)
+    const outcome = applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [root.id], cascade: true })
+    expect(outcome.cascadeDeleted).toEqual(['src_a', 'src_b'])
+  })
+
+  it('closure handles cross-kind cycles (source lineage ↔ evidence authenticity basis)', () => {
+    const made = seedGraphSnapshot()
+    const graph = new GraphContext(structuredClone(made.snapshot), 10_000)
+    const snapshot = graph.snapshot
+    const src1 = snapshot.sources[0]!
+    const src2 = structuredClone(src1)
+    src2.id = `src_${'cycle-test'}`
+    src2.lineage.parentSourceIds = [src1.id]
+    snapshot.sources.push(src2)
+    const evidence = structuredClone(snapshot.evidence[0] ?? {
+      id: `ev_${'cycle'}`, entityVersion: 1, createdAt: 't', updatedAt: 't',
+      sourceId: src2.id, sourceSnapshotHash: 'h', span: { start: 0, end: 1 }, quote: 'q',
+      contextSpan: { start: 0, end: 1 }, originalLocation: 'loc', transformation: 'none',
+      transformationNote: '',
+    } as Evidence)
+    evidence.sourceId = src2.id
+    if (!snapshot.evidence.some((candidate) => candidate.id === evidence.id)) snapshot.evidence.push(evidence)
+    src2.authenticityBasisEvidenceIds = [evidence.id]
+    const outcome = applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [src1.id], cascade: true })
+    expect(snapshot.sources.some((source) => source.id === src1.id || source.id === src2.id)).toBe(false)
+    expect(snapshot.evidence.some((candidate) => candidate.id === evidence.id)).toBe(false)
+    // Leaf-first: the evidence and the child source precede the root.
+    expect(outcome.cascadeDeleted).toEqual([evidence.id, src2.id])
+  })
+})
+
+it('reports ordinary deleted claims in changedIds and affectedClaimIds', () => {
+  const made = seedGraphSnapshot()
+  const claim = addClaim(made, 'Unreferenced claim')
+  const graph = new GraphContext(structuredClone(liveSnapshot(made)), 10_000)
+  const outcome = applyMutation(graph, { op: 'upsert', creates: [], updates: [], deletes: [claim.id] })
+  expect(graph.snapshot.claims.some((c) => c.id === claim.id)).toBe(false)
+  expect(outcome.changedIds).toEqual([claim.id])
+  expect(outcome.affectedClaimIds).toEqual([claim.id])
+  expect(outcome.cascadeDeleted).toBeUndefined()
+})

@@ -59,6 +59,7 @@ Separate facts, source reports, interpretations, causes, intentions, and evaluat
 Record scope, premises, warrants, assumptions, counterevidence, and limits.
 Use the identifiers and revision returned by each successful call.
 Do not invent source identifiers or modify the graph files directly.
+Cascade delete removes all entities that reference the target, including arguments whose premise list references a deleted claim. This is destructive — the response lists every cascade-deleted entity for verification.
 
 ## 4. Write and bind the body
 

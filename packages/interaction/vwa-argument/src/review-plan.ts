@@ -20,10 +20,10 @@ import type { ReverseIndex } from './dependencies.ts'
 import { randomUUID } from 'node:crypto'
 import { rootBlocks } from './markdown-blocks.ts'
 export { rootBlocks } from './markdown-blocks.ts'
-import type { Id, ProjectSnapshot, Ref } from './types.ts'
+import type { Id, ProjectSnapshot, Ref, ReviewStage } from './types.ts'
 
-/** 'audit' is planned/extracted in audit.ts (extract+align), not by planStage. */
-export type ReviewStage = 'sources' | 'support' | 'claims' | 'arguments' | 'audit'
+// The ReviewStage union lives in types.ts (schema-mirror module); re-exported here.
+export type { ReviewStage } from './types.ts'
 
 /** One planned per-stage review task (§11.1/§11.3). */
 export interface ReviewTask {

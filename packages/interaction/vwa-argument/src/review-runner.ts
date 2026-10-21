@@ -1,15 +1,9 @@
 /** Background review execution with frozen inputs, immutable history and shared attempt accounting. */
-import { readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { randomUUID as cryptoUuid } from 'node:crypto'
 import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson } from './schema.ts'
 import { planStage, type ReviewStage, type ReviewTask } from './review-plan.ts'
-import {
-  ReviewRunStore,
-  cacheKey,
-  detectDisagreement,
-  disagreementFinding,
-} from './review-run-store.ts'
+import { ReviewRunStore, cacheKey, detectDisagreement, disagreementFinding, requestRuns } from './review-run-store.ts'
 import {
   ReviewInvalidError,
   parseReviewResponse,
@@ -21,9 +15,9 @@ import {
 import { BudgetTracker, type ReviewBudget } from './review-tasks.ts'
 import { ReviewCaller, ReviewBudgetError } from './review-call.ts'
 import { executeAudit } from './audit.ts'
-import { ProjectStore, type Fail } from './store.ts'
+import { ProjectStore, fail, type Fail } from './store.ts'
 import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-input.ts'
-import { currentReviews } from './review-current.ts'
+import { currentReviews, auditDependencyDigest } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
@@ -182,16 +176,28 @@ export async function executeReviewRun(input: {
     records.push(record)
     store.writeRecord(runId, record)
   }
-  const errorRecord = (stage: ReviewStage, error: unknown, task?: ReviewTask): ReviewRecord => ({
+  // Preserve the exact inputs used for dispatch; history and concurrent tasks
+  // may differ from the records available when the call eventually fails.
+  const errorRecord = (stage: ReviewStage, error: unknown, taskInput?: {
+    task: ReviewTask; dependencyDigest: Hash; inputHash: Hash
+  }): ReviewRecord => ({
     runId,
     stage,
-    targetRefs: task?.targetRefs ?? [],
-    dependencyDigest: task ? taskDependencyDigest(index, task, records) : '',
+    targetRefs: taskInput?.task.targetRefs ?? [],
+    dependencyDigest: taskInput?.dependencyDigest ?? '',
     contractHash: deps.contractHash,
     policyHash: policyHash(),
     reviewerConfigHash: configHash,
     promptHash: stage === 'audit' ? '' : promptHash(stage),
-    inputHash: '',
+    inputHash: taskInput?.inputHash ?? '',
+    // Aggregate audit errors need the same artifact/dependency identity as
+    // the successful extract/align pair so progress can reject stale runs.
+    ...(stage === 'audit' && input.artifact ? {
+      targetRefs: [{ id: input.artifact.id, entityVersion: snapshot.artifacts.find((a) => a.id === input.artifact!.id)?.entityVersion ?? 1 }],
+      artifactHash: sha256Hex(input.artifact.text),
+      dependencyDigest: auditDependencyDigest(snapshot, input.artifact.id,
+        currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records),
+    } : {}),
     status: input.signal.aborted ? 'cancelled' : error instanceof ReviewBudgetError ? 'budget-exhausted' : 'error',
     inputTokens: 0,
     outputTokens: 0,
@@ -208,6 +214,10 @@ export async function executeReviewRun(input: {
       retryAttempts: (error as { retryAttempts?: number })?.retryAttempts ?? 0,
     },
   })
+  // The stage actually being executed; startup failures (adapter init,
+  // snapshot validation) happen before any stage is entered and must not be
+  // attributed to a task stage.
+  let reachedStage: ReviewStage | undefined
   try {
     if ('ok' in reserved) return finish('incomplete', reserved)
     input.signal.throwIfAborted()
@@ -253,6 +263,7 @@ export async function executeReviewRun(input: {
       if (refusal) return finish(refusal.code === 'BUDGET_EXHAUSTED' ? 'budget-exhausted' : 'completed', refusal)
     }
     for (const stage of input.stages) {
+      reachedStage = stage
       input.signal.throwIfAborted()
       if (budget.wallExceeded()) return finish('incomplete')
       if (stage === 'audit') {
@@ -400,7 +411,7 @@ export async function executeReviewRun(input: {
                 save({ ...record, kind: 'disagreement', response: { ...result.raw, findings: [finding] } })
               }
             } catch (error) {
-              save(errorRecord(stage, error, task))
+              save(errorRecord(stage, error, { task, dependencyDigest: dep, inputHash: key }))
               throw error
             }
           }),
@@ -468,21 +479,19 @@ export async function executeReviewRun(input: {
     // one fails the stage loop and finishes 'incomplete' via existing logic.
     return finish(coreDiscovered ? 'incomplete' : 'completed')
   } catch (error) {
-    const stage = input.stages.at(-1) ?? 'audit'
-    save(errorRecord(stage, error))
-    return finish(
-      input.signal.aborted ? 'cancelled' : error instanceof ReviewBudgetError ? 'budget-exhausted' : 'incomplete',
-    )
+    const status = input.signal.aborted ? 'cancelled' : error instanceof ReviewBudgetError ? 'budget-exhausted' : 'incomplete'
+    if (reachedStage === undefined) {
+      // Startup failure (adapter init, snapshot validation): no stage was
+      // entered, so no task failed. Record the reason at run level instead of
+      // fabricating a stage error record that progress would count.
+      return finish(status, fail(
+        (input.signal.aborted ? 'CANCELLED' : ((error as { code?: string })?.code ?? 'REVIEW_UNAVAILABLE')) as Fail['code'],
+        String((error as { message?: string })?.message ?? error).slice(0, 500),
+        false,
+      ))
+    }
+    save(errorRecord(reachedStage, error))
+    return finish(status)
   }
 }
-import { randomUUID as cryptoUuid } from 'node:crypto'
-function requestRuns(root: string, projectId: string, requestId: string): Id[] {
-  const store = new ReviewRunStore(root, projectId)
-  try {
-    return readdirSync(join(root, '.dsh', 'vwa', projectId, 'review-runs')).filter(
-      (id) => store.readRequest(id)?.requestId === requestId,
-    )
-  } catch {
-    return []
-  }
-}
+

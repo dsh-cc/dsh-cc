@@ -447,6 +447,123 @@ describe('evidence.register (§10.3)', () => {
     if (head.ok) expect(head.data.snapshot.sources[0]?.acquisition.kind).toBe('unverified')
   })
 
+  it('D.3: re-registering an EDITED file at the same path includes a driftWarning', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'drift.txt')
+    writeFileSync(sourcePath, 'original body\n', 'utf8')
+    const first = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'drift-1',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(first.ok).toBe(true)
+    const oldId = (first.data as { sourceId: string }).sourceId
+    writeFileSync(sourcePath, 'edited body\n', 'utf8')
+    const second = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'drift-2',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(second.ok).toBe(true)
+    const data = second.data as { sourceId: string; duplicated: boolean; driftWarning: string }
+    expect(data.sourceId).not.toBe(oldId)
+    expect(data.duplicated).toBe(false)
+    expect(data.driftWarning).toContain(`since source ${oldId} was registered`)
+    expect(data.driftWarning).toContain('delete the old source and re-register')
+  })
+
+  it.each(['path', 'citation'])('D.3: dedup after an edit emits no drift warning (%s locator)', async (locator) => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'versions.txt')
+    const metadata = { ...METADATA, ...(locator === 'path' ? { originalLocator: sourcePath } : {}) }
+    const register = (revision: number) => call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: revision, requestId: `version-${revision}`,
+      input: { path: sourcePath, metadata, excerpts: [] },
+    })
+    writeFileSync(sourcePath, 'version A\n', 'utf8')
+    const first = await register(1)
+    expect(first.ok).toBe(true)
+    writeFileSync(sourcePath, 'version B\n', 'utf8')
+    const second = await register(2)
+    expect(second.ok).toBe(true)
+    expect((second.data as { driftWarning?: string }).driftWarning).toBeDefined()
+    const third = await register(3)
+    expect(third.ok).toBe(true)
+    expect(third.data).toMatchObject({ sourceId: (second.data as { sourceId: string }).sourceId, duplicated: true })
+    expect(third.data).not.toHaveProperty('driftWarning')
+    // Reverting to an already registered snapshot is also a dedup, not a new source.
+    writeFileSync(sourcePath, 'version A\n', 'utf8')
+    const reverted = await register(4)
+    expect(reverted.ok).toBe(true)
+    expect(reverted.data).toMatchObject({ sourceId: (first.data as { sourceId: string }).sourceId, duplicated: true })
+    expect(reverted.data).not.toHaveProperty('driftWarning')
+  })
+
+  it('D.3: drift is detected from the citation locator when the path is not used as locator', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'cited.txt')
+    writeFileSync(sourcePath, 'cited original\n', 'utf8')
+    // Real registrations carry a citation locator (URL/archive ref), not the local path.
+    const first = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'cited-1',
+      input: { path: sourcePath, metadata: { ...METADATA }, excerpts: [] },
+    })
+    expect(first.ok).toBe(true)
+    const oldId = (first.data as { sourceId: string }).sourceId
+    writeFileSync(sourcePath, 'cited edited\n', 'utf8')
+    const second = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'cited-2',
+      input: { path: sourcePath, metadata: { ...METADATA }, excerpts: [] },
+    })
+    expect(second.ok).toBe(true)
+    const data = second.data as { sourceId: string; driftWarning?: string }
+    expect(data.sourceId).not.toBe(oldId)
+    expect(data.driftWarning).toContain(`since source ${oldId} was registered`)
+  })
+
+  it('D.3: re-registering the SAME unchanged file dedups with no driftWarning', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'same.txt')
+    writeFileSync(sourcePath, 'stable body\n', 'utf8')
+    const first = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'same-1',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    const second = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 2,
+      requestId: 'same-2',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(second.ok).toBe(true)
+    const data = second.data as { sourceId: string; duplicated: boolean; driftWarning?: string }
+    expect(data.sourceId).toBe((first.data as { sourceId: string }).sourceId)
+    expect(data.duplicated).toBe(true)
+    expect('driftWarning' in data).toBe(false)
+  })
+
+  it('D.3: a genuinely new file has no driftWarning', async () => {
+    const { tools, workspace } = mount()
+    const sourcePath = join(workspace.root, 'fresh.txt')
+    writeFileSync(sourcePath, 'fresh body\n', 'utf8')
+    const result = await call(tools.get('evidence.register') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'fresh-1',
+      input: { path: sourcePath, metadata: { ...METADATA, originalLocator: sourcePath }, excerpts: [] },
+    })
+    expect(result.ok).toBe(true)
+    expect('driftWarning' in (result.data as object)).toBe(false)
+  })
+
   it('rejects paths outside the workspace root and binary input', async () => {
     const { tools, workspace } = mount()
     const outside = join(initWorkspace().root, 'outside.txt')
@@ -589,9 +706,57 @@ describe('argument.update (§10.5)', () => {
     })
     expect(deletion.ok).toBe(false)
     expect(deletion.code).toBe('REFERENCE_IN_USE')
-    expect(deletion.message).toContain('argument premise/conclusion')
+    expect(deletion.message).toContain('(premiseClaimIds)')
     const after = workspace.store.readHead()
     if (after.ok) expect(after.data.head.revision).toBe(head.data.head.revision)
+  })
+
+  it('cascade pass-through deletes referencers and lists cascadeDeleted leaf-first (D06/Feature D)', async () => {
+    const { tools, workspace } = mount()
+    const update = tools.get('argument.update') as ToolDefinition
+    const made = (await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'u-2c',
+      input: {
+        op: 'upsert',
+        creates: [
+          { clientKey: 'a', type: 'claim', body: CLAIM_BODY },
+          { clientKey: 'b', type: 'claim', body: { ...CLAIM_BODY, text: 'Claim two' } },
+          {
+            clientKey: 'arg',
+            type: 'argument',
+            body: {
+              premiseClaimIds: [{ $new: 'b' }],
+              evidenceGroupIds: [],
+              conclusionClaimId: { $new: 'a' },
+              scheme: 'causal',
+              warrant: 'w',
+              assumptions: [],
+              limitations: [],
+            },
+          },
+        ],
+        updates: [],
+        deletes: [],
+      },
+    })) as { ok: boolean; data: { changedIds: string[] } }
+    expect(made.ok).toBe(true)
+    const [, claimB, argumentId] = made.data.changedIds
+    const head = workspace.store.readHead()
+    if (!head.ok) throw new Error(head.message)
+    const deletion = (await call(update, {
+      projectId: workspace.projectId,
+      expectedRevision: head.data.head.revision,
+      requestId: 'u-3c',
+      input: { op: 'upsert', creates: [], updates: [], deletes: [claimB], cascade: true },
+    })) as { ok: boolean; code?: string; data?: { cascadeDeleted?: string[] } }
+    expect(deletion.ok).toBe(true)
+    expect(deletion.data?.cascadeDeleted).toEqual([argumentId])
+    const after = workspace.store.readHead()
+    if (!after.ok) throw new Error(after.message)
+    expect(after.data.snapshot.arguments).toHaveLength(0)
+    expect(after.data.snapshot.claims.some((claim) => claim.id === claimB)).toBe(false)
   })
 
   it('bind-artifact validates occurrences against the real bytes (D12)', async () => {

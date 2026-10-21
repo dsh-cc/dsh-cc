@@ -1,6 +1,6 @@
 # VWA lane-2 Hardening — Feature D: Report Observability and Authoring UX
 
-## Status: Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes); user sign-off pending.
+## Status: Implemented — PR #272 (open, pending merge). Three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problems 7, 8, 10 and 11 from the tui-40b4 session.
@@ -60,7 +60,7 @@ stageProgress: Record<ReviewStage, {
   completed: number       // tasks with a completed record
   failed: number          // tasks whose latest record has status error/budget-exhausted
   notRun: number          // total - completed - failed
-  lastRunStatus?: string  // status of the most recent run touching this stage
+  lastRunStatus?: string  // most recently ended task status (legacy JSON field name)
   channelErrors: number   // error records with errorCode in channel set
   schemaErrors: number    // error records with errorCode REVIEW_INVALID
   budgetErrors: number    // error records with errorCode BUDGET_EXHAUSTED
@@ -71,16 +71,33 @@ stageProgress: Record<ReviewStage, {
 as the runner (Feature C.2.3) — a batched claims stage with 6 claims and
 batch size 3 has `total: 2`, not `total: 6`.
 
+Current task counts use the same task identity as delivery freshness:
+entity versions, dependency digest, contract, policy, prompts, reviewer
+configuration, and scope-dependent rules must match. Historical failures
+remain in the failure list and error buckets, but cannot complete or fail a
+current task. New semantic failure records persist the task input hash;
+legacy unsigned failures remain available as history.
+
+For a bound artifact, `audit.total` is one. Completion requires a completed
+`extract` and `align` pair from the same run and input hash, with current
+artifact, dependency, contract, policy, prompt, and reviewer inputs. Aggregate
+`audit` errors carry artifact references, content hash, and dependency digest;
+they appear in the failure list and count as failed only for matching inputs.
+An extraction record alone does not complete the audit.
+
 Error classification:
 - **Channel**: REVIEW_UNAVAILABLE, REVIEW_TRUNCATED, REVIEW_CONFIG_DRIFT,
   timeout
 - **Schema**: REVIEW_INVALID (model output failure, not transport)
 - **Budget**: BUDGET_EXHAUSTED, CONTEXT_TOO_LARGE
 
-`cancelled` is a run-level status (the entire run was cancelled), not a
-task-level status. Cancelled runs do not produce per-task error records
-with `status: 'cancelled'`; the run-level status is reflected in
-`lastRunStatus`.
+`lastRunStatus` retains its original JSON field name for compatibility, but
+reports the most recently ended task, not the aggregate run status. The
+markdown column is labeled "last task". Records are ordered by `endedAt`,
+then `startedAt`; equal timestamps prefer error, budget-exhausted,
+cancelled, then completed, with `runId` as a final deterministic tie-breaker.
+This applies to semantic stages and the audit extract/align/error records.
+A cancelled run without a task record does not change this field.
 
 `stageProgress` is computed from the **full run store** (allRecords), not
 from `currentReviews` — failed records are invisible to currentReviews.
@@ -110,10 +127,10 @@ the checks table and the findings list:
 
 ```
 ## Review progress
-| stage | completed | failed | not run | last run |
+| stage | completed | failed | not run | last task |
 |-------|-----------|--------|---------|----------|
 | sources | 3/3 | 0 | 0 | completed |
-| support | 4/5 | 1 (channel) | 0 | incomplete |
+| support | 4/5 | 1 (channel) | 0 | error |
 | claims | 0/6 | 0 | 6 | — |
 
 ### Failures
@@ -143,7 +160,9 @@ snapshot hash of any existing source with the same original path/locator.
 Mechanism: `registerSource` already reads the file and computes its hash.
 Before creating a new source, check if any existing source has the same
 `originalLocator` (or `path` field). If found and `diskHash !== existing.snapshotHash`,
-include a `driftWarning` in the response:
+include a `driftWarning` in the response only when registration creates a
+new source. A dedup hit emits no warning, including repeat registration of
+the edited content or a reversion to an already registered snapshot:
 
 ```json
 {

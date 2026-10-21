@@ -89,6 +89,7 @@ export {
   type MutationOutcome,
 } from './graph.ts'
 export { applyBindArtifact, validateArtifactPath } from './artifact.ts'
+export { computeDeletionClosure, findReferencesDetailed, type ReferenceInfo } from './references.ts'
 export { acquireLock, lockHeld, releaseLock } from './lock.ts'
 export {
   CAPTURE_WHITELIST,
