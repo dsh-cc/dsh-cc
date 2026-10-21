@@ -95,7 +95,12 @@ export function isStructuredData(text: string): boolean {
   // Compare logical records; quoted delimiters and newlines are field content.
   // Try both formats independently: a tab inside a CSV field is not a TSV hint.
   // Leading tabs can be empty TSV fields; the parser skips blank records.
-  return isDelimitedData(text, ',') || isDelimitedData(text, '\t')
+  // A leading byte-order mark is an encoding artifact, not content: strip it
+  // for detection only (the snapshot text, evidence offsets and leading tabs
+  // stay untouched) — otherwise the BOM trips the parser's field-start state
+  // before a quoted header and the file is misclassified as prose.
+  const bomStripped = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+  return isDelimitedData(bomStripped, ',') || isDelimitedData(bomStripped, '\t')
 }
 
 /**

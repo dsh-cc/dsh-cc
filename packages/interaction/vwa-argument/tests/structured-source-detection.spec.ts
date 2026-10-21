@@ -19,6 +19,9 @@ const cases = [
   ['TSV empty first field', '\tvalue\nx\ty\n'],
   ['TSV empty first field after blank records', '\n  \r\n\tvalue\r\nx\ty\r\n'],
   ['TSV empty first record fields', '\t\nx\ty\n'],
+  ['BOM quoted CSV', '\uFEFF"name","note"\n"a","hello, world"\n'],
+  ['BOM quoted TSV', '\uFEFF"name"\t"note"\n"a"\t"b"\n'],
+  ['BOM unquoted CSV', '\uFEFFname,note\nAlice,ok\n'],
 ] as const
 
 describe('quoted structured sources', () => {
