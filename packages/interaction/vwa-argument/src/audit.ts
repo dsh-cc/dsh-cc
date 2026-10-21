@@ -82,6 +82,9 @@ export interface AuditOutcome {
   metrics: { extractedAtomicClaims: number; mappedAtomicClaims: number }
 }
 
+/** §11.4: finding codes the runtime generates from the alignment — model output carrying them is dropped. */
+const RUNTIME_OWNED_AUDIT_CODES = new Set(['AUDIT_NEW_CLAIM', 'AUDIT_STRONGER', 'AUDIT_BROADER'])
+
 /** Runtime item id: derived from taskId + span (§11.4). */
 function itemExtractedId(taskId: string, span: Span): Id {
   return `ext_${sha256Hex(stableJson({ taskId, start: span.start, end: span.end })).slice(0, 32)}`
@@ -313,7 +316,11 @@ export async function executeAudit(input: {
   )
 
   // ---- runtime findings (§11.4): the three AUDIT codes are fixed major ----
-  const findings: Finding[] = [...alignResponse.findings]
+  // The AUDIT_* codes are RUNTIME-OWNED: they are derived from the alignment,
+  // never model output. Model-returned entries are dropped here — the outcome
+  // path pairs AUDIT_NEW_CLAIM spans with 'new' atomics BY ORDER (extraction
+  // order), so a model-echoed entry would shift spans onto the wrong proposal.
+  const findings: Finding[] = alignResponse.findings.filter((f) => !RUNTIME_OWNED_AUDIT_CODES.has(f.code))
   for (const entry of alignResponse.alignment) {
     if (entry.relation !== 'new') continue
     const derivation = derivations.find((d) => d.extractedId === entry.extractedId)!

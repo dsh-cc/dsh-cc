@@ -266,6 +266,52 @@ describe('executeAudit — findings, core discovery, span validation', () => {
     expect(outcome.alignRecord.stage).toBe('align')
   })
 
+  it('model-returned AUDIT_NEW_CLAIM findings are dropped; proposal spans stay paired with their own atomics', async () => {
+    // Review finding: the model may echo an AUDIT_* code the runtime owns.
+    // The pairing in auditOutcomeFromRecords matches AUDIT_NEW_CLAIM spans to
+    // 'new' atomics BY ORDER, so a model-returned entry would shift every
+    // span onto the wrong proposal. Reproduction: two new claims with spans
+    // [first, second]; the model returns a finding for the SECOND claim.
+    const first = item('Person A claimed in memoirs to have opposed the plan.', ARTIFACT)
+    const second = item('The minutes record only the vote.', ARTIFACT)
+    const secondStart = ARTIFACT.indexOf('The minutes record only the vote.')
+    const secondSpan = { start: secondStart, end: secondStart + 'The minutes record only the vote.'.length }
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = auditAdapter({
+      items: [first, second],
+      align: (envelope) => ({
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        // The model returns a runtime-owned code for the SECOND new claim.
+        findings: [{
+          id: `finding_${randomUUID()}`,
+          code: 'AUDIT_NEW_CLAIM',
+          targetIds: [],
+          severity: 'major',
+          explanation: 'model-echoed new claim for the second item',
+          evidenceIds: [],
+          artifactSpans: [secondSpan],
+          repair: 'add-evidence',
+        }],
+        targets: [],
+        alignment: envelope.items.map((entry: { extractedId: string }) => ({
+          extractedId: entry.extractedId,
+          claimIds: [],
+          relation: 'new',
+          rationale: 'unregistered',
+        })),
+      }),
+    })
+    const outcome = await executeAudit(auditInput(ARTIFACT, snapshot, adapter))
+    // Each proposal keeps ITS OWN original-coordinate span (review repro:
+    // without the fix the pair comes back swapped as [secondSpan, first.span]).
+    expect(outcome.newClaimProposals).toHaveLength(2)
+    expect(outcome.newClaimProposals[0]!.span).toEqual(first.span)
+    expect(outcome.newClaimProposals[1]!.span).toEqual(second.span)
+    // The runtime-generated findings remain, one per new atomic.
+    expect(outcome.findings.filter((f) => f.code === 'AUDIT_NEW_CLAIM')).toHaveLength(2)
+  })
+
   it('a span that does not exactly match the artifact is a runtime validation failure', async () => {
     const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
     const adapter = auditAdapter({
