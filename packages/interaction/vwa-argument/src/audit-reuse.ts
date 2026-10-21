@@ -56,18 +56,29 @@ export function auditInputHash(input: {
 }
 
 /**
- * True when history holds a completed, schema-valid extract/align pair from
- * ONE run under this audit key. Disagreement markers never qualify.
+ * The reusable extract/align pair when history holds a completed, schema-valid
+ * pair from ONE run under this audit key. Disagreement markers never qualify.
  */
+export function findReusableAudit(
+  history: (ReviewRecord & { kind?: 'disagreement' })[],
+  inputHash: Hash,
+): { extract: ReviewRecord; align: ReviewRecord } | undefined {
+  for (const align of history) {
+    if (
+      align.stage !== 'align' ||
+      align.kind === 'disagreement' ||
+      align.inputHash !== inputHash ||
+      !recordReusable(align, new Set(AUDIT_RULE_IDS))
+    )
+      continue
+    const extract = history.find(
+      (r) => r.stage === 'extract' && r.runId === align.runId && r.status === 'completed' && r.inputHash === inputHash,
+    )
+    if (extract) return { extract, align }
+  }
+  return undefined
+}
+
 export function hasReusableAudit(history: (ReviewRecord & { kind?: 'disagreement' })[], inputHash: Hash): boolean {
-  return history.some(
-    (align) =>
-      align.stage === 'align' &&
-      align.kind !== 'disagreement' &&
-      align.inputHash === inputHash &&
-      recordReusable(align, new Set(AUDIT_RULE_IDS)) &&
-      history.some(
-        (r) => r.stage === 'extract' && r.runId === align.runId && r.status === 'completed' && r.inputHash === inputHash,
-      ),
-  )
+  return findReusableAudit(history, inputHash) !== undefined
 }

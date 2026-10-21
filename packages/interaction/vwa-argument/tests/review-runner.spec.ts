@@ -643,3 +643,79 @@ describe('Feature E — large-source compaction in the runner', () => {
   })
 })
 
+describe('F1.4 — retry pool seeded from the request record', () => {
+  /** Pre-write a queued request record (the runner reads retryAllowance from it). */
+  function seedRequest(root: string, projectId: string, input: ReturnType<typeof runnerInput>, retryAllowance?: number): void {
+    new ReviewRunStore(root, projectId).writeRequest(input.runId, {
+      schemaVersion: 1,
+      requestId: input.requestId,
+      runId: input.runId,
+      stage: input.stages.join('+'),
+      targetClaimIds: [],
+      status: 'queued',
+      inputTokens: 0,
+      outputTokens: 0,
+      calls: 0,
+      startedAt: new Date().toISOString(),
+      ...(retryAllowance === undefined ? {} : { retryAllowance }),
+    })
+  }
+
+  it('exhausted pool fails the task REVIEW_RETRY_BUDGET with the refusal persisted on the run outcome (allSettled path)', async () => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fakeAdapter([() => ({ raw: '{' })])
+    const input = runnerInput(root, snapshot, ['claims'])
+    seedRequest(root, snapshot.projectId, input, 1)
+    vi.useFakeTimers()
+    const run = executeReviewRun({ ...input, deps: { ...input.deps, adapter } })
+    await vi.runAllTimersAsync()
+    const outcome = await run
+    vi.useRealTimers()
+    expect(outcome.status).toBe('incomplete')
+    expect(outcome.refusal).toMatchObject({ code: 'REVIEW_RETRY_BUDGET' })
+    expect(outcome.refusal?.message).toContain('retry headroom exhausted')
+    expect(outcome.refusal?.message).toContain('continue: true')
+    const record = outcome.records[0]!
+    expect(record.errorCode).toBe('REVIEW_RETRY_BUDGET')
+    expect(record.status).toBe('error')
+  })
+
+  it('the outer-catch failure path persists the refusal too (audit stage)', async () => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    // Audit extract stays invalid: the per-call ceiling would allow 3 attempts,
+    // but the pool of 1 runs out after the first retry.
+    const adapter = fakeAdapter([() => ({ raw: '{' })])
+    const input = runnerInput(root, snapshot, ['audit'])
+    seedRequest(root, snapshot.projectId, input, 1)
+    vi.useFakeTimers()
+    const run = executeReviewRun({
+      ...input,
+      artifact: { id: `art_${randomUUID()}`, path: 'docs/a.md', text: 'audit body' },
+      deps: { ...input.deps, adapter },
+    })
+    await vi.runAllTimersAsync()
+    const outcome = await run
+    vi.useRealTimers()
+    expect(outcome.status).toBe('incomplete')
+    expect(outcome.refusal).toMatchObject({ code: 'REVIEW_RETRY_BUDGET' })
+    expect(outcome.records.at(-1)).toMatchObject({ stage: 'audit', errorCode: 'REVIEW_RETRY_BUDGET' })
+  })
+
+  it('a request record WITHOUT retryAllowance behaves as today (legacy unlimited)', async () => {
+    const { root } = workspace()
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fakeAdapter([() => ({ raw: '{' })])
+    const input = runnerInput(root, snapshot, ['claims'])
+    seedRequest(root, snapshot.projectId, input)
+    vi.useFakeTimers()
+    const run = executeReviewRun({ ...input, deps: { ...input.deps, adapter } })
+    await vi.runAllTimersAsync()
+    const outcome = await run
+    vi.useRealTimers()
+    expect(outcome.refusal).toBeUndefined()
+    expect(outcome.records[0]).toMatchObject({ status: 'error', errorCode: 'REVIEW_INVALID' })
+  })
+})
+
