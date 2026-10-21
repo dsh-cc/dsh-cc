@@ -8,6 +8,8 @@
  * @module @dsh-cc/vwa-argument/feasibility
  */
 import { auditCostModel } from './audit-cost.ts'
+import { buildReverseIndex } from './dependencies.ts'
+import { upstreamRecords } from './review-input.ts'
 import { allRecords, planContinueTasks, reusableRecord, resolveTargetClaimIds } from './review-continue.ts'
 import type { CycleUsage } from './review-cycle.ts'
 import type { ReviewRunStore } from './review-run-store.ts'
@@ -16,7 +18,7 @@ import { effectiveAuditUnitChars } from './audit-reuse.ts'
 import { fail, type Fail } from './store.ts'
 import { sha256Hex, stableJson } from './schema.ts'
 import type { ReviewBudget } from './review-budget.ts'
-import type { ReviewStage } from './review-plan.ts'
+import type { ReviewStage, ReviewTask } from './review-plan.ts'
 import type { Id, ProjectSnapshot } from './types.ts'
 import type { ReviewCollaborators } from './tools.ts'
 
@@ -70,26 +72,33 @@ export function estimateReviewCalls(input: {
     auditCalls = model.calls
     auditUnits = model.units
   }
-  // Per-stage executable counts. Fresh runs count every planned task; in
-  // continue mode only tasks WITHOUT a reusable completed record (the same
-  // reuse semantics the runner applies), while audit stays counted in full.
+  // Traverse every semantic stage in dependency order. An upstream dispatch
+  // can change a downstream cache key even if that key is reusable NOW.
+  // Unrequested intermediate stages also propagate potential invalidation:
+  // currentReviews drops their stale records before the next dispatch.
+  // Unrelated cached tasks remain exempt; audit stays counted in full.
   const history = allRecords(input.root, input.snapshot.projectId)
   const plannedCalls = { sources: 0, support: 0, claims: 0, arguments: 0, audit: auditCalls }
   let executableTasks = 0
+  const index = buildReverseIndex(input.snapshot)
+  const changingTasks: ReviewTask[] = []
   for (const { stage, task, inputHash } of planContinueTasks({
     root: input.root,
     adapter: input.adapter,
     contractHash: input.contractHash,
     snapshot: input.snapshot,
-    stages: input.stages.filter((s) => s !== 'audit'),
+    stages: ['sources', 'support', 'claims', 'arguments'],
     targetClaimIds: input.targetClaimIds,
     ...(input.artifact ? { artifact: input.artifact } : {}),
     history,
   })) {
-    if (input.continueMode) {
-      const prior = history.filter((r) => r.inputHash === inputHash)
-      if (reusableRecord(prior, task, true, new Set()) !== undefined) continue
-    }
+    const affected = upstreamRecords(index, task, changingTasks).length > 0
+    const executable = input.stages.includes(stage) && (
+      !input.continueMode || affected ||
+      reusableRecord(history.filter((r) => r.inputHash === inputHash), task, true, new Set()) === undefined
+    )
+    if (affected || executable) changingTasks.push(task)
+    if (!executable) continue
     plannedCalls[stage] += 1
     executableTasks += 1
   }
@@ -129,11 +138,20 @@ export function budgetFeasibilityRefusal(input: {
   const maxOutputTokens = input.continueMode && input.remainingCycleUsed
     ? Math.min(budget.maxOutputTokensPerRun, Math.max(0, budget.maxOutputTokensPerRun - input.remainingCycleUsed.outputTokens))
     : budget.maxOutputTokensPerRun
-  if (estimatedWithRetries <= maxCalls && estimatedOutputTokens <= maxOutputTokens) return undefined
+  const exceededDimensions: ('calls' | 'outputTokens')[] = []
+  const reasons: string[] = []
+  if (estimatedWithRetries > maxCalls) {
+    exceededDimensions.push('calls')
+    reasons.push(`${estimatedWithRetries} calls exceed the available call budget of ${maxCalls}`)
+  }
+  if (estimatedOutputTokens > maxOutputTokens) {
+    exceededDimensions.push('outputTokens')
+    reasons.push(`${estimatedOutputTokens} output tokens exceed the available output token budget of ${maxOutputTokens}`)
+  }
+  if (exceededDimensions.length === 0) return undefined
   return fail(
     'BUDGET_INSUFFICIENT',
-    `Planned ${estimatedCalls} calls (${estimatedWithRetries} with retry headroom) ≈ ${estimatedOutputTokens} ` +
-      `output tokens exceeds the frozen budget of ${maxOutputTokens} (reservation upper bound; ` +
+    `Planned ${estimatedCalls} base calls with retry headroom: ${reasons.join('; ')} (reservation upper bound; ` +
       'actual usage may be lower). Options: (a) reduce target scope, (b) enable claims batching on a new project, ' +
       '(c) create a new project with a larger budget.',
     false,
@@ -143,6 +161,8 @@ export function budgetFeasibilityRefusal(input: {
       executableCalls: estimatedCalls,
       estimatedWithRetries,
       estimatedOutputTokens,
+      exceededDimensions,
+      budgetCalls: maxCalls,
       budgetOutputTokens: maxOutputTokens,
       estimatedWallMs,
       budgetWallMs: budget.wallMs,

@@ -31,7 +31,10 @@ export function taskDependencyIds(index: ReverseIndex, task: ReviewTask): Id[] {
   }
   return [...ids].sort()
 }
-export function upstreamRecords(index: ReverseIndex, task: ReviewTask, records: ReviewRecord[]): ReviewRecord[] {
+/** Select by stage and target identity; admission also uses this predicate for potentially changed tasks. */
+export function upstreamRecords<T extends Pick<ReviewRecord, 'stage' | 'targetRefs'>>(
+  index: ReverseIndex, task: ReviewTask, records: T[],
+): T[] {
   const ids = new Set(dependencyEntries(index, taskDependencyIds(index, task)).map((e) => e.id))
   return records
     .filter((r) => ORDER.indexOf(r.stage) < ORDER.indexOf(task.stage) && r.targetRefs.some((ref) => ids.has(ref.id)))
