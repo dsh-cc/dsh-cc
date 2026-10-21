@@ -357,7 +357,7 @@ export async function executeReviewRun(input: {
             } catch (error) {
               // Envelope-construction failures (e.g. structured data over the
               // limit) must land in the records like dispatch failures do.
-              save(errorRecord(stage, error, task))
+              save(errorRecord(stage, error, { task, dependencyDigest: dep, inputHash: key }))
               throw error
             }
             const messages: ReviewMessages = [
