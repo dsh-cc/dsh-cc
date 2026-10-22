@@ -10,8 +10,8 @@
 import { planStage } from './review-plan.ts'
 import { currentReviews, matchesReviewTask, auditDependencyDigest } from './review-current.ts'
 import { taskDependencyDigest } from './review-input.ts'
-import { sha256Hex, stableJson } from './schema.ts'
-import { policyHash, promptHash } from './review-contract.ts'
+import { sha256Hex } from './schema.ts'
+import { policyHash, promptHash, semanticContractHash } from './review-contract.ts'
 import type { ReverseIndex } from './dependencies.ts'
 import type { Id, ProjectSnapshot, ReviewFailure, ReviewRecord, ReviewStage, StageProgress } from './types.ts'
 
@@ -73,7 +73,7 @@ export function computeStageProgress(input: {
   const failures: ReviewFailure[] = []
   const records = input.records.filter((r) => r.kind !== 'disagreement')
   const current = currentReviews(input.snapshot, records, input.targets, input.reviewerConfigHash).records
-  const contractHash = sha256Hex(stableJson(input.snapshot.contract))
+  const contractHash = semanticContractHash(input.snapshot.contract)
   for (const stage of PROGRESS_STAGES) {
     const progress = stageProgress[stage]
     const stageRecords = records.filter((r) => r.stage === stage)

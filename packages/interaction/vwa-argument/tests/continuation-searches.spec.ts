@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { evaluateDelivery } from '../src/delivery-check.ts'
 import { allRecords, continuePreCheck } from '../src/review-continue.ts'
@@ -44,7 +45,7 @@ describe('audit continuation search identity', () => {
         })) }],
       }), inputTokens: 5 }
     }])
-    const deps = { root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) }
+    const deps = { root, adapter, budget: BUDGET, contractHash: semanticContractHash(snapshot.contract) }
     const base = { deps, snapshot, artifact, targetClaimIds: [claim.id], signal: new AbortController().signal }
     const run = (stages: ReviewStage[], continueMode = false) => executeReviewRun({
       ...base, runId: `run_${randomUUID()}`, requestId: randomUUID(), stages, continueMode,

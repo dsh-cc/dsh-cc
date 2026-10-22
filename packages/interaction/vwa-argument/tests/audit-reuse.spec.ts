@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
@@ -43,7 +44,7 @@ function world() {
   })
   return {
     root, claim, artifact, snapshot,
-    contractHash: sha256Hex(stableJson(snapshot.contract)),
+    contractHash: semanticContractHash(snapshot.contract),
   }
 }
 

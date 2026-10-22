@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { budgetFeasibilityRefusal } from '../src/feasibility.ts'
 import { continuePreCheck } from '../src/review-continue.ts'
@@ -31,7 +32,7 @@ function fixture(maxOutputTokensPerRun = 96_000) {
     }
   }])
   const input = {
-    root, snapshot, adapter, budget, contractHash: sha256Hex(stableJson(snapshot.contract)),
+    root, snapshot, adapter, budget, contractHash: semanticContractHash(snapshot.contract),
     stages: ['claims' as const], targetClaimIds: claims.map((c) => c.id),
   }
   const run = (targetClaimIds = input.targetClaimIds) => executeReviewRun({

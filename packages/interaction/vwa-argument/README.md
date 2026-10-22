@@ -54,7 +54,7 @@ disabled the tools are not registered and the feature is inert.
   〔src:ws:packages/interaction/vwa-argument/src/schema.ts#L1-L40〕.
 - **Settings** (`src/settings.ts`): namespace `vwa-argument`, flat kebab
   keys per the §13 table. `semantic-enabled` defaults to **false**; all
-  review budgets follow §13 and are frozen into `contract.reviewSettings` at project initialization; contract edits preserve these runtime-owned limits. `review-alias` (default `sonnet`) names the
+  review budgets follow §13 and are frozen into `contract.reviewSettings` at project initialization; contract edits preserve these runtime-owned limits, and capacity limits are revisable after init via the `argument.update` op `set-review-settings` (completed review records are preserved). `review-alias` (default `sonnet`) names the
   model ALIAS the reviewer routes through — never a concrete model id. Same dual-half idiom as vwa-evidence:
   `registerNamespaceSafe` for /config UX plus a fail-soft raw hot-read of
   `<dshHome>/settings.json` (`readUserSettingsSync`)
@@ -80,7 +80,7 @@ set (`@dsh-cc/vwa-eval`, §22.2).
 
 A completed call is not a passed review. Delivery selects records matching the current task dependencies, contract, policy, prompt, and effective prepared model configuration. Relevant changes expire old judgments; unrelated author changes do not invalidate independent support tasks. Conflicting same-input judgments remain visible and cannot be erased by a newer pass. Negative support propagates through the weakest required premise; alternative support paths are evaluated independently.
 
-`all` runs sources, support, claims, arguments and full-text extract/align. Every provider schema is self-contained, extraction responses are strictly validated, and alignment requires AUDIT-01 through AUDIT-05. Attempts, including audit calls and repairs, reserve and persist budget before dispatch; interrupted reservations remain charged after restart. Project limits are frozen at init; model routes are resolved per call and their effective prepared options enter review identity.
+`all` runs sources, support, claims, arguments and full-text extract/align. Every provider schema is self-contained, extraction responses are strictly validated, and alignment requires AUDIT-01 through AUDIT-05. Attempts, including audit calls and repairs, reserve and persist budget before dispatch; interrupted reservations remain charged after restart. Project limits are frozen at init and revisable per project via the `set-review-settings` mutation op; model routes are resolved per call and their effective prepared options enter review identity.
 
 Mechanical gates inspect the caller's actual workspace files. Optional unavailable style checks are disclosed separately; link checks and used executable-code checks remain required. Snapshot/hash/quote failures block semantic delivery. Reports retain current assessments, explicit warrants and premises, limitations, unresolved issues, and the experimental calibration status. Only presentation of both exact body/report paths with current hashes advances delivery; a report failure cannot produce a success receipt. Signatures require a matching existing receipt from the user's session, and human adjudication expires when its bound inputs change.
 

@@ -9,7 +9,7 @@ import { currentReviews, combineVerdicts, auditDependencyDigest, stageFamily } f
 import { computeCoreSet, planStage } from './review-plan.ts'
 import { computeAssessments, digestRecords, activeMajorCount } from './policy.ts'
 import { mapMechanical, stageVerdict, type GateEntry } from './report-render.ts'
-import { policyHash, promptHash } from './review-contract.ts'
+import { policyHash, promptHash, semanticContract, semanticContractHash } from './review-contract.ts'
 import { computeStageProgress } from './review-progress.ts'
 import { verifySnapshot } from './sources.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
@@ -55,7 +55,8 @@ export function activeAdjudications(
 export function projectDependencyDigest(snapshot: ProjectSnapshot, records: ReviewRecord[]): Hash {
   return sha256Hex(
     stableJson({
-      contract: snapshot.contract,
+      // F3.1: adjudication identity uses the semantic contract (capacity excluded).
+      contract: semanticContract(snapshot.contract),
       sources: snapshot.sources,
       evidence: snapshot.evidence,
       claims: snapshot.claims,
@@ -158,7 +159,7 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     artifact: { id: artifactId, text },
     ...(input.reviewerConfigHash === undefined ? {} : { reviewerConfigHash: input.reviewerConfigHash }),
   })
-  const contractHash = sha256Hex(stableJson(snapshot.contract)),
+  const contractHash = semanticContractHash(snapshot.contract),
     artifactHash = sha256Hex(text)
   const expectedAudit = auditDependencyDigest(snapshot, artifactId, selected.records)
   const audit = input.records.filter(

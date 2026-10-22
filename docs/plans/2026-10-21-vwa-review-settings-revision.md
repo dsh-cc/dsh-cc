@@ -1,6 +1,6 @@
 # VWA Post-lane-2 Fix Batch — Fix 3: Review Settings Revision (capacity-only, cache-preserving)
 
-## Status: Designed — three-lane blind review converged (r1 full review: NO-GO on all seats → v2 redesign; r2 delta confirmation; r3 micro-confirmation — final round GO on all seats). Implementation pending; user sign-off pending.
+## Status: Implemented — PR #278 (open, pending merge). Three-lane blind review converged (r1 full review: NO-GO on all seats → v2 redesign; r2 delta confirmation; r3 micro-confirmation — final round GO on all seats).
 
 All anchors cite tree `b64af0e8`, verified 2026-10-21. Stacks on Fix 1 + Fix 2.
 

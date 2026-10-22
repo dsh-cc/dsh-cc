@@ -16,7 +16,7 @@ import type { ReviewRunStore } from './review-run-store.ts'
 import type { Hash } from './types.ts'
 import { effectiveAuditUnitChars } from './audit-reuse.ts'
 import { fail, type Fail } from './store.ts'
-import { sha256Hex, stableJson } from './schema.ts'
+import { semanticContractHash, recordMatchesKey } from './review-contract.ts'
 import type { ReviewBudget } from './review-budget.ts'
 import type { ReviewStage, ReviewTask } from './review-plan.ts'
 import type { Id, ProjectSnapshot } from './types.ts'
@@ -95,7 +95,7 @@ export function estimateReviewCalls(input: {
     const affected = upstreamRecords(index, task, changingTasks).length > 0
     const executable = input.stages.includes(stage) && (
       !input.continueMode || affected ||
-      reusableRecord(history.filter((r) => r.inputHash === inputHash), task, true, new Set()) === undefined
+      reusableRecord(history.filter((r) => recordMatchesKey(r, inputHash)), task, true, new Set()) === undefined
     )
     if (affected || executable) changingTasks.push(task)
     if (!executable) continue
@@ -165,7 +165,9 @@ export function budgetFeasibilityRefusal(input: {
       `(b) raise ${raiseSettings} in settings BEFORE creating a ` +
       'project — existing projects keep their frozen budget; ' +
       '(c) create a new project with a larger budget (registered sources, evidence, claims and completed review ' +
-      'records are NOT carried over).',
+      'records are NOT carried over); ' +
+      '(d) revise the frozen budget on this project (argument.update op set-review-settings) — ' +
+      'sources, evidence and completed review records are preserved.',
     false,
     {
       plannedCalls,
@@ -200,7 +202,7 @@ export function reviewRetryAllowance(input: {
     ...(input.artifact ? { artifact: input.artifact } : {}),
     ...(input.review.maxContextChars ? { maxContextChars: input.review.maxContextChars } : {}),
     budget: input.review.budget,
-    contractHash: sha256Hex(stableJson(input.snapshot.contract)),
+    contractHash: semanticContractHash(input.snapshot.contract),
     adapter: input.review.adapter,
     continueMode: input.body.continue === true,
   })
@@ -219,6 +221,8 @@ export function admissionRequestRecord(input: {
   taskId: string
   payloadHash: Hash
   artifact?: { id: Id; text: string }
+  /** The head revision the budget/snapshot was read from (F4 consistency stamp). */
+  headRevision?: number
 }): Parameters<ReviewRunStore['writeRequest']>[1] {
   return {
     schemaVersion: 1,
@@ -230,6 +234,11 @@ export function admissionRequestRecord(input: {
     ...(input.body.continue === true ? { continue: true } : {}),
     taskId: input.taskId,
     status: 'queued',
+    // F3.4: the snapshot budget frozen on the cycle's lead request at admission.
+    budget: input.review.budget,
+    // F4: the snapshot revision that budget was computed from — verified
+    // against HEAD inside the reservation lock (review-cycle.ts).
+    ...(input.headRevision === undefined ? {} : { budgetRevision: input.headRevision }),
     retryAllowance: reviewRetryAllowance(input),
     inputTokens: 0,
     outputTokens: 0,
@@ -257,7 +266,7 @@ export function reviewBudgetRefusal(input: {
     ...(input.artifact ? { artifact: input.artifact } : {}),
     ...(input.review.maxContextChars ? { maxContextChars: input.review.maxContextChars } : {}),
     budget: input.review.budget,
-    contractHash: sha256Hex(stableJson(input.snapshot.contract)),
+    contractHash: semanticContractHash(input.snapshot.contract),
     adapter: input.review.adapter,
     continueMode: input.body.continue === true,
     ...(input.remainingCycleUsed === undefined ? {} : { remainingCycleUsed: input.remainingCycleUsed }),

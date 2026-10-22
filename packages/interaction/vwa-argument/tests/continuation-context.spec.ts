@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { runReviewWithTimers as executeReviewRun } from './review-timer-helpers.ts'
 import { allRecords, continuePreCheck } from '../src/review-continue.ts'
@@ -15,7 +16,7 @@ function world() {
   const source = makeSource(), claim = makeClaim()
   claim.scope.corpus = [source.id]
   const snapshot = makeSnapshot({ sources: [source], claims: [claim] })
-  return { root, source, claim, snapshot, contractHash: sha256Hex(stableJson(snapshot.contract)) }
+  return { root, source, claim, snapshot, contractHash: semanticContractHash(snapshot.contract) }
 }
 
 type Envelope = {

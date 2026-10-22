@@ -8,6 +8,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { currentReviews } from '../src/review-current.ts'
@@ -52,7 +53,7 @@ function batchedFixture(batchSize: number) {
   ])
   const run = () =>
     executeReviewRun({
-      deps: { root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) },
+      deps: { root, adapter, budget: BUDGET, contractHash: semanticContractHash(snapshot.contract) },
       runId: `run_${randomUUID()}`,
       requestId: randomUUID(),
       stages: ['claims'],

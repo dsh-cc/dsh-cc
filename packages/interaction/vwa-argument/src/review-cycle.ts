@@ -16,10 +16,11 @@
  *
  * @module @dsh-cc/vwa-argument/review-cycle
  */
-import { readdirSync } from 'node:fs'
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { ReviewRunStore } from './review-run-store.ts'
-import { fail, VwaFail, type Fail } from './store.ts'
+import { fail, ProjectStore, VwaFail, type Fail } from './store.ts'
+import { stableJson } from './schema.ts'
 import { acquireLock, releaseLock } from './lock.ts'
 import type { ReviewBudget } from './review-budget.ts'
 import type { Id } from './types.ts'
@@ -56,12 +57,118 @@ function latestCycle(all: Request[]): { cycleId: Id; cycleSequence: number } {
   return { cycleId: latest?.cycleId ?? LEGACY_CYCLE, cycleSequence: latest?.cycleSequence ?? 0 }
 }
 
+/**
+ * The project head revision at admission — the revision whose snapshot the
+ * cycle's budget was computed from. Production admission pre-reads a valid
+ * HEAD (tools.ts fails the request otherwise); an unreadable head (no
+ * project at all) yields 0, which no committed revision can be behind.
+ */
+function headRevisionOf(root: string, projectId: Id): number {
+  const head = new ProjectStore(root, projectId).readHead()
+  return head.ok ? head.data.head.revision : 0
+}
+
 /** Short cross-process critical section: no model calls or awaits while held. */
 function withBudgetLock<T>(root: string, projectId: Id, action: () => T): T {
   const dir = join(root, '.dsh', 'vwa', projectId, 'review-budget')
   const refusal = acquireLock(dir)
   if (refusal) throw new VwaFail(refusal)
   try { return action() } finally { releaseLock(dir) }
+}
+
+/**
+ * F3.4: a cycle's persisted budget lives in its OWN sidecar file, never as a
+ * field of the lead request record — a running task periodically writes its
+ * whole in-memory request record back (usage rows), which would silently
+ * revert a budget field revised mid-run. All readers/writers go through
+ * withBudgetLock, so the writes are serialized; the record also carries the
+ * project revision that produced it, so a STALE sync (committed before a
+ * newer revision) can never overwrite a newer budget.
+ */
+interface CycleBudgetRecord {
+  /** The project head revision that produced this budget; 0 = admission baseline. */
+  revision: number
+  budget: ReviewBudget
+}
+
+function cycleBudgetPath(root: string, projectId: Id, cycleId: Id): string {
+  return join(root, '.dsh', 'vwa', projectId, 'review-cycles', `${cycleId}.json`)
+}
+
+/**
+ * The cycle's budget, or undefined for a LEGACY cycle (no sidecar — the
+ * caller's budget governs). A present-but-CORRUPT file throws: falling back
+ * to a stale budget would admit over-limit calls, so the reservation path
+ * must fail closed (the runner surfaces this as a budget refusal).
+ */
+export function readCycleBudget(root: string, projectId: Id, cycleId: Id): ReviewBudget | undefined {
+  const path = cycleBudgetPath(root, projectId, cycleId)
+  let text: string
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw corruptCycleBudget(cycleId, error)
+  }
+  let record: unknown
+  try {
+    record = JSON.parse(text)
+  } catch (error) {
+    throw corruptCycleBudget(cycleId, error)
+  }
+  if (
+    typeof record !== 'object' || record === null ||
+    typeof (record as CycleBudgetRecord).revision !== 'number' ||
+    typeof (record as CycleBudgetRecord).budget !== 'object' || (record as CycleBudgetRecord).budget === null
+  ) {
+    throw corruptCycleBudget(cycleId, new Error('unexpected sidecar shape'))
+  }
+  return (record as CycleBudgetRecord).budget
+}
+
+function corruptCycleBudget(cycleId: Id, cause: unknown): VwaFail {
+  return new VwaFail(fail(
+    'STORE_IO_FAILED',
+    `the review-cycle budget ledger for cycle ${cycleId} is corrupt; refusing to reserve against a damaged file: ${String(cause)}`,
+    false,
+  ))
+}
+
+/** Tolerant read for the update path: corrupt/absent records are simply overwritten (repaired). */
+function readCycleBudgetRecordTolerant(root: string, projectId: Id, cycleId: Id): CycleBudgetRecord | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(cycleBudgetPath(root, projectId, cycleId), 'utf8')) as CycleBudgetRecord
+    return typeof parsed.revision === 'number' ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Atomic sidecar write: a temp file is fsynced and RENAMED over the target —
+ * a crash can never leave a half-written budget file behind (a torn file
+ * would otherwise fail the reservation path closed or, worse, fall back to
+ * a stale budget).
+ */
+function writeCycleBudget(root: string, projectId: Id, cycleId: Id, budget: ReviewBudget, revision: number): void {
+  const target = cycleBudgetPath(root, projectId, cycleId)
+  mkdirSync(join(root, '.dsh', 'vwa', projectId, 'review-cycles'), { recursive: true })
+  const tmp = `${target}.${process.pid}.tmp`
+  const bytes = Buffer.from(stableJson({ revision, budget } satisfies CycleBudgetRecord))
+  const fd = openSync(tmp, 'w')
+  try {
+    let written = 0
+    while (written < bytes.length) written += writeSync(fd, bytes, written)
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  try {
+    renameSync(tmp, target)
+  } catch (error) {
+    try { unlinkSync(tmp) } catch { /* best effort */ }
+    throw error
+  }
 }
 
 /**
@@ -84,7 +191,32 @@ export function reserveCycleRequest(
         : request.continue === true
           ? latest
           : { cycleId: runId, cycleSequence: latest.cycleSequence + 1 }
-      const reserved = { ...request, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
+      // F3.4: a fresh request opening a cycle freezes its budget into the
+      // cycle's sidecar (review-cycles/<cycleId>.json); continuations never
+      // re-stamp it. The `budget` field of the request is transport only —
+      // it is stripped so request-record write-backs cannot clobber the cycle.
+      // F4 consistency check: when the request carries the snapshot revision
+      // its budget was computed from, it must still be the CURRENT head at
+      // reservation time (inside the lock) — otherwise a budget computed
+      // before a concurrent commit would be stamped as the newer revision.
+      // The refused admission gets REVISION_CONFLICT (retryable: re-read and
+      // reload the budget).
+      if (identity.cycleId === runId && request.budget !== undefined) {
+        const headRevision = headRevisionOf(root, projectId)
+        if (request.budgetRevision !== undefined && request.budgetRevision !== headRevision) {
+          return fail(
+            'REVISION_CONFLICT',
+            `the review budget was computed from revision ${request.budgetRevision} but HEAD is ${headRevision}; reload the budget and retry`,
+            true,
+          )
+        }
+        // Stamp the budget's VERIFIED source revision (equal to HEAD here);
+        // a revision-0 stamp would let any delayed revision sync cross over
+        // onto a NEWER cycle (F3).
+        writeCycleBudget(root, projectId, runId, request.budget, request.budgetRevision ?? headRevision)
+      }
+      const { budget: _transport, budgetRevision: _source, ...record } = request
+      const reserved = { ...record, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
       store.reserveRequest(runId, reserved)
       return reserved
     })
@@ -117,18 +249,62 @@ export function cycleUsage(root: string, projectId: Id, excludeRunId?: Id, cycle
  * section. The callback must synchronously reserve locally and append its
  * durable usage row BEFORE returning. Other runs see that row before they
  * can reserve; a crash after it is written still counts against the cycle.
+ *
+ * F3.4: the checked budget is the CYCLE's persisted budget (stored on the
+ * cycle's lead request record), read inside the same lock — not the caller's
+ * snapshot budget. `budget` remains only as the legacy fallback for cycles
+ * whose lead request predates the persisted budget (absent budget field).
  */
 export function reserveCycleCall(
   root: string, projectId: Id, cycleId: Id, budget: ReviewBudget, inputTokens: number,
   reserve: () => boolean,
 ): boolean {
   return withBudgetLock(root, projectId, () => {
+    const cycleBudget = readCycleBudget(root, projectId, cycleId) ?? budget
     const used = cycleUsage(root, projectId, undefined, cycleId)
-    if (used.calls + 1 > budget.maxCallsPerRun ||
-        used.inputTokens + inputTokens > budget.maxInputTokensPerRun ||
-        used.outputTokens + budget.maxOutputTokensPerCall > budget.maxOutputTokensPerRun) return false
+    if (used.calls + 1 > cycleBudget.maxCallsPerRun ||
+        used.inputTokens + inputTokens > cycleBudget.maxInputTokensPerRun ||
+        // The output headroom must be checked against the CALLING RUN's actual
+        // per-call reservation — its locally frozen budget — never the cycle's
+        // (possibly revised) per-call cap: an in-flight run admitted before a
+        // downward revision still reserves its old, larger per-call amount.
+        used.outputTokens + budget.maxOutputTokensPerCall > cycleBudget.maxOutputTokensPerRun) return false
     return reserve()
   })
+}
+
+/**
+ * F3.4: atomically update the LATEST cycle's persisted budget (the sidecar,
+ * under the same budget lock — called by the set-review-settings path after
+ * the mutation commits). `revision` is the project head revision the budget
+ * was computed from: a sync carrying an OLDER revision than the stored one
+ * is rejected (false) so a delayed sync cannot overwrite a newer budget —
+ * the sync runs after the project transaction released its lock, so two
+ * revisions may commit out of sync order. Future admissions in that cycle
+ * see the new ceiling; in-flight runs keep their locally frozen
+ * `deps.budget`. A caller-visible false must be DISCLOSED (see
+ * review-settings-revision.ts), never silently swallowed.
+ */
+export function updateLatestCycleBudget(
+  root: string, projectId: Id, budget: ReviewBudget, revision = 0,
+): boolean {
+  try {
+    return withBudgetLock(root, projectId, () => {
+      const store = new ReviewRunStore(root, projectId)
+      const { cycleId } = latestCycle(requests(root, projectId))
+      if (cycleId === LEGACY_CYCLE) return false
+      if (store.readRequest(cycleId) === undefined) return false
+      const stored = readCycleBudgetRecordTolerant(root, projectId, cycleId)
+      if (stored !== undefined && stored.revision > revision) return false // stale sync
+      writeCycleBudget(root, projectId, cycleId, budget, revision)
+      return true
+    })
+  } catch {
+    // A failed cycle-budget rewrite must not fail the committed mutation; the
+    // revised settings are already in the graph snapshot for new cycles, and
+    // the caller discloses the not-yet-applied state (P3).
+    return false
+  }
 }
 
 /** The budget a continue run may still spend in its cycle. */

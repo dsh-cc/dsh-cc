@@ -7,6 +7,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { executeReviewRun } from '../src/review-runner.ts'
 import { evaluateDelivery } from '../src/delivery-check.ts'
@@ -69,7 +70,7 @@ function fixture(batchSize: number, claims = [makeClaim('fact', 'The council clo
   ])
   const run = () =>
     executeReviewRun({
-      deps: { root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(snapshotWithArtifact.contract)) },
+      deps: { root, adapter, budget: BUDGET, contractHash: semanticContractHash(snapshotWithArtifact.contract) },
       runId: `run_${randomUUID()}`,
       requestId: randomUUID(),
       stages: ['claims'],
@@ -103,7 +104,7 @@ describe('Feature C — delivery per-claim assessments over batched claims recor
       }) }
     }])
     const outcome = await executeReviewRun({
-      deps: { root: f.root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+      deps: { root: f.root, adapter, budget: BUDGET, contractHash: semanticContractHash(f.snapshot.contract) },
       runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['claims', 'arguments'],
       targetClaimIds: claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
     })
@@ -194,7 +195,7 @@ describe('Feature D — report stage progress and failure detail (§D.2)', () =>
       },
     ])
     const outcome = await executeReviewRun({
-      deps: { root: f.root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+      deps: { root: f.root, adapter, budget: BUDGET, contractHash: semanticContractHash(f.snapshot.contract) },
       runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['claims'],
       targetClaimIds: claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
     })
@@ -219,7 +220,7 @@ describe('Feature D — report stage progress and failure detail (§D.2)', () =>
       },
     ])
     const outcome = await executeReviewRun({
-      deps: { root: f.root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+      deps: { root: f.root, adapter, budget: BUDGET, contractHash: semanticContractHash(f.snapshot.contract) },
       runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['claims'],
       targetClaimIds: f.claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
     })
@@ -246,7 +247,7 @@ describe('report progress regressions', () => {
     expect(claims.status).toBe('completed')
     const outcome = await executeReviewRun({
       deps: {
-        root: f.root, budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)),
+        root: f.root, budget: BUDGET, contractHash: semanticContractHash(f.snapshot.contract),
         adapter: fakeAdapter([(req) => {
           const envelope = JSON.parse(req.messages[1]!.content) as {
             context: { currentReviews: { stage: string }[] }
@@ -315,7 +316,7 @@ describe('report progress regressions', () => {
     const f = fixture(1)
     const outcome = await executeReviewRun({
       deps: { root: f.root, adapter: fakeAdapter([() => { throw new ReviewContextError('audit context too large') }]),
-        budget: BUDGET, contractHash: sha256Hex(stableJson(f.snapshot.contract)) },
+        budget: BUDGET, contractHash: semanticContractHash(f.snapshot.contract) },
       runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['audit'],
       targetClaimIds: f.claims.map((c) => c.id), snapshot: f.snapshot,
       artifact: { id: f.artifactId, path: 'report.md', text: f.body }, signal: new AbortController().signal,
@@ -346,7 +347,7 @@ describe('report progress regressions', () => {
     const base = {
       runId: `run_${randomUUID()}`, targetRefs: [{ id: f.artifactId, entityVersion: 1 }],
       dependencyDigest: auditDependencyDigest(f.snapshot, f.artifactId, []), artifactHash: sha256Hex(f.body),
-      contractHash: sha256Hex(stableJson(f.snapshot.contract)), policyHash: policyHash(),
+      contractHash: semanticContractHash(f.snapshot.contract), policyHash: policyHash(),
       reviewerConfigHash: 'reviewer', inputHash: 'audit-key', status: 'completed' as const,
       inputTokens: 0, outputTokens: 0, startedAt: '2026-10-20', endedAt: '2026-10-20',
     }

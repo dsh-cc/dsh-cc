@@ -259,7 +259,8 @@ function vwaInit(
         `(${frozen.budget.maxOutputTokensPerRun}/${frozen.budget.maxOutputTokensPerCall}); ` +
         `with 50% retry headroom ≈ ${Math.floor(maxCallsFittingBudget / 1.5)} review calls per run.`,
       `Suggested claims batch size: ${suggestedClaimsBatchSize(frozen.budget)} — set review-claims-batch-size BEFORE creating projects ` +
-        'with larger graphs (a project\'s frozen budget cannot be changed after init).',
+        'with larger graphs. After init, revise capacity with the argument.update op set-review-settings — ' +
+        'registered sources, evidence, claims and completed review records are preserved.',
     ].join('\n'),
   }
 }

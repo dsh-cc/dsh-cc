@@ -4,8 +4,32 @@ import { sha256Hex, stableJson } from './schema.ts'
 import { POLICY_VERSION } from './policy.ts'
 import review from './contracts/review.schema.json' with { type: 'json' }
 import author from './contracts/author.schema.json' with { type: 'json' }
-import type { Hash } from './types.ts'
+import type { Hash, ReviewRecord } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
+
+/**
+ * F3.1 identity policy: the semantic contract view strips `reviewSettings`
+ * (capacity/budget numbers) from the record identity. Review records are keyed
+ * by their semantic inputs (§A.2); a capacity change must not invalidate
+ * completed-record reuse, so every identity surface hashes THIS view, never
+ * the full contract.
+ */
+export function semanticContract<C extends { reviewSettings?: unknown }>(contract: C): Omit<C, 'reviewSettings'> {
+  const { reviewSettings: _stripped, ...semantic } = contract as C & Record<string, unknown>
+  return semantic as Omit<C, 'reviewSettings'>
+}
+export function semanticContractHash(contract: { reviewSettings?: unknown }): Hash {
+  return sha256Hex(stableJson(semanticContract(contract)))
+}
+/**
+ * F3.1: the single record↔recomputed-cache-key matcher. Every reuse and
+ * currentness site (continue planning, runner matching, collectCachedRecords,
+ * findReusableAudit/hasReusableAudit, matchesReviewTask) delegates here so key
+ * comparison can never diverge between sites.
+ */
+export function recordMatchesKey(record: Pick<ReviewRecord, 'inputHash'>, key: Hash): boolean {
+  return record.inputHash === key
+}
 
 export const RUBRIC_VERSION = 'humanities-v1'
 export const RULES: Record<string, string> = {

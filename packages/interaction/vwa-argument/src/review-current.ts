@@ -1,7 +1,7 @@
 /** Select current, fully covered review tasks; history never becomes current by recency alone. */
 import { buildReverseIndex } from './dependencies.ts'
 import { sha256Hex, stableJson, validateReviewResponse } from './schema.ts'
-import { policyHash, promptHash } from './review-contract.ts'
+import { policyHash, promptHash, recordMatchesKey, semanticContract, semanticContractHash } from './review-contract.ts'
 import { planStage, type ReviewStage, type ReviewTask } from './review-plan.ts'
 import { deduplicateBySemanticHash, semanticRecordHash, taskDependencyDigest } from './review-input.ts'
 import { cacheKey, detectDisagreement, disagreementFinding } from './review-run-store.ts'
@@ -20,11 +20,15 @@ export function matchesReviewTask(
     (expected.reviewerConfigHash === undefined || r.reviewerConfigHash === expected.reviewerConfigHash) &&
     r.dependencyDigest === expected.dependencyDigest &&
     stableJson(r.targetRefs) === stableJson(task.targetRefs) &&
-    r.inputHash === cacheKey({
-      stage: task.stage, targetRefs: task.targetRefs, requiredRules: task.requiredRules,
-      dependencyDigest: expected.dependencyDigest, contractHash: expected.contractHash,
-      policyHash: policyHash(), reviewerConfigHash: r.reviewerConfigHash, promptHash: promptHash(task.stage),
-    })
+    // F3.1: key comparison goes through the one shared matcher.
+    recordMatchesKey(
+      r,
+      cacheKey({
+        stage: task.stage, targetRefs: task.targetRefs, requiredRules: task.requiredRules,
+        dependencyDigest: expected.dependencyDigest, contractHash: expected.contractHash,
+        policyHash: policyHash(), reviewerConfigHash: r.reviewerConfigHash, promptHash: promptHash(task.stage),
+      }),
+    )
 }
 
 export interface CurrentReviews {
@@ -43,7 +47,7 @@ export function currentReviews(
     findings: Finding[] = []
   const stages = {} as CurrentReviews['stages']
   const index = buildReverseIndex(snapshot)
-  const contractHash = sha256Hex(stableJson(snapshot.contract))
+  const contractHash = semanticContractHash(snapshot.contract)
   for (const stage of ['sources', 'support', 'claims', 'arguments'] as const) {
     const tasks = planStage({ stage, snapshot, index, targetClaimIds: targets, core: new Set(), claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1 })
     const verdicts: Verdict[] = []
@@ -122,7 +126,8 @@ export function auditDependencyDigest(snapshot: ProjectSnapshot, artifactId: Id,
   return sha256Hex(
     stableJson({
       artifact: artifact ?? artifactId,
-      contract: snapshot.contract,
+      // F3.1: audit identity uses the semantic contract (capacity excluded).
+      contract: semanticContract(snapshot.contract),
       graph: [...index.claims.values()],
       groups: snapshot.groups,
       arguments: snapshot.arguments,

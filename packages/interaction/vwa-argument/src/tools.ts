@@ -25,8 +25,10 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readUserSettingsSync } from './settings.ts'
 import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
+import { semanticContractHash } from './review-contract.ts'
 import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
+import { afterRevisionCommit, discloseCycleBudgetStatus } from './review-settings-revision.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
 import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
@@ -250,27 +252,28 @@ export function registerArgumentTools(
         name: 'argument.update',
         description:
       'Atomically mutate a VWA lane-2 argument graph: set the project contract, upsert claims/' +
-      'evidence groups/arguments/issues, or bind the artifact. Full-graph validation runs before ' +
-      'commit; failures report a stable error code and never partially commit.',
-    parameters: {
+      'evidence groups/arguments/issues, revise the frozen review settings (op set-review-settings), ' +
+      'or bind the artifact. Full-graph validation runs before commit; failures report a stable error code and never partially commit.',    parameters: {
       ...common(),
       input: {
         type: 'object',
         additionalProperties: true,
         required: true,
-        description: 'Mutation union: {op: set-contract|upsert|bind-artifact, …}',
+        description: 'Mutation union: {op: set-contract|upsert|bind-artifact|set-review-settings, …}',
       },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
       const args = guard(raw)
       if ('ok' in args) return args
-      return finish(
-        runTool(deps, args, exec as ExecContext, { op: 'update', input: args.input }, (_snapshot, graph) => {
-          const outcome = applyMutation(graph, args.input as Mutation)
-          return { result: outcome }
-        }),
-      )
+      const root = deps.workspaceRoot(exec.agent)
+      if (root === undefined) return fail('STORE_IO_FAILED', 'no workspace root is bound to this session', false)
+      const result = runTool(deps, args, exec as ExecContext, { op: 'update', input: args.input }, (_snapshot, graph) => {
+        const outcome = applyMutation(graph, args.input as Mutation)
+        return { result: outcome }
+      })
+      const cycleBudgetUpdated = afterRevisionCommit(root, args.projectId, (args.input as { op?: unknown }).op, result)
+      return finish(discloseCycleBudgetStatus(result, cycleBudgetUpdated))
     },
       }),
     ),
@@ -393,7 +396,7 @@ export function registerArgumentTools(
               adapter: review.adapter,
               maxOutputTokens: review.budget.maxOutputTokensPerCall,
               signal: exec.signal,
-              contractHash: sha256Hex(stableJson(snapshot.contract)),
+              contractHash: semanticContractHash(snapshot.contract),
               snapshot,
               stages,
               targetClaimIds: resolveTargetClaimIds(snapshot, body),
@@ -427,6 +430,8 @@ export function registerArgumentTools(
         runId,
         admissionRequestRecord({
           root, review, snapshot, stages, body, requestId: args.requestId, runId, taskId, payloadHash,
+          // F4: the budget's source revision — verified against HEAD in the reservation lock.
+          headRevision: head.data.head.revision,
           ...(artifact === undefined ? {} : { artifact }),
         }),
       )
@@ -439,7 +444,7 @@ export function registerArgumentTools(
             budget: review.budget,
             ...(review.maxArtifactChars ? { maxArtifactChars: review.maxArtifactChars } : {}),
             ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
-            contractHash: sha256Hex(stableJson(snapshot.contract)),
+            contractHash: semanticContractHash(snapshot.contract),
             readSnapshot,
             emitProgress: (event) => {
               tasks.emitProgress(event)

@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { vwaAdjudicate } from '../src/commands.ts'
 import { evaluateDelivery } from '../src/delivery-check.ts'
@@ -61,7 +62,7 @@ async function adjudicatedBatch(keepAdditionalFinding = false) {
     }),
   })])
   const outcome = await executeReviewRun({
-    deps: { root: workspace.root, adapter, budget: frozen.budget, contractHash: sha256Hex(stableJson(snapshot.contract)) },
+    deps: { root: workspace.root, adapter, budget: frozen.budget, contractHash: semanticContractHash(snapshot.contract) },
     runId: `run_${randomUUID()}`, requestId: randomUUID(), stages: ['claims'],
     targetClaimIds: [claim.id, other.id], snapshot, signal: new AbortController().signal,
   })
