@@ -362,5 +362,37 @@ describe('cycle-budget review fixes (P1/P2/P3)', () => {
     expect(updateLatestCycleBudget(root, projectId, one, 3)).toBe(true)
     expect(readCycleBudget(root, projectId, 'run_lead')?.maxCallsPerRun).toBe(1)
   })
+
+  it('F3: a new cycle stamps its actual head revision, so a stale sync cannot cross over onto it', () => {
+    const made = initWorkspace(), root = made.root, projectId = made.projectId
+    // Advance the project head to revision 3 (B's committed revision).
+    let head = made.store.readHead()
+    if (!head.ok) throw new Error(head.message)
+    for (let revision = head.data.head.revision; revision < 3; revision++) {
+      const bumped = made.store.withTransaction({
+        expectedRevision: revision, requestId: uuid(), payloadHash: uuid(),
+        applyFn: (snapshot) => {
+          applyMutation(new GraphContext(snapshot, 10_000), { op: 'set-review-settings', reviewSettings: { budget: { maxCallsPerRun: 3 } } })
+          return { result: null }
+        },
+      })
+      expect(bumped.ok).toBe(true)
+    }
+    head = made.store.readHead()
+    if (!head.ok) throw new Error(head.message)
+    expect(head.data.head.revision).toBe(3)
+    const admitted = { ...base, maxCallsPerRun: 2, maxOutputTokensPerCall: 20 }
+    const one = { ...admitted, maxCallsPerRun: 1 }
+    const nine = { ...admitted, maxCallsPerRun: 9 }
+    // Cycle C1: B's revision-3 sync lands on it (ceiling 1).
+    reserveCycleRequest(root, projectId, 'run_c1', leadRequest(admitted))
+    expect(updateLatestCycleBudget(root, projectId, one, 3)).toBe(true)
+    // A NEW cycle opens AFTER B's revision — its sidecar must stamp the actual
+    // head revision (3), not 0, so A's delayed revision-2 sync is rejected
+    // instead of overwriting the new cycle's ceiling back to 9.
+    reserveCycleRequest(root, projectId, 'run_c2', leadRequest(one))
+    expect(updateLatestCycleBudget(root, projectId, nine, 2)).toBe(false)
+    expect(readCycleBudget(root, projectId, 'run_c2')?.maxCallsPerRun).toBe(1)
+  })
 })
 

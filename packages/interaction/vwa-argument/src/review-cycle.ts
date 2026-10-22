@@ -19,7 +19,7 @@
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { ReviewRunStore } from './review-run-store.ts'
-import { fail, VwaFail, type Fail } from './store.ts'
+import { fail, ProjectStore, VwaFail, type Fail } from './store.ts'
 import { stableJson } from './schema.ts'
 import { acquireLock, releaseLock } from './lock.ts'
 import type { ReviewBudget } from './review-budget.ts'
@@ -55,6 +55,17 @@ function latestCycle(all: Request[]): { cycleId: Id; cycleSequence: number } {
     (best, r) => (r.cycleSequence ?? 0) > (best?.cycleSequence ?? 0) ? r : best, undefined,
   )
   return { cycleId: latest?.cycleId ?? LEGACY_CYCLE, cycleSequence: latest?.cycleSequence ?? 0 }
+}
+
+/**
+ * The project head revision at admission — the revision whose snapshot the
+ * cycle's budget was computed from. Production admission pre-reads a valid
+ * HEAD (tools.ts fails the request otherwise); an unreadable head (no
+ * project at all) yields 0, which no committed revision can be behind.
+ */
+function headRevisionOf(root: string, projectId: Id): number {
+  const head = new ProjectStore(root, projectId).readHead()
+  return head.ok ? head.data.head.revision : 0
 }
 
 /** Short cross-process critical section: no model calls or awaits while held. */
@@ -184,10 +195,13 @@ export function reserveCycleRequest(
       // cycle's sidecar (review-cycles/<cycleId>.json); continuations never
       // re-stamp it. The `budget` field of the request is transport only —
       // it is stripped so request-record write-backs cannot clobber the cycle.
-      // Revision 0 = admission baseline: any committed project revision (≥1)
-      // supersedes it.
+      // The sidecar is stamped with the ACTUAL project head revision the
+      // admission read (production admission always pre-reads a valid HEAD);
+      // only an unreadable head falls back to 0, which no committed revision
+      // can be behind. A revision-0 stamp would let any delayed revision sync
+      // cross over onto a NEWER cycle (F3).
       if (identity.cycleId === runId && request.budget !== undefined) {
-        writeCycleBudget(root, projectId, runId, request.budget, 0)
+        writeCycleBudget(root, projectId, runId, request.budget, headRevisionOf(root, projectId))
       }
       const { budget: _transport, ...record } = request
       const reserved = { ...record, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
