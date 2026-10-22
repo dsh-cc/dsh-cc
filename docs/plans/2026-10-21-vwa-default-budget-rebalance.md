@@ -1,6 +1,6 @@
 # VWA Post-lane-2 Fix Batch — Fix 2: Default Budget Rebalance and Honest Refusal Messaging
 
-## Status: Designed — three-lane blind review converged (r1 full review: GO-WITH-CHANGES on all seats; r2 delta confirmation; r3 micro-confirmation — final round GO on all seats). Implementation pending; user sign-off pending.
+## Status: Implemented — PR #277 (open, pending merge). Three-lane blind review converged (r1 full review: GO-WITH-CHANGES on all seats; r2 delta confirmation; r3 micro-confirmation — final round GO on all seats). F2.4 note: the package READMEs (en/zh) do not list numeric defaults, so no README change was needed; the §C.2.2 historical design table is intentionally untouched per F2.4.
 
 All anchors cite tree `b64af0e8`, verified 2026-10-21. Stacks on Fix 1 (the
 gate's arithmetic is Fix 1's contract).

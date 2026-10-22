@@ -113,9 +113,9 @@ describe('/vwa init budget capacity guidance (Feature C §C.2.4)', () => {
     const { root } = initWorkspace()
     const result = await run(root, 'init')
     expect(result.kind).toBe('success')
-    // Ship defaults: 24000/3000 → 8 full calls, floor(8 / 1.5) = 5 with headroom.
-    expect(result.text).toContain('Budget capacity (frozen at init): 8 full calls')
-    expect(result.text).toContain('50% retry headroom ≈ 5 review calls per run.')
+    // Ship defaults: 96000/3000 → 32 full calls, floor(32 / 1.5) = 21 with headroom.
+    expect(result.text).toContain('Budget capacity (frozen at init): 32 full calls')
+    expect(result.text).toContain('50% retry headroom ≈ 21 review calls per run.')
     expect(result.text).toContain('Suggested claims batch size: 2')
     expect(result.text).toContain('review-claims-batch-size')
     expect(result.text).not.toContain('increase the budget on this project')

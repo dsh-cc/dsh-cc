@@ -149,11 +149,23 @@ export function budgetFeasibilityRefusal(input: {
     reasons.push(`${estimatedOutputTokens} output tokens exceed the available output token budget of ${maxOutputTokens}`)
   }
   if (exceededDimensions.length === 0) return undefined
+  // Dimension-aware guidance (F2.3): a calls-bound refusal cannot be fixed by
+  // raising the output-token budget (or the claims batch size alone), so the
+  // settings to raise must follow the failed dimension(s).
+  const raiseSettings = exceededDimensions.includes('calls')
+    ? exceededDimensions.includes('outputTokens')
+      ? 'review-max-calls-per-run and review-max-output-tokens-per-run'
+      : 'review-max-calls-per-run'
+    : 'review-max-output-tokens-per-run (or review-claims-batch-size)'
   return fail(
     'BUDGET_INSUFFICIENT',
-    `Planned ${estimatedCalls} base calls with retry headroom: ${reasons.join('; ')} (reservation upper bound; ` +
-      'actual usage may be lower). Options: (a) reduce target scope, (b) enable claims batching on a new project, ' +
-      '(c) create a new project with a larger budget.',
+    `Planned ${estimatedCalls} calls (${estimatedWithRetries} with retry headroom) exceeds the frozen budget on ` +
+      `${reasons.join('; ')}. (Reservation upper bound; actual usage may be lower.) Options: ` +
+      '(a) reduce the review scope (targetClaimIds / stage); ' +
+      `(b) raise ${raiseSettings} in settings BEFORE creating a ` +
+      'project — existing projects keep their frozen budget; ' +
+      '(c) create a new project with a larger budget (registered sources, evidence, claims and completed review ' +
+      'records are NOT carried over).',
     false,
     {
       plannedCalls,
