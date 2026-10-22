@@ -253,9 +253,7 @@ export function registerArgumentTools(
         description:
       'Atomically mutate a VWA lane-2 argument graph: set the project contract, upsert claims/' +
       'evidence groups/arguments/issues, revise the frozen review settings (op set-review-settings), ' +
-      'or bind the artifact. Full-graph validation runs before ' +
-      'commit; failures report a stable error code and never partially commit.',
-    parameters: {
+      'or bind the artifact. Full-graph validation runs before commit; failures report a stable error code and never partially commit.',    parameters: {
       ...common(),
       input: {
         type: 'object',
@@ -432,6 +430,8 @@ export function registerArgumentTools(
         runId,
         admissionRequestRecord({
           root, review, snapshot, stages, body, requestId: args.requestId, runId, taskId, payloadHash,
+          // F4: the budget's source revision — verified against HEAD in the reservation lock.
+          headRevision: head.data.head.revision,
           ...(artifact === undefined ? {} : { artifact }),
         }),
       )

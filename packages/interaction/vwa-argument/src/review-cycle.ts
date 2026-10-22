@@ -195,15 +195,27 @@ export function reserveCycleRequest(
       // cycle's sidecar (review-cycles/<cycleId>.json); continuations never
       // re-stamp it. The `budget` field of the request is transport only —
       // it is stripped so request-record write-backs cannot clobber the cycle.
-      // The sidecar is stamped with the ACTUAL project head revision the
-      // admission read (production admission always pre-reads a valid HEAD);
-      // only an unreadable head falls back to 0, which no committed revision
-      // can be behind. A revision-0 stamp would let any delayed revision sync
-      // cross over onto a NEWER cycle (F3).
+      // F4 consistency check: when the request carries the snapshot revision
+      // its budget was computed from, it must still be the CURRENT head at
+      // reservation time (inside the lock) — otherwise a budget computed
+      // before a concurrent commit would be stamped as the newer revision.
+      // The refused admission gets REVISION_CONFLICT (retryable: re-read and
+      // reload the budget).
       if (identity.cycleId === runId && request.budget !== undefined) {
-        writeCycleBudget(root, projectId, runId, request.budget, headRevisionOf(root, projectId))
+        const headRevision = headRevisionOf(root, projectId)
+        if (request.budgetRevision !== undefined && request.budgetRevision !== headRevision) {
+          return fail(
+            'REVISION_CONFLICT',
+            `the review budget was computed from revision ${request.budgetRevision} but HEAD is ${headRevision}; reload the budget and retry`,
+            true,
+          )
+        }
+        // Stamp the budget's VERIFIED source revision (equal to HEAD here);
+        // a revision-0 stamp would let any delayed revision sync cross over
+        // onto a NEWER cycle (F3).
+        writeCycleBudget(root, projectId, runId, request.budget, request.budgetRevision ?? headRevision)
       }
-      const { budget: _transport, ...record } = request
+      const { budget: _transport, budgetRevision: _source, ...record } = request
       const reserved = { ...record, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
       store.reserveRequest(runId, reserved)
       return reserved

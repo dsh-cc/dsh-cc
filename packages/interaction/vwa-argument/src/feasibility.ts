@@ -221,6 +221,8 @@ export function admissionRequestRecord(input: {
   taskId: string
   payloadHash: Hash
   artifact?: { id: Id; text: string }
+  /** The head revision the budget/snapshot was read from (F4 consistency stamp). */
+  headRevision?: number
 }): Parameters<ReviewRunStore['writeRequest']>[1] {
   return {
     schemaVersion: 1,
@@ -234,6 +236,9 @@ export function admissionRequestRecord(input: {
     status: 'queued',
     // F3.4: the snapshot budget frozen on the cycle's lead request at admission.
     budget: input.review.budget,
+    // F4: the snapshot revision that budget was computed from — verified
+    // against HEAD inside the reservation lock (review-cycle.ts).
+    ...(input.headRevision === undefined ? {} : { budgetRevision: input.headRevision }),
     retryAllowance: reviewRetryAllowance(input),
     inputTokens: 0,
     outputTokens: 0,

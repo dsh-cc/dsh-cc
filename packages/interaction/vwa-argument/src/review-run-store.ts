@@ -89,6 +89,12 @@ export class ReviewRunStore {
        * (review-cycle.ts), which request write-backs can never clobber.
        */
       budget?: import('./review-budget.ts').ReviewBudget
+      /**
+       * F4 transport-only: the project head revision the `budget` was computed
+       * from; reserveCycleRequest verifies it against the current HEAD inside
+       * the budget lock and refuses with REVISION_CONFLICT on mismatch.
+       */
+      budgetRevision?: number
       taskId?: string
       processId?: number
       processNonce?: string

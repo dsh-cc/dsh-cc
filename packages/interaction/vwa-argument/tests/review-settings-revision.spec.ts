@@ -253,10 +253,11 @@ describe('F3.4 cycle budget persistence', () => {
 describe('cycle-budget review fixes (P1/P2/P3)', () => {
   const base = freezeReviewSettings().budget
 
-  function leadRequest(budget: typeof base): Parameters<typeof reserveCycleRequest>[3] {
+  function leadRequest(budget: typeof base, budgetRevision?: number, runId = 'run_lead'): Parameters<typeof reserveCycleRequest>[3] {
     return {
-      schemaVersion: 1, requestId: 'r1', runId: 'run_lead', stage: 'claims', targetClaimIds: [],
+      schemaVersion: 1, requestId: 'r1', runId, stage: 'claims', targetClaimIds: [],
       status: 'running', calls: 0, inputTokens: 0, outputTokens: 0, budget,
+      ...(budgetRevision === undefined ? {} : { budgetRevision }),
       startedAt: '2026-10-21T00:00:00.000Z',
     }
   }
@@ -393,6 +394,56 @@ describe('cycle-budget review fixes (P1/P2/P3)', () => {
     reserveCycleRequest(root, projectId, 'run_c2', leadRequest(one))
     expect(updateLatestCycleBudget(root, projectId, nine, 2)).toBe(false)
     expect(readCycleBudget(root, projectId, 'run_c2')?.maxCallsPerRun).toBe(1)
+  })
+
+  it('F4: a budget computed from a stale snapshot cannot be stamped as the newer revision', () => {
+    const made = initWorkspace(), root = made.root, projectId = made.projectId
+    // Advance the project head to revision 2 (A's revision).
+    let head = made.store.readHead()
+    if (!head.ok) throw new Error(head.message)
+    for (let revision = head.data.head.revision; revision < 2; revision++) {
+      const bumped = made.store.withTransaction({
+        expectedRevision: revision, requestId: uuid(), payloadHash: uuid(),
+        applyFn: (snapshot) => {
+          applyMutation(new GraphContext(snapshot, 10_000), { op: 'set-review-settings', reviewSettings: { budget: { maxCallsPerRun: 3 } } })
+          return { result: null }
+        },
+      })
+      expect(bumped.ok).toBe(true)
+    }
+    const admitted = { ...base, maxCallsPerRun: 2, maxOutputTokensPerCall: 20 }
+    const one = { ...admitted, maxCallsPerRun: 1 }
+    const nine = { ...admitted, maxCallsPerRun: 9 }
+    // B commits revision 3 (ceiling 1), opens and syncs its own cycle.
+    const bumped3 = made.store.withTransaction({
+      expectedRevision: 2, requestId: uuid(), payloadHash: uuid(),
+      applyFn: (snapshot) => {
+        applyMutation(new GraphContext(snapshot, 10_000), { op: 'set-review-settings', reviewSettings: { budget: { maxCallsPerRun: 1 } } })
+        return { result: null }
+      },
+    })
+    expect(bumped3.ok).toBe(true)
+    reserveCycleRequest(root, projectId, 'run_b', leadRequest(one, 3, 'run_b'))
+    expect(updateLatestCycleBudget(root, projectId, one, 3)).toBe(true)
+    // A's admission prepared its budget from the revision-2 snapshot (ceiling 9)
+    // and passed the tool-layer HEAD check BEFORE B's commit; by reservation
+    // time HEAD has moved to 3 — the reservation must be refused instead of
+    // stamping the stale budget as revision 3.
+    const stale = reserveCycleRequest(root, projectId, 'run_a', leadRequest(nine, 2, 'run_a'))
+    expect('ok' in stale).toBe(true)
+    if ('ok' in stale) {
+      expect(stale.code).toBe('REVISION_CONFLICT')
+      expect(stale.retryable).toBe(true)
+    }
+    // Nothing was reserved and no sidecar was written for the refused run.
+    const store = new ReviewRunStore(root, projectId)
+    expect(store.readRequest('run_a')).toBeUndefined()
+    expect(readCycleBudget(root, projectId, 'run_a')).toBeUndefined()
+    // A retry with a budget reloaded from the CURRENT head revision succeeds
+    // and stamps that revision.
+    const retried = reserveCycleRequest(root, projectId, 'run_a2', leadRequest(one, 3, 'run_a2'))
+    expect('ok' in retried).toBe(false)
+    expect(readCycleBudget(root, projectId, 'run_a2')?.maxCallsPerRun).toBe(1)
   })
 })
 
