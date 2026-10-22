@@ -28,6 +28,7 @@ import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.t
 import { semanticContractHash } from './review-contract.ts'
 import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
+import { afterRevisionCommit } from './review-settings-revision.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
 import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
@@ -259,19 +260,21 @@ export function registerArgumentTools(
         type: 'object',
         additionalProperties: true,
         required: true,
-        description: 'Mutation union: {op: set-contract|upsert|bind-artifact, …}',
+        description: 'Mutation union: {op: set-contract|upsert|bind-artifact|set-review-settings, …}',
       },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
       const args = guard(raw)
       if ('ok' in args) return args
-      return finish(
-        runTool(deps, args, exec as ExecContext, { op: 'update', input: args.input }, (_snapshot, graph) => {
-          const outcome = applyMutation(graph, args.input as Mutation)
-          return { result: outcome }
-        }),
-      )
+      const root = deps.workspaceRoot(exec.agent)
+      if (root === undefined) return fail('STORE_IO_FAILED', 'no workspace root is bound to this session', false)
+      const result = runTool(deps, args, exec as ExecContext, { op: 'update', input: args.input }, (_snapshot, graph) => {
+        const outcome = applyMutation(graph, args.input as Mutation)
+        return { result: outcome }
+      })
+      afterRevisionCommit(root, args.projectId, (args.input as { op?: unknown }).op, result)
+      return finish(result)
     },
       }),
     ),

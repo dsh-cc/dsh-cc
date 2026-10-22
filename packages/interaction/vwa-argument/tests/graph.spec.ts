@@ -295,8 +295,10 @@ describe('contract mutation (§10.5 set-contract)', () => {
     const graph = new GraphContext(structuredClone(made.snapshot), 10_000)
     const outcome = applyMutation(graph, {
       op: 'set-contract',
-      contract: { ...made.snapshot.contract, mode: 'reviewed' },
-    })
+      // F3.3: a set-contract payload must not carry reviewSettings — the frozen
+      // settings are preserved when absent (revising them is the new op's job).
+      contract: { ...made.snapshot.contract, mode: 'reviewed', reviewSettings: undefined },
+    } as never)
     expect(outcome.contractChanged).toBe(true)
     expect(graph.snapshot.contract.mode).toBe('reviewed')
   })

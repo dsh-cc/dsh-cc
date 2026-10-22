@@ -230,6 +230,8 @@ export function admissionRequestRecord(input: {
     ...(input.body.continue === true ? { continue: true } : {}),
     taskId: input.taskId,
     status: 'queued',
+    // F3.4: the snapshot budget frozen on the cycle's lead request at admission.
+    budget: input.review.budget,
     retryAllowance: reviewRetryAllowance(input),
     inputTokens: 0,
     outputTokens: 0,

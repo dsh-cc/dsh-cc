@@ -14,15 +14,16 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { ajvErrors, authorDefValidator, spanError } from './schema.ts'
-import { VwaFail, fail } from './store.ts'
-import type { Fail } from './store.ts'
-import { buildReverseIndex, findEntity } from './dependencies.ts'
+import { ajvErrors, authorDefValidator } from './schema.ts'
+import { VwaFail, fail, type Fail } from './store.ts'
+import { reviseFrozenSettings, type PatchReviewSettings, type ReviewSettingsRevisionOutcome } from './review-settings-revision.ts'
+import type { FrozenReviewSettings } from './review-config.ts'
+import { computeDeletionClosure, computeDeletionOrder, findReferencesDetailed } from './references.ts'
 import type { AnyEntity, EntityKind, ReverseIndex } from './dependencies.ts'
 import { applyBindArtifact } from './artifact.ts'
-import { computeDeletionClosure, computeDeletionOrder, findReferencesDetailed } from './references.ts'
+import { buildReverseIndex, findEntity } from './dependencies.ts'
 import type {
-  Argument, Artifact, Claim, Entity, Evidence, EvidenceGroup, Id, Issue, Occurrence,
+  Argument, Artifact, Claim, Entity, EvidenceGroup, Id, Issue, Occurrence,
   ProjectContract, ProjectSnapshot,
 } from './types.ts'
 
@@ -45,6 +46,11 @@ export type Mutation =
     cascade?: boolean
   }
   | { op: 'bind-artifact'; artifactId?: Id; path: string; occurrences: Occurrence[]; outline: Artifact['outline'] }
+  // F3.3: partial capacity revision of the frozen review settings (never maxContextChars).
+  // F3.3: partial capacity revision of the frozen review settings (never maxContextChars).
+  | { op: 'set-review-settings'; reviewSettings: PatchReviewSettings }
+
+export type { PatchReviewSettings } from './review-settings-revision.ts'
 
 export type CreateType = 'claim' | 'group' | 'argument' | 'issue'
 
@@ -128,25 +134,7 @@ function requireNonEmpty(body: Record<string, unknown>, fields: string[]): void 
   }
 }
 
-/** Quote === decodedSnapshot.slice(span) and contextSpan ⊇ span, ≤12000 units (§5.1). */
-export function validateEvidenceAgainstSnapshot(
-  evidence: Pick<Evidence, 'span' | 'quote' | 'contextSpan'>,
-  snapshotText: string,
-): void {
-  const spanProblem = spanError(evidence.span, snapshotText)
-  if (spanProblem !== '') reject('SCHEMA_INVALID', `evidence span invalid: ${spanProblem}`)
-  if (evidence.quote !== snapshotText.slice(evidence.span.start, evidence.span.end)) {
-    reject('SCHEMA_INVALID', 'quote does not match the snapshot slice (UTF-16 code-unit compare)')
-  }
-  const contextProblem = spanError(evidence.contextSpan, snapshotText)
-  if (contextProblem !== '') reject('SCHEMA_INVALID', `contextSpan invalid: ${contextProblem}`)
-  if (evidence.contextSpan.start > evidence.span.start || evidence.contextSpan.end < evidence.span.end) {
-    reject('SCHEMA_INVALID', 'contextSpan must contain span')
-  }
-  if (evidence.contextSpan.end - evidence.contextSpan.start > 12000) {
-    reject('CONTEXT_TOO_LARGE', 'context exceeds 12000 code units; provide an explicitly smaller range')
-  }
-}
+export { validateEvidenceAgainstSnapshot } from './evidence-span.ts'
 
 /** Result of one committed mutation set. */
 export interface MutationOutcome {
@@ -155,20 +143,25 @@ export interface MutationOutcome {
   contractChanged: boolean
   /** Feature D §D.4.2: cascade-deleted entities in deletion order (leaves first). */
   cascadeDeleted?: Id[]
+  // F3.3 set-review-settings only: revised keys with old/new, the reuse disclosure, and the merged settings (F3.4).
+  fieldsChanged?: Record<string, { old: unknown; new: unknown }>
+  reuseStatement?: string
+  reviewSettings?: FrozenReviewSettings
 }
 
-/** Valid mutation ops (§D.1); anything else is rejected before dispatch. */
-const VALID_OPS = new Set(['set-contract', 'upsert', 'bind-artifact'])
+/** Valid mutation ops (§D.1 + F3.3); anything else is rejected before dispatch. */
+const VALID_OPS = new Set(['set-contract', 'upsert', 'bind-artifact', 'set-review-settings'])
 
 /** Apply one mutation to the working snapshot in place; full validation on completion (§10.5). */
 export function applyMutation(graph: GraphContext, mutation: Mutation): MutationOutcome {
   const changedIds: Id[] = []
   let contractChanged = false
   let cascadeDeleted: Id[] | undefined
+  let revision: ReviewSettingsRevisionOutcome & { reviewSettings: FrozenReviewSettings } | undefined
   // Feature D §D.1: validate the op enum at the entrance, before dispatch — an
   // unrecognized op used to fall through to bind-artifact and TypeError.
   if (typeof mutation.op !== 'string' || !VALID_OPS.has(mutation.op)) {
-    reject('SCHEMA_INVALID', `missing or unknown op: got ${JSON.stringify((mutation as { op?: unknown }).op)}; expected one of set-contract, upsert, bind-artifact`)
+    reject('SCHEMA_INVALID', `missing or unknown op: got ${JSON.stringify((mutation as { op?: unknown }).op)}; expected one of set-contract, upsert, bind-artifact, set-review-settings`)
   }
   if (mutation.op === 'upsert' && (!Array.isArray(mutation.creates) || !Array.isArray(mutation.updates) || !Array.isArray(mutation.deletes))) {
     reject('SCHEMA_INVALID', 'upsert requires creates, updates, and deletes arrays')
@@ -176,10 +169,23 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
   if (mutation.op === 'set-contract') {
     validateDef('ProjectContract', mutation.contract)
     if (mutation.contract.question.trim() === '') reject('SCHEMA_INVALID', 'contract.question must be non-empty')
+    // F3.3: with the set-review-settings op available, a set-contract payload
+    // carrying reviewSettings is an explicit error (it used to be silently overridden).
+    if (mutation.contract.reviewSettings !== undefined) {
+      reject('SCHEMA_INVALID', 'set-contract must not carry reviewSettings; use the set-review-settings mutation op (F3.3) to revise the frozen review settings')
+    }
+    // Absent reviewSettings keeps the frozen ones (F3.3: carrying them is the error above).
     const reviewSettings = graph.snapshot.contract.reviewSettings
     graph.snapshot.contract = { ...mutation.contract, ...(reviewSettings ? { reviewSettings } : {}) }
     contractChanged = true // §15: contract change invalidates all project semantic reviews.
     changedIds.push('contract')
+  } else if (mutation.op === 'set-review-settings') {
+    // F3.3: partial patch merged in review-settings-revision.ts; contractChanged
+    // stays FALSE there (identity excludes reviewSettings, F3.1).
+    const revised = reviseFrozenSettings(graph.snapshot.contract, mutation.reviewSettings)
+    graph.snapshot.contract = revised.contract
+    changedIds.push('contract')
+    revision = revised.revision
   } else if (mutation.op === 'upsert') {
     const newIds = new Map<string, Id>()
     for (const create of mutation.creates) {
@@ -214,7 +220,13 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
     changedIds.push(mutation.artifactId ?? 'artifact')
   }
   postValidate(graph.snapshot)
-  return { changedIds, affectedClaimIds: affectedClaims(graph, changedIds), contractChanged, ...(cascadeDeleted ? { cascadeDeleted } : {}) }
+  return {
+    changedIds,
+    affectedClaimIds: affectedClaims(graph, changedIds),
+    contractChanged,
+    ...(cascadeDeleted ? { cascadeDeleted } : {}),
+    ...(revision ? { fieldsChanged: revision.fieldsChanged, reuseStatement: revision.reuseStatement, reviewSettings: revision.reviewSettings } : {}),
+  }
 }
 
 function affectedClaims(graph: GraphContext, changedIds: Id[]): Id[] {

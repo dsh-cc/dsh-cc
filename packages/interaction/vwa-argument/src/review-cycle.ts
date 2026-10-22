@@ -84,7 +84,12 @@ export function reserveCycleRequest(
         : request.continue === true
           ? latest
           : { cycleId: runId, cycleSequence: latest.cycleSequence + 1 }
-      const reserved = { ...request, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
+      // F3.4: a fresh request opening a cycle freezes its budget on the
+      // cycle's lead request record; continuations never re-stamp it.
+      const leadBudget = identity.cycleId === runId && request.budget !== undefined
+        ? { budget: request.budget }
+        : {}
+      const reserved = { ...request, ...identity, ...leadBudget, startedAt: prior?.startedAt ?? request.startedAt }
       store.reserveRequest(runId, reserved)
       return reserved
     })
@@ -117,18 +122,51 @@ export function cycleUsage(root: string, projectId: Id, excludeRunId?: Id, cycle
  * section. The callback must synchronously reserve locally and append its
  * durable usage row BEFORE returning. Other runs see that row before they
  * can reserve; a crash after it is written still counts against the cycle.
+ *
+ * F3.4: the checked budget is the CYCLE's persisted budget (stored on the
+ * cycle's lead request record), read inside the same lock — not the caller's
+ * snapshot budget. `budget` remains only as the legacy fallback for cycles
+ * whose lead request predates the persisted budget (absent budget field).
  */
 export function reserveCycleCall(
   root: string, projectId: Id, cycleId: Id, budget: ReviewBudget, inputTokens: number,
   reserve: () => boolean,
 ): boolean {
   return withBudgetLock(root, projectId, () => {
+    const cycleBudget = new ReviewRunStore(root, projectId).readRequest(cycleId)?.budget ?? budget
     const used = cycleUsage(root, projectId, undefined, cycleId)
-    if (used.calls + 1 > budget.maxCallsPerRun ||
-        used.inputTokens + inputTokens > budget.maxInputTokensPerRun ||
-        used.outputTokens + budget.maxOutputTokensPerCall > budget.maxOutputTokensPerRun) return false
+    if (used.calls + 1 > cycleBudget.maxCallsPerRun ||
+        used.inputTokens + inputTokens > cycleBudget.maxInputTokensPerRun ||
+        used.outputTokens + cycleBudget.maxOutputTokensPerCall > cycleBudget.maxOutputTokensPerRun) return false
     return reserve()
   })
+}
+
+/**
+ * F3.4: atomically update the LATEST cycle's persisted budget under the same
+ * budget lock (called by the set-review-settings path after the mutation
+ * commits). Future admissions in that cycle see the new ceiling; in-flight
+ * runs keep their locally frozen `deps.budget` — the runner never re-reads
+ * the cycle budget mid-run. Returns false when no cycle lead record exists.
+ */
+export function updateLatestCycleBudget(
+  root: string, projectId: Id, budget: ReviewBudget,
+): boolean {
+  try {
+    return withBudgetLock(root, projectId, () => {
+      const store = new ReviewRunStore(root, projectId)
+      const { cycleId } = latestCycle(requests(root, projectId))
+      if (cycleId === LEGACY_CYCLE) return false
+      const lead = store.readRequest(cycleId)
+      if (lead === undefined) return false
+      store.writeRequest(cycleId, { ...lead, budget })
+      return true
+    })
+  } catch {
+    // A failed cycle-budget rewrite must not fail the committed mutation;
+    // the revised settings are already in the graph snapshot for new cycles.
+    return false
+  }
 }
 
 /** The budget a continue run may still spend in its cycle. */

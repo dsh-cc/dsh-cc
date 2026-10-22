@@ -82,6 +82,8 @@ export class ReviewRunStore {
       /** Stable admission-time identity; absent only on legacy requests. */
       cycleId?: Id
       cycleSequence?: number
+      /** F3.4: budget frozen on the cycle's lead request at admission; absent = legacy (caller's budget). */
+      budget?: import('./review-budget.ts').ReviewBudget
       taskId?: string
       processId?: number
       processNonce?: string
