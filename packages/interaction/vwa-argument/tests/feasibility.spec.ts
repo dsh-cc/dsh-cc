@@ -10,7 +10,7 @@ import { executeReviewRun } from '../src/review-runner.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
 import { BUDGET, NOW, claimsResponse, fakeAdapter, makeClaim, makeSnapshot } from './review-helpers.ts'
 
-function fixture(maxOutputTokensPerRun = 24_000) {
+function fixture(maxOutputTokensPerRun = 96_000) {
   const root = mkdtempSync(join(tmpdir(), 'vwa-feasibility-'))
   const claims = Array.from({ length: 6 }, () => makeClaim())
   const budget = { ...BUDGET, maxOutputTokensPerRun }
@@ -44,7 +44,7 @@ function fixture(maxOutputTokensPerRun = 24_000) {
 describe('batched budget feasibility and continuation', () => {
   it('admits six claims as three calls under the default output budget', () => {
     const { input } = fixture()
-    // Three batched calls, five with retry headroom, reserve 15k of 24k.
+    // Three batched calls, five with retry headroom, reserve 15k of 96k.
     expect(budgetFeasibilityRefusal({ ...input, continueMode: false })).toBeUndefined()
   })
 

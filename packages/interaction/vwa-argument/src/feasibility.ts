@@ -151,9 +151,13 @@ export function budgetFeasibilityRefusal(input: {
   if (exceededDimensions.length === 0) return undefined
   return fail(
     'BUDGET_INSUFFICIENT',
-    `Planned ${estimatedCalls} base calls with retry headroom: ${reasons.join('; ')} (reservation upper bound; ` +
-      'actual usage may be lower). Options: (a) reduce target scope, (b) enable claims batching on a new project, ' +
-      '(c) create a new project with a larger budget.',
+    `Planned ${estimatedCalls} calls (${estimatedWithRetries} with retry headroom) exceeds the frozen budget on ` +
+      `${reasons.join('; ')}. (Reservation upper bound; actual usage may be lower.) Options: ` +
+      '(a) reduce the review scope (targetClaimIds / stage); ' +
+      '(b) raise review-max-output-tokens-per-run (or review-claims-batch-size) in settings BEFORE creating a ' +
+      'project — existing projects keep their frozen budget; ' +
+      '(c) create a new project with a larger budget (registered sources, evidence, claims and completed review ' +
+      'records are NOT carried over).',
     false,
     {
       plannedCalls,

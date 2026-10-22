@@ -37,9 +37,9 @@ describe('DEFAULT_VWA_ARGUMENT_SETTINGS (§13 table)', () => {
   it('carries the §13 budget defaults', () => {
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-calls-per-run']).toBe(40)
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-input-tokens-per-run']).toBe(160_000)
-    expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-output-tokens-per-run']).toBe(24_000)
+    expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-output-tokens-per-run']).toBe(96_000)
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-output-tokens-per-call']).toBe(3000)
-    expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-wall-ms']).toBe(180_000)
+    expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-wall-ms']).toBe(900_000)
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-call-timeout-ms']).toBe(45_000)
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-concurrency']).toBe(2)
     expect(DEFAULT_VWA_ARGUMENT_SETTINGS['review-max-artifact-chars']).toBe(120_000)

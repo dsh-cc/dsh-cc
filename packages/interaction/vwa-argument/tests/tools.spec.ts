@@ -1290,7 +1290,7 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
 
   it('a sufficient budget passes through with no refusal', async () => {
     const made = makeWorkspace()
-    const frozen = made.store.init(CONTRACT) // ship defaults: 24000 per run
+    const frozen = made.store.init(CONTRACT) // ship defaults: 96000 per run
     if (!frozen.ok) throw new Error(frozen.message)
     const { tools, workspace } = mount({ review: reviewWithScript([(req) => stepFor(req, 5)]) }, made)
     await seedClaims(tools, workspace.projectId, 2)
