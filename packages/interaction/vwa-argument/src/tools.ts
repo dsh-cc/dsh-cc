@@ -252,7 +252,8 @@ export function registerArgumentTools(
         name: 'argument.update',
         description:
       'Atomically mutate a VWA lane-2 argument graph: set the project contract, upsert claims/' +
-      'evidence groups/arguments/issues, or bind the artifact. Full-graph validation runs before ' +
+      'evidence groups/arguments/issues, revise the frozen review settings (op set-review-settings), ' +
+      'or bind the artifact. Full-graph validation runs before ' +
       'commit; failures report a stable error code and never partially commit.',
     parameters: {
       ...common(),

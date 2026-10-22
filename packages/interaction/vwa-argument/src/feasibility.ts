@@ -165,7 +165,9 @@ export function budgetFeasibilityRefusal(input: {
       `(b) raise ${raiseSettings} in settings BEFORE creating a ` +
       'project — existing projects keep their frozen budget; ' +
       '(c) create a new project with a larger budget (registered sources, evidence, claims and completed review ' +
-      'records are NOT carried over).',
+      'records are NOT carried over); ' +
+      '(d) revise the frozen budget on this project (argument.update op set-review-settings) — ' +
+      'sources, evidence and completed review records are preserved.',
     false,
     {
       plannedCalls,
