@@ -3,6 +3,8 @@
  * persistence (docs/plans/2026-10-21-vwa-review-settings-revision.md §F3.3/§F3.4).
  * @module tests/review-settings-revision
  */
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyMutation, GraphContext } from '../src/graph.ts'
 import { VwaFail, fail } from '../src/store.ts'
@@ -316,6 +318,49 @@ describe('cycle-budget review fixes (P1/P2/P3)', () => {
       expect(data.cycleBudgetUpdated).toBe(false)
       expect(data.cycleBudgetNote).toContain('current review cycle')
     } else throw new Error('expected an ok result')
+  })
+
+  it('F1: a corrupt cycle-budget ledger blocks the call instead of falling back to the old budget', () => {
+    const made = initWorkspace(), root = made.root, projectId = 'prj_f1'
+    const admitted = { ...base, maxCallsPerRun: 5, maxOutputTokensPerCall: 20 }
+    reserveCycleRequest(root, projectId, 'run_lead', leadRequest(admitted))
+    const store = new ReviewRunStore(root, projectId)
+    const lead = store.readRequest('run_lead')!
+    store.writeRequest('run_lead', { ...lead, calls: 1, inputTokens: 10, outputTokens: 20 })
+    // Tighten the cycle ceiling from 5 to 1 (revision 2); 1 call used.
+    expect(updateLatestCycleBudget(root, projectId, { ...admitted, maxCallsPerRun: 1 }, 2)).toBe(true)
+    // Simulate a torn write: the sidecar is truncated mid-JSON (a crash between
+    // write and rename leaves this shape when writes are not atomic).
+    const sidecar = join(root, '.dsh', 'vwa', projectId, 'review-cycles', 'run_lead.json')
+    writeFileSync(sidecar, '{"revision":2,"budg', 'utf8')
+    // Must BLOCK (ceiling is 1, 1 call used): silently falling back to the
+    // caller's stale budget of 5 would admit an over-limit call.
+    let blocked: unknown
+    try {
+      reserveCycleCall(root, projectId, 'run_lead', admitted, 10, () => true)
+    } catch (error) {
+      blocked = error
+    }
+    expect(blocked).toBeInstanceOf(VwaFail)
+    expect(String((blocked as VwaFail).fail.message)).toContain('corrupt')
+  })
+
+  it('F2: a stale revision sync cannot overwrite a newer cycle budget', () => {
+    const made = initWorkspace(), root = made.root, projectId = 'prj_f2'
+    const admitted = { ...base, maxCallsPerRun: 2, maxOutputTokensPerCall: 20 }
+    reserveCycleRequest(root, projectId, 'run_lead', leadRequest(admitted))
+    const nine = { ...admitted, maxCallsPerRun: 9 }
+    const one = { ...admitted, maxCallsPerRun: 1 }
+    // Process A commits revision 2 (ceiling 9) but its cycle sync is delayed;
+    // process B commits revision 3 (ceiling 1) and syncs first.
+    expect(updateLatestCycleBudget(root, projectId, one, 3)).toBe(true)
+    // A's late sync carries the OLDER project revision — it must be rejected
+    // instead of overwriting B's newer ceiling back to 9.
+    expect(updateLatestCycleBudget(root, projectId, nine, 2)).toBe(false)
+    expect(readCycleBudget(root, projectId, 'run_lead')?.maxCallsPerRun).toBe(1)
+    // A same-revision retry (idempotent rewrite) is still allowed.
+    expect(updateLatestCycleBudget(root, projectId, one, 3)).toBe(true)
+    expect(readCycleBudget(root, projectId, 'run_lead')?.maxCallsPerRun).toBe(1)
   })
 })
 

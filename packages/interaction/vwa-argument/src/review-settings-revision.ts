@@ -129,12 +129,14 @@ export function reviseFrozenSettings(
  * ops (nothing to sync).
  */
 export function afterRevisionCommit(
-  root: string, projectId: string, op: unknown, result: { ok: boolean; data?: unknown },
+  root: string, projectId: string, op: unknown, result: { ok: boolean; revision?: number; data?: unknown },
 ): boolean | undefined {
   if (result.ok !== true || op !== 'set-review-settings') return undefined
   const revised = (result.data as { reviewSettings?: FrozenReviewSettings }).reviewSettings
   if (revised === undefined) return undefined
-  return updateLatestCycleBudget(root, projectId, revised.budget)
+  // The project revision fences the sync: a delayed sync from an older
+  // revision cannot overwrite a newer cycle budget (F2).
+  return updateLatestCycleBudget(root, projectId, revised.budget, result.revision ?? 0)
 }
 
 /** P3 disclosure appended when a committed revision could not update the current cycle's budget. */
