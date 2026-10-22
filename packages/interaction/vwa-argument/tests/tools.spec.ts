@@ -197,6 +197,30 @@ describe('tool registration (§13 gate surface)', () => {
     expect(started).toHaveLength(1)
   })
 
+  it('argument.review writes retryAllowance onto the admission request record (F1.4)', async () => {
+    const { tools, workspace } = mount({
+      review: () => ({
+        adapter: fakeAdapter([() => {
+          throw new Error('no task planned')
+        }]),
+        budget: BUDGET,
+        tasks: reviewCollaborators([() => ({ raw: '{}' })]).tasks,
+      }),
+    })
+    const result = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: 1,
+      requestId: 'r-retry',
+      input: { stage: 'claims' },
+    })
+    expect(result).toMatchObject({ ok: true, data: { completion: 'started' } })
+    const request = new ReviewRunStore(workspace.root, workspace.projectId)
+      .readRequest((result.data as { runId: string }).runId)
+    expect(request?.schemaVersion).toBe(1) // no version bump
+    expect(typeof request?.retryAllowance).toBe('number')
+    expect(request!.retryAllowance!).toBeGreaterThanOrEqual(0)
+  })
+
   it('refuses to run without a bound workspace root', async () => {
     const { tools } = mount({ workspaceRoot: () => undefined })
     const result = await call(tools.get('argument.update') as ToolDefinition, {
@@ -973,23 +997,27 @@ describe('argument.review continue within the review-cycle budget (§13, §A.4)'
 
   it('a continuation spends only what the cycle has left, then is refused with BUDGET_EXHAUSTED', async () => {
     let failing: string | undefined
-    const { tools, workspace, state, ids } = await project(4, () => failing)
+    // Budget 6: the fresh plan (3 tasks → 5 with retry headroom) fits the
+    // F1.5 per-call gate, and the cycle leaves exactly 3 calls — the
+    // continuation's own estimate (2 tasks → 3 with headroom).
+    const { tools, workspace, state, ids } = await project(6, () => failing)
     const store = new ReviewRunStore(workspace.root, workspace.projectId)
-    // Fresh run: claim 1 passes, claim 2 fails twice (the caller retries once) → 3 of 4 calls, incomplete.
+    // Fresh run: claim 1 passes, claim 2 fails twice (the caller retries once) → 3 of 5 calls, incomplete.
     failing = ids[1]
     const first = await run(tools, workspace.projectId, 'cycle-1', { stage: 'claims' })
     expect((await settle(store, (first.data as { runId: string }).runId))).toMatchObject({ status: 'incomplete', calls: 3 })
-    // Infra failure fixed: the continuation may use only the 1 remaining call.
-    failing = undefined
+    // The continuation re-runs the failed claim (passes) and burns the
+    // remaining calls on the newly failing claim: 3 of the 3 remaining spent.
+    failing = ids[2]
     const second = await run(tools, workspace.projectId, 'cycle-2', { stage: 'claims', continue: true })
     expect(second.ok).toBe(true)
-    expect((await settle(store, (second.data as { runId: string }).runId))).toMatchObject({ status: 'budget-exhausted', calls: 1 })
-    expect(state.dispatches).toBe(4)
+    expect((await settle(store, (second.data as { runId: string }).runId))).toMatchObject({ status: 'incomplete', calls: 3 })
+    expect(state.dispatches).toBe(6)
     // Nothing left in the cycle: refused before reserving, no model call.
     const third = await run(tools, workspace.projectId, 'cycle-3', { stage: 'claims', continue: true })
     expect(third).toMatchObject({ ok: false, code: 'BUDGET_EXHAUSTED', retryable: false })
     expect(store.findRunByRequestId(requestIdMap.get('cycle-3')!)).toBeUndefined()
-    expect(state.dispatches).toBe(4)
+    expect(state.dispatches).toBe(6)
   })
 })
 
@@ -1229,8 +1257,9 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
     expect(result.ok).toBe(true) // 1 executable task fits; the reusable one is exempt
     expect((await settle(new ReviewRunStore(workspace.root, workspace.projectId), (result.data as { runId: string }).runId))?.status).toBe('completed')
     // With the audit requested, the audit is counted in FULL even in continue
-    // mode: 1 claim task + (1 root block + 1 over-long piece + 1 align) = 4
-    // calls → 6 with headroom → 18000 > 8000 refused.
+    // mode. Packing is now the runtime's (F1.1): both tiny units fit one batch
+    // at 0.7 × 48_000 → 1 claim task + (1 batch + 1 align) = 3 calls → 5 with
+    // headroom → 15000 > 8000 refused.
     const update = tools.get('argument.update') as ToolDefinition
     // bind-artifact validates occurrences against the ACTUAL bytes (D12).
     toolDeps.artifactTexts.set('report.md', 'The documented shift began in 1789 and spread quickly.\n')
@@ -1256,7 +1285,7 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
     // The audit is counted in FULL even in continue mode; the remaining claim
     // task (invalidated by binding, if applicable) is the only semantic work.
     expect((denied.details as { plannedCalls: Record<string, number> }).plannedCalls.claims).toBeLessThanOrEqual(1)
-    expect((denied.details as { plannedCalls: Record<string, number> }).plannedCalls.audit).toBe(3)
+    expect((denied.details as { plannedCalls: Record<string, number> }).plannedCalls.audit).toBe(2)
   })
 
   it('a sufficient budget passes through with no refusal', async () => {

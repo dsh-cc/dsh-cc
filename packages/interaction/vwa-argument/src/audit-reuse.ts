@@ -4,9 +4,10 @@
  * An audit (extract + align over one bound artifact) is reusable in continue
  * mode only when every input it was computed from is unchanged: the artifact
  * bytes, the audit dependency digest (graph + current upstream judgments),
- * the frozen core set, the contract, policy, prompts, reviewer config and the
- * extraction unit size. That identity is the audit records' `inputHash`, so
- * the tool pre-check and the runner guard compare one key and cannot diverge.
+ * the frozen core set, the contract, policy, prompts, reviewer config,
+ * extraction unit size and result semantics. That identity is the audit
+ * records' `inputHash`, so the tool pre-check and the runner guard compare
+ * one key and cannot diverge.
  *
  * @module @dsh-cc/vwa-argument/audit-reuse
  */
@@ -43,6 +44,11 @@ export function auditInputHash(input: {
   return sha256Hex(
     stableJson({
       stage: 'audit',
+      // Legacy records may mix model-emitted AUDIT_* findings with runtime
+      // findings. Reconstructing proposals from that order corrupts spans.
+      // Invalidate those records in BOTH admission and runner reuse checks;
+      // version 2 guarantees that these finding codes are runtime-owned.
+      resultVersion: 2,
       artifactHash: sha256Hex(input.artifact.text),
       dependencyDigest: auditDependencyDigest(input.snapshot, input.artifact.id, input.records),
       coreClaimIds: [...new Set(input.coreClaimIds)].sort(),
@@ -56,18 +62,29 @@ export function auditInputHash(input: {
 }
 
 /**
- * True when history holds a completed, schema-valid extract/align pair from
- * ONE run under this audit key. Disagreement markers never qualify.
+ * The reusable extract/align pair when history holds a completed, schema-valid
+ * pair from ONE run under this audit key. Disagreement markers never qualify.
  */
+export function findReusableAudit(
+  history: (ReviewRecord & { kind?: 'disagreement' })[],
+  inputHash: Hash,
+): { extract: ReviewRecord; align: ReviewRecord } | undefined {
+  for (const align of history) {
+    if (
+      align.stage !== 'align' ||
+      align.kind === 'disagreement' ||
+      align.inputHash !== inputHash ||
+      !recordReusable(align, new Set(AUDIT_RULE_IDS))
+    )
+      continue
+    const extract = history.find(
+      (r) => r.stage === 'extract' && r.runId === align.runId && r.status === 'completed' && r.inputHash === inputHash,
+    )
+    if (extract) return { extract, align }
+  }
+  return undefined
+}
+
 export function hasReusableAudit(history: (ReviewRecord & { kind?: 'disagreement' })[], inputHash: Hash): boolean {
-  return history.some(
-    (align) =>
-      align.stage === 'align' &&
-      align.kind !== 'disagreement' &&
-      align.inputHash === inputHash &&
-      recordReusable(align, new Set(AUDIT_RULE_IDS)) &&
-      history.some(
-        (r) => r.stage === 'extract' && r.runId === align.runId && r.status === 'completed' && r.inputHash === inputHash,
-      ),
-  )
+  return findReusableAudit(history, inputHash) !== undefined
 }

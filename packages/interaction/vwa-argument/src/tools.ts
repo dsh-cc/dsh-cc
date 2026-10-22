@@ -32,11 +32,11 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
-import { reviewBudgetRefusal } from './feasibility.ts'
+import { admissionRequestRecord, reviewBudgetRefusal } from './feasibility.ts'
 import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
 import { replayReviewRequest } from './review-request.ts'
-import { reserveCycleRequest } from './review-cycle.ts'
+import { cycleUsage, reserveCycleRequest } from './review-cycle.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
 
 /** The minimal registration face of the harness tool runtime (no hard dep). */
@@ -415,23 +415,21 @@ export function registerArgumentTools(
       if (refusal !== undefined) return refusal
       // Continue preparation freezes the effective reviewer fingerprint before
       // feasibility hashes tasks and exempts reusable records. Never reserve first.
-      const infeasible = reviewBudgetRefusal({ root, review, snapshot, stages, body, ...(artifact === undefined ? {} : { artifact }) })
-      if (infeasible) return infeasible
-      const reserved = reserveCycleRequest(root, args.projectId, runId, {
-        schemaVersion: 1,
-        requestId: args.requestId,
-        runId,
-        stage: stages.join('+'),
-        targetClaimIds: resolveTargetClaimIds(snapshot, body),
-        payloadHash,
-        ...(body.continue === true ? { continue: true } : {}),
-        taskId,
-        status: 'queued',
-        inputTokens: 0,
-        outputTokens: 0,
-        calls: 0,
-        startedAt: new Date().toISOString(),
+      const infeasible = reviewBudgetRefusal({
+        root, review, snapshot, stages, body, ...(artifact === undefined ? {} : { artifact }),
+        // Continue mode gates against the REMAINING cycle budget (F1.5).
+        ...(body.continue === true ? { remainingCycleUsed: cycleUsage(root, args.projectId) } : {}),
       })
+      if (infeasible) return infeasible
+      const reserved = reserveCycleRequest(
+        root,
+        args.projectId,
+        runId,
+        admissionRequestRecord({
+          root, review, snapshot, stages, body, requestId: args.requestId, runId, taskId, payloadHash,
+          ...(artifact === undefined ? {} : { artifact }),
+        }),
+      )
       if ('ok' in reserved) return reserved
       const started = tasks.start(taskId, runId, async (signal) => {
         await executeReviewRun({

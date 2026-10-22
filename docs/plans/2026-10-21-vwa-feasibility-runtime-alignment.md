@@ -1,6 +1,6 @@
 # VWA Post-lane-2 Fix Batch — Fix 1: Feasibility Estimation Aligned to Runtime Semantics
 
-## Status: Designed — three-lane blind review converged (r1 full review: critic GO-WITH-CHANGES, grok GO-WITH-CHANGES, codex NO-GO adjudicated as severity calibration on the same finding set; r2 delta confirmation; r3 micro-confirmation — final round GO on all seats). Implementation pending; user sign-off pending.
+## Status: Implemented — PR #276 (open, pending merge). First in the stacked fix batch (Fix 2, Fix 3 to follow). The #275 design docs landed on main before this PR, so it is based on main directly.
 
 All anchors cite tree `b64af0e8` (main after the #271/#272/#274 merge race fix),
 verified by direct source reading on 2026-10-21 before this design was written.

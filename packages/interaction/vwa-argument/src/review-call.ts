@@ -15,6 +15,13 @@ export const REVIEW_REPAIR_CONTEXT_CHARS = REPAIR_PREFIX.length + MAX_REPAIR_ERR
 export class ReviewBudgetError extends Error {
   readonly code = 'BUDGET_EXHAUSTED'
 }
+/** F1.4: the run's retry pool is empty — no further extra attempts are allowed. */
+export class ReviewRetryBudgetError extends Error {
+  readonly code = 'REVIEW_RETRY_BUDGET'
+}
+/** F1.4 precise recovery advice for REVIEW_RETRY_BUDGET. */
+export const RETRY_BUDGET_ADVICE =
+  'retry headroom exhausted; completed records are kept. If the cycle still has budget, retry with `continue: true` on a new requestId (same cycle, completed records are reused across runs); if the cycle is spent, a fresh request opens a new cycle with a full budget but re-executes the semantic stages (a second opinion).'
 export class ReviewContextError extends Error {
   readonly code = 'CONTEXT_TOO_LARGE'
 }
@@ -30,7 +37,7 @@ type RetryClass = 'invalid' | 'transient' | 'truncation' | 'permanent'
 function classify(error: unknown): RetryClass {
   if (error instanceof ReviewTruncatedError) return 'truncation'
   if (error instanceof ReviewConfigDriftError) return 'permanent'
-  if (error instanceof ReviewBudgetError || error instanceof ReviewContextError) return 'permanent'
+  if (error instanceof ReviewBudgetError || error instanceof ReviewContextError || error instanceof ReviewRetryBudgetError) return 'permanent'
   // Audit extraction uses its own error class with the same validation code.
   if (error instanceof ReviewInvalidError || (error as { code?: string })?.code === 'REVIEW_INVALID') return 'invalid'
   // Timeout deadline rejection and dispatch/transport errors (carrying `detail`) are transient.
@@ -50,7 +57,14 @@ export class ReviewCaller {
     readonly usage: (row: Omit<UsageRow, 'runId'>) => void,
     readonly maxContextChars = 48_000,
     readonly reserveShared?: (inputTokens: number, reserve: () => boolean) => boolean,
-  ) {}
+    /** F1.4 per-run retry pool; undefined = legacy unlimited (absent request field). */
+    readonly retryAllowance?: number,
+  ) {
+    this.poolUnits = retryAllowance
+  }
+
+  /** Remaining pool units; undefined = legacy unlimited. */
+  private poolUnits: number | undefined
 
   /** Abortable backoff sleep (B.2.4). */
   private sleep(ms: number): Promise<void> {
@@ -81,11 +95,25 @@ export class ReviewCaller {
     let request = messages
     let attempts = 0
     let firstSeq = -1
+    // F1.4 correction: a retry unit is charged at the retry DECISION but is
+    // only earned when the retry actually reserves and dispatches. Every exit
+    // between the charge and that reservation refunds the unit — a retry that
+    // never went out (context overflow, counting failure, budget/wall refusal,
+    // abort during backoff) must not starve peer tasks of the pool.
+    let chargedRetryUnit = false
+    const refundRetryUnit = () => {
+      if (chargedRetryUnit) {
+        if (this.poolUnits !== undefined) this.poolUnits += 1
+        chargedRetryUnit = false
+      }
+    }
     for (;;) {
+      if (chargedRetryUnit && this.signal.aborted) refundRetryUnit()
       this.signal.throwIfAborted()
       // Repairs append a message: validate the actual attempt before counting
       // or reserving spend, while preserving the completed-attempt count.
       if (request.reduce((n, m) => n + m.content.length, 0) > this.maxContextChars) {
+        refundRetryUnit()
         throw this.attach(new ReviewContextError('review context exceeds the configured limit; no evidence was truncated'), attempts)
       }
       let counted: Awaited<ReturnType<ReviewModelAdapter['countInput']>>
@@ -93,6 +121,7 @@ export class ReviewCaller {
         counted = await this.adapter.countInput([...request, { role: 'user', content: JSON.stringify(schema) }])
       } catch (error) {
         // Counting failed before reservation or dispatch; only earlier attempts count.
+        refundRetryUnit()
         throw this.attach(error, attempts)
       }
       // Local counters and the durable ledger row must be updated inside the
@@ -112,8 +141,12 @@ export class ReviewCaller {
         })
         return true
       }
-      if (!(this.reserveShared ? this.reserveShared(counted.tokens, reserve) : reserve()))
+      if (!(this.reserveShared ? this.reserveShared(counted.tokens, reserve) : reserve())) {
+        refundRetryUnit()
         throw this.attach(new ReviewBudgetError('review budget exhausted'), attempts)
+      }
+      // The attempt is committed (reserved, dispatch follows): the charged unit is earned.
+      chargedRetryUnit = false
       const seq = this.tracker.calls
       const timeout = new AbortController()
       const signal = AbortSignal.any([this.signal, timeout.signal])
@@ -165,6 +198,15 @@ export class ReviewCaller {
         if (cls === 'truncation' || cls === 'permanent' || attempts >= maxAttempts || this.tracker.wallExceeded()) {
           throw this.attach(error, attempts)
         }
+        // F1.4: the pool is checked and debited synchronously (same tick, before
+        // the retry dispatch, no await between check and debit) so concurrent
+        // tasks in a Promise.allSettled batch cannot both claim the last unit.
+        if (this.poolUnits !== undefined) {
+          if (this.poolUnits <= 0)
+            throw this.attach(new ReviewRetryBudgetError(RETRY_BUDGET_ADVICE), attempts)
+          this.poolUnits -= 1
+          chargedRetryUnit = true
+        }
         retry = { error, backoff }
         if (cls === 'invalid') {
           request = [
@@ -192,11 +234,15 @@ export class ReviewCaller {
       // can reserve against actual spend rather than this completed call's cap.
       if (retry) {
         const remaining = this.tracker.remainingMs()
-        if (remaining <= 0) throw this.attach(retry.error, attempts)
+        if (remaining <= 0) {
+          refundRetryUnit()
+          throw this.attach(retry.error, attempts)
+        }
         if (remaining >= retry.backoff) {
           try {
             await this.sleep(retry.backoff)
           } catch {
+            refundRetryUnit()
             throw this.attach(retry.error, attempts)
           }
         }

@@ -13,14 +13,15 @@ import {
   type ReviewMessages,
 } from './review-adapter.ts'
 import { BudgetTracker, type ReviewBudget } from './review-tasks.ts'
-import { ReviewCaller, ReviewBudgetError } from './review-call.ts'
+import { ReviewCaller, ReviewBudgetError, ReviewRetryBudgetError, RETRY_BUDGET_ADVICE } from './review-call.ts'
 import { executeAudit } from './audit.ts'
 import { ProjectStore, fail, type Fail } from './store.ts'
 import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-input.ts'
 import { currentReviews, auditDependencyDigest } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
-import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, RULES } from './review-contract.ts'
+import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
+import { applyReusedAudit } from './audit-reuse-apply.ts'
 import { reserveCycleCall, reserveCycleRequest } from './review-cycle.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord, ReviewErrorDetail } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
@@ -30,28 +31,8 @@ export { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor }
 export { collectCachedRecords } from './review-continue.ts'
 
 /** Public envelope constructor retained for tools inspecting planned inputs. */
-export function buildEnvelope(input: {
-  stage: ReviewStage
-  runId: Id
-  task: ReviewTask
-  contract: ProjectSnapshot['contract']
-  dependencies: unknown
-  maxOutputTokens: number
-}): unknown {
-  return {
-    stage: input.stage,
-    runId: input.runId,
-    taskId: input.task.taskId,
-    rubricVersion: RUBRIC_VERSION,
-    requiredRules: input.task.requiredRules,
-    ruleDefinitions: Object.fromEntries(input.task.requiredRules.map((r) => [r.ruleId, RULES[r.ruleId]])),
-    contract: input.contract,
-    targets: input.task.targetRefs,
-    dependencies: input.task.envelope,
-    budget: { maxOutputTokens: input.maxOutputTokens },
-    context: input.dependencies,
-  }
-}
+export { buildEnvelope } from './review-envelope.ts'
+
 export interface ReviewRunnerDeps {
   root: string
   adapter: ReviewModelAdapter
@@ -170,6 +151,8 @@ export async function executeReviewRun(input: {
     (tokens, reserve) => 'ok' in reserved ? false : reserveCycleCall(
       deps.root, snapshot.projectId, reserved.cycleId, deps.budget, tokens, reserve,
     ),
+    // F1.4: the run's retry pool, seeded from the request record (absent = legacy unlimited).
+    request.retryAllowance,
   )
   let configHash = ''
   const save = (record: ReviewRecord) => {
@@ -273,6 +256,19 @@ export async function executeReviewRun(input: {
         // Audit and delivery must see the same current judgments, including
         // prior second opinions; semantic digests collapse reused copies.
         const auditRecords = currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records
+        // F1.2: continue mode may reuse a completed audit when the post-semantic-stage
+        // input hash is unchanged; default (non-continue) mode NEVER reuses (second opinion).
+        const reused =
+          input.continueMode === true
+            ? applyReusedAudit({ history, snapshot, artifact: input.artifact, records: auditRecords, frozenCore, contractHash: deps.contractHash, configHash, maxUnitChars: input.maxUnitChars, maxContextChars: deps.maxContextChars, runId, seq: budget.calls, save, store })
+            : undefined
+        if (reused) {
+          findings.push(...reused.findings)
+          coreDiscovered = reused.needsReview || reused.newCoreDiscovered
+          auditMetrics = reused.metrics
+          newClaimProposals = reused.newClaimProposals
+          continue
+        }
         const audit = await executeAudit({
           adapter: deps.adapter,
           runId,
@@ -436,6 +432,8 @@ export async function executeReviewRun(input: {
               : failed.reason instanceof ReviewBudgetError
                 ? 'budget-exhausted'
                 : 'incomplete',
+            // F1.4: persist the retry-pool refusal on the run outcome here too.
+            failed.reason instanceof ReviewRetryBudgetError ? fail('REVIEW_RETRY_BUDGET', RETRY_BUDGET_ADVICE, false) : undefined,
           )
       }
       deps.emitProgress?.({ runId, stage, message: `stage ${stage} done` })
@@ -503,7 +501,9 @@ export async function executeReviewRun(input: {
       ))
     }
     save(errorRecord(reachedStage, error))
-    return finish(status)
+    // F1.4: persist the retry-pool refusal on the outer-catch path as well.
+    const retryRefusal = error instanceof ReviewRetryBudgetError ? fail('REVIEW_RETRY_BUDGET', RETRY_BUDGET_ADVICE, false) : undefined
+    return finish(status, retryRefusal)
   }
 }
 
