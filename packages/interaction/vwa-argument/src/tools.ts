@@ -28,7 +28,7 @@ import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.t
 import { semanticContractHash } from './review-contract.ts'
 import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
-import { afterRevisionCommit } from './review-settings-revision.ts'
+import { afterRevisionCommit, discloseCycleBudgetStatus } from './review-settings-revision.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
 import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
@@ -274,8 +274,8 @@ export function registerArgumentTools(
         const outcome = applyMutation(graph, args.input as Mutation)
         return { result: outcome }
       })
-      afterRevisionCommit(root, args.projectId, (args.input as { op?: unknown }).op, result)
-      return finish(result)
+      const cycleBudgetUpdated = afterRevisionCommit(root, args.projectId, (args.input as { op?: unknown }).op, result)
+      return finish(discloseCycleBudgetStatus(result, cycleBudgetUpdated))
     },
       }),
     ),

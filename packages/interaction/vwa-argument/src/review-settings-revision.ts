@@ -124,14 +124,42 @@ export function reviseFrozenSettings(
  * update the LATEST review cycle's persisted budget (delegates to
  * review-cycle.ts). Future admissions see the new ceiling; in-flight runs
  * keep their locally frozen `deps.budget`. A failed update never fails the
- * already-committed mutation.
+ * already-committed mutation — it returns false so the caller can DISCLOSE
+ * the not-yet-applied cycle budget (P3); returns undefined for non-revision
+ * ops (nothing to sync).
  */
 export function afterRevisionCommit(
   root: string, projectId: string, op: unknown, result: { ok: boolean; data?: unknown },
-): void {
-  if (result.ok !== true || op !== 'set-review-settings') return
+): boolean | undefined {
+  if (result.ok !== true || op !== 'set-review-settings') return undefined
   const revised = (result.data as { reviewSettings?: FrozenReviewSettings }).reviewSettings
-  if (revised !== undefined) updateLatestCycleBudget(root, projectId, revised.budget)
+  if (revised === undefined) return undefined
+  return updateLatestCycleBudget(root, projectId, revised.budget)
+}
+
+/** P3 disclosure appended when a committed revision could not update the current cycle's budget. */
+export const CYCLE_BUDGET_NOT_APPLIED =
+  'The current review cycle keeps its previous ceiling (its budget ledger could not be updated ' +
+  'concurrently); the revised settings already apply to new cycles and to records — retry the same ' +
+  'revision to apply it to the current cycle.'
+
+/**
+ * P3: annotate an otherwise-successful revision result when the cycle-budget
+ * rewrite did not take effect, instead of silently swallowing the failure.
+ * Returns the input unchanged for any other outcome.
+ */
+export function discloseCycleBudgetStatus<T extends { ok: boolean; data?: unknown }>(
+  result: T, cycleBudgetUpdated: boolean | undefined,
+): T {
+  if (cycleBudgetUpdated !== false || result.ok !== true) return result
+  return {
+    ...result,
+    data: {
+      ...(result.data as Record<string, unknown>),
+      cycleBudgetUpdated: false,
+      cycleBudgetNote: CYCLE_BUDGET_NOT_APPLIED,
+    },
+  } as T
 }
 
 /** The full result shape of one committed set-review-settings mutation (§F3.3). */

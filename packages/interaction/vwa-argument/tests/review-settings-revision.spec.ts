@@ -9,7 +9,10 @@ import { VwaFail, fail } from '../src/store.ts'
 import { semanticContractHash } from '../src/review-contract.ts'
 import { freezeReviewSettings } from '../src/review-config.ts'
 import {
-  reserveCycleCall, reserveCycleRequest, updateLatestCycleBudget,
+  afterRevisionCommit, discloseCycleBudgetStatus,
+} from '../src/review-settings-revision.ts'
+import {
+  readCycleBudget, reserveCycleCall, reserveCycleRequest, updateLatestCycleBudget,
 } from '../src/review-cycle.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { initWorkspace, uuid } from './helpers.ts'
@@ -178,7 +181,8 @@ describe('F3.4 cycle budget persistence', () => {
     })
     expect('ok' in reserved).toBe(false)
     if ('ok' in reserved) return
-    expect(reserved.budget).toEqual(budget)
+    // The cycle budget persists in the sidecar, not on the request record (P2 fix).
+    expect(readCycleBudget(root, projectId, 'run_lead')).toEqual(budget)
     // The persisted cycle budget governs: the caller passes a DIFFERENT (tighter) budget.
     const tighter = { ...budget, maxCallsPerRun: 1 }
     const store = new ReviewRunStore(root, projectId)
@@ -209,7 +213,7 @@ describe('F3.4 cycle budget persistence', () => {
     const revised = { ...budget, maxCallsPerRun: 5 }
     expect(updateLatestCycleBudget(root, projectId, revised)).toBe(true)
     const store = new ReviewRunStore(root, projectId)
-    expect(store.readRequest('run_c1')?.budget).toEqual(revised)
+    expect(readCycleBudget(root, projectId, 'run_c1')).toEqual(revised)
     // Future admissions in the same cycle now reserve against the revised ceiling.
     expect(reserveCycleCall(root, projectId, 'run_c1', budget, 10, () => true)).toBe(true)
     // No cycle at all → nothing to rewrite.
@@ -224,14 +228,14 @@ describe('F3.4 cycle budget persistence', () => {
       status: 'running', calls: 0, inputTokens: 0, outputTokens: 0, budget: { ...budget, maxCallsPerRun: 4 },
       startedAt: '2026-10-21T00:00:00.000Z',
     })
-    expect(new ReviewRunStore(root, projectId).readRequest('run_new')?.budget?.maxCallsPerRun).toBe(4)
+    expect(readCycleBudget(root, projectId, 'run_new')?.maxCallsPerRun).toBe(4)
     // Legacy: a lead record with no persisted budget keeps the caller's budget (pre-F3.4 behavior).
     reserveCycleRequest(root, projectId, 'run_legacy_lead', {
       schemaVersion: 1, requestId: 'r2', runId: 'run_legacy_lead', stage: 'claims', targetClaimIds: [],
       status: 'running', calls: 0, inputTokens: 0, outputTokens: 0,
       startedAt: '2026-10-21T00:00:00.000Z',
     })
-    expect(new ReviewRunStore(root, projectId).readRequest('run_legacy_lead')?.budget).toBeUndefined()
+    expect(readCycleBudget(root, projectId, 'run_legacy_lead')).toBeUndefined()
     // Legacy: no persisted budget → the CALLER's budget (pre-F3.4 behavior) governs.
     const legacyStore = new ReviewRunStore(root, projectId)
     const reserve = () => {
@@ -241,6 +245,77 @@ describe('F3.4 cycle budget persistence', () => {
     }
     expect(reserveCycleCall(root, projectId, 'run_legacy_lead', { ...budget, maxCallsPerRun: 1 }, 10, reserve)).toBe(true)
     expect(reserveCycleCall(root, projectId, 'run_legacy_lead', { ...budget, maxCallsPerRun: 1 }, 10, reserve)).toBe(false)
+  })
+})
+
+describe('cycle-budget review fixes (P1/P2/P3)', () => {
+  const base = freezeReviewSettings().budget
+
+  function leadRequest(budget: typeof base): Parameters<typeof reserveCycleRequest>[3] {
+    return {
+      schemaVersion: 1, requestId: 'r1', runId: 'run_lead', stage: 'claims', targetClaimIds: [],
+      status: 'running', calls: 0, inputTokens: 0, outputTokens: 0, budget,
+      startedAt: '2026-10-21T00:00:00.000Z',
+    }
+  }
+
+  it('P1: the output headroom check uses the calling run\'s actual per-call reservation, not the revised cycle per-call', () => {
+    const made = initWorkspace(), root = made.root, projectId = 'prj_p1'
+    const admitted = { ...base, maxOutputTokensPerRun: 10_000, maxOutputTokensPerCall: 3_000 }
+    reserveCycleRequest(root, projectId, 'run_lead', leadRequest(admitted))
+    const store = new ReviewRunStore(root, projectId)
+    const lead = store.readRequest('run_lead')!
+    store.writeRequest('run_lead', { ...lead, calls: 3, outputTokens: 8_500 })
+    // Downward revision: the cycle keeps its 10,000 ceiling but the per-call cap drops to 1,000.
+    expect(updateLatestCycleBudget(root, projectId, { ...admitted, maxOutputTokensPerCall: 1_000 })).toBe(true)
+    // An in-flight run still RESERVES with its locally frozen per-call cap of 3,000
+    // (8,500 + 3,000 > 10,000) — the check must use the actual reservation, so this refuses.
+    expect(reserveCycleCall(root, projectId, 'run_lead', admitted, 10, () => true)).toBe(false)
+  })
+
+  it('P2: a running task\'s request write-back cannot overwrite the revised cycle budget', () => {
+    const made = initWorkspace(), root = made.root, projectId = 'prj_p2'
+    const admitted = { ...base, maxCallsPerRun: 2, maxOutputTokensPerCall: 20 }
+    reserveCycleRequest(root, projectId, 'run_lead', leadRequest(admitted))
+    const store = new ReviewRunStore(root, projectId)
+    // The runner's start-of-run in-memory snapshot of its own request record.
+    const inMemory = store.readRequest('run_lead')!
+    expect(updateLatestCycleBudget(root, projectId, { ...admitted, maxCallsPerRun: 9 })).toBe(true)
+    // The in-flight runner writes its usage back from the stale in-memory copy.
+    store.writeRequest('run_lead', { ...inMemory, calls: 1, inputTokens: 10, outputTokens: 20 })
+    // The cycle ceiling is still the revised 9 (calls 1→2→3 fit); a reverted
+    // ceiling of 2 would refuse the third call.
+    const reserve = () => {
+      const r = store.readRequest('run_lead')!
+      store.writeRequest('run_lead', { ...r, calls: r.calls + 1 })
+      return true
+    }
+    expect(reserveCycleCall(root, projectId, 'run_lead', { ...admitted, maxCallsPerRun: 9 }, 10, reserve)).toBe(true)
+    expect(reserveCycleCall(root, projectId, 'run_lead', { ...admitted, maxCallsPerRun: 9 }, 10, reserve)).toBe(true)
+  })
+
+  it('P3: a failed cycle-budget rewrite is surfaced to the revision result, not silently swallowed', () => {
+    const made = initWorkspace()
+    const okResult = {
+      ok: true as const, projectId: 'prj_p3', revision: 2,
+      data: { reviewSettings: freezeReviewSettings(), fieldsChanged: {}, reuseStatement: '', contractChanged: false },
+    }
+    // No cycle exists for this project → the cycle-budget rewrite fails and the
+    // caller learns about it (previously: void, silently ignored).
+    expect(afterRevisionCommit(made.root, 'prj_p3', 'set-review-settings', okResult)).toBe(false)
+    // A successful rewrite reports true.
+    const projectId = 'prj_p3b'
+    reserveCycleRequest(made.root, projectId, 'run_lead', leadRequest(base))
+    expect(afterRevisionCommit(made.root, projectId, 'set-review-settings', okResult)).toBe(true)
+    // Non-revision ops report undefined (nothing to sync).
+    expect(afterRevisionCommit(made.root, projectId, 'upsert', okResult)).toBe(undefined)
+    // The disclosure helper annotates an otherwise-successful revision result.
+    const annotated = discloseCycleBudgetStatus(okResult, false)
+    if (annotated.ok) {
+      const data = annotated.data as { cycleBudgetUpdated?: boolean; cycleBudgetNote?: string }
+      expect(data.cycleBudgetUpdated).toBe(false)
+      expect(data.cycleBudgetNote).toContain('current review cycle')
+    } else throw new Error('expected an ok result')
   })
 })
 

@@ -16,10 +16,11 @@
  *
  * @module @dsh-cc/vwa-argument/review-cycle
  */
-import { readdirSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ReviewRunStore } from './review-run-store.ts'
 import { fail, VwaFail, type Fail } from './store.ts'
+import { stableJson } from './schema.ts'
 import { acquireLock, releaseLock } from './lock.ts'
 import type { ReviewBudget } from './review-budget.ts'
 import type { Id } from './types.ts'
@@ -65,6 +66,29 @@ function withBudgetLock<T>(root: string, projectId: Id, action: () => T): T {
 }
 
 /**
+ * F3.4: a cycle's persisted budget lives in its OWN sidecar file, never as a
+ * field of the lead request record — a running task periodically writes its
+ * whole in-memory request record back (usage rows), which would silently
+ * revert a budget field revised mid-run. All readers/writers go through
+ * withBudgetLock, so a plain write is race-free.
+ */
+export function readCycleBudget(root: string, projectId: Id, cycleId: Id): ReviewBudget | undefined {
+  try {
+    return JSON.parse(
+      readFileSync(join(root, '.dsh', 'vwa', projectId, 'review-cycles', `${cycleId}.json`), 'utf8'),
+    ) as ReviewBudget
+  } catch {
+    return undefined // absent (legacy cycle) or unreadable — caller's budget governs
+  }
+}
+
+function writeCycleBudget(root: string, projectId: Id, cycleId: Id, budget: ReviewBudget): void {
+  const dir = join(root, '.dsh', 'vwa', projectId, 'review-cycles')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, `${cycleId}.json`), stableJson(budget))
+}
+
+/**
  * Assign cycle membership atomically at admission, before a host may queue
  * the run. Fresh requests open a monotonic cycle; continuations bind to the
  * latest admitted cycle. A runner preserves its queued identity, even if a
@@ -84,12 +108,15 @@ export function reserveCycleRequest(
         : request.continue === true
           ? latest
           : { cycleId: runId, cycleSequence: latest.cycleSequence + 1 }
-      // F3.4: a fresh request opening a cycle freezes its budget on the
-      // cycle's lead request record; continuations never re-stamp it.
-      const leadBudget = identity.cycleId === runId && request.budget !== undefined
-        ? { budget: request.budget }
-        : {}
-      const reserved = { ...request, ...identity, ...leadBudget, startedAt: prior?.startedAt ?? request.startedAt }
+      // F3.4: a fresh request opening a cycle freezes its budget into the
+      // cycle's sidecar (review-cycles/<cycleId>.json); continuations never
+      // re-stamp it. The `budget` field of the request is transport only —
+      // it is stripped so request-record write-backs cannot clobber the cycle.
+      if (identity.cycleId === runId && request.budget !== undefined) {
+        writeCycleBudget(root, projectId, runId, request.budget)
+      }
+      const { budget: _transport, ...record } = request
+      const reserved = { ...record, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
       store.reserveRequest(runId, reserved)
       return reserved
     })
@@ -133,21 +160,27 @@ export function reserveCycleCall(
   reserve: () => boolean,
 ): boolean {
   return withBudgetLock(root, projectId, () => {
-    const cycleBudget = new ReviewRunStore(root, projectId).readRequest(cycleId)?.budget ?? budget
+    const cycleBudget = readCycleBudget(root, projectId, cycleId) ?? budget
     const used = cycleUsage(root, projectId, undefined, cycleId)
     if (used.calls + 1 > cycleBudget.maxCallsPerRun ||
         used.inputTokens + inputTokens > cycleBudget.maxInputTokensPerRun ||
-        used.outputTokens + cycleBudget.maxOutputTokensPerCall > cycleBudget.maxOutputTokensPerRun) return false
+        // The output headroom must be checked against the CALLING RUN's actual
+        // per-call reservation — its locally frozen budget — never the cycle's
+        // (possibly revised) per-call cap: an in-flight run admitted before a
+        // downward revision still reserves its old, larger per-call amount.
+        used.outputTokens + budget.maxOutputTokensPerCall > cycleBudget.maxOutputTokensPerRun) return false
     return reserve()
   })
 }
 
 /**
- * F3.4: atomically update the LATEST cycle's persisted budget under the same
- * budget lock (called by the set-review-settings path after the mutation
- * commits). Future admissions in that cycle see the new ceiling; in-flight
- * runs keep their locally frozen `deps.budget` — the runner never re-reads
- * the cycle budget mid-run. Returns false when no cycle lead record exists.
+ * F3.4: atomically update the LATEST cycle's persisted budget (the sidecar,
+ * under the same budget lock — called by the set-review-settings path after
+ * the mutation commits). Future admissions in that cycle see the new ceiling;
+ * in-flight runs keep their locally frozen `deps.budget` — the runner never
+ * re-reads the cycle budget mid-run. Returns false when no cycle lead record
+ * exists; a caller-visible false must be DISCLOSED (see review-settings-
+ * revision.ts), never silently swallowed.
  */
 export function updateLatestCycleBudget(
   root: string, projectId: Id, budget: ReviewBudget,
@@ -157,14 +190,14 @@ export function updateLatestCycleBudget(
       const store = new ReviewRunStore(root, projectId)
       const { cycleId } = latestCycle(requests(root, projectId))
       if (cycleId === LEGACY_CYCLE) return false
-      const lead = store.readRequest(cycleId)
-      if (lead === undefined) return false
-      store.writeRequest(cycleId, { ...lead, budget })
+      if (store.readRequest(cycleId) === undefined) return false
+      writeCycleBudget(root, projectId, cycleId, budget)
       return true
     })
   } catch {
-    // A failed cycle-budget rewrite must not fail the committed mutation;
-    // the revised settings are already in the graph snapshot for new cycles.
+    // A failed cycle-budget rewrite must not fail the committed mutation; the
+    // revised settings are already in the graph snapshot for new cycles, and
+    // the caller discloses the not-yet-applied state (P3).
     return false
   }
 }
