@@ -19,7 +19,7 @@ import { ProjectStore, fail, type Fail } from './store.ts'
 import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-input.ts'
 import { currentReviews, auditDependencyDigest } from './review-current.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
-import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor } from './review-contract.ts'
+import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, recordMatchesKey, semanticContract } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
 import { applyReusedAudit } from './audit-reuse-apply.ts'
 import { reserveCycleCall, reserveCycleRequest } from './review-cycle.ts'
@@ -317,7 +317,7 @@ export async function executeReviewRun(input: {
               reviewerConfigHash: configHash,
               promptHash: promptHash(stage),
             })
-            const prior = history.filter((r) => r.inputHash === key)
+            const prior = history.filter((r) => recordMatchesKey(r, key))
             const ownRuns = new Set(requestRuns(deps.root, snapshot.projectId, input.requestId))
             const reusable = reusableRecord(prior, task, input.continueMode === true, ownRuns)
             if (reusable) {
@@ -442,7 +442,7 @@ export async function executeReviewRun(input: {
     const live = new ProjectStore(deps.root, snapshot.projectId).readHead()
     if (live.ok) {
       const before = stableJson({
-        contract: snapshot.contract,
+        contract: semanticContract(snapshot.contract),
         dependencies: input.targetClaimIds.map((id) =>
           taskDependencyDigest(
             index,
@@ -460,7 +460,7 @@ export async function executeReviewRun(input: {
       })
       const nextIndex = buildReverseIndex(live.data.snapshot)
       const after = stableJson({
-        contract: live.data.snapshot.contract,
+        contract: semanticContract(live.data.snapshot.contract),
         dependencies: input.targetClaimIds.map((id) =>
           taskDependencyDigest(
             nextIndex,

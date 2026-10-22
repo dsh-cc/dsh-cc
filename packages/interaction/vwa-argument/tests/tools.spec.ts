@@ -13,6 +13,7 @@ import type { ToolDeps } from '../src/tools.ts'
 import { CaptureRegistry } from '../src/sources.ts'
 import { CONTRACT, initWorkspace, makeWorkspace, uuid } from './helpers.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { freezeReviewSettings } from '../src/review-config.ts'
 import { DEFAULT_VWA_ARGUMENT_SETTINGS } from '../src/settings.ts'
 import { BUDGET, claimsResponse, fakeAdapter } from './review-helpers.ts'
@@ -1239,7 +1240,7 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
         root: workspace.root,
         adapter,
         budget: BUDGET,
-        contractHash: sha256Hex(stableJson(head.data.snapshot.contract)),
+        contractHash: semanticContractHash(head.data.snapshot.contract),
       },
       runId: `run_${uuid()}`,
       requestId: 'pre-run',

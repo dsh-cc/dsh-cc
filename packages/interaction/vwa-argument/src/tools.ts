@@ -25,6 +25,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readUserSettingsSync } from './settings.ts'
 import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
+import { semanticContractHash } from './review-contract.ts'
 import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
@@ -393,7 +394,7 @@ export function registerArgumentTools(
               adapter: review.adapter,
               maxOutputTokens: review.budget.maxOutputTokensPerCall,
               signal: exec.signal,
-              contractHash: sha256Hex(stableJson(snapshot.contract)),
+              contractHash: semanticContractHash(snapshot.contract),
               snapshot,
               stages,
               targetClaimIds: resolveTargetClaimIds(snapshot, body),
@@ -439,7 +440,7 @@ export function registerArgumentTools(
             budget: review.budget,
             ...(review.maxArtifactChars ? { maxArtifactChars: review.maxArtifactChars } : {}),
             ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
-            contractHash: sha256Hex(stableJson(snapshot.contract)),
+            contractHash: semanticContractHash(snapshot.contract),
             readSnapshot,
             emitProgress: (event) => {
               tasks.emitProgress(event)

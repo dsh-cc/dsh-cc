@@ -6,6 +6,7 @@
  * batch-1 graph with the batching escape, and admit the same graph at
  * claims batch 2.
  */
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { budgetFeasibilityRefusal, estimateReviewCalls } from '../src/feasibility.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
@@ -59,7 +60,7 @@ function tenClaimGraph(batchSize?: number) {
 function inputFor(snapshot: ReturnType<typeof tenClaimGraph>['snapshot'], targetClaimIds: string[]) {
   return {
     root: '/nonexistent', snapshot, adapter: fakeAdapter([]), budget: FROZEN.budget,
-    contractHash: sha256Hex(stableJson(snapshot.contract)), stages: STAGES,
+    contractHash: semanticContractHash(snapshot.contract), stages: STAGES,
     targetClaimIds, artifact: ARTIFACT, continueMode: false,
   }
 }

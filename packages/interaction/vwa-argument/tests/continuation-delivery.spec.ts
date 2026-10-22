@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it } from 'vitest'
 import { evaluateDelivery } from '../src/delivery-check.ts'
 import { allRecords } from '../src/review-continue.ts'
@@ -33,7 +34,7 @@ describe('continuation audit delivery', () => {
     const first = await executeReviewRun({
       ...base,
       deps: {
-        root, budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)),
+        root, budget: BUDGET, contractHash: semanticContractHash(snapshot.contract),
         adapter: fakeAdapter([(req) => {
           const target = JSON.parse(req.messages[1]!.content).targets[0].id
           if (target === b.id) throw new Error('transport failure')
@@ -55,7 +56,7 @@ describe('continuation audit delivery', () => {
     ])
     const second = await executeReviewRun({
       ...base, runId: `run_${randomUUID()}`, requestId: randomUUID(), continueMode: true,
-      deps: { root, adapter, budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) },
+      deps: { root, adapter, budget: BUDGET, contractHash: semanticContractHash(snapshot.contract) },
     })
     expect(second.status).toBe('completed')
     expect(adapter.state.dispatches).toBe(3)
@@ -75,14 +76,14 @@ describe('continuation audit delivery', () => {
     const continueAdapter = fakeAdapter(auditSteps)
     const auditOnly = await executeReviewRun({
       ...base, stages: ['audit'], runId: `run_${randomUUID()}`, requestId: randomUUID(), continueMode: true,
-      deps: { root, adapter: continueAdapter, budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) },
+      deps: { root, adapter: continueAdapter, budget: BUDGET, contractHash: semanticContractHash(snapshot.contract) },
     })
     expect(continueAdapter.state.dispatches).toBe(0)
     expect(auditOnly.refusal).toMatchObject({ code: 'NOTHING_TO_CONTINUE' })
     // A fresh audit-only run (no continue) also digests the historical judgments.
     const fresh = await executeReviewRun({
       ...base, stages: ['audit'], runId: `run_${randomUUID()}`, requestId: randomUUID(),
-      deps: { root, adapter: fakeAdapter(auditSteps), budget: BUDGET, contractHash: sha256Hex(stableJson(snapshot.contract)) },
+      deps: { root, adapter: fakeAdapter(auditSteps), budget: BUDGET, contractHash: semanticContractHash(snapshot.contract) },
     })
     expect(fresh.status).toBe('completed')
     const latestAudit = fresh.records.find((r) => r.stage === 'extract')!

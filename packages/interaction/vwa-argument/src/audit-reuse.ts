@@ -13,7 +13,7 @@
  */
 import { sha256Hex, stableJson } from './schema.ts'
 import { auditDependencyDigest } from './review-current.ts'
-import { policyHash, promptHash } from './review-contract.ts'
+import { policyHash, promptHash, recordMatchesKey } from './review-contract.ts'
 import { recordReusable } from './review-run-store.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewRecord } from './types.ts'
 
@@ -73,12 +73,12 @@ export function findReusableAudit(
     if (
       align.stage !== 'align' ||
       align.kind === 'disagreement' ||
-      align.inputHash !== inputHash ||
+      !recordMatchesKey(align, inputHash) ||
       !recordReusable(align, new Set(AUDIT_RULE_IDS))
     )
       continue
     const extract = history.find(
-      (r) => r.stage === 'extract' && r.runId === align.runId && r.status === 'completed' && r.inputHash === inputHash,
+      (r) => r.stage === 'extract' && r.runId === align.runId && r.status === 'completed' && recordMatchesKey(r, inputHash),
     )
     if (extract) return { extract, align }
   }

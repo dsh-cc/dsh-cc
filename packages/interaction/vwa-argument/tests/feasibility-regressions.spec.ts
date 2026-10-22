@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, expect, it, vi } from 'vitest'
 import { admissionRequestRecord, budgetFeasibilityRefusal, estimateReviewCalls } from '../src/feasibility.ts'
 import { executeReviewRun } from '../src/review-runner.ts'
@@ -52,7 +53,7 @@ async function world(claimsBatchSize = 1, indirect = false) {
     }
   }])
   const input = {
-    root, snapshot, adapter, budget, contractHash: sha256Hex(stableJson(snapshot.contract)),
+    root, snapshot, adapter, budget, contractHash: semanticContractHash(snapshot.contract),
     targetClaimIds: snapshot.claims.map((c) => c.id), stages: ['sources', 'claims'] as ReviewStage[], continueMode: true,
   }
   const first = await executeReviewRun({

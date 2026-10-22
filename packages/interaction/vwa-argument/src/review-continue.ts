@@ -18,7 +18,7 @@ import { computeCoreSet, planStage, type ReviewStage, type ReviewTask } from './
 import { ReviewRunStore, cacheKey, recordReusable } from './review-run-store.ts'
 import { taskDependencyDigest } from './review-input.ts'
 import { currentReviews } from './review-current.ts'
-import { policyHash, promptHash } from './review-contract.ts'
+import { policyHash, promptHash, recordMatchesKey } from './review-contract.ts'
 import { auditInputHash, effectiveAuditUnitChars, hasReusableAudit } from './audit-reuse.ts'
 import { cycleBudgetRefusal, cycleUsage } from './review-cycle.ts'
 import type { ReviewBudget } from './review-budget.ts'
@@ -43,7 +43,8 @@ export function allRecords(root: string, projectId: string): ReviewRecord[] {
 }
 
 export function collectCachedRecords(root: string, projectId: string, key: Hash): ReviewRecord[] {
-  return allRecords(root, projectId).filter((r) => r.inputHash === key)
+  // F3.1: key comparison goes through the one shared matcher.
+  return allRecords(root, projectId).filter((r) => recordMatchesKey(r, key))
 }
 
 /**
@@ -160,7 +161,7 @@ export function continueHasWork(input: ContinuePlanInput): boolean {
   const { history } = context
   const semantic = planContinueTasks(input, context).some(({ inputHash, task }) => {
     const required = new Set(task.requiredRules.map((r) => r.ruleId))
-    return !history.some((r) => r.inputHash === inputHash && r.kind !== 'disagreement' && recordReusable(r, required))
+    return !history.some((r) => recordMatchesKey(r, inputHash) && r.kind !== 'disagreement' && recordReusable(r, required))
   })
   if (semantic || !input.stages.includes('audit')) return semantic
   // Without a bound artifact the runner ends 'incomplete'; never refuse that as "nothing to do".

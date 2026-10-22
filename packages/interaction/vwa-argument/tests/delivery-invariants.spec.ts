@@ -1,4 +1,5 @@
 /** Cross-stage acceptance: public runner -> persisted records -> report -> receipt. */
+import { semanticContractHash } from '../src/review-contract.ts'
 import { describe, it, expect } from 'vitest'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -143,7 +144,7 @@ function fixture() {
         root: made.root,
         adapter,
         budget: BUDGET,
-        contractHash: sha256Hex(stableJson(head.data.snapshot.contract)),
+        contractHash: semanticContractHash(head.data.snapshot.contract),
         readSnapshot: (id) => readFileSync(join(made.store.snapshotDir, `${id}.md`), 'utf8'),
       },
       runId: `run_${randomUUID()}`,
