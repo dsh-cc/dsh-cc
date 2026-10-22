@@ -31,6 +31,9 @@ function minimalGraph() {
   const group = makeGroup(claim.id, [evidence.id])
   const snapshot = makeSnapshot({
     sources: [source], evidence: [evidence], claims: [claim], groups: [group],
+    // Deliberate self-premise: claimClosure() pulls premise claims into the
+    // closure, so a distinct premise would plan a second claims call and
+    // change the documented minimal-graph arithmetic (6 first attempts).
     arguments: [makeArgument(claim.id, [claim.id], [group.id])],
   })
   return { snapshot, targetClaimIds: [claim.id] }
