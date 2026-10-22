@@ -3,9 +3,11 @@
  * design §3.1/§3.4): claims the registry's pending workflow-run deposit on
  * the first child start of a run (keyed by the per-run derived signal),
  * journals every settled child at its arrival index, and on a resume
- * (`claim.resumeOf` set) replays completed prefix hits as fabricated runs
- * until the first miss, which freezes the run to live execution for every
- * subsequent child.
+ * (`claim.resumeOf` set) replays hits as fabricated runs until the first
+ * miss, which freezes the run to live execution for every subsequent child.
+ * A hit is keyed by the REQUEST HASH against the journal's replayable
+ * prefix, not by arrival position: concurrent combinators may start
+ * children in a different order on resume (design §3.4, rev. 2026-10-22).
  *
  * The live path is a transparent pass-through: the delegate's `SubagentRun`
  * is returned unchanged; only `run.result` is tapped to journal the
@@ -49,8 +51,15 @@ interface JournalRun {
   readonly unbind: () => void
   /** Provider arrival counter (1-based; == worker seq per the strong form). */
   arrivalIndex: number
-  /** Replay source lines; undefined for live runs (nothing to replay). */
-  replayLines: JournalLine[] | undefined
+  /**
+   * Replay pool: hash → the not-yet-consumed replayable lines with that
+   * hash, in journal (seq) order. Only the journal's replayable prefix is
+   * pooled (contiguous seq 1..k of completed lines with a well-formed
+   * projection): a line journaled after a failed/missing/malformed one
+   * never replays (CC: "runs again, and so does every agent that started
+   * after it"). Undefined for live runs (nothing to replay).
+   */
+  replayPool: Map<string, Array<{ line: JournalLine; projection: SubagentResult }>> | undefined
   /** Permanent first-miss/corruption latch: every later child spawns live. */
   frozen: boolean
 }
@@ -67,6 +76,25 @@ function projectionFromLine(line: JournalLine): SubagentResult | undefined {
     ...(structured !== undefined ? { structured } : {}),
     stopReason: 'completed',
   }
+}
+
+/**
+ * Pool the journal's replayable prefix by request hash: lines seq 1..k in
+ * order, stopping at the first line that is not a completed, well-formed
+ * projection at its expected seq (a gap, a failure, or a malformed result).
+ */
+function buildReplayPool(lines: readonly JournalLine[]): NonNullable<JournalRun['replayPool']> {
+  const pool = new Map<string, Array<{ line: JournalLine; projection: SubagentResult }>>()
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (line.seq !== i + 1 || line.status !== 'completed') break
+    const projection = projectionFromLine(line)
+    if (projection === undefined) break
+    const bucket = pool.get(line.hash)
+    if (bucket === undefined) pool.set(line.hash, [{ line, projection }])
+    else bucket.push({ line, projection })
+  }
+  return pool
 }
 
 /** Provider construction options. */
@@ -134,36 +162,37 @@ export class CcWorkflowJournalProvider implements SubagentProvider {
     const idx = ++run.arrivalIndex
     const hash = hashSubagentRequest(request)
 
-    // Frozen-until-first-miss replay (design §3.4). A stored line replays
-    // only while unfrozen, at the same arrival index, with a matching hash
-    // and a well-formed completed projection.
-    if (run.replayLines !== undefined && !run.frozen) {
-      const line = run.replayLines[idx - 1]
-      if (line !== undefined && line.status === 'completed' && line.hash === hash) {
-        const projection = projectionFromLine(line)
-        if (projection !== undefined) {
-          this.registry.markCached(run.runId, idx)
-          try {
-            run.writer.record(idx, line)
-          } catch {
-            // Copy-forward failure fails open to a live spawn (design §3.3).
-            run.frozen = true
-            this.options.warn(`cc-workflow-journal: copy-forward for run "${run.runId}" seq ${idx} failed; falling open to a live spawn`)
-          }
-          if (!run.frozen) {
-            return {
-              id: randomUUID() as unknown as SessionId,
-              localAgent: undefined,
-              result: Promise.resolve(projection),
-              dispose: () => Promise.resolve(),
-            }
+    // Frozen-until-first-miss replay (design §3.4), keyed by request hash.
+    // While unfrozen, a child replays the first unconsumed pooled line with
+    // its exact hash; no such line (edited prompt/options/schema, a request
+    // past the replayable prefix, or more duplicates than were journaled)
+    // is the first miss and freezes the run permanently.
+    if (run.replayPool !== undefined && !run.frozen) {
+      const candidates = run.replayPool.get(hash)
+      const hit = candidates?.shift()
+      if (hit !== undefined) {
+        this.registry.markCached(run.runId, idx)
+        try {
+          // Copy-forward at THIS run's arrival index, so the new journal is
+          // seq-complete in its own arrival order.
+          run.writer.record(idx, { ...hit.line, seq: idx })
+        } catch {
+          // Copy-forward failure fails open to a live spawn (design §3.3).
+          run.frozen = true
+          this.options.warn(`cc-workflow-journal: copy-forward for run "${run.runId}" seq ${idx} failed; falling open to a live spawn`)
+        }
+        if (!run.frozen) {
+          return {
+            id: randomUUID() as unknown as SessionId,
+            localAgent: undefined,
+            result: Promise.resolve(hit.projection),
+            dispose: () => Promise.resolve(),
           }
         }
-      }
-      if (!run.frozen) {
-        // Hash mismatch, non-completed stored status, missing line, or a
-        // malformed projection: freeze permanently — this and every later
-        // seq spawns live (CC's "and so does every agent after it").
+      } else {
+        // No unconsumed replayable line for this request: freeze permanently
+        // — this and every later arrival spawns live (CC's "and so does
+        // every agent after it").
         run.frozen = true
       }
     }
@@ -203,8 +232,8 @@ export class CcWorkflowJournalProvider implements SubagentProvider {
     })
     // Resume parse (design §3.2: the provider parses, never reads, the
     // deposited text). Live runs (no resumeOf) have nothing to replay —
-    // replayLines stays undefined and the frozen latch is never consulted.
-    let replayLines: JournalLine[] | undefined
+    // replayPool stays undefined and the frozen latch is never consulted.
+    let replayPool: JournalRun['replayPool']
     let frozen = false
     if (claim.resumeOf !== undefined) {
       if (claim.journalText === undefined) {
@@ -216,7 +245,7 @@ export class CcWorkflowJournalProvider implements SubagentProvider {
           frozen = true
           this.options.warn(`cc-workflow-journal: journal for run "${claim.resumeOf}" is corrupt; replaying live (fail-open)`)
         } else {
-          replayLines = parsed.lines
+          replayPool = buildReplayPool(parsed.lines)
         }
       }
     }
@@ -224,7 +253,7 @@ export class CcWorkflowJournalProvider implements SubagentProvider {
       drain: () => writer.drain(),
       markCached: index => this.registry.markCached(claim.runId, index),
     })
-    return { runId: claim.runId, writer, unbind, arrivalIndex: 0, replayLines, frozen }
+    return { runId: claim.runId, writer, unbind, arrivalIndex: 0, replayPool, frozen }
   }
 
   /**

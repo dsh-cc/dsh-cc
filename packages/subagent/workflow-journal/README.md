@@ -15,21 +15,27 @@ in the same session replays the unchanged prefix instead of re-spawning it
   lives at `$DSH_HOME/workflows/runs/<sessionId>/<runId>.jsonl` and is
   rewritten whole on each flush (tmp+rename) through the
   `ccWorkflowRunRegistry` service's drain ordering.
-- **Replay.** On a resume claim, incoming children are resolved in arrival
-  order against the old journal: a hash match (prompt + outputSchema +
-  agentOptions) on a completed line returns a fabricated `SubagentRun` —
-  fresh session id, result resolved from the journal, immediate `dispose()` —
-  and the durable `tool-workflow/agent-start`/`agent-end` records gain
+- **Replay.** On a resume claim, each incoming child is matched by its
+  request hash (prompt + outputSchema + agentOptions) against the old
+  journal's replayable prefix (the contiguous completed lines from seq 1),
+  not by arrival position, so concurrent combinators (`pipeline`,
+  `parallel`) that start children in a different order on resume still hit.
+  Each journal line is consumed at most once; identical requests consume
+  lines in journal order. A hit returns a fabricated `SubagentRun` — fresh
+  session id, result resolved from the journal, immediate `dispose()` — and
+  the durable `tool-workflow/agent-start`/`agent-end` records gain
   `cached: true` via `registry.markCached(runId, arrivalIndex)`. The first
-  mismatch (hash, non-completed status, missing line, corruption, size-cap
-  truncation) flips the run frozen permanently: the miss and every later
-  child spawn live (fail-open).
+  miss (no unconsumed replayable line with that hash: an edited request, a
+  request journaled after a non-completed/missing/corrupt line, or a
+  size-cap truncation) flips the run frozen permanently: the miss and every
+  later child spawn live (fail-open).
 - **Retention.** Journals are same-session only: a runId is resumable while
   its settled-map entry survives in the registry. A boot sweep removes
   session directories under `runs/` whose mtime is older than the TTL
   (default 24h); the sweep is disk hygiene, not crash recovery.
-- **Copy-forward.** A resume of a resumed run copies the replayed prefix
-  into its own journal first, so a second resume keeps the original prefix.
+- **Copy-forward.** A resume of a resumed run copies each replayed line
+  into its own journal at the new run's arrival index, so a second resume
+  keeps the original prefix.
 
 ## Deviations from CC (recorded)
 

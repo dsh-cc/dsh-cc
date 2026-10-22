@@ -13,18 +13,22 @@ CC 对齐的工作流恢复日志。它注册 `cc-workflow-journal` 子代理 pr
   结果）。一次运行的日志文件位于
   `$DSH_HOME/workflows/runs/<sessionId>/<runId>.jsonl`，每次刷新整体重写
   （tmp+rename），排序由 `ccWorkflowRunRegistry` 服务的 drain 顺序保证。
-- **重放。** 收到恢复声明后，按到达顺序与旧日志逐一比对：对已完成行的
-  哈希命中（prompt + outputSchema + agentOptions）返回一个伪造的
+- **重放。** 收到恢复声明后，每个到来的子代理按请求哈希（prompt +
+  outputSchema + agentOptions）与旧日志的可重放前缀（从 seq 1 起连续的
+  已完成行）匹配，而非按到达位置匹配；因此并发组合器（`pipeline`、
+  `parallel`）在恢复时即使以不同顺序启动子代理也能命中。每条日志行至多
+  消费一次；相同请求按日志顺序依次消费。命中时返回一个伪造的
   `SubagentRun`——全新会话 id、结果取自日志、`dispose()` 立即完成——并通过
   `registry.markCached(runId, arrivalIndex)` 为持久的
   `tool-workflow/agent-start`/`agent-end` 记录附加 `cached: true`。首次失配
-  （哈希、非完成状态、缺失行、损坏、到达字节上限）后该运行永久冻结：失配
-  及其后的子代理全部在线派生（fail-open）。
+  （不存在该哈希的未消费可重放行：请求被修改、该请求记录在非完成/缺失/
+  损坏行之后，或到达字节上限）后该运行永久冻结：失配及其后的子代理全部
+  在线派生（fail-open）。
 - **保留策略。** 日志仅限同一会话：runId 在结算表条目存活期间可恢复。启动
   时清扫 `runs/` 下 mtime 超过 TTL（默认 24h）的会话目录；清扫只是磁盘
   卫生，并非崩溃恢复。
-- **前向拷贝。** 对"已恢复运行"再次恢复时，先把重放的前缀拷入自己的日志，
-  因此第二次恢复仍保留原始前缀。
+- **前向拷贝。** 对"已恢复运行"再次恢复时，每条重放行按新运行的到达序号
+  拷入自己的日志，因此第二次恢复仍保留原始前缀。
 
 ## 与 CC 的偏差（已记录）
 

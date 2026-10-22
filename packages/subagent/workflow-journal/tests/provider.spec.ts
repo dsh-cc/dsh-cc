@@ -274,6 +274,70 @@ describe('CcWorkflowJournalProvider', () => {
     expect(fx.delegate.spawns.length).toBe(before) // full prefix still replays
   })
 
+  // Keyed replay (design §3.4 rev. 2026-10-22): concurrent combinators
+  // (pipeline/parallel) may start children in a different order on resume
+  // than in the journaled run — e.g. replayed stage-1 hits settle instantly,
+  // so stage-2 calls of later items can overtake earlier ones. Matching must
+  // key on the request, not on the arrival position.
+  it('replays an all-hit resume when children arrive in a different order than the journaled run', async () => {
+    const fx = setup()
+    await runSpawns(fx, ['fan 0', 'stage2 a', 'stage2 b', 'stage2 c'])
+    const text = readFileSync(join(fx.dir, 'sess', 'run-1.jsonl'), 'utf8')
+    const before = fx.delegate.spawns.length
+    // Deterministic reorder: stage2 c overtakes a and b (the observed CI order).
+    const second = await runSpawns(fx, ['fan 0', 'stage2 c', 'stage2 a', 'stage2 b'], { resumeOf: 'run-1', journalText: text })
+    expect(fx.delegate.spawns.length - before).toBe(0)
+    // Each replay returns the result journaled for ITS request, not for its position.
+    const texts = await Promise.all(second.runs.map(async run => (await run.result).output))
+    expect(texts).toEqual([
+      [{ type: 'text', text: 'out-0' }],
+      [{ type: 'text', text: 'out-3' }],
+      [{ type: 'text', text: 'out-1' }],
+      [{ type: 'text', text: 'out-2' }],
+    ])
+    expect(fx.registry.cached.get(second.runId)).toEqual([1, 2, 3, 4])
+  })
+
+  it('copies reordered hits forward at the NEW arrival index, so a resume of the resume still replays fully', async () => {
+    const fx = setup()
+    await runSpawns(fx, ['a', 'b', 'c'])
+    const text1 = readFileSync(join(fx.dir, 'sess', 'run-1.jsonl'), 'utf8')
+    await runSpawns(fx, ['c', 'a', 'b'], { resumeOf: 'run-1', journalText: text1 })
+    const text2 = readFileSync(join(fx.dir, 'sess', 'run-2.jsonl'), 'utf8')
+    const lines2 = text2.split('\n').filter(Boolean).map(line => JSON.parse(line) as JournalLine)
+    expect(lines2.map(line => line.seq)).toEqual([1, 2, 3])
+    expect(lines2.map(line => line.hash)).toEqual(['c', 'a', 'b'].map(prompt => hashSubagentRequest({ prompt: [{ type: 'text', text: prompt }] })))
+    const before = fx.delegate.spawns.length
+    await runSpawns(fx, ['b', 'c', 'a'], { resumeOf: 'run-2', journalText: text2 })
+    expect(fx.delegate.spawns.length).toBe(before)
+  })
+
+  it('consumes duplicate identical requests one journal line each, in journal order', async () => {
+    const fx = setup()
+    await runSpawns(fx, ['same', 'same'])
+    const text = readFileSync(join(fx.dir, 'sess', 'run-1.jsonl'), 'utf8')
+    const before = fx.delegate.spawns.length
+    const second = await runSpawns(fx, ['same', 'same', 'same'], { resumeOf: 'run-1', journalText: text })
+    // Two hits (out-0, out-1), the third has no unconsumed line → miss → live.
+    expect(fx.delegate.spawns.slice(before).map(record => record.promptText)).toEqual(['same'])
+    expect((await second.runs[0]!.result).output).toEqual([{ type: 'text', text: 'out-0' }])
+    expect((await second.runs[1]!.result).output).toEqual([{ type: 'text', text: 'out-1' }])
+  })
+
+  it('never replays a completed line journaled AFTER a non-completed one, even if it arrives first', async () => {
+    const fx = setup()
+    await runSpawns(fx, ['one', 'two', 'three'])
+    const text = readFileSync(join(fx.dir, 'sess', 'run-1.jsonl'), 'utf8')
+    const failedMid = text.split('\n').filter(Boolean).map((lineText, i) => {
+      const parsed = JSON.parse(lineText) as JournalLine
+      return i === 1 ? { ...parsed, status: 'error' } : parsed
+    })
+    const before = fx.delegate.spawns.length
+    // 'three' started after the failed 'two' in the journaled run → CC reruns it.
+    await runSpawns(fx, ['three', 'one', 'two'], { resumeOf: 'run-1', journalText: failedMid.map(line => JSON.stringify(line)).join('\n') })
+    expect(fx.delegate.spawns.slice(before).map(record => record.promptText)).toEqual(['three', 'one', 'two'])
+  })
+
   it('attributes the normal run after a zero-agent run leaves its claim unclaimed (deposit overwrite)', async () => {
     const fx = setup()
     // A zero-agent run deposits a claim its provider never consumes; the next
