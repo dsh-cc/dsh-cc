@@ -29,7 +29,13 @@ import { sha256Hex, stableJson } from './schema.ts'
 import { loadPrompt, responseSchemaFor, promptHash, RULES } from './review-contract.ts'
 import { auditDependencyDigest } from './review-current.ts'
 import { deduplicateBySemanticHash } from './review-input.ts'
-import { packExtractionBatches } from './audit-cost.ts'
+import {
+  effectiveContextChars,
+  maxAlignItemsPerBatch,
+  maxExtractUnitsPerBatch,
+  packExtractionBatches,
+} from './audit-cost.ts'
+import { dispatchAlignChunks, mergeAlignChunks, runtimeAuditFindings } from './audit-align.ts'
 import { AUDIT_RULE_IDS, auditInputHash, auditUnitChars } from './audit-reuse.ts'
 import { buildReverseIndex } from './dependencies.ts'
 import { computeCoreSet } from './review-plan.ts'
@@ -54,8 +60,7 @@ export {
 export type { ExtractionUnit, ExtractEnvelope, AlignEnvelope } from './audit-input.ts'
 import {
   ReviewInvalidError,
-  validateTaskResponse,
-  parseReviewResponse,
+  ReviewTruncatedError,
   type ReviewModelAdapter,
   type ReviewMessages,
 } from './review-adapter.ts'
@@ -81,9 +86,6 @@ export interface AuditOutcome {
   needsReview: boolean
   metrics: { extractedAtomicClaims: number; mappedAtomicClaims: number }
 }
-
-/** §11.4: finding codes the runtime generates from the alignment — model output carrying them is dropped. */
-const RUNTIME_OWNED_AUDIT_CODES = new Set(['AUDIT_NEW_CLAIM', 'AUDIT_STRONGER', 'AUDIT_BROADER'])
 
 /** Runtime item id: derived from taskId + span (§11.4). */
 function itemExtractedId(taskId: string, span: Span): Id {
@@ -199,12 +201,22 @@ export async function executeAudit(input: {
     budget: { maxOutputTokens: input.maxOutputTokens },
   }
   // Batches packed by the shared cost model (audit-cost.ts) so estimate and
-  // runtime packing cannot diverge; one batch = one model call.
-  const batches = packExtractionBatches(units, input.caller?.maxContextChars ?? Number.POSITIVE_INFINITY)
+  // runtime packing cannot diverge; one batch = one model call. F4.1/F4.2: the
+  // runner's effective context AND the per-call output cap both bound a batch.
+  const batches = packExtractionBatches(
+    units,
+    effectiveContextChars(input.caller),
+    maxExtractUnitsPerBatch(input.maxOutputTokens),
+  )
   const collected: import('./types.ts').ExtractedItem[] = []
   let extractInputTokens = 0,
     extractOutputTokens = 0
-  for (const batch of batches) {
+  // F4.4: work-queue bisect — a truncated batch is re-split and re-dispatched
+  // (each split is a NEW call: own reservation/usage rows, no retry-pool
+  // charge); only a single-unit truncation is structural and rethrows.
+  const queue = [...batches]
+  while (queue.length > 0) {
+    const batch = queue.shift()!
     const envelope = {
       ...extractEnvelope,
       units: batch.map((u) => ({
@@ -213,12 +225,27 @@ export async function executeAudit(input: {
         after: stripped.text.slice(u.span.end, u.context.end),
       })),
     }
-    const raw = await dispatch(extractPrompt, envelope, EXTRACT_RESPONSE_SCHEMA, (text) => ({
-      items: validateExtractItems((parseExtractResponse(text) as { items?: unknown } | null)?.items, stripped.text, batch),
-    }))
-    collected.push(...(raw.raw as { items: import('./types.ts').ExtractedItem[] }).items)
-    extractInputTokens += raw.inputTokens
-    extractOutputTokens += raw.outputTokens
+    try {
+      const raw = await dispatch(extractPrompt, envelope, EXTRACT_RESPONSE_SCHEMA, (text) => ({
+        items: validateExtractItems((parseExtractResponse(text) as { items?: unknown } | null)?.items, stripped.text, batch),
+      }))
+      collected.push(...(raw.raw as { items: import('./types.ts').ExtractedItem[] }).items)
+      extractInputTokens += raw.inputTokens
+      extractOutputTokens += raw.outputTokens
+    } catch (error) {
+      if (error instanceof ReviewTruncatedError && batch.length > 1) {
+        const mid = Math.ceil(batch.length / 2)
+        queue.unshift(batch.slice(0, mid), batch.slice(mid))
+        continue
+      }
+      // Guidance attached ONLY at this audit rethrow site; the shared
+      // ReviewTruncatedError message is untouched. Raising
+      // maxOutputTokensPerCall is NOT the fix (Fix 5 territory).
+      if (error instanceof ReviewTruncatedError)
+        error.message +=
+          ': a single extraction unit exceeds the per-call output cap — split the artifact root block'
+      throw error
+    }
   }
   const extractItems = validateExtractItems(collected, stripped.text, units)
 
@@ -254,24 +281,12 @@ export async function executeAudit(input: {
   // ---- align stage (§12) ----
   const alignStart = new Date().toISOString()
   const alignPrompt = loadPrompt('align')
-  const alignEnvelope: AlignEnvelope & Record<string, unknown> = {
+  const alignEnvelope: Omit<AlignEnvelope, 'items'> & Record<string, unknown> = {
     stage: 'align',
     runId,
     taskId,
     rubricVersion: input.rubricVersion,
     contract: snapshot.contract,
-    items: derivations.map((d) => ({
-      extractedId: d.extractedId,
-      span: d.item.span,
-      quote: d.item.exactText,
-      atomicClaims: d.item.atomicClaims.map((c) => ({
-        text: c.text,
-        kind: c.kind,
-        importance: c.importance,
-        scope: c.scope,
-      })),
-      isQuotation: d.item.isQuotation,
-    })),
     claims: snapshot.claims.map((claim) => ({
       id: claim.id,
       text: claim.text,
@@ -296,62 +311,35 @@ export async function executeAudit(input: {
     effectiveCoreClaimIds,
     budget: { maxOutputTokens: input.maxOutputTokens },
   }
-  const alignPromptHash = promptHash('align')
-  const alignRaw = await dispatch(alignPrompt, alignEnvelope, responseSchemaFor('align'), (raw) => {
-    const response = parseReviewResponse(raw)
-    if (response.stage !== 'align') throw new AuditInvalidError('expected an align response')
-    validateAlignment(response, derivations, snapshot.claims.map((claim) => claim.id))
-    if (input.caller)
-      validateTaskResponse(response, {
+  const claimIds = snapshot.claims.map((claim) => claim.id)
+  // F4.3: chunked align dispatch — each chunk's OUTPUT is bounded by the
+  // per-call cap; shared context (claims, artifact, searches) re-sent per chunk.
+  const { responses: chunkResponses, inputTokens: alignInputTokens, outputTokens: alignOutputTokens } =
+    await dispatchAlignChunks({
+      dispatch,
+      alignPrompt,
+      schema: responseSchemaFor('align'),
+      envelope: alignEnvelope,
+      derivations,
+      maxChunkItems: maxAlignItemsPerBatch(input.maxOutputTokens),
+      claimIds,
+      withCaller: !!input.caller,
+      taskSpec: {
         stage: 'align',
-        targetIds: new Set([artifact.id, ...snapshot.claims.map((c) => c.id)]),
+        targetIds: new Set([artifact.id, ...claimIds]),
         requiredRules: new Map([[artifact.id, new Set<string>(AUDIT_RULE_IDS)]]),
         knownEvidenceIds: new Set(snapshot.evidence.map((e) => e.id)),
-      })
-    return response
-  })
-  const alignResponse = alignRaw.raw as import('./types.ts').AlignResponse
+      },
+    })
+  const alignResponse = mergeAlignChunks(chunkResponses, derivations, claimIds)
   alignResponse.alignment = derivations.map(
     (d) => alignResponse.alignment.find((a) => a.extractedId === d.extractedId)!,
   )
 
   // ---- runtime findings (§11.4): the three AUDIT codes are fixed major ----
-  // The AUDIT_* codes are RUNTIME-OWNED: they are derived from the alignment,
-  // never model output. Model-returned entries are dropped here — the outcome
-  // path pairs AUDIT_NEW_CLAIM spans with 'new' atomics BY ORDER (extraction
-  // order), so a model-echoed entry would shift spans onto the wrong proposal.
-  const findings: Finding[] = alignResponse.findings.filter((f) => !RUNTIME_OWNED_AUDIT_CODES.has(f.code))
-  for (const entry of alignResponse.alignment) {
-    if (entry.relation !== 'new') continue
-    const derivation = derivations.find((d) => d.extractedId === entry.extractedId)!
-    for (const atomic of derivation.item.atomicClaims) {
-      findings.push({
-        id: `finding_${randomUUID()}`,
-        code: 'AUDIT_NEW_CLAIM',
-        targetIds: [artifact.id],
-        severity: 'major', // fixed major (§11.4); maps to AUDIT-01
-        explanation: `Extracted claim maps to no author claim: ${atomic.text}`,
-        evidenceIds: [],
-        artifactSpans: [derivation.originalSpan],
-        repair: 'add-evidence',
-      })
-    }
-  }
-  for (const entry of alignResponse.alignment) {
-    if (entry.relation !== 'stronger' && entry.relation !== 'broader') continue
-    const derivation = derivations.find((d) => d.extractedId === entry.extractedId)!
-    findings.push({
-      id: `finding_${randomUUID()}`,
-      code: entry.relation === 'stronger' ? 'AUDIT_STRONGER' : 'AUDIT_BROADER',
-      targetIds: [...entry.claimIds],
-      severity: 'major', // fixed major (§11.4); maps to AUDIT-02
-      explanation: `Extracted claim is ${entry.relation} than the mapped author claim: ${entry.rationale}`,
-      evidenceIds: [],
-      artifactSpans: [derivation.originalSpan],
-      repair: entry.relation === 'stronger' ? 'qualify' : 'narrow-claim',
-    })
-  }
+  const findings = runtimeAuditFindings(alignResponse, derivations, artifact.id)
 
+  const alignPromptHash = promptHash('align')
   const core = new Set(input.coreClaimIds ?? [])
   const discoveredCore = [
     ...new Set([
@@ -374,8 +362,8 @@ export async function executeAudit(input: {
     promptHash: alignPromptHash,
     inputHash,
     status: 'completed',
-    inputTokens: alignRaw.inputTokens,
-    outputTokens: alignRaw.outputTokens,
+    inputTokens: alignInputTokens,
+    outputTokens: alignOutputTokens,
     startedAt: alignStart,
     endedAt: new Date().toISOString(),
     response: { ...alignResponse, findings },

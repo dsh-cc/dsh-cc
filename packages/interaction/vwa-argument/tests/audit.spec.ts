@@ -12,7 +12,14 @@ import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { AuditInvalidError, executeAudit, extractionUnits, stripClaimMarkers, validateAlignment } from '../src/audit.ts'
 import { rootBlocks } from '../src/review-plan.ts'
-import type { ReviewModelAdapter, ReviewMessages } from '../src/review-adapter.ts'
+import { ReviewTruncatedError, type ReviewModelAdapter, type ReviewMessages } from '../src/review-adapter.ts'
+import { ReviewCaller } from '../src/review-call.ts'
+import { BudgetTracker } from '../src/review-tasks.ts'
+import type { ReviewBudget } from '../src/review-runner.ts'
+import type { UsageRow } from '../src/review-run-store.ts'
+import { auditCostModel } from '../src/audit-cost.ts'
+import { auditUnitChars } from '../src/audit-reuse.ts'
+import type { ReviewCaller as ReviewCallerType } from '../src/review-call.ts'
 import type { AlignEnvelope, ExtractEnvelope } from '../src/audit.ts'
 import type { Claim, ExtractedItem, ProjectSnapshot, ReviewRecord } from '../src/types.ts'
 import { makeClaim, makeSnapshot } from './review-helpers.ts'
@@ -32,7 +39,19 @@ function auditAdapter(options: {
         describe: () => ({ modelId: 'fake', providerId: 'fake', version: 'unpinned', effectiveOptions: {} }),
         dispatch: async () => {
           const index = call++
-          if (index === 0) return { raw: JSON.stringify({ items: options.items }), inputTokens: 5, outputTokens: 7 }
+          // Fix 4: dispatch counts changed — extract and align each run in
+          // multiple dispatches, so the stage is read from the envelope
+          // instead of assuming index 0 = extract, 1+ = align.
+          if ((envelope as { stage?: string }).stage === 'extract') {
+            // Each extract dispatch owns only its own units: return just the
+            // fixture items whose spans fall inside this batch's units.
+            const units = (envelope as { units: { span: { start: number; end: number } }[] }).units
+            const scoped = options.items.filter((it) =>
+              units.some((u) => it.span.start >= u.span.start && it.span.start < u.span.end),
+            )
+            return { raw: JSON.stringify({ items: scoped }), inputTokens: 5, outputTokens: 7 }
+          }
+          void index
           const response = options.align(envelope as AlignEnvelope)
           const rules = (envelope as { requiredRules?: { targetId: string; ruleId: string }[] }).requiredRules
           if (rules)
@@ -592,5 +611,243 @@ describe('audit via executeReviewRun (stage union)', () => {
       signal: new AbortController().signal,
     })
     expect(outcome.status).toBe('incomplete')
+  })
+})
+
+// ---- Fix 4 (docs/plans/2026-10-23-vwa-audit-extract-output-budget.md §F4.3/§F4.4):
+// output-bounded packing, truncation bisect, chunked align merge ----
+
+type Fix4Envelope = AlignEnvelope & {
+  stage: string
+  units?: { span: { start: number; end: number }; text: string }[]
+  requiredRules?: { targetId: string; ruleId: string }[]
+}
+
+/** One item exactly covering a unit (valid: span inside the unit, exact text). */
+function unitItem(artifactText: string, u: { span: { start: number; end: number } }): ExtractedItem {
+  return {
+    span: u.span,
+    exactText: artifactText.slice(u.span.start, u.span.end),
+    atomicClaims: [dummyAtomic()],
+    isQuotation: false,
+  }
+}
+
+function fix4Budget(over: Partial<ReviewBudget> = {}): ReviewBudget {
+  return {
+    maxCallsPerRun: 40, maxInputTokensPerRun: 1_000_000, maxOutputTokensPerRun: 1_000_000,
+    maxOutputTokensPerCall: 3000, wallMs: 600_000, callTimeoutMs: 1_000, concurrency: 1,
+    ...over,
+  }
+}
+
+/**
+ * Fake adapter driven by envelope stage (Fix 4: dispatch counts changed, the
+ * stage is read per dispatch). Options inject truncation / other errors per
+ * (stage, unit count) and record every dispatch's shape.
+ */
+function fix4Adapter(
+  artifactText: string,
+  options: {
+    truncate?: (stage: string, unitCount: number) => boolean
+    throwOn?: (stage: string, unitCount: number) => Error | undefined
+    observed?: { stage: string; unitCount: number }[]
+    align?: (envelope: AlignEnvelope) => Record<string, unknown>
+  } = {},
+): ReviewModelAdapter {
+  return {
+    async prepareReviewCall(req) {
+      const envelope = JSON.parse(req.messages[1]!.content) as Fix4Envelope
+      return {
+        describe: () => ({ modelId: 'fake', providerId: 'fake', version: 'unpinned', effectiveOptions: {} }),
+        dispatch: async () => {
+          if (envelope.stage === 'extract') {
+            const units = envelope.units ?? []
+            options.observed?.push({ stage: 'extract', unitCount: units.length })
+            const thrown = options.throwOn?.('extract', units.length)
+            if (thrown) throw thrown
+            if (options.truncate?.('extract', units.length)) throw new ReviewTruncatedError()
+            return {
+              raw: JSON.stringify({ items: units.map((u) => unitItem(artifactText, u)) }),
+              inputTokens: 5,
+              outputTokens: 7,
+            }
+          }
+          options.observed?.push({ stage: 'align', unitCount: envelope.items.length })
+          const thrown = options.throwOn?.('align', envelope.items.length)
+          if (thrown) throw thrown
+          if (options.truncate?.('align', envelope.items.length)) throw new ReviewTruncatedError()
+          const response = options.align?.(envelope) ?? {
+            stage: 'align',
+            rubricVersion: 'humanities-v1',
+            findings: [],
+            targets: [],
+            alignment: envelope.items.map((entry: { extractedId: string }) => ({
+              extractedId: entry.extractedId,
+              claimIds: [],
+              relation: 'new',
+              rationale: 'r',
+            })),
+          }
+          const rules = envelope.requiredRules
+          if (rules)
+            response.targets = [...new Set(rules.map((r) => r.targetId))].map((targetId) => ({
+              targetId,
+              checks: rules
+                .filter((r) => r.targetId === targetId)
+                .map((r) => ({ ruleId: r.ruleId, result: 'pass', rationale: 'reviewed', evidenceIds: [] })),
+            }))
+          return { raw: JSON.stringify(response), inputTokens: 6, outputTokens: 8 }
+        },
+      }
+    },
+    async countInput() {
+      return { tokens: 10, method: 'tokenizer' as const }
+    },
+    configFingerprint: () => ({ fake: true }),
+  }
+}
+
+const FIX4_TEXT = (n: number) =>
+  Array.from({ length: n }, (_, i) => `Sentence number ${i + 1} stands here.\n`).join('\n')
+
+describe('Fix 4 — estimate/runtime parity and truncation bisect', () => {
+  it('§4.5 parity: auditCostModel().calls equals executeAudit dispatches, including the 48k-default path', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    for (const withCaller of [false, true] as const) {
+      const observed: { stage: string; unitCount: number }[] = []
+      const adapter = fix4Adapter(ARTIFACT, { observed })
+      let caller: ReviewCallerType | undefined
+      if (withCaller) {
+        // Real caller, default 48k context — exercises the caller-dispatch path.
+        const budget = fix4Budget()
+        caller = new ReviewCaller(adapter, new BudgetTracker(budget), budget, new AbortController().signal, () => {})
+      }
+      const input = { ...auditInput(ARTIFACT, snapshot, adapter), ...(caller ? { caller } : {}) }
+      await executeAudit(input)
+      const model = auditCostModel({
+        artifactText: ARTIFACT,
+        maxUnitChars: auditUnitChars(48_000, caller?.maxContextChars),
+        maxContextChars: caller?.maxContextChars ?? 48_000,
+        maxOutputTokensPerCall: 3000,
+      })
+      expect(observed.filter((o) => o.stage === 'extract')).toHaveLength(model.extractBatches)
+      expect(observed.filter((o) => o.stage === 'align')).toHaveLength(model.alignBatches)
+      expect(observed).toHaveLength(model.calls)
+    }
+  })
+
+  it('§4.7a: >1-unit truncation bisects — all items returned, new ledger rows, zero retry-pool charge', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const observed: { stage: string; unitCount: number }[] = []
+    const adapter = fix4Adapter(FIX4_TEXT(3), { observed, truncate: (stage, n) => stage === 'extract' && n > 1 })
+    const rows: Omit<UsageRow, 'runId'>[] = []
+    const budget = fix4Budget()
+    const caller = new ReviewCaller(adapter, new BudgetTracker(budget), budget, new AbortController().signal, (row) =>
+      rows.push(row),
+    )
+    const outcome = await executeAudit({ ...auditInput(FIX4_TEXT(3), snapshot, adapter), caller })
+    expect(outcome.extractionRecord.response.items).toHaveLength(3)
+    // [2 units] truncates → [1],[1] re-queued ahead of [1]; then one align call.
+    expect(observed.map((o) => [o.stage, o.unitCount])).toEqual([
+      ['extract', 2],
+      ['extract', 1],
+      ['extract', 1],
+      ['extract', 1],
+      ['align', 3],
+    ])
+    // Each dispatch reserves (2 rows per call: reserved + actual); 5 calls.
+    expect(rows.filter((row) => row.kind === 'reserved')).toHaveLength(5)
+    expect(rows.every((row) => row.retryOf === undefined)).toBe(true)
+  })
+
+  it('§4.7b: odd splits and multiple queued batches dispatch in exact work-queue order', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const observed: { stage: string; unitCount: number }[] = []
+    const adapter = fix4Adapter(FIX4_TEXT(5), { observed, truncate: (stage, n) => stage === 'extract' && n > 1 })
+    await executeAudit({ ...auditInput(FIX4_TEXT(5), snapshot, adapter), maxOutputTokens: 3000 })
+    // Batches [2,2,1]; each truncated batch splits odd-first (ceil) and the
+    // halves jump the queue ahead of the untouched later batches.
+    expect(observed.filter((o) => o.stage === 'extract').map((o) => o.unitCount)).toEqual([2, 1, 1, 2, 1, 1, 1])
+  })
+
+  it('§4.7c: single-unit truncation rethrows REVIEW_TRUNCATED with the root-block guidance', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fix4Adapter(FIX4_TEXT(1), { truncate: () => true })
+    const error = await executeAudit(auditInput(FIX4_TEXT(1), snapshot, adapter)).catch((e: unknown) => e)
+    expect((error as { code?: string }).code).toBe('REVIEW_TRUNCATED')
+    expect((error as Error).message).toContain('split the artifact root block')
+  })
+
+  it('§4.7d: a non-truncation error propagates unchanged', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fix4Adapter(FIX4_TEXT(2), { throwOn: () => new Error('boom') })
+    await expect(executeAudit(auditInput(FIX4_TEXT(2), snapshot, adapter))).rejects.toThrow('boom')
+  })
+
+  it('§4.7e: BUDGET_EXHAUSTED raised by a bisect dispatch surfaces as the run budget failure', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = fix4Adapter(FIX4_TEXT(3), { truncate: (stage, n) => stage === 'extract' && n > 1 })
+    const budget = fix4Budget({ maxCallsPerRun: 1 }) // first extract call spends it
+    const caller = new ReviewCaller(adapter, new BudgetTracker(budget), budget, new AbortController().signal, () => {})
+    await expect(
+      executeAudit({ ...auditInput(FIX4_TEXT(3), snapshot, adapter), caller }),
+    ).rejects.toMatchObject({ code: 'BUDGET_EXHAUSTED' })
+  })
+
+  it('§4.8: 19 derivations at cap 12,000 → 2 align dispatches, merged in order, findings and token sums', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const claimId = snapshot.claims[0]!.id
+    const observed: { stage: string; unitCount: number }[] = []
+    const adapter = fix4Adapter(FIX4_TEXT(19), {
+      observed,
+      align: (envelope) => ({
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [
+          {
+            id: `finding_${randomUUID()}`,
+            code: 'MODEL_X',
+            targetIds: [claimId],
+            severity: 'major',
+            explanation: `chunk of ${envelope.items.length}`,
+            evidenceIds: [],
+            artifactSpans: [],
+            repair: 'add-evidence',
+          },
+        ],
+        targets: [],
+        alignment: envelope.items.map((entry: { extractedId: string }) => ({
+          extractedId: entry.extractedId,
+          claimIds: [claimId],
+          relation: 'exact',
+          rationale: 'r',
+        })),
+      }),
+    })
+    const outcome = await executeAudit({ ...auditInput(FIX4_TEXT(19), snapshot, adapter), maxOutputTokens: 12_000 })
+    // 12,000 → 16 align items/batch → chunks [16, 3]; extract 8/batch → [8,8,3].
+    expect(observed.filter((o) => o.stage === 'extract').map((o) => o.unitCount)).toEqual([8, 8, 3])
+    expect(observed.filter((o) => o.stage === 'align').map((o) => o.unitCount)).toEqual([16, 3])
+    const alignment = (outcome.alignRecord.response as { alignment: { extractedId: string }[] }).alignment
+    expect(alignment).toHaveLength(19)
+    expect(new Set(alignment.map((a) => a.extractedId)).size).toBe(19)
+    // Every derivation pairs (order-sensitive): all 19 atomics count as mapped.
+    expect(outcome.metrics.mappedAtomicClaims).toBe(19)
+    // Chunk findings concatenated, then runtime AUDIT_* findings appended.
+    const modelFindings = outcome.findings.filter((f) => f.code === 'MODEL_X')
+    expect(modelFindings.map((f) => f.explanation)).toEqual(['chunk of 16', 'chunk of 3'])
+    expect(outcome.alignRecord.inputTokens).toBe(12) // 2 × 6
+    expect(outcome.alignRecord.outputTokens).toBe(16) // 2 × 8
+  })
+
+  it('§4.8: a truncated align chunk bisects into smaller chunks', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const observed: { stage: string; unitCount: number }[] = []
+    const adapter = fix4Adapter(FIX4_TEXT(19), { observed, truncate: (stage, n) => stage === 'align' && n > 8 })
+    const outcome = await executeAudit({ ...auditInput(FIX4_TEXT(19), snapshot, adapter), maxOutputTokens: 12_000 })
+    // [16] truncates → [8],[8] jump ahead of [3].
+    expect(observed.filter((o) => o.stage === 'align').map((o) => o.unitCount)).toEqual([16, 8, 8, 3])
+    expect((outcome.alignRecord.response as { alignment: unknown[] }).alignment).toHaveLength(19)
   })
 })
