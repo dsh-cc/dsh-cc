@@ -1,6 +1,7 @@
-## Status: Design — three-lane blind review converged (codex, grok and the internal
-critic all GO: r1 full review, r2 delta verification, r3 micro-confirmation);
-user sign-off and implementation pending. Fix 4 of the post-lane-2 batch.
+## Status: Implemented — PR #281 (open, pending merge). Design converged via
+three-lane blind review (codex, grok, internal critic: r1 full review, r2
+delta, r3 micro-confirmation — all GO; ledger in §7). Fix 4 of the
+post-lane-2 batch.
 
 All code anchors cite tree `8cf51b13` (main after #278/#279), verified by direct
 source reading on 2026-10-23. Harness anchors cite `dsh` 0.2.0-rc.2
