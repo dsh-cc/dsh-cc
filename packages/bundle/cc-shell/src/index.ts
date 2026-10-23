@@ -47,6 +47,7 @@ import * as CcMcpClient from '@dsh-cc/mcp-client'
 import { CcPluginManagerService } from './ccPluginManager.ts'
 import { CcPluginsService } from './ccPlugins.ts'
 import { createPluginMcpSeam } from './mcpSeam.ts'
+import { ensureMcpConnections, markGatingNoticeFired, markNoticeFired, mountMcpServerOnce } from './mcpSingleton.ts'
 import { createPluginRulesSeam, RULES_SECTION_NAME, RULES_SECTION_ORDER } from './rulesSeam.ts'
 
 /** Plugin config: which on-disk CC surfaces to mount. */
@@ -93,18 +94,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   // The registry must outlive any single mcp-client instance: when an instance with
   // failOnStartupError fails at startup, cordis rolls that fiber back and would
-  // dispose a lazily instance-provided registry with it. Provide it from a dedicated
-  // child fiber that is ACTIVE before any instance mounts (a direct
-  // `new McpConnectionsService(ctx)` here would stay invisible: this fiber is LOADING
-  // and ctx.get is strict).
-  if (ctx.get('mcpConnections') === undefined) {
-    await ctx.plugin({
-      name: 'cc-mcp-connections',
-      apply(c: Context) {
-        new CcMcpClient.McpConnectionsService(c)
-      },
-    })
-  }
+  // dispose a lazily instance-provided registry with it. Provide it from the ROOT
+  // fiber (register-if-absent) so every preset standing-mounted tree shares the one
+  // instance, and so it is ACTIVE before any instance mounts.
+  const mcpConnections = await ensureMcpConnections(ctx.root)
 
   // The spawn-time model resolver is provided by the `@dsh-cc/model-aliases`
   // routes service (`ccModelRoutes`). Query it lazily on every spawn so mount
@@ -213,7 +206,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       const registrations = buildRegistrations(body, { env: process.env, deferStartupConnect: true })
       for (const server of registrations) {
         try {
-          await ctx.plugin(CcMcpClient, server)
+          // Idempotent per serverName: a second preset tree's mount is a no-op.
+          await mountMcpServerOnce(ctx.root, CcMcpClient, server)
           deferredNames.push(server.serverName)
           results.push(`mcp server ${server.serverName} mounted from ${file}`)
         } catch (error) {
@@ -246,17 +240,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       // fan-out), so the closure flag still picks the first announcement.
       if (fired) return
       fired = true
-      const registry = ctx.get('mcpConnections') as CcMcpClient.McpConnectionsService | undefined
-      const pending = registry === undefined
-        ? []
-        : registry.entries()
-          .filter(entry => deferredNames.includes(entry.name) && entry.state === 'connecting')
-          .map(entry => entry.name)
+      // Runtime-scoped too: the other preset tree's handler sees this mark and
+      // no-ops, so the notice is injected / mcpReadyNotice mounted only once.
+      if (!markNoticeFired(mcpConnections)) return
+      const pending = mcpConnections.entries()
+        .filter(entry => deferredNames.includes(entry.name) && entry.state === 'connecting')
+        .map(entry => entry.name)
       if (pending.length === 0) return
       const text = `MCP: still connecting — ${pending.join(', ')}. Tools from these servers become available once ready.`
       agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'cc-shell-glue', form: 'notice', summary: text } }))
       const sid = agent.session?.id
-      mountMcpReadyNotice(ctx, registry!, pending, typeof sid === 'string' ? sid : undefined)
+      mountMcpReadyNotice(ctx, mcpConnections, pending, typeof sid === 'string' ? sid : undefined)
     })
   }
 
@@ -272,6 +266,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     ctx.on('agent/created', ({ agent }: { agent: { inject(message: unknown): void } }) => {
       if (fired) return
       fired = true
+      // Shared with the other preset tree's handler (design §D): one gating
+      // notice per runtime, not per tree.
+      if (!markGatingNoticeFired(mcpConnections)) return
       agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'cc-shell-glue', form: 'notice', summary: text } }))
     })
   }

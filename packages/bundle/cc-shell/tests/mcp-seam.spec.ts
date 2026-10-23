@@ -135,6 +135,19 @@ describe('cc-shell plugin MCP seam — registration pipeline', () => {
     expect(warns.some(w => w.includes('broken') && w.includes('command'))).toBe(true)
     expect(fake.entries).toHaveLength(0)
   })
+
+  it('4b. serverName already in the shared registry → warn + no-op disposer, no instance mounted', async () => {
+    const fake = createFakeClient()
+    ctx.provide('mcpConnections', { entries: () => [{ name: 'already-there' }] })
+    const seam = createPluginMcpSeam(ctx, { plugin: fake.plugin })
+    const dispose = seam.registerServer('already-there', validEntry())
+
+    await settle()
+    expect(dispose).toBeTypeOf('function')
+    expect(() => dispose()).not.toThrow()
+    expect(warns.some(w => w.includes('already-there') && w.includes('already registered'))).toBe(true)
+    expect(fake.entries).toHaveLength(0)
+  })
 })
 
 describe('cc-shell plugin MCP seam — pending-release ledger (D8)', () => {
