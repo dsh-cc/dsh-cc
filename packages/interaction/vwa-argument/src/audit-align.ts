@@ -152,6 +152,13 @@ const VERDICT_SEVERITY: Record<AlignResponse['targets'][number]['checks'][number
  * rationale is deterministic). The ruleId union keeps the merged response
  * schema-valid and `validateTaskResponse`-clean (one check per rule per
  * target, which is exactly what a single-call align response must satisfy).
+ *
+ * The merged entry is built FRESH as `{ targetId, checks }` rather than
+ * spreading a chunk's target: `ResponseTarget` is
+ * `additionalProperties: false` with exactly those two properties
+ * (review.schema.json), so there is no per-target field the spread would need
+ * to preserve — and building fresh keeps a future schema addition a
+ * conscious decision instead of a silent last-chunk-wins value.
  */
 function mergeChunkTargets(chunks: AlignResponse[]): AlignResponse['targets'] {
   const targets = new Map<Id, Map<string, AlignResponse['targets'][number]['checks'][number]>>()
