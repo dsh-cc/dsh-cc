@@ -68,6 +68,19 @@ export function packExtractionBatches(
  * model calls (extract batches + align batches, F4.1). `maxContextChars` MUST
  * be the RUNNER's effective context (`effectiveContextChars`), never
  * `Infinity` — an unbounded no-op default must not leak into estimates.
+ *
+ * `extractBatches` is EXACT (the runtime packs the same units with the same
+ * two constraints). `alignBatches` is an APPROXIMATION: the runtime chunks
+ * align by the number of EXTRACTED ITEMS, while this model can only key on
+ * extraction units — one unit may yield several items or none. Direction of
+ * the error, both bounded and both acceptable under the "reservation upper
+ * bound" semantics of the feasibility gate:
+ *  - over-estimate (many units, few items) → an early, conservative
+ *    BUDGET_INSUFFICIENT refusal;
+ *  - under-estimate (few units, many items) → extra runtime dispatches, which
+ *    the per-run BudgetTracker enforces (BUDGET_EXHAUSTED with completed
+ *    records preserved) and the truncation bisect covers.
+ * It is NOT a hard feasibility guarantee for align.
  */
 export function auditCostModel(input: {
   artifactText: string

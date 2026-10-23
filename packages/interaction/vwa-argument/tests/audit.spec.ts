@@ -21,7 +21,8 @@ import { auditCostModel } from '../src/audit-cost.ts'
 import { auditUnitChars } from '../src/audit-reuse.ts'
 import type { ReviewCaller as ReviewCallerType } from '../src/review-call.ts'
 import type { AlignEnvelope, ExtractEnvelope } from '../src/audit.ts'
-import type { Claim, ExtractedItem, ProjectSnapshot, ReviewRecord } from '../src/types.ts'
+import type { Claim, ExtractedItem, ProjectSnapshot, ReviewRecord, AlignResponse } from '../src/types.ts'
+import { mergeAlignChunks, dispatchAlignChunks } from '../src/audit-align.ts'
 import { makeClaim, makeSnapshot } from './review-helpers.ts'
 
 // ---- helpers ----
@@ -653,6 +654,10 @@ function fix4Adapter(
     throwOn?: (stage: string, unitCount: number) => Error | undefined
     observed?: { stage: string; unitCount: number }[]
     align?: (envelope: AlignEnvelope) => Record<string, unknown>
+    /** Per-chunk check results: overrides the default all-pass target injection. */
+    alignTargets?: (envelope: AlignEnvelope) => unknown[]
+    /** Extract returns zero items (models the zero-extraction approximation case). */
+    emptyExtract?: boolean
   } = {},
 ): ReviewModelAdapter {
   return {
@@ -668,7 +673,9 @@ function fix4Adapter(
             if (thrown) throw thrown
             if (options.truncate?.('extract', units.length)) throw new ReviewTruncatedError()
             return {
-              raw: JSON.stringify({ items: units.map((u) => unitItem(artifactText, u)) }),
+              raw: JSON.stringify({
+                items: options.emptyExtract ? [] : units.map((u) => unitItem(artifactText, u)),
+              }),
               inputTokens: 5,
               outputTokens: 7,
             }
@@ -690,13 +697,16 @@ function fix4Adapter(
             })),
           }
           const rules = envelope.requiredRules
-          if (rules)
+          if (options.alignTargets) {
+            response.targets = options.alignTargets(envelope) as never
+          } else if (rules) {
             response.targets = [...new Set(rules.map((r) => r.targetId))].map((targetId) => ({
               targetId,
               checks: rules
                 .filter((r) => r.targetId === targetId)
                 .map((r) => ({ ruleId: r.ruleId, result: 'pass', rationale: 'reviewed', evidenceIds: [] })),
             }))
+          }
           return { raw: JSON.stringify(response), inputTokens: 6, outputTokens: 8 }
         },
       }
@@ -849,5 +859,239 @@ describe('Fix 4 — estimate/runtime parity and truncation bisect', () => {
     // [16] truncates → [8],[8] jump ahead of [3].
     expect(observed.filter((o) => o.stage === 'align').map((o) => o.unitCount)).toEqual([16, 8, 8, 3])
     expect((outcome.alignRecord.response as { alignment: unknown[] }).alignment).toHaveLength(19)
+  })
+})
+
+describe('Fix 4 review fixes — cross-chunk check merging and cost-model approximation', () => {
+  const check = (ruleId: string, result: 'pass' | 'fail' | 'needs-review' | 'not-run', rationale = 'r') => ({
+    ruleId,
+    result,
+    rationale,
+    evidenceIds: [] as [],
+  })
+  const chunkOf = (targets: unknown[], alignment: unknown[] = []): AlignResponse =>
+    ({ stage: 'align', rubricVersion: 'humanities-v1', findings: [], targets, alignment }) as unknown as AlignResponse
+  const derivations = [{ extractedId: 'e1' }, { extractedId: 'e2' }]
+  // Each chunk carries only ITS OWN alignment entries (merged = the union).
+  const own = (id: string) => [
+    { extractedId: id, claimIds: [], relation: 'new', rationale: 'r' },
+  ]
+
+  it('mergeAlignChunks: a later pass does not overwrite an earlier fail (same target, same rule)', () => {
+    const merged = mergeAlignChunks(
+      [
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-02', 'fail', 'first batch found drift')] }], own('e1')),
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-02', 'pass', 'second batch ok')] }], own('e2')),
+      ],
+      derivations,
+      [],
+    )
+    const c = merged.targets[0]!.checks.find((x) => x.ruleId === 'AUDIT-02')!
+    expect(c.result).toBe('fail')
+    expect(c.rationale).toBe('first batch found drift')
+  })
+
+  it('mergeAlignChunks: an earlier pass does not survive a later fail (order-independent worst-wins)', () => {
+    const merged = mergeAlignChunks(
+      [
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-02', 'pass', 'first ok')] }], own('e1')),
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-02', 'fail', 'second found drift')] }], own('e2')),
+      ],
+      derivations,
+      [],
+    )
+    expect(merged.targets[0]!.checks.find((x) => x.ruleId === 'AUDIT-02')!.result).toBe('fail')
+  })
+
+  it('mergeAlignChunks: needs-review beats pass; fail beats needs-review; pass beats not-run; ties keep the first', () => {
+    const merged = mergeAlignChunks(
+      [
+        chunkOf([
+          { targetId: 't1', checks: [check('AUDIT-01', 'needs-review', 'first'), check('AUDIT-02', 'pass', 'first')] },
+        ], own('e1')),
+        chunkOf([
+          { targetId: 't1', checks: [check('AUDIT-01', 'pass', 'second'), check('AUDIT-02', 'fail', 'second')] },
+        ], own('e2')),
+      ],
+      derivations,
+      [],
+    )
+    const byRule = new Map(merged.targets[0]!.checks.map((c) => [c.ruleId, c]))
+    expect(byRule.get('AUDIT-01')!.result).toBe('needs-review')
+    expect(byRule.get('AUDIT-02')!.result).toBe('fail')
+    const ties = mergeAlignChunks(
+      [
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-01', 'pass', 'first')] }], own('e1')),
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-01', 'pass', 'second')] }], own('e2')),
+      ],
+      derivations,
+      [],
+    )
+    expect(ties.targets[0]!.checks[0]!.rationale).toBe('first')
+    const notRun = mergeAlignChunks(
+      [
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-01', 'not-run', 'first')] }], own('e1')),
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-01', 'pass', 'second')] }], own('e2')),
+      ],
+      derivations,
+      [],
+    )
+    expect(notRun.targets[0]!.checks[0]!.result).toBe('pass')
+  })
+
+  it('mergeAlignChunks: rule set unions across chunks (one entry per targetId/ruleId stays valid)', () => {
+    const merged = mergeAlignChunks(
+      [
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-01', 'pass')] }], own('e1')),
+        chunkOf([{ targetId: 't1', checks: [check('AUDIT-02', 'fail'), check('AUDIT-03', 'pass')] }], own('e2')),
+      ],
+      derivations,
+      [],
+    )
+    expect(merged.targets).toHaveLength(1)
+    expect(merged.targets[0]!.checks.map((c) => c.ruleId).sort()).toEqual(['AUDIT-01', 'AUDIT-02', 'AUDIT-03'])
+  })
+
+  it('executeAudit: cross-chunk conflict — first chunk fail survives the second chunk pass, findings stay consistent', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const claimId = snapshot.claims[0]!.id
+    const observed: { stage: string; unitCount: number }[] = []
+    const adapter = fix4Adapter(FIX4_TEXT(19), {
+      observed,
+      // The artifact target id comes from the chunk's own requiredRules
+      // (auditInput mints one when the snapshot has no artifact).
+      alignTargets: (envelope) => {
+        const targetId = envelope.requiredRules![0]!.targetId
+        return envelope.items.length > 10
+          ? [{ targetId, checks: [check('AUDIT-02', 'fail', 'first chunk found drift')] }]
+          : [{ targetId, checks: [check('AUDIT-02', 'pass', 'second chunk ok')] }]
+      },
+      align: (envelope) => ({
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [
+          {
+            id: `finding_${randomUUID()}`,
+            code: 'MODEL_X',
+            targetIds: [claimId],
+            severity: 'major',
+            explanation: `chunk of ${envelope.items.length}`,
+            evidenceIds: [],
+            artifactSpans: [],
+            repair: 'add-evidence',
+          },
+        ],
+        targets: [],
+        alignment: envelope.items.map((entry: { extractedId: string }) => ({
+          extractedId: entry.extractedId,
+          claimIds: [claimId],
+          relation: 'exact',
+          rationale: 'r',
+        })),
+      }),
+    })
+    const outcome = await executeAudit({ ...auditInput(FIX4_TEXT(19), snapshot, adapter), maxOutputTokens: 12_000 })
+    // chunks [16, 3]: the [16] chunk failed AUDIT-02, the [3] chunk passed it.
+    expect(observed.filter((o) => o.stage === 'align').map((o) => o.unitCount)).toEqual([16, 3])
+    const targets = (outcome.alignRecord.response as AlignResponse).targets
+    expect(targets).toHaveLength(1)
+    expect(targets[0]!.checks.find((c) => c.ruleId === 'AUDIT-02')!.result).toBe('fail')
+    // Findings from BOTH chunks survive the merge (checks and findings stay consistent).
+    expect(outcome.findings.filter((f) => f.code === 'MODEL_X').map((f) => f.explanation)).toEqual([
+      'chunk of 16',
+      'chunk of 3',
+    ])
+  })
+
+  it('cost model approximation: one→many — the runtime chunks by ITEM count, the estimate by UNIT count', async () => {
+    // One unit can yield several extracted items (or none): the runtime align
+    // chunking keys on derivations, while auditCostModel can only key on
+    // extraction units. The estimate is a documented approximation, not a hard
+    // feasibility guarantee — under-estimates are covered by the runtime budget
+    // guard and the bisect; over-estimates refuse early (conservative).
+    const dispatches: number[] = []
+    const derivations = Array.from({ length: 7 }, (_, i) => ({
+      extractedId: `e${i}`,
+      item: { span: { start: 0, end: 1 }, exactText: 'x', atomicClaims: [], isQuotation: false },
+      originalSpan: { start: 0, end: 1 },
+    }))
+    const result = await dispatchAlignChunks({
+      dispatch: async (_prompt, env, _schema, parse) => {
+        const items = (env as { items: { extractedId: string }[] }).items
+        dispatches.push(items.length)
+        return {
+          raw: parse(
+            JSON.stringify({
+              stage: 'align',
+              rubricVersion: 'humanities-v1',
+              findings: [],
+              targets: [],
+              alignment: items.map((e) => ({ extractedId: e.extractedId, claimIds: [], relation: 'new', rationale: 'r' })),
+            }),
+          ),
+          inputTokens: 1,
+          outputTokens: 1,
+        }
+      },
+      alignPrompt: 'p',
+      schema: {},
+      envelope: { stage: 'align' } as never,
+      derivations,
+      maxChunkItems: 2,
+      claimIds: [],
+      withCaller: false,
+      taskSpec: {} as never,
+    })
+    // Item-keyed runtime: 7 items at 2 per chunk → [2, 2, 2, 1].
+    expect(dispatches).toEqual([2, 2, 2, 1])
+    expect(result.responses).toHaveLength(4)
+    // A 1-unit artifact at cap 3,000 estimates ONE align batch — the estimate
+    // cannot know the unit produced 7 items (needs 4 chunks). Divergence is
+    // the documented approximation, bounded by the runtime budget guard.
+    const model = auditCostModel({
+      artifactText: 'Single root block.\n',
+      maxUnitChars: auditUnitChars(48_000),
+      maxContextChars: 48_000,
+      maxOutputTokensPerCall: 3_000,
+    })
+    expect(model.units).toBe(1)
+    expect(model.alignBatches).toBe(1)
+  })
+
+  it('cost model approximation: zero extraction — the runtime still makes exactly one align dispatch', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const observed: { stage: string; unitCount: number }[] = []
+    const adapter = fix4Adapter(FIX4_TEXT(9), { observed, emptyExtract: true })
+    const outcome = await executeAudit({ ...auditInput(FIX4_TEXT(9), snapshot, adapter), maxOutputTokens: 3_000 })
+    const model = auditCostModel({
+      artifactText: FIX4_TEXT(9),
+      maxUnitChars: auditUnitChars(48_000),
+      maxContextChars: 48_000,
+      maxOutputTokensPerCall: 3_000,
+    })
+    // 9 units at cap 3,000 estimate 3 align batches (4 items/chunk) while the
+    // runtime dispatches the single empty chunk (pre-Fix-4 shape preserved).
+    expect(model.alignBatches).toBe(3)
+    expect(observed.filter((o) => o.stage === 'align').map((o) => o.unitCount)).toEqual([0])
+    expect((outcome.alignRecord.response as { alignment: unknown[] }).alignment).toHaveLength(0)
+  })
+
+  it('cost model approximation: the char constraint binds the EXTRACT estimate — extract-side parity holds', () => {
+    const model = auditCostModel({
+      artifactText: FIX4_TEXT(3),
+      maxUnitChars: auditUnitChars(48_000),
+      // 0.7 × 250 chars: each stableJson(unit) alone exceeds it → one unit per
+      // batch even though maxExtractUnitsPerBatch(3000) = 2 would allow pairs.
+      maxContextChars: 250,
+      maxOutputTokensPerCall: 3_000,
+    })
+    // The estimate follows the char bound on the extract side (3 batches, not
+    // the count-bound 2) — the same packing the runtime extract loop applies.
+    expect(model.extractBatches).toBe(3)
+    expect(Math.ceil(3 / 2)).toBe(2) // the count-only bound would under-count
+    // The align estimate applies the SAME unit packing (chars + count) and so
+    // also follows the char bound (3), while the runtime align chunks by ITEM
+    // count only — the documented approximation gap.
+    expect(model.alignBatches).toBe(3)
   })
 })

@@ -105,9 +105,17 @@ export async function dispatchAlignChunks<D extends AlignDerivation>(args: {
 /**
  * F4.3 merge contract: stage/rubricVersion asserted identical, alignment
  * concatenated (the caller reorders by derivation and the full-set
- * `validateAlignment` gate re-runs in mergeAlignChunks), targets unioned by
- * targetId, findings concatenated (runtime-owned AUDIT codes are appended by
- * {@link runtimeAuditFindings}, never merged from model output).
+ * `validateAlignment` gate re-runs in mergeAlignChunks), targets merged PER
+ * (targetId, ruleId) keeping the WORST verdict (fail > needs-review > pass >
+ * not-run; ties keep the first chunk's entry), findings concatenated
+ * (runtime-owned AUDIT codes are appended by {@link runtimeAuditFindings},
+ * never merged from model output).
+ *
+ * Why per-rule and worst-wins: every chunk is required to check the same
+ * artifact target against all AUDIT rules, so duplicate (targetId, ruleId)
+ * pairs are the NORMAL case. A plain per-target "last chunk wins" merge would
+ * let a later chunk's `pass` erase an earlier chunk's `fail` — the persisted
+ * checks would then contradict the findings (which are kept from every chunk).
  */
 export function mergeAlignChunks(
   chunks: AlignResponse[],
@@ -122,12 +130,49 @@ export function mergeAlignChunks(
   const merged: AlignResponse = {
     ...first,
     alignment: chunks.flatMap((chunk) => chunk.alignment),
-    targets: [...new Map(chunks.flatMap((chunk) => chunk.targets).map((t) => [t.targetId, t])).values()],
+    targets: mergeChunkTargets(chunks),
     findings: chunks.flatMap((chunk) => chunk.findings),
   }
   // Final coherence gate over the whole set (each chunk validated only its own).
   validateAlignment(merged, derivations, claimIds)
   return merged
+}
+
+/** Verdict severity: the merge never lets a milder verdict replace a harsher one. */
+const VERDICT_SEVERITY: Record<AlignResponse['targets'][number]['checks'][number]['result'], number> = {
+  fail: 3,
+  'needs-review': 2,
+  pass: 1,
+  'not-run': 0,
+}
+
+/**
+ * Merge per-chunk target checks into one entry per (targetId, ruleId), keeping
+ * the harsher verdict (first occurrence wins on ties, so the retained
+ * rationale is deterministic). The ruleId union keeps the merged response
+ * schema-valid and `validateTaskResponse`-clean (one check per rule per
+ * target, which is exactly what a single-call align response must satisfy).
+ */
+function mergeChunkTargets(chunks: AlignResponse[]): AlignResponse['targets'] {
+  const targets = new Map<Id, Map<string, AlignResponse['targets'][number]['checks'][number]>>()
+  for (const chunk of chunks) {
+    for (const target of chunk.targets) {
+      let checks = targets.get(target.targetId)
+      if (checks === undefined) {
+        checks = new Map()
+        targets.set(target.targetId, checks)
+      }
+      for (const check of target.checks) {
+        const previous = checks.get(check.ruleId)
+        if (previous === undefined || VERDICT_SEVERITY[check.result] > VERDICT_SEVERITY[previous.result])
+          checks.set(check.ruleId, check)
+      }
+    }
+  }
+  return [...targets.entries()].map(([targetId, checks]) => ({
+    targetId,
+    checks: [...checks.values()],
+  }))
 }
 
 /** §11.4 runtime-owned AUDIT codes: model output carrying them is dropped. */

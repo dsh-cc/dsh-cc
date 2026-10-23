@@ -111,6 +111,20 @@ export function auditCostModel(input: {
 // calls = extractBatches + alignBatches   (replaces the old "+ 1 align")
 ```
 
+**Estimate fidelity (explicit):** `extractBatches` is exact — the estimate and
+the runtime pack the same extraction units under the same two constraints.
+`alignBatches` is an APPROXIMATION, because the runtime chunks align by the
+number of EXTRACTED ITEMS while the estimate can only key on extraction units
+(one unit may yield several items, or none). The estimate is therefore NOT a
+hard feasibility guarantee for align; its error is bounded in both directions
+and both are acceptable under the reservation-upper-bound semantics of the
+gate: an over-estimate refuses early (conservative), an under-estimate is
+caught by the per-run `BudgetTracker` (`BUDGET_EXHAUSTED`, completed records
+preserved) and by the truncation bisect. §4 pins the three divergence shapes
+(one→many, zero extraction, char-constraint-bound extract), and the align
+merge keeps the WORST verdict per (targetId, ruleId) so a later chunk's `pass`
+can never erase an earlier chunk's `fail`.
+
 ### F4.2 Estimate/runtime context parity (r1 critic major)
 
 Today the runtime packs with `?? Number.POSITIVE_INFINITY` (audit.ts:203) while
