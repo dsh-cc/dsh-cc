@@ -1,0 +1,54 @@
+{
+  "_provenance": "Token counts measured with tiktoken cl100k_base / o200k_base on 2026-10-23 over the exact `text` values in this file (bytes = UTF-8 byte length).",
+  "samples": {
+    "english_prose": {
+      "class": "conservative",
+      "text": "The council closed the port before dawn. Merchants disputed the order, citing losses, while the harbour master maintained that the risk justified it. The council closed the port before dawn. Merchants disputed the order, citing losses, while the harbour master maintained that the risk justified it. The council closed the port before dawn. Merchants disputed the order, citing losses, while the harbour master maintained that the risk justified it. ",
+      "cl100k": 85,
+      "o200k": 85,
+      "bytes": 450
+    },
+    "json_envelope": {
+      "class": "conservative",
+      "text": "{\"stage\":\"align\",\"rubricVersion\":\"humanities-v1\",\"contract\":{\"requiredQuestions\":[{\"id\":\"q1\",\"text\":\"What happened?\"}]},\"units\":[{\"unitId\":\"u1\",\"span\":{\"start\":0,\"end\":42},\"text\":\"The council closed the port.\",\"heading\":\"Harbour\"}]}",
+      "cl100k": 64,
+      "o200k": 66,
+      "bytes": 232
+    },
+    "typescript_code": {
+      "class": "conservative",
+      "text": "export function packExtractionBatches(units: ExtractionUnit[], maxContextChars: number, maxItems = Number.POSITIVE_INFINITY): ExtractionUnit[][] {\n  const batches: ExtractionUnit[][] = []\n  let batch: ExtractionUnit[] = [], chars = 0\n  for (const unit of units) {\n    if (batch.length && (chars + stableJson(unit).length > maxContextChars * 0.7 || batch.length >= maxItems)) {\n      batches.push(batch); batch = []; chars = 0\n    }\n    batch.push(unit); chars += stableJson(unit).length\n  }\n  return batches\n}\n",
+      "cl100k": 128,
+      "o200k": 128,
+      "bytes": 510
+    },
+    "chinese_prose": {
+      "class": "dense",
+      "text": "议会天亮前关闭了港口。商人们对此提出异议，称损失惨重，而港务长坚持认为风险足以证成此举。此后数周，港口的通行费收入下降了三成。",
+      "cl100k": 74,
+      "o200k": 54,
+      "bytes": 189
+    },
+    "chinese_rare": {
+      "class": "dense",
+      "text": "齉龘靐齉龘靐齉龘靐齉龘靐齉龘靐齉龘靐齉龘靐齉龘靐齉龘靐齉龘靐",
+      "cl100k": 70,
+      "o200k": 60,
+      "bytes": 90
+    },
+    "emoji_symbols": {
+      "class": "dense",
+      "text": "⚠️🔥✅❌🚢⚓️📉📈🧾🔍 ⚠️🔥✅❌🚢⚓️📉📈🧾🔍 ⚠️🔥✅❌🚢⚓️📉📈🧾🔍",
+      "cl100k": 90,
+      "o200k": 63,
+      "bytes": 128
+    },
+    "mixed": {
+      "class": "conservative",
+      "text": "Harbour report §3: 港口关闭 (closed) — losses ≈ ¥12,000,000; see ⚠️ note. 商人们 disputed the order.",
+      "cl100k": 38,
+      "o200k": 36,
+      "bytes": 117
+    }
+  }
+}

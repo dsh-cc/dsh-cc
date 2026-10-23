@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { createReviewAdapter, ReviewConfigDriftError } from '../src/review-adapter.ts'
+import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { BudgetTracker } from '../src/review-tasks.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import type { ReviewBudget } from '../src/review-budget.ts'
@@ -89,6 +90,70 @@ describe('Fix 5 — configFingerprint excludes budget facts', () => {
     const unexpected = Object.keys(fp.effectiveConfig).filter((k) => !allowed.has(k))
     // A future harness key must fail here loudly and be classified (F5 §4.5).
     expect(unexpected).toEqual([])
+  })
+})
+
+describe('Fix 5 review — config shape verified against the real config path', () => {
+  /**
+   * Compile-time pin against the harness type (dsh 0.2.0-rc.2, LlmCallConfig is
+   * the closed six-key shape). A future harness field that becomes REQUIRED
+   * breaks this `satisfies` and forces classification (budget → deny, semantic
+   * → keep) instead of a silent identity change.
+   */
+  const CLOSED_HARNESS_SHAPE = {
+    provider: 'fake',
+    model: 'fake-model',
+    reasoningEffort: 'low',
+    temperature: 0.2,
+    maxTokens: 1_000,
+    stop: ['END'],
+  } satisfies LlmCallConfig
+
+  it('the raw prepared config carries the closed harness field set', async () => {
+    const adapter = createReviewAdapter({
+      // Echo the full closed shape the way a real harness resolve does.
+      llm: {
+        async prepareCall() {
+          return { config: { ...CLOSED_HARNESS_SHAPE }, stream: async function* () {} }
+        },
+      },
+      route: ROUTE,
+    })
+    await adapter.initialize(1_000, SIGNAL)
+    const fp = adapter.configFingerprint() as { effectiveConfig: Record<string, unknown> }
+    // The RAW config (post-prepareCall) has every closed-shape key…
+    expect(Object.keys(CLOSED_HARNESS_SHAPE).sort()).toEqual(
+      ['maxTokens', 'model', 'provider', 'reasoningEffort', 'stop', 'temperature'],
+    )
+    // …and the fingerprint keeps all of them EXCEPT the budget key.
+    expect(Object.keys(fp.effectiveConfig).sort()).toEqual(
+      ['model', 'provider', 'reasoningEffort', 'stop', 'temperature'],
+    )
+    expect(fp.effectiveConfig.maxTokens).toBeUndefined()
+    // The semantic values survive verbatim (no accidental reshaping).
+    expect(fp.effectiveConfig).toMatchObject({
+      provider: 'fake',
+      model: 'fake-model',
+      reasoningEffort: 'low',
+      temperature: 0.2,
+      stop: ['END'],
+    })
+  })
+
+  it('an UNKNOWN future config field enters the fingerprint (denylist fails toward re-invalidation)', async () => {
+    // The strip is a denylist: any key the harness adds is hashed, so a future
+    // semantic key keeps invalidating records (safe direction) instead of being
+    // silently dropped by an allowlist (stale reuse).
+    const withFuture = createReviewAdapter({
+      llm: echoingLlm(() => ({ futureBudgetKnob: 5 })),
+      route: ROUTE,
+    })
+    const withoutFuture = createReviewAdapter({ llm: echoingLlm(), route: ROUTE })
+    await withFuture.initialize(12_000, SIGNAL)
+    await withoutFuture.initialize(12_000, SIGNAL)
+    const fp = withFuture.configFingerprint() as { effectiveConfig: Record<string, unknown> }
+    expect(fp.effectiveConfig.futureBudgetKnob).toBe(5)
+    expect(withFuture.configFingerprint()).not.toEqual(withoutFuture.configFingerprint())
   })
 })
 
