@@ -22,7 +22,7 @@ const FROZEN = freezeReviewSettings()
 const STAGES: ReviewStage[] = ['sources', 'support', 'claims', 'arguments', 'audit']
 
 /** A small artifact text that costs exactly 2 audit calls (1 extract batch + 1 align). */
-const ARTIFACT = { id: 'art_1', text: Array.from({ length: 20 }, (_, i) => `# H${i}\n\nParagraph ${i} is short.\n`).join('\n') }
+const ARTIFACT = { id: 'art_1', text: 'Paragraph 0 is short.\n' }
 
 /** The minimal complete graph: 1 source + 1 evidence + 1 group + 1 claim + 1 argument (+2 audit = 6 first attempts). */
 function minimalGraph() {

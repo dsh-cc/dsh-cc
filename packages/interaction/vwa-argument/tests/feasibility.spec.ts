@@ -86,6 +86,7 @@ function auditEstimate(text: string, maxContextChars?: number) {
     artifactText: text,
     maxUnitChars: effectiveAuditUnitChars(maxContextChars === undefined ? {} : { maxContextChars }),
     maxContextChars: maxContextChars ?? RUNNER_CONTEXT,
+    maxOutputTokensPerCall: 3000,
   })
 }
 
@@ -101,7 +102,7 @@ describe('audit cost model alignment (F1.1/F1.3)', () => {
       })
       expect(estimate.plannedCalls.audit).toBe(model.calls)
       expect(estimate.auditUnits).toBe(model.units)
-      expect(estimate.plannedCalls.audit).toBe(model.batches + 1)
+      expect(estimate.plannedCalls.audit).toBe(model.extractBatches + model.alignBatches)
       expect(model.calls).toBeGreaterThan(1)
     })
   }
