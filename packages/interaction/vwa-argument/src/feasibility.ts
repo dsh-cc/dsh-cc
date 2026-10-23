@@ -7,7 +7,7 @@
  *
  * @module @dsh-cc/vwa-argument/feasibility
  */
-import { auditCostModel } from './audit-cost.ts'
+import { auditCostModel, effectiveContextChars } from './audit-cost.ts'
 import { buildReverseIndex } from './dependencies.ts'
 import { upstreamRecords } from './review-input.ts'
 import { allRecords, planContinueTasks, reusableRecord, resolveTargetClaimIds } from './review-continue.ts'
@@ -66,8 +66,11 @@ export function estimateReviewCalls(input: {
     const model = auditCostModel({
       artifactText: input.artifact.text,
       maxUnitChars: unitChars,
-      // The runtime defaults to 48_000 when no caller context is set.
-      maxContextChars: input.maxContextChars ?? 48_000,
+      // The runtime defaults to 48_000 when no caller context is set (F4.2).
+      maxContextChars: effectiveContextChars(
+        input.maxContextChars === undefined ? undefined : { maxContextChars: input.maxContextChars },
+      ),
+      maxOutputTokensPerCall: budget.maxOutputTokensPerCall,
     })
     auditCalls = model.calls
     auditUnits = model.units
