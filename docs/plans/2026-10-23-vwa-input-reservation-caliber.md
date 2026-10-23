@@ -1,6 +1,6 @@
-## Status: Design — three-lane blind review converged (codex, grok and the internal
-critic all GO: r1 full review, r2 delta verification, r3 micro-confirmation);
-user sign-off and implementation pending. Fix 6 of the post-lane-2 batch.
+## Status: Implemented — PR #282 (open, pending merge). Design converged via
+three-lane blind review (codex, grok, internal critic: r1 full review, r2
+delta, r3 micro-confirmation — all GO; ledger in §7). Fix 6 of the post-lane-2 batch (ships with Fix 5 in one PR for a single identity reset).
 
 All code anchors cite tree `8cf51b13`. Runtime evidence cites the 2026-10-22
 reproduction (`run_787893ba` usage ledger, test project `prj_13485f41-…`).

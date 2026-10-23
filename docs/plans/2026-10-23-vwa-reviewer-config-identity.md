@@ -1,6 +1,6 @@
-## Status: Design — three-lane blind review converged (codex, grok and the internal
-critic all GO: r1 full review, r2 delta verification, r3 micro-confirmation);
-user sign-off and implementation pending. Fix 5 of the post-lane-2 batch.
+## Status: Implemented — PR #282 (open, pending merge). Design converged via
+three-lane blind review (codex, grok, internal critic: r1 full review, r2
+delta, r3 micro-confirmation — all GO; ledger in §7). Fix 5 of the post-lane-2 batch (ships with Fix 6 in one PR for a single identity reset).
 
 All code anchors cite tree `8cf51b13`. Harness anchors cite `dsh` 0.2.0-rc.2
 (`deepseek-harness` @ `c1b47e41fc`), whose `LlmCallConfig` is the closed shape
