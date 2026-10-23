@@ -305,15 +305,29 @@ awaits the source run's journal `drain`, then re-enters `engine.start` with the
 the pending claim with `resumeOf` set. The provider then resolves each incoming
 child in arrival order:
 
-- **While unfrozen** (no miss yet): compare the child's request hash with the
-  old journal line at the same arrival index. Match → **do not spawn**; return a
+- **While unfrozen** (no miss yet): look the child's request hash up in the
+  old journal's *replayable prefix* — the contiguous lines seq 1..k that are
+  `completed` with a well-formed projection — and take the first unconsumed
+  line with that hash (each line replays at most once; identical requests
+  consume lines in journal order). **Revision 2026-10-22:** matching was
+  originally by arrival index ("the old journal line at the same arrival
+  index"); that assumed resume arrival order reproduces the journaled run's,
+  which concurrent combinators violate — replayed stage-1 hits of a
+  `pipeline()` settle instantly, so a later item's stage-2 call can overtake
+  an earlier one (observed on CI: `stage2 c` arriving first, freezing the
+  run and re-spawning all three stage-2 agents; spike `expected 13 to be 10`).
+  Hash keying makes replay independent of arrival order. CC's "a failed
+  agent runs again, and so does every agent that started after it" is kept
+  by the prefix cut: a line journaled after a non-completed, missing, or
+  malformed line is never pooled. Hit → **do not spawn**; return a
   fabricated `SubagentRun` whose `result` resolves to the stored result and
   whose `dispose()` resolves immediately (provenance rides the additive
-  `cached: true` extension below). Mismatch on
-  hash, a non-completed stored status, a missing line, or journal corruption →
-  flip frozen permanently for this run, spawn live, and every subsequent seq
-  spawns live regardless of matches (this *is* CC's "and so does every agent
-  after it").
+  `cached: true` extension below); the copy-forward line is re-recorded at the
+  *new* run's arrival index. No unconsumed pooled line for the hash (edited
+  request, a request past the replayable prefix, more duplicates than
+  journaled) or journal corruption → flip frozen permanently for this run,
+  spawn live, and every subsequent arrival spawns live regardless of matches
+  (this *is* CC's "and so does every agent after it").
 - Fabricated-run compatibility is the slice's load-bearing spike: `SubagentRun`
   exposes `id: SessionId` and `localAgent`; consumers (the engine's host-side
   handshake, invariant listeners keyed by session id) may assume a real session.
@@ -341,8 +355,9 @@ child in arrival order:
   reports each hit as `registry.markCached(runId, arrivalIndex)`; the
   registry's start/end listeners enrich the record when `agent.seq` is in the
   cached set — exact because arrival index == seq (§2 strong form). Correlation
-  caveat: replay CORRECTNESS does not depend on this equality (both the journal
-  and the frozen-until-first-miss rule speak provider arrival index only); if
+  caveat: replay CORRECTNESS does not depend on this equality (the journal
+  records provider arrival index and replay matches by request hash, never by
+  index — §3.4 revision 2026-10-22); if
   the strong form ever breaks, the sole damage is a mis-flagged `cached` row —
   the equality is asserted in composition and dogfood (§DoD), not just in the
   spike. Fabricated rows also record the synthetic `childId` (the harness-owned
@@ -444,6 +459,10 @@ real `WorkerThreadWorkflowEngine` + real `SubagentRuntime` + real
 
 Residual noted by the spike: cross-item interleaving *within* a pipeline is
 engine-owned and not pinned by the spike's arrival assertions.
+**Follow-up 2026-10-22:** that residual materialized under CI load (resume
+run's stage-2 arrivals reordered → positional mismatch → 3 extra spawns);
+fixed by hash-keyed matching (§3.4 revision), with a deterministic reorder
+regression in `tests/provider.spec.ts`.
 
 ## Acceptance (DoD)
 
