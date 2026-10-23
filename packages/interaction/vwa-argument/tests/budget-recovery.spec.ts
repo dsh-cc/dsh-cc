@@ -11,7 +11,7 @@ describe('usage-ledger retry linkage (B.2.4)', () => {
     store.initRun('run_retry')
     const row = {
       runId: 'run_retry', taskId: 'task_one', seq: 2, kind: 'error' as const,
-      inputTokens: 10, outputTokens: 3000, method: 'bytes-upper-bound' as const,
+      inputTokens: 10, outputTokens: 3000, method: 'bytes/3-estimate' as const,
       retryOf: 'task_one:1',
     }
     store.appendUsage('run_retry', row)
@@ -44,7 +44,7 @@ describe('persisted usage recovers a reserve even if request counters were not u
       kind: 'reserved',
       inputTokens: 42,
       outputTokens: 3000,
-      method: 'bytes-upper-bound',
+      method: 'bytes/3-estimate',
     })
     expect(new ReviewRunStore(root, 'prj_recovery').loadRequest('run_recovery')).toMatchObject({
       status: 'incomplete',

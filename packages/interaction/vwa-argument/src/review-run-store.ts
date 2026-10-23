@@ -40,7 +40,7 @@ export interface UsageRow {
   kind: 'actual' | 'reserved' | 'reused' | 'repair' | 'error'
   inputTokens: number
   outputTokens: number
-  method: 'tokenizer' | 'bytes-upper-bound'
+  method: 'tokenizer' | 'bytes/3-estimate'
   /** B.2.4: on retry rows, `${taskId}:${seq}` of the original attempt. */
   retryOf?: string
 }

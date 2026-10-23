@@ -1,6 +1,6 @@
-## Status: Design — three-lane blind review converged (codex, grok and the internal
-critic all GO: r1 full review, r2 delta verification, r3 micro-confirmation);
-user sign-off and implementation pending. Fix 6 of the post-lane-2 batch.
+## Status: Implemented — PR #282 (open, pending merge). Design converged via
+three-lane blind review (codex, grok, internal critic: r1 full review, r2
+delta, r3 micro-confirmation — all GO; ledger in §7). Fix 6 of the post-lane-2 batch (ships with Fix 5 in one PR for a single identity reset).
 
 All code anchors cite tree `8cf51b13`. Runtime evidence cites the 2026-10-22
 reproduction (`run_787893ba` usage ledger, test project `prj_13485f41-…`).
@@ -48,12 +48,39 @@ was the blocker.
 
 ```ts
 const bytes = Buffer.from(messages.map((m) => m.content).join(''), 'utf8').length
-// F6: approximate accounting, NOT an upper bound. UTF-8 reviewer envelopes run
-// ~2.2 (token-dense CJK) to ~6.5 (ASCII/JSON) bytes per token; bytes/3 keeps
-// the reproduction's 6.5x inflation down to ~1.9x while under-reserving at
-// most ~1.4x per call on the densest realistic script mix.
+// F6: approximate accounting, NOT an upper bound. Measured against real
+// tokenizers (see the calibration table below), reviewer envelopes run ~3.6
+// (English prose) to ~6 bytes/token (JSON/code), where bytes/3 is conservative
+// (1.0-1.8x the real count); token-dense text (CJK prose ~2.6, rare CJK ~1.3,
+// emoji ~1.4 bytes/token) under-reserves by up to ~2.3x. bytes/3 removes the
+// reproduction's 6.5x inflation while that bounded under-reserve is disclosed
+// and covered by settled actuals plus the runtime budget guard.
 return { tokens: Math.ceil(bytes / 3), method: 'bytes/3-estimate' }
 ```
+
+**Calibration (added after PR #282 review; measured, not assumed).** The
+fixture `packages/interaction/vwa-argument/tests/fixtures/input-calibration.json`
+carries seven text classes with their UTF-8 byte counts and token counts from
+`cl100k_base` / `o200k_base`; `tests/review-input-calibration.spec.ts` pins the
+classification:
+
+| class | bytes | estimate `ceil(b/3)` | cl100k | estimate/实际 |
+|---|---:|---:|---:|---:|
+| English prose | 450 | 150 | 85 | 1.76× |
+| JSON envelope | 232 | 78 | 64 | 1.22× |
+| TypeScript code | 510 | 170 | 128 | 1.33× |
+| mixed (中英+符号) | 117 | 39 | 38 | 1.03× |
+| Chinese prose | 189 | 63 | 74 | 0.85× |
+| rare CJK glyphs | 90 | 30 | 70 | 0.43× |
+| emoji / symbols | 128 | 43 | 90 | 0.48× |
+
+**The input budget is therefore an APPROXIMATE control, not a strict upper
+bound.** Worst observed under-reservation is ~2.3× (rare-CJK glyphs, cl100k);
+the estimate is never allowed to be treated as a hard bound anywhere in the
+code path, and the settle/reconcile machinery (settled actuals, durable
+reserved rows, `maxCallsPerRun`-bounded failure accumulation) is what keeps the
+error bounded. A class the fixture does not cover must be re-measured the same
+way (fixture `text` → tokenizer) before its behavior is quoted.
 
 **Accounting semantics (the part that makes this safe, and the reason the doc
 no longer claims a bound):**
@@ -66,9 +93,11 @@ no longer claims a bound):**
   reserve against actuals, not estimates.
 - **Overshoot exposure has two parts, both bounded (r2 codex correction):**
   1. **In-flight calls**: at most `concurrency` (schema max 4, default 2) calls
-     are simultaneously reserved at the estimate; per call the under-estimate
-     factor is ≤1.36× on the densest realistic script mix and ≤3× on
-     adversarial token-dense text.
+     are simultaneously reserved at the estimate; per call the measured
+     under-estimate factor is ≤1.2× on the script classes the fixture covers
+     (CJK prose 0.85×) and ≤2.33× on rare-CJK/emoji-dense text (calibration
+     table above; the earlier "≤1.4×" figure was an unmeasured assumption and
+     is superseded).
   2. **Failed dispatches with no provider usage**: on an error path the
      adapter throws without usage, and `ReviewCaller` records the ESTIMATE
      (`result?.inputTokens ?? counted.tokens`, review-call.ts:222-228 — the

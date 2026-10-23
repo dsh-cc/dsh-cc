@@ -17,7 +17,9 @@ import type {
 import type {
   PreparedReviewCall, ReviewMessages, ReviewModelAdapter, ReviewTaskContract,
 } from '../src/review-adapter.ts'
-import { ReviewInvalidError, validateTaskResponse } from '../src/review-adapter.ts'
+import { ReviewInvalidError, createReviewAdapter, validateTaskResponse } from '../src/review-adapter.ts'
+import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
+import type { ReviewLlmFace } from '../src/review-adapter.ts'
 import { buildReverseIndex } from '../src/dependencies.ts'
 import type { ReviewBudget } from '../src/review-runner.ts'
 
@@ -128,6 +130,55 @@ export function fakeAdapter(
       return { provider: 'fake', model: 'fake-model', template: 'prompts@1' }
     },
   }
+}
+
+/**
+ * Scripted adapter that runs the REAL `createReviewAdapter` (Fix 5 §4.4): the
+ * `prepareCall` fake echoes `{...config, temperature}` like the real client,
+ * so the prepared config reaches `configFingerprint()` as `effectiveConfig`.
+ * `fakeAdapter` returns a constant fingerprint without `effectiveConfig`,
+ * which makes identity pins vacuous.
+ */
+export function realAdapter(
+  script: Array<(req: { messages: ReviewMessages; maxOutputTokens: number }) => {
+    raw: string
+    inputTokens?: number
+    outputTokens?: number
+  }>,
+  state: FakeAdapterState = { dispatches: 0, prepareCalls: 0, lastMessages: undefined, lastResponseSchema: undefined },
+): ReviewModelAdapter & { state: FakeAdapterState } {
+  const llm: ReviewLlmFace = {
+    async prepareCall(config) {
+      state.prepareCalls += 1
+      return {
+        config: { ...config, temperature: 0.2 },
+        stream: async function* (options: GenerateOptions) {
+          const index = state.dispatches
+          state.dispatches += 1
+          const block = options.messages[0]!.content.find((candidate) => candidate.type === 'text')
+          const content = block !== undefined && block.type === 'text' ? block.text : ''
+          const messages: ReviewMessages = [
+            ...(options.system === undefined ? [] : [{ role: 'system' as const, content: options.system }]),
+            { role: 'user' as const, content },
+          ]
+          state.lastMessages = messages
+          const step = script[Math.min(index, script.length - 1)]!
+          const result = step({ messages, maxOutputTokens: config.maxTokens ?? 0 })
+          yield { type: 'block-start' as const, index: 0, blockType: 'tool-call' as const }
+          yield {
+            type: 'block-end' as const, index: 0,
+            block: { type: 'tool-call' as const, id: 'r', name: 'respond', arguments: result.raw },
+          }
+          yield {
+            type: 'usage' as const,
+            usage: { inputTokens: result.inputTokens ?? 5, outputTokens: result.outputTokens ?? 5 },
+          }
+          yield { type: 'finish' as const, reason: { kind: 'stop' as const } }
+        },
+      }
+    },
+  }
+  return { ...createReviewAdapter({ llm, route: { provider: 'fake', model: 'fake-model' } }), state }
 }
 
 /** A schema-valid claims-stage response over one fact claim. */

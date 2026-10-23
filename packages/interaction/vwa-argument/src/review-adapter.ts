@@ -92,7 +92,14 @@ export interface ReviewModelAdapter {
     maxOutputTokens: number
     signal: AbortSignal
   }): Promise<PreparedReviewCall>
-  countInput(messages: ReviewMessages): Promise<{ tokens: number; method: 'tokenizer' | 'bytes-upper-bound' }>
+  /**
+   * Input-token count for reservation/admission. `'tokenizer'` = the host
+   * meter; `'bytes/3-estimate'` = the approximate fallback (`ceil(bytes/3)`),
+   * which may UNDER-estimate token-dense text (rare CJK / emoji) — the
+   * budget gate is approximate control, and settled actuals govern once
+   * the provider reports usage.
+   */
+  countInput(messages: ReviewMessages): Promise<{ tokens: number; method: 'tokenizer' | 'bytes/3-estimate' }>
   /** §11.2: the effective configuration facts that enter reviewerConfigHash. */
   configFingerprint(): Record<string, unknown>
 }
@@ -111,11 +118,24 @@ export function forcedRespondTools(responseSchema: object): ToolSchema[] {
   return [{ ...RESPOND_TOOL, parameters: responseSchema as ToolSchema['parameters'] }]
 }
 
-/** Host token meter: chars/4 heuristic when available, else UTF-8 byte upper bound (§13). */
+/**
+ * Host token meter (§13). With a `countTokens` callback the host's own
+ * meter is used (labelled 'tokenizer'). Without one — the production case
+ * today — `countInput` returns an APPROXIMATE estimate, `ceil(bytes / 3)`
+ * labelled 'bytes/3-estimate': the input budget is approximate control, not
+ * a strict upper bound (see the calibration table in
+ * tests/review-input-calibration.spec.ts and design doc
+ * docs/plans/2026-10-23-vwa-input-reservation-caliber.md §F6.1).
+ */
 export function createReviewAdapter(options: {
   llm: ReviewLlmFace
   route: ReviewerRoute
-  /** true (default): host token-meter heuristic chars/4 labeled 'tokenizer'; false: byte count. */
+  /**
+   * Superseded by `countTokens` presence (this flag is shadowed and only kept
+   * for source compatibility): a tokenizer is available exactly when
+   * `countTokens` is wired, and the label in the fingerprint no longer
+   * exists (Fix 6 §F6.2 — counting is accounting, not review identity).
+   */
   tokenizerAvailable?: boolean
   countTokens?(messages: ReviewMessages): Promise<number>
 }): ReviewModelAdapter {
@@ -227,12 +247,19 @@ export function createReviewAdapter(options: {
       }
     },
     configFingerprint() {
+      // F5: budget facts are not review semantics (same principle as
+      // semanticContractHash, F3.1). The mid-run drift check in freeze() keeps
+      // comparing the FULL config. Denylist, not allowlist: unknown future
+      // keys hash (over-invalidation) instead of silently dropping
+      // (under-invalidation → stale records reused as current).
+      const { maxTokens: _budget, ...semanticConfig } = effectiveConfig ?? {}
+      // F6: how input was COUNTED is a budget-accounting fact — it changes
+      // reservations, never review content — so it is not record identity.
       return {
         provider: options.route.provider,
         model: options.route.model,
         promptTemplates: TEMPLATE_VERSION,
-        tokenizer: tokenizerAvailable ? 'tokenizer' : 'bytes-upper-bound',
-        ...(effectiveConfig ? { effectiveConfig } : {}),
+        ...(effectiveConfig ? { effectiveConfig: semanticConfig } : {}),
       }
     },
     async countInput(messages) {
@@ -240,7 +267,15 @@ export function createReviewAdapter(options: {
         return { tokens: await options.countTokens!(messages), method: 'tokenizer' }
       }
       const bytes = Buffer.from(messages.map((m) => m.content).join(''), 'utf8').length
-      return { tokens: bytes, method: 'bytes-upper-bound' }
+      // F6: approximate accounting, NOT an upper bound. Measured (tiktoken,
+      // tests/fixtures/input-calibration.json): reviewer envelopes run ~3.6
+      // (English prose) to ~6 bytes/token (JSON/code), where bytes/3 stays
+      // conservative (1.0-1.8x the real count); token-dense text (CJK prose
+      // ~2.6, rare CJK ~1.3, emoji ~1.4 bytes/token) under-reserves by up to
+      // ~2.3x. bytes/3 removes the 6.5x inflation while that bounded
+      // under-reserve is disclosed and covered by settled actuals + the
+      // runtime budget guard.
+      return { tokens: Math.ceil(bytes / 3), method: 'bytes/3-estimate' }
     },
   }
 }
