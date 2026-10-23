@@ -92,7 +92,7 @@ export interface ReviewModelAdapter {
     maxOutputTokens: number
     signal: AbortSignal
   }): Promise<PreparedReviewCall>
-  countInput(messages: ReviewMessages): Promise<{ tokens: number; method: 'tokenizer' | 'bytes-upper-bound' }>
+  countInput(messages: ReviewMessages): Promise<{ tokens: number; method: 'tokenizer' | 'bytes/3-estimate' }>
   /** §11.2: the effective configuration facts that enter reviewerConfigHash. */
   configFingerprint(): Record<string, unknown>
 }
@@ -227,12 +227,19 @@ export function createReviewAdapter(options: {
       }
     },
     configFingerprint() {
+      // F5: budget facts are not review semantics (same principle as
+      // semanticContractHash, F3.1). The mid-run drift check in freeze() keeps
+      // comparing the FULL config. Denylist, not allowlist: unknown future
+      // keys hash (over-invalidation) instead of silently dropping
+      // (under-invalidation → stale records reused as current).
+      const { maxTokens: _budget, ...semanticConfig } = effectiveConfig ?? {}
+      // F6: how input was COUNTED is a budget-accounting fact — it changes
+      // reservations, never review content — so it is not record identity.
       return {
         provider: options.route.provider,
         model: options.route.model,
         promptTemplates: TEMPLATE_VERSION,
-        tokenizer: tokenizerAvailable ? 'tokenizer' : 'bytes-upper-bound',
-        ...(effectiveConfig ? { effectiveConfig } : {}),
+        ...(effectiveConfig ? { effectiveConfig: semanticConfig } : {}),
       }
     },
     async countInput(messages) {
@@ -240,7 +247,11 @@ export function createReviewAdapter(options: {
         return { tokens: await options.countTokens!(messages), method: 'tokenizer' }
       }
       const bytes = Buffer.from(messages.map((m) => m.content).join(''), 'utf8').length
-      return { tokens: bytes, method: 'bytes-upper-bound' }
+      // F6: approximate accounting, NOT an upper bound. UTF-8 reviewer envelopes
+      // run ~2.2 (token-dense CJK) to ~6.5 (ASCII/JSON) bytes per token; bytes/3
+      // keeps the reproduction's 6.5x inflation down to ~1.9x while
+      // under-reserving at most ~1.4x per call on the densest realistic mix.
+      return { tokens: Math.ceil(bytes / 3), method: 'bytes/3-estimate' }
     },
   }
 }

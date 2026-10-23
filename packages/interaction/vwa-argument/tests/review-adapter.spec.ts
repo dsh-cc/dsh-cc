@@ -85,8 +85,8 @@ describe('review adapter — forced single-tool respond form', () => {
     expect(await withMeter.countInput(messages)).toEqual({ tokens: 10, method: 'tokenizer' })
     const withoutMeter = createReviewAdapter({ llm, route: ROUTE, tokenizerAvailable: false })
     const counted = await withoutMeter.countInput(messages)
-    expect(counted.method).toBe('bytes-upper-bound')
-    expect(counted.tokens).toBe(40) // ASCII bytes === chars here
+    expect(counted.method).toBe('bytes/3-estimate')
+    expect(counted.tokens).toBe(14) // ceil(40 / 3)
   })
 })
 
