@@ -17,6 +17,10 @@ feasibility before implementation, and a worked workflow example.
 The implementation-readiness clarification adds an ordered classification
 algorithm, staged integration prerequisites, reuse ownership, concrete
 adoption notices and an explicit late-event companion fixture.
+The contract-consistency revision additionally fixes manifest identity mapping,
+unknown-error precedence and the bounded Java version probe. It preserves
+manual adoption, full-log delivery and the existing tool-only approval reuse
+policy; readiness claims still require actual preparation/acceptance records.
 Feature implementation and final design sign-off remain pending.
 
 Date: 2026-10-23 (Asia/Singapore). This document is a design review draft; it
@@ -162,7 +166,10 @@ load-bearing anchors.
 - Both `package.json` and `.claude-plugin/plugin.json` describe it as
   "three subagents, three skills, and optional Serena hooks"; adding one
   skill makes it **four**. The version follows the repo release flow and is
-  not bumped separately in this PR.
+  not bumped separately in this PR. The manifests have distinct names:
+  package.json uses `@dsh-cc/plugin-dsh-cc-agents`, while plugin.json uses
+  `dsh-cc-agents`. These identify the npm package and host plugin respectively;
+  only their versions must be equal (§20.7).
 - npm `files` already includes the whole `skills` directory, so the new
   skill ships without touching `files`; publish contents are pinned by an
   npm-pack test (precedent: `tests/vwa-writing.spec.ts`).
@@ -403,6 +410,9 @@ workflow record before a model package exists. If unconfirmed, tell the
 user that this invocation can proceed but project-wide screening needs
 manual adoption of references/agents-snippet.md. Do not automatically edit
 AGENTS.md/CLAUDE.md or claim installation enabled universal screening.
+Installation/update documentation MUST state that availability alone does
+not enable project-wide screening, and link the manual adoption snippet.
+It must not advertise an automatically enforced gate.
 The first-use response states one of: screening adopted and review rules
 available; screening unconfirmed with the exact snippet path to adopt; or
 review rules missing with the rule source that could not be loaded. State
@@ -1086,6 +1096,49 @@ I/O diagnostics remain on stderr. Cleanup failure after successful final
 publication does not change the committed status; it is reported on stderr,
 and any surviving lock is handled under §13.
 
+### 10.1.1 Java version-probe process contract
+
+The Java version query is a real child process, distinct from a model case.
+preflight and check use the same bounded implementation. Spawn the selected
+Java executable with only `-version`, shell:false, cwd set to the validated
+project root, and the scrubbed environment from §13. Preserve the normalized executable
+selection rules in §10. Do not write probe logs or create run artifacts.
+
+- Start a 10000 ms wall-clock deadline at the spawn attempt, including the
+  wait for spawn confirmation. Limit combined stdout/stderr to 1 MiB, retaining
+  at most that prefix in memory. Either limit stops the query using
+  SIGTERM, followed after 2000 ms by SIGKILL if it has not closed. Allow
+  another 2000 ms for close after SIGKILL; expiry is a process-control failure
+  handled below. Otherwise await close before returning or starting TLC;
+  clear owned timers/listeners. A spawn
+  error settles the attempt without waiting for a close that cannot occur.
+- A normal exit 0 must report a parseable Java major version of at least 17.
+  Accept the standard `java version "<version>"` or
+  `openjdk version "<version>"` header from either stream, including modern
+  integer/dotted versions and legacy `1.<major>` versions. The quoted version
+  token must match `[0-9]+(?:\.[0-9]+)*(?:[-+_][A-Za-z0-9.+_-]+)?` in full;
+  ignore text following the closing quote. Read the first decimal component
+  as major, except a first component of 1 requires and uses the second
+  component. Compare components as decimal integers without rounding.
+  Multiple headers must identify the same version token. Pin representative
+  Temurin/OpenJDK and Oracle headers in tests. Missing, malformed or conflicting
+  version headers, a lower major, nonzero exit, signal exit, timeout or output
+  limit produce blocked/java-version with a deterministic diagnostic. An
+  ENOENT spawn error produces java-missing; other spawn failures produce io.
+- For check, the §10.1 cancellation latch takes precedence over probe failure:
+  stop the active probe with the same termination ladder and await settlement,
+  then return incomplete/cancelled, summary=null, exit 3. Do not start cfg
+  generation or TLC. Cancellation before the probe prevents its spawn.
+  Standalone preflight installs no cancellation latch or new signal policy;
+  its ordinary process termination cannot create evidence or project writes.
+- Probe limits are fixed internal constants, not new CLI/config fields or
+  model-case timeout settings. Probe output never enters case event parsing
+  or Evidence. No new public reason is introduced. If termination/close
+  cannot be established because process control fails, return blocked/io
+  (or the higher-priority check cancellation result), report the concrete
+  failure on stderr, start no TLC, and do not claim the child has stopped.
+  Do not wait indefinitely after a reported process-control failure.
+
 ## 11. TLC output and result classification
 
 ### 11.1 Frame parsing
@@ -1108,7 +1161,9 @@ Event-stream gate rules:
 - severity=4 (STATE) is trace output, not an error or success signal;
 - severity = 2 (TLCBUG class) → error/tlc-bug regardless of code;
 - a code outside the pinned-version vocabulary with severity = 1 →
-  error/unknown-error;
+  error/unknown-error after the higher-priority interruption, spawn, malformed
+  output, TLCBUG and exit/event contradiction checks in §11.3. In particular,
+  exit 0 with any severity=1 remains error/output-inconsistent;
 - an unknown code with severity = 0 or 4 → recorded in eventCodes only;
   no effect on judgment. A severity=3 code, known or unknown, adds
   `tlc-warning:<case-id>:<code>` to summary.warnings; no effect on judgment.
@@ -1168,11 +1223,16 @@ overrides and persistence feasibility are applied separately by §11.4 and
    For exit 13, 2113 also supplies a corresponding event but is an evaluation
    error, not a violation. For exit 0, any severity=1 frame is likewise
    output-inconsistent, whether or not success events are present.
-6. Classify matching nonzero exits using the table below.
-7. For exit 0, return verified only if every §11.2 predicate holds;
+6. Any code outside the pinned-version vocabulary with severity=1 returns
+   error/unknown-error, even when a known event matches a nonzero exit.
+   Do not discard an unknown error merely because a familiar violation is
+   also present. The vocabulary is the pinned EC.java event-code set,
+   not merely the subset of codes in this classification table.
+7. Classify matching nonzero exits using the table below.
+8. For exit 0, return verified only if every §11.2 predicate holds;
    otherwise return incomplete/output-invalid. Missing success events,
    invalid/missing final statistics and their ordering cannot imply success.
-8. Any remaining outcome returns error/unknown-error.
+9. Any remaining outcome returns error/unknown-error.
 
 | Exit and corresponding event | Status / reason |
 |---|---|
@@ -1204,6 +1264,10 @@ Pin these combined-condition fixtures in both classifier and replay tests:
 | exit 12, 2110 present, malformed frame | incomplete/output-invalid |
 | exit 12, 2110 present, severity=2 | error/tlc-bug |
 | exit 12, 2110 and TLC_SUCCESS present | error/output-inconsistent |
+| exit 12, 2110 and an unknown severity=1 event | error/unknown-error |
+| exit 0, an unknown severity=1 event, with or without success events | error/output-inconsistent |
+| exit 12, 2110, unknown severity=1 and malformed output | incomplete/output-invalid |
+| exit 12, 2110, unknown severity=1 and severity=2 | error/tlc-bug |
 | exit 13, 2113 and 2116 present, otherwise consistent | error/property-evaluation-failed |
 | timeout plus malformed output and severity=2 | incomplete/timeout |
 | cancellation plus timeout | incomplete/cancelled |
@@ -1611,7 +1675,7 @@ waits to fake timeouts.
 | manifest | full valid example, unknown/duplicate JSON keys, missing fields, duplicate cases, no core case, legacy required field, invalid coverage label, no invariant, illegal IDs, out-of-range limits, **value grammar** (directive-token-in-value like "2 CONSTRAINT Prune"/"TRUE PROPERTY", reserved-word idents, nested sets, trailing garbage, negative integers, quotes) |
 | cfg | key order, LF, CONSTANTS header present/absent, existing-identical, existing-different refuses overwrite, extra directives forbidden, canonical serialization |
 | paths | `..`, absolute model, input symlinks, output ancestor symlinks, paths with spaces, file/total ceilings, --jar/--java symlink resolution and recording |
-| environment | missing Java/JAR, version too low, checksum mismatch, Windows, env-var scrubbing |
+| environment | missing Java/JAR, version too low, checksum mismatch, Windows, env-var scrubbing; distinct expected manifest names with equal versions pass, wrong names/unequal versions block; Java probe deadline/output ceiling/parse failures/spawn errors and check cancellation per §10.1.1 |
 | parser | arbitrary chunk splits, CRLF, **nested frames**, END mismatch, unclosed frames, severity∉{0,1,2,3,4}, WARNING/STATE retained, severity=2, unknown codes at both severities, success/finish ordering |
 | classification | at least one case per §11.3 table row (incl. 2113 vs 2132 discrimination, 255, exit-0-without-success, exit-0-with-error, nonzero-with-success, output-inconsistent, OOM, signals, timeout, log-limit, unknown output); **an all-zero-stats empty Init is never verified** |
 | lifecycle | timeout TERM→KILL, same ladder for log ceiling, no case runs after cancellation and summary=incomplete/cancelled, results written only after close, lock conflict, lock release on error, failed runs overwrite the latest summary, running marker after hard-kill blocks reuse of old success, **snapshot digest ≠ inputDigest → no spawn**, mid-run artifact change → incomplete |
@@ -2176,9 +2240,15 @@ AuditOutput = {
   non-null runId/inputDigest. Invalid: fresh=false, verification=null;
   runId/inputDigest identify the current parsed marker if it is valid,
   otherwise both are null. Never copy identity from an unmatched old summary.
-- runnerPackage is read from both plugin manifests; name/version must agree.
-  Missing or inconsistent manifests block preflight with config-invalid and
-  make evidence auditing schema-invalid. Auditing compares both package
+- runnerPackage.name/version come from package.json: the npm package identity
+  is `@dsh-cc/plugin-dsh-cc-agents`. Validate plugin.json independently with
+  name=`dsh-cc-agents`; its version must equal package.json.version. Do not
+  compare the two name strings for equality or rename either manifest. Both
+  names must match this explicit mapping and both versions must be nonempty
+  strings; version equality is exact. No alias or implicit name conversion
+  is permitted. Missing, malformed or mismapped identities, or unequal
+  versions, block preflight with config-invalid and make evidence auditing
+  schema-invalid. Auditing compares both package
   identity and runnerDigest; either mismatch is stale/runner.
 - Audit inputFiles against fresh enumeration, not only paths listed by
   evidence. Validate the generated cfg bytes against checks.json, not just
@@ -2321,6 +2391,12 @@ actual runner-package receiver inspection/replay establishes delivery
 acceptance. No claim here requires support for 800 MiB universally:
 record the tested capacity and block any actual package exceeding it.
 The current design supplies requirements, not successful probe results.
+For this repository, the effective review-rule source and each remote route
+remain unconfirmed until those records exist. The historical roster is not
+a substitute for a loadable current protocol. Missing rules or capacity
+block workflow integration, not independent runner steps 1–3; report the
+exact pending prerequisite and owner rather than calling the feature ready.
+The forwarding-loop repair remains outside this implementation scope.
 
 The minimum package for each lane contains:
 
@@ -2478,6 +2554,17 @@ obligations, not missing policy choices silently resolved by this edit.
 
 ## Review ledger
 
+- **Contract-consistency revision (2026-10-24)**: user requested revision and
+  submission following the current design analysis. Correct the distinct
+  npm/plugin name mapping while retaining equal versions; make unknown
+  severity=1 precedence explicit in the ordered classifier and combined
+  fixtures; bound Java version probing and define cancellation/failures.
+  Reinforce manual adoption notices and pending rule/channel readiness.
+  Preserve full-log delivery and the existing tool-only approval reuse
+  policy, including its non-equivalence caveat. No actual channel probe,
+  TLC execution, feature implementation or current-revision sign-off is
+  claimed by this documentation change.
+
 - **Reviewability clarification (2026-10-24)**: add coverage and change-adjudication precedents, explicit preparation evidence and separate readiness claims, tool-upgrade comparison records, and a contract/acceptance navigation index. Preserve prior policy choices and fixture bodies; no real transport, TLC execution or final sign-off is claimed.
 
 - **Implementation-readiness clarification (2026-10-24)**: unify the
@@ -2574,3 +2661,4 @@ obligations, not missing policy choices silently resolved by this edit.
 - Sign-off: user authorized these design choices, document editing and
   committing to this PR. Final formal design sign-off and feature
   implementation remain pending.
+
