@@ -1054,7 +1054,7 @@ capabilities:
   engine.tool-search:
     title: ToolSearch (deferred tools)
     category: engine
-    plane: preset
+    plane: host
     upstream:
       summary: Search-activated deferred tools kept out of the model-visible schema.
       refs: []
@@ -1064,7 +1064,7 @@ capabilities:
       behavioral: full
       ux: full
     evidence:
-      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: tool-search" }
+      - { type: source, path: packages/bundle/cc-tui/cordis.patch.yml, anchor: "- id: tool-search" }
       - { type: test, path: packages/core/tool-search/tests/tool-search.spec.ts }
     deviation: { kind: none }
 

@@ -1567,7 +1567,7 @@
     "engine.tool-search": {
       "title": "ToolSearch (deferred tools)",
       "category": "engine",
-      "plane": "preset",
+      "plane": "host",
       "upstream": {
         "summary": "Search-activated deferred tools kept out of the model-visible schema.",
         "refs": []
@@ -1589,7 +1589,7 @@
       "evidence": [
         {
           "type": "source",
-          "path": "packages/preset/cc/agent.cordis.yml",
+          "path": "packages/bundle/cc-tui/cordis.patch.yml",
           "anchor": "- id: tool-search"
         },
         {
