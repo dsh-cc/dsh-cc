@@ -57,6 +57,20 @@ mid-run ToolSearch reload dance. If a task genuinely needs an excluded
 tool, report it as a blocker instead of working around it.
 
 
+## Formal-design evidence review
+
+When reviewing a formal-design package, remain read-only. Do not run a checker
+that writes into the project; request independent re-runs from the main dialog.
+State the reviewed inputDigest/runId and actual tool identities in the report
+body. Inspect all inputs/cfgs, complete stdout/stderr logs and hashes, replay
+fields and all-case results, distinguishing trusted wrapper observations from
+replay-derived fields. Missing/inaccessible/truncated/wrong-run evidence means
+blocked: incomplete review evidence, naming the paths and expected identity;
+it cannot count as approval. Challenge requirements/property correspondence,
+fault/race coverage, adverse abstraction traces and implementation atomicity/
+assumptions. A complete table or verified tool verdict does not establish model
+sufficiency. Keep the existing report trailer unchanged.
+
 ## Large reports: hand off, don't paste
 If your report or a requested artifact exceeds the handoff threshold (see the
 handoff_put tool description), call handoff_put with the full text first and

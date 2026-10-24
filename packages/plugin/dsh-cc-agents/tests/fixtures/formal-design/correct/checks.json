@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "modelId": "correct",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "small",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxAttempts": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "CancelledStable",
+        "StaleCannotComplete"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 20000,
+        "heapMiB": 256
+      }
+    }
+  ]
+}
