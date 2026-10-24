@@ -3,9 +3,22 @@
 #
 # GitHub port of orchestrix's codebase presubmit. Four intentional deviations
 # from the reference repo:
-#   1. Single job: here typecheck≡build (both are `tsc -b
-#      tsconfig.packages.json`); the reference repo's parallel
-#      quality-gates / test-and-build jobs would only build the harness twice.
+#   1. Parallel job split (2026-11): three jobs — `static-gates` (pure static
+#      scans, no node_modules, no install; seconds to red on the most common
+#      failure classes), `quality-gates` (assembly + typecheck/bundle/
+#      exports/smoke/artifacts), and `unit-tests` (vitest + informational
+#      tiers). `quality-gates` and `unit-tests` run in parallel from t=0, each
+#      with its own assembly prefix. That duplicates `pnpm install`
+#      (~1min, node_modules is never cached anyway) and `tsc -b` per job —
+#      accepted: on cache-hit runs the wall time is max(job) instead of
+#      sum(steps); on cache-miss runs both jobs build the harness in
+#      parallel, which is no worse than the old serial cold build. Only
+#      `quality-gates` saves the harness-lib cache (restore-only in
+#      `unit-tests`, with a fallback build that never saves) — no save races.
+#      An earlier single-job design merged the reference repo's parallel
+#      quality-gates / test-and-build jobs because they would only build the
+#      harness twice; the cache-by-pin-SHA + fallback-build pattern is what
+#      makes the split viable now.
 #   2. The reference repo installs Node + an internal mirror/bnpm by hand;
 #      this workflow uses setup-node's native pnpm cache instead — both
 #      repos' dependencies come entirely from the public npm registry.
@@ -44,7 +57,8 @@ on:
 
 env:
   # deepseek-harness pin: single source of truth for the checkout ref and
-  # the harness-artifact cache key
+  # the harness-artifact cache key. publish.yml greps this file for exactly
+  # one occurrence of this line — keep it workflow-level and unique.
   DSH_HARNESS_REF: c1b47e41fcd54d20a0f061df28683bfc29ee24e5 # 0.2.0-rc.2 release commit
 
 permissions:
@@ -58,15 +72,25 @@ concurrency:
 
 # Every run: step uses `bash -eo pipefail` (GitHub's default without an
 # explicit shell is `bash -e`, which lets `cmd | tee log` mask cmd's failure).
-# Enforced by scripts/check-workflow-pipefail.mjs.
+# Enforced by scripts/check-workflow-pipefail.mjs. Workflow-level, so all
+# three jobs inherit it.
 defaults:
   run:
     shell: bash
 
 jobs:
-  presubmit:
+  # ---------------------------------------------------------------------------
+  # Pure static gates: no node_modules, no sibling checkout, no install.
+  # Checkout + Node is the entire setup cost — static failure classes
+  # (README trio drift, parity staleness, size budget, boundary violations)
+  # go red in seconds, in parallel with the assembly-heavy jobs below.
+  # Keep this list in sync with the "before install" gates described in
+  # docs/plans/ — a gate may move here only if it needs nothing beyond
+  # git + Node stdlib.
+  # ---------------------------------------------------------------------------
+  static-gates:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,24 +99,9 @@ jobs:
           # origin/main (scripts/check-eval-gate.mjs), which needs full history.
           fetch-depth: 0
 
-      - uses: actions/checkout@v4
-        with:
-          repository: dsh-cc/deepseek-harness
-          ref: ${{ env.DSH_HARNESS_REF }}
-          path: deepseek-harness
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-          run_install: false
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: |
-            dsh-cc/pnpm-lock.yaml
-            deepseek-harness/pnpm-lock.yaml
 
       # Pure static scan, no node_modules needed: catches "a spec imports an
       # undeclared link:/workspace dependency" — a CI-only failure class
@@ -161,6 +170,39 @@ jobs:
       - name: Vendored pi-tui purity (check:vendor-purity)
         working-directory: dsh-cc
         run: node scripts/check-vendor-purity.mjs
+
+  # ---------------------------------------------------------------------------
+  # Assembly + quality gates: everything that needs node_modules and the
+  # built harness but is not the test suite. Owns the harness-lib cache
+  # save (the only job that writes it).
+  # ---------------------------------------------------------------------------
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: dsh-cc
+          # The eval-gate history need moved to static-gates; quality gates
+          # don't diff against main.
+      - uses: actions/checkout@v4
+        with:
+          repository: dsh-cc/deepseek-harness
+          ref: ${{ env.DSH_HARNESS_REF }}
+          path: deepseek-harness
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            dsh-cc/pnpm-lock.yaml
+            deepseek-harness/pnpm-lock.yaml
 
       - name: Cache harness build outputs (restore)
         id: cache-harness
@@ -281,13 +323,91 @@ jobs:
         working-directory: dsh-cc
         run: pnpm check:artifacts
 
+  # ---------------------------------------------------------------------------
+  # Unit tests. Runs in parallel with quality-gates (no `needs:`): each job
+  # pays its own assembly prefix (harness cache restore + two installs +
+  # tsc). Restore-only here — quality-gates is the single cache writer; the
+  # fallback build below covers cache-miss/evicted runs without ever saving
+  # (no save races by construction). Cold-cache wall time is unchanged vs
+  # the old serial job (both jobs build the harness concurrently); warm runs
+  # drop from sum(quality + tests) to max(quality, tests).
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    runs-on: ubuntu-latest
+    # Cold-cache worst case: harness build + two installs + tsc (~15m) + the
+    # 25m vitest step cap, plus slack so the if:always() artifact upload
+    # survives a hung cold suite instead of being cancelled with the job.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: dsh-cc
+
+      - uses: actions/checkout@v4
+        with:
+          repository: dsh-cc/deepseek-harness
+          ref: ${{ env.DSH_HARNESS_REF }}
+          path: deepseek-harness
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            dsh-cc/pnpm-lock.yaml
+            deepseek-harness/pnpm-lock.yaml
+
+      - name: Cache harness build outputs (restore)
+        id: cache-harness
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            deepseek-harness/packages/*/*/lib
+            deepseek-harness/vendor/*/lib
+            deepseek-harness/apps/cli/lib
+            deepseek-harness/native/system/packages/*/lib
+            deepseek-harness/native/system/packages/*/bin
+          key: harness-lib-${{ env.DSH_HARNESS_REF }}
+
+      - name: Install deepseek-harness deps
+        working-directory: deepseek-harness
+        run: pnpm install --frozen-lockfile
+
+      # This restore hits only when a *prior* run saved this key (the
+      # parallel quality-gates job is still mid-build when this step runs).
+      # On a cold key this job builds the harness itself — never saves;
+      # quality-gates is the single cache writer.
+      - name: 'Build deepseek-harness lib (fallback on cache miss)'
+        if: steps.cache-harness.outputs.cache-hit != 'true'
+        working-directory: deepseek-harness
+        run: pnpm run build:lib && pnpm run build:native-system
+
+      - name: Install dsh-cc deps
+        working-directory: dsh-cc
+        env:
+          HUSKY: 0
+        run: pnpm install --frozen-lockfile
+
+      # Not the typecheck gate (that lives in quality-gates) — but vitest
+      # needs tsc -b output: specs resolve workspace packages whose exports
+      # point at lib/ (e.g. @dsh-cc/post-edit-verify; PR #215 lesson).
+      - name: Build (tsc -b project references)
+        working-directory: dsh-cc
+        run: pnpm typecheck
+
       # Observability add-on (docs/plans/2026-10-03-ci-test-stability.md §5):
       # the 25m step cap kills the hang-all case so the upload below still
       # runs (R4 bounds every touched file at 18m at enforced ceilings); the
       # tee'd log + junit land in artifacts/ and upload with if: always().
       # Expected — not guaranteed — on cache-hit runs (measured ~1m pre-step
-      # prefix leaves ~4m slack under the 30m job cap); a cold-cache hung
-      # suite can still lose artifacts (accepted residual, stated in §5).
+      # prefix leaves ~4m slack under the vitest step's 25m cap; the 45m job
+      # cap above covers the cold-prefix case so the upload survives a hung
+      # suite (accepted residual, stated in §5).
       # The workflow-level `defaults.run.shell: bash` supplies pipefail, so the
       # step exit status stays vitest's, not tee's. The junit XML is
       # best-effort (end-of-run writer); the tee'd log is the expected artifact.
