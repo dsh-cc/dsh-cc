@@ -274,4 +274,4 @@ Final shape (the row, not just the key):
 
 ## Status
 
-**Design — user-approved after round-2 blind review.** Critic GO-WITH-CHANGES (8 findings, all folded); grok GO-WITH-CHANGES (4 blockers + 2 majors, all folded; delta round: 4 folds OK, 2 PROBLEM re-folded, 2 NEW documented). User confirmed the two architecture forks: (1) root singleton + isolate key removal for `mcpConnections`, (2) **hoist `toolSearch` to root** to preserve deferral semantics. Ready for implementation.
+**Implemented — PR #283 (open, pending merge).** Critic GO-WITH-CHANGES (8 findings, all folded); grok GO-WITH-CHANGES (4 blockers + 2 majors, all folded; delta round: 4 folds OK, 2 PROBLEM re-folded, 2 NEW documented). User confirmed the two architecture forks: (1) root singleton + isolate key removal for `mcpConnections`, (2) **hoist `toolSearch` to root** to preserve deferral semantics. Shipped as five commits (singleton helpers → glue wiring → preset hoist → design doc → bundle-layer tool-search move + manifest host-plane anchor); presubmit green.
