@@ -59,9 +59,14 @@ skill can also select it. The main dialog reports adoption and missing review
 rules on first use; it does not edit AGENTS.md automatically. After a plugin
 update, restart dsh to use the updated skill and runner.
 
-Java >=17 and the exact separately supplied TLC v1.7.4 JAR are required only
-for model checks. Normal dsh startup does not need Java. No tool is downloaded
-automatically. Set TLA2TOOLS_JAR or pass --jar; see the
+Model checks need Java >=17 on PATH. The plugin includes the exact pinned
+TLC v1.7.4 JAR, so no separate download or JAR configuration is required.
+Normal dsh startup does not need Java. Neither runtime nor installation runs
+a download script. The default order is --jar, then TLA2TOOLS_JAR, then the
+bundled JAR. A missing or checksum-invalid configured JAR blocks the check;
+it never silently falls back. All selections must match the pinned checksum.
+The [third-party notices](skills/formal-design/toolchain/THIRD-PARTY-NOTICES.md)
+record the original artifact, source and licenses. See the
 [skill](skills/formal-design/SKILL.md), [modeling guide](skills/formal-design/references/modeling-guide.md),
 [review contract](skills/formal-design/references/review-contract.md) and
 [worked example](skills/formal-design/examples/task-lifecycle/workflow.md).

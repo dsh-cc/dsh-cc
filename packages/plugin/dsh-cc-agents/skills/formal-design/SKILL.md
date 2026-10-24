@@ -62,13 +62,16 @@ not as actual evidence or approval.
    cfgs/evidence/current-run under specs/tla and artifacts under .formal-design.
    Main-dialog/executor edits also maintain design, cfgs and implementation.md.
 3. Obtain Node (repository requirement ^22.19 or >=24), Java >=17 and the
-   exact separately supplied TLC JAR pinned by scripts/toolchain.json. Nothing
-   downloads or scans for a JAR. Without --jar use TLA2TOOLS_JAR; without
-   --java use PATH java. Preflight is read-only and starts no model check.
+   bundled TLC JAR pinned by scripts/toolchain.json. No JAR configuration is
+   required by default. Selection is --jar > TLA2TOOLS_JAR > the bundled
+   toolchain/tla2tools.jar, resolved relative to this skill. A configured path
+   or checksum failure blocks; never silently fall back. All sources must
+   match the pin. Nothing downloads or scans for a JAR. Without --java use
+   PATH java. Preflight is read-only and starts no model check.
 
 ```sh
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --project "$PROJECT" --model specs/tla/task-lifecycle --jar "$TLA2TOOLS_JAR"
-node "${CLAUDE_SKILL_DIR}/scripts/check.mjs" --project "$PROJECT" --model specs/tla/task-lifecycle --jar "$TLA2TOOLS_JAR"
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs" --project "$PROJECT" --model specs/tla/task-lifecycle
+node "${CLAUDE_SKILL_DIR}/scripts/check.mjs" --project "$PROJECT" --model specs/tla/task-lifecycle
 node "${CLAUDE_SKILL_DIR}/scripts/check-evidence.mjs" --project "$PROJECT" --model specs/tla/task-lifecycle
 ```
 

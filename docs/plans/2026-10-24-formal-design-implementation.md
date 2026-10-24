@@ -61,8 +61,8 @@ Skill integration now includes SKILL.md, modeling/review/adoption references,
 orchestration and critic/executor duties, four-skill descriptions in all six
 surfaces, bilingual README hashes, npm-pack package assertions (including
 marathon), and a dedicated pinned-TLC CI workflow. CI checks out the same
-sibling harness pin as presubmit, verifies the JAR before tests, fails if the
-JAR is absent, and preserves hidden .formal-design diagnostics on failure. There is no version bump, dependency addition,
+sibling harness pin as presubmit, verifies the bundled JAR before tests, fails if the
+JAR is absent or corrupt, and preserves hidden .formal-design diagnostics on failure. There is no version bump, dependency addition,
 AGENTS.md rewrite, startup hook, or automatic Java/JAR download.
 
 ## TDD observations and validation
@@ -89,10 +89,11 @@ npm pack --dry-run --json # in packages/plugin/dsh-cc-agents
 The sibling deepseek-harness checkout uses the presubmit pin
 `c1b47e41fcd54d20a0f061df28683bfc29ee24e5` (not its default branch).
 No harness library build is needed for these runner tests.
-The final focused runs pass 76 runner contract tests, 9 package-shape tests
-and 20 actual TLC integration tests (105 total). README, dependency,
+The original focused runs passed 76 runner contract tests, 9 package-shape
+tests and 20 actual TLC integration tests (105 total); bundled-toolchain
+coverage is recorded below. README, dependency,
 workflow-shell and publish-manifest gates pass; the plugin dry-run manifest
-contains all 22 skill/runner/example files. The full plugin suite passes
+contains all 22 skill/runner/example files. The original full plugin suite passed
 120 tests, including its existing skills and hooks. The repository artifact scanner also
 passes (99 packages, 35 files checked). A full repository build and the
 end-to-end workflow acceptance are not claimed by this checkpoint. A first publish
@@ -104,7 +105,9 @@ Real execution used Linux, Node 24.22.1 and OpenJDK 17.0.20. The separately
 obtained TLC v1.7.4 JAR matched official SHA-1
 `bee4a54f3ee3d4afc347c3240ec2d9e93b075104` and SHA-256
 `936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88`.
-Neither artifact is committed or downloaded by the runner.
+The user subsequently requested committing this exact JAR with the plugin;
+the bundled-toolchain revision below supersedes the external-JAR setup.
+The runner does not download tools.
 
 | Contract | Concrete automated evidence | Observed scope / remaining limit |
 |---|---|---|
@@ -156,3 +159,36 @@ resolution and runner imports, not only source-tree presence. The dedicated
 CI missing-JAR path was also executed and failed explicitly as required.
 The new workflow YAML, shell syntax and sibling pin were checked locally;
 GitHub-hosted workflow execution is reported separately after the PR opens.
+
+## User-approved bundled TLC revision
+
+The user requested that installation include TLC so Java >=17 is the only
+additional local prerequisite, then requested updating this PR. The exact
+upstream v1.7.4 binary is committed under skills/formal-design/toolchain,
+with its original MIT license, JavaMail EPL-2.0 license/source provenance,
+and original Eclipse Orbit/Geronimo Activation Apache-2.0 notices. The binary
+is unchanged; its Git blob, SHA-1 and SHA-256 are checked. Git attributes
+preserve its bytes and the original third-party notices across checkouts.
+
+Selection is --jar > TLA2TOOLS_JAR > the bundled resource. An explicitly
+configured missing or checksum-invalid artifact blocks, with no silent
+fallback. All selections use the same pinned checksum and record actual
+jarPath/jarSha256. No public evidence/CLI schema or model input changes.
+No postinstall, prepack or runtime download is added. The JAR is tracked in
+normal Git so both marketplace clones and npm packages carry it.
+
+New red tests pinned absent default resources, source precedence, configured
+missing paths and packaging/hash integrity before implementation. Packaged
+zero-JAR-configuration preflight/check/audit, cache selection and exact bytes
+are covered. Cache byte-comparison uses Buffer.equals so a 2.2 MiB binary
+is compared exactly without an expensive per-byte assertion traversal.
+Dedicated CI validates the bundled resource and runs FORMAL_DESIGN_CI=1 with
+TLA2TOOLS_JAR unset; local real TLC tests remain opt-in. The old external-JAR
+CI download and missing-environment guard are superseded by these tests.
+Review/adoption/remote-acceptance requirements remain as recorded above.
+
+Bundled-toolchain validation: 482 tests passed across plugin-loader,
+plugin-manager and the agents plugin, including 21 actual TLC/packaged-run
+tests. Configured checksum failure, missing configured/bundled paths and
+selection precedence remain explicit failures. README, publish-manifest,
+dependency and workflow-shell gates pass. CI YAML/pin/shell syntax also pass.

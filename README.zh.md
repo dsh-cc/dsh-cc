@@ -94,7 +94,7 @@ dsh web
   - `executor` 使用 `sonnet` 执行已明确的计划。
   - `marathon` 使用 `fable` 处理涉及大量文件的变更或需求未知的任务。
   - 四个 skill 分别是 `dsh-cc-agents-orchestration`、`data-analysis`、**`vwa-writing`** 和 **`formal-design`**。
-  - `formal-design` 在现有设计评审前检查有界 TLA+ 模型。Java 与固定版本 TLC JAR 仅在选择执行检查时需要。安装插件不会启用项目级筛查；需[手动采用规则片段](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md)，并在更新插件后重启。
+  - `formal-design` 在现有设计评审前检查有界 TLA+ 模型。执行检查需要 Java >=17；固定版本 TLC JAR 已随插件提供，无需另外下载或配置。安装插件不会启用项目级筛查；需[手动采用规则片段](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md)，并在更新插件后重启。
 - **`dsh-cc-shunt`** 将批量读取和重复代码生成交给 worker 子代理。配置 `haiku` 可降低模型成本。
 - **`cc-codex-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Codex 命令。
 - **`cc-grok-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Grok 命令。

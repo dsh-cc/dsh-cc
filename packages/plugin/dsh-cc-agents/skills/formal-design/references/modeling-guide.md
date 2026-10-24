@@ -58,9 +58,11 @@ evidence.json and current-run.json remain outside inputDigest.
 All commands require exactly one --project and --model, except --help alone.
 The project exists; model is exactly specs/tla/<modelId>, project-relative,
 with no absolute path, dot/empty segment or escaping symlink. preflight/check
-accept one --jar and --java; check-evidence rejects them. Explicit tool paths
-(and the JAR environment fallback) are realpath-normalized once to regular
-files. PATH java is recorded literally in argv; its resolved location is
+accept one --jar and --java; check-evidence rejects them. JAR selection is --jar > TLA2TOOLS_JAR > the bundled toolchain/tla2tools.jar;
+there is no runtime or installation download. Explicitly configured missing
+or checksum-invalid paths block instead of silently falling back. All JAR
+sources must match the pinned artifact. Selected tool paths (including the
+bundled JAR) are realpath-normalized once to regular files. PATH java is recorded literally in argv; its resolved location is
 separate metadata. Java options/classpath/TLA-library injection variables
 are scrubbed. v1 supports macOS/Linux termination; Windows blocks. Heap caps
 are not total RSS limits. A TLA+ execution is not a general security sandbox.

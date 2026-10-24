@@ -79,7 +79,8 @@ record; they do not establish project workflow acceptance.
     A remains a historical reference. D2 never reuses D's approvals.
 
 Use the installed scripts via ${CLAUDE_SKILL_DIR}/scripts/{preflight,check,
-check-evidence}.mjs with --project and --model. preflight/check need an
-explicit --jar or TLA2TOOLS_JAR. No command downloads Java or the JAR.
+check-evidence}.mjs with --project and --model. preflight/check use the
+bundled pinned JAR by default; --jar overrides TLA2TOOLS_JAR, which overrides
+the bundle. Configured errors block instead of silently falling back. No command downloads Java or the JAR.
 Commands write only the declared model artifacts and .formal-design outputs;
 adding /.formal-design/ to the project's .gitignore is a separate manual edit.

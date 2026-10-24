@@ -55,8 +55,11 @@ critic 采用只读人格，通常在后台运行；executor 和 marathon 可以
 主对话在首次使用时说明规则采用情况和缺失的评审规则，不会自动编辑 AGENTS.md。
 更新插件后需重启 dsh，才会使用更新后的 skill 和 runner。
 
-仅在选择执行模型检查时需要 Java >=17 和单独提供的固定 TLC v1.7.4 JAR。
-普通 dsh 启动不需要 Java，也不会自动下载工具。设置 TLA2TOOLS_JAR 或传入 --jar；
+执行模型检查只需 PATH 中有 Java >=17。插件已包含固定 TLC v1.7.4 JAR，
+无需另外下载或配置 JAR。普通 dsh 启动不需要 Java，运行时和安装阶段也不会执行下载脚本。
+选择顺序为 --jar、TLA2TOOLS_JAR、内置 JAR。明确配置的 JAR 缺失或校验失败时会阻塞检查，
+不会静默回退；所有来源都必须匹配固定校验值。
+[第三方通知](skills/formal-design/toolchain/THIRD-PARTY-NOTICES.md)记录原始产物、源码和许可。
 详见 [skill](skills/formal-design/SKILL.md)、[建模指南](skills/formal-design/references/modeling-guide.md)、
 [评审契约](skills/formal-design/references/review-contract.md)和[完整示例](skills/formal-design/examples/task-lifecycle/workflow.md)。
 

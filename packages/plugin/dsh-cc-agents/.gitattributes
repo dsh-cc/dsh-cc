@@ -1,0 +1,4 @@
+# Preserve the exact third-party release and original upstream notices.
+skills/formal-design/toolchain/tla2tools.jar binary
+skills/formal-design/toolchain/LICENSE -text
+skills/formal-design/toolchain/licenses/** -text -whitespace

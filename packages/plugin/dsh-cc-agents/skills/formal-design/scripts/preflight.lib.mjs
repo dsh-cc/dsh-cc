@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises'
 import { join } from 'node:path'
-import { inspectProject, enumerate, hashFile, runnerIdentity, cfgState } from './fingerprint.lib.mjs'
+import { inspectProject, enumerate, hashFile, runnerIdentity, cfgState, SCRIPTS } from './fingerprint.lib.mjs'
 import { fail, parseManifest, sortBlockers } from './manifest.lib.mjs'
 import { probeJava } from './process.lib.mjs'
 export function parseSyntax(argv, command) {
@@ -15,12 +15,15 @@ export function parseSyntax(argv, command) {
   if (!options.project || !options.model) fail('usage-invalid', '--project and --model are required')
   return options
 }
-export async function normalizeArguments(options, command) {
+export async function normalizeArguments(options, command, { env = process.env, bundledJar = join(SCRIPTS, '../toolchain/tla2tools.jar') } = {}) {
   if (options.help) return options
   // Normalize once, retain independent missing-file diagnostics for preflight.
   options.argumentBlockers = []
   if (command !== 'check-evidence') {
-    if (!options.jar && process.env.TLA2TOOLS_JAR) options.jar = process.env.TLA2TOOLS_JAR
+    // A configured path is authoritative: normalization/checksum errors must
+    // not silently substitute a different artifact. Only an absent selection
+    // uses the immutable toolchain resource shipped with this plugin version.
+    if (!Object.hasOwn(options, 'jar')) options.jar = env.TLA2TOOLS_JAR || bundledJar
     for (const key of ['java', 'jar']) if (options[key]) {
       try { const path = await fs.realpath(options[key]); if (!(await fs.stat(path)).isFile()) throw new Error('not regular'); options[key] = path }
       catch (e) { options.argumentBlockers.push({ code: e.code === 'ENOENT' || e.code === 'ENOTDIR' ? `${key}-missing` : 'io', detail: `${key} path is not an accessible regular file` }); options[key] = null }
@@ -55,7 +58,7 @@ export async function preflight(options, { probe = probeJava, signal, platform =
     else javaVersion = result.version
   }
   if (!options.jar) {
-    if (!blockers.some(b => b.code === 'jar-missing' || (b.code === 'io' && b.detail.startsWith('jar ')))) blockers.push({ code: 'jar-missing', detail: 'provide --jar or TLA2TOOLS_JAR' })
+    if (!blockers.some(b => b.code === 'jar-missing' || (b.code === 'io' && b.detail.startsWith('jar ')))) blockers.push({ code: 'jar-missing', detail: 'TLC JAR unavailable; reinstall the plugin or provide --jar/TLA2TOOLS_JAR' })
   } else {
     try {
       const sha1 = await hashFile(options.jar, 'sha1')

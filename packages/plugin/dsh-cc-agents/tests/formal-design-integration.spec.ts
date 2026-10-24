@@ -1,14 +1,14 @@
 import { mkdtemp, mkdir, cp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
-const jar = process.env.TLA2TOOLS_JAR
-if (process.env.FORMAL_DESIGN_CI === '1' && !jar) throw new Error('Dedicated formal-design CI requires TLA2TOOLS_JAR')
+const bundledJar = resolve(import.meta.dirname, '../skills/formal-design/toolchain/tla2tools.jar')
+const jar = process.env.TLA2TOOLS_JAR || (process.env.FORMAL_DESIGN_CI === '1' ? bundledJar : undefined)
 const fixtureDir = join(import.meta.dirname, 'fixtures/formal-design')
 const scripts = join(import.meta.dirname, '../skills/formal-design/scripts')
-const command = (file: string, args: string[]) => new Promise<any>((res, rej) => {
-  const child = spawn(process.execPath, [join(scripts, file), ...args], { shell: false }); let stdout = ''; let stderr = ''
+const command = (file: string, args: string[], options: { base?: string; env?: NodeJS.ProcessEnv } = {}) => new Promise<any>((res, rej) => {
+  const child = spawn(process.execPath, [join(options.base ?? scripts, file), ...args], { shell: false, env: options.env ?? process.env }); let stdout = ''; let stderr = ''
   child.stdout.on('data', b => { stdout += b }); child.stderr.on('data', b => { stderr += b }); child.once('error', rej)
   child.once('close', code => { try { res({ code, output: JSON.parse(stdout), stderr }) } catch { rej(new Error(`${stdout}\n${stderr}`)) } })
 })
@@ -61,6 +61,33 @@ describe.skipIf(!jar)('formal-design raw pinned cfg parser protocol', () => {
       expect(result.eventCodes).toContain(5006)
     } finally {
       if (process.env.FORMAL_DESIGN_ARTIFACTS) { await mkdir(process.env.FORMAL_DESIGN_ARTIFACTS, { recursive: true }); await cp(root, join(process.env.FORMAL_DESIGN_ARTIFACTS, 'cfg-parse-raw'), { recursive: true }) }
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 30000)
+})
+
+
+describe.skipIf(!jar)('formal-design default bundled distribution', () => {
+  it('runs the packed skill end to end with no JAR flag or environment configuration', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'formal packed '))
+    try {
+      const pkg = resolve(import.meta.dirname, '..')
+      const packed = JSON.parse(execFileSync('npm', ['pack', '--json', '--pack-destination', root], { cwd: pkg, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0]
+      execFileSync('tar', ['-xzf', join(root, packed.filename), '-C', root])
+      const packedSkill = join(root, 'package/skills/formal-design')
+      const project = join(root, 'project'); const model = 'specs/tla/task-lifecycle'
+      await mkdir(join(project, 'specs/tla'), { recursive: true })
+      await cp(join(packedSkill, 'examples/task-lifecycle'), join(project, model), { recursive: true })
+      const env = { ...process.env }; delete env.TLA2TOOLS_JAR
+      const options = { base: join(packedSkill, 'scripts'), env }
+      const args = ['--project', project, '--model', model]
+      expect((await command('preflight.mjs', args, options)).output).toMatchObject({ status: 'ready-for-check', willGenerate: [] })
+      const checked = await command('check.mjs', args, options)
+      expect(checked.output).toMatchObject({ status: 'verified', summary: { jarPath: join(packedSkill, 'toolchain/tla2tools.jar'), jarSha256: '936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88' } })
+      expect(checked.code).toBe(0)
+      expect((await command('check-evidence.mjs', args, options)).output).toMatchObject({ status: 'valid', fresh: true, verification: 'verified' })
+    } finally {
+      if (process.env.FORMAL_DESIGN_ARTIFACTS) { await mkdir(process.env.FORMAL_DESIGN_ARTIFACTS, { recursive: true }); await cp(root, join(process.env.FORMAL_DESIGN_ARTIFACTS, 'packed-bundle'), { recursive: true }) }
       await rm(root, { recursive: true, force: true })
     }
   }, 30000)

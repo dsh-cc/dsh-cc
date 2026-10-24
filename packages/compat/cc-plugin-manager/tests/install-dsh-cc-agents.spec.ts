@@ -161,8 +161,24 @@ describe('dsh-cc-agents install round-trip (marketplace → cache → mount)', (
       expect(trackedFormal.length).toBeGreaterThan(0)
       for (const path of trackedFormal) {
         const relative = path.slice(formalPrefix.length)
-        expect(readFileSync(join(formalDir, relative)), relative).toEqual(readFileSync(join(REPO_ROOT, path)))
+        expect(readFileSync(join(formalDir, relative)).equals(readFileSync(join(REPO_ROOT, path))), relative).toBe(true)
       }
+      const env = { ...process.env }; delete env.TLA2TOOLS_JAR
+      const selection = JSON.parse(execFileSync(process.execPath, [
+        '--input-type=module', '-e', `
+          import { pathToFileURL } from 'node:url';
+          import { readFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const { parseArguments } = await import(pathToFileURL(process.argv[1]).href);
+          const options = await parseArguments(['--project', process.argv[2], '--model', 'specs/tla/test'], 'check');
+          const hash = createHash('sha256').update(readFileSync(options.jar)).digest('hex');
+          console.log(JSON.stringify({ jar: options.jar, hash, blockers: options.argumentBlockers }));
+        `, join(formalDir, 'scripts/preflight.lib.mjs'), cwd,
+      ], { cwd, env, encoding: 'utf8' }))
+      expect(selection).toEqual({
+        jar: join(formalDir, 'toolchain/tla2tools.jar'),
+        hash: '936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88', blockers: [],
+      })
       for (const command of ['preflight', 'check', 'check-evidence']) {
         expect(formal?.content).toContain('${CLAUDE_SKILL_DIR}/scripts/' + command + '.mjs')
         // Starting from another cwd proves cached commands can import their

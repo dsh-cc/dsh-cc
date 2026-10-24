@@ -142,7 +142,7 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { vi } from 'vitest'
 import { scrubEnvironment, parseJavaVersion, probeJava, runCase } from '../skills/formal-design/scripts/process.lib.mjs'
-import { parseArguments, preflight } from '../skills/formal-design/scripts/preflight.lib.mjs'
+import { parseArguments, normalizeArguments, preflight } from '../skills/formal-design/scripts/preflight.lib.mjs'
 function fakeChild() {
   const child = new EventEmitter() as any
   child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = vi.fn(() => true)
@@ -595,5 +595,46 @@ describe('formal-design source integrity', () => {
     let status = 0; let ignored = ''
     try { ignored = execFileSync('git', ['check-ignore', '--no-index', ...files], { encoding: 'utf8' }) } catch (e: any) { status = e.status; ignored = e.stdout ?? '' }
     expect(ignored).toBe(''); expect(status).toBe(1)
+  })
+})
+
+
+describe('formal-design bundled TLC resolution', () => {
+  const bundled = join(import.meta.dirname, '../skills/formal-design/toolchain/tla2tools.jar')
+  it('uses the bundled pinned JAR without an option or environment variable', async () => {
+    const { root } = await project()
+    const options = await normalizeArguments({ project: root, model: 'specs/tla/test' }, 'check', { env: {} })
+    expect(options.jar).toBe(await fs.realpath(bundled))
+    expect(options.argumentBlockers).toEqual([])
+  })
+  it('prefers explicit JAR over environment and environment over the bundle', async () => {
+    const { root } = await project(); const explicit = join(root, 'explicit.jar'); const environment = join(root, 'environment.jar')
+    await writeFile(explicit, 'explicit'); await writeFile(environment, 'environment')
+    const env = { TLA2TOOLS_JAR: environment }
+    expect((await normalizeArguments({ project: root, model: 'specs/tla/test', jar: explicit }, 'check', { env })).jar).toBe(explicit)
+    expect((await normalizeArguments({ project: root, model: 'specs/tla/test' }, 'preflight', { env })).jar).toBe(environment)
+  })
+  it('never falls back when an explicitly configured path is missing', async () => {
+    const { root } = await project()
+    for (const explicit of [true, false]) {
+      const missing = join(root, 'missing.jar')
+      const input = { project: root, model: 'specs/tla/test', ...(explicit ? { jar: missing } : {}) }
+      const options = await normalizeArguments(input, 'check', { env: { TLA2TOOLS_JAR: explicit ? bundled : missing } })
+      expect(options.jar).toBeNull()
+      expect(options.argumentBlockers.map((b: any) => b.code)).toEqual(['jar-missing'])
+    }
+  })
+  it('reports a missing bundled resource without networking or rewriting configuration', async () => {
+    const { root } = await project()
+    const options = await normalizeArguments({ project: root, model: 'specs/tla/test' }, 'check', { env: {}, bundledJar: join(root, 'absent-bundle.jar') })
+    expect(options.jar).toBeNull()
+    expect(options.argumentBlockers.map((b: any) => b.code)).toEqual(['jar-missing'])
+  })
+  it('does not silently replace a configured JAR with a checksum mismatch', async () => {
+    const { root } = await project(); const wrong = join(root, 'wrong.jar'); await writeFile(wrong, 'not the pinned bytes')
+    const options = await normalizeArguments({ project: root, model: 'specs/tla/test', jar: wrong }, 'preflight', { env: {} })
+    const result = await preflight(options, { probe: async () => ({ version: '17' }) })
+    expect(options.jar).toBe(wrong)
+    expect(result.output).toMatchObject({ status: 'blocked', reason: 'jar-checksum', willGenerate: [] })
   })
 })

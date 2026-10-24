@@ -12,6 +12,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
 const PKG_DIR = dirname(import.meta.dirname)
@@ -90,7 +91,9 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
 describe('formal-design skill distribution', () => {
   const skill = join(PKG_DIR, 'skills/formal-design')
   const required = ['SKILL.md', 'references/modeling-guide.md', 'references/review-contract.md', 'references/agents-snippet.md',
-    'scripts/preflight.mjs', 'scripts/check.mjs', 'scripts/check-evidence.mjs', 'scripts/manifest.lib.mjs',
+    'toolchain/tla2tools.jar', 'toolchain/LICENSE', 'toolchain/THIRD-PARTY-NOTICES.md',
+    'toolchain/licenses/JAVAMAIL-EPL-2.0.txt', 'toolchain/licenses/ACTIVATION-APACHE-2.0.txt',
+    'toolchain/licenses/ACTIVATION-NOTICE.txt', 'scripts/preflight.mjs', 'scripts/check.mjs', 'scripts/check-evidence.mjs', 'scripts/manifest.lib.mjs',
     'scripts/fingerprint.lib.mjs', 'scripts/process.lib.mjs', 'scripts/tlc-output.lib.mjs', 'scripts/toolchain.json',
     'examples/task-lifecycle/Model.tla', 'examples/task-lifecycle/checks.json', 'examples/task-lifecycle/design.md',
     'examples/task-lifecycle/workflow.md', 'examples/task-lifecycle/cases/small.cfg']
@@ -110,4 +113,13 @@ describe('formal-design skill distribution', () => {
     for (const file of required) expect(packed.has(`skills/formal-design/${file}`), file).toBe(true)
     expect(readdirSync(join(skill, 'scripts')).every(f => !statSync(join(skill, 'scripts', f)).isDirectory())).toBe(true)
   })
+})
+
+
+it('ships the exact upstream TLC bytes pinned by toolchain.json', () => {
+  const skill = join(PKG_DIR, 'skills/formal-design')
+  const pin = JSON.parse(readFileSync(join(skill, 'scripts/toolchain.json'), 'utf8'))
+  const bytes = readFileSync(join(skill, 'toolchain/tla2tools.jar'))
+  expect(createHash('sha1').update(bytes).digest('hex')).toBe(pin.sha1)
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe('936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88')
 })

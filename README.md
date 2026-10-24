@@ -94,7 +94,7 @@ The bundles are sufficient for the quick start. The `dsh-cc` marketplace has fou
   - `executor` uses `sonnet` to execute a specified plan.
   - `marathon` uses `fable` for changes to many files or tasks with unknown requirements.
   - The skills are `dsh-cc-agents-orchestration`, `data-analysis`, **`vwa-writing`**, and **`formal-design`**.
-  - `formal-design` checks bounded TLA+ models before the existing design review. Java and the pinned TLC JAR are optional check-time tools. Installing the plugin does not enable project-wide screening; [adopt the rules manually](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md) and restart after plugin updates.
+  - `formal-design` checks bounded TLA+ models before the existing design review. Model checks need Java >=17; the pinned TLC JAR ships with the plugin. No separate JAR download or configuration is needed. Installing the plugin does not enable project-wide screening; [adopt the rules manually](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md) and restart after plugin updates.
 - **`dsh-cc-shunt`** sends bulk reads and code generation again and again to worker subagents. Configure `haiku` for lower model cost.
 - **`cc-codex-bridge`** lets you run one specified Codex command form through its PreToolUse hook.
 - **`cc-grok-bridge`** lets you run one specified Grok command form through its PreToolUse hook.

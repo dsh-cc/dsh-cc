@@ -52,29 +52,24 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Download and verify the exact pinned TLC JAR
+      - name: Verify the bundled pinned TLC JAR (no download)
         working-directory: dsh-cc
         run: |
-          pin=packages/plugin/dsh-cc-agents/skills/formal-design/scripts/toolchain.json
-          jar_url=$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).downloadUrl)' "$pin")
-          jar_path="$RUNNER_TEMP/tla2tools.jar"
-          curl --fail --location --retry 3 --output "$jar_path" "$jar_url"
-          node --input-type=module - "$pin" "$jar_path" <<'JS'
+          node --input-type=module - <<'JS'
           import fs from 'node:fs';
           import { createHash } from 'node:crypto';
-          const pin = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          const actual = createHash('sha1').update(fs.readFileSync(process.argv[3])).digest('hex');
-          if (actual !== pin.sha1) throw new Error('Pinned TLC checksum mismatch');
+          const skill = 'packages/plugin/dsh-cc-agents/skills/formal-design';
+          const pin = JSON.parse(fs.readFileSync(skill + '/scripts/toolchain.json', 'utf8'));
+          const actual = createHash('sha1').update(fs.readFileSync(skill + '/toolchain/tla2tools.jar')).digest('hex');
+          if (actual !== pin.sha1) throw new Error('Bundled TLC is missing or has the wrong checksum');
           JS
-          test -s "$jar_path"
-          printf 'TLA2TOOLS_JAR=%s\n' "$jar_path" >> "$GITHUB_ENV"
-      - name: Contract and real TLC integration tests (missing JAR must fail)
+      - name: Contract, packaged default and real TLC integration tests
         working-directory: dsh-cc
         env:
           FORMAL_DESIGN_CI: '1'
           FORMAL_DESIGN_ARTIFACTS: ${{ runner.temp }}/formal-design-artifacts
         run: |
-          test -s "$TLA2TOOLS_JAR"
+          unset TLA2TOOLS_JAR
           pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design.spec.ts packages/plugin/dsh-cc-agents/tests/formal-design-integration.spec.ts packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts
       - uses: actions/upload-artifact@v4
         if: failure()

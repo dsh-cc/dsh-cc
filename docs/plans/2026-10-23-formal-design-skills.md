@@ -1,6 +1,13 @@
 # On-demand TLA+ Design Verification Workflow for dsh-cc: Detailed Design
 
-## Status: Design — implementation-contract revision (2026-10-24).
+## Status: Design — bundled-toolchain revision (2026-10-24).
+User-approved distribution change: ship the unmodified pinned TLC JAR and
+its upstream/third-party notices as Git-tracked plugin resources, covering
+both npm and Git marketplace installs. Selection is explicit --jar, then
+TLA2TOOLS_JAR, then the bundled file. A configured missing/invalid JAR never
+silently falls back. Java >=17 remains the only additional local prerequisite
+for checks; runtime/installation do not download tools. This supersedes the
+older user-supplied-JAR statements in historical review entries.
 Earlier r1–r3 review history is retained in the Review ledger; it does not
 constitute review of this revision. User authorized this document update
 and chose approval reuse after a successful tool-only re-check (§12).
@@ -278,6 +285,10 @@ packages/plugin/dsh-cc-agents/skills/formal-design/
   scripts/tlc-output.lib.mjs
   scripts/process.lib.mjs
   scripts/toolchain.json
+  toolchain/tla2tools.jar         # exact pinned upstream binary, tracked in Git
+  toolchain/LICENSE
+  toolchain/THIRD-PARTY-NOTICES.md
+  toolchain/licenses/…            # original embedded dependency notices
   examples/task-lifecycle/…      # see §14, including workflow.md
 ```
 
@@ -944,8 +955,15 @@ version >=17. v1 pins TLC v1.7.4:
   SHA-1 is a compatibility/integrity match against the official artifact —
   no anti-collision guarantee is claimed. Run evidence separately records
   the actual JAR's SHA-256.
-- Without an explicit `--jar`, read TLA2TOOLS_JAR; there is no default
-  scanning, no networking, and no auto-download. Without `--java`, use the
+- Selection is explicit `--jar` > nonempty TLA2TOOLS_JAR >
+  `${CLAUDE_SKILL_DIR}/toolchain/tla2tools.jar`. The bundled file is an
+  unmodified Git-tracked plugin resource, not Git LFS or a prepack/postinstall
+  download, so npm packages and Git marketplace clones both contain it.
+  A configured path that is missing, unreadable or checksum-invalid blocks;
+  it never silently falls back to another source. Every selection must match
+  the pin. Keep the upstream MIT and embedded dependency licenses/notices
+  and source provenance beside the binary. No scanning, networking or
+  auto-download occurs at runtime or installation. Without `--java`, use the
   PATH java (not pre-resolved; spawn resolves it, and javaVersion is
   recorded as usual).
 - Changing the TLC version requires reviewing it together with the pinned
@@ -960,8 +978,8 @@ never with hardcoded machine paths. Invocation shape ($PROJECT is the
 target project root):
 
 ```sh
-node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"      --project "$PROJECT" --model specs/tla/task-lifecycle --jar /absolute/tla2tools.jar
-node "${CLAUDE_SKILL_DIR}/scripts/check.mjs"          --project "$PROJECT" --model specs/tla/task-lifecycle --jar /absolute/tla2tools.jar
+node "${CLAUDE_SKILL_DIR}/scripts/preflight.mjs"      --project "$PROJECT" --model specs/tla/task-lifecycle
+node "${CLAUDE_SKILL_DIR}/scripts/check.mjs"          --project "$PROJECT" --model specs/tla/task-lifecycle
 node "${CLAUDE_SKILL_DIR}/scripts/check-evidence.mjs" --project "$PROJECT" --model specs/tla/task-lifecycle
 ```
 
@@ -983,7 +1001,7 @@ one JSON object plus a newline (schema in §20); diagnostics go to stderr;
 passed `--jar`/`--java` must exist; it is realpath'd **once at argument
 parsing** to an absolute path (symlinks allowed; the resolved path is
 recorded) and must be a regular file; evidence argv records the normalized
-absolute path. The `--jar` (or the resolved TLA2TOOLS_JAR) bytes get a SHA-1
+absolute path. The selected JAR bytes (explicit, environment or bundled) get a SHA-1
 compared against toolchain.json (mismatch → blocked/jar-checksum) and a
 SHA-256 recorded in evidence. PATH-form java is not pre-resolved (the argv
 and javaExecutable recording rules are in §12).
@@ -1696,9 +1714,12 @@ dialog/reviewer records under §16.4, not claimed as runner enforcement.
 
 ### 16.2 Real TLC integration tests
 
-formal-design-integration.spec.ts skips explicitly when TLA2TOOLS_JAR is
-unset locally; the dedicated CI job MUST provide the pinned JAR — a missing
-JAR fails the job rather than skipping. Real runs against: the correct
+formal-design-integration.spec.ts is opt-in locally via TLA2TOOLS_JAR or
+FORMAL_DESIGN_CI=1 (using the bundle). The dedicated CI job sets the latter
+and MUST validate and use the bundled pinned JAR with TLA2TOOLS_JAR unset —
+a missing or corrupt bundle fails rather than skips. Include actual npm
+archive extraction and zero-JAR-configuration preflight/check/audit, plus
+Git marketplace cache selection and byte-preservation tests. Real runs against: the correct
 model, the buggy-callback model, a deadlock model, liveness pass and fail
 models with fairness, a syntax-error model, **an empty-Init model**
 (asserting non-verified), and **a safety-form PROPERTY model** (asserting
@@ -1732,9 +1753,9 @@ paragraph):
 3. `pnpm install --frozen-lockfile` (no harness lib build needed; if
    implementation proves otherwise, fall back to copying presubmit's
    cache/build block and note it in the implementation record).
-4. setup-java Temurin 17; download the JAR to RUNNER_TEMP from the pinned
-   URL, verify the official SHA-1, export TLA2TOOLS_JAR; download or
-   checksum failure MUST fail the job.
+4. setup-java Temurin 17; verify the Git-tracked bundled JAR against the
+   official SHA-1; missing/checksum failure MUST fail the job. Unset
+   TLA2TOOLS_JAR and run with FORMAL_DESIGN_CI=1. No JAR download occurs.
 5. `pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design.spec.ts packages/plugin/dsh-cc-agents/tests/formal-design-integration.spec.ts`.
 6. On failure, upload the test-produced .formal-design output as a
    diagnostic artifact; tests should copy output into the job-designated
@@ -1860,7 +1881,7 @@ pass at the time of writing):
 
 ```sh
 pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design.spec.ts packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts
-pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design-integration.spec.ts   # requires TLA2TOOLS_JAR
+FORMAL_DESIGN_CI=1 pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design-integration.spec.ts   # Java >=17; bundled JAR
 node scripts/check-readme.mjs --write && pnpm check:readme
 pnpm check:publish
 pnpm check:artifacts
@@ -2553,6 +2574,14 @@ sign-off and feature implementation remain pending. These are execution
 obligations, not missing policy choices silently resolved by this edit.
 
 ## Review ledger
+
+- **Bundled-toolchain revision (2026-10-24)**: user requested updating the PR
+  to include the pinned JAR with the plugin. Preserve exact upstream bytes,
+  licenses/provenance, checksum and actual SHA-256 evidence. Explicit/env
+  errors block without fallback. npm and Git marketplace installs require no
+  separate JAR configuration; CI verifies the bundle without downloading it.
+  Ordinary startup still needs no Java. Existing manual review/remote-delivery
+  acceptance limitations and review authority are unchanged.
 
 - **Contract-consistency revision (2026-10-24)**: user requested revision and
   submission following the current design analysis. Correct the distinct
