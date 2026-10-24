@@ -79,6 +79,21 @@ export function createPluginMcpSeam(ctx: Context, opts: PluginMcpSeamOptions = {
       const config = registrations[0]!
       const serverName = config.serverName
 
+      // Pre-flight collision check (docs/plans/2026-10-23-mcp-mount-singleton.md
+      // §C): a name already in the shared root registry is a no-op, never a
+      // second process.
+      // BOOT-ORDER CAVEAT: the glue runs plugins.mountAll() (this seam) BEFORE
+      // the .mcp.json loop, so on the FIRST preset tree a same-name config
+      // server is not registered yet and this check misses it — that collision
+      // is still caught by mcp-client's serverName reservation plus the ledger
+      // below. This pre-flight mainly covers the SECOND tree's plugin servers
+      // and post-boot `/reload-plugins`.
+      const registry = ctx.get('mcpConnections') as { entries(): { name: string }[] } | undefined
+      if (registry !== undefined && registry.entries().some(entry => entry.name === serverName)) {
+        ctx.logger.warn(`cc-shell-glue: skipped plugin MCP server "${serverName}": already registered`)
+        return () => {}
+      }
+
       const attach = (): (() => void) => {
         const fiber = mount(plugin, config)
         // The activation thenable is always consumed: settle on success, warn

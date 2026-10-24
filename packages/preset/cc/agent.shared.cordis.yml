@@ -327,14 +327,34 @@
 
 # Service rows MUST sit in a group with an `isolate` realm: mounting this preset
 # rejects any row that publishes a cordis Service into the root realm
-# (PresetMountError / leakedServices). The isolate keys below are all required —
-# the glue dynamically attaches mcp-client as a sub-fiber, and `Context.extend`
-# inherits the group's isolate map down the prototype chain, so without
-# `mcpConnections` isolated here it would publish into the root realm and break
-# the preset. The command rows and the `memory` / `hooks-claude-code` consumers
-# must live INSIDE the group: they `ctx.get('ccModelRoutes')` (and
-# `ctx.get('mcpConnections')`), which resolve to nothing outside the isolated
-# realm. `ccPlugins` is deliberately NOT isolated: the glue publishes it into
+# (PresetMountError / leakedServices). `mcpConnections` is deliberately NOT
+# isolated: it is a runtime-scoped resource published from the ROOT fiber by
+# the cc-shell glue (`ensureMcpConnections` / `mountMcpServerOnce` in
+# packages/bundle/cc-shell/src/mcpSingleton.ts), so every preset tree
+# standing-mounted in one runtime shares ONE registry and one set of MCP
+# server processes. Isolating it here would shadow that root publication:
+# each tree would get its own empty registry, and the second tree's
+# mcp-client mounts would collide on mcp-client's `serverName` reservation
+# (only the first tree's processes would ever run).
+#
+# `toolSearch` is also NOT isolated — root-mounted mcp-client fibers must
+# resolve the deferral seam — but NOTE: removing the isolate key is NOT
+# sufficient to share a preset-provided service. A preset-row provide of a
+# non-isolated name trips the leakedServices gate ("Preset services require
+# isolate realms: toolSearch" — the smoke:profile-boot failure caught after
+# the first version of this fix). The `tool-search` row therefore lives in
+# the cc-tui patch layer (packages/bundle/cc-tui/cordis.patch.yml), mounted
+# once per runtime at the bundle layer, outside every preset standing
+# mount. Its activation state is shared across preset trees, and re-adding
+# a `tool-search` row HERE is compositionally wrong.
+#
+# The same reasoning applies to `ccPlugins` and `hookRun` below: runtime-
+# scoped services are published from the root fiber, never from a preset
+# row's realm. The remaining isolate keys below are all required. The
+# command rows and the `memory` / `hooks-claude-code` consumers must live
+# INSIDE the group: they `ctx.get('ccModelRoutes')` (in-realm) and
+# `ctx.get('mcpConnections')` / `ctx.get('toolSearch')` (root-published,
+# visible from every realm). `ccPlugins` is deliberately NOT isolated: the glue publishes it into
 # the ROOT realm from the root fiber (see CcPluginsService in
 # @dsh-cc/bundle-shell) so host-plane siblings — the TUI driver and /help
 # — can resolve it; isolating the name here would shadow that publication and
@@ -357,11 +377,9 @@
   name: cordis:group
   group: true
   isolate:
-    toolSearch: true
     microcompactor: true
     ccModelRoutes: true
     resumePinStore: true
-    mcpConnections: true
     hookBridgeStatus: true
     mcp: true
     hooks: true
@@ -376,9 +394,6 @@
     # trips the preset mount guard (process-global service from a preset row).
     ccActorContractGate: true
   config:
-    # ToolSearch: model-called search that activates deferred tools per scope.
-    - id: tool-search
-      name: '@dsh-cc/tool-search'
 
     # Model-free staleness microcompaction (auto: false by default).
     - id: compaction-micro
@@ -436,8 +451,8 @@
       name: '@dsh-cc/command-mcp'
 
     # Serena-first prompt steering: while a serena MCP server is ready
-    # (registry-only, live detection over the isolated `mcpConnections`
-    # above), the registered `serena-first` section (order 105) renders the
+    # (live detection over the shared, root-published `mcpConnections`
+    # registry), the registered `serena-first` section (order 105) renders the
     # policy paragraph and the assemble waterfall rewrites the upstream
     # `tool:read` / `tool:grep` texts (replace-not-mutate, `{ prepend: true }`).
     # Publishes no Service, so it needs no isolate key of its own;
@@ -447,8 +462,8 @@
     - id: serena-first
       name: '@dsh-cc/serena-first'
 
-    # /doctor reads ccModelRoutes, mcpConnections, and hookBridgeStatus, so it
-    # shares the group realm.
+    # /doctor reads the root-published mcpConnections, and the in-realm
+    # ccModelRoutes and hookBridgeStatus, so it lives inside the group.
     - id: command-doctor
       name: '@dsh-cc/command-doctor'
 

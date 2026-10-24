@@ -227,15 +227,22 @@ describe('agent.cordis.yml composition', () => {
     expect(row.config).toBeUndefined()
   })
 
-  it('isolates exactly the eleven cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
+  it('isolates exactly the nine cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')
+    // Tripwire: the `tool-search` row must NOT live in any preset body. A
+    // preset-row provide of a non-isolated name trips the preset
+    // leakedServices gate ("Preset services require isolate realms:
+    // toolSearch", the smoke:profile-boot failure that followed the isolate
+    // removal). The row lives in the cc-tui patch layer instead.
+    expect(yamlText).not.toContain('- id: tool-search')
+    // `toolSearch` and `mcpConnections` are deliberately absent: both are
+    // runtime-scoped singletons published from the root fiber by the cc-shell
+    // glue (mcpSingleton.ts), shared by every preset tree in the runtime.
     expect(group.isolate).toEqual({
-      toolSearch: true,
       microcompactor: true,
       ccModelRoutes: true,
       resumePinStore: true,
-      mcpConnections: true,
       hookBridgeStatus: true,
       mcp: true,
       hooks: true,
@@ -337,9 +344,9 @@ describe('agent.cordis.yml composition', () => {
     expect(configIds.indexOf('lsp-on-write')).toBe(configIds.indexOf('post-edit-verify') + 1)
     expect(configIds).toContain('command-plugin')
     expect(configIds).toContain('command-mcp')
-    // The serena-first steering row consumes the isolated `mcpConnections`
-    // realm and must sit inside the group, right after command-mcp (plan
-    // docs/plans/2026-09-04-serena-first-prompt-sections.md).
+    // The serena-first steering row consumes the shared, root-published
+    // `mcpConnections` registry and must sit inside the group, right after
+    // command-mcp (plan docs/plans/2026-09-04-serena-first-prompt-sections.md).
     expect(configIds).toContain('serena-first')
     expect(topIds).not.toContain('serena-first')
     expect(configIds.indexOf('serena-first')).toBeGreaterThan(configIds.indexOf('command-mcp'))

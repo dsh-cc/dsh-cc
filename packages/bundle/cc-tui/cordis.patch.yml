@@ -91,6 +91,16 @@
     # include row mounts @dsh-cc/preset-cc/agent.cordis.yml from the
     # profile's node_modules (a hard dependency of @dsh-cc/tui), keeping
     # that tested file the single source of the cc composition.
+    # Runtime-scoped MCP tool deferral registry: mounts once per runtime at
+    # the bundle layer (outside every preset standing mount). It used to sit
+    # in the cc-services preset group; with `toolSearch` deliberately
+    # non-isolated (so root-mounted mcp-client fibers can resolve the seam),
+    # a preset-row provide would trip the preset leakedServices gate
+    # ("Preset services require isolate realms: toolSearch"), which broke
+    # smoke:profile-boot. Do not re-add the row to any preset body.
+    - id: tool-search
+      name: '@dsh-cc/tool-search'
+
     - id: agent-preset-registry
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:

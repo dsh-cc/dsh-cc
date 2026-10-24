@@ -3,8 +3,8 @@
  * new `c.provide('foo')` landing without a matching isolate key. Mount the
  * glue under the cc-services isolate map and assert the same gate the preset
  * mount uses — empty pluginDirs/mcpConfigFiles is enough to fire the four
- * child provides (`mcpConnections`, `mcp`, plus host-realm `ccPlugins` /
- * `ccPluginManager`).
+ * child provides (`mcp`, plus host-realm `ccPlugins` / `ccPluginManager` /
+ * root-published `mcpConnections`).
  */
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,13 +14,16 @@ import { Context } from '@deepseek-ai/cordis'
 import { apply } from '../src/index.ts'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 
-/** cc-services isolate keys from packages/preset/cc/agent.cordis.yml. */
+/**
+ * cc-services isolate keys from packages/preset/cc/agent.shared.cordis.yml.
+ * `toolSearch` and `mcpConnections` are deliberately absent: both are
+ * root-published runtime singletons (cc-shell mcpSingleton.ts), not per-tree
+ * state.
+ */
 const CC_SERVICES_ISOLATE = [
-  'toolSearch',
   'microcompactor',
   'ccModelRoutes',
   'resumePinStore',
-  'mcpConnections',
   'hookBridgeStatus',
   'mcp',
   'hooks',
@@ -93,7 +96,7 @@ afterEach(() => {
 })
 
 describe('cc-shell glue leakedServices (cc-services isolate map)', () => {
-  it('publishes no process-global services when the nine isolate keys are set', async () => {
+  it('publishes no process-global services when the seven isolate keys are set', async () => {
     const root = new Context()
     root.provide('commands', { register: () => () => {} })
     const group = isolateGroup(root, CC_SERVICES_ISOLATE)
@@ -101,6 +104,11 @@ describe('cc-shell glue leakedServices (cc-services isolate map)', () => {
     const fiber = await glue
     expect(leakedServices(root, fiber)).toEqual([])
     expect(group.get('mcp')).toBeDefined()
+    // The registry is published from the ROOT fiber (mcpSingleton
+    // `ensureMcpConnections`), so it resolves from the group realm without an
+    // isolate key — and, living outside the mount fiber, it is not a leak.
+    const fromRoot = root.get('mcpConnections')
+    expect(fromRoot).toBeDefined()
     expect(group.get('mcpConnections')).toBeDefined()
     await fiber.dispose()
     await root.fiber.dispose()
