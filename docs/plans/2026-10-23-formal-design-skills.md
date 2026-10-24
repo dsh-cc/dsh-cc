@@ -550,6 +550,35 @@ Explicit user waiver follows §4.1 and §5; it returns to the modified original
 pipeline as waived/unverified and is never described as satisfying this
 enabled-task gate.
 
+### 5.3 Coverage decisions and implementation-change precedents
+
+These precedents calibrate the manual gate; they do not turn model
+sufficiency into a runner verdict. The main dialog records the decision,
+requirement/property/action IDs, concrete trace, code mechanism, rationale
+and reviewer disposition in the workflow record. A reviewer may challenge
+the rationale under the existing review rules. Uncertainty is an unresolved
+finding, not permission for the executor to choose semantics.
+
+| Situation | Required disposition |
+|---|---|
+| Cancellation is modeled as undoing an external payment that may already have committed | Reject the abstraction unless an actual compensating protocol and its guarantees are specified. Model the committed effect or obtain the existing project's approval of a stated exclusion; never claim rollback from logical cancellation. |
+| The matrix covers cancellation stability but omits the business requirement that one logical request causes at most one external charge | Reject coverage even if every listed property passes. Add the requirement, relevant retry/duplicate traces, property and implementation mechanism, or an explicitly approved exclusion. |
+| A bounded logical-task model omits payments and explicitly claims only cancellation stability and attempt-tag filtering | Eligible for review only when those are the task's relevant requirements or the omitted requirements have approved exclusions; the bound and omitted effects must remain visible. Passing is not approval of payment deduplication. |
+| A stale callback is assumed to stutter without modeling its delivered attempt tag | The minimal fixture alone is insufficient evidence for a real receiver guard. Use the explicit companion pattern (§18.1), challenge guard/update atomicity, and map it to the target handler. |
+| Implementation changes names or extracts helpers while preserving the approved state transitions, guard, atomicity and assumptions | Record observed mapping and run affected code tests; unchanged model inputs do not require new formal approval. |
+| A guarded single transaction becomes a read followed by a separate write, or retry ownership/persistence order changes | Treat as a semantic/atomicity/assumption change. Update design/model and mappings, re-check and re-review before affected implementation continues. |
+| A bug fix restores the exact approved guard and atomic update after code omitted them | Record why this restores rather than changes the approved semantics; run the mapped regression tests. If restoration cannot be established, return to main-dialog adjudication. |
+
+At acceptance, assess the actual change rather than its label ("refactor" or
+"fix"). The executor reports uncertain cases as Blockers and pauses affected
+work (§6.3); the main dialog owns the disposition. Any resulting change to
+digested inputs follows §12. This does not add a new approval authority.
+
+§16.4 acceptance MUST exercise both rejected coverage examples above, the
+eligible bounded example, and each implementation-change category. Preserve
+the actual rationale and resulting gate state; a pre-filled table or keyword
+match is insufficient.
+
 ## 6. Roles and dispatch
 
 ### 6.1 Main dialog
@@ -1334,6 +1363,15 @@ A semantic change to the requirements/model or an unresolved upgrade finding
 blocks reuse under the existing rules. No new mandatory re-review category
 is introduced by this clarification.
 
+For each tool-only reuse, compare the old and new case outcomes, warning
+sets and checked configuration, and record relevant tool release changes or
+known issues affecting parsing/classification/model execution. Explain any
+observed difference; unresolved findings block reuse under the existing
+rule. The original approval references and the new successful check do not
+establish equivalence between tool versions. This comparison documents the
+existing trust decision and does not add mandatory re-review solely for a
+tool change.
+
 The current evidence package contains a single new runId and its actual
 tool identities, never old logs, case results, markers or evidence mixed
 with the new run. Historical approvals remain separate records retaining
@@ -1778,6 +1816,33 @@ recorded; no unresolved blockers; the ordinary request entry point is
 unchanged; documents distinguish bounded-model results from the real
 implementation; no mandatory Java startup dependency was added and no
 nonexistent runtime gate is claimed.
+
+### 17.1 Contract and acceptance navigation
+
+This table is a navigation index, not a second definition of behavior.
+Normative details remain at the referenced sections. If an implementation
+discovers an apparent conflict, report a design blocker rather than choose
+a convenient interpretation; the main dialog resolves it before affected
+work proceeds.
+
+| Observable contract | Normative source | Verification evidence |
+|---|---|---|
+| Discovery, adoption notices and re-screening | §4 | §16.4 effective-rule and scope-change records |
+| Coverage, review admission and change adjudication | §5, §6 | §16.4 scenarios and §5.3 decision records |
+| Config validation and exact cfg generation/recovery | §9 | §16 automated fixtures; §20.8 items 1, 2, 10, 11 |
+| CLI lifecycle and cancellation publication | §10, §10.1 | §20.7 serialized outcomes; §20.8 items 5, 15, 16 |
+| TLC parsing, classification and aggregation | §11 | §16 pinned/real TLC fixtures; §20.8 items 3, 4, 9, 14 |
+| Digests, replay, staleness and approval reuse | §12, §12.1 | §16.4 upgrade scenarios; §20.8 items 6, 7, 12, 14 |
+| Path boundaries, environment and locks | §13 | §16 automated fixtures; §20.8 item 17 |
+| Model examples and business/code correspondence | §14, §18, §18.1 | §16.4 actual workflow plus real companion counterexample |
+| Packaging and staged integration readiness | §2, §3, §7, §17 | Publish manifest, package tests and prerequisite record |
+| Serialized public shapes and rejection precedence | §20.7 | Producer/consumer round trips and failure injection |
+| Complete remote evidence delivery | §20.8 | Per-lane feasibility and actual receiver records in §16.4 |
+
+The implementation record maps each applicable contract row to concrete
+test names or manual scenario records and observed results. Pending
+prerequisites are recorded as pending/blocked, never as passing checks.
+This index does not replace the full acceptance requirements.
 
 ## 18. The minimal example's determinate model
 
@@ -2240,6 +2305,23 @@ If no suitable existing authorized channel
 exists, remain blocked; v1 does not add an uploader, raise channel limits
 or authorize a new external service implicitly.
 
+The preparation record MUST also identify the effective rule source and
+its session/revision, the authorized lane identities supplied by those
+rules, the probe date, actual byte counts/file counts, producer and receiver
+hash results, and any failed access/reconstruction attempt. A forwarding
+loop or an unavailable protocol is recorded as unavailable, not resolved by
+quoting a historical roster. Reconfirm the record when rules, channel,
+receiver access or package size changes in a way that invalidates the probe.
+
+Readiness has three separate claims: runner contracts implemented (steps
+1–3), workflow integration prerequisites established (before step 4), and
+actual workflow acceptance complete (step 5). Report them separately.
+Representative transport probes establish only the second claim; only
+actual runner-package receiver inspection/replay establishes delivery
+acceptance. No claim here requires support for 800 MiB universally:
+record the tested capacity and block any actual package exceeding it.
+The current design supplies requirements, not successful probe results.
+
 The minimum package for each lane contains:
 
 - Every input listed by evidence.inputFiles, preserving model-relative
@@ -2371,7 +2453,32 @@ details that preserve these externally observable contracts. It must return
 a design blocker rather than change a status, CLI field, acceptance
 condition or product boundary to fit its implementation.
 
+## 21. Revision scope and remaining decisions
+
+This clarification preserves plugin-only delivery, manual adoption, complete
+remote logs, the existing review authority, and successful tool-only
+approval reuse. It adds decision precedents, readiness evidence and an
+implementation/acceptance index; it does not change public CLI schemas or
+the minimal TLA+ fixtures. No additional user policy decision is required
+to implement these clarifications.
+
+If preparation establishes that no existing authorized route can deliver
+the actual package, ask the user for a scoped decision. Recommended first
+option: use an already authorized capable route and preserve full logs.
+An alternative that introduces a service or changes evidence requirements
+is a separate design change requiring approval; do not implement it as
+recovery. Likewise, unavailable effective review rules require an explicit
+rule source or scoped user decision, not an invented roster. Repair of the
+repository forwarding loop remains outside this document's implementation
+scope.
+
+Actual transport probes, real TLC execution, current-revision formal
+sign-off and feature implementation remain pending. These are execution
+obligations, not missing policy choices silently resolved by this edit.
+
 ## Review ledger
+
+- **Reviewability clarification (2026-10-24)**: add coverage and change-adjudication precedents, explicit preparation evidence and separate readiness claims, tool-upgrade comparison records, and a contract/acceptance navigation index. Preserve prior policy choices and fixture bodies; no real transport, TLC execution or final sign-off is claimed.
 
 - **Implementation-readiness clarification (2026-10-24)**: unify the
   transport prerequisite at workflow integration (step 4), while allowing
