@@ -1,13 +1,10 @@
 # On-demand TLA+ Design Verification Workflow for dsh-cc: Detailed Design
 
-## Status: Design — three-lane blind review converged (r1 full review folded
-54 findings into 40 changes; r2 delta verified the folds and surfaced 7 more,
-all folded; v4 shape pivot by explicit user decision from a create/maintain
-installer pair to the packaged form here; r3 reduced-roster micro-confirmation
-of the v4 text GO-WITH-CHANGES from both remaining seats with all reported
-residue folded — the Codex lane was recorded interrupted after two
-platform-flake aborts, roster reduction approved by the user);
-user sign-off and implementation pending.
+## Status: Design — implementation-contract revision (2026-10-24).
+Earlier r1–r3 review history is retained in the Review ledger; it does not
+constitute review of this revision. User authorized this document update
+and chose approval reuse after a successful tool-only re-check (§12).
+Feature implementation and final design sign-off remain pending.
 
 Date: 2026-10-23 (Asia/Singapore). This document is a design review draft; it
 is not yet implemented. "Must" and "must not" statements here are acceptance
@@ -355,6 +352,23 @@ If the trigger applies and the installed plugin predates the current
 session (possible right after an update, before restart), the main dialog
 notes the materialized runner version in the design document; evidence from
 different runner versions is never mixed into one review package.
+
+### 4.3 Activation prerequisites and observable behavior
+
+v1 adds no automatic catalog hook. Installation makes the skill discoverable;
+it does not guarantee that an arbitrary main dialog will load its body.
+For project-wide screening on every design, a human must adopt the copyable
+agents-snippet into the project's effective rules. The plugin orchestration
+skill also points to formal-design when that orchestration skill is loaded.
+An explicit request loads formal-design directly. Missing project screening
+rules must not be described as a technically enforced automatic gate.
+
+The installed skill's description must summarize all four triggers so that
+ordinary semantic skill selection can find it. Acceptance separately
+demonstrates: explicit invocation; orchestration-selected invocation; and
+project-rule-driven screening including a not-needed task. No catalog scan,
+rules-file auto-edit or new startup dependency is introduced.
+
 ## 5. Workflow, states, and pass conditions
 
 | State | Owner | Condition to advance |
@@ -387,7 +401,9 @@ dialog fixes the corresponding part and re-checks. Forbidden for the sake of
 passing: deleting properties, adding unrealistic assumptions, carving a
 failing action out of Next, or shrinking the problem boundary. Every
 property, assumption, and boundary adjustment MUST be justified in design.md
-for the three lanes.
+for the three lanes. Run IDs, timestamps, tool-upgrade reuse records and
+review opinions go in implementation.md or the review record, not design.md:
+adding run-specific bookkeeping to a digested input would stale the run.
 
 Check timeouts, missing Java/JAR, unknown output, model errors, and resource
 exhaustion all block an enabled task from review-ready. Continuing to write
@@ -398,6 +414,38 @@ decision; history is not rewritten.
 There is no "pass by default after three retries." When the same blockage
 repeats with no new information, stop re-running; report the concrete
 blocker and the available options.
+
+### 5.1 The manual coverage gate (all rows required)
+
+design.md contains a table with columns:
+requirement ID / business outcome / property ID / TLA operator /
+case IDs and bounds / fault-or-race trace / assumption IDs /
+planned code symbol and atomicity mechanism / regression scenario /
+exclusion and justification.
+
+The main dialog checks these minimums:
+
+- Every business correctness requirement has a property or an explicit
+  exclusion. Every property names at least one required case.
+- Each applicable FD-T1…T4 trigger has a modeled adverse ordering or a
+  specific exclusion rationale. Include both competing event orders,
+  duplicate and late delivery, timeout/retry, and crash/restart when in scope.
+- Every modeled atomic action has a concrete implementation mechanism
+  (for example one transaction or a guarded state update). A sequence of
+  separate writes cannot be called atomic without explaining the mechanism.
+- Every assumption identifies real code, infrastructure guarantees or a
+  declared external obligation. Unsupported assumptions remain blockers.
+- Each safety property has a regression scenario and expected assertion;
+  each liveness property lists fairness and response assumptions. If
+  liveness is excluded, explain why that is acceptable for this task.
+- An exclusion records the affected requirement, the risk left unverified,
+  the reason and the existing project's required approval/disposition.
+  A known defect cannot be excluded merely to pass.
+
+No empty cells or unexplained “N/A” pass this gate. Before implementation,
+planned symbols and test scenarios are allowed; acceptance replaces them
+with real locations and observed results. Reviewers may still reject model
+sufficiency: a complete table is necessary, not sufficient.
 
 ## 6. Roles and dispatch
 
@@ -554,7 +602,11 @@ name equal to the module name.
 UTF-8 JSON, no comments; schemaVersion fixed at 1; every object rejects
 unknown fields and duplicate keys. If JSON.parse cannot detect duplicate
 keys, a JSON tokenizer pass MUST detect them before parsing — this item is
-not optional. Case IDs must not repeat.
+not optional. Case IDs must not repeat. Every field shown in the §9 example is required,
+including constants and properties when empty; no implicit defaults are
+introduced. The §9.1 directive blacklist also applies to configuration
+identifier fields (specification, constant keys, invariants and properties)
+so none can be parsed as a cfg section keyword.
 
 ```json
 {
@@ -593,17 +645,21 @@ atom     := bool | nat | ident
 bool     := "TRUE" | "FALSE"
 nat      := "0" | [1-9][0-9]*
 ident    := [A-Za-z][A-Za-z0-9_]*
-set      := "{" [ atom ("," atom)* ] "}"
+set      := "{" [ atom ("," [" "] atom)* ] "}"
 ```
 
-- Between atoms and set elements, only zero or one space is allowed:
-  `{1, 2, ok}` is legal, `{ 1 , 2 }` is not (validation canonicalizes to the
-  comma-then-one-space form — **the generator only ever emits the canonical
-  form**).
+- The grammar's comma token permits an optional single ASCII space
+  immediately after it. No other whitespace is permitted. Thus `{1,2, ok}`
+  is legal and `{ 1 , 2 }` is not. Canonical serialization emits one
+  ASCII space after each comma; element order and duplicates are preserved.
+  A top-level atom has no leading or trailing whitespace.
+- Naturals are limited to 0..2147483647 (the pinned TLC integer domain);
+  validation compares decimal strings or BigInt, never rounded JS Numbers.
 - **ident blacklist**: an ident must not equal any cfg directive reserved
   word: `SPECIFICATION`, `CONSTANT`, `CONSTANTS`, `INVARIANT`,
   `PROPERTIES`, `PROPERTY`, `CONSTRAINT`, `ACTION_CONSTRAINT`, `SYMMETRY`,
-  `VIEW`, `CHECK_DEADLOCK`, `INIT`, `NEXT` (exact match against TLC
+  `VIEW`, `CHECK_DEADLOCK`, `INIT`, `NEXT`, `CONSTRAINTS`,
+  `ACTION_CONSTRAINTS`, `INVARIANTS`, `TYPE`, `TYPE_CONSTRAINT` (exact match against TLC
   directive casing; the blacklist itself is written as a manifest constant
   and covered by tests).
 - Rejected: negative integer literals (the pinned parser reports a
@@ -612,9 +668,11 @@ set      := "{" [ atom ("," atom)* ] "}"
   newlines, comments, semicolons, empty strings.
 - Semantics: booleans, non-negative integers, model-value idents, and their
   finite sets; type and expression validity remain TLC's job at check time.
-  Anything needing other expressions uses a named definition inside the
-  model (define in .tla, then assign the ident) — the free cfg channel is
-  not extended.
+  An ident is a TLC model value, NOT a reference to a TLA+ definition:
+  `C = Derived` does not evaluate a `Derived == ...` operator. v1
+  supports no `<-` overrides. Derive complex values inside .tla from
+  supported primitive constant parameters; if that cannot express the case,
+  report the unsupported configuration rather than emit arbitrary cfg text.
 
 ### 9.2 The cfg generation format (byte-exact)
 
@@ -644,8 +702,14 @@ anything that disables deadlock checking).
 When cases/<id>.cfg is absent, check writes it into the model directory per
 these rules (a committed input, §12 ordering); when it exists but differs
 from the generated bytes the result is blocked/config-drift — overwriting
-reviewed material automatically is forbidden. After editing checks.json the
-developer re-runs check to update .cfg explicitly.
+reviewed material automatically is forbidden. To update configuration:
+(1) edit checks.json; (2) inspect the old cfg and remove only the changed
+declared cfg files explicitly, as a main-dialog/executor file edit;
+(3) run preflight (willGenerate lists the absent files), then check;
+(4) inspect and commit the generated diff with checks.json. No new CLI flag
+or update command is added. Merely re-running check against a mismatched cfg
+always blocks. Removed cases' old cfgs may be explicitly deleted; undeclared
+cfgs are neither executed nor included in inputDigest.
 
 Finite bounds live in constants and state definitions; the bounds must not
 quietly carve out events still being handled. Terminal states are modeled
@@ -696,7 +760,10 @@ node "${CLAUDE_SKILL_DIR}/scripts/check-evidence.mjs" --project "$PROJECT" --mod
 package tree path `packages/plugin/dsh-cc-agents/skills/formal-design/` —
 identical files, since that tree IS the shipped artifact.)
 
-All three commands support --help; check supports the same --java as
+All three commands require one --project and one --model, except --help
+used alone. preflight/check additionally accept one --jar and one --java;
+check-evidence rejects these environment flags. All three commands support
+--help; check supports the same --java as
 preflight; check-evidence never starts Java and does not require the JAR to
 exist at its original path. Unknown arguments, missing values, or duplicates
 exit 2. Extra TLC/JVM argument pass-through is forbidden. stdout is exactly
@@ -715,7 +782,8 @@ and javaExecutable recording rules are in §12).
 preflight is read-only: **what it validates is checks.json (all §9
 rules) and existing cfgs against their generated values**, plus the Java
 version and JAR checksum; runner identity is attested by evidence's
-runnerPackage+runnerDigest (§12), not by preflight. Missing cfgs may still
+runnerPackage+runnerDigest (§12); preflight additionally validates that the
+two plugin manifests expose a consistent identity (§20.7). Missing cfgs may still
 yield ready-for-check with the will-generate paths listed. Success is
 exit=0/status=ready-for-check; environment problems are
 exit=2/status=blocked. It does not claim verified.
@@ -723,21 +791,29 @@ exit=2/status=blocked. It does not claim verified.
 check runs the same preflight first; any blocker means TLC never starts.
 **Pinned run order:**
 
-1. Take the model lock (§13); conflict → blocked/model-locked.
+1. Validate CLI syntax and all §13 project/model/output-path boundaries
+   read-only, before mkdir or any lock write; then take the model lock
+   (§13). Conflict → blocked/model-locked. Full preflight follows under lock.
 2. Run preflight.
 3. Generate missing cfgs per §9.2 **into the model directory** (cfgs are
    committed inputs).
 4. Compute the input digest inputDigest (§12 input set, now including cfgs).
-5. Copy the input snapshot into the run directory byte-for-byte
+5. Allocate the unique run directory and atomically publish current-run.json
+   (state=running, runId and inputDigest) BEFORE copying inputs. From this
+   point, any early failure must leave a non-reusable running marker or
+   publish incomplete/error evidence for this attempt. Copy the input
+   snapshot into the run directory byte-for-byte
    (`fs.copyFile`, no text transforms); recompute the snapshot digest and
    require equality with inputDigest — **mismatch → incomplete/input-changed,
    no JVM is spawned**.
-6. Atomically write the model-root current-run.json (state=running).
+6. Confirm the snapshot digest matches; proceed using that snapshot only.
 7. Execute the cases sequentially (process contract below).
 8. When all finish: recompute the original-input digest and the
-   runner/jar/toolchain digests against step 4's recorded values; any
-   mismatch → evidence status=incomplete/artifact-changed (still written to
-   disk; never dressed as verified).
+   runner/jar/toolchain digests against step 4's recorded values. Input
+   mismatch → incomplete/input-changed; runner/JAR/toolchain mismatch →
+   incomplete/artifact-changed. Missing or unreadable previously captured
+   inputs/artifacts count as mismatches. If both change, input-changed wins.
+   The incomplete evidence is still written; it is never called verified.
 9. Write evidence.json (sibling temp + rename), then update current-run.json
    to state=finished.
 10. Release the lock in a finally.
@@ -792,12 +868,20 @@ verbatim; nothing inside them is executed.
 
 Event-stream gate rules:
 
-- severity ∉ {0,1,2} → output-invalid;
+- severity ∉ {0,1,2,3,4} → output-invalid;
+- severity=3 (WARNING) is preserved as a warning, not a failure;
+- severity=4 (STATE) is trace output, not an error or success signal;
 - severity = 2 (TLCBUG class) → error/tlc-bug regardless of code;
 - a code outside the pinned-version vocabulary with severity = 1 →
   error/unknown-error;
-- an unknown code with severity = 0 → recorded in eventCodes only; no effect
-  on judgment.
+- an unknown code with severity = 0 or 4 → recorded in eventCodes only;
+  no effect on judgment. A severity=3 code, known or unknown, adds
+  `tlc-warning:<case-id>:<code>` to summary.warnings; no effect on judgment.
+  The severity vocabulary comes from pinned MP.java, including warnings
+  and printed states; rejecting 3/4 would discard ordinary counterexamples.
+  stdout and stderr have independent incremental frame-parser stacks; do
+  not concatenate asynchronous chunks from the two streams into one stack.
+  Required ordered success events and final statistics come from stdout.
 
 ### 11.2 The only path to verified
 
@@ -816,6 +900,9 @@ path; string-matching "success" is never sufficient**):
    **g>0 ∧ d>0 ∧ q=0** (the all-zero stats of an empty Init can never be
    verified). Missing or unparseable stats → incomplete/output-invalid.
    **Only 2199 counts**; 2200 (progress stats) participates in nothing.
+   Use the last stdout 2199 frame before TLC_FINISHED, trimming only outer
+   whitespace; the body must match in full. No valid final frame means
+   incomplete/output-invalid, even if an earlier stats frame was valid.
 5. The presence or absence of TLC_CHECKING_TEMPORAL_PROPS_END=2267 is **not**
    a negative condition: a safety-form PROPERTY (e.g. []P) is checked by the
    safety engine under invariant semantics, and the pinned version emits no
@@ -831,17 +918,36 @@ path; string-matching "success" is never sufficient**):
 
 | # | Condition | Classification / reason |
 |---|---|---|
-| 1 | cancellation, timeout, log ceiling, signal exit, spawn failure, snapshot or mid-run digest mismatch | incomplete/{cancelled,timeout,log-limit,spawn-failed,input-changed,artifact-changed} |
+| 1 | wrapper cancellation, snapshot or mid-run input mismatch, runner/JAR/toolchain mismatch, timeout, log ceiling, signal exit (in this precedence order) | incomplete/{cancelled,input-changed,artifact-changed,timeout,log-limit,signal-exit} |
+| 1a | spawn failed before a child started | error/spawn-failed |
 | 2 | exit=11 with 2114 (deadlock) | counterexample/deadlock |
 | 3 | exit=12 with 2107 (initial invariant) or 2110 (next-state invariant) | counterexample/invariant |
 | 4 | exit=13 with 2108/2112/2116 (temporal/action property violated) | counterexample/temporal |
 | 5 | exit=13 with 2113 (action property evaluation failed) | error/property-evaluation-failed |
 | 6 | exit=14 with TLC_VALUE_ASSERT_FAILED=2132 | counterexample/value-assert |
-| 7 | exit=10 | error/assumption-failed (corroborated by events, e.g. the 1000/5006 chain) |
-| 8 | exit ∈ {75,76,77,150,151,255} | error/config-invalid or error/unknown-error (discriminated by corroborating events) |
+| 7 | exit=10 with 2104 or 2105 | error/assumption-failed |
+| 8 | exit ∈ {75,76,77} | error/property-evaluation-failed (includes specification evaluation) |
+| 8a | exit=150 with 2171/3002, exit=151 with a config event, or exit=255 with a cfg-parse event | error/config-invalid |
 | 9 | other nonzero exit | error (reason inferred from events; absent that, error/unknown-error) |
 | 10 | §11.2 fully satisfied | verified |
 | 11 | anything else | incomplete |
+
+For row 8a, cfg-parse events are exactly 5001..5006; config events are
+2222..2245, 2280 and 2281 (the pinned ERROR_CONFIG_PARSE mapping).
+Other exit=150/151/255 results use error/unknown-error. The 1000/5006
+nested chain is a configuration parse error, not an ASSUME violation.
+For exit 10..14, the absence of its corresponding event (including 2113
+for exit 13) is output-inconsistent. Any TLC_SUCCESS event paired with a
+nonzero exit, or a recognized violation paired with the wrong exit, is
+output-inconsistent. Do not infer success or a specific cause from prose.
+
+Before rows 2–11: malformed frames or invalid severity produce
+incomplete/output-invalid; any severity=2 frame produces error/tlc-bug.
+Then apply exit/event contradictions before ordinary exit classification.
+If a nonzero error cannot be associated with a specific recognized cause,
+use error/unknown-error (including resource exhaustion without a recognized
+specific event). A zero-exit run missing any required success event or
+positive final statistics is incomplete/output-invalid.
 
 A contradiction between the exit code and events (e.g. exit=0 with a
 violation event, or exit=12 with no violation event) →
@@ -850,17 +956,26 @@ does not promise to parse every TLA+ value into a structured trace.
 
 ### 11.4 Aggregation and exit codes
 
-summary.status: **run-level global preconditions are checked first** (any of
-cancellation / input change / ceiling / artifact change → incomplete with
-the corresponding reason); then: all required verified → verified; any
-required with a counterexample → counterexample; else any required with an
-error → error; else → incomplete. optional results never change summary;
-when an optional case has a counterexample, warnings gains
-`optional-counterexample:<id>`. preflight blockage → blocked.
+summary.status: **run-level global preconditions are checked first**:
+wrapper cancellation, input change, artifact change (in that order) make the
+whole run incomplete even if they occurred during an optional case.
+Timeout, log ceiling, signal exit, spawn failure and TLC findings are
+case-local; aggregate required cases as follows: all verified → verified;
+any counterexample → counterexample; else any error → error; else incomplete.
+A terminal run-level I/O failure uses error/io before required aggregation,
+unless a higher-priority cancellation/input/artifact incomplete cause exists;
+§20.7 governs whether consistent Evidence can be persisted.
+Within the selected status use the first matching case in checks.json order
+for summary.reason. Successful summary.reason is verified. Optional cases
+never change required aggregation, but every non-verified optional result
+adds `optional-<status>:<id>:<reason>` to warnings. Warnings are ordered
+by manifest case order; within each case, TLC warning codes in numeric
+order precede its optional-result warning.
+Preflight blockage → blocked. Not-run records are retained.
 
-check exit codes: 0 = all required verified; 1 = a required case has a
-counterexample; 2 = blocked or error (multiple blockers are all listed);
-3 = incomplete (including cancellation). TLC's own exit code is never used
+check exit codes are selected ONLY from the final summary/command status:
+0 = verified; 1 = counterexample; 2 = blocked or error (multiple blockers
+are all listed); 3 = incomplete (including cancellation). TLC's own exit code is never used
 directly as the wrapper's exit code. check-evidence: 0 = the evidence is
 intact and fresh (**which does not mean the model passed** — its JSON
 explicitly carries the fresh and verification fields, §12/§20); 2 =
@@ -872,12 +987,14 @@ Each run preserves the input/ snapshot, each case's stdout.log/stderr.log,
 and the run's evidence.json. The latest summary is published to the
 model-root evidence.json via sibling-temp + rename after the whole run ends,
 failures included — passing off a previous success as this run's result is
-forbidden. current-run.json is maintained per §10 steps 6/9: state=running
-before any case starts; state=finished after evidence lands. check-evidence
-MUST require: matching runId/inputDigest across both files and
-state=finished; then consult the model lock — lock present with a live pid →
-`run-in-progress`; otherwise running/missing/mismatched → incomplete-run. If
-the process is hard-killed, an old success summary therefore cannot
+forbidden. current-run.json is maintained per §10 steps 5/9: state=running
+before snapshot copying or any case starts; state=finished after evidence lands. check-evidence
+MUST first reject a model lock with a live pid as run-in-progress; then
+require matching runId/inputDigest across both files and state=finished.
+A running/missing/mismatched marker means incomplete-run; malformed evidence
+means schema-invalid. The complete rejection order is §20.7. If
+snapshot copying fails or the process is hard-killed after the marker,
+an old success summary therefore cannot
 impersonate the latest result. **A preflight or check blocked before
 starting a run leaves existing evidence untouched**: an old finished
 evidence keeps its validity (validity is determined only by content and
@@ -908,7 +1025,7 @@ evidence.json, schemaVersion=1, MUST contain:
 ```text
 runId, modelId, inputDigest, inputFiles[{path,sha256}],
 runnerDigest, runnerPackage{name,version}, toolchainVersion, toolchainDigest, jarSha256, jarPath, javaVersion, platform,
-startedAt, finishedAt, status, warnings[],
+startedAt, finishedAt, status, reason, warnings[], javaExecutable,
 cases[{id,required,status,reason,exitCode,signal,
        timedOut,elapsedMs,argv,statistics,
        eventCodes,stdoutPath,stderrPath,stdoutSha256,stderrSha256}]
@@ -948,14 +1065,30 @@ consistency, log file presence and SHA-256, and that the run directory is
 inside the project .formal-design/runs. Any mismatch → exit 2 + reason:
 stale/{input,runner,toolchain}, log-missing, log-mismatch, schema-invalid,
 incomplete-run, run-in-progress. **On success it exits 0 and outputs
-`{"status":"valid","fresh":true,"verification":<evidence.summary.status>}`**:
+`{"status":"valid","fresh":true,"verification":<evidence.status>}`**:
 fresh and verification are decoupled — a fresh counterexample/error/
 incomplete evidence is equally "valid evidence"; callers MUST read the
 verification field, and treating exit 0 as "the model passed" is forbidden.
 Cross-machine missing logs are not valid local evidence — re-run (which also requires the same runnerPackage version installed there, plus Java); committed summaries aid review readability but never substitute for an actual check on the new machine.
 
 Evidence has no time TTL; staleness is determined by content and toolchain
-version. Design review opinions MUST reference an inputDigest. Changes to
+identity. Design review opinions MUST reference an inputDigest and record
+the runnerPackage, runnerDigest, toolchainDigest and jarSha256 of the
+evidence actually reviewed. Approval is bound to inputDigest; tool identity
+is audit metadata, not a second approval key.
+
+**User decision (2026-10-24):** after a tool-only upgrade, unchanged
+inputDigest plus a fresh, locally validated re-check in which every required
+case is verified permits reuse of the original three-lane approvals.
+No new three-lane review is required solely because the runner/plugin,
+TLC/JAR or toolchain identity changed. The main dialog records old and new
+tool identities, the new runId, the unchanged inputDigest, approval
+references, and any optional-case findings in implementation.md. An optional
+counterexample affecting the design still blocks development per §9.
+Without that successful re-check, development cannot continue on the old
+evidence. This exception never permits reuse across changed model inputs.
+
+Changes to
 design.md, the model, configuration, properties, assumptions, or bounds
 invalidate all of the package's evidence and three-lane approvals.
 Implementation-code changes do not automatically change the model digest; at
@@ -969,7 +1102,8 @@ review. Pure log reorderings do not change inputDigest.
 Runner (preflight/check/check-evidence):
 
 - --project must exist and realpath to a directory; --model is a
-  project-relative path — absolute paths, `..`, empty segments, and
+  project-relative path, exactly `specs/tla/<modelId>`, where modelId
+  equals checks.json's modelId. Absolute paths, `..`, empty segments, and
   boundary-crossing symlinks are rejected. The model input root must contain
   no symlinks; enumeration accepts regular files only. Existing ancestors of
   the run output must also realpath inside the project without crossing
@@ -1060,8 +1194,10 @@ Norms for the packaged skill:
   changes take effect after update + restart (§3.3), and names the one
   suggested project hygiene edit (the `/.formal-design/` .gitignore line)
   as a manual step.
-- No skill prose writes into the target project beyond the runner's §3.2
-  write set.
+- The runner's write set is §3.2. Main-dialog/executor plain file edits
+  additionally create/update implementation.md, maintain generated cfgs per
+  §9.2, and add the project .gitignore entry. Skill prose must distinguish
+  these edits from runner writes; no runner edits .gitignore.
 - orchestration gains one pointer sentence to this skill (§7.2). The
   three-lane policy is not copied into any skill — one canonical copy,
   no drift.
@@ -1080,11 +1216,11 @@ waits to fake timeouts.
 | cfg | key order, LF, CONSTANTS header present/absent, existing-identical, existing-different refuses overwrite, extra directives forbidden, canonical serialization |
 | paths | `..`, absolute model, input symlinks, output ancestor symlinks, paths with spaces, file/total ceilings, --jar/--java symlink resolution and recording |
 | environment | missing Java/JAR, version too low, checksum mismatch, Windows, env-var scrubbing |
-| parser | arbitrary chunk splits, CRLF, **nested frames**, END mismatch, unclosed frames, severity∉{0,1,2}, severity=2, unknown codes at both severities, success/finish ordering |
+| parser | arbitrary chunk splits, CRLF, **nested frames**, END mismatch, unclosed frames, severity∉{0,1,2,3,4}, WARNING/STATE retained, severity=2, unknown codes at both severities, success/finish ordering |
 | classification | at least one case per §11.3 table row (incl. 2113 vs 2132 discrimination, 255, exit-0-without-success, exit-0-with-error, nonzero-with-success, output-inconsistent, OOM, signals, timeout, log-limit, unknown output); **an all-zero-stats empty Init is never verified** |
 | lifecycle | timeout TERM→KILL, same ladder for log ceiling, no case runs after cancellation and summary=incomplete/cancelled, results written only after close, lock conflict, lock release on error, failed runs overwrite the latest summary, running marker after hard-kill blocks reuse of old success, **snapshot digest ≠ inputDigest → no spawn**, mid-run artifact change → incomplete |
 | evidence | staleness on model/design/cfg/runner/toolchain changes, missing declared cfg → invalid, mid-run input change, logs missing/modified, summary schema invalid, cross-project path refusal, **fresh/verification decoupling** (a fresh counterexample evidence exits 0 with verification=counterexample), live lock → run-in-progress |
-| aggregation | required failures, optional failure goes to warnings, deterministic order, no not-run case dropped, precedence among multiple failures, **cancellation/global preconditions beat required aggregation** |
+| aggregation | required failures, optional failure goes to warnings, deterministic order, no not-run case dropped, precedence among multiple failures, **run-global cancellation/input/artifact preconditions beat required aggregation; optional case timeout/log-limit/signal remain warnings** |
 | publish | the whole skill tree (SKILL.md, references, scripts, toolchain.json, examples) ships in the package (npm-pack assertions), agent trailers unchanged, every §2.2 description surface consistent, bilingual doc hashes re-recorded, every shipped file is clean under `git check-ignore` |
 
 ### 16.2 Real TLC integration tests
@@ -1097,8 +1233,11 @@ models with fairness, a syntax-error model, **an empty-Init model**
 (asserting non-verified), and **a safety-form PROPERTY model** (asserting
 verified WITHOUT 2267), asserting wrapper statuses and log events. **Every
 exit of the §11.3 classification table gets at least one real-run fixture
-pinning it** (including the injection constant, which is stopped at manifest
-validation and never reaches TLC). First confirm §11's stats and frame
+pinning the reachable TLC outcome**. Wrapper-only paths (spawn failure,
+signals, cancellation, timeout, log ceiling, malformed/unknown protocol,
+digest races and filesystem errors) use deterministic injected unit tests;
+they do not require a real TLC fixture for every synthetic code. The
+injection constant must be rejected by manifest tests before any spawn. First confirm §11's stats and frame
 assumptions against real output; if the pinned version's actual format
 differs, revise the parser and this document's corresponding protocol —
 never just edit test expectations to get past.
@@ -1139,6 +1278,8 @@ scenario below; keyword searches over the skill do not count as acceptance:
 
 - After a plugin upgrade and restart: check-evidence on a pre-upgrade model
   package reports stale/runner; re-running check restores valid evidence.
+  With unchanged inputDigest and required cases verified, the main dialog
+  records approval reuse per §12; no automatic new three-lane dispatch.
 - Plain formatting work: not-needed recorded; original three-lane flow
   continues; no Java required.
 - Cancellation/retry design: auto-enabled — model first, formal review
@@ -1310,10 +1451,13 @@ not TLA+ official requirements.
 
 ## 20. Appendix: JSON contracts and the reason vocabulary
 
-Every runner command's stdout is exactly one JSON object + one LF. Fields
-below (`?` = may be absent/null; enum values are kebab-case). This appendix
-is the machine-facing completion of §10/§12: the body sections own the
-semantics, and this appendix owns the field names.
+Every runner command's stdout is exactly one JSON object + one LF.
+Sections 20.1–20.6 show discriminants and abridged illustrations; §20.7
+defines the complete field shapes, nullability and validation rules.
+No field is optional unless §20.7 explicitly says so. JSON object key order
+is not significant. Semantic algorithms in the body and the field contract
+in §20.7 must agree; any new contradiction is a design blocker, not license
+for executor to choose silently.
 
 ### 20.1 preflight.mjs
 
@@ -1324,7 +1468,7 @@ semantics, and this appendix owns the field names.
 ### 20.2 check.mjs (the stdout projection of the evidence summary)
 
 ```json
-{"schemaVersion":1,"command":"check","status":"verified|counterexample|error|incomplete|blocked","reason":"…","summary":{…same shape as evidence.json…}}
+{"schemaVersion":1,"command":"check","status":"verified|counterexample|error|incomplete|blocked","reason":"…","blockers":[],"summary":"<Evidence object or null; see 20.7>"}
 ```
 
 evidence.json's complete field list is in §12; stdout's `summary` is
@@ -1337,50 +1481,54 @@ identical in shape.
 ```
 
 `status=valid` always pairs with `fresh:true`; `verification` relays the
-audited evidence's summary.status (**not a pass**, §12). When invalid:
+audited evidence's top-level status (**not a pass**, §12). When invalid:
 fresh=false, verification=null, reason concrete.
 
 ### 20.4 Runner exit codes (fixed per command)
 
 - preflight: 0 = ready-for-check; 2 = blocked or usage errors.
-- check: 0 = all required verified; 1 = a required case has a
-  counterexample; 2 = blocked or error (all blockers listed); 3 =
-  incomplete (including cancellation).
+- check, by final command status: 0 = verified; 1 = counterexample;
+  2 = blocked or error (all blockers listed); 3 = incomplete
+  (including cancellation).
 - check-evidence: 0 = valid (integrity+freshness; **not a pass**); 2 =
   invalid/stale/missing, with a concrete reason.
 
 ### 20.5 The complete reason vocabulary (implementations pick ONLY from here)
 
+- Successful preflight uses `ready-for-check`; successful check uses
+  `verified`; successful auditing uses `valid`.
 - preflight blocked: `config-invalid` (checks.json validation failure),
   `config-drift` (cfg mismatch), `input-limit`, `model-path-unsafe`,
   `java-missing`, `java-version`, `jar-missing`, `jar-checksum`,
-  `unsupported-platform`.
+  `unsupported-platform`, `usage-invalid`, `io`.
 - check: `model-locked`, `lock-io`, plus everything from preflight.
 - Case level: `verified`, `counterexample/deadlock`,
   `counterexample/invariant`, `counterexample/temporal`,
   `counterexample/value-assert`, `error/assumption-failed`,
   `error/property-evaluation-failed`, `error/config-invalid`,
   `error/unknown-error`, `error/tlc-bug`, `error/output-inconsistent`,
-  `error/spawn-failed`, `incomplete/timeout`, `incomplete/log-limit`,
-  `incomplete/cancelled`, `incomplete/input-changed`,
-  `incomplete/artifact-changed`, `incomplete/not-run`,
+  `error/spawn-failed`, `error/io`, `incomplete/timeout`, `incomplete/log-limit`,
+  `incomplete/cancelled`, `incomplete/signal-exit`, `incomplete/input-changed`,
+  `incomplete/artifact-changed`, `not-run/not-run`,
   `incomplete/output-invalid`. (evidence's cases[].reason records the
   post-slash half; cases[].status records the pre-slash half.)
 - check-evidence: `valid`, `stale/input`, `stale/runner`,
   `stale/toolchain`, `log-missing`, `log-mismatch`, `schema-invalid`,
   `incomplete-run`, `run-in-progress`, `evidence-missing`,
-  `runs-path-unsafe`.
+  `runs-path-unsafe`, `usage-invalid`, `io`.
 
-With multiple coexisting causes: preflight lists them all in the blockers
-array; summary/status reports the single highest-priority one per §11.3's
-table order.
+With multiple coexisting causes: preflight lists blockers in the fixed
+order in §20.7, and reason is the first blocker's code. Run-global causes
+use §11.4 precedence; otherwise summary.reason comes from the first case
+in manifest order having the aggregate status. Only case classification
+uses §11.3's table. These are three distinct priority domains.
 
 ### 20.6 Representative output samples (truncated; field order not fixed)
 
 Spawn failure (one case of a check):
 
 ```json
-{"id":"small","required":true,"status":"error","reason":"spawn-failed","exitCode":null,"signal":null,"timedOut":false,"elapsedMs":3,"argv":null,"statistics":null,"eventCodes":[]}
+{"id":"small","required":true,"status":"error","reason":"spawn-failed","exitCode":null,"signal":null,"timedOut":false,"elapsedMs":3,"argv":["java","..."],"statistics":null,"eventCodes":[]}
 ```
 
 User cancellation (check, exit 3):
@@ -1400,6 +1548,196 @@ Multiple blockers (preflight, exit 2):
 ```json
 {"schemaVersion":1,"command":"preflight","status":"blocked","blockers":[{"code":"java-missing","detail":"no java on PATH"},{"code":"jar-checksum","detail":"SHA-1 mismatch"}]}
 ```
+
+### 20.7 Complete serialized shapes and validation
+
+These are structural type definitions, not JSON samples. `string[]` may be
+empty. All object fields shown are mandatory; unknown fields and duplicate
+keys are rejected on read. Nullable fields are emitted as null, never omitted.
+No schema library or new dependency is required. Tests assert these shapes
+for every producer and consumer.
+
+```text
+Blocker = { code: BlockedReason, detail: string }
+BlockedReason = usage-invalid | model-locked | lock-io | config-invalid |
+  config-drift | input-limit | model-path-unsafe | java-missing |
+  java-version | jar-missing | jar-checksum | unsupported-platform | io
+RunStatus = verified | counterexample | error | incomplete
+CaseStatus = RunStatus | not-run
+Statistics = { generated: DecimalString, distinct: DecimalString,
+               queue: DecimalString }
+InputFile = { path: string, sha256: Sha256 }
+RunnerPackage = { name: string, version: string }
+CaseResult = {
+  id: string, required: boolean, status: CaseStatus, reason: string,
+  exitCode: integer|null, signal: string|null, timedOut: boolean|null,
+  elapsedMs: nonnegative-integer|null, argv: string[]|null,
+  statistics: Statistics|null, eventCodes: integer[],
+  stdoutPath: string|null, stderrPath: string|null,
+  stdoutSha256: Sha256|null, stderrSha256: Sha256|null
+}
+Evidence = {
+  schemaVersion: 1, runId: string, modelId: string,
+  inputDigest: Sha256, inputFiles: InputFile[],
+  runnerDigest: Sha256, runnerPackage: RunnerPackage,
+  toolchainVersion: string, toolchainDigest: Sha256,
+  jarSha256: Sha256, jarPath: string, javaVersion: string,
+  javaExecutable: string|null, platform: darwin|linux,
+  startedAt: string, finishedAt: string,
+  status: RunStatus, reason: string, warnings: string[],
+  cases: CaseResult[]
+}
+CurrentRun = {
+  schemaVersion: 1, runId: string, inputDigest: Sha256,
+  state: running|finished
+}
+ModelLock = {
+  schemaVersion: 1, pid: positive-integer, runId: string, startedAt: string
+}
+PreflightOutput = {
+  schemaVersion: 1, command: preflight,
+  status: ready-for-check|blocked, reason: string,
+  blockers: Blocker[], willGenerate: string[]
+}
+CheckOutput = {
+  schemaVersion: 1, command: check,
+  status: RunStatus|blocked, reason: string,
+  blockers: Blocker[], summary: Evidence|null
+}
+AuditOutput = {
+  schemaVersion: 1, command: check-evidence,
+  status: valid|invalid, reason: string, fresh: boolean,
+  verification: RunStatus|null, runId: string|null, inputDigest: Sha256|null
+}
+```
+
+- Sha256 is exactly 64 lowercase hex characters. DecimalString matches
+  `0|[1-9][0-9]*`. UTC times use `Date.toISOString()`; finishedAt must
+  not precede startedAt. elapsedMs uses a monotonic clock.
+- Evidence has top-level status/reason, with NO nested summary member.
+  CheckOutput.summary is the whole Evidence object, with status/reason
+  equal to the outer fields. It is null only for blocked/pre-run failures.
+  No fabricated Evidence is written for preflight blockage. The sole
+  post-start exception to non-null summary is the unrecoverable I/O error
+  defined below; it cannot be audited as completed Evidence.
+- Ready preflight: reason=ready-for-check, blockers=[]; willGenerate lists
+  absent declared cfg paths in manifest order. Blocked preflight/check:
+  reason is the first blocker code, blockers is nonempty, and
+  willGenerate=[] (preflight) or summary=null (check). All check output
+  objects include blockers, empty for an executed run.
+- BlockedReason governs the blocked-output branch. CaseResult status/reason
+  pairs are independently restricted to §20.5, including not-run/not-run;
+  shared spellings such as io and config-invalid are intentional.
+  Verified has reason=verified. Evidence reasons use the selected case's
+  bare reason or the run-global reason (§11.4).
+- cases contains exactly one result per manifest case in manifest order;
+  IDs and required flags match checks.json, with no extras or duplicates.
+  Not-run has reason=not-run, eventCodes=[], and every runtime field null.
+  A failed spawn has status=error/reason=spawn-failed, elapsedMs measured
+  for the attempt, timedOut=false, argv equal to the attempted command
+  vector, exitCode/signal/statistics=null. Its log files exist and may be
+  empty. A started child has non-null argv, elapsedMs and timedOut.
+  eventCodes contains unique observed numeric codes sorted ascending.
+- argv includes the executable as element 0, then the arguments actually
+  supplied to spawn. PATH java is recorded literally as java; an explicitly
+  supplied executable is normalized per §10. javaExecutable is audit
+  metadata resolved as described in §12, not an attestation of binary bytes.
+- Log paths are project-relative POSIX paths rooted under
+  .formal-design/runs/<modelId>/<runId>/<caseId>/. stdout and stderr hashes
+  cover their exact persisted bytes. At the combined 50 MiB limit, persist
+  only the first 50 MiB in arrival order, stop adding bytes, terminate the
+  child, and record incomplete/log-limit; this limit is not a success path.
+  Null logs/hashes are permitted only for not-run cases.
+- When a snapshot mismatch prevents all JVM starts, emit one not-run
+  record per case and Evidence.status=incomplete/reason=input-changed.
+  Run-global incomplete reasons and terminal error/io override case
+  aggregation during auditing, in the same precedence as §11.4.
+- AuditOutput valid: reason=valid, fresh=true, verification=Evidence.status,
+  non-null runId/inputDigest. Invalid: fresh=false, verification=null;
+  runId/inputDigest identify the current parsed marker if it is valid,
+  otherwise both are null. Never copy identity from an unmatched old summary.
+- runnerPackage is read from both plugin manifests; name/version must agree.
+  Missing or inconsistent manifests block preflight with config-invalid and
+  make evidence auditing schema-invalid. Auditing compares both package
+  identity and runnerDigest; either mismatch is stale/runner.
+- Audit inputFiles against fresh enumeration, not only paths listed by
+  evidence. Validate the generated cfg bytes against checks.json, not just
+  their hashes. Validate cases/aggregation and hashes, but do not claim that
+  hashes authenticate reviews or an adversarially forged evidence file.
+- Before parsing evidence, reject symlinked/escaping run paths as
+  runs-path-unsafe. Audit rejection precedence then is: live lock →
+  run-in-progress; missing current-run → incomplete-run; running or invalid/
+  mismatched marker → incomplete-run; missing evidence → evidence-missing;
+  malformed evidence/schema/manifest → schema-invalid; stale/input;
+  stale/runner; stale/toolchain; log-missing; log-mismatch; valid.
+  For marker/evidence identity comparison parse evidence before comparing;
+  malformed evidence is schema-invalid, not an arbitrary identity mismatch.
+  A dead leftover lock does not make finished evidence invalid; check still
+  refuses that lock until a human resolves it (§13).
+- Preflight blocker order is: usage-invalid, model-path-unsafe,
+  unsupported-platform, config-invalid, input-limit, config-drift,
+  java-missing, java-version, jar-missing, jar-checksum, io.
+  Run lock errors precede preflight in check. Within a category, details are
+  sorted by relative path then case ID in Unicode code-point order;
+  absent detail keys sort as empty strings.
+  Independent checks continue to gather blockers, but dependent checks are
+  skipped: no version query when Java is missing; no checksum for a missing
+  JAR; no cfg generation comparison when the manifest cannot be parsed.
+- Missing explicitly passed Java/JAR paths map to java-missing/jar-missing,
+  not a usage error. Malformed flags, duplicates and missing flag values
+  map to usage-invalid. Invalid --project/--model maps to model-path-unsafe.
+  Unexpected filesystem errors before the running marker produce
+  blocked/io; lock creation failure other than EEXIST produces lock-io.
+- An I/O failure after publishing the running marker aborts execution,
+  terminates any child, and attempts error/io evidence only if all required
+  artifacts can be persisted consistently. Otherwise emit CheckOutput
+  status=error/reason=io/summary=null/blockers=[] and exit 2; leave the
+  running marker and never report finished or verified. Such a stdout error
+  is not Evidence. A failed final marker write likewise returns error/io
+  and cannot make evidence reusable. Always release the owned lock in
+  finally; report cleanup failures on stderr and do not remove another lock.
+- check-evidence usage errors return invalid/usage-invalid; unexpected read
+  errors return invalid/io; both exit 2. Help never invokes Java or mutates files.
+
+### 20.8 Remote review and implementation acceptance
+
+Full raw logs remain local ignored artifacts; v1 adds no uploader or remote
+evidence service. A reviewer on the producing machine may read the supplied
+paths. A remote reviewer must receive the full logs through the project's
+existing authorized artifact channel, or request a main-dialog independent
+re-run and its outputs. A Git-committed summary alone is insufficient to
+claim local check-evidence success on another machine. An independent
+re-run must have the same inputDigest; record the actual tool identity.
+No automatic external upload, retention policy or fourth review lane is added.
+
+In addition to §16, contract tests must cover:
+
+1. checks.json change → cfg drift → explicit removal → generated diff →
+   stale approvals; a re-run alone must not overwrite a reviewed cfg.
+2. C=Derived is a model value; complex derived values are expressed inside
+   TLA+ from primitive parameters. All pinned cfg directive names, including
+   plural forms, are rejected as model-value identifiers.
+3. Spawn failure → error/spawn-failed/exit 2; signal → incomplete/
+   signal-exit/exit 3 when required; optional timeout/log-limit/signal →
+   warning with required success preserved.
+4. Simultaneous global causes follow cancelled > input-changed >
+   artifact-changed, regardless of optional/required case. Any new input
+   file, deletion or read failure changes the digest result.
+5. Snapshot-copy failure cannot reuse an older finished success. Inject
+   failures at each atomic-write/rename boundary; no false finished marker.
+6. Producer→consumer round trips of every §20.7 variant, including null
+   fields, not-run, invalid identity, unknown/duplicate keys and I/O failure.
+7. Unchanged input plus tool upgrade: old evidence is stale, successful new
+   check permits approval reuse; model/design/config change requires new
+   three-lane approval even if the new checks pass.
+8. Demonstrate each §4.3 activation path; demonstrate a missing critical
+   coverage row blocks review-ready; remote missing logs cannot be audited
+   as valid local evidence.
+
+The executor may choose internal pure-function names and implementation
+details that preserve these externally observable contracts. It must return
+a design blocker rather than change a status, CLI field, acceptance
+condition or product boundary to fit its implementation.
 
 ## Review ledger
 
@@ -1447,4 +1785,12 @@ Multiple blockers (preflight, exit 2):
   conclusion in §2.1) and one count wording fix, both folded. All residue
   was re-verified in the text by targeted greps; the review gate is
   satisfied with every r1→r3 finding carrying a verified fold.
-- Sign-off: user sign-off pending; "Approved" is not claimed until then.
+- **Implementation-contract revision (2026-10-24)**: correct constant
+  semantics and complete the cfg reserved-word set; specify cfg regeneration;
+  reconcile classification, reasons, optional-case aggregation, evidence
+  fields, CLI failures and early-run lifecycle; make trigger prerequisites,
+  coverage acceptance and remote review behavior explicit. User chose
+  successful tool-only re-check with approval reuse over mandatory re-review.
+  This revision has not undergone a new three-lane review.
+- Sign-off: user authorized editing and committing this revision; final
+  design sign-off and implementation remain pending.
