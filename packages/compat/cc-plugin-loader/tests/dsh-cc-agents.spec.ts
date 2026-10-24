@@ -176,13 +176,15 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR, seams: { subagents } })
     try {
       const skills = mount.report.components.find(c => c.kind === 'skills')
-      expect(skills?.loaded).toBe(3)
+      expect(skills?.loaded).toBe(4)
       expect(skills?.skipped).toBe(0)
       expect(skills?.failed).toBe(0)
       // Real-registry visibility (a tally alone cannot prove it — a duplicate
       // name would register as a silent no-op).
       const listed = await ctx.skills.list()
-      expect(listed.map(s => s.name)).toContain('dsh-cc-agents-orchestration')
+      expect(listed.map(s => s.name).sort()).toEqual([
+        'data-analysis', 'dsh-cc-agents-orchestration', 'formal-design', 'vwa-writing',
+      ])
       const loaded = await ctx.skills.get('dsh-cc-agents-orchestration')
       expect(loaded).toBeDefined()
       expect(loaded?.invocation.modelInvocable).toBe(true)
@@ -196,6 +198,17 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       expect(writing?.resourceBase).toEqual({ kind: 'directory', path: resolve(REAL_PLUGIN_DIR, 'skills/vwa-writing') })
       expect(writing?.content).toContain('references/tool-contract.md')
       expect(writing?.content).toContain('scripts/preflight.mjs')
+      const formal = await ctx.skills.get('formal-design')
+      expect(formal).toMatchObject({
+        invocation: { modelInvocable: true, userInvocable: true },
+        resourceBase: { kind: 'directory', path: resolve(REAL_PLUGIN_DIR, 'skills/formal-design') },
+        path: resolve(REAL_PLUGIN_DIR, 'skills/formal-design/SKILL.md'),
+      })
+      for (const command of ['preflight', 'check', 'check-evidence']) {
+        expect(formal?.content).toContain('${CLAUDE_SKILL_DIR}/scripts/' + command + '.mjs')
+      }
+      expect(formal?.content).toContain('references/modeling-guide.md')
+      expect(formal?.content).toContain('references/review-contract.md')
     } finally {
       mount.dispose()
     }
