@@ -14,6 +14,9 @@ recovery, conservative lock probing and real remote-delivery acceptance.
 The workflow-clarity revision additionally specifies adoption states,
 re-screening, flat model inputs, historical approval reuse, remote-channel
 feasibility before implementation, and a worked workflow example.
+The implementation-readiness clarification adds an ordered classification
+algorithm, staged integration prerequisites, reuse ownership, concrete
+adoption notices and an explicit late-event companion fixture.
 Feature implementation and final design sign-off remain pending.
 
 Date: 2026-10-23 (Asia/Singapore). This document is a design review draft; it
@@ -400,6 +403,13 @@ workflow record before a model package exists. If unconfirmed, tell the
 user that this invocation can proceed but project-wide screening needs
 manual adoption of references/agents-snippet.md. Do not automatically edit
 AGENTS.md/CLAUDE.md or claim installation enabled universal screening.
+The first-use response states one of: screening adopted and review rules
+available; screening unconfirmed with the exact snippet path to adopt; or
+review rules missing with the rule source that could not be loaded. State
+which work may proceed and which gate is blocked. Repeat this notice when
+the observed adoption/review state changes; do not imply that installation
+performed adoption. Acceptance records must exercise real effective rules,
+not merely the presence of a snippet file.
 No startup hook or Java dependency is added.
 
 Screening adoption and review-rule availability are separate checks.
@@ -1110,45 +1120,67 @@ path; string-matching "success" is never sufficient**):
    at §10 steps 5/8, ceilings, cancellation).
 7. Every scheduled case has a result record.
 
-### 11.3 Classification priority table (complete; first match top-down)
+### 11.3 Deterministic case classification
 
-| # | Condition | Classification / reason |
-|---|---|---|
-| 1 | wrapper cancellation, snapshot or mid-run input mismatch, runner/JAR/toolchain mismatch, timeout, log ceiling, signal exit (in this precedence order) | incomplete/{cancelled,input-changed,artifact-changed,timeout,log-limit,signal-exit} |
-| 1a | spawn failed before a child started | error/spawn-failed |
-| 2 | exit=11 with 2114 (deadlock) | counterexample/deadlock |
-| 3 | exit=12 with 2107 (initial invariant) or 2110 (next-state invariant) | counterexample/invariant |
-| 4 | exit=13 with 2108/2112/2116 (temporal/action property violated) | counterexample/temporal |
-| 5 | exit=13 with 2113 (action property evaluation failed) | error/property-evaluation-failed |
-| 6 | exit=14 with TLC_VALUE_ASSERT_FAILED=2132 | counterexample/value-assert |
-| 7 | exit=10 with 2104 or 2105 | error/assumption-failed |
-| 8 | exit ∈ {75,76,77} | error/property-evaluation-failed (includes specification evaluation) |
-| 8a | exit=150 with 2171/3002, exit=151 with a config event, or exit=255 with a cfg-parse event | error/config-invalid |
-| 9 | other nonzero exit | error (reason inferred from events; absent that, error/unknown-error) |
-| 10 | §11.2 fully satisfied | verified |
-| 11 | anything else | incomplete |
+Apply the following algorithm in order; return at the first matching step.
+This ordered algorithm is authoritative for case classification. Run-global
+overrides and persistence feasibility are applied separately by §11.4 and
+§20.7. Wrapper observations remain trusted observations under §12.1.
 
-For row 8a, cfg-parse events are exactly 5001..5006; config events are
-2222..2245, 2280 and 2281 (the pinned ERROR_CONFIG_PARSE mapping).
-Other exit=150/151/255 results use error/unknown-error. The 1000/5006
-nested chain is a configuration parse error, not an ASSUME violation.
-For exit 10..14, the absence of its corresponding event (including 2113
-for exit 13) is output-inconsistent. Any TLC_SUCCESS event paired with a
-nonzero exit, or a recognized violation paired with the wrong exit, is
-output-inconsistent. Do not infer success or a specific cause from prose.
+1. A recorded case interruption returns incomplete with the first applicable
+   reason: cancelled, input-changed, artifact-changed, timeout, log-limit,
+   signal-exit. Do not require well-formed output from an interrupted child.
+2. An unsuccessful spawn returns error/spawn-failed.
+3. Malformed frames or invalid severity return incomplete/output-invalid.
+4. Any severity=2 frame returns error/tlc-bug.
+5. Exit/event contradictions return error/output-inconsistent: TLC_SUCCESS
+   with any nonzero exit; a recognized violation with an exit other than its
+   matching exit below; or exit 10..14 without its corresponding event.
+   For exit 13, 2113 also supplies a corresponding event but is an evaluation
+   error, not a violation. For exit 0, any severity=1 frame is likewise
+   output-inconsistent, whether or not success events are present.
+6. Classify matching nonzero exits using the table below.
+7. For exit 0, return verified only if every §11.2 predicate holds;
+   otherwise return incomplete/output-invalid. Missing success events,
+   invalid/missing final statistics and their ordering cannot imply success.
+8. Any remaining outcome returns error/unknown-error.
 
-Before rows 2–11: malformed frames or invalid severity produce
-incomplete/output-invalid; any severity=2 frame produces error/tlc-bug.
-Then apply exit/event contradictions before ordinary exit classification.
-If a nonzero error cannot be associated with a specific recognized cause,
-use error/unknown-error (including resource exhaustion without a recognized
-specific event). A zero-exit run missing any required success event or
-positive final statistics is incomplete/output-invalid.
+| Exit and corresponding event | Status / reason |
+|---|---|
+| 11 with 2114 | counterexample/deadlock |
+| 12 with 2107 or 2110 | counterexample/invariant |
+| 13 with 2108, 2112 or 2116 | counterexample/temporal |
+| 13 with 2113 | error/property-evaluation-failed |
+| 14 with 2132 | counterexample/value-assert |
+| 10 with 2104 or 2105 | error/assumption-failed |
+| 75, 76 or 77 | error/property-evaluation-failed |
+| 150 with 2171 or 3002; 151 with a config event; 255 with a cfg-parse event | error/config-invalid |
+| Other nonzero exits | error/unknown-error |
 
-A contradiction between the exit code and events (e.g. exit=0 with a
-violation event, or exit=12 with no violation event) →
-error/output-inconsistent. Complete counterexample logs are preserved; v1
-does not promise to parse every TLA+ value into a structured trace.
+If multiple recognized events match exit 13, 2113 takes precedence over
+the temporal-violation events. A recognized violation for contradiction
+checking means 2114, 2107, 2110, 2108, 2112, 2116 or 2132.
+The corresponding sets for exits 10..14 are exactly the sets in this table.
+Config events are 2222..2245, 2280 and 2281; cfg-parse events are 5001..5006.
+The nested 1000/5006 chain is config-invalid, not assumption-failed.
+Other exit=150/151/255 outcomes are unknown-error. Do not infer causes from prose.
+
+Pin these combined-condition fixtures in both classifier and replay tests:
+
+| Observations | Expected status / reason |
+|---|---|
+| exit 0, severity=1, success events missing | error/output-inconsistent |
+| exit 0, severity=1, all success events present | error/output-inconsistent |
+| exit 0, no error, missing required success event | incomplete/output-invalid |
+| exit 12, 2110 present, malformed frame | incomplete/output-invalid |
+| exit 12, 2110 present, severity=2 | error/tlc-bug |
+| exit 12, 2110 and TLC_SUCCESS present | error/output-inconsistent |
+| exit 13, 2113 and 2116 present, otherwise consistent | error/property-evaluation-failed |
+| timeout plus malformed output and severity=2 | incomplete/timeout |
+| cancellation plus timeout | incomplete/cancelled |
+
+Complete counterexample logs are preserved; v1 does not promise to parse
+every TLA+ value into a structured trace.
 
 ### 11.4 Aggregation and exit codes
 
@@ -1290,6 +1322,17 @@ implementation.md. Any configured-case failure blocks reuse and formal
 review admission per §5.2/§9.
 Without that successful re-check, development cannot continue on the old
 evidence. This exception never permits reuse across changed model inputs.
+
+The main dialog owns the reuse decision and its record; neither a runner
+exit code nor executor discretion grants reuse. It checks unchanged inputs,
+all-case verification, a valid fresh audit, complete prior approval references,
+and no unresolved findings. The record names the upgrade scope, including
+parser/classifier or TLC changes, and acknowledges that historical lanes did
+not review the new tool execution. This is the existing user-approved trust
+policy even for those tool changes, not a claim of tool equivalence.
+A semantic change to the requirements/model or an unresolved upgrade finding
+blocks reuse under the existing rules. No new mandatory re-review category
+is introduced by this clarification.
 
 The current evidence package contains a single new runId and its actual
 tool identities, never old logs, case results, markers or evidence mixed
@@ -1558,7 +1601,7 @@ model, the buggy-callback model, a deadlock model, liveness pass and fail
 models with fairness, a syntax-error model, **an empty-Init model**
 (asserting non-verified), and **a safety-form PROPERTY model** (asserting
 verified WITHOUT 2267), asserting wrapper statuses and log events. **Every
-exit of the §11.3 classification table gets at least one real-run fixture
+reachable TLC exit in the §11.3 classification table gets at least one real-run fixture
 pinning the reachable TLC outcome**. Wrapper-only paths (spawn failure,
 signals, cancellation, timeout, log ceiling, malformed/unknown protocol,
 digest races and filesystem errors) use deterministic injected unit tests;
@@ -1663,7 +1706,8 @@ Also record these workflow-clarity acceptance scenarios:
   evidence, A's approvals retain their original identities, reuse is recorded,
   and no new formal dispatch occurs after approval. A changed input or an
   unfinished review instead follows the re-review/redispatch rules.
-- The remote-channel feasibility record precedes runner implementation;
+- The remote-channel feasibility record precedes workflow integration (step 4
+  of §17); independent runner work in steps 1–3 may proceed beforehand;
   later actual-package delivery records receiver hashes and replay.
   Unsupported payload sizes/access remain blocked, without adding a service.
 - Walk through §14.1 end to end using real check/review artifacts for
@@ -1677,8 +1721,12 @@ claimed as a runtime enforcement guarantee.
 
 ## 17. Implementation order and definition of done
 
-First complete the §20.8 remote-channel feasibility record for every remote
-lane and confirm effective review rules are available. Before a runner exists,
+Before workflow integration (step 4), complete the §20.8 remote-channel
+feasibility record for every remote lane and confirm effective review rules
+are available. Steps 1–3 may proceed independently while those checks are
+pending; neither their completion nor local TLC success establishes an
+end-to-end deliverable. Do not begin step 4, formal dispatch, or claim workflow
+acceptance until both prerequisites are established. Before a runner exists,
 representative files and an existing receiver-side hashing/streaming mechanism
 establish transport feasibility only, not runner replay. Missing capability
 is an end-to-end integration blocker. Independent pure runner work may proceed,
@@ -1807,6 +1855,36 @@ by stuttering in the spec; whether that abstraction suffices for the target
 code MUST be reviewed separately. The example does not model workers,
 leases, persistence, or external side-effect dedup, and claims no such
 properties.
+
+### 18.1 Explicit late-event companion fixture
+
+Keep the §18 minimal fixture unchanged. Additionally ship a separate correct
+companion model and buggy variant that explicitly represent a delivered
+completion's attempt number. This fixture is not an external-effect or
+persistence model and does not add cases to the minimal package.
+
+The companion extends the logical task model with pending completions for
+started attempts. Starting attempt a may enqueue a completion tagged a;
+delivery nondeterministically selects a pending tag and removes it. Delivery
+changes status to succeeded and acceptedAttempt to that tag only when
+status is running and the tag equals the current attempt. Other deliveries
+leave the logical task fields unchanged. Cancellation does not erase pending
+events, allowing delivery after cancellation. State exactly which operation
+atomically removes the event and conditionally updates task state.
+
+Use finite attempts and at most one pending completion per attempt; explicitly
+exclude duplicate deliveries in this fixture and explain that it establishes
+no duplicate-side-effect property. Include TypeOK, CancelledStable and
+StaleCannotComplete, plus coverage traces for timeout → retry → old delivery,
+both cancel/current-completion orders, and cancel → pending delivery.
+The buggy variant removes only the attempt-equality guard, and must yield
+a stale-result counterexample at two attempts. Record actual TLC outputs at
+implementation acceptance; this design text claims no execution.
+
+This companion tests the modeled receiver guard rather than assuming all
+stale deliveries stutter. It still requires the abstraction and atomicity
+review in §5.1; a passing companion is not proof that a real callback handler
+implements its guard atomically.
 
 ## 19. Official protocol references
 
@@ -2139,7 +2217,7 @@ the exact full files and each lane must read and hash them. Channel
 availability, retention until review completion, and receiver access are
 checked before formal dispatch.
 
-Before runner implementation, record a feasibility probe for each remote lane:
+Before workflow integration begins, record a feasibility probe for each remote lane:
 the effective review protocol; existing authorized channel identity;
 file/message/aggregate limits; chunking and exact reconstruction procedure;
 receiver retrieval and streaming hash/replay capability; access lifetime
@@ -2294,6 +2372,17 @@ a design blocker rather than change a status, CLI field, acceptance
 condition or product boundary to fit its implementation.
 
 ## Review ledger
+
+- **Implementation-readiness clarification (2026-10-24)**: unify the
+  transport prerequisite at workflow integration (step 4), while allowing
+  independent runner steps 1–3; specify a single ordered case classifier
+  and combined-error acceptance fixtures; name the main dialog as approval
+  reuse owner without changing the previously approved reuse policy; make
+  first-use adoption/blocker notices concrete; require a separate explicit
+  late-event companion fixture without changing the two minimal fixtures.
+  Transport probes, real TLC runs, and final current-revision review remain
+  pending implementation/preparation obligations, not results of this edit.
+
 
 - **Workflow-clarity revision (2026-10-24)**: user requested revision and
   submission following the design analysis. Clarify adoption versus
