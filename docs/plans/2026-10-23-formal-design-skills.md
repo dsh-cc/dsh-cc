@@ -4,6 +4,10 @@
 Earlier r1–r3 review history is retained in the Review ledger; it does not
 constitute review of this revision. User authorized this document update
 and chose approval reuse after a successful tool-only re-check (§12).
+The subsequent user-approved clarification requires every configured case
+(including expansion cases) to verify before formal review (§5.2), retains
+completed cfg generation on failure (§9.3), and blocks remote approval when
+the review package is incomplete (§20.8).
 Feature implementation and final design sign-off remain pending.
 
 Date: 2026-10-23 (Asia/Singapore). This document is a design review draft; it
@@ -377,7 +381,7 @@ rules-file auto-edit or new startup dependency is introduced.
 | modeling | main dialog | requirements, properties, assumptions, model, and check config complete |
 | checking | main dialog, or an executor running explicit checks | actual script output obtained |
 | revising | main dialog | counterexamples/errors explained and revised; back to checking |
-| review-ready | main dialog | every required case verified, evidence fresh, coverage matrix complete |
+| review-ready | main dialog | every configured case verified, evidence fresh, coverage matrix complete, no unresolved findings |
 | reviewing | the existing three lanes | all review the design package at one digest |
 | approved | main dialog | three lanes meet the existing pass bar; no unresolved blockers |
 | implementing | executor | approved package contains implementation mapping and regression scenarios |
@@ -389,8 +393,9 @@ follow the original pipeline as modified by the explicit user change, and
 the report says "waived, not verified." waived never arises from a failing
 script run.
 
-review-ready = every required case verified in the current run + input
-digests consistent + the manual coverage-matrix check done. The runner's
+review-ready = every configured case verified in the current run + input
+digests consistent + the manual coverage-matrix check done + no unresolved
+findings. required=false does not relax this gate (§9). The runner's
 verified only certifies execution conditions; it does not judge model
 sufficiency. When inputs are unchanged, a previous run that check-evidence
 judges valid may be cited (§12).
@@ -443,9 +448,39 @@ The main dialog checks these minimums:
   A known defect cannot be excluded merely to pass.
 
 No empty cells or unexplained “N/A” pass this gate. Before implementation,
-planned symbols and test scenarios are allowed; acceptance replaces them
-with real locations and observed results. Reviewers may still reject model
-sufficiency: a complete table is necessary, not sufficient.
+planned symbols and test scenarios are allowed. The approved design.md
+retains that planned matrix unchanged. At acceptance, implementation.md
+contains a corresponding observed matrix keyed by the same requirement,
+property and action IDs, with real code locations, test names, observed
+results and any deviations; it references the approved inputDigest.
+Do not replace planned cells in design.md merely to record implementation
+progress. A change in semantics, abstraction, atomicity or assumptions does
+change the design inputs and requires re-check and re-review (§12).
+Reviewers may still reject model sufficiency: a complete table is necessary,
+not sufficient.
+
+### 5.2 Formal review admission and implementation admission
+
+The main dialog applies this decision table; script exit codes alone never
+constitute workflow approval. Early consultation may help modeling, but is
+not the formal three-lane review and cannot produce a reusable approval.
+
+| Evidence and workflow condition | Formal review admission | Implementation admission |
+|---|---|---|
+| Audit invalid, missing or stale | Blocked; repair or re-check | Blocked |
+| Audit valid, verification=counterexample/error/incomplete (including any configured case failure or not-run) | Blocked; resolve and re-check | Blocked |
+| Audit valid, verification=verified, but coverage incomplete or findings unresolved | Blocked; complete coverage and dispositions | Blocked |
+| Audit valid, verification=verified, coverage complete, no unresolved findings | May dispatch the existing three lanes with the complete package | Wait for their existing approval requirements |
+| Any lane lacks complete evidence or returns an unresolved blocker | Review is incomplete or must return to revision | Blocked |
+| Same inputDigest approved by all required lanes, fresh verified evidence, no unresolved blockers | Review complete | Allowed |
+| Only tool identity changes, same inputDigest, fresh verified re-check of every configured case, reuse record complete | Existing approvals may be reused per §12 | Allowed under the existing approval requirements |
+
+All configured cases means every entry in checks.json, regardless of its
+required flag. No failed, timed-out, log-limited, signalled or not-run
+expansion case can be dismissed as a warning to admit formal review.
+Explicit user waiver follows §4.1 and §5; it returns to the modified original
+pipeline as waived/unverified and is never described as satisfying this
+enabled-task gate.
 
 ## 6. Roles and dispatch
 
@@ -567,7 +602,7 @@ specs/tla/<model-id>/
   cases/<case-id>.cfg             # deterministically generated from checks.json and committed
   evidence.json                  # latest run summary, committed for review
   current-run.json               # latest attempt and its completion state, committed for review
-  implementation.md             # written after implementation: mapping and test results
+  implementation.md             # run/review records; observed mapping and test results at acceptance
 ```
 
 Raw logs, TLC state stores, and input snapshots live under the project's
@@ -716,11 +751,55 @@ quietly carve out events still being handled. Terminal states are modeled
 with explicit self-loop actions; disabling deadlock checking to mask them is
 forbidden.
 
-optional cases widen parameter exploration and are not required to pass.
-Their failures MUST be shown (§11 warnings); when a counterexample affects
-the real design covered by required cases, the main dialog MUST resolve it
-before development — the optional label must not be used to ignore a known
+Cases with required=false widen parameter exploration; the flag records
+core versus expansion coverage, not permission to ignore a configured
+case. Once present in checks.json, every case must verify for the aggregate
+to be verified and for formal review admission (§5.2). Failures remain
+visible in results and warnings (§11), and block formal review until resolved
+and re-checked. Removing or weakening a failing expansion case solely to
+pass is forbidden by §5. Any justified scope/configuration change is a
+changed input requiring new evidence and review, never a waiver of a known
 defect.
+
+### 9.3 cfg generation failure and recovery
+
+Preflight runs before any cfg generation (§10). If Java/JAR or any other
+preflight prerequisite blocks, no cfg is generated; willGenerate=[] in the
+blocked response. A ready preflight only reports missing paths and never
+writes them.
+
+After successful preflight, check creates absent declared cfgs in manifest
+order. Stop generation on its first failure; do not generate later files.
+Each file uses a unique same-directory exclusive temporary file whose name
+ends in .tmp (never .cfg), complete
+write and close, then atomic publication without replacing any existing
+destination (for example fs.link(temp, destination), then unlink(temp),
+on supported local filesystems). A platform/filesystem without atomic
+no-replace publication reports blocked/io rather than overwriting a file.
+If a destination appears concurrently, compare its complete bytes: an exact
+match is retained; a difference reports blocked/config-drift. Ordinary
+rename-overwrite is not an acceptable publication mechanism for cfgs.
+
+| Failure boundary | Files retained | Output and recovery |
+|---|---|---|
+| Preflight blocks | Existing cfgs unchanged; no generated files | blocked with ordered blockers; fix prerequisites and retry |
+| One cfg write/publication fails before the running marker | Previously completed cfgs remain; remove only the current attempt's temporary file when possible; no partial destination | blocked/io, summary=null, exit 2; stderr identifies completed and unfinished declared paths; repair I/O and retry |
+| A concurrently created cfg differs | Previously completed cfgs and the concurrent file remain | blocked/config-drift, summary=null, exit 2; inspect and explicitly remove only changed cfgs per §9.2 |
+| All cfgs exist, but later preparation fails before the running marker | Completed cfgs remain; previous evidence/marker untouched | blocked/io, summary=null, exit 2 for I/O; repair and retry |
+| Failure after publishing the running marker | Completed cfgs remain | §20.7 error/incomplete persistence rules; no reusable success for the failed attempt |
+
+Diagnostics identify project-relative completed and unfinished cfg paths in
+manifest order; no new stdout fields or status codes are added. On retry,
+preflight checks retained cfg bytes and lists only still-absent declared
+paths when ready. check never rolls back completed cfgs and never reports
+verification merely because generation succeeded. Abrupt process death may
+leave uniquely named temporary files; they are never treated as cfg inputs
+and may be removed after confirming no checker owns them. Normal failures
+attempt cleanup and report cleanup failure on stderr.
+Existing evidence is audited against current inputs, so changed checks.json,
+changed cfg bytes or a missing declared cfg prevents reuse even when a
+pre-run failure leaves old evidence files untouched. An unchanged-input
+pre-run failure retains the existing §12 validity rule.
 
 ## 10. Toolchain and CLI contract
 
@@ -795,8 +874,9 @@ check runs the same preflight first; any blocker means TLC never starts.
    read-only, before mkdir or any lock write; then take the model lock
    (§13). Conflict → blocked/model-locked. Full preflight follows under lock.
 2. Run preflight.
-3. Generate missing cfgs per §9.2 **into the model directory** (cfgs are
-   committed inputs).
+3. Generate missing cfgs per §9.2/§9.3 **into the model directory** (cfgs
+   are committed inputs). Partial generation retains completed files;
+   generation failure returns before the running marker or any JVM start.
 4. Compute the input digest inputDigest (§12 input set, now including cfgs).
 5. Allocate the unique run directory and atomically publish current-run.json
    (state=running, runId and inputDigest) BEFORE copying inputs. From this
@@ -960,15 +1040,20 @@ summary.status: **run-level global preconditions are checked first**:
 wrapper cancellation, input change, artifact change (in that order) make the
 whole run incomplete even if they occurred during an optional case.
 Timeout, log ceiling, signal exit, spawn failure and TLC findings are
-case-local; aggregate required cases as follows: all verified → verified;
-any counterexample → counterexample; else any error → error; else incomplete.
-A terminal run-level I/O failure uses error/io before required aggregation,
+case-local; aggregate every configured case as follows: all verified →
+verified; any counterexample → counterexample; else any error → error;
+else incomplete (including not-run). The required flag does not filter
+aggregation. A terminal run-level I/O failure uses error/io before case
+aggregation,
 unless a higher-priority cancellation/input/artifact incomplete cause exists;
 §20.7 governs whether consistent Evidence can be persisted.
 Within the selected status use the first matching case in checks.json order
-for summary.reason. Successful summary.reason is verified. Optional cases
-never change required aggregation, but every non-verified optional result
-adds `optional-<status>:<id>:<reason>` to warnings. Warnings are ordered
+for summary.reason. Successful summary.reason is verified. Expansion cases
+affect aggregation exactly as core cases do; every
+non-verified required=false result additionally adds
+`optional-<status>:<id>:<reason>` to warnings for coverage context. This
+warning does not downgrade the failure or permit review admission. Warnings
+are ordered
 by manifest case order; within each case, TLC warning codes in numeric
 order precede its optional-result warning.
 Preflight blockage → blocked. Not-run records are retained.
@@ -1060,7 +1145,7 @@ toolchainVersion it enters evidence and the check-evidence comparisons.
 check-evidence (read-only, no Java) recomputes the current inputDigest,
 runnerDigest, and toolchainDigest, and verifies: current-run.json's finished
 state and lock state (above), toolchainVersion, config↔case correspondence
-(every declared cfg exists individually), required-status aggregation
+(every declared cfg exists individually), all-configured-case aggregation
 consistency, log file presence and SHA-256, and that the run directory is
 inside the project .formal-design/runs. Any mismatch → exit 2 + reason:
 stale/{input,runner,toolchain}, log-missing, log-mismatch, schema-invalid,
@@ -1078,13 +1163,14 @@ evidence actually reviewed. Approval is bound to inputDigest; tool identity
 is audit metadata, not a second approval key.
 
 **User decision (2026-10-24):** after a tool-only upgrade, unchanged
-inputDigest plus a fresh, locally validated re-check in which every required
+inputDigest plus a fresh, locally validated re-check in which every configured
 case is verified permits reuse of the original three-lane approvals.
 No new three-lane review is required solely because the runner/plugin,
 TLC/JAR or toolchain identity changed. The main dialog records old and new
 tool identities, the new runId, the unchanged inputDigest, approval
-references, and any optional-case findings in implementation.md. An optional
-counterexample affecting the design still blocks development per §9.
+references, and the disposition of any prior expansion-case findings in
+implementation.md. Any configured-case failure blocks reuse and formal
+review admission per §5.2/§9.
 Without that successful re-check, development cannot continue on the old
 evidence. This exception never permits reuse across changed model inputs.
 
@@ -1153,8 +1239,10 @@ attempt guard; TLC should produce a counterexample. Turn that trace into a
 plain code regression scenario: first execution times out, the second
 starts, the first one's success callback arrives — assert the second one's
 state is not overwritten. The implementation mapping MUST name the real
-callback handler and test name; before implementation it may name planned
-symbols, and at acceptance those MUST be replaced with real locations.
+callback handler and test name; before implementation design.md may name
+planned symbols. At acceptance the observed mapping in implementation.md
+MUST name the real locations, linked to the same action/property IDs; the
+approved planned mapping in design.md is not overwritten (§5.1).
 
 implementation.md finally contains: inputDigest, the code symbol for each
 model action, how atomicity is implemented, the test or manual-review
@@ -1170,9 +1258,10 @@ rules, without assuming lane identities:
    formal-design screening; on a hit, load the skill and record the
    rationale.
 2. An enabled task enters the formal three-lane design review only after
-   its required checks verified, the evidence is fresh, and the coverage
-   check is complete; consulting reviewers early is allowed but is not a
-   formal approval.
+   every configured case is verified, the evidence is fresh, the coverage
+   check is complete, and no findings remain unresolved (§5.2). A configured
+   expansion case has the same pass obligation. Consulting reviewers early
+   is allowed but is not a formal approval.
 3. All three lanes review the design+verification package at the same
    inputDigest; the existing three-lane pass criteria continue to apply.
 4. The executor receives the approved design, model evidence,
@@ -1220,8 +1309,13 @@ waits to fake timeouts.
 | classification | at least one case per §11.3 table row (incl. 2113 vs 2132 discrimination, 255, exit-0-without-success, exit-0-with-error, nonzero-with-success, output-inconsistent, OOM, signals, timeout, log-limit, unknown output); **an all-zero-stats empty Init is never verified** |
 | lifecycle | timeout TERM→KILL, same ladder for log ceiling, no case runs after cancellation and summary=incomplete/cancelled, results written only after close, lock conflict, lock release on error, failed runs overwrite the latest summary, running marker after hard-kill blocks reuse of old success, **snapshot digest ≠ inputDigest → no spawn**, mid-run artifact change → incomplete |
 | evidence | staleness on model/design/cfg/runner/toolchain changes, missing declared cfg → invalid, mid-run input change, logs missing/modified, summary schema invalid, cross-project path refusal, **fresh/verification decoupling** (a fresh counterexample evidence exits 0 with verification=counterexample), live lock → run-in-progress |
-| aggregation | required failures, optional failure goes to warnings, deterministic order, no not-run case dropped, precedence among multiple failures, **run-global cancellation/input/artifact preconditions beat required aggregation; optional case timeout/log-limit/signal remain warnings** |
+| aggregation | all-configured-case failures affect status regardless of required flag; expansion failure also appears in warnings; deterministic order; no not-run case dropped; precedence among multiple failures; **run-global cancellation/input/artifact preconditions beat case aggregation; expansion timeout/log-limit/signal yield incomplete and prevent verified** |
 | publish | the whole skill tree (SKILL.md, references, scripts, toolchain.json, examples) ships in the package (npm-pack assertions), agent trailers unchanged, every §2.2 description surface consistent, bilingual doc hashes re-recorded, every shipped file is clean under `git check-ignore` |
+
+The unit matrix additionally includes every §20.8 scenario for partial cfg
+generation, stable blocker ordering and all-case aggregation. Workflow-only
+admission, mapping and remote-delivery scenarios are demonstrated with main
+dialog/reviewer records under §16.4, not claimed as runner enforcement.
 
 ### 16.2 Real TLC integration tests
 
@@ -1278,7 +1372,7 @@ scenario below; keyword searches over the skill do not count as acceptance:
 
 - After a plugin upgrade and restart: check-evidence on a pre-upgrade model
   package reports stale/runner; re-running check restores valid evidence.
-  With unchanged inputDigest and required cases verified, the main dialog
+  With unchanged inputDigest and every configured case verified, the main dialog
   records approval reuse per §12; no automatic new three-lane dispatch.
 - Plain formatting work: not-needed recorded; original three-lane flow
   continues; no Java required.
@@ -1288,7 +1382,18 @@ scenario below; keyword searches over the skill do not count as acceptance:
 - User explicitly opts out: waived recorded, unverified reported; conflicts
   with stricter project rules follow the conflict rule.
 - Missing Java / check timeout: blocked/incomplete reported truthfully —
-  never called a pass, never handed to development.
+  never called a pass, never dispatched to formal review or development.
+- An expansion case fails while all core cases verify: no formal dispatch;
+  resolve the failure and re-check every configured case. Renaming it
+  optional or logging a warning cannot admit review.
+- cfg generation fails partway: retain completed cfgs, report completed/
+  unfinished paths, repair and retry without overwriting retained files;
+  do not confuse generated inputs with verified evidence.
+- Acceptance only adds observed code/test locations: update implementation.md
+  and preserve design.md/inputDigest. Changed assumptions require redesign,
+  re-check and new formal review.
+- A remote lane lacks a complete log: record blocked review evidence;
+  supply a complete same-run package before counting its approval.
 - Asked to "just delete the failing property and start coding": the failing
   evidence is preserved and the decision returns to design; success is never
   fabricated.
@@ -1414,7 +1519,7 @@ The buggy-callback fixture replaces ONLY CompleteStale with the following,
 everything else identical. It models wrongly accepting the previous round's
 success while the current task is still running; at MaxAttempts=2 it should
 violate StaleCannotComplete. An expected-to-fail fixture must not be placed
-in the correct example's required checks.
+in the correct example's configured checks.
 
 ```tla
 CompleteStale == /\ status = "running"
@@ -1678,11 +1783,36 @@ AuditOutput = {
   unsupported-platform, config-invalid, input-limit, config-drift,
   java-missing, java-version, jar-missing, jar-checksum, io.
   Run lock errors precede preflight in check. Within a category, details are
-  sorted by relative path then case ID in Unicode code-point order;
-  absent detail keys sort as empty strings.
+  sorted by internal relative-path and case-ID keys in Unicode code-point
+  order, then by detail text as a deterministic tie-breaker. These keys are
+  defined below and are not fields of the serialized Blocker.
   Independent checks continue to gather blockers, but dependent checks are
   skipped: no version query when Java is missing; no checksum for a missing
   JAR; no cfg generation comparison when the manifest cannot be parsed.
+- Blocker serialization remains exactly {code, detail}. Internally collect
+  {code, detail, relativePath, caseId}; relativePath is the project-relative
+  POSIX path of the failing project input (checks.json or the relevant cfg/
+  model file), or "" for CLI, platform, toolchain/plugin/environment and
+  other errors without a project input path. caseId is the manifest case ID
+  when the error is specific to one identifiable case, otherwise "".
+  Use these keys when creating the diagnostic, never extract them from
+  detail text. Sort by blocker category priority, relativePath, caseId,
+  then detail, comparing Unicode scalar values lexicographically (shorter
+  prefix first, not localeCompare). Serialize only code/detail afterward.
+  Exact duplicate code/detail diagnostics are emitted once, retaining the
+  lowest internal sort key. detail text must be deterministic, without
+  timestamps or random temporary names. Manifest-wide parse failures have
+  the checks.json path and caseId=""; malformed/unidentifiable case IDs
+  use caseId="". Multiple diagnostics per category are preserved.
+
+  Example: config-drift for cases/z.cfg encountered before cases/a.cfg
+  must still serialize a.cfg first. The following is a complete blocked
+  preflight response (all paths are relative to the project):
+
+  ```json
+  {"schemaVersion":1,"command":"preflight","status":"blocked","reason":"config-drift","blockers":[{"code":"config-drift","detail":"specs/tla/task-lifecycle/cases/a.cfg differs from generated bytes"},{"code":"config-drift","detail":"specs/tla/task-lifecycle/cases/z.cfg differs from generated bytes"}],"willGenerate":[]}
+  ```
+
 - Missing explicitly passed Java/JAR paths map to java-missing/jar-missing,
   not a usage error. Malformed flags, duplicates and missing flag values
   map to usage-invalid. Invalid --project/--model maps to model-path-unsafe.
@@ -1702,13 +1832,52 @@ AuditOutput = {
 ### 20.8 Remote review and implementation acceptance
 
 Full raw logs remain local ignored artifacts; v1 adds no uploader or remote
-evidence service. A reviewer on the producing machine may read the supplied
-paths. A remote reviewer must receive the full logs through the project's
-existing authorized artifact channel, or request a main-dialog independent
-re-run and its outputs. A Git-committed summary alone is insufficient to
-claim local check-evidence success on another machine. An independent
-re-run must have the same inputDigest; record the actual tool identity.
-No automatic external upload, retention policy or fourth review lane is added.
+evidence service. The main dialog prepares and delivers the review package
+to each lane through the project's existing authorized artifact channel.
+A local reviewer may use accessible paths. A remote reviewer must receive
+accessible full file contents; producer-only paths are not delivery.
+
+The minimum package for each lane contains:
+
+- Every input listed by evidence.inputFiles, preserving model-relative
+  paths and exact bytes: design.md, checks.json, all model .tla files and
+  all declared cfgs.
+- Matching current-run.json and evidence.json, the inputDigest/runId and
+  the recorded runnerPackage, runnerDigest, toolchainDigest and jarSha256.
+- Full persisted stdout/stderr logs for every configured case, preserving
+  the project-relative paths in evidence and matching their SHA-256 values.
+  An excerpt or prose summary is insufficient.
+- The producing main dialog's complete check-evidence JSON output, showing
+  valid/fresh/verified for that run, and the completed coverage assessment.
+- The approved/planned implementation mapping, regression scenarios and
+  counterexample dispositions. Records outside design.md reference the
+  same inputDigest; an unresolved disposition blocks formal dispatch.
+
+The main dialog records each lane's package identity and accessible artifact
+locations in implementation.md or the review record, outside digested inputs.
+Each lane confirms the runId/inputDigest, full input enumeration, cfg bytes,
+log presence/hashes and the verified all-case results. It records tool
+identities and reviews the model's sufficiency. This is evidence inspection,
+not an assertion that the recipient ran local check-evidence.
+
+A Git-committed summary alone is insufficient to claim local check-evidence
+success on another machine. A remote recipient may claim that only after
+the actual command validates a complete local package with the matching
+installed runner/toolchain. Reviewers remain read-only (§6.2); they request
+any mutating independent re-run from the main dialog. Such a re-run must
+have the same inputDigest, record its actual tool identity, and provide a
+complete package from the new run. Different runIds must not be mixed;
+redispatch the complete new package to all lanes if the reviewed run changes.
+
+Missing, truncated, inaccessible or mismatched inputs/logs cause that lane
+to report "blocked: incomplete review evidence", identifying missing paths
+and expected runId/inputDigest. This is a review disposition, not a new CLI
+status/reason. It cannot be counted as approval or waive another lane.
+The main dialog supplies the complete package or independently re-runs and
+supplies its outputs. Channel size limits do not permit summary-only
+approval; use an existing authorized channel capable of delivering complete
+files or remain blocked. No automatic upload, new artifact service,
+retention policy or fourth review lane is added.
 
 In addition to §16, contract tests must cover:
 
@@ -1718,8 +1887,10 @@ In addition to §16, contract tests must cover:
    TLA+ from primitive parameters. All pinned cfg directive names, including
    plural forms, are rejected as model-value identifiers.
 3. Spawn failure → error/spawn-failed/exit 2; signal → incomplete/
-   signal-exit/exit 3 when required; optional timeout/log-limit/signal →
-   warning with required success preserved.
+   signal-exit/exit 3 for any configured case. Expansion timeout/log-limit/
+   signal → incomplete with an additional optional-result warning; core
+   success never masks it. Expansion counterexample/error likewise changes
+   aggregation and blocks formal review.
 4. Simultaneous global causes follow cancelled > input-changed >
    artifact-changed, regardless of optional/required case. Any new input
    file, deletion or read failure changes the digest result.
@@ -1732,7 +1903,33 @@ In addition to §16, contract tests must cover:
    three-lane approval even if the new checks pass.
 8. Demonstrate each §4.3 activation path; demonstrate a missing critical
    coverage row blocks review-ready; remote missing logs cannot be audited
-   as valid local evidence.
+   as valid local evidence or counted as a lane approval.
+9. Required=true case verified plus required=false counterexample/error/
+   timeout/log-limit/signal/not-run: aggregate is non-verified, auditing
+   retains that status, and the main dialog never dispatches formal review.
+   A pure TLC warning with every case verified remains eligible subject to
+   the manual coverage/findings gate. Merely renaming a failed case
+   "optional" never changes its obligation.
+10. Fail generation on the second of three absent cfgs: the first stays
+    complete, no partial second destination exists, no third is generated,
+    no JVM or running marker starts, stdout is blocked/io/summary=null,
+    and stderr lists completed/unfinished paths. Retry lists only absent
+    cfgs and succeeds without rewriting the first. Test differing and
+    identical concurrently created destinations, cleanup failure and hard
+    kill. Missing Java must generate nothing. Old evidence must fail audit
+    whenever current digested inputs changed.
+11. Multiple blockers in one category are stable under reversed discovery
+    order; cover equal-path different-case errors, absent context, detail
+    tie-breaks, duplicate diagnostics and non-ASCII Unicode code-point
+    comparisons. Public objects contain only code/detail.
+12. Record routine acceptance mapping/results in implementation.md and
+    assert design.md/inputDigest are unchanged and approvals stay bound.
+    A changed atomicity assumption instead updates design/model, makes old
+    evidence stale and requires re-check before new formal review.
+13. A remote lane given only a summary, missing one case's stderr, truncated
+    stdout, wrong-run logs or an inaccessible artifact reports blocked and
+    cannot approve. Complete delivery permits review; a re-run switches all
+    lanes to one complete new run package at the same inputDigest.
 
 The executor may choose internal pure-function names and implementation
 details that preserve these externally observable contracts. It must return
@@ -1792,5 +1989,14 @@ condition or product boundary to fit its implementation.
   coverage acceptance and remote review behavior explicit. User chose
   successful tool-only re-check with approval reuse over mandatory re-review.
   This revision has not undergone a new three-lane review.
-- Sign-off: user authorized editing and committing this revision; final
-  design sign-off and implementation remain pending.
+- **User-approved review-gate clarification (2026-10-24)**: user accepted all
+  three recommendations: every configured case must verify before formal
+  three-lane review; cfg generation retains completed atomic writes on
+  failure and reports unfinished paths; incomplete remote evidence blocks
+  lane approval. Also resolve acceptance-mapping digest churn and define
+  deterministic internal blocker sorting without changing public shapes.
+  These clauses supersede the earlier optional-case aggregation policy;
+  historical r1–r3 entries are not approval of these revisions.
+- Sign-off: user authorized these design choices, document editing and
+  committing to this PR. Final formal design sign-off and feature
+  implementation remain pending.
