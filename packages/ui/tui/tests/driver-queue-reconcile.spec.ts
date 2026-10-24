@@ -133,7 +133,7 @@ describe('zombie-busy reconciliation (W2)', () => {
     const driver = await createDriver(ctx as never, {})
     await driver.submit('queued chip')
 
-    expect(driver.state.queued).toEqual(['queued chip'])
+    expect(driver.state.queued).toEqual([{ text: 'queued chip' }])
     expect(agent.followup).not.toHaveBeenCalled()
   })
 

@@ -128,7 +128,7 @@ describe('createDriver boot seed (fire-early / await-late)', () => {
     // with an 'idle' agent dispatches immediately instead of queueing.
     agentRef.current!.status = 'running'
     await driver.submit('second')
-    expect(driver.state.queued).toEqual(['second'])
+    expect(driver.state.queued).toEqual([{ text: 'second' }])
   })
 
   it('no-model notice appears exactly once, only after the seed settles', async () => {
