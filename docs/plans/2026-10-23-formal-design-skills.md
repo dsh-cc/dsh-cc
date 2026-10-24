@@ -8,6 +8,9 @@ The subsequent user-approved clarification requires every configured case
 (including expansion cases) to verify before formal review (§5.2), retains
 completed cfg generation on failure (§9.3), and blocks remote approval when
 the review package is incomplete (§20.8).
+The subsequent user-approved determinism revision specifies log-replay auditing,
+the cancellation publication boundary, core/expansion coverage labels, I/O
+recovery, conservative lock probing and real remote-delivery acceptance.
 Feature implementation and final design sign-off remain pending.
 
 Date: 2026-10-23 (Asia/Singapore). This document is a design review draft; it
@@ -395,7 +398,7 @@ script run.
 
 review-ready = every configured case verified in the current run + input
 digests consistent + the manual coverage-matrix check done + no unresolved
-findings. required=false does not relax this gate (§9). The runner's
+findings. coverage=expansion does not relax this gate (§9). The runner's
 verified only certifies execution conditions; it does not judge model
 sufficiency. When inputs are unchanged, a previous run that check-evidence
 judges valid may be cited (§12).
@@ -431,7 +434,7 @@ exclusion and justification.
 The main dialog checks these minimums:
 
 - Every business correctness requirement has a property or an explicit
-  exclusion. Every property names at least one required case.
+  exclusion. Every property names at least one core case.
 - Each applicable FD-T1…T4 trigger has a modeled adverse ordering or a
   specific exclusion rationale. Include both competing event orders,
   duplicate and late delivery, timeout/retry, and crash/restart when in scope.
@@ -440,6 +443,11 @@ The main dialog checks these minimums:
   separate writes cannot be called atomic without explaining the mechanism.
 - Every assumption identifies real code, infrastructure guarantees or a
   declared external obligation. Unsupported assumptions remain blockers.
+- Each critical abstraction names omitted real events/state, the affected
+  property IDs, and why their omission preserves those properties. Include
+  at least one adverse concrete trace challenging each such justification;
+  if it can change an observed outcome, model it or record an approved
+  exclusion. A filled matrix is not evidence of a valid abstraction.
 - Each safety property has a regression scenario and expected assertion;
   each liveness property lists fairness and response assumptions. If
   liveness is excluded, explain why that is acceptable for this task.
@@ -476,7 +484,7 @@ not the formal three-lane review and cannot produce a reusable approval.
 | Only tool identity changes, same inputDigest, fresh verified re-check of every configured case, reuse record complete | Existing approvals may be reused per §12 | Allowed under the existing approval requirements |
 
 All configured cases means every entry in checks.json, regardless of its
-required flag. No failed, timed-out, log-limited, signalled or not-run
+coverage label. No failed, timed-out, log-limited, signalled or not-run
 expansion case can be dismissed as a warning to admit formal review.
 Explicit user waiver follows §4.1 and §5; it returns to the modified original
 pipeline as waived/unverified and is never described as satisfying this
@@ -651,7 +659,7 @@ so none can be parsed as a cfg section keyword.
   "cases": [
     {
       "id": "small",
-      "required": true,
+      "coverage": "core",
       "specification": "Spec",
       "constants": {"MaxAttempts": "2"},
       "invariants": ["TypeOK", "CancelledStable", "StaleCannotComplete"],
@@ -664,9 +672,11 @@ so none can be parsed as a cfg section keyword.
 
 Constraints: modelId/case.id match [a-z][a-z0-9-]{0,63}; module,
 specification, constant keys, and property names match
-[A-Za-z][A-Za-z0-9_]*. cases length 1..16, at least one required=true; each
-case has at least one invariant; array names do not repeat. required is an
-explicit boolean. properties may be empty. limits is required; timeoutMs an
+[A-Za-z][A-Za-z0-9_]*. cases length 1..16, at least one coverage=core; each
+case has at least one invariant; array names do not repeat. coverage is an
+explicit string enum, core|expansion. The legacy required field is rejected
+as an unknown field; there is no alias or migration mode in this unimplemented
+v1. properties may be empty. limits is required; timeoutMs an
 integer 1000..600000, heapMiB an integer 256..4096.
 
 ### 9.1 The constants value grammar (complete, and the only one)
@@ -751,7 +761,7 @@ quietly carve out events still being handled. Terminal states are modeled
 with explicit self-loop actions; disabling deadlock checking to mask them is
 forbidden.
 
-Cases with required=false widen parameter exploration; the flag records
+Cases with coverage=expansion widen parameter exploration; the label records
 core versus expansion coverage, not permission to ignore a configured
 case. Once present in checks.json, every case must verify for the aggregate
 to be verified and for formal review admission (§5.2). Failures remain
@@ -872,7 +882,9 @@ check runs the same preflight first; any blocker means TLC never starts.
 
 1. Validate CLI syntax and all §13 project/model/output-path boundaries
    read-only, before mkdir or any lock write; then take the model lock
-   (§13). Conflict → blocked/model-locked. Full preflight follows under lock.
+   (§13). Reserve the runId in memory before writing the lock; step 5 uses
+   that same ID without allocating another. Conflict → blocked/model-locked.
+   Full preflight follows under lock.
 2. Run preflight.
 3. Generate missing cfgs per §9.2/§9.3 **into the model directory** (cfgs
    are committed inputs). Partial generation retains completed files;
@@ -894,9 +906,10 @@ check runs the same preflight first; any blocker means TLC never starts.
    incomplete/artifact-changed. Missing or unreadable previously captured
    inputs/artifacts count as mismatches. If both change, input-changed wins.
    The incomplete evidence is still written; it is never called verified.
-9. Write evidence.json (sibling temp + rename), then update current-run.json
-   to state=finished.
-10. Release the lock in a finally.
+9. Stage evidence.json and current-run.json (sibling temps), then publish
+   evidence followed by the finished marker under §10.1's cancellation boundary.
+10. Release the owned lock in a finally; retain §10.1 signal handlers until
+    cleanup is complete and the command exits with its committed result.
 
 Cases execute independently and sequentially; a failing case does not stop
 the others from producing results. Each case's cwd is the isolated input
@@ -920,16 +933,48 @@ never load whole logs. **The per-case combined log ceiling is 50 MiB**
 SIGTERM→2000ms→SIGKILL ladder as timeout, recorded as incomplete/log-limit.
 timeout counts from successful spawn: the same SIGTERM first, SIGKILL after
 2000ms; results are written after the child's close event. **A user cancel
-(SIGINT/SIGTERM to the wrapper) takes precedence over all aggregation**:
-clean up the current child, mark the current case cancelled, mark remaining
-cases not-run, record incomplete/cancelled per §11's global preconditions,
-exit 3. The JVM is started directly — no shell subprocess. v1 supports
+(SIGINT/SIGTERM observed by the wrapper before final publication) takes
+precedence over all aggregation**; §10.1 defines the exact boundary and
+all no-child cases. The JVM is started directly — no shell subprocess. v1 supports
 macOS/Linux; Windows returns blocked/unsupported-platform — silently running
 unverified termination logic is forbidden.
 
 JVM resource exhaustion, signal exits and the like are judged
 incomplete/error only. heapMiB is a JVM heap cap; it does not limit total
 JVM RSS.
+
+### 10.1 Cancellation and the publication boundary
+
+For check only, install SIGINT/SIGTERM handlers after CLI syntax validation and before any
+asynchronous path validation, lock or preflight work. A handler latches
+cancellation until this command successfully publishes the finished marker.
+Stop starting new preparation steps or children once latched. Cancellation
+means a signal observed by that handler, not an unobservable OS arrival time.
+
+| Boundary when cancellation is observed | Required outcome |
+|---|---|
+| Before the running marker | Stop preparation, clean up owned temporary files/lock, retain completed cfgs and old evidence; emit incomplete/cancelled, summary=null, blockers=[], exit 3. No new Evidence is fabricated. |
+| During snapshot/preparation after the running marker | Start no JVM; every case is not-run; publish incomplete/cancelled Evidence only if the §20.7 persistence conditions hold. |
+| While a case child is active | Apply the TERM→2000ms→KILL ladder, await close, record that case incomplete/cancelled with actual process metadata and complete persisted logs; later cases are not-run. |
+| Between cases, or after the last child closes | Preserve completed case records; unstarted cases are not-run. Even if every case verified, the run is incomplete/cancelled. |
+| After the finished marker is successfully published | Keep the committed result and its exit code; finish owned-lock cleanup. Do not convert it into cancelled or use the default signal exit. |
+
+Publication is serialized: after staging Evidence and its marker, check the
+cancellation latch again. If it changed, regenerate the staged result before
+publication. Use a synchronous, non-yielding final critical section: inspect
+the latch, publish evidence, publish the finished marker, then mark the run
+committed in memory. No await or callback dispatch occurs between those
+operations. A signal handler dispatched after that successful section is
+post-publication. This defines a reproducible handler-observation boundary,
+rather than promising atomicity across two files or OS signal arrival time.
+A failed marker publication never commits a result.
+
+A cancellation latched during asynchronous evidence/log persistence still
+wins aggregation; if consistent persistence cannot be completed, return
+incomplete/cancelled with summary=null and leave a non-finished marker.
+I/O diagnostics remain on stderr. Cleanup failure after successful final
+publication does not change the committed status; it is reported on stderr,
+and any surviving lock is handled under §13.
 
 ## 11. TLC output and result classification
 
@@ -1038,11 +1083,11 @@ does not promise to parse every TLA+ value into a structured trace.
 
 summary.status: **run-level global preconditions are checked first**:
 wrapper cancellation, input change, artifact change (in that order) make the
-whole run incomplete even if they occurred during an optional case.
+whole run incomplete even if they occurred during an expansion case.
 Timeout, log ceiling, signal exit, spawn failure and TLC findings are
 case-local; aggregate every configured case as follows: all verified →
 verified; any counterexample → counterexample; else any error → error;
-else incomplete (including not-run). The required flag does not filter
+else incomplete (including not-run). The coverage label does not filter
 aggregation. A terminal run-level I/O failure uses error/io before case
 aggregation,
 unless a higher-priority cancellation/input/artifact incomplete cause exists;
@@ -1050,12 +1095,12 @@ unless a higher-priority cancellation/input/artifact incomplete cause exists;
 Within the selected status use the first matching case in checks.json order
 for summary.reason. Successful summary.reason is verified. Expansion cases
 affect aggregation exactly as core cases do; every
-non-verified required=false result additionally adds
-`optional-<status>:<id>:<reason>` to warnings for coverage context. This
+non-verified coverage=expansion result additionally adds
+`expansion-<status>:<id>:<reason>` to warnings for coverage context. This
 warning does not downgrade the failure or permit review admission. Warnings
 are ordered
 by manifest case order; within each case, TLC warning codes in numeric
-order precede its optional-result warning.
+order precede its expansion-result warning.
 Preflight blockage → blocked. Not-run records are retained.
 
 check exit codes are selected ONLY from the final summary/command status:
@@ -1074,7 +1119,8 @@ model-root evidence.json via sibling-temp + rename after the whole run ends,
 failures included — passing off a previous success as this run's result is
 forbidden. current-run.json is maintained per §10 steps 5/9: state=running
 before snapshot copying or any case starts; state=finished after evidence lands. check-evidence
-MUST first reject a model lock with a live pid as run-in-progress; then
+MUST first apply §13's conservative lock probe (present or indeterminate
+process means run-in-progress); then
 require matching runId/inputDigest across both files and state=finished.
 A running/missing/mismatched marker means incomplete-run; malformed evidence
 means schema-invalid. The complete rejection order is §20.7. If
@@ -1111,7 +1157,7 @@ evidence.json, schemaVersion=1, MUST contain:
 runId, modelId, inputDigest, inputFiles[{path,sha256}],
 runnerDigest, runnerPackage{name,version}, toolchainVersion, toolchainDigest, jarSha256, jarPath, javaVersion, platform,
 startedAt, finishedAt, status, reason, warnings[], javaExecutable,
-cases[{id,required,status,reason,exitCode,signal,
+cases[{id,coverage,status,reason,exitCode,signal,
        timedOut,elapsedMs,argv,statistics,
        eventCodes,stdoutPath,stderrPath,stdoutSha256,stderrSha256}]
 ```
@@ -1126,7 +1172,7 @@ the §10-normalized absolute paths; a PATH-form java is recorded as the
 literal `java`); `javaExecutable` is recorded separately — the absolute path
 resolved after the run for PATH-form java, or null when unresolvable.
 exitCode/signal are null when nothing was spawned. Not-run cases keep
-id/required and status=not-run, with the other runtime fields null.
+id/coverage and status=not-run, with the other runtime fields null.
 
 runnerDigest: the digest, computed by the exact inputDigest algorithm, over
 **all regular files ending in .mjs found recursively under the packaged
@@ -1142,7 +1188,7 @@ toolchain.json does NOT participate in runnerDigest: toolchainDigest
 separately records the SHA-256 of that file's bytes; together with
 toolchainVersion it enters evidence and the check-evidence comparisons.
 
-check-evidence (read-only, no Java) recomputes the current inputDigest,
+check-evidence (read-only, no Java) replays logs per §12.1 and recomputes the current inputDigest,
 runnerDigest, and toolchainDigest, and verifies: current-run.json's finished
 state and lock state (above), toolchainVersion, config↔case correspondence
 (every declared cfg exists individually), all-configured-case aggregation
@@ -1173,6 +1219,41 @@ implementation.md. Any configured-case failure blocks reuse and formal
 review admission per §5.2/§9.
 Without that successful re-check, development cannot continue on the old
 evidence. This exception never permits reuse across changed model inputs.
+
+### 12.1 Read-only log replay during evidence auditing
+
+check-evidence MUST stream and reparse both persisted logs with the same
+pinned framing/parser and classifier used by check; hashing alone is not
+result validation. It never starts Java, mutates files or requires the old
+Java/JAR path to exist. Share pure parser/classifier functions, not the
+stored verdict, between producer and auditor.
+
+For each attempted case (including spawn failure), reconstruct eventCodes,
+final statistics and TLC
+warnings from the exact persisted bytes. Apply §11 classification using
+recorded exitCode, signal and timedOut, plus the recorded spawn-failed
+observation for an unsuccessful spawn and the case's explicitly recorded
+reason for wrapper-only cancellation/log-limit/I/O interruption. Compare
+reconstructed fields, status/reason and warnings against Evidence. Recompute
+all-case aggregation with the recorded run-global cancellation/input-change/
+artifact-change/I/O reason where applicable. Any discrepancy is invalid/
+schema-invalid (exit 2), after input/tool staleness and log presence/hash
+checks in the §20.7 precedence. No new reason string is introduced.
+
+Wrapper observations are not recoverable from TLC text. Replay trusts the
+recorded spawn-failure observation, process exit/signal, timeout flag,
+elapsedMs, argv, timestamps and
+wrapper interruption/global reason as observations; it validates their
+schema and consistency, but does not claim to independently establish
+their historical truth. In particular, a recorded timeout/cancellation or
+global input mismatch need not appear in a TLC frame. not-run cases have
+no logs and follow the exact null/empty-field contract instead of replay.
+Replay must preserve incomplete/output-invalid for legitimately malformed
+captured output; it rejects a contradictory stored classification, not the
+mere existence of a failed run. Global overrides may coexist with all cases
+verified, as for cancellation after the final child closes (§10.1).
+This detects producer/summary inconsistency within the existing local trust
+boundary; it is not cryptographic attestation or independent model execution.
 
 Changes to
 design.md, the model, configuration, properties, assumptions, or bounds
@@ -1210,6 +1291,18 @@ Runner (preflight/check/check-evidence):
   report the lock's pid/runId/startedAt and let a human delete it after
   confirming the recorded process is gone. Deleting the lock of a still-
   running task is forbidden.
+- Lock probing never proves process identity from PID alone. On supported
+  macOS/Linux use kill(pid, 0): success means present, ESRCH means absent,
+  and EPERM or any other inability to establish absence means indeterminate.
+  A present PID may have been reused; report that uncertainty, never assert
+  it is the original checker. check refuses every existing lock as
+  model-locked without deleting it. check-evidence returns run-in-progress
+  for present/indeterminate probes and for malformed/unreadable lock contents
+  whose owner cannot be safely probed. Only a well-formed lock with an absent
+  PID may be ignored by auditing; it still blocks check. Diagnostics state
+  present/absent/indeterminate and recorded identity where parseable.
+  The operator must establish ownership/absence before manual removal;
+  automated recovery does not infer it from PID presence or elapsed time.
 
 
 ## 14. The example and the business-to-implementation correspondence
@@ -1301,15 +1394,15 @@ waits to fake timeouts.
 
 | Category | Must cover |
 |---|---|
-| manifest | full valid example, unknown/duplicate JSON keys, missing fields, duplicate cases, no required, no invariant, illegal IDs, out-of-range limits, **value grammar** (directive-token-in-value like "2 CONSTRAINT Prune"/"TRUE PROPERTY", reserved-word idents, nested sets, trailing garbage, negative integers, quotes) |
+| manifest | full valid example, unknown/duplicate JSON keys, missing fields, duplicate cases, no core case, legacy required field, invalid coverage label, no invariant, illegal IDs, out-of-range limits, **value grammar** (directive-token-in-value like "2 CONSTRAINT Prune"/"TRUE PROPERTY", reserved-word idents, nested sets, trailing garbage, negative integers, quotes) |
 | cfg | key order, LF, CONSTANTS header present/absent, existing-identical, existing-different refuses overwrite, extra directives forbidden, canonical serialization |
 | paths | `..`, absolute model, input symlinks, output ancestor symlinks, paths with spaces, file/total ceilings, --jar/--java symlink resolution and recording |
 | environment | missing Java/JAR, version too low, checksum mismatch, Windows, env-var scrubbing |
 | parser | arbitrary chunk splits, CRLF, **nested frames**, END mismatch, unclosed frames, severity∉{0,1,2,3,4}, WARNING/STATE retained, severity=2, unknown codes at both severities, success/finish ordering |
 | classification | at least one case per §11.3 table row (incl. 2113 vs 2132 discrimination, 255, exit-0-without-success, exit-0-with-error, nonzero-with-success, output-inconsistent, OOM, signals, timeout, log-limit, unknown output); **an all-zero-stats empty Init is never verified** |
 | lifecycle | timeout TERM→KILL, same ladder for log ceiling, no case runs after cancellation and summary=incomplete/cancelled, results written only after close, lock conflict, lock release on error, failed runs overwrite the latest summary, running marker after hard-kill blocks reuse of old success, **snapshot digest ≠ inputDigest → no spawn**, mid-run artifact change → incomplete |
-| evidence | staleness on model/design/cfg/runner/toolchain changes, missing declared cfg → invalid, mid-run input change, logs missing/modified, summary schema invalid, cross-project path refusal, **fresh/verification decoupling** (a fresh counterexample evidence exits 0 with verification=counterexample), live lock → run-in-progress |
-| aggregation | all-configured-case failures affect status regardless of required flag; expansion failure also appears in warnings; deterministic order; no not-run case dropped; precedence among multiple failures; **run-global cancellation/input/artifact preconditions beat case aggregation; expansion timeout/log-limit/signal yield incomplete and prevent verified** |
+| evidence | staleness on model/design/cfg/runner/toolchain changes, missing declared cfg → invalid, mid-run input change, logs missing/modified, summary schema invalid, cross-project path refusal, **fresh/verification decoupling** (a fresh counterexample evidence exits 0 with verification=counterexample), present/indeterminate lock owner → run-in-progress |
+| aggregation | all-configured-case failures affect status regardless of coverage label; expansion failure also appears in warnings; deterministic order; no not-run case dropped; precedence among multiple failures; **run-global cancellation/input/artifact preconditions beat case aggregation; expansion timeout/log-limit/signal yield incomplete and prevent verified** |
 | publish | the whole skill tree (SKILL.md, references, scripts, toolchain.json, examples) ships in the package (npm-pack assertions), agent trailers unchanged, every §2.2 description surface consistent, bilingual doc hashes re-recorded, every shipped file is clean under `git check-ignore` |
 
 The unit matrix additionally includes every §20.8 scenario for partial cfg
@@ -1394,6 +1487,16 @@ scenario below; keyword searches over the skill do not count as acceptance:
   re-check and new formal review.
 - A remote lane lacks a complete log: record blocked review evidence;
   supply a complete same-run package before counting its approval.
+- For every remote lane, deliver a real package through its actual authorized
+  channel, with a log larger than that channel's inline-text limit, plus a
+  representative multi-case package. Record producer/receiver enumeration,
+  hashes, runId/inputDigest, retrieval and read results. Exercise channel
+  capacity/access failure: no formal dispatch or summary-only approval.
+- Review a critical abstraction with an adverse concrete trace, including
+  cancellation followed by a late callback that produces an external side
+  effect. Explain whether the stated property observes that effect;
+  omitted relevant behavior must cause model revision or an approved
+  exclusion, even when the coverage matrix has no empty cells.
 - Asked to "just delete the failing property and start coding": the failing
   evidence is preserved and the decision returns to design; success is never
   fabricated.
@@ -1633,13 +1736,13 @@ uses §11.3's table. These are three distinct priority domains.
 Spawn failure (one case of a check):
 
 ```json
-{"id":"small","required":true,"status":"error","reason":"spawn-failed","exitCode":null,"signal":null,"timedOut":false,"elapsedMs":3,"argv":["java","..."],"statistics":null,"eventCodes":[]}
+{"id":"small","coverage":"core","status":"error","reason":"spawn-failed","exitCode":null,"signal":null,"timedOut":false,"elapsedMs":3,"argv":["java","..."],"statistics":null,"eventCodes":[]}
 ```
 
 User cancellation (check, exit 3):
 
 ```json
-{"schemaVersion":1,"command":"check","status":"incomplete","reason":"cancelled","summary":{"status":"incomplete","cases":[{"id":"small","required":true,"status":"incomplete","reason":"cancelled"},{"id":"large","required":false,"status":"not-run","reason":"not-run"}]}}
+{"schemaVersion":1,"command":"check","status":"incomplete","reason":"cancelled","summary":{"status":"incomplete","cases":[{"id":"small","coverage":"core","status":"incomplete","reason":"cancelled"},{"id":"large","coverage":"expansion","status":"not-run","reason":"not-run"}]}}
 ```
 
 Stale evidence (check-evidence, exit 2):
@@ -1674,7 +1777,7 @@ Statistics = { generated: DecimalString, distinct: DecimalString,
 InputFile = { path: string, sha256: Sha256 }
 RunnerPackage = { name: string, version: string }
 CaseResult = {
-  id: string, required: boolean, status: CaseStatus, reason: string,
+  id: string, coverage: core|expansion, status: CaseStatus, reason: string,
   exitCode: integer|null, signal: string|null, timedOut: boolean|null,
   elapsedMs: nonnegative-integer|null, argv: string[]|null,
   statistics: Statistics|null, eventCodes: integer[],
@@ -1721,22 +1824,23 @@ AuditOutput = {
   not precede startedAt. elapsedMs uses a monotonic clock.
 - Evidence has top-level status/reason, with NO nested summary member.
   CheckOutput.summary is the whole Evidence object, with status/reason
-  equal to the outer fields. It is null only for blocked/pre-run failures.
-  No fabricated Evidence is written for preflight blockage. The sole
-  post-start exception to non-null summary is the unrecoverable I/O error
-  defined below; it cannot be audited as completed Evidence.
+  equal to the outer fields. It is null for blocked/pre-run failures and
+  pre-marker cancellation (§10.1). No fabricated Evidence is written for
+  preflight blockage. After the running marker, it is null only when I/O
+  prevents consistent publication (including a latched cancellation with
+  that I/O failure), as defined below; such output is not completed Evidence.
 - Ready preflight: reason=ready-for-check, blockers=[]; willGenerate lists
   absent declared cfg paths in manifest order. Blocked preflight/check:
   reason is the first blocker code, blockers is nonempty, and
   willGenerate=[] (preflight) or summary=null (check). All check output
-  objects include blockers, empty for an executed run.
+  objects include blockers, empty for an executed run or cancellation.
 - BlockedReason governs the blocked-output branch. CaseResult status/reason
   pairs are independently restricted to §20.5, including not-run/not-run;
   shared spellings such as io and config-invalid are intentional.
   Verified has reason=verified. Evidence reasons use the selected case's
   bare reason or the run-global reason (§11.4).
 - cases contains exactly one result per manifest case in manifest order;
-  IDs and required flags match checks.json, with no extras or duplicates.
+  IDs and coverage labels match checks.json, with no extras or duplicates.
   Not-run has reason=not-run, eventCodes=[], and every runtime field null.
   A failed spawn has status=error/reason=spawn-failed, elapsedMs measured
   for the attempt, timedOut=false, argv equal to the attempted command
@@ -1767,17 +1871,19 @@ AuditOutput = {
   identity and runnerDigest; either mismatch is stale/runner.
 - Audit inputFiles against fresh enumeration, not only paths listed by
   evidence. Validate the generated cfg bytes against checks.json, not just
-  their hashes. Validate cases/aggregation and hashes, but do not claim that
-  hashes authenticate reviews or an adversarially forged evidence file.
+  their hashes. Replay and validate cases/aggregation per §12.1 after
+  verifying log hashes; hashes do not authenticate reviews or forged evidence.
 - Before parsing evidence, reject symlinked/escaping run paths as
-  runs-path-unsafe. Audit rejection precedence then is: live lock →
+  runs-path-unsafe. Audit rejection precedence then is: present/indeterminate
+  lock owner (including an unprobeable lock under §13) →
   run-in-progress; missing current-run → incomplete-run; running or invalid/
   mismatched marker → incomplete-run; missing evidence → evidence-missing;
   malformed evidence/schema/manifest → schema-invalid; stale/input;
-  stale/runner; stale/toolchain; log-missing; log-mismatch; valid.
+  stale/runner; stale/toolchain; log-missing; log-mismatch;
+  replay/record mismatch → schema-invalid; valid.
   For marker/evidence identity comparison parse evidence before comparing;
   malformed evidence is schema-invalid, not an arbitrary identity mismatch.
-  A dead leftover lock does not make finished evidence invalid; check still
+  A well-formed leftover lock with an absent PID does not invalidate evidence; check still
   refuses that lock until a human resolves it (§13).
 - Preflight blocker order is: usage-invalid, model-path-unsafe,
   unsupported-platform, config-invalid, input-limit, config-drift,
@@ -1818,14 +1924,35 @@ AuditOutput = {
   map to usage-invalid. Invalid --project/--model maps to model-path-unsafe.
   Unexpected filesystem errors before the running marker produce
   blocked/io; lock creation failure other than EEXIST produces lock-io.
-- An I/O failure after publishing the running marker aborts execution,
-  terminates any child, and attempts error/io evidence only if all required
-  artifacts can be persisted consistently. Otherwise emit CheckOutput
-  status=error/reason=io/summary=null/blockers=[] and exit 2; leave the
-  running marker and never report finished or verified. Such a stdout error
-  is not Evidence. A failed final marker write likewise returns error/io
-  and cannot make evidence reusable. Always release the owned lock in
-  finally; report cleanup failures on stderr and do not remove another lock.
+- An I/O failure after the running marker stops new JVM starts and
+  terminates/awaits any current child. Publishing recovery Evidence requires:
+  every attempted spawn has truthful process metadata; all captured bytes
+  up to child close are successfully written to both log files (except the
+  intentional log-limit prefix); both files can be read/hashed; every case
+  has a schema-valid record; and Evidence plus its finished marker can be
+  published. An unstarted case is not-run. Never relabel a started child
+  not-run or invent empty logs for bytes lost to an I/O failure.
+  These requirements also apply to snapshot/preparation failures; use
+  all not-run records if no spawn was attempted. Open both logs before
+  attempting spawn. A failed log open means that case is not-run, not
+  spawn-failed; unreferenced partial files may remain as diagnostics.
+
+  | Failure boundary | Publication and command result |
+  |---|---|
+  | Log creation fails before a spawn attempt; previous cases' records/logs are complete | All unattempted cases not-run; publish global error/io Evidence if all recovery prerequisites hold; exit 2. |
+  | Other run-directory/snapshot I/O fails, with no lost child output and recoverable storage | Publish global error/io Evidence, preserving completed records; exit 2. |
+  | A child log write/flush/close fails, output is lost, process metadata is unavailable, or log read/hash fails | No completed Evidence; summary=null, leave the running marker; error/io, exit 2. |
+  | Evidence staging/publication fails | At most one recovery publication attempt if prerequisites can be re-established; otherwise summary=null, running marker, error/io, exit 2. Never retry indefinitely. |
+  | Final finished-marker publication fails | No committed result; summary=null, running marker, error/io, exit 2. Do not publish a second success or treat a newly written summary as reusable. |
+  | Owned-lock cleanup fails after successful final publication | Committed Evidence/status/exit code remain; stderr reports cleanup failure (§10.1). |
+
+  Where consistent Evidence is possible, §11.4 global precedence still
+  applies: cancellation/input-change/artifact-change override error/io.
+  If persistence is impossible, a latched cancellation returns incomplete/
+  cancelled, summary=null, exit 3; otherwise error/io, summary=null, exit 2.
+  blockers=[] in both branches. These command-only results are not Evidence.
+  Always attempt owned-lock cleanup in finally, report failure on stderr,
+  and never remove another owner's lock.
 - check-evidence usage errors return invalid/usage-invalid; unexpected read
   errors return invalid/io; both exit 2. Help never invokes Java or mutates files.
 
@@ -1836,6 +1963,15 @@ evidence service. The main dialog prepares and delivers the review package
 to each lane through the project's existing authorized artifact channel.
 A local reviewer may use accessible paths. A remote reviewer must receive
 accessible full file contents; producer-only paths are not delivery.
+Acceptance must demonstrate byte-preserving delivery through the actual
+authorized channel used by each remote lane, not a hypothetical attachment
+API. Sixteen cases can approach 800 MiB of persisted logs (16 × 50 MiB);
+the channel may deliver multiple files or chunks, but they must reconstruct
+the exact full files and each lane must read and hash them. Channel
+availability, retention until review completion, and receiver access are
+checked before formal dispatch. If no suitable existing authorized channel
+exists, remain blocked; v1 does not add an uploader, raise channel limits
+or authorize a new external service implicitly.
 
 The minimum package for each lane contains:
 
@@ -1856,7 +1992,9 @@ The minimum package for each lane contains:
 The main dialog records each lane's package identity and accessible artifact
 locations in implementation.md or the review record, outside digested inputs.
 Each lane confirms the runId/inputDigest, full input enumeration, cfg bytes,
-log presence/hashes and the verified all-case results. It records tool
+log presence/hashes, §12.1 replay-derived fields and the verified all-case
+results. Each lane distinguishes replay-derived fields from trusted wrapper
+observations, records tool
 identities and reviews the model's sufficiency. This is evidence inspection,
 not an assertion that the recipient ran local check-evidence.
 
@@ -1879,7 +2017,9 @@ approval; use an existing authorized channel capable of delivering complete
 files or remain blocked. No automatic upload, new artifact service,
 retention policy or fourth review lane is added.
 
-In addition to §16, contract tests must cover:
+In addition to §16, automated contract tests and recorded manual workflow
+scenarios must cover the following. Remote delivery and model-sufficiency
+items use §16.4 records; they are not claimed as runner enforcement:
 
 1. checks.json change → cfg drift → explicit removal → generated diff →
    stale approvals; a re-run alone must not overwrite a reviewed cfg.
@@ -1888,11 +2028,11 @@ In addition to §16, contract tests must cover:
    plural forms, are rejected as model-value identifiers.
 3. Spawn failure → error/spawn-failed/exit 2; signal → incomplete/
    signal-exit/exit 3 for any configured case. Expansion timeout/log-limit/
-   signal → incomplete with an additional optional-result warning; core
+   signal → incomplete with an additional expansion-result warning; core
    success never masks it. Expansion counterexample/error likewise changes
    aggregation and blocks formal review.
 4. Simultaneous global causes follow cancelled > input-changed >
-   artifact-changed, regardless of optional/required case. Any new input
+   artifact-changed, regardless of core/expansion coverage. Any new input
    file, deletion or read failure changes the digest result.
 5. Snapshot-copy failure cannot reuse an older finished success. Inject
    failures at each atomic-write/rename boundary; no false finished marker.
@@ -1904,7 +2044,7 @@ In addition to §16, contract tests must cover:
 8. Demonstrate each §4.3 activation path; demonstrate a missing critical
    coverage row blocks review-ready; remote missing logs cannot be audited
    as valid local evidence or counted as a lane approval.
-9. Required=true case verified plus required=false counterexample/error/
+9. Core case verified plus expansion counterexample/error/
    timeout/log-limit/signal/not-run: aggregate is non-verified, auditing
    retains that status, and the main dialog never dispatches formal review.
    A pure TLC warning with every case verified remains eligible subject to
@@ -1930,6 +2070,31 @@ In addition to §16, contract tests must cover:
     stdout, wrong-run logs or an inaccessible artifact reports blocked and
     cannot approve. Complete delivery permits review; a re-run switches all
     lanes to one complete new run package at the same inputDigest.
+
+14. Replay both logs with deliberately inconsistent but well-formed summary
+    fields: change eventCodes, statistics, case verdict, warnings or aggregate
+    while retaining the actual logs and their hashes. Reject schema-invalid.
+    Untampered verified, counterexample, malformed-output and wrapper-interrupted
+    runs round-trip correctly; do not confuse valid evidence with verification.
+15. Inject cancellation before the running marker, during snapshot, during
+    a child, between cases, after all cases verify, during async staging,
+    immediately before final synchronous publication and after it. Assert
+    exact summary/null shape, marker state, cases and exit codes (§10.1).
+    Cancel plus unrecoverable I/O yields incomplete/cancelled with null
+    summary; cancellation after commit leaves the original result intact.
+16. Inject log-open, write, flush, close, metadata, hash, evidence-publication
+    and marker-publication failures at every §20.7 boundary. A started child
+    is never not-run; lost bytes never acquire invented logs; no partial
+    publication permits old or new evidence to impersonate a finished run.
+17. Probe present PIDs (including a reused unrelated PID), absent PIDs,
+    EPERM/other probe failures and malformed/unreadable locks. Assert the
+    conservative check/audit split and no automatic lock deletion (§13).
+18. Reject legacy required fields and invalid/missing coverage labels in
+    checks.json and Evidence. core and expansion retain identical pass
+    obligations; expansion warnings use expansion-<status>:<id>:<reason>.
+19. Perform the §16.4 actual-channel delivery and abstraction-challenge
+    scenarios. Large/full logs remain required; receiver-side hash/replay
+    records, not producer path listings, demonstrate successful delivery.
 
 The executor may choose internal pure-function names and implementation
 details that preserve these externally observable contracts. It must return
@@ -1997,6 +2162,16 @@ condition or product boundary to fit its implementation.
   deterministic internal blocker sorting without changing public shapes.
   These clauses supersede the earlier optional-case aggregation policy;
   historical r1–r3 entries are not approval of these revisions.
+- **User-approved determinism revision (2026-10-24)**: user accepted all
+  recommendations: read-only log replay during auditing; cancellation until
+  final finished-marker publication with a synchronous observation boundary;
+  coverage=core|expansion replacing the misleading required boolean; full
+  remote logs with actual-channel delivery acceptance. Clarify I/O recovery
+  and conservative lock probing, and challenge critical abstractions with
+  concrete adverse traces. These contracts supersede earlier field/warning
+  spellings and lifecycle wording; historical review entries retain their
+  original terminology. No feature implementation or TLC execution is claimed,
+  and final formal design sign-off remains pending.
 - Sign-off: user authorized these design choices, document editing and
   committing to this PR. Final formal design sign-off and feature
   implementation remain pending.
