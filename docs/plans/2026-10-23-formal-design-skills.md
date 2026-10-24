@@ -11,6 +11,9 @@ the review package is incomplete (§20.8).
 The subsequent user-approved determinism revision specifies log-replay auditing,
 the cancellation publication boundary, core/expansion coverage labels, I/O
 recovery, conservative lock probing and real remote-delivery acceptance.
+The workflow-clarity revision additionally specifies adoption states,
+re-screening, flat model inputs, historical approval reuse, remote-channel
+feasibility before implementation, and a worked workflow example.
 Feature implementation and final design sign-off remain pending.
 
 Date: 2026-10-23 (Asia/Singapore). This document is a design review draft; it
@@ -265,7 +268,7 @@ packages/plugin/dsh-cc-agents/skills/formal-design/
   scripts/tlc-output.lib.mjs
   scripts/process.lib.mjs
   scripts/toolchain.json
-  examples/task-lifecycle/…      # see §14
+  examples/task-lifecycle/…      # see §14, including workflow.md
 ```
 
 ### 3.2 Locating and invoking the runner
@@ -324,8 +327,10 @@ decision with an explicit scope; never silently override.
 
 ### 4.2 Auto-trigger
 
-The main dialog runs the screening once after forming an initial design and
-before dispatching the three-lane formal design review. First check: does
+The main dialog runs the initial screening after forming an initial design and
+before dispatching the three-lane formal design review. Re-screening after
+scope or semantics changes follows §4.4; not-needed is not permanent.
+First check: does
 the work add or change the behavior of some protocol/state machine? If not,
 the mere presence of concurrency nearby does not trigger.
 
@@ -357,8 +362,10 @@ not depend on the answers may proceed.
 
 If the trigger applies and the installed plugin predates the current
 session (possible right after an update, before restart), the main dialog
-notes the materialized runner version in the design document; evidence from
-different runner versions is never mixed into one review package.
+records the actual materialized runner version in implementation.md or the
+review record, outside digested inputs. A current package contains one run
+and one tool identity; historical approval references follow §12 and must
+not be mixed with current evidence.
 
 ### 4.3 Activation prerequisites and observable behavior
 
@@ -375,6 +382,49 @@ ordinary semantic skill selection can find it. Acceptance separately
 demonstrates: explicit invocation; orchestration-selected invocation; and
 project-rule-driven screening including a not-needed task. No catalog scan,
 rules-file auto-edit or new startup dependency is introduced.
+
+### 4.4 Adoption states and re-screening
+
+The main dialog distinguishes two workflow observations, not new CLI fields:
+
+| Observation | Behavior within the adopted workflow |
+|---|---|
+| Skill available, project screening rules not confirmed | Explicit requests load the skill; semantic selection or a loaded orchestration skill may select it. Installation alone does not promise screening of every design. |
+| Effective project rules include the screening snippet | Screen every initial design, including not-needed work, and re-screen at the change boundaries below. This is a prompt-level obligation, not runtime enforcement. |
+
+On the first formal-design invocation in a project/session, the main dialog
+checks the effective rules supplied or loadable in that session. Record the
+effective rule source and whether project-wide screening is confirmed, or
+why confirmation is unavailable, in implementation.md or the existing
+workflow record before a model package exists. If unconfirmed, tell the
+user that this invocation can proceed but project-wide screening needs
+manual adoption of references/agents-snippet.md. Do not automatically edit
+AGENTS.md/CLAUDE.md or claim installation enabled universal screening.
+No startup hook or Java dependency is added.
+
+Screening adoption and review-rule availability are separate checks.
+If the existing review protocol cannot be loaded, modeling can proceed;
+implementation remains blocked under §2.3/§6. For this repository, record
+the forwarding-loop dependency without treating this PR as its repair or
+inventing a roster. Recheck effective rules after the user changes them;
+a previous session's observation does not establish current adoption.
+
+Re-screen when a requirement, design revision, reviewer request or reported
+implementation deviation adds or changes protocol/state machine behavior,
+including any FD-T1…T4 behavior or behavior covered by an existing model.
+Before formal dispatch and executor handoff, confirm the screening still
+describes current scope. An executor discovering such a deviation reports
+Blockers and pauses affected implementation; the main dialog owns the
+re-screening and semantic decisions.
+
+A previous not-needed decision may become enabled: record the new rationale
+and trigger IDs, then complete modeling/checking/coverage and formal review
+before implementation proceeds. Prior ordinary-design approvals do not
+satisfy the newly enabled gate. Enabled-task input changes follow §12.
+Retain a previous explicit waiver only if its recorded scope covers the
+changed work; otherwise obtain a new scoped user decision. Keep superseded
+decision history outside digested inputs; design.md carries the current
+screening decision when a model package exists.
 
 ## 5. Workflow, states, and pass conditions
 
@@ -639,6 +689,27 @@ TLAPS, Apalache, Java module overrides, custom classpaths, external module
 directories, or arbitrary user commands. TLC's bundled standard modules are
 usable; non-standard .tla modules must live in the model root with a file
 name equal to the module name.
+
+### 8.1 Exact input directory and enumeration rules
+
+The model root is specs/tla/<model-id> itself. All non-standard TLA+ modules,
+including the checks.json entry module, are direct children of that root.
+Enumerate direct-child regular .tla files only. Any nested .tla, including
+under cases/, is rejected as config-invalid by preflight/check and
+schema-invalid by check-evidence; never silently ignore it or treat it as
+a recursive dependency. Symlink violations retain §13 path-error precedence.
+
+The digested set is exactly root design.md, root checks.json, all
+direct-child .tla files and cases/<id>.cfg for each declared case. The §9
+ID grammar permits no nested cfg path. Old undeclared cfgs are neither
+executed nor digested; removal remains an explicit edit (§9.2).
+implementation.md, evidence.json, current-run.json and non-input support
+files are not copied into the snapshot or added to inputDigest. The §13
+symlink, unsafe file-type and Java-override prohibitions still apply;
+exclusion from the digest does not authorize a prohibited file.
+Support files cannot supply model dependencies or substitute for requirements
+restated in design.md. Use identical enumeration/validation in preflight,
+check, snapshot comparison and check-evidence, independent of traversal order.
 
 ## 9. checks.json: the single configuration source
 
@@ -1131,7 +1202,7 @@ starting a run leaves existing evidence untouched**: an old finished
 evidence keeps its validity (validity is determined only by content and
 toolchain version, below).
 
-Input file set: design.md, checks.json, all .tla under the model root, and
+Input file set: design.md, checks.json, all direct-child .tla files (§8.1), and
 every .cfg declared for this run under cases/ (**a declared cfg that is
 missing is invalid/schema-invalid to check-evidence** — it is a checked
 input and should exist after §10 step 3). Dependencies outside the directory
@@ -1219,6 +1290,22 @@ implementation.md. Any configured-case failure blocks reuse and formal
 review admission per §5.2/§9.
 Without that successful re-check, development cannot continue on the old
 evidence. This exception never permits reuse across changed model inputs.
+
+The current evidence package contains a single new runId and its actual
+tool identities, never old logs, case results, markers or evidence mixed
+with the new run. Historical approvals remain separate records retaining
+the inputDigest and tool identities originally reviewed. The reuse record
+links them to the fresh current run and the §5.2 checks; it never rewrites
+their identities or implies that lanes reviewed the upgraded tool.
+
+Example: approvals of digest D under runner R1/run A remain historical.
+After upgrade to R2, run B must have the same D, all cases verified and a
+successful local audit. implementation.md links A/R1 and the original
+approvals to B/R2 and records reuse. Executor receives B's complete evidence
+and those references. If D changes to D2, new formal review is required.
+This is the explicit exception to redispatch for a changed run after
+completed approval. During unfinished formal review, changing the reviewed
+run still redispatches one complete new package to all lanes (§20.8).
 
 ### 12.1 Read-only log replay during evidence auditing
 
@@ -1342,6 +1429,50 @@ model action, how atomicity is implemented, the test or manual-review
 evidence for each key property, the unmodeled scope, and deviations. TLC
 passing and code tests passing are reported separately.
 
+### 14.1 Required worked workflow example
+
+Ship examples/task-lifecycle/workflow.md in addition to the runnable model
+package. It is a clearly labeled illustrative walkthrough, not generated
+Evidence or a claim that TLC or real review was executed at design time.
+The shipped example uses actual outputs only after §16 acceptance produces
+them; until then, symbolic D/A/B/R1/R2 labels below are explanatory and must
+never be serialized as valid digests, IDs or approvals. Real acceptance
+records remain separate and identify their actual artifacts.
+
+The walkthrough must connect all of the following stages:
+
+| Stage | Concrete decision and required record |
+|---|---|
+| Request and adoption | User asks to support cancellation and retry while callbacks may arrive late. Record effective screening/review rules or their blockers (§4.4), and FD-T1/FD-T2 enabled. |
+| Business semantics | Cancellation wins only if accepted before terminal completion; no rollback of an external side effect is promised. Only a callback for the active running attempt may complete the task. |
+| Requirements and model | S-1 maps cancellation stability to CancelledStable; S-2 maps stale-result rejection to StaleCannotComplete. Map both to core case small with MaxAttempts=2, and TypeOK to the same case. State why two attempts expose an old/new-attempt race, without claiming arbitrary-scale proof. |
+| Atomicity and assumptions | Plan a guarded status/attempt update, represented as one atomic action. Name planned applyCompletion(taskId, attempt) and cancelTask(taskId) symbols and the intended transaction/CAS mechanism. Keep the example in-memory unless persistence is explicitly modeled. |
+| Rejected abstraction | Reject a draft that treats cancellation as rolling back a side effect already sent by a worker. Trace: worker starts effect → cancellation accepted → effect completes. Explain that logical terminal-state properties cannot establish absence of that effect. |
+| Scope decision | Restate the user's logical-state contract in design.md; show that effect rollback is outside that contract. If actual requirements demand no post-cancel effects, this is a requirements/design blocker: model an enforceable effect protocol or obtain the project's required scoped exclusion approval, never drop the requirement silently. |
+| Counterexample | Use the separate buggy fixture: attempt 1 times out → retry starts attempt 2 → completion for attempt 1 is incorrectly accepted. Preserve its failing evidence separately; explain the missing attempt guard and why the correct model rejects it. Never add the buggy fixture as a must-pass case in the correct package. |
+| Checking and coverage | Generate/inspect cfg, run check, audit the same run, and inspect coverage. A verified tool result with incomplete atomicity/abstraction justification remains blocked. Keep actual run IDs and outcomes in implementation.md. |
+| Formal review | Deliver one complete package at digest D/run A to all required lanes, each with full logs and receiver checks. Record per-lane dispositions and consolidated unresolved findings. Illustrative approvals are not reusable real approvals. |
+| Revision | If a lane requires changed semantics, update design/model, obtain new digest D2, re-check and re-review all required lanes. If a lane only needs a missing log, restore that same-run package or redispatch one complete replacement run; do not merge runs. |
+| Handoff | After actual required approvals, hand off approved D and fresh evidence, planned guarded-update symbols, code-change plan and regression assertions. The executor reports a blocker if the required atomic update cannot be implemented. |
+| Acceptance | implementation.md maps actual symbols and tests to the same action/property IDs and approved D. Tests cover both cancellation/completion orders and stale callback after retry. Pure observed locations/results do not edit design.md. Semantic deviations require §12 redesign/check/review. |
+| Tool upgrade | For unchanged D and fresh verified/audited B under R2, link historical A/R1 approvals via the §12 reuse record. Keep B's evidence complete and unmixed. Changed D2 never reuses D approvals. |
+
+The normative coverage table in design.md still uses every §5.1 column;
+the walkthrough table does not replace it. Populate the example's planned
+matrix with explicit requirement/property/action IDs, case bounds,
+fault traces, assumptions, atomicity, assertions and exclusions. Include
+both the timeout/retry/late-result trace and cancel/late-callback trace;
+state that neither establishes external effect rollback or persistence
+safety. Do not invent real code locations before implementation.
+
+Review records in the walkthrough show the required structure: lane
+identity from effective rules, reviewed inputDigest/runId, tool identities,
+accessible artifact locations and receiver hash/replay results, disposition,
+findings and resolution. Reuse records add old/new tool/run identities,
+unchanged inputDigest, original approval references and the fresh audit.
+Use actual effective lane identities and real hashes in acceptance records,
+never the walkthrough's symbolic labels.
+
 ## 15. Normative content of AGENTS.md and the skills
 
 agents-snippet.md provides a complete copyable version of the following
@@ -1364,6 +1495,8 @@ rules, without assuming lane identities:
    re-check and re-review.
 6. Inability to check never auto-waives; an explicit user waiver displays
    the unverified scope.
+7. Distinguish skill availability from effective project-wide screening;
+   re-screen changed scope and stop affected implementation per §4.4.
 
 Norms for the packaged skill:
 
@@ -1404,6 +1537,12 @@ waits to fake timeouts.
 | evidence | staleness on model/design/cfg/runner/toolchain changes, missing declared cfg → invalid, mid-run input change, logs missing/modified, summary schema invalid, cross-project path refusal, **fresh/verification decoupling** (a fresh counterexample evidence exits 0 with verification=counterexample), present/indeterminate lock owner → run-in-progress |
 | aggregation | all-configured-case failures affect status regardless of coverage label; expansion failure also appears in warnings; deterministic order; no not-run case dropped; precedence among multiple failures; **run-global cancellation/input/artifact preconditions beat case aggregation; expansion timeout/log-limit/signal yield incomplete and prevent verified** |
 | publish | the whole skill tree (SKILL.md, references, scripts, toolchain.json, examples) ships in the package (npm-pack assertions), agent trailers unchanged, every §2.2 description surface consistent, bilingual doc hashes re-recorded, every shipped file is clean under `git check-ignore` |
+
+The path tests additionally assert §8.1: a direct-child helper participates
+in the digest and snapshot; a nested .tla under an arbitrary subdirectory or
+cases/ is rejected with the specified producer/auditor reasons; undeclared
+cfgs are neither run nor digested. The same fresh enumeration is used by
+producer and auditor, including newly added files.
 
 The unit matrix additionally includes every §20.8 scenario for partial cfg
 generation, stable blocker ordering and all-case aggregation. Workflow-only
@@ -1510,6 +1649,27 @@ scenario below; keyword searches over the skill do not count as acceptance:
   independently, then report the missing rules before development — never
   invent reviewers.
 
+Also record these workflow-clarity acceptance scenarios:
+
+- Skill installation alone, explicit invocation without adopted screening,
+  orchestration selection, and effective project rules produce exactly the
+  distinct §4.4 notices/records. Missing review rules block implementation.
+- A not-needed design later adds retries: re-screen, enable, and complete
+  the full gate; old ordinary-design approval is insufficient. An executor
+  discovering this deviation pauses and reports it.
+- A scope change outside an earlier waiver requires a new scoped decision;
+  no automatic extension or silent loss of the prior record.
+- Upgrade R1/run A to R2/run B with identical inputs: B is the sole current
+  evidence, A's approvals retain their original identities, reuse is recorded,
+  and no new formal dispatch occurs after approval. A changed input or an
+  unfinished review instead follows the re-review/redispatch rules.
+- The remote-channel feasibility record precedes runner implementation;
+  later actual-package delivery records receiver hashes and replay.
+  Unsupported payload sizes/access remain blocked, without adding a service.
+- Walk through §14.1 end to end using real check/review artifacts for
+  acceptance; demonstrate the rejected side-effect abstraction and a
+  semantics-changing revision. No symbolic walkthrough approval counts.
+
 v1 adds no new automated multi-agent evaluation platform; existing dsh-cc
 sessions perform the manual acceptance with records kept, while automated
 tests own the executable scripts. Manual scenario demonstration must not be
@@ -1517,8 +1677,16 @@ claimed as a runtime enforcement guarantee.
 
 ## 17. Implementation order and definition of done
 
-Deliver in this dependency order; at every step pin the corresponding
-failing tests first, then implement:
+First complete the §20.8 remote-channel feasibility record for every remote
+lane and confirm effective review rules are available. Before a runner exists,
+representative files and an existing receiver-side hashing/streaming mechanism
+establish transport feasibility only, not runner replay. Missing capability
+is an end-to-end integration blocker. Independent pure runner work may proceed,
+but the complete workflow cannot be claimed deliverable or done. Actual
+runner-package delivery and replay remain later acceptance (§16.4).
+
+Deliver in this dependency order; at every implementation step pin the
+corresponding failing tests first, then implement:
 
 1. manifest/cfg/fingerprint: implement §9, §12's input enumeration/digest,
    §13's path constraints as pure functions with tests; pin every boundary
@@ -1969,7 +2137,28 @@ API. Sixteen cases can approach 800 MiB of persisted logs (16 × 50 MiB);
 the channel may deliver multiple files or chunks, but they must reconstruct
 the exact full files and each lane must read and hash them. Channel
 availability, retention until review completion, and receiver access are
-checked before formal dispatch. If no suitable existing authorized channel
+checked before formal dispatch.
+
+Before runner implementation, record a feasibility probe for each remote lane:
+the effective review protocol; existing authorized channel identity;
+file/message/aggregate limits; chunking and exact reconstruction procedure;
+receiver retrieval and streaming hash/replay capability; access lifetime
+through review; and observed success or failure. Test a file above the inline
+limit and a representative multi-case payload. Record the maximum package
+size actually supported, without inferring support for the 800 MiB worst
+case. Larger actual packages remain blocked unless the existing route can
+deliver them completely. Receivers may stream files through tools; inserting
+every byte into model context is not required. Uninspected logs cannot be
+claimed reviewed. A review lane's existence does not establish a usable
+artifact channel.
+
+Keep this record in implementation.md or the implementation preparation
+record, outside digested inputs. Missing capability is an environment/
+integration blocker, not authorization to build an uploader. Resolve it
+through an already authorized capable route, or request a scoped user
+decision to change the delivery design. Do not weaken the full-log gate.
+Actual runner-produced delivery and receiver replay remain §16.4 acceptance.
+If no suitable existing authorized channel
 exists, remain blocked; v1 does not add an uploader, raise channel limits
 or authorize a new external service implicitly.
 
@@ -2005,7 +2194,10 @@ installed runner/toolchain. Reviewers remain read-only (§6.2); they request
 any mutating independent re-run from the main dialog. Such a re-run must
 have the same inputDigest, record its actual tool identity, and provide a
 complete package from the new run. Different runIds must not be mixed;
-redispatch the complete new package to all lanes if the reviewed run changes.
+redispatch the complete new package to all lanes if the reviewed run changes
+during formal review. After completed approval, §12's tool-only reuse
+exception instead permits historical approval references with one fresh
+current package, never mixed evidence.
 
 Missing, truncated, inaccessible or mismatched inputs/logs cause that lane
 to report "blocked: incomplete review evidence", identifying missing paths
@@ -2102,6 +2294,17 @@ a design blocker rather than change a status, CLI field, acceptance
 condition or product boundary to fit its implementation.
 
 ## Review ledger
+
+- **Workflow-clarity revision (2026-10-24)**: user requested revision and
+  submission following the design analysis. Clarify adoption versus
+  discoverability, re-screening, flat input enumeration, historical approval
+  references versus current evidence, early remote-channel feasibility and
+  worked workflow acceptance. Preserve existing plugin-only, full-log,
+  manual-adoption and tool-only reuse policies. No uploader, runtime hook,
+  roster change or feature implementation is introduced. Real channel
+  capabilities and effective review rules remain implementation-preparation
+  facts to establish, not capabilities claimed by this document.
+  Final design sign-off remains pending.
 
 - **r1 (full review, three lanes blind, one message)**: critic
   GO-WITH-CHANGES (12 findings), Grok lane GO-WITH-CHANGES (17 findings),
