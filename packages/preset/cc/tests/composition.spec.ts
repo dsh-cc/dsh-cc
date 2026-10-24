@@ -230,6 +230,12 @@ describe('agent.cordis.yml composition', () => {
   it('isolates exactly the nine cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')
+    // Tripwire: the `tool-search` row must NOT live in any preset body. A
+    // preset-row provide of a non-isolated name trips the preset
+    // leakedServices gate ("Preset services require isolate realms:
+    // toolSearch", the smoke:profile-boot failure that followed the isolate
+    // removal). The row lives in the cc-tui patch layer instead.
+    expect(yamlText).not.toContain('- id: tool-search')
     // `toolSearch` and `mcpConnections` are deliberately absent: both are
     // runtime-scoped singletons published from the root fiber by the cc-shell
     // glue (mcpSingleton.ts), shared by every preset tree in the runtime.

@@ -22,7 +22,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@dsh-cc/tui": "workspace:^"
+    "@dsh-cc/tui": "workspace:^",
+    "@dsh-cc/tool-search": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",

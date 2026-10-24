@@ -247,6 +247,31 @@ The test composes both `preset-cc` and `preset-vwa` against the shared body (via
 - Existing single-preset tests (`defer-startup-connect.spec.ts`, `mcp-seam.integration.spec.ts`) continue to pass unchanged.
 - Manual dogfood: boot the `tui` profile in **vwa mode** in a worktree, run `/mcp`, confirm the registry lists the three servers and `mcp__serena__*` tools are present.
 
+## Round-3 post-implementation correction (leakedServices gate)
+
+The first implementation of this design (commits through this PR's second
+slice) removed `toolSearch: true` from the cc-services isolate map and left
+the `tool-search` row inside the preset group, on the theory that "removing
+the isolate key makes the row's publication land on the root realm." That
+theory is **wrong**: the preset leakedServices gate rejects any row mounted
+inside the preset standing tree whose service name resolves to the default
+(root) isolate key — `Preset services require isolate realms: toolSearch`,
+which regressed `smoke:profile-boot` in CI (no first frame; unit and YAML
+gates stayed green because they bypass the registry's mountPreset gate).
+
+Final shape (the row, not just the key):
+
+- The `- id: tool-search` row **leaves the preset entirely** and mounts
+  once per runtime in `packages/bundle/cc-tui/cordis.patch.yml`, outside
+  every preset standing mount (the same class of fix as workflow-journal's
+  register-if-absent: host-plane resources do not belong in a standing-
+  mounted preset body). Its fiber is therefore never within a preset mount
+  and cannot trip the gate; root-mounted mcp-client fibers still resolve
+  the seam by name.
+- A tripwire in `packages/preset/cc/tests/composition.spec.ts` asserts no
+  preset body contains `- id: tool-search`.
+- `smoke:profile-boot` re-verified locally green after the move.
+
 ## Status
 
 **Design — user-approved after round-2 blind review.** Critic GO-WITH-CHANGES (8 findings, all folded); grok GO-WITH-CHANGES (4 blockers + 2 majors, all folded; delta round: 4 folds OK, 2 PROBLEM re-folded, 2 NEW documented). User confirmed the two architecture forks: (1) root singleton + isolate key removal for `mcpConnections`, (2) **hoist `toolSearch` to root** to preserve deferral semantics. Ready for implementation.
