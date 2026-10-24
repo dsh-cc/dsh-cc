@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-官方 dsh-cc 插件，提供三个子代理、三个 skill 和可选的 Serena hooks。
+官方 dsh-cc 插件，提供三个子代理、四个 skill 和可选的 Serena hooks。
 
 ## 组件
 
@@ -14,6 +14,7 @@
 | `dsh-cc-agents-orchestration` | Agent 选择和报告契约 | 主 agent |
 | `data-analysis` | 指标口径、对账和报告检查 | 主 agent |
 | `vwa-writing` | 来源证据、论证审查、文章写作和交付 | 已配置的 VWA reviewer |
+| `formal-design` | 在现有设计评审前进行有界 TLA+ 建模、TLC 检查和证据审查 | 主 agent |
 
 critic 采用只读人格，通常在后台运行；executor 和 marathon 可以修改文件，通常在前台运行。
 
@@ -42,6 +43,29 @@ critic 采用只读人格，通常在后台运行；executor 和 marathon 可以
 ```
 
 更新后请重启 dsh。仅更新插件市场不会更新已安装插件。
+
+## 形式化设计
+
+对涉及共享状态顺序、重试或迟到消息、崩溃恢复、异步所有权和授权的协议或状态机变更，
+使用 `formal-design`。主对话负责建模和解释反例。包内 runner 检查有界模型并审计证据，
+不增加运行时强制机制或新的评审通道。
+
+安装只使 skill 可用，不会启用项目级筛查。用户需将[项目规则片段](skills/formal-design/references/agents-snippet.md)
+手动加入当前生效的项目规则。明确请求或已加载的 orchestration skill 也可选择它。
+主对话在首次使用时说明规则采用情况和缺失的评审规则，不会自动编辑 AGENTS.md。
+更新插件后需重启 dsh，才会使用更新后的 skill 和 runner。
+
+执行模型检查只需 PATH 中有 Java >=17。插件已包含固定 TLC v1.7.4 JAR，
+无需另外下载或配置 JAR。普通 dsh 启动不需要 Java，运行时和安装阶段也不会执行下载脚本。
+选择顺序为 --jar、TLA2TOOLS_JAR、内置 JAR。明确配置的 JAR 缺失或校验失败时会阻塞检查，
+不会静默回退；所有来源都必须匹配固定校验值。
+[第三方通知](skills/formal-design/toolchain/THIRD-PARTY-NOTICES.md)记录原始产物、源码和许可。
+详见 [skill](skills/formal-design/SKILL.md)、[建模指南](skills/formal-design/references/modeling-guide.md)、
+[评审契约](skills/formal-design/references/review-contract.md)和[完整示例](skills/formal-design/examples/task-lifecycle/workflow.md)。
+
+每个已配置 case 都必须验证通过，包括 expansion case。证据新鲜且审计有效不等于模型通过，
+还需读取 verification 字段。覆盖充分性和现有评审批准是独立条件。评审者必须收到同一次运行的
+完整模型输入及每个 case 的两份日志。验证结论不超出指定模型、参数、性质和假设。
 
 ## VWA writing
 

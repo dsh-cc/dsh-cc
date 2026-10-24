@@ -39,6 +39,17 @@ article. Load its preflight and tool contract before delegation. A critic
 opinion does not replace `argument.review`. Routine copy editing stays outside
 this workflow unless the user requests evidence review.
 
+## Formal design
+
+For protocol/state-machine changes involving shared-state ordering, retry or
+late delivery, crash recovery, or asynchronous authorization/lease ownership,
+load `formal-design` before the existing design review. Main dialog owns
+modeling and semantics; critic can advise read-only, while executor may run
+explicit checks and implement approved plans. Use that skill's complete
+evidence and coverage contract; review identities and pass criteria remain in
+the effective project rules. Installation alone does not adopt project-wide
+screening; use its manual agents snippet. Re-screen scope changes.
+
 ## Background asymmetry (important)
 
 - **critic** is read-only, so it runs in the BACKGROUND by default —

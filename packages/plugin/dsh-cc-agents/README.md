@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Official dsh-cc plugin with three subagents, three skills, and optional Serena hooks.
+Official dsh-cc plugin with three subagents, four skills, and optional Serena hooks.
 
 ## Components
 
@@ -14,6 +14,7 @@ Official dsh-cc plugin with three subagents, three skills, and optional Serena h
 | `dsh-cc-agents-orchestration` | Agent selection and report contracts | Main agent |
 | `data-analysis` | Metric definitions, reconciliation, and report checks | Main agent |
 | `vwa-writing` | Source evidence, argument review, article writing, and delivery | Configured VWA reviewer |
+| `formal-design` | Bounded TLA+ modeling, TLC checks, and evidence review before the existing design review | Main agent |
 
 The critic has a read-only persona and usually runs in the background. Executor and marathon can change files and usually run in the foreground.
 
@@ -42,6 +43,40 @@ Update the marketplace first. Then update the installed plugin cache.
 ```
 
 Restart dsh after the update. A marketplace update by itself does not update the installed plugin.
+
+## Formal design
+
+Use `formal-design` for protocol or state-machine changes with shared-state
+ordering, retries or late messages, crash recovery, or asynchronous ownership
+and authorization. The main dialog owns modeling and reviews counterexamples.
+The packaged runner checks the bounded model and audits the evidence. It adds
+no runtime enforcement or new review lane.
+
+Installation makes the skill available. It does not enable project-wide
+screening. A human must adopt the [project rules snippet](skills/formal-design/references/agents-snippet.md)
+into the effective project rules. Explicit requests and a loaded orchestration
+skill can also select it. The main dialog reports adoption and missing review
+rules on first use; it does not edit AGENTS.md automatically. After a plugin
+update, restart dsh to use the updated skill and runner.
+
+Model checks need Java >=17 on PATH. The plugin includes the exact pinned
+TLC v1.7.4 JAR, so no separate download or JAR configuration is required.
+Normal dsh startup does not need Java. Neither runtime nor installation runs
+a download script. The default order is --jar, then TLA2TOOLS_JAR, then the
+bundled JAR. A missing or checksum-invalid configured JAR blocks the check;
+it never silently falls back. All selections must match the pinned checksum.
+The [third-party notices](skills/formal-design/toolchain/THIRD-PARTY-NOTICES.md)
+record the original artifact, source and licenses. See the
+[skill](skills/formal-design/SKILL.md), [modeling guide](skills/formal-design/references/modeling-guide.md),
+[review contract](skills/formal-design/references/review-contract.md) and
+[worked example](skills/formal-design/examples/task-lifecycle/workflow.md).
+
+Every configured case must verify, including expansion cases. Fresh valid
+evidence alone does not mean the model passed; check its verification field.
+Complete coverage and the existing review approvals are separate conditions.
+Reviewers need the full same-run model inputs and both logs for every case.
+These checks establish no correctness claim beyond the specified model,
+parameters, properties and assumptions.
 
 ## VWA writing
 
