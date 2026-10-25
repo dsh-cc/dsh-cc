@@ -169,6 +169,13 @@ packages/**/src/*.d.ts.map
 !/packages/plugin/cc-codex-bridge/scripts/lib/
 !/packages/plugin/cc-grok-bridge/scripts/lib/
 
+# formal-design runner artifacts (runs, evidence staging, locks)
+/.formal-design/
+# per-run model outputs written inside specs/tla model dirs (cfgs are the
+# committed contract; these two are machine-local run state)
+specs/**/current-run.json
+specs/**/evidence.json
+
 # Test-suite scratch dirs (workflow-journal/tool-workflow suites seed temp
 # journals here relative to the run cwd; regenerated on every run)
 .scratch/
