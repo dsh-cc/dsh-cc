@@ -11,6 +11,8 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
 const PKG_DIR = dirname(import.meta.dirname)
@@ -46,9 +48,10 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
     }
   })
 
-  it('the agents directory holds both agent definitions', () => {
+  it('the agents directory holds all three agent definitions', () => {
     expect(existsSync(join(PKG_DIR, 'agents', 'critic.md'))).toBe(true)
     expect(existsSync(join(PKG_DIR, 'agents', 'executor.md'))).toBe(true)
+    expect(existsSync(join(PKG_DIR, 'agents', 'marathon.md'))).toBe(true)
   })
 
   it('the hooks directory carries the serena gate trio and a valid hooks.json', () => {
@@ -82,4 +85,41 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
     expect(manifest.name).toBe('dsh-cc-agents')
     expect(manifest.version).toBe(pkg.version)
   })
+})
+
+
+describe('formal-design skill distribution', () => {
+  const skill = join(PKG_DIR, 'skills/formal-design')
+  const required = ['SKILL.md', 'references/modeling-guide.md', 'references/review-contract.md', 'references/agents-snippet.md',
+    'toolchain/tla2tools.jar', 'toolchain/LICENSE', 'toolchain/THIRD-PARTY-NOTICES.md',
+    'toolchain/licenses/JAVAMAIL-EPL-2.0.txt', 'toolchain/licenses/ACTIVATION-APACHE-2.0.txt',
+    'toolchain/licenses/ACTIVATION-NOTICE.txt', 'scripts/preflight.mjs', 'scripts/check.mjs', 'scripts/check-evidence.mjs', 'scripts/manifest.lib.mjs',
+    'scripts/fingerprint.lib.mjs', 'scripts/process.lib.mjs', 'scripts/tlc-output.lib.mjs', 'scripts/toolchain.json',
+    'examples/task-lifecycle/Model.tla', 'examples/task-lifecycle/checks.json', 'examples/task-lifecycle/design.md',
+    'examples/task-lifecycle/workflow.md', 'examples/task-lifecycle/cases/small.cfg']
+  it('ships the workflow entry, references, executable runner and example', () => {
+    for (const file of required) expect(existsSync(join(skill, file)), file).toBe(true)
+    const entry = readFileSync(join(skill, 'SKILL.md'), 'utf8')
+    expect(entry).toMatch(/^---\nname: formal-design\ndescription: .+\n---/)
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/preflight.mjs')
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/check.mjs')
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/check-evidence.mjs')
+  })
+  it('includes the complete skill tree in the actual npm publish manifest', () => {
+    const pack = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json'], { cwd: PKG_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0]
+    const packed = new Set(pack.files.map((f: { path: string }) => f.path))
+    const walk = (dir: string, prefix = ''): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(dir, e.name), prefix + e.name + '/') : [prefix + e.name])
+    for (const file of walk(skill)) expect(packed.has(`skills/formal-design/${file}`), file).toBe(true)
+    for (const file of required) expect(packed.has(`skills/formal-design/${file}`), file).toBe(true)
+    expect(readdirSync(join(skill, 'scripts')).every(f => !statSync(join(skill, 'scripts', f)).isDirectory())).toBe(true)
+  })
+})
+
+
+it('ships the exact upstream TLC bytes pinned by toolchain.json', () => {
+  const skill = join(PKG_DIR, 'skills/formal-design')
+  const pin = JSON.parse(readFileSync(join(skill, 'scripts/toolchain.json'), 'utf8'))
+  const bytes = readFileSync(join(skill, 'toolchain/tla2tools.jar'))
+  expect(createHash('sha1').update(bytes).digest('hex')).toBe(pin.sha1)
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe('936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88')
 })

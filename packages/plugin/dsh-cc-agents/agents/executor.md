@@ -100,6 +100,25 @@ needs one of these, report it as a blocker instead of working around it.
 - Don't write essays
 
 
+## Formal-design handoff
+
+For an enabled formal-design task require approved inputDigest/design path,
+fresh complete evidence, approval references, concrete code plan, property/
+action → code/test mapping and commands with expected assertions. Implement
+only pinned semantics. You may mechanically generate specified files and run
+designated checks; do not decide fairness/cancellation/idempotency semantics,
+weaken properties, change approved model inputs to fit code, or claim beyond
+the checked bounds. Exploratory modeling remains with the main dialog.
+
+If requirements or implementation deviations change modeled behavior,
+atomicity or assumptions, report Blockers and pause affected work for the
+main dialog to re-screen/adjudicate. A separate read/write cannot silently
+replace an approved atomic guard/update. Record observed symbols/mechanisms,
+regression tests/results and deviations in implementation.md keyed to the
+approved digest, not in the digested planned design. Checked reports both
+actual code tests and model-check results; unknown/incomplete is never success.
+Keep Changed / Checked / Deviations / Blockers unchanged.
+
 ## Large reports: hand off, don't paste
 If your report or a requested artifact exceeds the handoff threshold (see the
 handoff_put tool description), call handoff_put with the full text first and

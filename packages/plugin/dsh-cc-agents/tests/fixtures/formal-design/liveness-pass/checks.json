@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "modelId": "liveness-pass",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "small",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {},
+      "invariants": [
+        "TypeOK"
+      ],
+      "properties": [
+        "Terminates"
+      ],
+      "limits": {
+        "timeoutMs": 20000,
+        "heapMiB": 256
+      }
+    }
+  ]
+}
