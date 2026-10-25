@@ -241,8 +241,11 @@ implement-as-written test; every finding is folded or dispositioned:
   (git ls-files byte-compare of every tracked formal-design resource between
   marketplace source and versioned cache, cached bundled-JAR sha256, all
   three cached entrypoints from another cwd) and runs repo-wide in
-  presubmit; the dedicated `formal-design.yml` workflow now also runs that
-  spec.
+  presubmit, which builds the sibling harness that spec imports. It was
+  briefly added to the dedicated `formal-design.yml` line and reverted:
+  that workflow intentionally installs without a harness build, and the
+  spec cannot resolve its harness-linked imports there (CI-verified
+  failure, recorded here). Presubmit remains its coverage lane.
 - macOS symlinked-tmpdir test failures (codex minor, reproduced): the runner
   realpath-normalizes resolved paths while test fixtures were built from the
   un-normalized temp base. Fix: canonical temp bases in the three test rigs.

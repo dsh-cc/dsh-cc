@@ -63,14 +63,14 @@ jobs:
           const actual = createHash('sha1').update(fs.readFileSync(skill + '/toolchain/tla2tools.jar')).digest('hex');
           if (actual !== pin.sha1) throw new Error('Bundled TLC is missing or has the wrong checksum');
           JS
-      - name: Contract, packaged default, marketplace-cache and real TLC integration tests
+      - name: Contract, packaged default and real TLC integration tests
         working-directory: dsh-cc
         env:
           FORMAL_DESIGN_CI: '1'
           FORMAL_DESIGN_ARTIFACTS: ${{ runner.temp }}/formal-design-artifacts
         run: |
           unset TLA2TOOLS_JAR
-          pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design.spec.ts packages/plugin/dsh-cc-agents/tests/formal-design-integration.spec.ts packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts packages/compat/cc-plugin-manager/tests/install-dsh-cc-agents.spec.ts
+          pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design.spec.ts packages/plugin/dsh-cc-agents/tests/formal-design-integration.spec.ts packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
