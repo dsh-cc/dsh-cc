@@ -68,9 +68,9 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
   await ctx.plugin(AgentLoop, { agents: [] })
 
   const core: MoaCore = {
-    readSettings: () => ({ ...DEFAULT_MOA_SETTINGS, enabled: true }),
     arming: new ArmingMachine(() => true),
     bookkeeping: new EscalationBookkeeping(),
+    warnedReasons: new Set<string>(),
   }
   core.arming.arm()
   // Production parity: the router observes via the shared runtime-state
@@ -92,6 +92,7 @@ async function setup(mainScript: Script, options: { probabilities?: Record<strin
     )
   }
   const deps: RouterDeps = {
+    readSettings: () => ({ ...DEFAULT_MOA_SETTINGS, enabled: true }),
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,

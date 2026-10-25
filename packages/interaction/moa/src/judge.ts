@@ -24,7 +24,7 @@ import { resolveJudgeRoute } from './judge-route.ts'
 import { isSubagentAgent } from './agent-scope.ts'
 import { MOA_ESCALATION_KIND } from './state.ts'
 import { TIER_ALIASES, tierAt } from './tiers.ts'
-import type { MoaCore } from './index.ts'
+import type { MoaCore, MoaSettings } from './index.ts'
 import type { ArmingValidation, EnsureArmed } from './router.ts'
 
 /** Same crop marker contract as the router (§3.3). */
@@ -42,6 +42,8 @@ export const ACCEPT_QUESTION = {
 
 /** Injected seams; every one is optional and degrades fail-open. */
 export interface JudgeDeps {
+  /** The mounting tree's OWN settings reader (§2.2.1 — never a shared capture). */
+  readSettings(): MoaSettings
   /** Pre-step capture read (§3.2). */
   getCapturedOpening(turnId: number): UserMessage | undefined
   /** The router's decided tier per turn (the tier the turn ran on). */
@@ -145,7 +147,7 @@ export function createAcceptanceJudge(
     snap.fromTier >= 0 && // the turn ran under moa routing
     effectFree &&
     snap.fromTier < TIER_ALIASES.length - 1 && // hard ceiling: masterplan
-    (bookkeeping.stateFor(snap.originSeq)?.retriesUsed ?? 0) < Math.min(core.readSettings().maxEscalations, 3)
+    (bookkeeping.stateFor(snap.originSeq)?.retriesUsed ?? 0) < Math.min(deps.readSettings().maxEscalations, 3)
 
   /** Capture the judge inputs synchronously at turn-stopping. */
   const capture = (payload: { agent: Agent; turn: number }): { snap: JudgeSnapshot; effectFree: boolean } | undefined => {
@@ -223,7 +225,7 @@ export function createAcceptanceJudge(
 
   /** Detached verdict pipeline: call → guards → escalate. */
   const judgeAsync = async (snap: JudgeSnapshot, shadow: boolean, eligible: boolean): Promise<void> => {
-    const settings = core.readSettings()
+    const settings = deps.readSettings()
     const startedAt = now()
     let pAcceptable: number | undefined
     let failure: string | undefined
@@ -333,7 +335,7 @@ export function createAcceptanceJudge(
   return {
     listener: (payload) => {
       try {
-        const settings = core.readSettings()
+        const settings = deps.readSettings()
         const act = settings.acceptance.enabled === true
         const shadow = !act && settings.acceptance.shadow === true
         if (!act && !shadow) return

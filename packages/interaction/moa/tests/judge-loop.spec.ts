@@ -86,7 +86,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   const arming = new ArmingMachine(() => settings.enabled)
   arming.arm()
   const bookkeeping = new EscalationBookkeeping()
-  const core: MoaCore = { readSettings: () => settings, arming, bookkeeping }
+  const core: MoaCore = { arming, bookkeeping, warnedReasons: new Set<string>() }
   const validation: ArmingValidation = { ok: true }
   // Production parity: the assemble seam's boot-pair note and the arming
   // observes route through the shared runtime-state singletons (apply()
@@ -127,6 +127,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
     )
   }
   const routerDeps: RouterDeps = {
+    readSettings: () => settings,
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
@@ -134,6 +135,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   const router = createRequestRouter(core, { validation, deps: routerDeps })
 
   const judgeDeps: JudgeDeps = {
+    readSettings: () => settings,
     getCapturedOpening: (turnId) => captureAt(turnId),
     tierFor: (turnId) => tierFor(turnId),
     routes: () => tierRoutes() as never,

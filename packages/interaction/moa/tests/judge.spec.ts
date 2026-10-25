@@ -78,7 +78,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
   const arming = new ArmingMachine(() => settings.enabled)
   arming.arm()
   const bookkeeping = new EscalationBookkeeping()
-  const core: MoaCore = { readSettings: () => settings, arming, bookkeeping }
+  const core: MoaCore = { arming, bookkeeping, warnedReasons: new Set<string>() }
   resetRuntimeCore()
   const session: FakeSession = { events: [], id: 'session-1', seq: 0 }
   const followed: { text: string; source: unknown }[] = []
@@ -113,6 +113,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     )
   }
   const deps: JudgeDeps = {
+    readSettings: () => settings,
     getCapturedOpening: (turnId) => getCapturedOpening(turnId),
     tierFor: () => options.tier ?? 1,
     routes: () => tierRoutes() as never,

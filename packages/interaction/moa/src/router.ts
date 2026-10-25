@@ -66,6 +66,8 @@ export interface MoaRouteBackend {
 
 /** Injected seams; every one is optional and degrades to fail-open. */
 export interface RouterDeps {
+  /** The mounting tree's OWN settings reader (§2.2.1 — never a shared capture). */
+  readSettings(): MoaSettings
   /** The `ccModelRoutes` service accessor; absence fail-opens + warns once. */
   routes?: (() => ModelRoutes | undefined) | undefined
   /** System One gateway facts for a resolved judge route. */
@@ -85,10 +87,7 @@ export interface RouterDeps {
 }
 
 /** Mount-time arming validation outcome (§3.7 / §3.6 window check). */
-export interface ArmingValidation {
-  ok: boolean
-  reason?: string
-}
+export interface ArmingValidation { ok: boolean; reason?: string }
 
 /**
  * Re-run the arm/validate pass when not yet armed (mount-order race: the
@@ -232,7 +231,7 @@ export function createRequestRouter(
     signal: AbortSignal,
     opening: UserMessage,
   ): Promise<number | undefined> => {
-    const settings = core.readSettings()
+    const settings = deps.readSettings()
     const routes = deps.routes?.()
     const judge = resolveJudgeRoute(settings.judgeRoute, {
       modelRoutes: routes,
@@ -355,7 +354,7 @@ export function createRequestRouter(
       // classification and zero overlay, but the boot baseline is ALWAYS
       // captured (effective-model-truth §5.2 part 1; ship-dark sessions that
       // later enable share one baseline).
-      if (!core.readSettings().enabled) {
+      if (!deps.readSettings().enabled) {
         const resolved = await next()
         if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved))
         return resolved
@@ -402,7 +401,7 @@ export function createRequestRouter(
       // applies. Fail-open: the persona states the selection.
       const boot = moaBootDefault()
       const gate =
-        core.readSettings().enabled &&
+        deps.readSettings().enabled &&
         opts.validation.ok &&
         agent !== undefined &&
         !isSubagentAgent(agent) &&
