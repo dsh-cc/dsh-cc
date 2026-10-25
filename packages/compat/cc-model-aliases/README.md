@@ -21,7 +21,7 @@ also handed to `prepareCall` as a literal id and errored.
 
 This package adds that layer: an alias resolves to a `{provider, model, reasoningEffort?}` route,
 the unresolvable cases fall back to *inheriting the parent route* (no override),
-and literal ids like `<literal-model-id>` keep passing through untouched.
+and literal ids like `deepseek-chat` keep passing through untouched.
 
 ## The `ccModelRoutes` service
 
@@ -63,8 +63,8 @@ resolves to "inherit the parent route" (the same no-override behavior as before)
 ```yaml
 # ccModelRoutes service config (the preset's cc-model-routes row)
 modelAliases:
-  sonnet: <model-id>                               # string form: model only, provider inherits
-  opus:   { provider: <provider>, model: <model-id> }  # explicit route
+  sonnet: deepseek-chat                              # string form: model only, provider inherits
+  opus:   { provider: deepseek, model: deepseek-reasoner }  # explicit route
 ```
 
 ```jsonc
@@ -108,8 +108,8 @@ nothing. An effort the target model does not support fails the request with
 ```jsonc
 // settings namespace "model-aliases"
 {
-  "opus":   { "provider": "<provider>", "model": "<model-id-a>", "reasoningEffort": "max" },
-  "sonnet": { "provider": "<provider>", "model": "<model-id-b>", "reasoningEffort": "max" }
+  "opus":   { "provider": "zai-api", "model": "glm-5.3", "reasoningEffort": "max" },
+  "sonnet": { "provider": "zai-api", "model": "glm-5.2", "reasoningEffort": "max" }
 }
 ```
 
@@ -121,7 +121,7 @@ untouched.
 
 A model reference — frontmatter `model:`, an alias target's `model` id, or the
 auto-mode classifier's `route` — may carry a `` `$<level>` `` suffix
-(`opus$high`, `<model-id>$xhigh`). The suffix is stripped before the id leaves
+(`opus$high`, `deepseek-reasoner$high`). The suffix is stripped before the id leaves
 the resolver (pricing, breakers, and pins key on bare model ids); the level
 rides `reasoningEffort` on the resolved route and **overrides** an alias
 target's declared `reasoningEffort`. Unknown level spellings are never
@@ -236,11 +236,10 @@ except `architect` follows its CC peer, so a deployment that already maps
 | `architect` | Planning and orchestration | inherit (main thread) |
 | `gauge` | Typed-decision cheap lane (System One models; not generative) | `haiku` |
 
-`gauge` is a typed-decision lane for System One models (e.g.
-`llmbox_systemone/<model>`); **never use it as agent frontmatter `model:`** — it
+`gauge` is a typed-decision lane for System One models; **never use it as agent frontmatter `model:`** — it
 is selected by decision consumers, not generative callers. This is enforced:
-a System One target (`protocol: "systemone"` or an `llmbox_systemone/` model
-id) keeps `protocol: 'systemone'` on its resolved route, the chat projections
+a System One target, identified by `protocol: "systemone"` or a recognized
+System One model-id prefix, keeps `protocol: 'systemone'` on its resolved route, the chat projections
 (`toAgentOptions` / `toOneShotRoute`) refuse such a route, and the routes
 service's `llm/stream` guard rejects any chat request for a System One model
 with `SystemOneChatModelError` (code `SYSTEMONE_NOT_CHAT_MODEL`). The

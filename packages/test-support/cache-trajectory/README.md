@@ -13,7 +13,7 @@ pnpm exec tsx packages/test-support/cache-trajectory/src/bin.ts \
   --out report.json            # write the report JSON
   --trajectory path.json       # default: built-in trajectories/standard.json
   --base-url http://localhost:PORT   # OpenAI-compatible mock server (keyless)
-  --provider <provider> --model <model-id>   # route overrides
+  --provider deepseek --model deepseek-chat   # route overrides
   --api-key <key>              # seed DEEPSEEK_API_KEY (mock runs); env/.env also work
   --no-cc-plugins              # skip the dsh-cc agent-plane plugins
   --no-cache-expected          # shape-only verdict (mock usage has no cache buckets)

@@ -13,7 +13,7 @@ pnpm exec tsx packages/test-support/cache-trajectory/src/bin.ts \
   --out report.json            # 写出报告 JSON
   --trajectory path.json       # 默认：内置 trajectories/standard.json
   --base-url http://localhost:PORT   # OpenAI 兼容 mock 服务器（免密钥）
-  --provider <provider> --model <model-id>   # 路由覆盖
+  --provider deepseek --model deepseek-chat   # 路由覆盖
   --api-key <key>              # 注入 DEEPSEEK_API_KEY（mock 运行）；env/.env 亦可
   --no-cc-plugins              # 跳过 dsh-cc agent 平面插件
   --no-cache-expected          # 仅结构判定（mock usage 无缓存桶）

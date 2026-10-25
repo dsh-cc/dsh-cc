@@ -11,7 +11,7 @@ CC 风格的 `web_fetch` 替代工具，带可选 `prompt` 参数。当 CC prese
 - **不传 `prompt`**（或为空白）：与 stock 工具完全一致——返回原始转换后的页面文本。
 - **传 `prompt`** 且已配置 `haiku` 模型别名（`ccModelRoutes.resolve('haiku')`）：
   抓取的文档经转换后与 prompt 一起送入该廉价 lane 上的一次性摘要调用，工具只返回提取结果。
-  字符串形式别名（`haiku: <model-id>`，仅 model）会从调用方 agent 的 request-header 继承缺失的 provider；
+  字符串形式别名（`haiku: deepseek-chat`，仅 model）会从调用方 agent 的 request-header 继承缺失的 provider；
   没有调用方 agent（即无父 provider）时工具直接失败。
 - **传 `prompt`** 但 `haiku` 别名未配置（无 `ccModelRoutes` 服务或 resolver 返回空）：
   工具抛出 `web_fetch: prompt requires a configured haiku model alias`，且**在任何抓取之前**——

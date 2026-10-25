@@ -18,13 +18,15 @@ All prices live in the plugin `Config` in your `cordis.yml`; nothing is hardcode
 
 The CC preset (`@dsh-cc/preset-cc`) ships a starter table of official published list prices for common DeepSeek, GLM, and Kimi models, collected from the vendor pricing pages (see the `command-cost` row in its `agent.cordis.yml` for the collection date and sources). Deployment billing often differs from list prices — override the whole `modelTable` when yours does. The starter table deliberately carries no `'*'` wildcard column: unmatched models report usage with a "no price configured" marker instead of a misleading zero cost.
 
+The prices below are illustrative values, not a current vendor quote. Replace them with the prices for your deployment.
+
 ```yaml
 - id: command-cost
   name: '@dsh-cc/command-cost'
   config:
     modelTable:
-      - model: <model-id>
-        provider: <provider>
+      - model: deepseek-chat
+        provider: deepseek
         inputPerMTok: 0.27
         outputPerMTok: 1.10
         cacheReadPerMTok: 0.07
@@ -55,6 +57,6 @@ The slash input and the direct token/cost output are absent from model requests 
 
 ## Known Limitations and Deferred Work
 
-- **Pricing tiers** — matching is exact first (first row wins), then a route-prefix tail-segment match (longest row wins; equal length → first row), then the `'*'` wildcard. A provider-less row prices every provider's prefixed variant of that model (e.g. a row for `<model-id>` prices both `<provider-a>/<model-id>` and `<provider-b>/<model-id>`); deployments that need provider isolation must set `provider` on the row.
+- **Pricing tiers** — matching is exact first (first row wins), then a route-prefix tail-segment match (longest row wins; equal length → first row), then the `'*'` wildcard. A provider-less row prices every provider's prefixed variant of that model (e.g. a row for `deepseek-chat` also matches `deepseek/deepseek-chat`); deployments that need provider isolation must set `provider` on the row.
 - **Starter prices are list prices, not your bill** — the preset table reflects official published prices at collection time and goes stale as vendors adjust; deployments with negotiated or internal-gateway pricing must override it.
 - **No live totals during a turn** — `/cost` reports the durable log up to the last checkpoint; in-flight usage is not included.

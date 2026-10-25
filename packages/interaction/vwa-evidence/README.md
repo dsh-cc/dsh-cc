@@ -87,7 +87,7 @@ When the service is absent or lacks the provider face, the artifact stays on
 the lane-1 path above (fail-soft).
 
 - **Report first, then receipt.** The review report is written under
-  `.dsh/vwa/<projectId>/reports/<artifactId>.md` (`writeBoundReport`), and a
+  `docs/vwa-reports/<projectId>/<artifactId>.review.md` (`writeBoundReport`), and a
   **v:2 receipt row** (`ReceiptV2`, `src/receipt.ts:110`) that references the
   report hash is appended to the same session ledger, with read-back.
   Its `checks` carry `mechanical`, `evidence`, `argument` and `audit` verdicts,

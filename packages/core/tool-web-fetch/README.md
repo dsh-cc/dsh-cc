@@ -13,7 +13,7 @@ stock `@deepseek-ai/dsh-tool-web` `web_fetch` when the CC preset sets `tool-web`
 - **With `prompt`** and a configured `haiku` model alias (`ccModelRoutes.resolve('haiku')`):
   the fetched document is converted and passed, together with the prompt, to a one-shot
   summarize call on that cheap lane. The tool returns only the extraction. A string-form
-  alias (`haiku: <model-id>`, model only) inherits the missing provider from the
+  alias (`haiku: deepseek-chat`, model only) inherits the missing provider from the
   calling agent's request-header; with no calling agent (hence no parent provider) the
   tool fails hard.
 - **With `prompt`** but the `haiku` alias unconfigured (no `ccModelRoutes` service or the

@@ -69,7 +69,7 @@ markdown 交付物转成机器可查证证据回执的纯函数模块。
 本包从不 import `@dsh-cc/vwa-argument`。服务缺失或不具备 provider 接口时，产物仍走上述
 lane-1 路径（fail-soft）。
 
-- **先报告，后回执。** 评审报告写入 `.dsh/vwa/<projectId>/reports/<artifactId>.md`
+- **先报告，后回执。** 评审报告写入 `docs/vwa-reports/<projectId>/<artifactId>.review.md`
   （`writeBoundReport`），随后向同一会话台账追加引用报告哈希的 **v:2 回执行**
   （`ReceiptV2`，`src/receipt.ts:110`），并读回校验。其 `checks` 含 `mechanical`、
   `evidence`、`argument`、`audit` 判定，`delivery` 取值为 `draft | reviewed |

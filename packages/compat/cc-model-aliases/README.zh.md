@@ -11,7 +11,7 @@
 
 Claude Code 的 agent/CLAUDE.md frontmatter 用 alias 命名模型。没有 alias 层时，`model: opus` 会被原样当作 provider model id 透传，因此不认识该 id 的 adapter（如 `llm-pi-ai`）抛 `UNKNOWN_MODEL`；而 `model: inherit`——CC 中意为「用父模型」的合法哨兵——也会被当作字面 id 交给 `prepareCall` 然后报错。
 
-本 package 补上这层：alias 解析为 `{provider, model, reasoningEffort?}` 路由，不可解析的情形回退为*继承父路由*（不 override），而 `<literal-model-id>` 之类的字面 id 原样透传不受影响。
+本 package 补上这层：alias 解析为 `{provider, model, reasoningEffort?}` 路由，不可解析的情形回退为*继承父路由*（不 override），而 `deepseek-chat` 之类的字面 id 原样透传不受影响。
 
 ## `ccModelRoutes` 服务
 
@@ -35,8 +35,8 @@ Claude Code 的 agent/CLAUDE.md frontmatter 用 alias 命名模型。没有 alia
 ```yaml
 # ccModelRoutes 服务配置(预设的 cc-model-routes 行)
 modelAliases:
-  sonnet: <model-id>                               # 字符串形式:仅 model,provider 继承
-  opus:   { provider: <provider>, model: <model-id> }  # 显式路由
+  sonnet: deepseek-chat                              # 字符串形式:仅 model,provider 继承
+  opus:   { provider: deepseek, model: deepseek-reasoner }  # 显式路由
 ```
 
 ```jsonc
@@ -69,8 +69,8 @@ alias 的查找顺序：**settings overlay → config 默认 → builtin fallbac
 ```jsonc
 // settings 命名空间 "model-aliases"
 {
-  "opus":   { "provider": "<provider>", "model": "<model-id-a>", "reasoningEffort": "max" },
-  "sonnet": { "provider": "<provider>", "model": "<model-id-b>", "reasoningEffort": "max" }
+  "opus":   { "provider": "zai-api", "model": "glm-5.3", "reasoningEffort": "max" },
+  "sonnet": { "provider": "zai-api", "model": "glm-5.2", "reasoningEffort": "max" }
 }
 ```
 
@@ -78,7 +78,7 @@ alias 的查找顺序：**settings overlay → config 默认 → builtin fallbac
 
 ### `model$level` 后缀语法
 
-模型引用——frontmatter 的 `model:`、alias target 的 `model` id、或 auto-mode classifier 的 `route`——可以携带 `` `$<level>` `` 后缀（`opus$high`、`<model-id>$xhigh`）。后缀在 id 离开解析器之前被剥离（定价、断路器、pin 都以裸 model id 为键）；level 以 `reasoningEffort` 搭载在解析出的路由上，并**覆盖** alias target 声明的 `reasoningEffort`。未知 level 拼写既不剥离也不丢弃：原样携带到 harness 边界，由其以 `UNSUPPORTED_REASONING_EFFORT` 报错。畸形后缀（结尾 `$`、空或非法字符集的 level、provider 段中的 `$`）让引用原样透传——不含 `$` 的既有 id 解析字节级不变。
+模型引用——frontmatter 的 `model:`、alias target 的 `model` id、或 auto-mode classifier 的 `route`——可以携带 `` `$<level>` `` 后缀（`opus$high`、`deepseek-reasoner$high`）。后缀在 id 离开解析器之前被剥离（定价、断路器、pin 都以裸 model id 为键）；level 以 `reasoningEffort` 搭载在解析出的路由上，并**覆盖** alias target 声明的 `reasoningEffort`。未知 level 拼写既不剥离也不丢弃：原样携带到 harness 边界，由其以 `UNSUPPORTED_REASONING_EFFORT` 报错。畸形后缀（结尾 `$`、空或非法字符集的 level、provider 段中的 `$`）让引用原样透传——不含 `$` 的既有 id 解析字节级不变。
 
 ### Effort 优先级
 
@@ -134,7 +134,7 @@ alias 的查找顺序：**settings overlay → config 默认 → builtin fallbac
 | `architect` | 规划与编排 | inherit（主线程） |
 | `gauge` | 类型化决策低价 lane（System One 模型；非生成用途） | `haiku` |
 
-`gauge` 是面向 System One 模型（如 `llmbox_systemone/<model>`）的类型化决策 lane;**绝不要把它用作 agent frontmatter 的 `model:`**——它由决策消费者选择，而非生成式调用方。该约束是强制的：System One 目标（`protocol: "systemone"` 或 `llmbox_systemone/` 模型 id）在解析出的路由上保留 `protocol: 'systemone'`，聊天投影(`toAgentOptions` / `toOneShotRoute`)拒绝此类路由，routes 服务的 `llm/stream` 守卫以 `SystemOneChatModelError`(code `SYSTEMONE_NOT_CHAT_MODEL`)拒绝任何针对 System One 模型的聊天请求。permission-rules 分类器与探针通过自己的协议客户端访问 System One，不受影响。
+`gauge` 是面向 System One 模型的类型化决策 lane;**绝不要把它用作 agent frontmatter 的 `model:`**——它由决策消费者选择，而非生成式调用方。该约束是强制的：System One 目标（通过 `protocol: "systemone"` 或已识别的 System One 模型 id 前缀识别）在解析出的路由上保留 `protocol: 'systemone'`，聊天投影(`toAgentOptions` / `toOneShotRoute`)拒绝此类路由，routes 服务的 `llm/stream` 守卫以 `SystemOneChatModelError`(code `SYSTEMONE_NOT_CHAT_MODEL`)拒绝任何针对 System One 模型的聊天请求。permission-rules 分类器与探针通过自己的协议客户端访问 System One，不受影响。
 
 已配置的字符串目标若指向另一个 alias，会**跟随一跳**（`sketch: haiku` 共用 haiku 的对象路由，含 `reasoningEffort`）。对象形式目标是具体路由，不作为名字再跟。第二跳不跟，因此 `sketch: draft` + `draft: haiku` 停在字面 `"haiku"`（防环）。
 
