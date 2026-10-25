@@ -171,11 +171,13 @@ export function apply(ctx: Context): void {
       }
       validation.ok = false
       validation.reason = reason
+      validation.ladder = undefined
       return
     }
     arming.arm()
     validation.ok = true
     validation.reason = 'armed'
+    validation.ladder = result.ladder
   }
   tryArm()
   try {

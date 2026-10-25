@@ -14,6 +14,7 @@
  */
 
 import type { MessageSource } from '@deepseek-ai/dsh-llm'
+import { TIER_COUNT } from './tiers.ts'
 
 /** Typed provenance kind for escalation followups (§3.4). */
 export const MOA_ESCALATION_KIND = 'moa-escalation' as const
@@ -84,18 +85,22 @@ export class EscalationBookkeeping {
   }
 
   /**
-   * Record one escalation retry: the turn moves from `fromTier` to `toTier`
-   * (strictly upward), advancing the floor and the retry counter.
+   * Record one escalation retry: the turn moves from the live floor to a
+   * HIGHER tier (§3.2 — same-model rungs may be skipped, so the jump is not
+   * necessarily one rung), advancing the floor and the retry counter.
    */
   recordRetryUsed(seq: number, fromTier: number, toTier: number): void {
     if (!Number.isInteger(seq) || seq < 0) fail(`invalid origin seq ${seq}`)
     if (!Number.isInteger(fromTier) || !Number.isInteger(toTier)) {
       fail(`non-integer tier (${fromTier} → ${toTier}) for seq ${seq}`)
     }
+    if (fromTier < 0 || fromTier >= TIER_COUNT || toTier < 0 || toTier >= TIER_COUNT) {
+      fail(`tier out of range (${fromTier} → ${toTier}) for seq ${seq}`)
+    }
     const existing = this.states.get(seq)
     const floor = existing?.tierFloor ?? fromTier
     if (fromTier !== floor) fail(`fromTier ${fromTier} ≠ live floor ${floor} for seq ${seq}`)
-    if (toTier !== floor + 1) fail(`toTier ${toTier} is not floor+1 (${floor}) for seq ${seq}`)
+    if (toTier <= floor) fail(`toTier ${toTier} does not exceed the live floor ${floor} for seq ${seq}`)
     const retriesUsed = (existing?.retriesUsed ?? 0) + 1
     this.states.set(seq, { tierFloor: toTier, retriesUsed })
   }

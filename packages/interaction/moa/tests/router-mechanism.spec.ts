@@ -125,6 +125,42 @@ describe('moa router mechanism', () => {
     expect(typeof rows[0].latencyMs).toBe('number')
   })
 
+  it('applied-index collapse (§3.3): a same-model argmax flip cannot change model, status label, or floor', async () => {
+    const ladder = [
+      { provider: 'mock', model: 'tier-sketch' },
+      { provider: 'mock', model: 'tier-sketch' },
+      { provider: 'mock', model: 'tier-blueprint' },
+      { provider: 'mock', model: 'tier-masterplan' },
+    ]
+    const run = async (probabilities: Record<string, number>, dir: string) => {
+      const ledger = join(dir, 'routing.jsonl')
+      const rig = makeRig({ validation: { ok: true, ladder }, ledger, probabilities })
+      await rig.seedCapture(1, [userOpening('go')])
+      const applied = await fire(rig, 1, 1)
+      const decision = (await rig.router.preStepListener({}, async () => ({ kind: 'continue', messages: [] }))) as {
+        messages: { source: { summary?: string } }[]
+      }
+      const rows = await readJsonl<{ tier?: string; argmaxTier?: string }>(ledger)
+      return {
+        model: applied.model,
+        floor: tierFor(1),
+        status: decision.messages.map((m) => m.source.summary).find((summary) => summary?.startsWith('moa: routed')),
+        ledger: rows[0],
+      }
+    }
+    // draft argmax (index 1) vs sketch argmax (index 0): both collapse to index 0.
+    const draftArgmax = await run({ sketch: 0.05, draft: 0.7, blueprint: 0.15, masterplan: 0.1 }, tempDir())
+    const sketchArgmax = await run({ sketch: 0.7, draft: 0.05, blueprint: 0.15, masterplan: 0.1 }, tempDir())
+    for (const out of [draftArgmax, sketchArgmax]) {
+      expect(out.model).toBe('tier-sketch')
+      expect(out.floor).toBe(0)
+      expect(out.status).toBe('moa: routed → sketch (tier-sketch)')
+      expect(out.ledger.tier).toBe('sketch')
+    }
+    expect(draftArgmax.ledger.argmaxTier).toBe('draft') // raw argmax kept as ledger noise
+    expect(sketchArgmax.ledger.argmaxTier).toBe('sketch')
+  })
+
   it('R6 (PR-2 shape): explicit /model → zero override AND zero classify (the assemble gate fails on the new selection); back to boot re-arms', async () => {
     const rig = makeRig()
     // Turn 1 at the boot default: armed, classify, override.

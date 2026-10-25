@@ -28,12 +28,18 @@ describe('escalation bookkeeping (§4/§3.4)', () => {
     expect(b.stateFor(3)).toEqual({ tierFloor: 1, retriesUsed: 1 })
   })
 
-  it('recordRetryUsed asserts toTier === floor+1 and fromTier === live floor', () => {
+  it('recordRetryUsed permits a multi-rung jump but refuses backward/out-of-range transitions (§3.2)', () => {
     const b = new EscalationBookkeeping()
     b.recordFloor(3, 0)
-    expect(() => b.recordRetryUsed(3, 0, 2)).toThrow(/floor\+1/)
-    expect(() => b.recordRetryUsed(3, 1, 2)).toThrow(/live floor/)
-    b.recordRetryUsed(3, 0, 1)
+    b.recordRetryUsed(3, 0, 2) // two-rung jump legal (same-model rung skipped)
+    expect(b.floorFor(3)).toBe(2)
+    expect(b.stateFor(3)).toEqual({ tierFloor: 2, retriesUsed: 1 })
+    expect(() => b.recordRetryUsed(3, 1, 3)).toThrow(/live floor/)
+    expect(() => b.recordRetryUsed(3, 2, 1)).toThrow(/does not exceed/)
+    expect(() => b.recordRetryUsed(3, 2, 2)).toThrow(/does not exceed/)
+    expect(() => b.recordRetryUsed(3, 2, 4)).toThrow(/out of range/)
+    b.recordRetryUsed(3, 2, 3)
+    expect(b.stateFor(3)).toEqual({ tierFloor: 3, retriesUsed: 2 })
     expect(() => b.recordRetryUsed(3, 0, 1)).toThrow(/live floor/)
   })
 

@@ -121,7 +121,7 @@ describe('moa wiring (apply) — mount-order race', () => {
     expect(getMoaCore().armingValidation).toEqual({ ok: false, reason: 'moa disabled' })
     // Settings settle afterwards (the real boot order, live-traced 2026-10-10).
     rig.arrive({ moa: { enabled: true } }, healthyRoutes)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
     expect(getMoaCore().arming.isArmed()).toBe(true)
     expect(rig.warnings).toEqual([])
   })
@@ -145,7 +145,7 @@ describe('moa wiring (apply) — mount-order race', () => {
     expect(getMoaCore().armingValidation?.ok).toBe(false)
     expect(getMoaCore().arming.isArmed()).toBe(false)
     rig.provideRoutes(healthyRoutes)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
     expect(getMoaCore().arming.isArmed()).toBe(true)
   })
 
@@ -160,7 +160,7 @@ describe('moa wiring (apply) — mount-order race', () => {
     expect(getMoaCore().armingValidation?.reason).toMatch(/ccModelRoutes service unavailable/)
     rig.services.set('ccModelRoutes', healthyRoutes)
     await fireRequest(rig)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
   })
 
   it('degenerate ladder (alias overlay not mounted yet) → later healthy routes arm it', async () => {
@@ -178,7 +178,8 @@ describe('moa wiring (apply) — mount-order race', () => {
     // the per-firing ensureArmed picks it up.
     rig.services.set('ccModelRoutes', healthyRoutes)
     await fireRequest(rig)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation?.ladder).toHaveLength(4) // §3.2.4 snapshot
     expect(getMoaCore().arming.isArmed()).toBe(true)
   })
 
@@ -299,7 +300,7 @@ describe('moa wiring (apply) — subagent scope', () => {
     const rig = makeLateCtx()
     apply(rig.ctx as never)
     rig.arrive({ moa: { enabled: true } }, healthyRoutes)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
 
     const request = mounted(rig, 'agent/request')
     const assemble = mounted(rig, 'system-prompt/assemble')
