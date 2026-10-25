@@ -178,8 +178,9 @@ export function createStatusLineWiring(
         ? {}
         : {
             moa: {
-              tier: rt.moaRef.value.tier,
+              ...(rt.moaRef.value.tier === undefined ? {} : { tier: rt.moaRef.value.tier }),
               ...(rt.moaRef.value.model === undefined ? {} : { model: rt.moaRef.value.model }),
+              ...(rt.moaRef.value.unarmed === undefined ? {} : { unarmed: rt.moaRef.value.unarmed }),
             },
           }),
       ...(mirror?.isReady() === true && mirror.getPath() !== undefined

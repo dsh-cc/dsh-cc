@@ -23,8 +23,8 @@ import { capMiddleToTokenBudget, systemoneDecide } from '@dsh-cc/systemone'
 import { resolveJudgeRoute } from './judge-route.ts'
 import { isSubagentAgent } from './agent-scope.ts'
 import { MOA_ESCALATION_KIND } from './state.ts'
-import { TIER_ALIASES, tierAt } from './tiers.ts'
-import type { MoaCore } from './index.ts'
+import { ladderSnapshot, nextDistinctTier, TIER_ALIASES, tierAt } from './tiers.ts'
+import type { MoaCore, MoaSettings } from './index.ts'
 import type { ArmingValidation, EnsureArmed } from './router.ts'
 
 /** Same crop marker contract as the router (§3.3). */
@@ -42,6 +42,8 @@ export const ACCEPT_QUESTION = {
 
 /** Injected seams; every one is optional and degrades fail-open. */
 export interface JudgeDeps {
+  /** The mounting tree's OWN settings reader (§2.2.1 — never a shared capture). */
+  readSettings(): MoaSettings
   /** Pre-step capture read (§3.2). */
   getCapturedOpening(turnId: number): UserMessage | undefined
   /** The router's decided tier per turn (the tier the turn ran on). */
@@ -144,8 +146,10 @@ export function createAcceptanceJudge(
     arming.isArmed() &&
     snap.fromTier >= 0 && // the turn ran under moa routing
     effectFree &&
-    snap.fromTier < TIER_ALIASES.length - 1 && // hard ceiling: masterplan
-    (bookkeeping.stateFor(snap.originSeq)?.retriesUsed ?? 0) < Math.min(core.readSettings().maxEscalations, 3)
+    // §3.2: a distinct tier must exist above (a duplicated top rung makes
+    // the turn ineligible BEFORE the judge call — no wasted spend).
+    nextDistinctTier(snap.fromTier, ladderSnapshot(opts.validation.ladder, deps.routes?.())) !== undefined &&
+    (bookkeeping.stateFor(snap.originSeq)?.retriesUsed ?? 0) < Math.min(deps.readSettings().maxEscalations, 3)
 
   /** Capture the judge inputs synchronously at turn-stopping. */
   const capture = (payload: { agent: Agent; turn: number }): { snap: JudgeSnapshot; effectFree: boolean } | undefined => {
@@ -165,7 +169,26 @@ export function createAcceptanceJudge(
       (event) => event.type === 'user/message' && textBlocks(event.data.content) === openingText,
     )
     if (lastUser === undefined) return undefined
-    const request = textBlocks(lastUser.data.content)
+    // §3.3.5 origin identity: an escalation followup carries the ORIGINAL
+    // request's originSeq. Inheriting it keeps one bookkeeping entry per
+    // original request (automatic chains cannot exceed max-escalations), and
+    // the judge keeps judging against the original request text, never the
+    // status row.
+    const openingSource = opening.source as { kind?: string; originSeq?: number } | undefined
+    const escalationSeq =
+      openingSource?.kind === MOA_ESCALATION_KIND && typeof openingSource.originSeq === 'number'
+        ? openingSource.originSeq
+        : undefined
+    const originalUser =
+      escalationSeq === undefined
+        ? undefined
+        : events.find((event) => event.type === 'user/message' && Number(event.seq) === escalationSeq)
+    const request =
+      escalationSeq === undefined
+        ? textBlocks(lastUser.data.content)
+        : originalUser === undefined
+          ? textBlocks(lastUser.data.content)
+          : textBlocks(originalUser.data.content)
     // Final answer: last assistant/message OF THIS TURN (abort/error turns
     // produce none — never take an older turn's tail message).
     const finalAnswer = events.findLast(
@@ -184,7 +207,7 @@ export function createAcceptanceJudge(
       effectFree: toolCalls.length === 0,
       snap: {
         turn: payload.turn,
-        originSeq: Number(lastUser.seq),
+        originSeq: escalationSeq ?? Number(lastUser.seq),
         fromTier: deps.tierFor(payload.turn) ?? -1,
         watermark: Number(session.seq),
         agent,
@@ -222,8 +245,8 @@ export function createAcceptanceJudge(
   }
 
   /** Detached verdict pipeline: call → guards → escalate. */
-  const judgeAsync = async (snap: JudgeSnapshot, shadow: boolean, eligible: boolean): Promise<void> => {
-    const settings = core.readSettings()
+  const judgeAsync = async (snap: JudgeSnapshot, shadow: boolean, eligible: boolean, release: () => void): Promise<void> => {
+    const settings = deps.readSettings()
     const startedAt = now()
     let pAcceptable: number | undefined
     let failure: string | undefined
@@ -300,8 +323,14 @@ export function createAcceptanceJudge(
       await logJudge({ ...base, pAcceptable, acted: false, reason: `stale: ${staleReason}` }).catch(() => undefined)
       return
     }
-    const toTier = snap.fromTier + 1
-    const row = `moa: ${tierAt(snap.fromTier) ?? snap.fromTier} → ${tierAt(toTier) ?? toTier}, first answer rejected by judge`
+    const toTier = nextDistinctTier(snap.fromTier, ladderSnapshot(opts.validation.ladder, deps.routes?.()))
+    if (toTier === undefined) return
+    // §3.2: name the target tier; a skip over same-model rungs renders the
+    // compact "escalate → <tier>" form (single line, no parenthetical noise).
+    const row =
+      toTier === snap.fromTier + 1
+        ? `moa: ${tierAt(snap.fromTier) ?? snap.fromTier} → ${tierAt(toTier) ?? toTier}, first answer rejected by judge`
+        : `moa: escalate → ${tierAt(toTier) ?? toTier}`
     try {
       bookkeeping.recordRetryUsed(snap.originSeq, snap.fromTier, toTier)
     } catch (error) {
@@ -309,6 +338,10 @@ export function createAcceptanceJudge(
       warn(`moa: escalation bookkeeping rejected the retry (${error instanceof Error ? error.message : String(error)})`)
       return
     }
+    // The retry is recorded: release the in-flight reservation BEFORE the
+    // followup so an automatic retry chain can be judged turn after turn
+    // (§3.3.5 limits 1 and 2); the log writes below are not escalation state.
+    release()
     // The typed followup IS the visible escalation status row (§3.5 single
     // row): durable user/message, moa-escalation provenance, form notice —
     // never a raw re-send of the user text with source.kind 'user' (that
@@ -333,7 +366,7 @@ export function createAcceptanceJudge(
   return {
     listener: (payload) => {
       try {
-        const settings = core.readSettings()
+        const settings = deps.readSettings()
         const act = settings.acceptance.enabled === true
         const shadow = !act && settings.acceptance.shadow === true
         if (!act && !shadow) return
@@ -350,7 +383,7 @@ export function createAcceptanceJudge(
         if (act && !eligible) return
         if (inFlight.has(payload.agent)) return
         inFlight.add(payload.agent)
-        void judgeAsync(captured.snap, shadow, eligible).finally(() => inFlight.delete(payload.agent))
+        void judgeAsync(captured.snap, shadow, eligible, () => inFlight.delete(payload.agent)).finally(() => inFlight.delete(payload.agent))
       } catch (error) {
         warn(`moa: judge capture failed: ${error instanceof Error ? error.message : String(error)}`)
       }

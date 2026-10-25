@@ -80,9 +80,9 @@ export function makeRig(options: RigOptions = {}): Rig {
   resetRuntimeCore()
   const settings: MoaSettings = { ...DEFAULT_MOA_SETTINGS, enabled: options.enabled ?? true }
   const core: MoaCore = {
-    readSettings: () => settings,
     arming: new ArmingMachine(() => settings.enabled),
     bookkeeping: new EscalationBookkeeping(),
+    warnedReasons: new Set<string>(),
   }
   core.arming.arm()
   // The router observes through the shared runtime-state singletons; point
@@ -113,6 +113,7 @@ export function makeRig(options: RigOptions = {}): Rig {
   }
 
   const deps: RouterDeps = {
+    readSettings: () => settings,
     routes: () => routes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,

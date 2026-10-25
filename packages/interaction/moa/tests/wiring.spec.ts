@@ -28,7 +28,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { makeRig, BOOT_PAIR, GAUGE_ROUTE } from './rig.ts'
-import { apply, resetMoaCore, getMoaCore, resolveSystemOneBackend, buildDeps } from '../src/index.ts'
+import { apply, resetMoaCore, getMoaCore, moaUnarmedReason, resolveSystemOneBackend, buildDeps, DEFAULT_MOA_SETTINGS } from '../src/index.ts'
 
 /** A describe-shaped settings service double (settings-ns `DescribeFace`). */
 function fakeSettingsService(sections: Record<string, unknown>): {
@@ -118,12 +118,10 @@ describe('moa wiring (apply) — mount-order race', () => {
     const rig = makeLateCtx()
     apply(rig.ctx as never)
     // During the preset sweep: ship defaults, unarmed.
-    expect(getMoaCore().readSettings().enabled).toBe(false)
     expect(getMoaCore().armingValidation).toEqual({ ok: false, reason: 'moa disabled' })
     // Settings settle afterwards (the real boot order, live-traced 2026-10-10).
     rig.arrive({ moa: { enabled: true } }, healthyRoutes)
-    expect(getMoaCore().readSettings().enabled).toBe(true)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
     expect(getMoaCore().arming.isArmed()).toBe(true)
     expect(rig.warnings).toEqual([])
   })
@@ -147,7 +145,7 @@ describe('moa wiring (apply) — mount-order race', () => {
     expect(getMoaCore().armingValidation?.ok).toBe(false)
     expect(getMoaCore().arming.isArmed()).toBe(false)
     rig.provideRoutes(healthyRoutes)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
     expect(getMoaCore().arming.isArmed()).toBe(true)
   })
 
@@ -162,7 +160,7 @@ describe('moa wiring (apply) — mount-order race', () => {
     expect(getMoaCore().armingValidation?.reason).toMatch(/ccModelRoutes service unavailable/)
     rig.services.set('ccModelRoutes', healthyRoutes)
     await fireRequest(rig)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
   })
 
   it('degenerate ladder (alias overlay not mounted yet) → later healthy routes arm it', async () => {
@@ -180,7 +178,8 @@ describe('moa wiring (apply) — mount-order race', () => {
     // the per-firing ensureArmed picks it up.
     rig.services.set('ccModelRoutes', healthyRoutes)
     await fireRequest(rig)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation?.ladder).toHaveLength(4) // §3.2.4 snapshot
     expect(getMoaCore().arming.isArmed()).toBe(true)
   })
 
@@ -199,8 +198,21 @@ describe('moa wiring (apply) — mount-order race', () => {
     const rig = makeLateCtx()
     apply(rig.ctx as never)
     rig.arrive({}, healthyRoutes)
-    expect(getMoaCore().readSettings().enabled).toBe(false)
     expect(getMoaCore().armingValidation).toEqual({ ok: false, reason: 'moa disabled' })
+    // §4: the default-off population NEVER produces an unarmed reason.
+    expect(moaUnarmedReason()).toBeUndefined()
+  })
+
+  it('exposes the enabled-but-unarmed reason; arming success clears it (§4)', () => {
+    resetMoaCore()
+    const rig = makeLateCtx()
+    apply(rig.ctx as never)
+    rig.arrive({ moa: { enabled: true } }, degenerateRoutes)
+    expect(moaUnarmedReason()).toMatch(/degenerate/)
+    // The overlay mounts in place: the retry arms and the reason clears.
+    rig.provideRoutes(healthyRoutes)
+    expect(moaUnarmedReason()).toBeUndefined()
+    expect(getMoaCore().armingValidation?.unarmedReason).toBeUndefined()
   })
 })
 
@@ -212,7 +224,7 @@ describe("buildDeps resolveEfforts — lazy llm service (F, 2026-10-11 dogfood)"
     // buildDeps must never touch the service property, and must find the
     // service through `ctx.get` lazily so a late arrival still wires effort
     // validation.
-    const deps = buildDeps(rig.ctx as never)
+    const deps = buildDeps(rig.ctx as never, () => DEFAULT_MOA_SETTINGS)
     // No llm service yet: fail soft (undefined efforts, the router keeps its
     // degrade semantics) — and never throw.
     await expect(deps.resolveEfforts?.('p', 'm1', new AbortController().signal)).resolves.toBeUndefined()
@@ -228,7 +240,7 @@ describe("buildDeps resolveEfforts — lazy llm service (F, 2026-10-11 dogfood)"
     rig.services.set('llm', {
       resolveModelInfo: async () => { throw new Error('catalog down') },
     })
-    const deps = buildDeps(rig.ctx as never)
+    const deps = buildDeps(rig.ctx as never, () => DEFAULT_MOA_SETTINGS)
     await expect(deps.resolveEfforts?.('p', 'm1', new AbortController().signal)).resolves.toBeUndefined()
   })
 })
@@ -302,7 +314,7 @@ describe('moa wiring (apply) — subagent scope', () => {
     const rig = makeLateCtx()
     apply(rig.ctx as never)
     rig.arrive({ moa: { enabled: true } }, healthyRoutes)
-    expect(getMoaCore().armingValidation).toEqual({ ok: true, reason: 'armed' })
+    expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
 
     const request = mounted(rig, 'agent/request')
     const assemble = mounted(rig, 'system-prompt/assemble')

@@ -75,9 +75,9 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
 
   const selection: ModelSelectionRef = { current: { ...BOOT }, assembled: undefined }
   const core: MoaCore = {
-    readSettings: () => ({ ...DEFAULT_MOA_SETTINGS, enabled: true }),
     arming: new ArmingMachine(() => true),
     bookkeeping: new EscalationBookkeeping(),
+    warnedReasons: new Set<string>(),
   }
   core.arming.arm()
   setRuntimeCore({ arming: core.arming, validation: { ok: true } })
@@ -111,6 +111,7 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
     )
   }
   const deps: RouterDeps = {
+    readSettings: () => ({ ...DEFAULT_MOA_SETTINGS, enabled: true }),
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,

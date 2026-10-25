@@ -13,10 +13,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
 import { captureClaimed, getCapturedOpening, noteClaimedTurn, resetRuntimeCore } from '../src/runtime-state.ts'
-import { GAUGE_ROUTE, routes as tierRoutes, userOpening } from './rig.ts'
+import { escalationOpening, GAUGE_ROUTE, routes as tierRoutes, userOpening } from './rig.ts'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -60,6 +61,8 @@ interface UnitOptions {
   pAccept?: number
   /** The tier the judged turn ran on (router's tierFor). */
   tier?: number
+  /** Arming-time ladder snapshot (§3.2.4); absent → live re-resolution. */
+  ladder?: ResolvedRoute[]
   /** Hold the first judge call until `deferred.resolve()` (stale-guard tests). */
   holdJudge?: boolean
 }
@@ -78,7 +81,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
   const arming = new ArmingMachine(() => settings.enabled)
   arming.arm()
   const bookkeeping = new EscalationBookkeeping()
-  const core: MoaCore = { readSettings: () => settings, arming, bookkeeping }
+  const core: MoaCore = { arming, bookkeeping, warnedReasons: new Set<string>() }
   resetRuntimeCore()
   const session: FakeSession = { events: [], id: 'session-1', seq: 0 }
   const followed: { text: string; source: unknown }[] = []
@@ -113,6 +116,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     )
   }
   const deps: JudgeDeps = {
+    readSettings: () => settings,
     getCapturedOpening: (turnId) => getCapturedOpening(turnId),
     tierFor: () => options.tier ?? 1,
     routes: () => tierRoutes() as never,
@@ -121,7 +125,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     routingLedgerPath: () => routingLedger,
     acceptanceLedgerPath: () => acceptanceLedger,
   }
-  const judge = createAcceptanceJudge(core, { validation: { ok: true }, deps })
+  const judge = createAcceptanceJudge(core, { validation: { ok: true, ladder: options.ladder }, deps })
   const fakeAgent = {
     session: {
       snapshotEvents: () => session.events,
@@ -206,6 +210,68 @@ describe('moa acceptance judge — unit', () => {
     ])
     const escalateRows = await readRows<{ type: string; originSeq: number; fromTier: number; toTier: number }>(rig.routingLedger, 1)
     expect(escalateRows).toEqual([expect.objectContaining({ type: 'escalate', originSeq: 0, fromTier: 1, toTier: 2 })])
+  }, 30_000)
+
+  it('escalation matrix (§3.2): a duplicated rung is skipped — next distinct model, two-rung jump, never the same model', async () => {
+    const ladder: ResolvedRoute[] = [
+      { provider: 'mock', model: 'tier-sketch' },
+      { provider: 'mock', model: 'tier-sketch' },
+      { provider: 'mock', model: 'tier-blueprint' },
+      { provider: 'mock', model: 'tier-masterplan' },
+    ]
+    // from sketch (index 0): the duplicated draft rung is skipped entirely.
+    const fromRunStart = makeUnitRig({ tier: 0, ladder })
+    await fromRunStart.seed(1, [userOpening('write a debounce function')])
+    seedTurn(fromRunStart, 1, 'write a debounce function')
+    fromRunStart.stop(1)
+    await flush()
+    expect(fromRunStart.followed[0].source).toMatchObject({ originSeq: 0, fromTier: 0, toTier: 2 })
+    expect(fromRunStart.followed[0].text).toBe('moa: escalate → blueprint')
+    expect(fromRunStart.bookkeeping.stateFor(0)).toEqual({ tierFloor: 2, retriesUsed: 1 })
+
+    // from the second copy (index 1): never the same model twice in a row.
+    const fromRunEnd = makeUnitRig({ tier: 1, ladder })
+    await fromRunEnd.seed(1, [userOpening('write a debounce function')])
+    seedTurn(fromRunEnd, 1, 'write a debounce function')
+    fromRunEnd.stop(1)
+    await flush()
+    expect(fromRunEnd.followed[0].source).toMatchObject({ fromTier: 1, toTier: 2 })
+  }, 30_000)
+
+  it('top-of-ladder with no distinct tier above → no judge call, no retry (§3.2)', async () => {
+    const ladder: ResolvedRoute[] = [
+      { provider: 'mock', model: 'tier-sketch' },
+      { provider: 'mock', model: 'tier-draft' },
+      { provider: 'mock', model: 'tier-blueprint' },
+      { provider: 'mock', model: 'tier-blueprint' },
+    ]
+    const rig = makeUnitRig({ tier: 2, ladder })
+    await rig.seed(1, [userOpening('plan it')])
+    seedTurn(rig, 1, 'plan it')
+    rig.stop(1)
+    await flush()
+    expect(rig.acceptStates).toHaveLength(0) // no wasted judge spend
+    expect(rig.followed).toHaveLength(0)
+  }, 30_000)
+
+  it('origin identity (§3.3.5): an escalation retry judges the ORIGINAL request and inherits its origin seq', async () => {
+    const rig = makeUnitRig({ tier: 2 })
+    const row = 'moa: draft → blueprint, first answer rejected by judge'
+    rig.session.events.push(
+      { seq: 0, type: 'user/message', data: { content: [{ type: 'text', text: 'write a debounce function' }], source: { kind: 'user' } } },
+      { seq: 1, type: 'assistant/message', data: { turn: 1, message: { content: [{ type: 'text', text: 'first answer' }] } } },
+      { seq: 2, type: 'user/message', data: { content: [{ type: 'text', text: row }], source: { kind: 'moa-escalation', originSeq: 0, fromTier: 1, toTier: 2 } } },
+      { seq: 3, type: 'assistant/message', data: { turn: 2, message: { content: [{ type: 'text', text: 'retry answer' }] } } },
+    )
+    rig.session.seq = 4
+    await rig.seed(2, [escalationOpening(row, 0, 1, 2)])
+    rig.stop(2)
+    await flush()
+    expect(rig.acceptStates[0]).toContain('write a debounce function') // original request, not the status row
+    expect(rig.acceptStates[0]).not.toContain('first answer rejected')
+    expect(rig.followed[0].source).toMatchObject({ originSeq: 0, fromTier: 2, toTier: 3 })
+    expect(rig.bookkeeping.stateFor(0)).toEqual({ tierFloor: 3, retriesUsed: 1 }) // one entry, not the retry's own seq
+    expect(rig.bookkeeping.stateFor(2)).toBeUndefined()
   }, 30_000)
 
   it('accept: P(acceptable) >= tau → no followup, judge row acted:false, NO escalate row', async () => {

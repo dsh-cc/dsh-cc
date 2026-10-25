@@ -21,17 +21,30 @@
  *
  * Known staleness (accepted): disabling moa emits no event, so the ref holds
  * its last value until a rebind or a model-selection change clears it.
+ *
+ * Unarmed state (scope-aware-listeners §4): an enabled-but-unarmed moa (routes
+ * unavailable, degenerate ladder, judge-route failure) is invisible otherwise —
+ * the only signal was a TUI-invisible stderr warn. The tap therefore also
+ * carries `unarmed` — the reason re-read from moa's shared arming validation
+ * (`moaUnarmedReason`) on every event, rendered as `unarmed — <reason>` and
+ * carried in the payload as `moa: {unarmed}`. It clears when an armed notice
+ * arrives or arming succeeds, and is NEVER set for `moa disabled`.
  * @module @dsh-cc/tui/harness/statusline-moa
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { TIER_ALIASES } from '@dsh-cc/moa'
+import { TIER_ALIASES, moaUnarmedReason } from '@dsh-cc/moa'
 
-/** Effective-pair value the ref carries: tier alias + optional model id. */
+/**
+ * Moa value the ref carries: an armed tier alias (+ optional effective model
+ * id), or — when moa is enabled but not armed — the reason it refused to arm.
+ * The two states are exclusive: an unarmed write replaces the tier.
+ */
 export interface MoaTierValue {
-  tier: string
+  tier?: string
   model?: string
+  unarmed?: string
 }
 
 /** Shared mutable moa-tier store (written by the tap, read by both statuslines). */
@@ -39,24 +52,28 @@ export type MoaTierRef = { value: MoaTierValue | undefined }
 
 /**
  * The built-in segment text for a ref value: `<model-id> ◂ <tier-alias>` when
- * the effective model is known, the plain tier alias otherwise; undefined for
- * an unset ref (the segment is omitted).
+ * the effective model is known, the plain tier alias otherwise; `unarmed —
+ * <reason>` while moa is enabled but cannot arm; undefined for an unset ref
+ * (the segment is omitted).
  */
 export function renderMoaTier(value: MoaTierValue | undefined): string | undefined {
   if (value === undefined) return undefined
+  if (value.unarmed !== undefined) return `unarmed — ${value.unarmed}`
+  if (value.tier === undefined) return undefined
   return value.model === undefined ? value.tier : `${value.model} ◂ ${value.tier}`
 }
 
-/** Same fields? (tier + model) — used to skip no-op ref writes. */
+/** Same fields? (tier + model + unarmed) — used to skip no-op ref writes. */
 function sameValue(a: MoaTierValue | undefined, b: MoaTierValue | undefined): boolean {
   if (a === undefined || b === undefined) return a === b
-  return a.tier === b.tier && a.model === b.model
+  return a.tier === b.tier && a.model === b.model && a.unarmed === b.unarmed
 }
 
 /**
  * Subscribe the session/event tap (same pattern as the transcript mirror in
  * statusline-wiring.ts, same session-id guard) and keep `ref` pointing at the
- * latest routed tier (alias + optional effective model). `onChange` fires once
+ * latest routed tier (alias + optional effective model) — or, while moa is
+ * enabled but unarmed, at the reason arming refused (§4). `onChange` fires once
  * per actual value change so the caller can trigger a re-render. Returns the
  * unsubscribe handle.
  */
@@ -66,31 +83,39 @@ export function subscribeMoaTier(
   ref: MoaTierRef,
   onChange: () => void,
 ): () => void {
+  const write = (next: MoaTierValue | undefined): void => {
+    if (sameValue(ref.value, next)) return
+    ref.value = next
+    onChange()
+  }
   return ctx.on('session/event', (session, event) => {
     // Guard against late events from a disposed/rebound session.
     if (String((session as { id?: unknown })?.id) !== String(current.agent.session.id)) return
     const e = event as { type?: unknown; data?: { source?: { kind?: unknown; tier?: unknown; model?: unknown } } }
-    if (e?.type !== 'user/message') return
-    const source = e.data?.source
-    // Switch-away transition: the sanitizer keeps only TRUE model-selection
-    // notices, so one of these means moa (if it was overlaying) is no longer
-    // serving the boot selection — clear the stale tier (§5.4 "otherwise").
-    if (source?.kind === 'model-selection') {
-      if (ref.value !== undefined) {
-        ref.value = undefined
-        onChange()
+    if (e?.type === 'user/message') {
+      const source = e.data?.source
+      // Switch-away transition: the sanitizer keeps only TRUE model-selection
+      // notices, so one of these means moa (if it was overlaying) is no longer
+      // serving the boot selection — clear the stale tier (§5.4 "otherwise").
+      if (source?.kind === 'model-selection') {
+        write(undefined)
+      } else if (source?.kind === 'moa') {
+        const tier = source.tier
+        if (typeof tier === 'number' && Number.isInteger(tier)) {
+          const alias = TIER_ALIASES[tier]
+          if (alias !== undefined) {
+            const model = typeof source.model === 'string' && source.model.length > 0 ? source.model : undefined
+            write({ tier: alias, ...(model === undefined ? {} : { model }) })
+          }
+        }
       }
-      return
     }
-    if (source?.kind !== 'moa') return
-    const tier = source.tier
-    if (typeof tier !== 'number' || !Number.isInteger(tier)) return
-    const alias = TIER_ALIASES[tier]
-    if (alias === undefined) return
-    const model = typeof source.model === 'string' && source.model.length > 0 ? source.model : undefined
-    const next: MoaTierValue = { tier: alias, ...(model === undefined ? {} : { model }) }
-    if (sameValue(ref.value, next)) return
-    ref.value = next
-    onChange()
+    // Unarmed visibility (§4): the shared arming validation changes without
+    // emitting any session event, so the reason is re-read on every event this
+    // tap sees (no new event type — the poisons-reopen red line). An armed
+    // notice above has already replaced it; arming success clears it here.
+    const unarmed = moaUnarmedReason()
+    if (unarmed !== undefined) write({ unarmed })
+    else if (ref.value?.unarmed !== undefined) write(undefined)
   })
 }

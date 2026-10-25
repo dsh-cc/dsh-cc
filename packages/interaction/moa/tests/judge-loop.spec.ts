@@ -86,7 +86,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   const arming = new ArmingMachine(() => settings.enabled)
   arming.arm()
   const bookkeeping = new EscalationBookkeeping()
-  const core: MoaCore = { readSettings: () => settings, arming, bookkeeping }
+  const core: MoaCore = { arming, bookkeeping, warnedReasons: new Set<string>() }
   const validation: ArmingValidation = { ok: true }
   // Production parity: the assemble seam's boot-pair note and the arming
   // observes route through the shared runtime-state singletons (apply()
@@ -127,6 +127,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
     )
   }
   const routerDeps: RouterDeps = {
+    readSettings: () => settings,
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
@@ -134,6 +135,7 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   const router = createRequestRouter(core, { validation, deps: routerDeps })
 
   const judgeDeps: JudgeDeps = {
+    readSettings: () => settings,
     getCapturedOpening: (turnId) => captureAt(turnId),
     tierFor: (turnId) => tierFor(turnId),
     routes: () => tierRoutes() as never,
@@ -260,11 +262,33 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
     )
     await runTurn(rig.agent, 'write a debounce function') // turn 1 → escalated
     await waitFor(() => rig.acceptStates.length >= 1, 'first judge call')
+    expect(rig.classifyStates).toEqual(['write a debounce function']) // no reclassification on the retry
     await runTurn(rig.agent, 'next', { kind: 'user' }) // retry turn ran (turn 2)
     await new Promise((resolve) => setTimeout(resolve, 50)) // settle the retry turn's judge gate
     expect(rig.acceptStates).toHaveLength(1)
     const escalated = (await pollJsonl<{ type: string; originSeq: number }>(rig.routingLedger, 1))[0]
     expect(rig.core.bookkeeping.stateFor(escalated.originSeq)).toMatchObject({ tierFloor: 2, retriesUsed: 1 })
+  }, 30_000)
+
+  it('automatic chain with maxEscalations 2: one original-sequence entry, monotonic floors, exact retries (§3.3.5)', async () => {
+    const rig = await setupLoop(
+      [textResponse('first answer'), textResponse('second answer'), textResponse('third answer'), textResponse('fourth answer')],
+      { maxEscalations: 2 },
+    )
+    await runTurn(rig.agent, 'write a debounce function')
+    await waitFor(() => rig.adapter.requests.length >= 3 && rig.acceptStates.length >= 2, 'two chained escalations')
+    await rig.agent.whenIdle()
+    await new Promise((resolve) => setTimeout(resolve, 50)) // settle the final (non-escalatable) turn
+    expect(rig.classifyStates).toEqual(['write a debounce function']) // never re-classified
+    expect(rig.acceptStates).toHaveLength(2) // exactly maxEscalations judge calls
+    expect(rig.adapter.requests.map((request) => request.model)).toEqual(['tier-draft', 'tier-blueprint', 'tier-masterplan'])
+    const rows = await pollJsonl<{ originSeq: number; fromTier: number; toTier: number }>(rig.routingLedger, 2)
+    expect(rows.map((row) => [row.fromTier, row.toTier])).toEqual([
+      [1, 2],
+      [2, 3],
+    ])
+    expect(new Set(rows.map((row) => row.originSeq)).size).toBe(1) // ONE original-sequence entry
+    expect(rig.core.bookkeeping.stateFor(rows[0].originSeq)).toEqual({ tierFloor: 3, retriesUsed: 2 })
   }, 30_000)
 
   it('shadow: judge called on tool turns too, verdict logged eligible:false, no followup', async () => {

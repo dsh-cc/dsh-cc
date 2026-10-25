@@ -2146,6 +2146,9 @@ importers:
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
         version: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-scope':
+        specifier: link:../../../../deepseek-harness/packages/core/scope
+        version: link:../../../../deepseek-harness/packages/core/scope
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery

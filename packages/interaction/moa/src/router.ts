@@ -10,10 +10,6 @@
  * turn's first `agent/request`); every later step of the turn reuses the
  * stored tier (P1).
  *
- * Input: the opening message from the PRE-STEP capture — never session
- * history. Retry turns (opening carries `moa-escalation` provenance) skip
- * classification entirely and apply the live origin-seq tier floor (§3.4).
- *
  * §6 precedence: the arming machine observes the LIVE pre-override request
  * pair (post-`next()` resolved config, always BEFORE the `withTier` overlay
  * — via `observeLiveSelection`, see runtime-state.ts); a disarmed machine
@@ -52,7 +48,7 @@ import {
   type TurnTier,
 } from './runtime-state.ts'
 import { isMoaEscalationMessage } from './state.ts'
-import { TIER_ALIASES, tierAt } from './tiers.ts'
+import { collapseAppliedTier, ladderSnapshot, TIER_ALIASES, tierAt, type TierLadder } from './tiers.ts'
 import type { MoaCore, MoaSettings } from './index.ts'
 
 /** Truncation marker handed to `capMiddleToTokenBudget` (head 2/3 + tail 1/3). */
@@ -66,6 +62,8 @@ export interface MoaRouteBackend {
 
 /** Injected seams; every one is optional and degrades to fail-open. */
 export interface RouterDeps {
+  /** The mounting tree's OWN settings reader (§2.2.1 — never a shared capture). */
+  readSettings(): MoaSettings
   /** The `ccModelRoutes` service accessor; absence fail-opens + warns once. */
   routes?: (() => ModelRoutes | undefined) | undefined
   /** System One gateway facts for a resolved judge route. */
@@ -85,10 +83,7 @@ export interface RouterDeps {
 }
 
 /** Mount-time arming validation outcome (§3.7 / §3.6 window check). */
-export interface ArmingValidation {
-  ok: boolean
-  reason?: string
-}
+export interface ArmingValidation { ok: boolean; reason?: string; ladder?: TierLadder | undefined; unarmedReason?: string | undefined }
 
 /**
  * Re-run the arm/validate pass when not yet armed (mount-order race: the
@@ -126,7 +121,7 @@ export function validateArming(opts: {
     budgetTokens: opts.settings.classifyBudgetTokens,
   })
   if (!judge.ok) return { ok: false, reason: judge.reason }
-  return { ok: true }
+  return { ok: true, ladder: ladder.tiers }
 }
 
 // Local import indirection keeps the tier import lazy for the validation path.
@@ -174,7 +169,7 @@ export function createRequestRouter(
   const logRoute = async (row: {
     turnId: number
     originSeq?: number
-    tier?: string
+    tier?: string; argmaxTier?: string
     probabilities?: Record<string, number>
     latencyMs: number
     truncated: boolean
@@ -232,7 +227,7 @@ export function createRequestRouter(
     signal: AbortSignal,
     opening: UserMessage,
   ): Promise<number | undefined> => {
-    const settings = core.readSettings()
+    const settings = deps.readSettings()
     const routes = deps.routes?.()
     const judge = resolveJudgeRoute(settings.judgeRoute, {
       modelRoutes: routes,
@@ -295,14 +290,18 @@ export function createRequestRouter(
     // state; input_tokens pinning at the window means the verdict is garbage.
     const truncated = result.usage.input_tokens >= judge.window
     if (truncated) tier = undefined
+    // §3.3 applied-index collapse: a same-model argmax flip is start-index
+    // noise — apply/ledger the FIRST index of the contiguous run.
+    const applied = tier === undefined ? undefined : collapseAppliedTier(tier, ladderSnapshot(opts.validation.ladder, routes))
+    const labels = applied === undefined || tier === undefined ? {} : { tier: tierAt(applied) ?? String(applied), argmaxTier: tierAt(tier) ?? String(tier) }
     await logRoute({
       turnId: turn,
-      ...(tier === undefined ? {} : { tier: TIER_ALIASES[tier] }),
+      ...labels,
       ...(probabilities === undefined ? {} : { probabilities }),
       latencyMs,
       truncated,
     })
-    return tier
+    return applied
   }
 
   /**
@@ -355,7 +354,7 @@ export function createRequestRouter(
       // classification and zero overlay, but the boot baseline is ALWAYS
       // captured (effective-model-truth §5.2 part 1; ship-dark sessions that
       // later enable share one baseline).
-      if (!core.readSettings().enabled) {
+      if (!deps.readSettings().enabled) {
         const resolved = await next()
         if (!isSubagentAgent(payload.agent)) observeLiveSelection(pairOf(resolved))
         return resolved
@@ -402,7 +401,7 @@ export function createRequestRouter(
       // applies. Fail-open: the persona states the selection.
       const boot = moaBootDefault()
       const gate =
-        core.readSettings().enabled &&
+        deps.readSettings().enabled &&
         opts.validation.ok &&
         agent !== undefined &&
         !isSubagentAgent(agent) &&

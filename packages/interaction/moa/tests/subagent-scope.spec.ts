@@ -218,11 +218,12 @@ describe('moa subagent scope (judge)', () => {
     }
     const arming = new ArmingMachine(() => settings.enabled)
     arming.arm()
-    const core: MoaCore = { readSettings: () => settings, arming, bookkeeping: new EscalationBookkeeping() }
+    const core: MoaCore = { arming, bookkeeping: new EscalationBookkeeping(), warnedReasons: new Set<string>() }
     resetRuntimeCore()
     const session: FakeSession = { events: [], id: 'session-1', seq: 0 }
     const acceptStates: string[] = []
     const deps: JudgeDeps = {
+      readSettings: () => settings,
       getCapturedOpening: (turnId) => getCapturedOpening(turnId),
       tierFor: () => 1,
       routes: () => tierRoutes() as never,

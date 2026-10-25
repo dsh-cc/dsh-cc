@@ -20,7 +20,7 @@ import { readUserSection } from '@dsh-cc/settings-ns'
 import { isSubagentAgent } from './agent-scope.ts'
 import { ArmingMachine } from './arming.ts'
 import { createAcceptanceJudge, type JudgeDeps } from './judge.ts'
-import { createRequestRouter, validateArming, type ArmingValidation, type EnsureArmed, type RequestRouter, type RouterDeps } from './router.ts'
+import { createRequestRouter, validateArming, type ArmingValidation, type EnsureArmed, type RouterDeps } from './router.ts'
 import { registerSettings, type MoaSettings } from './settings.ts'
 import {
   captureClaimed,
@@ -40,20 +40,27 @@ export { TIER_ALIASES, TIER_COUNT, resolveTiers, tierAt, nextTierUp, type TierRe
 export { DEFAULT_JUDGE_ALIAS, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
 export { MOA_ESCALATION_KIND, isMoaEscalationMessage, EscalationBookkeeping, type EscalationState } from './state.ts'
 export { moaNoticeSource } from './provenance.ts'
-export { CAPTURE_CAPACITY, captureClaimed, getCapturedOpening } from './runtime-state.ts'
+export { CAPTURE_CAPACITY, captureClaimed, getCapturedOpening, moaUnarmedReason, resetRuntimeCore, setRuntimeCore } from './runtime-state.ts'
 export { createRequestRouter, validateArming, textOf, tierRouteVariables, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
 export { createAcceptanceJudge, ACCEPT_QUESTION, type AcceptanceJudge, type JudgeDeps } from './judge.ts'
 
-/** What the wiring slice consumes. */
+/**
+ * The shared plugin core: ONE instance per runtime, holding only cross-tree
+ * truth (scope-aware-listeners design §2.2.1/§2.2.4). Anything that binds a
+ * specific preset tree — the settings reader, the router, the judge — is
+ * constructed per `apply` instead, because a value captured from the first
+ * tree's context is unreachable from a sibling scope.
+ */
 export interface MoaCore {
-  /** Live settings reader (hot-reloaded per use). */
-  readSettings(): MoaSettings
   /** The MAIN-agent arming state machine (§3.1). */
   arming: ArmingMachine
   /** Per-session escalation bookkeeping (§4). */
   bookkeeping: EscalationBookkeeping
-  /** The routing slice's router handle (tier decisions + pair record). */
-  router?: RequestRouter
+  /**
+   * Warn-once reasons already reported while unarmed. Shared, so two trees'
+   * arming retries never double-warn for one reason (§2.2.4).
+   */
+  warnedReasons: Set<string>
   /**
    * The live arming validation (mutated in place by the settings-arrival
    * retry below). Observability seam for wiring tests; the router and judge
@@ -83,11 +90,13 @@ export function resetMoaCore(): void {
 export const name = 'cc-moa'
 
 /**
- * Mount the plugin: register the settings namespace, construct the core, and
- * wire the two agent-scoped listeners (`agent/pre-step` capture +
- * `agent/request` classify/override). Idempotent — a second apply in one
- * runtime reuses the live core; listener registration follows the same
- * idempotency (a re-apply returns before re-registering).
+ * Mount the plugin: register the settings namespace, create the shared core on
+ * the first apply, and wire the routing slice (capture, observe+splice,
+ * request override, assemble seam, acceptance judge) on THIS context. The
+ * idempotency boundary is the shared core only — listener registration is
+ * per-apply, because scope-tagged dispatch reaches only the tree whose scope
+ * key the agent is bound to (design §2.1/§2.2). A second apply in a sibling
+ * preset tree therefore wires its own, reachable copy.
  *
  * Listeners are registered unconditionally even when `moa.enabled` is false:
  * the `enabled` fast bail at the top of each listener preserves the §3.1
@@ -115,34 +124,46 @@ export const name = 'cc-moa'
  */
 export function apply(ctx: Context): void {
   const read = registerSettings(ctx)
-  if (core !== undefined) return
-  const arming = new ArmingMachine(() => read().enabled)
-  const validation: ArmingValidation = { ok: false, reason: 'moa disabled' }
-  core = { readSettings: read, arming, bookkeeping: new EscalationBookkeeping(), armingValidation: validation }
-  // Shared runtime state (effective-model-truth §5.2): the sanitizer's
-  // accessors read these singletons without importing the apply() path.
-  setRuntimeCore({ arming, validation })
+  // The shared core is created once, on the first apply of the runtime; it
+  // holds arming truth, bookkeeping, validation and warn dedup — and nothing
+  // that belongs to one tree (§2.2.1/§2.2.2).
+  if (core === undefined) {
+    const arming = new ArmingMachine(() => read().enabled)
+    const validation: ArmingValidation = { ok: false, reason: 'moa disabled' }
+    core = { arming, bookkeeping: new EscalationBookkeeping(), warnedReasons: new Set<string>(), armingValidation: validation }
+    // Shared runtime state (effective-model-truth §5.2): the sanitizer's
+    // accessors read these singletons without importing the apply() path.
+    setRuntimeCore({ arming, validation })
+  }
+  const { arming, warnedReasons } = core
+  // The live validation object the router/judge closures read every firing.
+  const validation: ArmingValidation = (core.armingValidation ??= { ok: false, reason: 'moa disabled' })
+  // Every host seam below closes over THIS apply's context: the tree-local
+  // settings reader (never a core-held one), routes, backends, ledger paths.
+  const deps = buildDeps(ctx, read)
 
   /**
    * Arm + validate until it succeeds. Every not-yet-ok state is retryable:
    * settings may still be defaults, `ccModelRoutes` may be absent, and the
    * alias overlay may not be mounted yet (a temporarily degenerate ladder or
    * an unresolved `gauge` default). Once ok, it is a no-op. Each distinct
-   * failure reason warns once (no spam from the per-firing retry).
+   * failure reason warns once PROCESS-wide (the dedup lives on the shared
+   * core, so two trees cannot double-warn for one reason).
    */
-  const warnedReasons = new Set<string>()
   const tryArm: EnsureArmed = () => {
     if (validation.ok) return
     const settings = read()
     if (!settings.enabled) {
       // Leave unarmed but retryable: a later enable (hot reload) re-runs this.
       validation.reason = 'moa disabled'
+      // §4: `moa disabled` is the default-off population — never an unarmed reason.
+      validation.unarmedReason = undefined
       return
     }
     // Routes resolve lazily: `ccModelRoutes` is an app-level service that is
     // also absent during the preset sweep (capturing it at mount would pin
     // undefined for the process lifetime).
-    const routes = optionalRoutes(ctx)
+    const routes = deps.routes?.()
     const result = validateArming({ settings, routes, logger: ctx.logger })
     if (!result.ok) {
       const reason = result.reason ?? 'unknown'
@@ -152,11 +173,16 @@ export function apply(ctx: Context): void {
       }
       validation.ok = false
       validation.reason = reason
+      validation.ladder = undefined
+      // §4: the enabled-but-unarmed reason the statusline tap renders.
+      validation.unarmedReason = reason
       return
     }
     arming.arm()
     validation.ok = true
     validation.reason = 'armed'
+    validation.ladder = result.ladder
+    validation.unarmedReason = undefined
   }
   tryArm()
   try {
@@ -179,8 +205,7 @@ export function apply(ctx: Context): void {
     captureClaimed(agent, message, turn)
     noteClaimedTurn(agent, turn)
   })
-  const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps: buildDeps(ctx) })
-  core.router = router
+  const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps })
   // First moa pre-step listener: observe the sanitizer's published FROZEN
   // selection FIRST (effective-model-truth §5.2 part 2 — before anything
   // else, subagent-guarded), then the mount-race ensureArmed retry, then the
@@ -205,8 +230,7 @@ export function apply(ctx: Context): void {
   // Acceptance judge (§3.3/§3.4): capture-only `agent/turn-stopping`
   // listener — capture inputs synchronously, dispatch the judge DETACHED
   // (never blocks the waterfall; wakes the retry via agent.followup).
-  const judgeDeps = buildJudgeDeps(ctx)
-  const judge = createAcceptanceJudge(core, { validation, ensureArmed: tryArm, deps: judgeDeps })
+  const judge = createAcceptanceJudge(core, { validation, ensureArmed: tryArm, deps: buildJudgeDeps(ctx, read) })
   ctx.on('agent/turn-stopping', judge.listener as never)
 }
 
@@ -250,8 +274,9 @@ function optionalSettings(ctx: Context): { describe?: () => ReadonlyArray<{ ns?:
 }
 
 /** Wire the judge's host seams off the plug context (§3.3/§3.4). */
-function buildJudgeDeps(ctx: Context): JudgeDeps {
+function buildJudgeDeps(ctx: Context, readSettings: () => MoaSettings): JudgeDeps {
   return {
+    readSettings,
     // Judge inputs read the shared runtime-state store (effective-model-truth
     // §5.3): the capture is written by the `agent/inbox/claimed` listener and
     // the sticky tier by the assemble seam — both keyed per turn.
@@ -287,8 +312,12 @@ function optionalLlm(ctx: Context): {
  * regression specs (the lazy-`llm` seam cannot be pinned through `apply`
  * without a live preset boot).
  */
-export function buildDeps(ctx: Context): RouterDeps {
+export function buildDeps(ctx: Context, readSettings: () => MoaSettings): RouterDeps {
   return {
+    // This tree's OWN settings reader (§2.2.1): a reader captured from a
+    // sibling tree's context is exactly the cross-tree capture this split
+    // removes.
+    readSettings,
     // Lazy: `ccModelRoutes` is an app-level service absent during the preset
     // sweep — resolving per use (not capturing at mount) keeps the judge
     // alias path alive once the service settles.
