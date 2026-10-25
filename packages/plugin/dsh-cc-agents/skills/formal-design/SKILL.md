@@ -79,8 +79,10 @@ node "${CLAUDE_SKILL_DIR}/scripts/check-evidence.mjs" --project "$PROJECT" --mod
    existing cfg blocks; never overwrite reviewed material automatically. To
    change it, inspect and explicitly remove only changed declared cfgs, run
    preflight/check, then review the diff. Completed cfgs survive generation
-   failure; repair and retry only absent paths. No cfg generation means TLC
-   passed. See the guide for cancellation, locks and I/O recovery.
+   failure; repair and retry only absent paths. Skipped cfg generation only
+   means every declared cfg already matched — it says nothing about the check
+   result, and blocked or cancelled runs also skip generation. See the guide
+   for cancellation, locks and I/O recovery.
 5. Read the full actual results. Every configured case, core AND expansion,
    must be verified. Audit must report valid/fresh/verification=verified for
    that same run. Exit 0 from check-evidence means integrity and freshness,

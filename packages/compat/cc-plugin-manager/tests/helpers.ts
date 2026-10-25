@@ -6,7 +6,7 @@
  * @module @dsh-cc/plugin-manager/test-helpers
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -14,8 +14,13 @@ import { join } from 'node:path'
 
 export const temps: string[] = []
 
+// Canonicalize the temp base once: on macOS `os.tmpdir()` sits behind a
+// /var → /private/var symlink while consumers realpath-normalize results, so
+// fixtures built from the raw path fail path-equality assertions.
+const canonicalTmp = realpathSync(tmpdir())
+
 export async function tempDir(prefix: string): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), prefix))
+  const dir = await mkdtemp(join(canonicalTmp, prefix))
   temps.push(dir)
   return dir
 }

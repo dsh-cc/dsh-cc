@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { parseSyntax, normalizeArguments } from './preflight.lib.mjs'
 import { executeCheck } from './check.lib.mjs'
@@ -14,6 +15,11 @@ export async function main(argv = process.argv.slice(2)) {
     const result = await executeCheck(options, { signal: controller.signal })
     process.stdout.write(JSON.stringify(result) + '\n')
     return { verified: 0, counterexample: 1, blocked: 2, error: 2, incomplete: 3 }[result.status]
-  } finally { process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel) }
+  } finally {
+    // §10.1: after the finished marker is published the committed result and
+    // its exit code must survive. The handlers stay installed for the
+    // remaining process lifetime so a late SIGINT/SIGTERM cannot fall through
+    // to the default signal exit and clobber the committed exit code.
+  }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = await main()
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) process.exitCode = await main()

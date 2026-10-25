@@ -51,14 +51,19 @@ export class FrameParser {
         if (!Number.isSafeInteger(code) || ![0, 1, 2, 3, 4].includes(severity)) this.invalid = true
         const key = `${code}:${severity}`
         if (!this.events.has(key)) this.events.set(key, { code, severity })
-        if (code === 2187 && this.modeIndex === null) this.modeIndex = order
-        if (code === 2193 && this.modeIndex !== null && this.successIndex === null) this.successIndex = order
-        if (code === 2186) { this.finishedIndex = order; this.finalStats = this.pendingStats }
-        this.stack.push({ code, body: '', truncated: false })
+        // §11.1: STATE (4) and WARNING (3) frames are trace/warning output,
+        // never success signals. The ordered flow and statistics only count
+        // at the canonical severity the pinned version emits (0).
+        if (severity === 0) {
+          if (code === 2187 && this.modeIndex === null) this.modeIndex = order
+          if (code === 2193 && this.modeIndex !== null && this.successIndex === null) this.successIndex = order
+          if (code === 2186) { this.finishedIndex = order; this.finalStats = this.pendingStats }
+        }
+        this.stack.push({ code, severity, body: '', truncated: false })
       } else if (end) {
         const f = this.stack.pop()
         if (!f || f.code !== Number(end[1])) this.invalid = true
-        else if (f.code === 2199) {
+        else if (f.code === 2199 && f.severity === 0) {
           const m = !f.truncated && /^(0|[1-9][0-9]*) states generated, (0|[1-9][0-9]*) distinct states found, (0|[1-9][0-9]*) states left on queue\.$/.exec(f.body.trim())
           this.pendingStats = m ? { generated: m[1], distinct: m[2], queue: m[3] } : null
         }

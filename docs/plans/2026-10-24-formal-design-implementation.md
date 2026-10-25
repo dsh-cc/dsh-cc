@@ -1,6 +1,9 @@
 # Formal-design implementation record
 
-Status: skill integration implemented; remote/manual workflow acceptance pending.
+Status: skill integration implemented; three-lane review and remote-channel
+delivery acceptance recorded below (2026-10-25 revision). Effective-rule
+activation, manual workflow scenarios and receiver-side local check-evidence
+remain out of scope and are not claimed.
 Date: 2026-10-24. This is an implementation record, not formal design approval or actual
 remote/manual workflow acceptance.
 
@@ -137,16 +140,24 @@ no public status, acceptance condition or design requirement was changed.
 
 ## Pending workflow acceptance
 
-1. Obtain the current effective review protocol from the authorized source,
-   or an explicit scoped user decision changing the prerequisite.
-2. Identify each rule-provided remote lane and demonstrate full-file
-   transport/reconstruction capacity through its actual existing authorized
-   channel, including failures. Record byte/file counts and receiver hashes.
+1. ~~Obtain the current effective review protocol~~ Resolved for this PR by a
+   scoped user decision (2026-10-25): the user directed this round's
+   three-lane review and remote-channel delivery acceptance. The AGENTS.md
+   forwarding loop remains unrepaired; project-wide screening adoption of
+   the rules snippet remains a manual step outside this record.
+2. ~~Demonstrate full-file transport/reconstruction through actual authorized
+   channels~~ Completed 2026-10-25 for both remote lanes actually used (see
+   the delivery-acceptance section): byte-preserving delivery, receiver
+   enumeration/hashing/full-log read, a log above the channels' inline
+   limit, a multi-case package, and the capacity/access-failure exercise.
+   Recorded capacity is what was tested; larger packages stay blocked.
 3. Record manual hard-kill and additional filesystem-boundary stress
-   scenarios; do not claim unexecuted scenarios as passing.
+   scenarios; do not claim unexecuted scenarios as passing. (Pending.)
 4. Record all §16.4 real workflow scenarios, including abstraction challenges,
    effective-rule activation, approval reuse and full remote receiver replay.
-The implementation PR keeps these pending items visible. Local automated
+   (Effective-rule activation and the remaining manual scenarios remain
+   pending; receiver-side full-log inspection/replay is recorded above.)
+The implementation PR keeps the remaining pending items visible. Local automated
 results are not full workflow acceptance.
 
 ## Packaged execution and integration verification
@@ -192,3 +203,157 @@ plugin-manager and the agents plugin, including 21 actual TLC/packaged-run
 tests. Configured checksum failure, missing configured/bundled paths and
 selection precedence remain explicit failures. README, publish-manifest,
 dependency and workflow-shell gates pass. CI YAML/pin/shell syntax also pass.
+
+## Three-lane implementation review (2026-10-25)
+
+The user supplied the review direction for this round ("three-lane review and
+actual remote-channel delivery acceptance"), resolving the pending item 1
+below as a scoped user decision for this PR. Lanes: the local critic seat and
+the two remote bridge lanes actually used by this repository (codex and grok
+canonical bridge launchers). Each remote lane received the same review brief
+(implementation files pinned, design sections pinned by line range, live
+probes invited, output capped) plus the delivery-acceptance tasks; the local
+lane received the review brief only. All three lanes ran blind.
+
+Round 1 verdicts: critic GO-WITH-CHANGES (1 major, 2 minor); codex NO-GO
+(1 major, 3 minor — severity calibration, see below); grok GO-WITH-CHANGES
+(1 major, 2 minor), after an initial auth interruption on the grok lane was
+resolved by user re-login (recorded as interrupted, not consumed).
+Substance overlapped on the marketplace-test gap; the codex seat uniquely
+reproduced a false-verified channel via a live probe, and the grok seat
+independently confirmed the severity fix's preconditions hold (R3: "severity
+3/4 forgeries stay unverified"). Adjudication used the
+implement-as-written test; every finding is folded or dispositioned:
+
+- Parser severity hole (codex major, reproduced): success-sequence codes
+  2187/2193/2186 and the 2199 statistics frame were counted regardless of
+  severity, so forged severity-3/4 flow frames could classify a case as
+  verified, contradicting §11.1 ("STATE is trace output, not a success
+  signal"). All 41 captured real pinned logs emit these codes at severity 0
+  only. Fix: `tlc-output.lib.mjs` gates modeIndex/successIndex/finishedIndex
+  and the statistics capture on severity 0; red regression test pins
+  ordered=false, statistics=null and incomplete/output-invalid for severity-3
+  and severity-4 forgeries. Evidence audit replay inherits the fix (same
+  frame parser).
+- Marketplace cache coverage (critic major / codex minor): the required
+  §16.2 byte-preservation coverage exists in
+  `packages/compat/cc-plugin-manager/tests/install-dsh-cc-agents.spec.ts`
+  (git ls-files byte-compare of every tracked formal-design resource between
+  marketplace source and versioned cache, cached bundled-JAR sha256, all
+  three cached entrypoints from another cwd) and runs repo-wide in
+  presubmit; the dedicated `formal-design.yml` workflow now also runs that
+  spec.
+- macOS symlinked-tmpdir test failures (codex minor, reproduced): the runner
+  realpath-normalizes resolved paths while test fixtures were built from the
+  un-normalized temp base. Fix: canonical temp bases in the three test rigs.
+- Lock ownership loss on stat failure (critic minor): cleanup now also
+  unlinks on content equality with this run's lockBytes (unique runId =
+  content-level ownership proof) when creation-time inode identity could
+  not be captured; a foreign lock is never removed. Two regression tests.
+- `--`-leading CLI values rejected (critic minor): conservative fail-closed
+  by design; recorded here, no change.
+- SKILL.md false inference (grok major): "No cfg generation means TLC
+  passed" is false — existing cfgs skip generation and blocked/cancelled
+  runs skip it too. Reworded to "Skipped cfg generation only means every
+  declared cfg already matched — it says nothing about the check result,
+  and blocked or cancelled runs also skip generation."
+- Late-signal exit-code clobber (grok minor): check.mjs removed its
+  SIGINT/SIGTERM listeners in a finally before process exit, so a late
+  signal could fall through to the default signal exit and clobber the
+  committed exit code. The listeners now stay installed for the remaining
+  process lifetime (§10.1: keep the committed result and its exit code).
+  The window is not deterministically unit-testable; the fix is
+  inspection-verified with the rationale pinned in the code.
+- Missing OOM fixture (grok minor): a real pinned OOM capture was produced
+  by running the bundled TLC v1.7.4 with a 16 MiB heap on a large-state
+  model — exit 75 with 1000:1 ("Java heap space"), 2103:1, all-zero 2199
+  statistics and no 2193. Captured verbatim in
+  `tests/fixtures/formal-design/protocol-captures/oom.stdout.txt` and pinned
+  in its index.json (exit 75 → error/property-evaluation-failed per the
+  §11.3 table; the design forbids prose-cause inference, and the capture
+  now documents what a real OOM run classifies as).
+- Deliberate missing-file manifest entry (codex "blocker"): that entry is the
+  §16.4 channel capacity/access-failure exercise itself; the lane correctly
+  reported the package containing it as blocked, not approved. Recorded in
+  the delivery-acceptance record; no defect.
+
+Orchestrator-found during folding (disclosed to all lanes): the CLI entry
+guard compared `pathToFileURL(process.argv[1])` with `import.meta.url`, so
+on macOS a script path through a symlinked directory (for example `/tmp`)
+made every command a silent zero-byte exit-0 no-op. Fix:
+`realpathSync(process.argv[1])` in all three entrypoints plus a regression
+test. This also explains the codex seat's initially failing then passing
+test runs on this platform.
+
+Post-fold suites: 117 tests passed across formal-design.spec.ts (85,
+including the severity-forgery, symlink-invocation, lock-identity-loss and
+real OOM capture regressions), formal-design-integration.spec.ts (21, real
+TLC with the bundled JAR), package-shape.spec.ts (9) and
+install-dsh-cc-agents.spec.ts (1), plus the readme/spec-deps/
+workflow-pipefail static gates. Round 2 (delta/micro confirmation): the
+local seat confirmed all its folds OK (GO); the codex seat re-verified its
+major fold with its own targeted reproduction (severity-3/4 rejected,
+severity-0 statistics/exit-code preconditions intact) and all other folds
+(GO); the grok seat's delta round is recorded in the delivery section
+below.
+
+## Remote-channel delivery acceptance (§20.8 / §16.4, 2026-10-25)
+
+Effective rule source for this round: the user's direct instruction in this
+work line (scoped decision recorded above), not a loadable project protocol;
+the AGENTS.md forwarding loop remains unrepaired and is recorded as
+unavailable. Remote lanes and channels: the codex and grok bridge lanes as
+actually invoked in this repository (canonical launcher, multi-line prompt
+via `--prompt-file`, receiver file access inside the workspace checkout).
+Both channels' inline mode accepts a single-line prompt only, so every
+multi-line payload — including each delivered 2.3 KiB log — exceeds the
+inline limit and must be file-delivered; this is the recorded inline limit of
+the channel, and byte-preserving delivery was demonstrated by the receivers
+enumerating, reading and hashing the files.
+
+Producer package (regenerated with the folded runner, runnerDigest
+`f376aa8c…`): the shipped task-lifecycle example as a single-case project
+(verified, runId `20261025T031622Z-…c06de26a`, inputDigest recorded in
+evidence) and a two-case core+expansion project (both cases verified, same
+run timestamp family), each with full raw stdout/stderr logs, evidence.json,
+current-run.json, generated cfgs and the producer's complete check-evidence
+JSON output (valid/fresh/verified for both). Producer enumeration:
+`package-manifest.json` lists all 33 files with byte counts and SHA-256
+values; capacity-probe.bin (8,388,608 bytes, SHA-256
+`3a3a1e97a704002bf556ce4f7b73a68fceb275a4f1748cf2fa395f1e86c9cb70`); one
+deliberately absent missing-probe entry.
+
+Codex receiver results (round 1; that run inspected the pre-fix package with
+runnerDigest `dc50be…` — provenance noted, the fold changes only
+classification of forged non-zero severities, and the same receiver tasks
+were repeated against the regenerated package by the grok lane below):
+complete enumeration of both project trees (15 and 18 files), every hash
+matching the manifest and each run's recorded log hashes, full-byte read of
+all three case logs ending in a complete final frame, runId/inputDigest
+agreement across marker/evidence/producer outputs, capacity-probe byte count
+and hash match, the missing-probe retrieval failure reported verbatim with
+the package correctly declared blocked rather than approved, and an explicit
+statement that this is evidence inspection, not a receiver-side
+check-evidence run. No delivered component exceeded retrieval capability;
+observed capacity is recorded without inferring 800 MiB support.
+
+Grok receiver results (round 1, against the regenerated fixed-runner
+package, runnerDigest `f376aa8c…`): complete enumeration of both project
+trees (15 and 18 files, no extras/missing), all 33 file hashes matching the
+manifest and each run's recorded log hashes, full-byte reads of all three
+case logs each ending in a complete final frame, runId/inputDigest
+agreement (single: `…c06de26a` / `d16ba77d…`; multi: `…3b1aae31` /
+`4c6eb83d…`), capacity-probe byte count and hash match, the missing-probe
+retrieval failure (ENOENT) reported with the package correctly declared
+incomplete/blocked, and an explicit statement that this is evidence
+inspection, not a receiver-side check-evidence run. No delivered component
+exceeded retrieval capability.
+
+Final package provenance: after the grok folds the runner scripts changed
+once more, so the delivered package was regenerated a final time
+(runnerDigest `06e192d4…`, both projects verified, producer check-evidence
+valid/verified for both, 33 files re-enumerated with hashes). The grok
+delta/micro-confirmation round verified all three of its folds against the
+final checkout and spot-checked one delivered log hash against the final
+manifest (2329 bytes, match) — VERDICT: GO. All three lanes ended at GO
+after delta confirmation: critic GO, codex GO, grok GO.

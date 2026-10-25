@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { parseArguments, preflight } from './preflight.lib.mjs'
 export async function main(argv = process.argv.slice(2)) {
@@ -11,4 +12,4 @@ export async function main(argv = process.argv.slice(2)) {
     process.stdout.write(JSON.stringify({ schemaVersion: 1, command: 'preflight', status: 'blocked', reason, blockers: [{ code: reason, detail: e.detail ?? 'preflight failed' }], willGenerate: [] }) + '\n'); return 2
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = await main()
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) process.exitCode = await main()

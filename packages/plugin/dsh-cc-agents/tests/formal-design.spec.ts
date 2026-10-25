@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, readFile, symlink, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, symlink, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it, expect, afterEach } from 'vitest'
@@ -9,7 +9,10 @@ const manifest = () => ({ schemaVersion: 1, modelId: 'test', module: 'Model', ca
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(p => rm(p, { recursive: true, force: true }))) })
 async function project() {
-  const root = await mkdtemp(join(tmpdir(), 'formal design ')); roots.push(root)
+  // The runner realpath-normalizes every resolved path; build fixtures under a
+  // canonical temp base so expected values compare equal on symlinked tmpdirs
+  // (macOS /var/folders vs /private/var/folders).
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'formal design ')); roots.push(root)
   const model = join(root, 'specs/tla/test'); await mkdir(join(model, 'cases'), { recursive: true })
   await writeFile(join(model, 'checks.json'), JSON.stringify(manifest()))
   await writeFile(join(model, 'design.md'), 'bounded design')
@@ -104,6 +107,14 @@ describe('formal-design TLC frame and classifier contract', () => {
     expect(classifyText(success)).toMatchObject({ status: 'verified', reason: 'verified', statistics: { generated: '4', distinct: '3', queue: '0' } })
     for (const s of [success.replace(frame(2187), ''), success.replace(frame(2186), '') + frame(2187), success.replace('4 states', '0 states').replace('3 distinct', '0 distinct'), success.replace('0 states left', '1 states left'), success.replace('4 states generated', '4,000 states generated'), success.replace(frame(2186), frame(2199, 0, 'bad') + frame(2186))]) expect(classifyText(s).status).not.toBe('verified')
     expect(classifyText(success).eventCodes).not.toContain(2267)
+  })
+  it('does not count STATE/WARNING-severity flow frames as the ordered success sequence or statistics', () => {
+    for (const severity of [3, 4]) {
+      const forged = frame(2187, severity) + frame(2193, severity) + frame(2199, severity, '4 states generated, 3 distinct states found, 0 states left on queue.') + frame(2186, severity)
+      const parsed = parse(forged)
+      expect(parsed.ordered).toBe(false); expect(parsed.statistics).toBe(null)
+      expect(classifyText(forged)).toMatchObject({ status: 'incomplete', reason: 'output-invalid' })
+    }
   })
   it.each([
     [11, 2114, 'counterexample', 'deadlock'], [12, 2110, 'counterexample', 'invariant'], [12, 2107, 'counterexample', 'invariant'],
@@ -540,6 +551,24 @@ describe('formal-design lock acquisition failures', () => {
     expect(result).toMatchObject({ status: 'blocked', reason: 'lock-io' })
     await expect(readFile(join(root, '.formal-design/locks/test.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
+  it('still removes its own fully written lock when creation-time identity capture fails', async () => {
+    const { root, model } = await project(); const jar = join(root, 'jar'); await writeFile(jar, 'jar')
+    const io = { ...fs, lstat: async (p: string) => { if (p.endsWith('.lock')) throw new Error('identity capture failed'); return fs.lstat(p) } }
+    const result = await executeCheck({ project: root, model: 'specs/tla/test', jar, java: 'java' }, { io, preflight: readyPreflight(root, model), runCase: fakeRun, diagnostic: () => {} })
+    expect(result).toMatchObject({ status: 'verified', reason: 'verified' })
+    await expect(readFile(join(root, '.formal-design/locks/test.lock'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+  it('never removes a replacement lock on identity-capture failure when contents are not its own', async () => {
+    const { root, model } = await project(); const jar = join(root, 'jar'); await writeFile(jar, 'jar')
+    const io = { ...fs, lstat: async (p: string) => { if (p.endsWith('.lock')) throw new Error('identity capture failed'); return fs.lstat(p) } }
+    const result = await executeCheck({ project: root, model: 'specs/tla/test', jar, java: 'java' }, { io, preflight: readyPreflight(root, model), runCase: fakeRun, diagnostic: () => {} })
+    expect(result).toMatchObject({ status: 'verified', reason: 'verified' })
+    await writeFile(join(root, '.formal-design/locks/test.lock'), JSON.stringify({ schemaVersion: 1, pid: 1, runId: 'someone-else', startedAt: new Date().toISOString() }) + '\n')
+    // A second run that cannot capture identity must not remove that foreign lock by content.
+    const again = await executeCheck({ project: root, model: 'specs/tla/test', jar, java: 'java' }, { io, preflight: readyPreflight(root, model), diagnostic: () => {} })
+    expect(again).toMatchObject({ status: 'blocked', reason: 'model-locked' })
+    expect(await readFile(join(root, '.formal-design/locks/test.lock'), 'utf8')).toContain('someone-else')
+  })
 })
 
 describe('formal-design audit read failures', () => {
@@ -595,6 +624,17 @@ describe('formal-design source integrity', () => {
     let status = 0; let ignored = ''
     try { ignored = execFileSync('git', ['check-ignore', '--no-index', ...files], { encoding: 'utf8' }) } catch (e: any) { status = e.status; ignored = e.stdout ?? '' }
     expect(ignored).toBe(''); expect(status).toBe(1)
+  })
+  it('runs and emits JSON when the script path resolves through a symlink', async () => {
+    // argv[1] through a symlink must still trigger the CLI entrypoint;
+    // a mismatch makes every command a silent zero-byte exit 0.
+    const { root } = await project()
+    for (const command of ['preflight', 'check', 'check-evidence']) {
+      const linked = join(root, command + '.mjs')
+      await symlink(join(import.meta.dirname, `../skills/formal-design/scripts/${command}.mjs`), linked)
+      const out = execFileSync(process.execPath, [linked, '--help'], { encoding: 'utf8' })
+      expect(out).toContain(command + ' --project')
+    }
   })
 })
 

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, cp, rm, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, cp, rm, readFile, writeFile, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawn, execFileSync } from 'node:child_process'
@@ -7,6 +7,11 @@ const bundledJar = resolve(import.meta.dirname, '../skills/formal-design/toolcha
 const jar = process.env.TLA2TOOLS_JAR || (process.env.FORMAL_DESIGN_CI === '1' ? bundledJar : undefined)
 const fixtureDir = join(import.meta.dirname, 'fixtures/formal-design')
 const scripts = join(import.meta.dirname, '../skills/formal-design/scripts')
+// The runner realpath-normalizes resolved paths; use a canonical temp base so
+// expected values compare equal behind symlinked tmpdirs (macOS /var/folders).
+let canonicalTmp: string | null = null
+async function tmpBase(): Promise<string> { return canonicalTmp ??= await realpath(tmpdir()) }
+
 const command = (file: string, args: string[], options: { base?: string; env?: NodeJS.ProcessEnv } = {}) => new Promise<any>((res, rej) => {
   const child = spawn(process.execPath, [join(options.base ?? scripts, file), ...args], { shell: false, env: options.env ?? process.env }); let stdout = ''; let stderr = ''
   child.stdout.on('data', b => { stdout += b }); child.stderr.on('data', b => { stderr += b }); child.once('error', rej)
@@ -22,7 +27,7 @@ describe.skipIf(!jar)('formal-design real TLC v1.7.4', () => {
     ['property-evaluation', 'error', 'property-evaluation-failed'], ['next-evaluation', 'error', 'unknown-error'],
     ['config-event', 'error', 'config-invalid'], ['safety-evaluation', 'error', 'property-evaluation-failed'], ['action-evaluation', 'error', 'unknown-error'],  ['late-event-correct', 'verified', 'verified'], ['late-event-buggy', 'counterexample', 'invariant'],
   ])('%s produces %s/%s and round-trips through the auditor', async (name, status, reason) => {
-    const root = await mkdtemp(join(tmpdir(), 'formal TLC ')); const model = `specs/tla/${name}`
+    const root = await mkdtemp(join(await tmpBase(), 'formal TLC ')); const model = `specs/tla/${name}`
     try {
       await mkdir(join(root, 'specs/tla'), { recursive: true }); await cp(join(fixtureDir, name), join(root, model), { recursive: true })
       const args = ['--project', root, '--model', model]
@@ -50,7 +55,7 @@ describe.skipIf(!jar)('formal-design real TLC v1.7.4', () => {
 import { runCase } from '../skills/formal-design/scripts/process.lib.mjs'
 describe.skipIf(!jar)('formal-design raw pinned cfg parser protocol', () => {
   it('pins exit 255 nested cfg-parse events while the producer rejects that grammar', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'formal cfg '))
+    const root = await mkdtemp(join(await tmpBase(), 'formal cfg '))
     try {
       await cp(join(fixtureDir, 'cfg-parse'), root, { recursive: true })
       const cfg = join(root, 'invalid.cfg')
@@ -69,7 +74,7 @@ describe.skipIf(!jar)('formal-design raw pinned cfg parser protocol', () => {
 
 describe.skipIf(!jar)('formal-design default bundled distribution', () => {
   it('runs the packed skill end to end with no JAR flag or environment configuration', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'formal packed '))
+    const root = await mkdtemp(join(await tmpBase(), 'formal packed '))
     try {
       const pkg = resolve(import.meta.dirname, '..')
       const packed = JSON.parse(execFileSync('npm', ['pack', '--json', '--pack-destination', root], { cwd: pkg, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0]

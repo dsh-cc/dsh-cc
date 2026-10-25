@@ -1,429 +1,454 @@
 {
-  "toolchainVersion": "1.7.4",
-  "jarSha1": "bee4a54f3ee3d4afc347c3240ec2d9e93b075104",
-  "cases": [
-    {
-      "id": "correct",
-      "exitCode": 0,
-      "status": "verified",
-      "reason": "verified",
-      "eventCodes": [
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2193,
-        2194,
-        2199,
-        2200,
-        2219,
-        2220,
-        2262,
-        2268,
-        2401
-      ],
-      "statistics": {
-        "generated": "21",
-        "distinct": "10",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "buggy-callback",
-      "exitCode": 12,
-      "status": "counterexample",
-      "reason": "invariant",
-      "eventCodes": [
-        2110,
-        2121,
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2194,
-        2199,
-        2200,
-        2217,
-        2219,
-        2220,
-        2262,
-        2268,
-        2401
-      ],
-      "statistics": {
-        "generated": "15",
-        "distinct": "11",
-        "queue": "3"
-      }
-    },
-    {
-      "id": "deadlock",
-      "exitCode": 11,
-      "status": "counterexample",
-      "reason": "deadlock",
-      "eventCodes": [
-        2114,
-        2121,
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2194,
-        2199,
-        2200,
-        2217,
-        2219,
-        2220,
-        2262,
-        2268,
-        2401
-      ],
-      "statistics": {
-        "generated": "1",
-        "distinct": "1",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "liveness-pass",
-      "exitCode": 0,
-      "status": "verified",
-      "reason": "verified",
-      "eventCodes": [
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2192,
-        2193,
-        2194,
-        2199,
-        2200,
-        2212,
-        2219,
-        2220,
-        2262,
-        2267,
-        2268,
-        2401
-      ],
-      "statistics": {
-        "generated": "3",
-        "distinct": "2",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "liveness-fail",
-      "exitCode": 13,
-      "status": "counterexample",
-      "reason": "temporal",
-      "eventCodes": [
-        2116,
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2192,
-        2199,
-        2200,
-        2212,
-        2217,
-        2218,
-        2219,
-        2220,
-        2262,
-        2264,
-        2267,
-        2401
-      ],
-      "statistics": {
-        "generated": "2",
-        "distinct": "1",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "syntax-error",
-      "exitCode": 150,
-      "status": "error",
-      "reason": "config-invalid",
-      "eventCodes": [
-        2185,
-        2186,
-        2187,
-        2219,
-        2220,
-        2262,
-        2401,
-        3002
-      ],
-      "statistics": null
-    },
-    {
-      "id": "empty-init",
-      "exitCode": 0,
-      "status": "incomplete",
-      "reason": "output-invalid",
-      "eventCodes": [
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2193,
-        2194,
-        2199,
-        2200,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": {
-        "generated": "0",
-        "distinct": "0",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "safety-property",
-      "exitCode": 0,
-      "status": "verified",
-      "reason": "verified",
-      "eventCodes": [
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2193,
-        2194,
-        2199,
-        2200,
-        2219,
-        2220,
-        2262,
-        2268,
-        2401
-      ],
-      "statistics": {
-        "generated": "2",
-        "distinct": "1",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "initial-invariant",
-      "exitCode": 12,
-      "status": "counterexample",
-      "reason": "invariant",
-      "eventCodes": [
-        2107,
-        2185,
-        2186,
-        2187,
-        2189,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": null
-    },
-    {
-      "id": "assumption-failed",
-      "exitCode": 10,
-      "status": "error",
-      "reason": "assumption-failed",
-      "eventCodes": [
-        2104,
-        2185,
-        2186,
-        2187,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": null
-    },
-    {
-      "id": "value-assert",
-      "exitCode": 14,
-      "status": "counterexample",
-      "reason": "value-assert",
-      "eventCodes": [
-        2103,
-        2121,
-        2132,
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2199,
-        2200,
-        2217,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": {
-        "generated": "1",
-        "distinct": "1",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "invariant-evaluation",
-      "exitCode": 75,
-      "status": "error",
-      "reason": "property-evaluation-failed",
-      "eventCodes": [
-        1000,
-        2103,
-        2179,
-        2185,
-        2186,
-        2187,
-        2189,
-        2199,
-        2200,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": {
-        "generated": "1",
-        "distinct": "1",
-        "queue": "1"
-      }
-    },
-    {
-      "id": "safety-evaluation",
-      "exitCode": 76,
-      "status": "error",
-      "reason": "property-evaluation-failed",
-      "eventCodes": [
-        2111,
-        2121,
-        2179,
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2194,
-        2199,
-        2200,
-        2217,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": {
-        "generated": "2",
-        "distinct": "2",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "next-evaluation",
-      "exitCode": 255,
-      "status": "error",
-      "reason": "unknown-error",
-      "eventCodes": [
-        2103,
-        2121,
-        2179,
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2199,
-        2200,
-        2217,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": {
-        "generated": "1",
-        "distinct": "1",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "action-evaluation",
-      "exitCode": 255,
-      "status": "error",
-      "reason": "unknown-error",
-      "eventCodes": [
-        2103,
-        2113,
-        2121,
-        2179,
-        2185,
-        2186,
-        2187,
-        2189,
-        2190,
-        2199,
-        2200,
-        2217,
-        2219,
-        2220,
-        2262,
-        2401
-      ],
-      "statistics": {
-        "generated": "2",
-        "distinct": "2",
-        "queue": "0"
-      }
-    },
-    {
-      "id": "config-event",
-      "exitCode": 151,
-      "status": "error",
-      "reason": "config-invalid",
-      "eventCodes": [
-        2185,
-        2186,
-        2187,
-        2219,
-        2220,
-        2229,
-        2262,
-        2401
-      ],
-      "statistics": null
-    },
-    {
-      "id": "cfg-parse",
-      "exitCode": 255,
-      "status": "error",
-      "reason": "config-invalid",
-      "eventCodes": [
-        1000,
-        2186,
-        2187,
-        2262,
-        2401,
-        5006
-      ],
-      "statistics": null
-    }
-  ]
+ "toolchainVersion": "1.7.4",
+ "jarSha1": "bee4a54f3ee3d4afc347c3240ec2d9e93b075104",
+ "cases": [
+  {
+   "id": "correct",
+   "exitCode": 0,
+   "status": "verified",
+   "reason": "verified",
+   "eventCodes": [
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2193,
+    2194,
+    2199,
+    2200,
+    2219,
+    2220,
+    2262,
+    2268,
+    2401
+   ],
+   "statistics": {
+    "generated": "21",
+    "distinct": "10",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "buggy-callback",
+   "exitCode": 12,
+   "status": "counterexample",
+   "reason": "invariant",
+   "eventCodes": [
+    2110,
+    2121,
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2194,
+    2199,
+    2200,
+    2217,
+    2219,
+    2220,
+    2262,
+    2268,
+    2401
+   ],
+   "statistics": {
+    "generated": "15",
+    "distinct": "11",
+    "queue": "3"
+   }
+  },
+  {
+   "id": "deadlock",
+   "exitCode": 11,
+   "status": "counterexample",
+   "reason": "deadlock",
+   "eventCodes": [
+    2114,
+    2121,
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2194,
+    2199,
+    2200,
+    2217,
+    2219,
+    2220,
+    2262,
+    2268,
+    2401
+   ],
+   "statistics": {
+    "generated": "1",
+    "distinct": "1",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "liveness-pass",
+   "exitCode": 0,
+   "status": "verified",
+   "reason": "verified",
+   "eventCodes": [
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2192,
+    2193,
+    2194,
+    2199,
+    2200,
+    2212,
+    2219,
+    2220,
+    2262,
+    2267,
+    2268,
+    2401
+   ],
+   "statistics": {
+    "generated": "3",
+    "distinct": "2",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "liveness-fail",
+   "exitCode": 13,
+   "status": "counterexample",
+   "reason": "temporal",
+   "eventCodes": [
+    2116,
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2192,
+    2199,
+    2200,
+    2212,
+    2217,
+    2218,
+    2219,
+    2220,
+    2262,
+    2264,
+    2267,
+    2401
+   ],
+   "statistics": {
+    "generated": "2",
+    "distinct": "1",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "syntax-error",
+   "exitCode": 150,
+   "status": "error",
+   "reason": "config-invalid",
+   "eventCodes": [
+    2185,
+    2186,
+    2187,
+    2219,
+    2220,
+    2262,
+    2401,
+    3002
+   ],
+   "statistics": null
+  },
+  {
+   "id": "empty-init",
+   "exitCode": 0,
+   "status": "incomplete",
+   "reason": "output-invalid",
+   "eventCodes": [
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2193,
+    2194,
+    2199,
+    2200,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": {
+    "generated": "0",
+    "distinct": "0",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "safety-property",
+   "exitCode": 0,
+   "status": "verified",
+   "reason": "verified",
+   "eventCodes": [
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2193,
+    2194,
+    2199,
+    2200,
+    2219,
+    2220,
+    2262,
+    2268,
+    2401
+   ],
+   "statistics": {
+    "generated": "2",
+    "distinct": "1",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "initial-invariant",
+   "exitCode": 12,
+   "status": "counterexample",
+   "reason": "invariant",
+   "eventCodes": [
+    2107,
+    2185,
+    2186,
+    2187,
+    2189,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": null
+  },
+  {
+   "id": "assumption-failed",
+   "exitCode": 10,
+   "status": "error",
+   "reason": "assumption-failed",
+   "eventCodes": [
+    2104,
+    2185,
+    2186,
+    2187,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": null
+  },
+  {
+   "id": "value-assert",
+   "exitCode": 14,
+   "status": "counterexample",
+   "reason": "value-assert",
+   "eventCodes": [
+    2103,
+    2121,
+    2132,
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2199,
+    2200,
+    2217,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": {
+    "generated": "1",
+    "distinct": "1",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "invariant-evaluation",
+   "exitCode": 75,
+   "status": "error",
+   "reason": "property-evaluation-failed",
+   "eventCodes": [
+    1000,
+    2103,
+    2179,
+    2185,
+    2186,
+    2187,
+    2189,
+    2199,
+    2200,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": {
+    "generated": "1",
+    "distinct": "1",
+    "queue": "1"
+   }
+  },
+  {
+   "id": "safety-evaluation",
+   "exitCode": 76,
+   "status": "error",
+   "reason": "property-evaluation-failed",
+   "eventCodes": [
+    2111,
+    2121,
+    2179,
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2194,
+    2199,
+    2200,
+    2217,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": {
+    "generated": "2",
+    "distinct": "2",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "next-evaluation",
+   "exitCode": 255,
+   "status": "error",
+   "reason": "unknown-error",
+   "eventCodes": [
+    2103,
+    2121,
+    2179,
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2199,
+    2200,
+    2217,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": {
+    "generated": "1",
+    "distinct": "1",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "action-evaluation",
+   "exitCode": 255,
+   "status": "error",
+   "reason": "unknown-error",
+   "eventCodes": [
+    2103,
+    2113,
+    2121,
+    2179,
+    2185,
+    2186,
+    2187,
+    2189,
+    2190,
+    2199,
+    2200,
+    2217,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": {
+    "generated": "2",
+    "distinct": "2",
+    "queue": "0"
+   }
+  },
+  {
+   "id": "config-event",
+   "exitCode": 151,
+   "status": "error",
+   "reason": "config-invalid",
+   "eventCodes": [
+    2185,
+    2186,
+    2187,
+    2219,
+    2220,
+    2229,
+    2262,
+    2401
+   ],
+   "statistics": null
+  },
+  {
+   "id": "cfg-parse",
+   "exitCode": 255,
+   "status": "error",
+   "reason": "config-invalid",
+   "eventCodes": [
+    1000,
+    2186,
+    2187,
+    2262,
+    2401,
+    5006
+   ],
+   "statistics": null
+  },
+  {
+   "id": "oom",
+   "exitCode": 75,
+   "status": "error",
+   "reason": "property-evaluation-failed",
+   "eventCodes": [
+    1000,
+    2103,
+    2185,
+    2186,
+    2187,
+    2189,
+    2199,
+    2200,
+    2219,
+    2220,
+    2262,
+    2401
+   ],
+   "statistics": {
+    "generated": "0",
+    "distinct": "0",
+    "queue": "0"
+   }
+  }
+ ]
 }

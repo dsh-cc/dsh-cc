@@ -183,10 +183,15 @@ export async function executeCheck(options, deps = {}) {
     if (lockOwned) {
       try {
         // Exclusive creation proves ownership even if the initial write failed;
-        // a replacement is never removed based on its PID alone.
-        const stat = await io.lstat(lockPath)
-        const current = await io.readFile(lockPath, 'utf8')
-        if (lockIdentity && stat.dev === lockIdentity.dev && stat.ino === lockIdentity.ino && (!lockWritten || current === lockBytes)) await io.unlink(lockPath)
+        // a replacement is never removed based on its PID alone. Content
+        // equality with this run's lockBytes (unique runId) is ownership proof
+        // even when the creation-time inode identity could not be captured.
+        let stat = null
+        try { stat = await io.lstat(lockPath) } catch { /* identity capture failed */ }
+        let current = null
+        try { current = await io.readFile(lockPath, 'utf8') } catch { /* unreadable */ }
+        const identityMatches = Boolean(lockIdentity && stat && stat.dev === lockIdentity.dev && stat.ino === lockIdentity.ino)
+        if (current === lockBytes || (identityMatches && (!lockWritten || current === ''))) await io.unlink(lockPath)
         else diagnostic('lock contents changed; owned-lock cleanup refused')
       } catch { diagnostic('owned-lock cleanup failed; inspect recorded ownership before removal') }
     }
