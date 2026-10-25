@@ -5,6 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
 import { createStatusLineWiring } from '@dsh-cc/tui/harness/statusline-wiring.ts'
 import { formatModeLine } from '@dsh-cc/tui/statusline.ts'
+import { ArmingMachine, resetRuntimeCore, setRuntimeCore } from '@dsh-cc/moa'
+
+/**
+ * Point the shared moa runtime validation at an arming state — the tap's
+ * source of truth for the unarmed segment (scope-aware-listeners §4). Both
+ * sides resolve `@dsh-cc/moa`'s entry, so the module instance is shared.
+ */
+function setMoaValidation(validation: { ok: boolean; reason?: string; unarmedReason?: string }): void {
+  setRuntimeCore({ arming: new ArmingMachine(() => true), validation })
+}
 
 /**
  * Slice 4 — driver wiring for the custom status line (plan §4/Slice 4).
@@ -269,6 +279,7 @@ describe('createDriver custom statusLine wiring', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    resetRuntimeCore()
     if (prevHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = prevHome
     rmSync(tempHome, { recursive: true, force: true })
@@ -819,7 +830,7 @@ describe('createDriver custom statusLine wiring', () => {
     await driver.dispose()
   })
 
-  it('a moa event from another session (or without a tier) is ignored', async () => {
+  it('a moa event from another session (or a tier-less notice) is ignored', async () => {
     const { driver, emitSessionEvent, executor } = await bootActiveDriver()
     await vi.advanceTimersByTimeAsync(0)
 
@@ -831,6 +842,68 @@ describe('createDriver custom statusLine wiring', () => {
     emitSessionEvent('s-a', {
       type: 'user/message', seq: 2, time: 1_700_000_001_000,
       data: { source: { kind: 'moa', form: 'notice', summary: 'moa: routed → blueprint' } },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(driver.statusLine).not.toContain('moa:')
+    expect(JSON.parse(executor.specs.at(-1)!.stdin!)).not.toHaveProperty('moa')
+  })
+
+  it('an enabled-but-unarmed validation renders moa:unarmed — <reason>; arming success clears it (§4)', async () => {
+    // Bare driver (no settings/executor): the built-in lane is in charge.
+    const bare = makeStatusLineCtx({ projections: makeProjections() })
+    const driver = await createDriver(bare.ctx as never, { cwd: '/w/proj', branchProbe: async () => undefined })
+    // The shared moa validation (no session event of its own) is the source of
+    // truth: the tap re-reads it per event, so any event publishes its state.
+    setMoaValidation({ ok: false, reason: 'moa ladder is degenerate', unarmedReason: 'moa ladder is degenerate' })
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'user' } },
+    })
+    expect(driver.statusLine).toContain('moa:unarmed — moa ladder is degenerate')
+    // Arming succeeds: the next event re-reads the cleared reason and drops it.
+    setMoaValidation({ ok: true, reason: 'armed' })
+    bare.emitSessionEvent('s-a', {
+      type: 'user/message', seq: 2, time: 1_700_000_001_000,
+      data: { source: { kind: 'user' } },
+    })
+    expect(driver.statusLine).not.toContain('moa:')
+    await driver.dispose()
+  })
+
+  it('the unarmed reason rides the payload as moa:{unarmed}; an armed notice replaces it (§4)', async () => {
+    const { emitSessionEvent, executor } = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(0)
+    setMoaValidation({
+      ok: false,
+      reason: 'ccModelRoutes service unavailable; tiers cannot be resolved',
+      unarmedReason: 'ccModelRoutes service unavailable; tiers cannot be resolved',
+    })
+    emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'user' } },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(JSON.parse(executor.specs.at(-1)!.stdin!).moa)
+      .toEqual({ unarmed: 'ccModelRoutes service unavailable; tiers cannot be resolved' })
+    // Arming succeeds AND a routed notice arrives: the tier replaces the reason.
+    setMoaValidation({ ok: true, reason: 'armed' })
+    emitSessionEvent('s-a', {
+      type: 'user/message', seq: 2, time: 1_700_000_001_000,
+      data: { source: { kind: 'moa', form: 'notice', summary: 'x', tier: 1 } },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+    expect(JSON.parse(executor.specs.at(-1)!.stdin!).moa).toEqual({ tier: 'draft' })
+  })
+
+  it('`moa disabled` (enabled=false) produces nothing — no segment, no payload field (§4)', async () => {
+    const { driver, emitSessionEvent, executor } = await bootActiveDriver()
+    await vi.advanceTimersByTimeAsync(0)
+    // The default-off population: the validation says disabled and carries NO
+    // unarmed reason (tryArm never sets one while disabled).
+    setMoaValidation({ ok: false, reason: 'moa disabled' })
+    emitSessionEvent('s-a', {
+      type: 'user/message', seq: 1, time: 1_700_000_000_000,
+      data: { source: { kind: 'user' } },
     })
     await vi.advanceTimersByTimeAsync(300)
     expect(driver.statusLine).not.toContain('moa:')

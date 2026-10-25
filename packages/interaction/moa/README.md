@@ -50,3 +50,10 @@ lie about which model is serving the session:
   the built-in footer and the custom-command payload (`moa: {tier, model}`).
   A true switch-away clears the segment; the plain selection shows whenever
   no overlay is serving.
+- **Statusline shows why moa is not armed.** With `moa.enabled: true` but
+  arming refused (routes unavailable, degenerate ladder, judge-route window
+  failure) the statusline renders `moa:unarmed — <reason>` in the built-in
+  footer and carries `moa: {unarmed}` in the custom-command payload, so a
+  misconfiguration is visible instead of hiding in a warn line. Arming
+  success (or a routed notice) clears it. `moa disabled` — the default-off
+  population — renders nothing.

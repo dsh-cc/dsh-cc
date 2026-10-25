@@ -28,7 +28,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { makeRig, BOOT_PAIR, GAUGE_ROUTE } from './rig.ts'
-import { apply, resetMoaCore, getMoaCore, resolveSystemOneBackend, buildDeps, DEFAULT_MOA_SETTINGS } from '../src/index.ts'
+import { apply, resetMoaCore, getMoaCore, moaUnarmedReason, resolveSystemOneBackend, buildDeps, DEFAULT_MOA_SETTINGS } from '../src/index.ts'
 
 /** A describe-shaped settings service double (settings-ns `DescribeFace`). */
 function fakeSettingsService(sections: Record<string, unknown>): {
@@ -199,6 +199,20 @@ describe('moa wiring (apply) — mount-order race', () => {
     apply(rig.ctx as never)
     rig.arrive({}, healthyRoutes)
     expect(getMoaCore().armingValidation).toEqual({ ok: false, reason: 'moa disabled' })
+    // §4: the default-off population NEVER produces an unarmed reason.
+    expect(moaUnarmedReason()).toBeUndefined()
+  })
+
+  it('exposes the enabled-but-unarmed reason; arming success clears it (§4)', () => {
+    resetMoaCore()
+    const rig = makeLateCtx()
+    apply(rig.ctx as never)
+    rig.arrive({ moa: { enabled: true } }, degenerateRoutes)
+    expect(moaUnarmedReason()).toMatch(/degenerate/)
+    // The overlay mounts in place: the retry arms and the reason clears.
+    rig.provideRoutes(healthyRoutes)
+    expect(moaUnarmedReason()).toBeUndefined()
+    expect(getMoaCore().armingValidation?.unarmedReason).toBeUndefined()
   })
 })
 

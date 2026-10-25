@@ -43,11 +43,12 @@ export type StatusLinePayloadView = {
   /**
    * Moa routing tier for the current turn: the tier alias plus, when known,
    * the effective model id the overlay resolves to (effective-model-truth
-   * §5.4). Additive non-CC key (deviation recorded like `version` above):
-   * external CC consumers ignore unknown keys; omitted when moa is off or no
-   * route has landed yet.
+   * §5.4) — or, while moa is enabled but unarmed, the arming refusal reason
+   * (scope-aware-listeners §4). Additive non-CC key (deviation recorded like
+   * `version` above): external CC consumers ignore unknown keys; omitted when
+   * moa is off, no route has landed yet, or moa is disabled.
    */
-  moa?: { tier: string; model?: string }
+  moa?: { tier?: string; model?: string; unarmed?: string }
   /** Git worktree name (mirrors the worktree descriptor's name). */
   gitWorktree?: string
   /** Uncached input-token total (context-window total). */
@@ -156,7 +157,11 @@ export function buildStatusLinePayload(view: StatusLinePayloadView): Record<stri
     moa:
       view.moa === undefined
         ? undefined
-        : compact({ tier: view.moa.tier, ...(view.moa.model === undefined ? {} : { model: view.moa.model }) }),
+        : compact({
+          tier: view.moa.tier,
+          model: view.moa.model,
+          unarmed: view.moa.unarmed,
+        }),
   }
   return compact(payload) ?? {}
 }

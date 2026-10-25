@@ -40,7 +40,7 @@ export { TIER_ALIASES, TIER_COUNT, resolveTiers, tierAt, nextTierUp, type TierRe
 export { DEFAULT_JUDGE_ALIAS, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
 export { MOA_ESCALATION_KIND, isMoaEscalationMessage, EscalationBookkeeping, type EscalationState } from './state.ts'
 export { moaNoticeSource } from './provenance.ts'
-export { CAPTURE_CAPACITY, captureClaimed, getCapturedOpening } from './runtime-state.ts'
+export { CAPTURE_CAPACITY, captureClaimed, getCapturedOpening, moaUnarmedReason, resetRuntimeCore, setRuntimeCore } from './runtime-state.ts'
 export { createRequestRouter, validateArming, textOf, tierRouteVariables, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
 export { createAcceptanceJudge, ACCEPT_QUESTION, type AcceptanceJudge, type JudgeDeps } from './judge.ts'
 
@@ -156,6 +156,8 @@ export function apply(ctx: Context): void {
     if (!settings.enabled) {
       // Leave unarmed but retryable: a later enable (hot reload) re-runs this.
       validation.reason = 'moa disabled'
+      // §4: `moa disabled` is the default-off population — never an unarmed reason.
+      validation.unarmedReason = undefined
       return
     }
     // Routes resolve lazily: `ccModelRoutes` is an app-level service that is
@@ -172,12 +174,15 @@ export function apply(ctx: Context): void {
       validation.ok = false
       validation.reason = reason
       validation.ladder = undefined
+      // §4: the enabled-but-unarmed reason the statusline tap renders.
+      validation.unarmedReason = reason
       return
     }
     arming.arm()
     validation.ok = true
     validation.reason = 'armed'
     validation.ladder = result.ladder
+    validation.unarmedReason = undefined
   }
   tryArm()
   try {

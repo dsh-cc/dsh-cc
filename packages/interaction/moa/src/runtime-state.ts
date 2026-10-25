@@ -118,6 +118,12 @@ export function clearMoaRows(): void {
 export interface RuntimeValidation {
   ok: boolean
   reason?: string
+  /**
+   * The enabled-but-unarmed reason (scope-aware-listeners §4): set by `tryArm`
+   * on every failure while `moa.enabled`, cleared on arming success. NEVER set
+   * for `moa disabled` — the default-off population stays silent.
+   */
+  unarmedReason?: string | undefined
 }
 
 let arming: ArmingMachine | undefined
@@ -154,6 +160,14 @@ export function moaBootDefault(): RequestPair | undefined {
 /** `validation.ok && arming.isArmed()`; false (never throws) when not applied. */
 export function moaOverlayActive(): boolean {
   return validation?.ok === true && (arming?.isArmed() ?? false)
+}
+
+/**
+ * The enabled-but-unarmed reason, or undefined when armed, disabled, or not
+ * applied (§4 visibility). The statusline tap renders this as `moa:unarmed — …`.
+ */
+export function moaUnarmedReason(): string | undefined {
+  return validation?.unarmedReason
 }
 
 /** Publish one agent's frozen per-step selection (the sanitizer's pre-step half). */

@@ -83,7 +83,7 @@ export interface RouterDeps {
 }
 
 /** Mount-time arming validation outcome (§3.7 / §3.6 window check). */
-export interface ArmingValidation { ok: boolean; reason?: string; ladder?: TierLadder | undefined }
+export interface ArmingValidation { ok: boolean; reason?: string; ladder?: TierLadder | undefined; unarmedReason?: string | undefined }
 
 /**
  * Re-run the arm/validate pass when not yet armed (mount-order race: the
