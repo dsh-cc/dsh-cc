@@ -39,28 +39,28 @@ Two independent defects currently leave `moa` (tiered cascade routing, PRs
 - Baseline: fresh pty-driven TUI sessions complete real turns
   (turn/start → request/header → assistant/message → turn/end in
   `session.v4.jsonl.zstd`) while `~/.dsh/moa/routing.jsonl` gains no row.
-  Ledger last row before the probe: 2026-10-23 16:49 CST.
+  Ledger last row before the probe: 2026-10-23 16:49 CST. 〔src:ws:.scratch/moa-revival/probe-evidence.md#L9-L18〕
 - Pool-side tryArm stub (reverted after each probe; SHA-1 verified):
   `tryArm FAILED: moa ladder is degenerate …` with the stock aliases;
-  `tryArm OK` once `sonnet` is set to a distinct model.
+  `tryArm OK` once `sonnet` is set to a distinct model. 〔src:ws:.scratch/moa-revival/probe-evidence.md#L19-L28〕
 - Scope fingerprint stub (also reverted, SHA-1 verified): two applies —
   fiber chains `…/agent.cordis.yml` (cc tree, first, registers listeners)
   and `…/agent.vwa.cordis.yml` (vwa tree, second, early-returns) — and the
   main agent's scope parent equals the **vwa** standing-mount key
-  (`parentIsTag0=false parentIsTag1=true`).
+  (`parentIsTag0=false parentIsTag1=true`). 〔src:ws:.scratch/moa-revival/probe-evidence.md#L29-L48〕
 - Counterfactual A (`vwa-preset.selectedDefault: "cc"` alone): agent returns
   to the cc tree (`parentIsTag0=true`); still no ledger row — blocked by the
   degenerate ladder (Bug A).
 - Counterfactual B (`selectedDefault: "cc"` AND `sonnet → glm-5.3-flash`):
   `routing.jsonl` gains `2026-10-25T04:38:57Z tier=sketch P=0.7999` — full
   revival. Each defect is individually necessary; both are jointly
-  sufficient.
+  sufficient. 〔src:ws:.scratch/moa-revival/probe-evidence.md#L49-L57〕
 
 Known attribution trap, documented for future probes: a shared
 `/tmp/moa-trace.log` is written by every process using the pool, including
 the user's concurrently running TUI sessions; a listener-firing observation
 made this session look alive until the writer's pid was checked. All stubs
-now carry `process.pid`.
+now carry `process.pid`. 〔src:ws:.scratch/moa-revival/probe-evidence.md#L35-L42〕
 
 ### 1.2 Why the existing tests missed it
 
@@ -340,7 +340,7 @@ an expected signal).
 Commands and artifacts (all reverted; SHA-1 receipts):
 
 - pool `index.js`/`router.js` restored to
-  `60da51e1…`/`cbae04e9…` after every stub round; `grep -c '__tr'` → 0.
+  `60da51e1…`/`cbae04e9…` after every stub round; `grep -c '__tr'` → 0. 〔src:ws:.scratch/moa-revival/probe-evidence.md#L58-L64〕
 - `~/.dsh/settings.json` restored from byte-identical backup after the
   counterfactual (selectedDefault back to `vwa`, `sonnet` back to
   `deepseek-v4.1-flash`).
@@ -397,7 +397,7 @@ Rejected-from-fold: none — all r1 findings folded. Delta round pending.
 
 ### r2 (delta confirmation, 2026-10-25; brief `delta-brief.md`)
 
-- codex: 13/13 folds OK — VERDICT: GO (14.4k tokens).
+- codex: 13/13 folds OK — VERDICT: GO (14.4k tokens). 〔src:ws:.scratch/moa-revival/codex-r2.md#L418-L418〕
 - critic: 10/10 folds OK, no NEW — VERDICT: GO.
 - grok: 12/13 OK; fold 7 PROBLEM — "rebinding `readSettings`
   per apply cannot install a survivor reader: `registerNamespaceSafe`
@@ -429,7 +429,7 @@ residue fixed (grok NEW). A final micro-confirmation was dispatched.
 
 ### r4 (grok final micro-confirmation, 2026-10-25)
 
-"fold 7 + RESOLVED" — VERDICT: GO. Review convergence complete:
+"fold 7 + RESOLVED" — VERDICT: GO. 〔src:ws:.scratch/moa-revival/grok-r4.md#L1-L3〕 Review convergence complete:
 codex GO (r2 delta, 13/13), critic GO (r2 delta, 10/10), grok GO
 (r4, after two additional mechanism-precision rounds on the
 settings-reader ownership). User sign-off pending per house rules;
