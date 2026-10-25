@@ -33,9 +33,15 @@ one backend.
 - ↑ (empty composer) — recall the most recent queued message into the composer for editing; with a non-empty composer, ↑ walks composer history; in `!` shell mode, ↑/↓ walk the separate bash history
 - Tab — complete slash-command arguments after the command name (supported for `/model`, `/effort`, `/permissions`, and `/resume`)
 - `!` — run a local shell command (see [Shell mode](#shell-mode-))
-- `/quit` — exit
+- `/quit` (alias `/exit`) — exit; on exit the TUI prints the session id and a `--resume <id>` tip (set `DSH_CC_DISABLE_EXIT_TIP=1` to suppress it)
+- `/clear` (aliases `/new`, `/reset`) — start a new conversation with empty context; the previous session stays resumable
 - `/model` — list or switch the live LLM route
-- `/resume [id]` — list persisted sessions, or pin the next launch id
+- `/effort <level|default>` — set reasoning effort for the current model
+- `/resume [id]` — with no argument open the session switcher; with an id switch to that session
+- `/agents` — list, inspect, stop, or release background agents
+- `/provider` — manage LLM provider routes and API keys (`list`, `add <preset-id>`, `remove <route>`)
+- `/onboard` — re-run the first-run setup
+- `/tui-help` — show the key and command help
 - `/export-md [path]` — write the transcript to a Markdown file; an explicit path resolves against the session cwd, and no argument lands under `$DSH_HOME/tui/exports/<sessionId>-<timestamp>.md` (the directory is created on demand)
 - `/copy` — copy the most recent assistant reply to the system clipboard via an OSC 52 sequence (terminal must support OSC 52; no reply yet degrades to a notice)
 - `/usage` — open the usage panel: a context-occupancy bar, the token totals (input/output/cache buckets), and the system/tools/messages breakdown, all live while open; Esc closes it. Quota data has no source in this stack and is never shown
@@ -49,6 +55,16 @@ one backend.
   ordinary prose. Known limitation: because pi-tui drops autocomplete when its
   provider is replaced, an open `/` menu may close at the moment the skill
   catalog arrives.
+
+## Configuration
+
+The plugin `Config` (`src/index.ts`) accepts, besides `theme` (see [Theme](#theme)):
+`uiMode` (`regular` inline scrollback, the plugin default, or `fullscreen` alternate screen; the
+`DSH_CCTUI_UI_MODE` env var overrides it, and the `cc-tui` bundle profile pins `fullscreen`),
+`mouse` (fullscreen only: mouse capture for viewport scrolling and application-owned text
+selection, default `true`), `allowNoTty` (or `DSH_CCTUI_ALLOW_NO_TTY=1`: mount without a TTY),
+plus the launch fields `cwd`, `agentPreset`, `sessionId`, `autoResume`, `continueRequested`,
+`provider`, and `model`.
 
 ## Rendering
 

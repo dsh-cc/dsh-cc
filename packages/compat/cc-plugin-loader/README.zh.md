@@ -51,7 +51,7 @@ JSON 读失败与缺失的 `installPath` 会跳过而不是抛错。项目/local
 |---|---|---|---|
 | `commands` | 清单内联/source，或默认 `commands/*.md` | `commands` | 通过 `register` 注册每个斜杠命令；handler 返回命令内容 |
 | `agents` | `agents/` 目录或清单路径 | `subagents` | 通过 `loadAgentsDir` 加载 `AgentDefinition`，再通过 `registerProvider` 注册为命名 provider——以插件名做命名空间（`namespacePrefix: manifest.name`），因此 `provider.name` 是 scoped id `plugin:agent`，而 `provider.definition.agentType` 保持裸名；provider 还会暴露其 `definition`，供 Task 工具实时枚举。**不带** `namespacePrefix` 挂载则保持裸名——这些 agent 随后**对 Task 工具不可见**（一种向后兼容的逃生舱口，不是受支持的派发模式） |
-| `skills` | `skills/` 目录或清单路径 | `skills` | 通过 `discoverCcSkills` 发现 `SKILL.md`、解析 frontmatter，再通过 `register` 注册为运行时技能 |
+| `skills` | `skills/` 目录或清单路径 | `skills` | 通过 `discoverCcSkills` 发现 `SKILL.md`、解析 frontmatter，再通过 `register` 注册为运行时技能；技能名取其目录名，目录名不是合法注册名时（例如清单以 `"skills": ["./"]` 把带版本号的插件根目录列为技能根）回退到 frontmatter 的 `name`，见 `src/skills.ts:resolveSkillName` |
 | `hooks` | `hooks/hooks.json` 或内联 | `hooks`（guest）| 通过 `mergePluginHooks` 注入按事件组织的 hook 映射 |
 | `mcpServers` | 内联记录或 `.mcp.json` | `mcp`（guest）| 通过 `registerServer` 注册每个 server（工具命名是 seam 的职责）|
 | `settings` | 清单记录 | `settings`（guest）| 过滤到 allowlist（当前是 `agent`）后通过 `set` 写入 |

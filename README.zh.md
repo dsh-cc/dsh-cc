@@ -39,6 +39,8 @@ npm install -g @dsh-cc/cli@latest
 dsh-cc
 ```
 
+正式版（`vX.Y.Z`）发布到 npm 的 `latest` dist-tag；候选版（`vX.Y.Z-rc.N`）发布到 `next`，不会占用 `latest`。要试用候选版，请运行 `npm install -g @dsh-cc/cli@next`。
+
 升级后，启动器会在下次启动时更新 profile 中的 bundles，并将版本记录在 `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`。
 
 如果更新失败，启动器会显示警告并使用当前 profile 启动，下次启动时重试。
@@ -72,8 +74,7 @@ dsh web
 
 | dsh-cc 版本 | 已验证的 dsh |
 | --- | --- |
-| v0.9.0-rc.1 – v0.9.0-rc.4 | 0.2.0-rc.2 |
-| v0.8.3-rc.1 | 0.2.0-rc.2 |
+| v0.8.3-rc.1 – v0.9.2 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
 | v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
@@ -200,7 +201,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | 切换交互界面 | 终端和 Web profile |
 | 审查文档证据 | 可选的 VWA 运行时与 vwa-writing skill |
 
-本项目使用 dsh-cc 开发自身，参见[模型配置示例](#模型配置示例)。
+本项目使用 dsh-cc 开发自身；其模型路由属于用户配置，仅通过[模型别名](#模型别名)表达。
 
 ## 适用用户
 
@@ -335,6 +336,8 @@ CC preset 包含以下命令。用 `/help` 查看当前安装构建中的命令�
 
 共享 preset 还包含 `/preset`，VWA preset 另外提供 `/vwa` 项目命令。
 
+TUI 另有本地命令：`/model`、`/effort`、`/clear`（`/new`、`/reset`）、`/exit`（`/quit`）、`/usage`、`/export-md`、`/copy`、`/tui-help`。详见 [TUI 包](packages/ui/tui/README.zh.md#按键)。
+
 TUI 还提供任务列表、审批、排队提示词、会话导出、用量显示和本地 shell 命令。
 
 ### 配置 provider
@@ -380,19 +383,6 @@ inherit             -> parent agent route
 ```
 
 别名属于配置，不绑定固定厂商。未配置的内置别名通常继承父路由。
-
-### 模型配置示例
-
-仓库开发配置采用以下映射。这是示例，不是强制默认值。
-
-| 别名 | 模型 |
-| --- | --- |
-| `fable` / `masterplan` | `kimi-k3` |
-| `opus` / `blueprint` | `glm-5.3` |
-| `sonnet` / `draft` | `glm-5.3-flash` |
-| `haiku` / `sketch` | `deepseek-v4-flash-0731` |
-| `gauge` | `jev` （System One 决策通道：类型化判定，不生成正文） |
-| `architect` | inherit（主线程） |
 
 ## 产品边界
 

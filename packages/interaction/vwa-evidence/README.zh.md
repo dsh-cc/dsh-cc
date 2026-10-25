@@ -61,6 +61,26 @@ markdown 交付物转成机器可查证证据回执的纯函数模块。
   评估器将其实现为按会话单调事件序的每路径最后一行选取
   （`staleAgainst`），不引入额外的外部记账。
 
+## Lane-2 绑定产物交付（§16.2）
+
+当 `vwa-argument` 服务挂载在同一 realm 时，回合结束评估器还会处理被某个
+`vwa-argument` 项目绑定的产物（`src/bound-eval.ts`、`src/vwa-delivery.ts`）。
+服务按每次分派用 `ctx.get('vwa-argument')` 做结构化解析（`resolveDeliveryProvider`）；
+本包从不 import `@dsh-cc/vwa-argument`。服务缺失或不具备 provider 接口时，产物仍走上述
+lane-1 路径（fail-soft）。
+
+- **先报告，后回执。** 评审报告写入 `.dsh/vwa/<projectId>/reports/<artifactId>.md`
+  （`writeBoundReport`），随后向同一会话台账追加引用报告哈希的 **v:2 回执行**
+  （`ReceiptV2`，`src/receipt.ts:110`），并读回校验。其 `checks` 含 `mechanical`、
+  `evidence`、`argument`、`audit` 判定，`delivery` 取值为 `draft | reviewed |
+  delivered-unverified | delivered-reviewed`。
+- **交付事件。** 唯一被接受的交付事件是宿主的 `deliverables/presented` 会话事件；
+  哈希在检查时按已呈现文件的当前字节计算，并与绑定比对。事件从不伪造。
+- **claim 标记。** `〔claim:<id>〕` 作者辅助标记在 lane-1 表面上按普通文本处理：被跳过
+  （不产生 source spec，也不产生 `invalid-marker`），所有字符偏移保持有效
+  （`isClaimMarkerInner`，`src/marker.ts`）。
+- nudge 仍走唯一的 `vwa-evidence` inject 来源；绑定过期会产生单独的 nudge。
+
 本包为 vwa 专属（按设计 §3.2(a) 不进入能力清单）。
 
 计划：`docs/plans/2026-10-12-verifiable-workspace-agent.md`

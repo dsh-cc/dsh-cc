@@ -7,16 +7,17 @@ DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`mi
 ## 作用
 
 - **完整标准基底**。`agent.shared.cordis.yml`（cc 与 vwa 两个包装共同 include 的共享行体）以标准 `standard` preset 的逐字拷贝开头（16 个基座行），CC 模式会话因此具备标准编码 agent 的全部能力。
-- **作用域化的 CC 表面**。`cc rows` 段挂载 Claude Code 对齐插件——hook 桥（30 个 hook 事件中的 18 个）、CC 插件目录 glue、`ToolSearch`、memory 与 consolidation、输出样式、coordinator、21 个斜杠命令，以及 worktree/sleep/notebook/structured-output 与 git 工具。WebFetch:stock `tool-web` 以 `fetch: false` 运行，搜索超时沿用 60s;`web_fetch` 由 cc-services 里的 `tool-web-fetch` 行（`@dsh-cc/tool-web-fetch`，可选 `prompt` 在廉价 lane 上摘要）替代。fetch 执行器是 dsh-base 自带的 stock provider（DNS 钉定、逐跳仅公网），CC 出口上限由 cc-shell patch 重述；工具层会把 `http:` URL 升级为 `https:`（CC 对齐）；没有 `haiku` 路由时，可选 `prompt` 会在任何 fetch 之前硬失败。
+- **作用域化的 CC 表面**。`cc rows` 段挂载 Claude Code 对齐插件——hook 桥（支持 20 个 Claude hook 事件）、CC 插件目录 glue、`ToolSearch`、memory 与 consolidation、输出样式、coordinator、25 个斜杠命令，以及 worktree/sleep/notebook/structured-output 与 git 工具。WebFetch:stock `tool-web` 以 `fetch: false` 运行，搜索超时沿用 60s;`web_fetch` 由 cc-services 里的 `tool-web-fetch` 行（`@dsh-cc/tool-web-fetch`，可选 `prompt` 在廉价 lane 上摘要）替代。fetch 执行器是 dsh-base 自带的 stock provider（DNS 钉定、逐跳仅公网），CC 出口上限由 cc-shell patch 重述；工具层会把 `http:` URL 升级为 `https:`（CC 对齐）；没有 `haiku` 路由时，可选 `prompt` 会在任何 fetch 之前硬失败。
 - **会话标题与 `/rename`**。cc-shell bundle 用 `@dsh-cc/session-title-provider` 替换原生 `session-title-llm` 宿主行——first-prompt 标题提供方，配置了 `haiku` 廉价通道时盖印该路由（否则继承主路由）；本 preset 还挂载 `@dsh-cc/command-rename`，`/rename <title>` 即可固定用户标题。
-- **隔离的服务 realm**。承载服务的行（工具搜索、microcompactor、插件注册表、MCP 连接、hook-bridge 状态、插件 MCP seam）放进 `cc-services` 组并带七个必需的 `isolate` 键，发布到 entry-local realm 而非进程全局 root realm（否则会触发 preset 挂载门禁）。
+- **隔离的服务 realm**。承载服务的行放进 `cc-services` 组，并带九个必需的 `isolate` 键（`microcompactor`、`ccModelRoutes`、`resumePinStore`、`hookBridgeStatus`、`mcp`、`hooks`、`rules`、`contextCrusher`、`ccActorContractGate`），发布到 entry-local realm 而非进程全局 root realm（否则会触发 preset 挂载门禁）。`mcpConnections`、`toolSearch`、`ccPlugins` 有意**不**隔离：它们是由 root 发布的运行时单例，因此同一运行时中挂载的每个预设树（`cc` 与 `vwa`）共用同一份 MCP 注册表。
+- **`cc-services` 中的交互叠加层**。该组还挂载 `retry-attendant`、`post-edit-verify`、`lsp-on-write`、`turn-rules`、`prompt-suggest`、`advisor-watchdog`、`completion-gate`、`config-snapshot`、`progress-rebuild`、`skill-usage`、`reasoning-fold`、`tool-use-summary`、`handoff-store`、`serena-first`、`tool-manage-skill` 与 `moa` 行；设置详见各包 README。
 - **CC Task 委派（`tool-task` + `cc-model-routes`）**。`cc-services` 组还挂载 `@dsh-cc/subagent-task`（CC Task 工具，对按工作区的 `.claude/agents` 定义做 `subagent_type` 派发）与 `@dsh-cc/model-aliases`（`cc-model-routes`，拥有 `model-aliases` settings 命名空间与派发时别名解析器）。本 preset 里 harness 的 `tool-subagent` 与 `tool-subagent-fork` 两行被**禁用**，改用这个替代 Task，它同样拥有 durable 后台/`continuable` 流程：`run_in_background: true` 启动一个可按 agentId 寻址的 continuable 子代理，`report`/`send_message`/`list_agents`/`interrupt_agent` 都作用于该 id（`subagent_type: "fork"` 在上游 harness issue #2124 解决前保持前台一次性）。已知限制见 task 包 README 与 parity matrix。
 
 这些行此前位于全局 `cc-shell` patch(`packages/bundle/cc-shell/cordis.patch.yml`)，会泄漏进每个 agent preset；把它们 scope 到本 preset 正是隔离各行为面的手段。
 
 ## 安装
 
-无需安装步骤：`tui` profile 的 bundle patch（`packages/bundle/cc-tui/cordis.patch.yml`）会挂载 harness 的 agent-preset registry（`default: cc`），并以一条 file-backed include 行声明本 preset、指向本包内的 `agent.cordis.yml`；该包随 bundle 一起装入 profile 的 `node_modules`。插件代码与 preset 文件在启动时读取，因此更新包后需**重启 dsh**。
+无需安装步骤：`tui` profile 的 bundle patch（`packages/bundle/cc-tui/cordis.patch.yml`）会挂载 harness 的 agent-preset registry（`default: cc`），并以 file-backed include 行声明 `cc` 预设（order 5，指向本包内的 `agent.cordis.yml`）与 `vwa` 预设（order 6，指向 `agent.vwa.cordis.yml`）；该包随 bundle 一起装入 profile 的 `node_modules`。插件代码与 preset 文件在启动时读取，因此更新包后需**重启 dsh**。
 
 ## 选用
 

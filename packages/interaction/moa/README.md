@@ -20,6 +20,17 @@ costs nothing. Subagents/forks are never overlaid.
 | `classify-budget-tokens` | `4000` | classify input budget |
 | `call-budget-ms` | `8000` | per-message cascade deadline |
 
+## Arming ladder
+
+At arming time moa resolves the four lane aliases through `ccModelRoutes`
+(`resolveTiers`, `src/tiers.ts:50`). A lane that does not resolve to a
+concrete provider and model refuses to arm. The resolved ladder must be
+contiguous runs with at least two distinct routes: a route may repeat only
+next to itself (`[A,A,B,C]` arms), a route that reappears after a different
+one (`[A,B,A,C]`) refuses because an escalation would hop down, and an
+all-identical ladder refuses. Escalation moves to the next distinct tier of
+the ladder snapshot taken at arming.
+
 ## Truthful model bookkeeping
 
 While moa overlays a tier on the boot selection, two things would otherwise
@@ -46,7 +57,7 @@ lie about which model is serving the session:
   the wire always agree.
 - **Statusline shows the effective pair.** While an overlay is active the
   statusline renders `<model-id> ◂ <tier-alias>` (e.g.
-  `deepseek-v4.1-flash ◂ sketch`) instead of the bare tier alias — both in
+  `<model-id> ◂ sketch`) instead of the bare tier alias — both in
   the built-in footer and the custom-command payload (`moa: {tier, model}`).
   A true switch-away clears the segment; the plain selection shows whenever
   no overlay is serving.

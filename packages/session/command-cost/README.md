@@ -23,8 +23,8 @@ The CC preset (`@dsh-cc/preset-cc`) ships a starter table of official published 
   name: '@dsh-cc/command-cost'
   config:
     modelTable:
-      - model: deepseek-chat
-        provider: deepseek
+      - model: <model-id>
+        provider: <provider>
         inputPerMTok: 0.27
         outputPerMTok: 1.10
         cacheReadPerMTok: 0.07
@@ -55,6 +55,6 @@ The slash input and the direct token/cost output are absent from model requests 
 
 ## Known Limitations and Deferred Work
 
-- **Pricing tiers** — matching is exact first (first row wins), then a route-prefix tail-segment match (longest row wins; equal length → first row), then the `'*'` wildcard. A provider-less row prices every provider's prefixed variant of that model (e.g. `glm-5.3` prices both `llmbox_ant/glm-5.3` and `routeX/glm-5.3`); deployments that need provider isolation must set `provider` on the row.
+- **Pricing tiers** — matching is exact first (first row wins), then a route-prefix tail-segment match (longest row wins; equal length → first row), then the `'*'` wildcard. A provider-less row prices every provider's prefixed variant of that model (e.g. a row for `<model-id>` prices both `<provider-a>/<model-id>` and `<provider-b>/<model-id>`); deployments that need provider isolation must set `provider` on the row.
 - **Starter prices are list prices, not your bill** — the preset table reflects official published prices at collection time and goes stale as vendors adjust; deployments with negotiated or internal-gateway pricing must override it.
 - **No live totals during a turn** — `/cost` reports the durable log up to the last checkpoint; in-flight usage is not included.

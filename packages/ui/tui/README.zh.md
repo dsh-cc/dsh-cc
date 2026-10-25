@@ -30,9 +30,15 @@ dsh --profile tui
 - ↑（输入框为空时）— 撤回最近一条排队消息到输入框以供编辑；输入框非空时，↑ 遍历输入框历史；`!` shell 模式下，↑/↓ 遍历独立的 bash 历史
 - Tab — 在命令名之后补全斜杠命令参数（支持 `/model`、`/effort`、`/permissions`、`/resume`）
 - `!` — 运行本地 shell 命令（见 [Shell 模式](#shell-模式-）)
-- `/quit` — 退出
+- `/quit`（别名 `/exit`）— 退出；退出时 TUI 会打印会话 id 与 `--resume <id>` 提示（设置 `DSH_CC_DISABLE_EXIT_TIP=1` 可关闭）
+- `/clear`（别名 `/new`、`/reset`）— 以空上下文开始新对话；之前的会话仍可恢复
 - `/model` — 列出或切换实时 LLM 路由
-- `/resume [id]` — 列出持久化会话，或钉存下次启动的 id
+- `/effort <level|default>` — 设置当前模型的推理强度
+- `/resume [id]` — 无参数时打开会话切换器；带 id 时切换到该会话
+- `/agents` — 列出、查看、停止或释放后台代理
+- `/provider` — 管理 LLM provider 路由与 API 密钥（`list`、`add <preset-id>`、`remove <route>`）
+- `/onboard` — 重新运行首次启动设置
+- `/tui-help` — 显示按键与命令帮助
 - `/export-md [path]` — 把会话记录写入 Markdown 文件；显式路径相对会话 cwd 解析，无参数时落到 `$DSH_HOME/tui/exports/<sessionId>-<timestamp>.md`（目录按需创建）
 - `/copy` — 通过 OSC 52 序列把最近一条助手回复复制到系统剪贴板（终端需支持 OSC 52；尚无回复时降级为一条通知）
 - `/usage` — 打开用量面板：上下文占用条、token 总量（input/output/cache 分桶）、system/tools/messages 明细，打开期间全部实时；Esc 关闭。本技术栈中配额数据没有来源，从不显示
@@ -45,6 +51,15 @@ dsh --profile tui
   skill 指令（与 web 客户端同一通路）；否则就是普通文本。已知限制：因为 pi-tui 在其
   provider 被替换时会丢弃自动补全，打开的 `/` 菜单可能在 skill
   目录到达的那一刻被关闭。
+
+## 配置
+
+插件 `Config`（`src/index.ts`）除 `theme`（见[主题](#主题)）外还接受：
+`uiMode`（`regular` 内联滚动缓冲，插件默认；或 `fullscreen` 备用屏幕；环境变量
+`DSH_CCTUI_UI_MODE` 优先，`cc-tui` bundle profile 固定为 `fullscreen`）、
+`mouse`（仅全屏：捕获鼠标用于视口滚动与应用自管文本选择，默认 `true`）、
+`allowNoTty`（或 `DSH_CCTUI_ALLOW_NO_TTY=1`：无 TTY 也挂载），以及启动字段 `cwd`、
+`agentPreset`、`sessionId`、`autoResume`、`continueRequested`、`provider`、`model`。
 
 ## 渲染
 

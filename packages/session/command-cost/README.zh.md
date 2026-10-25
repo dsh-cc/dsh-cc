@@ -23,8 +23,8 @@ CC preset（`@dsh-cc/preset-cc`）默认内置了一张覆盖常见 DeepSeek、G
   name: '@dsh-cc/command-cost'
   config:
     modelTable:
-      - model: deepseek-chat
-        provider: deepseek
+      - model: <model-id>
+        provider: <provider>
         inputPerMTok: 0.27
         outputPerMTok: 1.10
         cacheReadPerMTok: 0.07
@@ -55,6 +55,6 @@ CC preset（`@dsh-cc/preset-cc`）默认内置了一张覆盖常见 DeepSeek、G
 
 ## 已知限制与暂缓事项
 
-- **定价层级**：先精确匹配（第一行优先），再按路由前缀的尾段后缀匹配（最长行优先；等长时取第一行），最后是 `'*'` 通配。不带 `provider` 的行会为该模型的所有 provider 前缀变体定价（例如 `glm-5.3` 同时定价 `llmbox_ant/glm-5.3` 与 `routeX/glm-5.3`）；需要 provider 隔离的部署必须在行上设置 `provider`。
+- **定价层级**：先精确匹配（第一行优先），再按路由前缀的尾段后缀匹配（最长行优先；等长时取第一行），最后是 `'*'` 通配。不带 `provider` 的行会为该模型的所有 provider 前缀变体定价（例如 `<model-id>` 行同时定价 `<provider-a>/<model-id>` 与 `<provider-b>/<model-id>`）；需要 provider 隔离的部署必须在行上设置 `provider`。
 - **起始表是牌价，不是账单**：preset 表反映采集时点的官方公示价，厂商调价后会过期；有议价或内部网关计费的部署必须自行覆盖。
 - **回合进行中没有实时总计**：`/cost` 报告截至最近检查点的持久日志，不包含进行中的用量。
