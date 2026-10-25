@@ -36,6 +36,7 @@ import {
   readStringArray,
   readUnique,
   readUuid,
+  isPlainObject,
   validate,
 } from './schema.lib.mjs'
 
@@ -213,7 +214,14 @@ export function validateRun(input, { repairRounds = 3 } = {}) {
                 reportPath: readString(v.reportPath, 'run.vwa.reportPath', { nullable: true }),
               }
             })(),
-      usage: o.usage === null ? null : readObject(o.usage, 'run.usage', []),
+      // Host-exposed usage fields are opaque; only the object envelope is checked.
+      usage:
+        o.usage === null
+          ? null
+          : (() => {
+              if (!isPlainObject(o.usage)) invalid('run.usage: expected an object or null')
+              return o.usage
+            })(),
       createdAt: readIso(o.createdAt, 'run.createdAt'),
       updatedAt: readIso(o.updatedAt, 'run.updatedAt'),
       model: readString(o.model, 'run.model', { nullable: true }),
