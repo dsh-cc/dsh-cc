@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "modelId": "acp-prompt-lifecycle",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxTurns": "3"
+      },
+      "invariants": [
+        "TypeOK",
+        "SlotConsistency",
+        "CancelWinsSettlement",
+        "LateEndIsolation",
+        "CancelInAdmissionNeverQueues",
+        "StopReasonMapping"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cancel-no-queue",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxTurns": "3"
+      },
+      "invariants": [
+        "TypeOK",
+        "StrictCancelNeverQueues"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-aborted-cancelled",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxTurns": "3"
+      },
+      "invariants": [
+        "TypeOK",
+        "StrictAbortedMeansCancelled"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
