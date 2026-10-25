@@ -5,6 +5,7 @@
  * @module @dsh-cc/tui/state/driver-types
  */
 
+import type { PastedImage } from '@dsh-cc/pi-tui'
 import type { CatalogEntry } from '../model-catalog.ts'
 import type { TuiState } from '../store.ts'
 import type { ToolCallView, ToolResultView } from '../tool-card.ts'
@@ -52,7 +53,14 @@ export interface Driver {
   readonly bashHistory: readonly string[]
   subscribe(listener: (state: TuiState) => void): () => void
   setDraft(draft: string): void
-  submit(text?: string): Promise<void>
+  /**
+   * Submit the composer's text (defaults to the live draft) plus the images the
+   * editor captured for it. Admission and marker stripping happen inside the
+   * driver, past its first await, so callers pass the raw text with its
+   * `[Image #N]` markers intact. The capture window is narrow and unforgiving —
+   * see the onSubmit hook in components/root-bash.ts.
+   */
+  submit(text?: string, images?: readonly PastedImage[]): Promise<void>
   interrupt(): void
   /**
    * Queue-jump (Ctrl+S): inject every queued outbox entry into the running
@@ -65,6 +73,9 @@ export interface Driver {
    * Pop the LAST queued entry (LIFO — the most recent submit) back out of
    * the outbox for editing (empty-composer ↑). Returns the text, or
    * `undefined` when the queue is empty (same-reference no-op).
+   *
+   * A chip's images do not come back with it, so the recalled text arrives
+   * marker-stripped, with a notice — see the driver's recallQueued.
    */
   recallQueued(): string | undefined
   /**
@@ -360,26 +371,13 @@ export type AgentDefaultModelLike = {
   currentSelection(): { provider: string; model: string; reasoningEffort?: string } | undefined
 }
 
-export type LlmLike = {
-  listProviders(): { id: string }[]
-  listModels(provider: string): Promise<{ provider: string; id: string; name: string }[]>
-  /**
-   * Optional model-metadata lookup used to validate reasoning-effort writes.
-   * Optional so existing llm stubs without it keep working: every effort
-   * consumer treats absence as "unresolvable" and fails closed (or writes the
-   * bare pair for /model, which never needs validation).
-   */
-  resolveModelInfo?(
-    provider: string,
-    model: string,
-    signal?: AbortSignal,
-  ): Promise<{
-    reasoning?: {
-      efforts: readonly { id: string; name: string; description?: string }[]
-      defaultEffort?: string
-    }
-  }>
-}
+/**
+ * The llm service seam moved to harness/driver-ctx.ts (the service-seam
+ * catalog) when the §3.7 image gate widened its model metadata: this file is at
+ * its 500-line cap, so widening here would have meant deleting docs to pay for
+ * it. Re-exported to keep the import path its consumers already use.
+ */
+export type { LlmLike } from '../harness/driver-ctx.ts'
 
 /**
  * `subagent/start` snapshot. The real `SubagentRunInfo` is declared in
