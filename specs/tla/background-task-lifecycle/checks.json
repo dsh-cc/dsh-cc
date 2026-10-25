@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "modelId": "background-task-lifecycle",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxAttempts": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "AttemptBound",
+        "LateCompleteCannotComplete",
+        "KilledStable",
+        "SuccessCommits",
+        "FinalWriteFromFinalAttempt"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cancel-window",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxAttempts": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "StrictNoCompleteAfterAbort"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cancel-write",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxAttempts": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "StrictCancelledNoWrite"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
