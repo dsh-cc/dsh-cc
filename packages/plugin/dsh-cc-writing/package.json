@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/plugin-dsh-cc-writing",
-  "version": "0.9.2-rc.1",
+  "version": "0.9.2",
   "description": "Official dsh-cc plugin with article writing, review, and language editing skills.",
   "type": "module",
   "license": "Apache-2.0",
