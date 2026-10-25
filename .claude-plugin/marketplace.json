@@ -12,6 +12,11 @@
       "description": "Official dsh-cc plugin: hard PreToolUse gates redirect bulk reads/boilerplate generation to cheap-lane shunt-worker subagents to save main-context tokens."
     },
     {
+      "name": "dsh-cc-writing",
+      "source": "./packages/plugin/dsh-cc-writing",
+      "description": "Official dsh-cc plugin: article-writing, article-review, and language-editing skills for structured, meaning-preserving revision of Chinese and English articles."
+    },
+    {
       "name": "cc-codex-bridge",
       "source": "./packages/plugin/cc-codex-bridge",
       "description": "Official dsh-cc plugin: an approval-free Codex rescue lane — one canonical, locked-down bash invocation auto-allowed via a PreToolUse hook, with Codex's internal sandbox off while the dsh outer sandbox remains the single write boundary."

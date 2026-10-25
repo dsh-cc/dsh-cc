@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "research",
+  "description": "Literature review or research summary in Chinese or English. Separate what a source reports from the synthesis, compare methods and evidence, and explain disagreement and gaps.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "separate-report-from-synthesis",
+      "instruction": "Keep each source report in its own sentences and mark where your synthesis starts.",
+      "rationale": "A reader must be able to see which claim belongs to a source and which claim belongs to the reviewer.",
+      "severity": "required"
+    },
+    {
+      "id": "compare-methods",
+      "instruction": "Compare the method of each study before you compare its result.",
+      "rationale": "A result from two different methods answers two different questions. A direct comparison would overstate agreement or conflict.",
+      "severity": "required"
+    },
+    {
+      "id": "compare-evidence-strength",
+      "instruction": "State the evidence strength that each cited source carries.",
+      "rationale": "A single case study and a controlled trial support the same sentence with very different force.",
+      "severity": "required"
+    },
+    {
+      "id": "explain-disagreement",
+      "instruction": "When sources disagree, give the reason for the disagreement and do not average it away.",
+      "rationale": "A disagreement that is smoothed over hides a real open question and invents a consensus.",
+      "severity": "required"
+    },
+    {
+      "id": "name-gaps",
+      "instruction": "Name the gaps that the reviewed literature leaves open.",
+      "rationale": "A review that reports no gap implies that the question is closed, which the evidence rarely supports.",
+      "severity": "required"
+    },
+    {
+      "id": "keep-provenance",
+      "instruction": "Keep the edition, date, location, and wording of each citation exact.",
+      "rationale": "A citation edit can change what a source says even when the sentence looks unchanged.",
+      "severity": "required"
+    },
+    {
+      "id": "no-unregistered-source",
+      "instruction": "Cite only a source that you read, and register its exact excerpt.",
+      "rationale": "A remembered or paraphrased source is not evidence, and it cannot be checked later.",
+      "severity": "required"
+    },
+    {
+      "id": "avoid-narrative-review",
+      "instruction": "Group sources by question or method, not by the order in which you read them.",
+      "rationale": "A reading-order narrative hides the comparison that a review exists to provide.",
+      "severity": "advisory"
+    }
+  ],
+  "protectedTerms": []
+}

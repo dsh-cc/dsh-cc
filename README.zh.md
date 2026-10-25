@@ -87,7 +87,7 @@ dsh web
 
 ### 可选官方插件
 
-快速开始只需安装 bundles。`dsh-cc` 插件市场另提供四个可选的官方插件。
+快速开始只需安装 bundles。`dsh-cc` 插件市场另提供五个可选的官方插件。
 
 - **`dsh-cc-agents`** 提供三个子代理、四个 skill 和可选的 Serena hooks。
   - `critic` 使用 `opus` 做分析和评审。
@@ -95,6 +95,9 @@ dsh web
   - `marathon` 使用 `fable` 处理涉及大量文件的变更或需求未知的任务。
   - 四个 skill 分别是 `dsh-cc-agents-orchestration`、`data-analysis`、**`vwa-writing`** 和 **`formal-design`**。
   - `formal-design` 在现有设计评审前检查有界 TLA+ 模型。执行检查需要 Java >=17；固定版本 TLC JAR 已随插件提供，无需另外下载或配置。安装插件不会启用项目级筛查；需[手动采用规则片段](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md)，并在更新插件后重启。
+- **`dsh-cc-writing`** 提供文章写作、文章评审和语言修改三个 skill，另有一个支撑流程 skill。
+  - 三个公开 skill 支持中文和英文文章，覆盖三类文体。
+  - 一次运行会在磁盘上保留 brief、plan、各阶段评审和保留性检查。
 - **`dsh-cc-shunt`** 将批量读取和重复代码生成交给 worker 子代理。配置 `haiku` 可降低模型成本。
 - **`cc-codex-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Codex 命令。
 - **`cc-grok-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Grok 命令。
@@ -106,6 +109,7 @@ dsh web
 ```text
 /plugin marketplace add dsh-cc/dsh-cc
 /plugin install dsh-cc-agents@dsh-cc
+/plugin install dsh-cc-writing@dsh-cc
 /plugin install dsh-cc-shunt@dsh-cc
 ```
 
@@ -120,7 +124,7 @@ dsh web
 
 仅更新插件市场不会更新已安装的插件。完成插件更新后请重启 dsh。
 
-各插件的配置和限制见：[agents](packages/plugin/dsh-cc-agents/README.zh.md)、[shunt](packages/plugin/dsh-cc-shunt/README.zh.md)、[Codex](packages/plugin/cc-codex-bridge/README.zh.md) 和 [Grok](packages/plugin/cc-grok-bridge/README.zh.md)。
+各插件的配置和限制见：[agents](packages/plugin/dsh-cc-agents/README.zh.md)、[writing](packages/plugin/dsh-cc-writing/README.zh.md)、[shunt](packages/plugin/dsh-cc-shunt/README.zh.md)、[Codex](packages/plugin/cc-codex-bridge/README.zh.md) 和 [Grok](packages/plugin/cc-grok-bridge/README.zh.md)。
 
 ## 用 VWA 写作与审查文档
 

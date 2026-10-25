@@ -119,3 +119,14 @@ Use the runtime's current grades and status.
 Keep an unverified result visibly unverified.
 Leave `/vwa sign` and `/vwa adjudicate` to the user.
 Do not replace VWA review with a critic subagent's opinion.
+
+## 7. Optional handoff to the writing plugin
+
+The evidence workflow above needs no other plugin, and it does not change when
+`dsh-cc-writing` is absent.
+
+If the user also wants argument planning, reverse-outline diagnosis, or bounded
+language passes, install `dsh-cc-writing` from the same marketplace. Then
+`article-writing` owns that orchestration and calls this adapter for evidence
+work. In that case do not start a second editorial loop here: run the evidence
+review, return its identifiers, and let the writing run finalize its own report.

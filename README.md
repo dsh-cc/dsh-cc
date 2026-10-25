@@ -87,7 +87,7 @@ Maintainers: keep this table consistent with `DSH_HARNESS_REF` in `.github/workf
 
 ### Optional official plugins
 
-The bundles are sufficient for the quick start. The `dsh-cc` marketplace has four optional official plugins.
+The bundles are sufficient for the quick start. The `dsh-cc` marketplace has five optional official plugins.
 
 - **`dsh-cc-agents`** has three subagents, four skills, and optional Serena hooks.
   - `critic` uses `opus` for analysis and review.
@@ -95,6 +95,9 @@ The bundles are sufficient for the quick start. The `dsh-cc` marketplace has fou
   - `marathon` uses `fable` for changes to many files or tasks with unknown requirements.
   - The skills are `dsh-cc-agents-orchestration`, `data-analysis`, **`vwa-writing`**, and **`formal-design`**.
   - `formal-design` checks bounded TLA+ models before the existing design review. Model checks need Java >=17; the pinned TLC JAR ships with the plugin. No separate JAR download or configuration is needed. Installing the plugin does not enable project-wide screening; [adopt the rules manually](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md) and restart after plugin updates.
+- **`dsh-cc-writing`** has three skills for article writing, article review, and language editing, plus one supporting workflow skill.
+  - The public skills accept Chinese and English articles in three genres.
+  - A run keeps a brief, a plan, reviews, and a preservation check on disk.
 - **`dsh-cc-shunt`** sends bulk reads and code generation again and again to worker subagents. Configure `haiku` for lower model cost.
 - **`cc-codex-bridge`** lets you run one specified Codex command form through its PreToolUse hook.
 - **`cc-grok-bridge`** lets you run one specified Grok command form through its PreToolUse hook.
@@ -106,6 +109,7 @@ Install plugins in a session.
 ```text
 /plugin marketplace add dsh-cc/dsh-cc
 /plugin install dsh-cc-agents@dsh-cc
+/plugin install dsh-cc-writing@dsh-cc
 /plugin install dsh-cc-shunt@dsh-cc
 ```
 
@@ -120,7 +124,7 @@ To update an installed plugin, update the marketplace first. Then update the plu
 
 A marketplace update by itself does not update the installed plugin. Restart dsh after the plugin update.
 
-Read each plugin README for its configuration and limits: [agents](packages/plugin/dsh-cc-agents/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md), [Codex](packages/plugin/cc-codex-bridge/README.md), and [Grok](packages/plugin/cc-grok-bridge/README.md).
+Read each plugin README for its configuration and limits: [agents](packages/plugin/dsh-cc-agents/README.md), [writing](packages/plugin/dsh-cc-writing/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md), [Codex](packages/plugin/cc-codex-bridge/README.md), and [Grok](packages/plugin/cc-grok-bridge/README.md).
 
 ## Write and review documents with VWA
 

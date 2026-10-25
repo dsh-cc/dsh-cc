@@ -1,0 +1,21 @@
+{
+  "name": "@dsh-cc/plugin-dsh-cc-writing",
+  "version": "0.9.2-rc.1",
+  "description": "Official dsh-cc plugin with article writing, review, and language editing skills.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": [
+    ".claude-plugin/plugin.json",
+    "skills",
+    "README.md",
+    "README.zh.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/plugin/dsh-cc-writing"
+  }
+}
