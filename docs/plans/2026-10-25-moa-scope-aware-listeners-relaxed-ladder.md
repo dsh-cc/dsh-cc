@@ -1,6 +1,6 @@
 # moa revival: scope-aware listener registration + relaxed tier ladder
 
-## Status: Design r3 (converged) — probe-verified root causes; three-seat blind review converged (codex GO, critic GO, grok GO; ledger §7). 
+## Status: Implemented — PR (open, pending merge). Design converged via three-seat blind review (codex GO, critic GO, grok GO; ledger §7), delivered as three implementation commits on this branch.
 
 All code anchors cite tree `3bddc9ee` (main). Harness anchors cite `dsh`
 0.2.0-rc.2 (global launcher install, unchanged since 2026-10-01). Runtime
