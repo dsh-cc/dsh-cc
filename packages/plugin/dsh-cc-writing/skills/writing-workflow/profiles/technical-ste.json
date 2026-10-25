@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "technical-ste",
+  "description": "English-only technical probe that adds the repository's STE-oriented prose constraints in docs/i18n/ste100.md to the technical rules. English text only, and only when the user asks for it. This is not ASD-STE100 certification and does not claim full compliance.",
+  "applicableLanguages": ["en"],
+  "rules": [
+    {
+      "id": "one-instruction-per-sentence",
+      "instruction": "Use a maximum of 20 words in an instruction sentence and 25 words in a description sentence.",
+      "rationale": "The limits come from docs/i18n/ste100.md. A shorter sentence gives a reader one item to act on.",
+      "severity": "required"
+    },
+    {
+      "id": "six-sentence-paragraph",
+      "instruction": "Use a maximum of six sentences in a paragraph, and give each paragraph one topic.",
+      "rationale": "The limit comes from docs/i18n/ste100.md. One topic per paragraph makes the structure visible.",
+      "severity": "required"
+    },
+    {
+      "id": "active-voice",
+      "instruction": "Use the active voice, and give an instruction with a command verb.",
+      "rationale": "The active voice names the actor. A reader then knows who performs the step.",
+      "severity": "required"
+    },
+    {
+      "id": "condition-first",
+      "instruction": "Put the condition before the instruction.",
+      "rationale": "A reader who meets the condition first knows whether the step applies before reading it.",
+      "severity": "required"
+    },
+    {
+      "id": "approved-word",
+      "instruction": "Use one name for one item, and use the approved word from docs/i18n/ste100.md.",
+      "rationale": "A synonym for one item reads as a second item. The approved word keeps one meaning.",
+      "severity": "required"
+    },
+    {
+      "id": "american-spelling",
+      "instruction": "Use American spelling.",
+      "rationale": "One spelling convention avoids a mixed result in one document.",
+      "severity": "required"
+    },
+    {
+      "id": "technical-terms-allowed",
+      "instruction": "Keep a technical noun or technical verb where the software meaning needs it, and do not reclassify a general word as a technical term.",
+      "rationale": "The technical vocabulary table in docs/i18n/ste100.md lists the permitted software meanings. An invented technical sense misleads a reader.",
+      "severity": "required"
+    },
+    {
+      "id": "keep-literals",
+      "instruction": "Keep literal tool names, paths, settings, status labels, code, and user-interface text unchanged.",
+      "rationale": "A changed literal no longer agrees with the runtime, and the reader cannot follow the step.",
+      "severity": "required"
+    },
+    {
+      "id": "no-certification-claim",
+      "instruction": "Do not call the result ASD-STE100 compliant or certified.",
+      "rationale": "These are selected constraints, not a dictionary check or a certification. A compliance claim would be false.",
+      "severity": "required"
+    },
+    {
+      "id": "not-a-default",
+      "instruction": "Apply this profile only to English text and only when the user asks for it.",
+      "rationale": "The 20-word and 25-word limits would harm prose that reads well in longer sentences. The default technical profile does not impose them.",
+      "severity": "required"
+    }
+  ],
+  "protectedTerms": []
+}

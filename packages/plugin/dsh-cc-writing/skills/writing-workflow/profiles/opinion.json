@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "opinion",
+  "description": "Argumentative essay or position piece in Chinese or English. State the thesis and the criteria, answer a material objection, and keep preference separate from fact.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "state-thesis",
+      "instruction": "State the thesis in the first two paragraphs in one sentence that a reader could reject.",
+      "rationale": "A thesis that cannot be rejected is a topic, not a claim, and the reader cannot tell what the essay argues.",
+      "severity": "required"
+    },
+    {
+      "id": "state-criteria",
+      "instruction": "State the criteria by which the thesis should be judged.",
+      "rationale": "Without criteria, a disagreement becomes a clash of tastes and no reader can check the reasoning.",
+      "severity": "required"
+    },
+    {
+      "id": "answer-objection",
+      "instruction": "State the strongest material objection and answer it.",
+      "rationale": "An unaddressed objection leaves the argument resting on the author's preferred framing.",
+      "severity": "required"
+    },
+    {
+      "id": "separate-preference-from-fact",
+      "instruction": "Mark an evaluative claim as a judgment and keep factual claims separate.",
+      "rationale": "A preference stated as a fact claims evidence it does not have.",
+      "severity": "required"
+    },
+    {
+      "id": "keep-qualifiers",
+      "instruction": "Keep every qualifier, scope word, and condition of the thesis.",
+      "rationale": "Dropping a qualifier turns a limited position into an absolute one, which a reader can refute with one counterexample.",
+      "severity": "required"
+    },
+    {
+      "id": "no-argument-by-adjective",
+      "instruction": "Support an evaluative word with a reason, not with a stronger evaluative word.",
+      "rationale": "Repeated intensifiers add heat but no support, and they hide a missing premise.",
+      "severity": "required"
+    },
+    {
+      "id": "concede-narrowly",
+      "instruction": "Concede only what the evidence requires, and name the part that stays open.",
+      "rationale": "A wide concession weakens the thesis beyond the evidence, and a narrow one keeps the disagreement visible.",
+      "severity": "advisory"
+    }
+  ],
+  "protectedTerms": []
+}

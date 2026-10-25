@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "technical",
+  "description": "Technical explanation in Chinese or English. Answer the question early, define the terms, separate what was observed from what was inferred, and keep every condition.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "answer-early",
+      "instruction": "State the answer in the first paragraph, before the background that supports it.",
+      "rationale": "A reader of a technical explanation looks for the result first. A buried answer reads as evasive and invites an early exit.",
+      "severity": "required"
+    },
+    {
+      "id": "define-terms",
+      "instruction": "Define each term of art at its first use, or link to the definition.",
+      "rationale": "An undefined term lets two readers take two meanings, and later reasoning then rests on different objects.",
+      "severity": "required"
+    },
+    {
+      "id": "separate-claims",
+      "instruction": "Mark the boundary between an observation, an inference, and a recommendation.",
+      "rationale": "A reader must know which sentence reports a measurement and which sentence advises an action.",
+      "severity": "required"
+    },
+    {
+      "id": "retain-conditions",
+      "instruction": "Keep every condition, precondition, and configuration that limits a claim.",
+      "rationale": "A technical claim without its condition is a false general claim. An edit that drops the condition changes the meaning.",
+      "severity": "required"
+    },
+    {
+      "id": "diagnose-long-sentence",
+      "instruction": "Use a long sentence only as a prompt to look for a second idea, never as an error by itself.",
+      "rationale": "A long sentence can be correct and useful. Length alone does not identify a defect.",
+      "severity": "advisory"
+    },
+    {
+      "id": "diagnose-passive",
+      "instruction": "Use a passive clause only as a prompt to check who performs the action, never as an error by itself.",
+      "rationale": "Technical prose often needs the passive when the actor is unknown or irrelevant. A blanket ban would change the meaning.",
+      "severity": "advisory"
+    },
+    {
+      "id": "one-name-per-item",
+      "instruction": "Use one name for one item across the whole article.",
+      "rationale": "Two names for one item read as two items and split the reader's model of the system.",
+      "severity": "required"
+    },
+    {
+      "id": "state-limits",
+      "instruction": "State the known limits of the result near the result.",
+      "rationale": "A limit that only appears in an appendix is missed by most readers, and the claim then reads as stronger than it is.",
+      "severity": "required"
+    }
+  ],
+  "protectedTerms": []
+}
