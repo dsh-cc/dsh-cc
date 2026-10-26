@@ -1458,7 +1458,9 @@ describe('Task tool', () => {
     it('carries the reconciled capacity + auto-release bullet (R8/R9)', () => {
       expect(BACKGROUND_SECTION_TEXT).toContain(
         '- A background child holds one of 25 live-child capacity slots while it is running; settled '
-        + 'children free theirs automatically. A settled child auto-releases after its inactivity grace '
+        + 'children free theirs automatically. Continuing a settled child through send_message admits '
+        + 'a fresh activation, so at the cap it is refused with the same remedy. A settled child '
+        + 'auto-releases after its inactivity grace '
         + 'window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` '
         + 'frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so '
         + 'send_message promptly if you plan to continue it. release_agent <id> remains the interactive '

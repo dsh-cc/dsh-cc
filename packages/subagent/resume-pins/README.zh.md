@@ -23,6 +23,9 @@
   （`DEFINITION_CHANGED`）、钉存工具可用性（`PINNED_TOOL_UNAVAILABLE`）、钉存路由
   可用性（`SUBAGENT_MODEL_UNAVAILABLE`）——每次拒绝都会**在**拒绝返回**之前**持久化进
   pin（`resume.state='blocked'`）；
+- 一个针对 `send_message` 的 **live 容量前置检查**：续跑一个已 settle 的子代理会占用一个
+  新的驻留激活名额，因此在 25 个存活子代理的上限处按 spawn 车道的同一份补救文案拒绝
+  （瞬态拒绝——不像上面的门禁拒绝那样持久化任何状态）；
 - 一个 **`agent/request` overlay**，把钉存的
   `{provider, model, reasoningEffort, maxTokens}` 元组逐字段（含缺席）应用到
   每个恢复的轮次，无论由谁恢复；

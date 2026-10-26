@@ -45,6 +45,7 @@ import {
   type ResumePolicy,
 } from './policy.ts'
 import { serializePerKey, ExecutionNoticeBus } from './serialize.ts'
+import { continuationCapacityRefusal, type CapacityServices } from './live-capacity.ts'
 import { PinStore, type CorruptPin } from './store.ts'
 import type { ResumePin } from './pin.ts'
 
@@ -317,6 +318,25 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
           + 'survives on disk, but same-session continuation is closed — spawn a fresh '
           + 'subagent with subagent_fork to continue the work.',
       }
+    }
+    // Live-capacity gate (F-2): continuing a SETTLED child admits a fresh
+    // resident activation, so the same 25 live-child cap that guards the spawn
+    // lanes applies to continuations too. A same-epoch steer to a still-live
+    // agent needs no new slot and passes through untouched. Unobservable
+    // capacity (missing seam, listing error, absent registry) degrades open,
+    // mirroring the spawn guard.
+    // Unobservable activation registry ⇒ no attributable liveness; the
+    // capacity guard below then degrades open rather than crashing the
+    // pre-execute waterfall.
+    const targetLive = (ctx as unknown as { agents?: { get?: (id: unknown) => unknown } })
+      .agents?.get?.(SessionId(target)) !== undefined
+    if (!targetLive) {
+      const capacityReason = await continuationCapacityRefusal(
+        ctx as unknown as CapacityServices,
+        exec.agent as { id?: unknown } | undefined,
+        exec.signal,
+      )
+      if (capacityReason !== undefined) return { kind: 'deny' as const, reason: capacityReason }
     }
     return serializePerKey(childLocks, target, async () => {
       const found = readPin(target)

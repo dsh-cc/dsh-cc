@@ -55,3 +55,10 @@ export {
 // canonical `apply`/`name`, not just the aliases above.
 export { apply, name } from './plugin.ts'
 export type { OverlayTuple } from './pin.ts'
+export {
+  MAX_LIVE_CONTINUABLE_CHILDREN,
+  LIVE_CAPACITY_REFUSAL,
+  countLiveChildren,
+  continuationCapacityRefusal,
+} from './live-capacity.ts'
+export type { CapacityAgentsLike, CapacityServices, CapacitySubagentsLike } from './live-capacity.ts'

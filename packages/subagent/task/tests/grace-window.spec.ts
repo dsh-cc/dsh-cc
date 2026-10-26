@@ -598,6 +598,9 @@ describe('send_message tombstone gate', () => {
     const ctx = {
       provide: () => {},
       get: (key: string) => (key === 'ccReleaseMarkers' ? markers : undefined),
+      // The continuation-capacity gate reads the activation registry; a child
+      // with no live activation is exactly the settled case these tests cover.
+      agents: { get: () => undefined },
       on: (_name: string, handler: never) => {
         preExecute.push({ handler })
         return () => {}
