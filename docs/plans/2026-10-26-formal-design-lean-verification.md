@@ -62,8 +62,11 @@ whole-program or deployment correctness.
 ## 3. Relationship to TLA+
 
 Keep the existing TLC runner, manifest version, CLI, artifact paths, output
-vocabulary, and verdict unchanged. Add Lean-specific commands and schemas beside
-it. Do not add backend branches to the TLC parser or reinterpret old evidence.
+vocabulary, and verdict unchanged for TLA-only use. Add Lean-specific commands
+and schemas beside it. Do not add backend branches to the TLC parser or
+reinterpret old evidence. The only permitted TLC runner change is the opt-in
+`--bridge` flag and the version-two evidence schema from section 10, which
+preserve version-one behavior entirely when the flag is absent.
 
 | Behavior under review | Selection | Required work |
 | --- | --- | --- |
@@ -113,20 +116,27 @@ packages/plugin/dsh-cc-agents/skills/formal-design/
   scripts/lean-check.mjs
   scripts/lean-check-conformance.mjs
   scripts/lean-check-evidence.mjs
+  scripts/lean-provision.mjs
   scripts/lean-manifest.lib.mjs
   scripts/lean-fingerprint.lib.mjs
   scripts/lean-process.lib.mjs
   scripts/lean-evidence.lib.mjs
+  scripts/check-combined-evidence.mjs
   scripts/lean-toolchain.json
   lean/Inspector.lean
   lean/Driver.lean
-  examples/budget-reservation/...
 packages/plugin/dsh-cc-agents/tests/
   formal-design-lean.spec.ts
   formal-design-lean-integration.spec.ts
   formal-design-lean-conformance.spec.ts
   fixtures/formal-design-lean/...
 ```
+
+All paths in this document are repository-root-relative. Short forms in the
+section 11 table are relative to `packages/plugin/dsh-cc-agents/`. The worked
+example from section 15 ships as the committed model
+`specs/lean/budget-reservation`; no duplicate copy lives under the skill
+directory.
 
 A project model has this exact layout:
 
@@ -160,7 +170,8 @@ resolution. Executors implement approved semantics and conformance adapters.
 Existing review identities and approval thresholds do not change.
 
 Keep generated artifacts under `.formal-design/lean/<model-id>/<run-id>/`.
-Reuse the existing explicit `.gitignore` adoption instruction. A runner must not
+Extend the existing explicit `.gitignore` adoption instruction to also ignore
+`specs/**/conformance-evidence.json`. A runner must not
 edit `.gitignore`, source files, project rules, or configuration. Persist only
 current evidence/pointers under the model directory. Commit source inputs and
 corpus files; treat generated current evidence like the existing TLC evidence.
@@ -212,14 +223,27 @@ Validation rules:
 - `properties`: 1..64 entries. IDs use the existing ID grammar. Requirement IDs
   match `REQ-[1-9][0-9]*`. Declarations are dot-separated ASCII Lean identifiers,
   each segment matching `[A-Za-z_][A-Za-z0-9_]*`; quoted names are unsupported.
-- `statement`: 1..16384 UTF-8 bytes. It is a Lean proposition expression, checked
-  in an empty local context after imports, with fully qualified noncore names.
-  It must not be a command, declaration, or source-file fragment.
-- `witnessDeclaration`: null for unconditional properties; otherwise a qualified
-  theorem name proving an explicit, nonempty instance of the precondition domain.
-  The inspector records its exact type and audits it like a required property.
-  Reviewers decide whether that witness addresses the actual preconditions.
+- `statement`: 1..16384 UTF-8 bytes. It is a Lean proposition expression,
+  elaborated as a closed term of type `Prop` in the environment produced by
+  `import Properties` (which transitively imports `Model`). Every identifier
+  referring to a declaration outside the Lean prelude must be fully qualified;
+  unqualified names are legal only for prelude names. It must not be a command,
+  declaration, or source-file fragment.
+- `witnessDeclaration`: null when the recorded statement contains no
+  top-level implication arrow (`->` or `→`); otherwise a qualified theorem name
+  proving an explicit, nonempty instance of the precondition domain. The
+  top-level arrow test is a conservative syntactic rule enforced at preflight:
+  it scans the matrix of the statement, so a leading `forall`/`∀` telescope
+  does not hide `->`/`→` in the matrix, and a null witness on such a form is a
+  `config-invalid` block. The
+  machine checks only that a non-null witness exists, is a theorem, and has a
+  stored proof; conditionality hidden behind a definition, and whether the
+  witness actually addresses the preconditions, remain review findings. The
+  inspector records its exact type and audits it like a required property.
 - `implementationFiles`: nonempty unique project-relative regular source paths.
+  Existence is validated at conformance preflight only; proof preflight and
+  proof checks accept paths that do not exist yet and record the declared
+  bindings as planned (section 9).
   Include all behavior-bearing transitive project dependencies used by the
   adapter. `executionFiles` is a unique array of additional project-relative
   files, including build scripts, runtime loaders, and lockfiles affecting it.
@@ -229,7 +253,8 @@ Validation rules:
   must equal `["node", "conformance/adapter.mjs"]`; it is not a shell command.
   Imported loaders and compilation steps must be in the committed adapter and
   declared execution closure. No runner-provided shell evaluation is allowed.
-- `comparison` must be `canonical-json`. Proof and conformance timeouts are
+- `comparison` must be `canonical-json`. The corpus line count must not exceed
+  `maxCases`. Proof and conformance timeouts are
   integers in 1000..600000. Heartbeats are integers in 1000..10000000. Recursion
   depth is an integer in 128..4096. `maxCases` is an integer in 1..100000.
 - Fixed Lean sources are at most 1 MiB each. All proof inputs total at most
@@ -265,46 +290,90 @@ lists official release URLs and hash verification steps. CI performs that step
 with pinned metadata. The runner never provisions it. Resolve the direct tool
 root using `--lean-root`, then `FORMAL_DESIGN_LEAN_ROOT`; absence is a blocker.
 Do not run an elan shim, search PATH, or permit environment-driven fallback.
-Read and execute `<root>/bin/lean` directly. Verify `--version` against the pin.
+Read and execute `<root>/bin/lean` directly. In the pinned release,
+`--version` prints a long header while `--short-version` prints the bare
+version string: verify the pin with `--short-version`, whose trimmed stdout
+must equal exactly `4.24.0`.
 
-An administrator provisions a read-only verified installation. Preflight records
-a content digest of `bin/lean`, its dynamic runtime libraries, and the complete
-`lib/lean` tree, with sorted relative paths and file hashes. Runtime distribution
-symlinks are allowed only within the selected root and are hashed with their
-resolved targets; model and artifact symlinks remain forbidden. CI verifies the
-release archive before extraction. A local installation requires a recorded
-verified archive receipt and matching extracted content digest, generated by a
-shipped explicit provisioning helper. Preflight rehashes installed content and
-blocks mismatches. This establishes reproducibility, not defense against a
-host administrator who can replace both files and receipts.
+An administrator provisions a read-only verified installation using the
+shipped `scripts/lean-provision.mjs`. The helper downloads the pinned archive,
+verifies its SHA-256 against `lean-toolchain.json`, extracts it, and records a
+receipt. The content digest is defined exactly: enumerate every regular file
+reachable under the installation root by walking `bin/` and `lib/` recursively
+plus any top-level shared runtime library; a symlink whose resolved target lies
+inside the root is hashed as the target's bytes under the symlink's relative
+path (targets outside the root are rejected); model and artifact symlinks
+remain forbidden. Sort the resulting `[relativePath, sha256]` pairs by Unicode
+code-point comparison of the path; the content digest is the SHA-256 of the
+canonical JSON serialization of that sorted array. The receipt is a JSON object
+with exactly `schemaVersion`, `toolchain`, `archiveSha256`, and `contentDigest`,
+written to the fixed sibling path `<lean-root>.receipt.json` — outside the
+hashed installation tree. Preflight locates the receipt at that same path
+derived from the resolved `--lean-root`, recomputes the content digest with the
+same enumeration, and blocks on a missing receipt, a mismatched
+`archiveSha256`, or a mismatched `contentDigest`. CI verifies the release archive
+before extraction. This establishes reproducibility, not defense against a host
+administrator who can replace both files and receipts.
 
 Use Lean core and bundled standard libraries only. Do not invoke Lake, accept a
-project `lakefile`, use local caches, or load third-party packages. Resolve
-imports from the immutable tool root and the fresh per-run source workspace.
-Clear `LEAN_PATH`, `LEAN_SRC_PATH`, and Lean/tool override environment variables;
-construct the child environment explicitly. Do not inherit an alternative
-sysroot. Set the working directory to the fresh workspace. Pass argv arrays.
+project `lakefile`, use local caches, or load third-party packages. Construct
+the child environment explicitly: inherit `PATH` and standard locale variables
+only, clear `LEAN_SRC_PATH` and every other Lean/tool override variable, and set
+`LEAN_PATH` to the absolute path of the fresh per-run workspace. In the pinned
+release, `initSearchPath` prepends `LEAN_PATH` entries and always appends
+`<sysroot>/lib/lean` (resolved relative to the `lean` binary), so builtin
+libraries resolve without further configuration while freshly compiled modules
+resolve through the workspace entry. Do not pass any other search-path flag. Set
+the working directory to the fresh workspace for Lean phases. Pass argv arrays.
 
 The fixed build sequence is:
 
-1. Acquire an exclusive per-model lock under `.formal-design/lean`.
+1. Acquire the exclusive per-model lock `.formal-design/locks/lean-<modelId>.lock`,
+   reusing the existing lock ownership rules; never delete it by age.
 2. Snapshot exact input bytes and identity before compiling anything.
 3. Copy only the three declared Lean source files and the shipped inspector
    and driver to a new empty workspace. Never copy `.olean`, native libraries,
-   generated C, Lake artifacts, or project build output.
-4. Compile `Model.lean`, then `Properties.lean`, then `Reference.lean` with
-   `<root>/bin/lean -o <module>.olean <module>.lean`. Supply the fixed manifest
-   heartbeat and recursion limits through Lean command-line options.
-5. Compile and run the shipped inspector against the freshly built modules.
-   It elaborates each `statement` as a term of type `Prop`. Require definitional
-   equality, without adding proof hypotheses, between that expression and the
-   declared theorem's type. Capture both fully elaborated types.
+   generated C, Lake artifacts, or project build output. A preexisting `.olean`,
+   `lakefile.*`, or `lake-manifest.json` anywhere in the model directory is a
+   `blocked` configuration failure, never `rejected`.
+4. Compile `Model.lean`, then `Properties.lean`, then `Reference.lean`, then
+   the shipped `Inspector.lean` and `Driver.lean`, each with
+   `<root>/bin/lean -o <module>.olean <module>.lean` executed in the fresh
+   workspace with `LEAN_PATH` set to the workspace. Pass the manifest limits as
+   `-DmaxHeartbeats=<limits.maxHeartbeats> -DmaxRecDepth=<limits.maxRecDepth>`
+   and `-D Elab.async=false` in every Lean invocation (command-line elaboration
+   otherwise forces async elaboration in the pinned release). The manifest
+   heartbeat value is the option value itself, not a post-multiplied count.
+   Every `-D` option must precede the input file and, for `--run`
+   invocations, precede `--run` itself: option parsing stops at `--run`, so a
+   `-D` flag placed after it becomes a script argument and is silently
+   ignored.
+   Project sources must not contain `set_option maxHeartbeats`,
+   `set_option maxRecDepth`, or any `debug.` kernel-bypass option such as
+   `debug.skipKernelTC`; reject those by mechanical source scan before
+   compilation.
+5. Run the shipped inspector in the same workspace. The runner first writes
+   `inspector-inputs.json` (the property list from `checks.json`) into the
+   workspace, then executes
+   `<root>/bin/lean --run Inspector.lean inspector-inputs.json` with the same
+   `LEAN_PATH` and `-D` options. The inspector reads the input file, elaborates
+   each `statement` as a closed term of type `Prop` in the `Properties`
+   environment, and requires definitional equality, without adding proof
+   hypotheses, between that expression and the declared theorem's type,
+   capturing both fully elaborated types. It writes one JSON report object to
+   `inspector-report.json` in the workspace (schema in section 8).
 6. Require every named property and witness to be a theorem declaration with
-   a stored proof value. Recursively collect axioms through its value and type,
-   including imported declarations. Reject any axiom outside the fixed allowlist.
+   a stored proof value. Collect axioms with `Lean.collectAxioms` applied to
+   each required constant; it walks exactly the constants the recorded proof
+   and type depend on. Do not scan all declarations of imported modules — the
+   Lean prelude itself contains `sorryAx` and unsafe `lc*` axioms, so an
+   indiscriminate scan rejects every proof. Reject any axiom outside the fixed
+   allowlist.
 7. Require a clean completion of every phase and a complete inspector report.
    Record all warnings. A warning containing an incomplete proof is a failure;
-   axiom inspection remains mandatory even if there are no warnings.
+   axiom inspection remains mandatory even if there are no warnings. On
+   failure, retain the partial inspector report with every unchecked property
+   marked `not-checked`.
 8. Hash source inputs again before publishing. Any change marks the run
    `incomplete` with reason `input-changed`; retain the attempted-run logs.
 9. Atomically publish evidence and its pointer, then release the lock.
@@ -353,8 +422,11 @@ property must have at least one case; this syntactic condition is not a coverage
 sufficiency claim. Each line must be a JSON object with no duplicate decoded keys.
 
 The runner starts the trusted Lean interpreter driver and the Node adapter as
-separate processes. Supply each the same ordered lines `{ "id": ..., "input": ... }`
-on stdin and close stdin after the corpus. Both must emit exactly one JSON line
+separate processes. The driver is executed as
+`<root>/bin/lean --run Driver.lean` in the fresh workspace with the same
+`LEAN_PATH` and `-D` options used for compilation; the adapter is executed as
+`node conformance/adapter.mjs`. Supply each the same ordered lines
+`{ "id": ..., "input": ... }` on stdin and close stdin after the corpus. Both must emit exactly one JSON line
 per input, in order, with exactly `id` and `result`. Result is exactly one of:
 
 ```json
@@ -370,20 +442,38 @@ one string `code` matching `[a-z][a-z0-9-]{0,63}`. The shipped driver maps refer
 `Except.error` strings to that error code and validates its grammar. Invalid
 reference error codes are protocol errors. Never compare exception text.
 
-Canonical comparison recursively sorts object keys by Unicode code point and
-preserves array order, strings, booleans, and null. Permit only safe integer JSON
-numbers; reject fractions, nonfinite values, negative zero tokens, and integer
-magnitudes above `Number.MAX_SAFE_INTEGER`. Model larger integers and fixed-point
-decimals as canonical decimal strings under the domain's reviewed codec. Strings
-must use valid Unicode scalar values. Compare parsed values, not original
-whitespace or escape spelling. Domain codecs must decide missing versus null,
-error behavior, overflow, rounding, and collection ordering explicitly.
+Canonical comparison is defined on raw JSON tokens, before any parser handles
+the text, so that Lean and Node cannot disagree on duplicate keys or numeric
+spelling. The token grammar is: object keys unique at every depth; numbers must
+match `^-?(0|[1-9][0-9]*)$`, lie within the safe-integer range, and not be
+`-0`; fractions, exponents, and nonfinite values are rejected. This grammar
+applies to the manifest, every corpus line, both stdout streams, and bridge
+JSON. After token validation, comparison recursively sorts object keys by
+Unicode code point and preserves array order, strings, booleans, and null.
+Model larger integers and fixed-point decimals as canonical decimal strings
+under the domain's reviewed codec. Strings must use valid Unicode scalar values.
+Compare parsed values, not original whitespace or escape spelling. Domain codecs
+must decide missing versus null, error behavior, overflow, rounding, and
+collection ordering explicitly.
 
-The adapter imports and calls production functions. It must not contain a second
-copy of the reference algorithm or print precomputed expected outputs. Its stdout
-is protocol-only; diagnostics use stderr. Missing, extra, duplicated, reordered,
-malformed, or oversized output fails. A thrown exception or nonzero exit fails,
-even if prior lines matched. Report the first mismatch and persist all outputs.
+The adapter is executed in place, not staged: its working directory is the model
+directory `specs/lean/<model-id>`, so `conformance/adapter.mjs` resolves exactly
+as declared. The adapter must resolve production imports relative to its own
+module location (Node ESM resolution), never relative to the process working
+directory. The runner hashes the full execution closure before and after the
+phase; any change marks the run `incomplete` with reason `input-changed`. The
+repository Node line (`^22.19 || >=24`) strips erasable TypeScript syntax when
+importing `.ts` files; the adapter may import such files directly when they use
+only erasable syntax. Non-erasable constructs require a committed, deterministic
+build step declared in the execution closure. The adapter must not contain a
+second copy of the reference algorithm or print precomputed expected outputs.
+Its stdout is protocol-only; diagnostics use stderr. Missing, extra, duplicated,
+reordered, malformed, or oversized output fails; oversized means exceeding the
+50 MiB stream cap from section 6. A thrown exception or nonzero exit fails, even
+if prior lines matched. The driver runs first over the whole corpus, then the
+adapter runs over the whole corpus, then the runner compares both outputs in
+corpus order; the first mismatch is the earliest corpus line whose results
+differ. Persist all outputs.
 
 Corpus generation is an explicit authoring step, not hidden check behavior.
 Commit generated corpus bytes and generation provenance (algorithm, version,
@@ -402,7 +492,8 @@ An empty or placeholder production adapter must not produce an accepted result.
 All commands accept `--project <root> --model specs/lean/<id>`. Preflight and producer commands
 also accept `--lean-root <root>`; the read-only auditor must not require a local
 Lean installation or execute project code. Reject unknown flags and repeated
-flags. `--help` performs no filesystem writes or tool execution.
+flags. `--help` prints plain text, performs no filesystem writes or tool
+execution, and is the only output that is not a JSON object.
 
 | Command | Behavior | Exit status |
 | --- | --- | --- |
@@ -414,9 +505,11 @@ flags. `--help` performs no filesystem writes or tool execution.
 
 Each command writes exactly one final machine-readable JSON result to stdout.
 Child streams go to artifact files, never mix with the final JSON. Preflight may
-execute `lean --version` to validate the installation; it starts no compilation.
-The auditor reads files and recomputes hashes only. Exit zero from the auditor
-means evidence integrity, not proof or conformance success.
+execute `lean --short-version` to validate the installation; it starts no
+compilation.
+The auditor reads files and recomputes hashes only. For the proof stage, exit
+zero means the evidence is valid and fresh, not that the verdict was `verified`.
+For the acceptance stage, exit zero means `acceptanceReady` (section 8).
 
 Use these distinct fields:
 
@@ -439,10 +532,22 @@ Proof evidence is a strict version-one object containing `schemaVersion`,
 `reason` is null only on success; otherwise use a stable code and detail object.
 Each input/runner file entry has exactly `path` and `sha256`. Each phase records
 its ID, argv, exit code, signal, timeout/cancellation flags, and stdout/stderr
-project-relative paths, byte lengths, and SHA-256 hashes. No absent empty stream.
+project-relative paths, byte lengths, and SHA-256 hashes. Every phase records
+both stdout and stderr; a zero-length stream is recorded as an empty artifact
+file with length 0 and the SHA-256 of empty input, never omitted as an absent
+field.
 Each property report records ID, declaration, exact elaborated proposition,
-axiom list, witness report or null, and verdict. The toolchain record includes
-pinned name, platform, archive hash, installed content digest, and observed version.
+axiom list, witness report or null, and a verdict from
+`verified | rejected | not-checked`. The toolchain record includes pinned
+name, platform, archive hash, installed content digest, and the observed
+`--short-version` output (`4.24.0`). `reason` codes come from the closed list `config-invalid`,
+`unsafe-path`, `missing-input`, `toolchain-missing`, `toolchain-mismatch`,
+`lock-conflict`, `input-changed`, `artifact-changed`, `timeout`, `cancelled`,
+`signal`, `stream-overflow`, `output-invalid`, `protocol-invalid`, `io`.
+Phase identifiers come from the closed list `compile-model`,
+`compile-properties`, `compile-reference`, `compile-inspector`, `inspector`,
+`driver`, `adapter`, `compare`. `evidenceSha256` is the SHA-256 of the exact
+published evidence bytes.
 
 Conformance evidence contains `schemaVersion`, `backend`, `modelId`, `runId`,
 `proofRunId`, `proofInputDigest`, `executionFiles`, `executionDigest`,
@@ -451,6 +556,25 @@ Conformance evidence contains `schemaVersion`, `backend`, `modelId`, `runId`,
 `firstMismatch` is null unless a mismatch occurred; otherwise it contains case
 ID, input, reference result, and implementation result. A protocol failure uses
 `reason` rather than fabricated results. Retain both full output streams.
+
+The inspector report is a strict JSON object with exactly `schemaVersion`,
+`properties`, and `toolchainVersion`, where each property entry has exactly
+`id`, `declaration`, `kind`, `statementType`, `theoremType`, `typesMatch`,
+`axioms`, `witness`, and `verdict`. `kind` is the Lean declaration kind string
+for the named declaration (`theorem` is required for acceptance); when the
+declaration cannot be found in the environment, `kind` is `null`. For
+`rejected` or `not-checked` properties, fields that could not be computed
+(`statementType`, `theoremType`, `axioms`, `witness`) are `null`, and `verdict`
+explains the distinction. `typesMatch` is `null` whenever either `statementType`
+or `theoremType` is `null`; otherwise it is the boolean result of the
+definitional-equality check. `witness` is `null` when no witness is declared;
+otherwise it is an object with exactly `declaration`, `kind`, `type`, and
+`verdict`. The comparison report is a strict JSON object with exactly
+`schemaVersion`, `caseCount`, `matchedCount`, and `cases`,
+where each case entry has exactly `id`, `referenceResult`,
+`implementationResult`, and `matched`. Both reports are persisted as hashed
+phase artifacts and referenced from the phase records; auditors recompute
+verdicts from them.
 
 `current-run.json` contains exactly `schemaVersion`, `runId`, `inputDigest`, and
 `evidenceSha256`. It names proof evidence only. Conformance evidence binds its
@@ -461,16 +585,26 @@ informational and do not define freshness.
 Proof input enumeration includes `design.md`, `checks.json`, and the three Lean
 sources. `implementation.md` is an acceptance record outside the proof digest.
 Execution input enumeration includes the corpus, adapter, all manifest-declared
-implementation/execution files, the Node version, and the proof input digest.
-Changes to execution inputs stale conformance, even when proofs remain fresh.
-Changes to a conformance field inside `checks.json` conservatively stale proof
-as well. Use SHA-256 and the existing `digestEntries` algorithm over sorted,
-project-relative `[path, sha256]` entries. Hash semantic runner assets, including
-Lean templates, inspector, driver, pin metadata, and every imported helper.
+implementation/execution files, the Node executable identity, and the proof
+input digest. `executionDigest` is the SHA-256 of the canonical JSON
+serialization (sorted keys, no insignificant whitespace, UTF-8) of the object
+`{ "files": <the digestEntries array of sorted, project-relative
+[path, sha256] entries>, "node": "<resolved node executable path>|<output of
+node --version>", "proofInputDigest": "<hex>" }`, where `digestEntries` is the
+existing algorithm. Changes to execution inputs stale conformance, even when
+proofs remain fresh. Changes to a conformance field inside `checks.json`
+conservatively stale proof as well. The runner digest enumerates, from
+`packages/plugin/dsh-cc-agents/skills/formal-design/`, every `scripts/lean-*.mjs`,
+`scripts/check-combined-evidence.mjs`, `lean/Inspector.lean`, `lean/Driver.lean`,
+and `scripts/lean-toolchain.json`.
 
-Readers reject missing files, duplicate entries, path escapes, hash mismatches,
-wrong run IDs, mismatched pins, unknown schema versions, incomplete report
-coverage, and internally inconsistent success records. Recompute verdicts from
+The proof-stage auditor exits 0 only when evidence is valid and fresh; stale
+evidence exits 2 as `invalid`, matching the existing TLC auditor. The
+acceptance-stage auditor exits 0 only when `acceptanceReady` is true; otherwise
+2. The two-stage exit semantics above supersede any generic integrity-only
+phrasing. Readers reject missing files, duplicate entries, path escapes, hash
+mismatches, wrong run IDs, mismatched pins, unknown schema versions, incomplete
+report coverage, and internally inconsistent success records. Recompute verdicts from
 complete stored phase metadata and inspector/comparison reports. These reports
 and their hashes must be referenced in phase artifacts. Hash integrity is not
 cryptographic attestation of an untrusted producer. Reviewers can request a
@@ -492,8 +626,10 @@ convert this boolean into project review approval.
 4. Record a coverage table in `design.md`: requirement ID, property ID, theorem,
    assumptions, witness, implementation symbol, codec, corpus cases, negative
    control, and excluded scope. Planned symbols are explicitly marked planned.
-5. Complete proofs and run proof checks/audit. Failed proof search is pending
-   work; never delete a property or strengthen assumptions merely to pass.
+5. Complete proofs and run proof checks/audit. Proof checks do not require the
+   implementation or conformance inputs to exist yet. Failed proof search is
+   pending work; never delete a property or strengthen assumptions merely to
+   pass.
 6. Submit the full same-run proof package to existing review lanes. Include exact
    inputs, Lean statements, inspector results, both streams for every phase,
    tool identities, corpus, planned source bindings, and outstanding conformance.
@@ -523,24 +659,36 @@ ambiguity; classify it and update the appropriate reviewed artifact.
 For selection `both`, add `specs/formal/<feature-id>/bridge.json` and `bridge.md`.
 Use a strict bridge JSON schema with exactly `schemaVersion` (1), `featureId`,
 `tlaModel` (a `specs/tla/<id>` path), `leanModel` (a `specs/lean/<id>` path), and
-`operations` (1..64 unique rows). Each row contains exactly `id`, `requirementId`,
+`operations` (1..64 unique rows). `featureId` uses the existing model-id grammar.
+Each row contains exactly `id`, `requirementId`,
 `tlaOperator`, `leanFunction`, `propertyIds`, `domain`, `casesFile`, and
 `implementationFiles`. Operation IDs use the bridge case ID grammar below;
 property IDs must exist in the selected Lean manifest. Implementation file
-paths must be a subset of that manifest's implementation closure. Names use their backend identifier grammars; domain is a
-nonempty explanation, and casesFile is a regular bridge-relative JSON file.
+paths must be a subset of that manifest's implementation closure. Names use
+their backend identifier grammars; domain is a nonempty explanation, and
+`casesFile` is a regular project-relative JSON file path (project-relative
+means repository-root-relative, as defined in section 4).
 
 Each cases file is an array of rows with exactly `id`, `input`, `expected`, and
-`tlaExpression`. Each bridge case ID must also identify a committed Lean corpus
-case with identical input bytes after canonicalization. The bridge row
-`propertyIds` must equal that corpus case's `covers` set. The expression is a
-TLA+ expression authored and reviewed as source, never shell text. The Lean reference and implementation must return `expected`
-for `input`. For each row, the main dialog adds a derived TLA+ invariant named
-`Bridge_<id>` asserting the corresponding operator expression equals the TLA+
-encoding of `expected`, and includes it in a declared TLC case. IDs here are
-restricted to ASCII letters/digits/underscores starting with a letter, so the
-derived name is valid. The invariant is checked, not assumed. Record the exact
-JSON-to-TLA+ encoding in `bridge.md`. All bridge artifacts and cases must be
+`tlaExpression`. `id` must equal the ID of a committed Lean corpus case (IDs use
+the existing corpus grammar, which excludes underscores, so the join key is ID
+equality). The bridge row `propertyIds` must equal that corpus case's `covers`
+set, and `input` must be canonically equal to that corpus case's `input`.
+`expected` is the conformance protocol result from section 7 — exactly an
+`{ "ok": ... }` or `{ "error": { "code": ... } }` object — and both the Lean
+reference and the implementation must return it for `input`. The
+`tlaExpression` is a TLA+ expression authored and reviewed as source, never
+shell text. For each row, the main dialog adds a derived TLA+ invariant named
+`Bridge_<id>` with every hyphen in `id` replaced by an underscore (injective,
+because the corpus grammar excludes underscores), asserting the corresponding
+operator expression equals the TLA+ encoding of `expected`, and includes it in a
+declared TLC case. The invariant is checked, not assumed: the combined
+auditor requires each derived invariant name to occur in the digested cfg bytes
+of a case whose recorded verdict is `verified`, matched as a complete cfg
+identifier token (delimited by whitespace or line boundaries), never as a
+substring — `Bridge_a` must not satisfy the check when only `Bridge_a_b` is
+present. Record the exact JSON-to-TLA+
+encoding in `bridge.md`. All bridge artifacts and cases must be
 listed in both models' design documents with SHA-256 hashes; a changed bridge
 requires updating both design inputs and rerunning both workflows.
 
@@ -557,21 +705,26 @@ State the crucial distinction: arithmetic proofs do not establish atomicity;
 TLC's bounded arithmetic examples do not establish the general Lean theorem.
 Shared examples provide conformance evidence, not a composition theorem.
 
-Implement `scripts/check-combined-evidence.mjs` as a read-only auditor. It accepts
-`--project` and `--bridge specs/formal/<id>/bridge.json`, validates the strict
-schema and case files, invokes both read-only backend auditors, verifies pinned
-bridge hashes from both evidence packages, and checks every bridge invariant and corpus
-case is represented in successful current evidence. Evidence must include the
+Implement `scripts/check-combined-evidence.mjs` as a read-only auditor. It
+accepts `--project` and `--bridge specs/formal/<id>/bridge.json`, validates the
+strict schema and case files, invokes both read-only backend auditors, verifies
+pinned bridge hashes from both evidence packages, and checks every bridge
+invariant and corpus case is represented in successful current evidence (TLC
+`status: verified`; Lean `proofVerdict: verified` and `conformanceVerdict:
+passed`). It writes exactly one JSON result object to stdout and exits 0 only
+when combined acceptance is valid; otherwise 2. Evidence must include the
 complete ordered per-case ID/result list in a hashed comparison report; aggregate
 counts alone cannot establish bridge coverage. For each TLA invariant, bind its
 name to a configured successful case and inspect the digested module declaration.
-Human review confirms that its expression is the specified bridge assertion. Store the machine-readable
-bridge hash lists in generated backend evidence for this purpose; add optional
-`bridgeFiles` entries only in new evidence schema versions, keeping old TLA
-version-one evidence readable and valid for TLA-only use. The TLC runner writes
-new schema-version-two evidence only when supplied `--bridge`; without that
-flag it preserves version-one behavior. Lean evidence includes `bridgeFiles`
-only in its bridge-enabled schema version two. The auditor rejects mixed bridge
+Human review confirms that its expression is the specified bridge assertion. Version-two evidence for both backends adds exactly one field, `bridgeFiles`:
+an array of `{ "path", "sha256" }` entries for `bridge.json`, `bridge.md`, and
+every declared casesFile, included in each backend's input enumeration before
+hashing. Old TLA version-one evidence remains readable and valid for TLA-only
+use. The TLC runner writes version-two evidence only when supplied `--bridge`;
+without that flag it preserves version-one behavior and shape. The same rule
+binds Lean: without `--bridge`, Lean evidence stays the section 8 version-one
+object; with `--bridge`, it uses its schema version two, which adds exactly
+`bridgeFiles`. The auditor rejects mixed bridge
 versions or successful records missing a bridge row. Both-mode producer commands require the same `--bridge` argument, a unique
 project-relative `specs/formal/<id>/bridge.json` path. The argument is also
 accepted by preflight and auditors; it is forbidden with a nonmatching model.
@@ -589,7 +742,9 @@ Update these existing files during implementation:
 | File | Required change |
 | --- | --- |
 | `skills/formal-design/SKILL.md` | Add routing, Lean workflow, commands, assurance wording, and links |
-| `references/agents-snippet.md` | Add Lean screening IDs; retain explicit project adoption |
+| `references/agents-snippet.md` | Add Lean screening IDs; rewrite the review-admission predicate for `backends`, proof and conformance verdicts, and both digests (a Lean-only task must not be admitted by vacuous TLC-case verification); retain explicit project adoption |
+| `agents/executor.md` | Extend the handoff keys with the proof input digest and execution digest alongside the approved input digest |
+| Skill `.gitignore` adoption instruction | Also ignore `specs/**/conformance-evidence.json` |
 | `references/modeling-guide.md` | Explain selection and point to Lean/combined guides |
 | `references/review-contract.md` | Add proof-stage review versus acceptance-stage conformance |
 | Existing TLC evidence/CLI modules | Add opt-in bridge schema two without changing schema-one contracts |
@@ -621,11 +776,14 @@ one; do not implement dependency-based selective skipping. In the feature PR,
 ship one accepted budget-reservation fixture/model with a real implementation
 binding. Unfinished production models must remain outside committed `specs/lean`.
 
-Enumerate `specs/formal/*/bridge.json` and run the combined auditor after both
-backend checks. Build artifacts live in runner temporary directories only when
-that still preserves project-relative paths required by the evidence package.
-Otherwise keep `.formal-design` in the checkout and upload it explicitly.
-Use a dedicated 30-minute Lean job timeout; individual phase limits still apply.
+Enumerate `specs/formal/*/bridge.json` before executing checks. The Lean job
+also installs Java. For each bridge, run the TLC producer with `--bridge` for
+the referenced `specs/tla` model, then run the Lean producer and conformance
+commands with `--bridge` for the referenced `specs/lean` model, then run the
+combined auditor; the shared checkout provides both evidence packages. Keep
+`.formal-design` in the checkout and upload it explicitly; artifacts must keep
+the project-relative paths recorded in the evidence packages. Use a dedicated
+30-minute Lean job timeout; individual phase limits still apply.
 
 Run package-shape checks against the packed plugin as well as the source tree.
 A clean npm installation must expose the guides and scripts without requiring
@@ -665,9 +823,9 @@ conformance, bridge support, documentation, and release checks pass.
 | Direct/indirect `sorry`, `admit`, custom axiom | Rejected by transitive axiom audit |
 | Allowed standard axioms | Accepted and listed, never described as axiom-free |
 | Unsupported computation axiom | Rejected without widening the allowlist |
-| Impossible precondition | Missing witness blocks configuration; misleading witness remains a review finding |
-| Source deliberately skips kernel checks | Review fixture rejects the bypass; never claim hostile-code isolation |
-| Preexisting `.olean` or project Lake file | Rejected before compilation |
+| Top-level implication without a witness | Manifest blocked at preflight; vacuity hidden behind definitions remains a review finding |
+| Source containing `set_option debug.skipKernelTC` | Blocked before compilation by source scan; never claim hostile-code isolation |
+| Preexisting `.olean` or project Lake file | Blocked before compilation |
 | Wrong tool version, missing archive receipt, modified installation | Preflight blocked |
 | Lean missing but TLA-only task | Existing TLC behavior unchanged |
 | Model/corpus/source changes during a run | Incomplete or stale, never accepted |
@@ -715,14 +873,17 @@ error cases explicitly, including an already invalid state. Prove:
 
 Avoid saturating-subtraction mistakes by stating and checking `reserved <= budget`
 before using `Nat` subtraction. Use canonical decimal strings for numeric JSON
-values so the Lean domain and JavaScript BigInt implementation agree. Production
-code converts strings to BigInt under the reviewed nonnegative canonical grammar.
-Do not silently coerce JSON numbers to BigInt.
+values so the Lean domain and JavaScript BigInt implementation agree. The
+canonical grammar is `^(0|[1-9][0-9]*)$`. Production code converts strings to
+BigInt under that grammar. Do not silently coerce JSON numbers to BigInt. The
+reference returns the error codes `invalid-state` (already invalid state:
+`reserved > budget`), `insufficient-budget` (`amount > budget - reserved`), and
+`invalid-amount` (malformed or negative string).
 
 Include exact exhaustion, excess by one, zero, invalid prior state, malformed
 string, negative string, and values above JavaScript's safe integer range.
 Enumerate a small finite domain and add seeded larger values. The known-bad
-mutant omits the admission guard. A combined example additionally models atomic
+mutant omits the `reserved > budget` admission guard. A combined example additionally models atomic
 admission and duplicate-release behavior in TLC and records bridge cases.
 Do not claim that this example proves the project's unrelated budget code.
 
@@ -768,3 +929,43 @@ Future separately designed work may add an independent proof checker, pinned
 Mathlib support, verified translation for a restricted production language,
 property-based corpus shrinking, or machine-checked refinement between models.
 None is an implicit dependency or an assurance claim of this implementation.
+
+## 18. Review ledger
+
+This revision was produced by a three-seat blind review of the initial
+document. Reviewers worked independently from the same brief. Rounds after
+the first verified only the folds from their own seat's findings; they were
+delta rounds, not full re-reviews. The reviewer lane identities and the
+verdict counts below are recorded as delivered; the underlying outputs are
+not committed to the repository.
+
+| Round | Scope | Seat verdicts | Outcome |
+| --- | --- | --- | --- |
+| r1 | Full document | internal critic GO-WITH-CHANGES (16 findings); external reviewer A NO-GO (8 findings, 1 blocker); external reviewer B NO-GO (14 findings, 1 blocker) | 34 merged folds applied |
+| r2 | Delta on own folds | critic GO-WITH-CHANGES (15 OK, 1 problem, 1 new minor); reviewer A GO-WITH-CHANGES (6 OK, 2 problems); reviewer B NO-GO (8 OK, 6 problems, 7 new incl. 1 blocker) | 14 further folds applied |
+| r3 | Micro-confirmation of r2 residuals | critic GO; reviewer B GO; reviewer A NO-GO on one narrow item | 1 fold applied |
+| r3b | Single-item confirmation | reviewer A GO | Converged |
+
+Adjudications worth recording:
+
+- The Lean import-path defect (clearing `LEAN_PATH` cannot resolve freshly
+  compiled modules) was reported independently by all three seats and was
+  verified against the v4.24.0 `initSearchPath` implementation before folding.
+- Reviewer A's round-1 claim that `--version` prints the bare version string
+  was corrected by reviewer B in round 2 and verified against the v4.24.0
+  shell source: `--version` prints a long header; `--short-version` prints
+  the bare string. The pin check now uses `--short-version`.
+- Reviewer B's round-2 blocker on `-D` option placement after `--run` was
+  verified against the same source (option parsing stops at `--run`).
+- Witness conditionality is enforced only by a conservative top-level arrow
+  scan of the statement matrix; everything deeper remains a review finding.
+  This split was proposed by two seats and adopted.
+
+Facts verified by the orchestrator during the cycle: the baseline commit
+exists on `main`; both v4.24.0 release asset SHA-256 digests match the values
+in section 6; the repository Node engines are `^22.19 || >=24`; the
+existing skill layout matches section 4.
+
+Status of this document: three-seat review converged (all seats GO on the
+final text). User sign-off pending. r2 through r3b verified folds only; the
+first round was the only full review of the initial text.
