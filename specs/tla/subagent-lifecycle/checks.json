@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "modelId": "subagent-lifecycle",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitAdmission": "FALSE",
+        "SplitContinue": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "CapOK",
+        "NoResurrect",
+        "ReleasedDisjoint",
+        "TombstoneNonLive",
+        "GraceMemberOnly",
+        "NoLateEpoch",
+        "DrainedQuiescent",
+        "PromotedIsBackground"
+      ],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-cap-toctou",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitAdmission": "TRUE",
+        "SplitContinue": "FALSE"
+      },
+      "invariants": ["TypeOK", "CapOK"],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-late-continue",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitAdmission": "FALSE",
+        "SplitContinue": "TRUE"
+      },
+      "invariants": ["TypeOK", "NoLateEpoch", "TombstoneNonLive"],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    }
+  ]
+}
