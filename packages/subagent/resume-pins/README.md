@@ -27,6 +27,10 @@ One cordis plugin (`apply`) with:
   tool availability (`PINNED_TOOL_UNAVAILABLE`), and pinned-route availability
   (`SUBAGENT_MODEL_UNAVAILABLE`) — every deny persisted into the pin
   (`resume.state='blocked'`) **before** the deny returns;
+- a **live-capacity pre-check** on `send_message`: continuing a settled child
+  admits a fresh resident activation, so at the 25 live-child cap the call is
+  refused with the spawn lanes' remedy copy (transient — nothing is persisted,
+  unlike the gate denials above);
 - an **`agent/request` overlay** applying the pinned
   `{provider, model, reasoningEffort, maxTokens}` tuple field-by-field
   (absence included) to every resumed turn, whatever resumed it;

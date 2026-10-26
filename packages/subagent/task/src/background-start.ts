@@ -39,6 +39,17 @@ export const PROVIDER_SPAWN = 'spawn'
 export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
 
 /**
+ * The single runtime refusal literal for the live-capacity cap (D4). The
+ * continuation guard in `@dsh-cc/subagent-resume-pins` reuses the same text
+ * for the same cap, so the user-visible remedy cannot drift between the spawn
+ * lanes and `send_message` continuations; a test pins byte equality.
+ */
+export const LIVE_CAPACITY_REFUSAL = `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
+  + 'release_agent on a running child (or /agents release <id> interactively), or '
+  + 'let children settle — only running children hold slots, and only '
+  + 'list_agents-visible children are releasable'
+
+/**
  * The env kill switch (UX plan §3.4): a non-empty value other than
  * case-insensitive `0`/`false` disables backgrounding-by-default.
  */
@@ -229,14 +240,7 @@ export async function assertLiveCapacity(
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
     // Single runtime literal (D4; T16 pins full equality against exactly it):
     // the copy names the real release path — /agents stop cannot free a slot.
-    throw refuse !== undefined
-      ? refuse(live)
-      : new Error(
-      `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
-      + 'release_agent on a running child (or /agents release <id> interactively), or '
-      + 'let children settle — only running children hold slots, and only '
-      + 'list_agents-visible children are releasable',
-    )
+    throw refuse !== undefined ? refuse(live) : new Error(LIVE_CAPACITY_REFUSAL)
   }
 }
 
