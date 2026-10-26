@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/vwa-evidence",
   "description": "Verifiable Workspace Agent evidence substrate (docs/plans/2026-10-12-verifiable-workspace-agent.md 4): marker/claim extraction from markdown, mechanical read-back verification, the three document gates, and versioned JSONL evidence receipts with write-then-read-back; the turn-stopping evaluator (window anchoring, pending recovery, nudge budgets) is the sole ledger writer",
-  "version": "0.9.2",
+  "version": "0.9.3-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
