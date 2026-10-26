@@ -30,7 +30,11 @@ One cordis plugin (`apply`) with:
 - a **live-capacity pre-check** on `send_message`: continuing a settled child
   admits a fresh resident activation, so at the 25 live-child cap the call is
   refused with the spawn lanes' remedy copy (transient — nothing is persisted,
-  unlike the gate denials above);
+  unlike the gate denials above). The check and a slot **reservation** run under the
+  per-parent admission lease shared with the Task spawn lanes (`admission.ts`), so a
+  concurrent spawn and a continuation cannot both take the last slot; the reservation
+  is released when the tool settles, on abort or deny, or by a safety TTL — never held
+  across the approval prompt;
 - an **`agent/request` overlay** applying the pinned
   `{provider, model, reasoningEffort, maxTokens}` tuple field-by-field
   (absence included) to every resumed turn, whatever resumed it;

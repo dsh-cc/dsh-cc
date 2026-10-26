@@ -25,7 +25,10 @@
   pin（`resume.state='blocked'`）；
 - 一个针对 `send_message` 的 **live 容量前置检查**：续跑一个已 settle 的子代理会占用一个
   新的驻留激活名额，因此在 25 个存活子代理的上限处按 spawn 车道的同一份补救文案拒绝
-  （瞬态拒绝——不像上面的门禁拒绝那样持久化任何状态）；
+  （瞬态拒绝——不像上面的门禁拒绝那样持久化任何状态）。检查与名额**预留**在与 Task spawn
+  车道共享的按父会话准入租约（`admission.ts`）下完成，因此并发的 spawn 与续跑不会同时
+  占用最后一个名额；预留在工具 settle、中止或被拒绝时释放，或由安全 TTL 兜底——绝不会
+  跨越审批提示持有；
 - 一个 **`agent/request` overlay**，把钉存的
   `{provider, model, reasoningEffort, maxTokens}` 元组逐字段（含缺席）应用到
   每个恢复的轮次，无论由谁恢复；

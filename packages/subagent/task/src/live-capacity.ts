@@ -8,7 +8,7 @@
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { acquireAdmission, type AdmissionLease } from './admission-lock.ts'
+import { acquireAdmission, pendingContinuations, type AdmissionLease } from '@dsh-cc/subagent-resume-pins'
 import type { SubagentsLike } from './background-start.ts'
 
 /**
@@ -61,7 +61,10 @@ export async function assertLiveCapacity(
   // an absent registry (or a bare fixture agent without a ctx) degrades the
   // guard open (no false blocks).
   const agents = parent.ctx?.get?.('agents') as { get?(id: string): { status?: string } | undefined } | undefined
-  const live = children.filter(child => agents?.get?.(child.id)?.status === 'running').length
+  const isRunning = (id: string): boolean => agents?.get?.(id)?.status === 'running'
+  // Slots already promised to in-flight `send_message` continuations count too:
+  // the same admission (resume-pins/admission.ts) guards both lanes.
+  const live = children.filter(child => isRunning(child.id)).length + pendingContinuations(String(parent.id), isRunning)
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
     // Single runtime literal (D4; T16 pins full equality against exactly it):
     // the copy names the real release path — /agents stop cannot free a slot.

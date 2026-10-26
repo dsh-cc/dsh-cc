@@ -45,7 +45,8 @@ import {
   type ResumePolicy,
 } from './policy.ts'
 import { serializePerKey, ExecutionNoticeBus } from './serialize.ts'
-import { continuationCapacityRefusal, type CapacityServices } from './live-capacity.ts'
+import { admitContinuation, type CapacityServices } from './live-capacity.ts'
+import type { AdmissionLease } from './admission.ts'
 import { PinStore, type CorruptPin } from './store.ts'
 import type { ResumePin } from './pin.ts'
 
@@ -208,6 +209,8 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   // cannot interleave their decisions or cross-deliver notices.
   const pendingNotices = new ExecutionNoticeBus()
   const childLocks = new Map<string, Promise<unknown>>()
+  /** Continuation slot reservations, keyed by the in-flight tool execution. */
+  const reservations = new WeakMap<object, AdmissionLease>()
 
   /**
    * Lookup-level read: an unsafe childId (harness session ids are
@@ -330,58 +333,86 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
     // pre-execute waterfall.
     const targetLive = (ctx as unknown as { agents?: { get?: (id: unknown) => unknown } })
       .agents?.get?.(SessionId(target)) !== undefined
+    // The check + slot reservation run under the per-parent admission lease
+    // shared with the spawn lanes (admission.ts), so a concurrent spawn and
+    // this continuation cannot both take the last slot. The reservation is
+    // released when the tool settles (post-execute), on abort, on deny, or by
+    // TTL — never held across the approval prompt or the activation itself.
+    let reservation: AdmissionLease | undefined
     if (!targetLive) {
-      const capacityReason = await continuationCapacityRefusal(
-        ctx as unknown as CapacityServices,
-        exec.agent as { id?: unknown } | undefined,
-        exec.signal,
-      )
-      if (capacityReason !== undefined) return { kind: 'deny' as const, reason: capacityReason }
-    }
-    return serializePerKey(childLocks, target, async () => {
-      const found = readPin(target)
-      if (found === undefined) return next() // legacy/foreign child: pass through
-      if ('kind' in found) {
-        return { kind: 'deny' as const, reason: `[PIN_UNREADABLE] resume pin for ${target} is unreadable (${found.reason}); refusing to resume` }
+      try {
+        const admission = await admitContinuation(
+          ctx as unknown as CapacityServices,
+          exec.agent as { id?: unknown } | undefined,
+          target,
+          exec.signal,
+        )
+        if (!admission.admitted) return { kind: 'deny' as const, reason: admission.reason }
+        reservation = admission.release
+        reservations.set(exec, reservation)
+      } catch (error) {
+        if (exec.signal?.aborted === true) return { kind: 'cancel' as const }
+        throw error
       }
-      // Same-epoch steer to a live agent: untouched.
-      if (ctx.agents.get(SessionId(target)) !== undefined) return next()
-      const decision = await evaluateGate(found, await gateEnv(found, exec.agent), policy())
-      if (decision.action === 'deny') {
+    }
+    try {
+      const gated = await serializePerKey(childLocks, target, async () => {
+        const found = readPin(target)
+        if (found === undefined) return next() // legacy/foreign child: pass through
+        if ('kind' in found) {
+          return { kind: 'deny' as const, reason: `[PIN_UNREADABLE] resume pin for ${target} is unreadable (${found.reason}); refusing to resume` }
+        }
+        // Same-epoch steer to a live agent: untouched.
+        if (ctx.agents.get(SessionId(target)) !== undefined) return next()
+        const decision = await evaluateGate(found, await gateEnv(found, exec.agent), policy())
+        if (decision.action === 'deny') {
+          try {
+            persistBlocked(found, decision)
+          } catch (error) {
+            // Fail closed: the deny stands even when the durable marker could
+            // not be written; the reason names the persistence failure.
+            return {
+              kind: 'deny' as const,
+              reason: `${decision.reason} (resume pin persistence failed: ${(error as Error).message})`,
+            }
+          }
+          return { kind: 'deny' as const, reason: decision.reason }
+        }
+        // Durability ordering: the pass result (cleared state, overlay cache,
+        // notices) is published synchronously BEFORE the delivery happens —
+        // a store-write failure denies with a store-write-failure code and the
+        // delivery never happens.
         try {
-          persistBlocked(found, decision)
+          persistPass(found, decision)
         } catch (error) {
-          // Fail closed: the deny stands even when the durable marker could
-          // not be written; the reason names the persistence failure.
           return {
             kind: 'deny' as const,
-            reason: `${decision.reason} (resume pin persistence failed: ${(error as Error).message})`,
+            reason: `[STORE_WRITE_FAILURE] resume pin could not publish the gate result for ${target} (${(error as Error).message}); refusing to resume until the durable state is written`,
           }
         }
-        return { kind: 'deny' as const, reason: decision.reason }
-      }
-      // Durability ordering: the pass result (cleared state, overlay cache,
-      // notices) is published synchronously BEFORE the delivery happens —
-      // a store-write failure denies with a store-write-failure code and the
-      // delivery never happens.
-      try {
-        persistPass(found, decision)
-      } catch (error) {
-        return {
-          kind: 'deny' as const,
-          reason: `[STORE_WRITE_FAILURE] resume pin could not publish the gate result for ${target} (${(error as Error).message}); refusing to resume until the durable state is written`,
+        if (decision.notices.length > 0) {
+          pendingNotices.publish(exec.token, decision.notices)
         }
-      }
-      if (decision.notices.length > 0) {
-        pendingNotices.publish(exec.token, decision.notices)
-      }
-      return next()
-    })
+        return next()
+      })
+      if (gated.kind === 'deny' || gated.kind === 'cancel') reservation?.()
+      return gated
+    } catch (error) {
+      reservation?.()
+      throw error
+    }
   })
 
   // §4.7: prefix the gate's notices onto the send_message result; annotate
   // list_agents for pinned children.
   ctx.on('tools/post-execute', async (exec, result, next) => {
+    // The send_message tool body has run: its continuation reservation is no
+    // longer needed (a visible running activation is counted directly).
+    const held = reservations.get(exec)
+    if (held !== undefined) {
+      reservations.delete(exec)
+      held()
+    }
     const out = await next()
     if (out.kind !== 'accept') return out
     if (exec.name === 'send_message') {
