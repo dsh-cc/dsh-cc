@@ -1,7 +1,7 @@
 /** Markdown extraction coordinates, strict response validation and independent reviewer inputs. */
 import { rootBlocks } from './review-plan.ts'
 import { reviewDefValidator, ajvErrors, spanError } from './schema.ts'
-import type { ExtractedItem, Span, Id, ProjectSnapshot } from './types.ts'
+import type { ExtractedItem, Scope, Span, Id, ProjectSnapshot } from './types.ts'
 /** One extraction unit: a root block, or an over-long block split into pieces. */
 export interface ExtractionUnit {
   unitId: string
@@ -179,7 +179,16 @@ export const EXTRACT_RESPONSE_SCHEMA: object = {
               properties: {
                 text: { type: 'string', minLength: 1, maxLength: 2000 },
                 kind: { enum: ['fact', 'source-report', 'interpretation', 'causal', 'intent', 'evaluation'] },
-                scope: { type: 'object' },
+                scope: {
+                  type: 'object',
+                  description: 'Stated bounds only; {} is correct when none is stated. Never invent source references.',
+                  properties: {
+                    subject: { type: 'string' },
+                    time: { type: 'string' },
+                    geography: { type: 'string' },
+                    exclusions: { type: 'array', items: { type: 'string' } },
+                  },
+                },
                 importance: { enum: ['core', 'supporting'] },
               },
             },
@@ -215,14 +224,72 @@ export class AuditInvalidError extends Error {
   }
 }
 
+const SCOPE_STRING_DEFAULT = 'unspecified'
+const SCOPE_STRING_MAX = 512
+const SCOPE_EXCLUSIONS_MAX = 1000
+
+/** Canonicalize a scope string: trim, truncate, trim again; '' for non-strings/empties. */
+function canonicalScopeString(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.trim().slice(0, SCOPE_STRING_MAX).trimEnd()
+}
+
+/** A prose scope field: canonical text, or the documented "no constraint" default. */
+function scopeField(value: unknown): string {
+  return canonicalScopeString(value) || SCOPE_STRING_DEFAULT
+}
+
+/**
+ * Default-fill one atomic claim's `scope` (design §3.1): lenient in, strict out.
+ * `corpus` is always empty — the extract model has no sources list and must not
+ * persist hallucinated ids. Every call allocates fresh arrays.
+ */
+function normalizeExtractedScope(raw: unknown): Scope {
+  const source =
+    typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  return {
+    subject: scopeField(source.subject),
+    corpus: [],
+    time: scopeField(source.time),
+    geography: scopeField(source.geography),
+    exclusions: Array.isArray(source.exclusions)
+      ? source.exclusions
+          .map(canonicalScopeString)
+          .filter((entry) => entry !== '')
+          .slice(0, SCOPE_EXCLUSIONS_MAX)
+      : [],
+  }
+}
+
+/**
+ * Shallow shape guard + scope default-fill before the strict validator runs
+ * (design §3.2). Malformed input passes through unchanged so the strict
+ * validator keeps producing the existing error surface.
+ */
+function normalizeExtractItem(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw
+  const item = raw as { atomicClaims?: unknown }
+  if (!Array.isArray(item.atomicClaims)) return raw
+  const claims = item.atomicClaims
+  if (!claims.every((claim) => typeof claim === 'object' && claim !== null && !Array.isArray(claim))) return raw
+  return {
+    ...item,
+    atomicClaims: (claims as { scope?: unknown }[]).map((claim) => ({
+      ...claim,
+      scope: normalizeExtractedScope(claim.scope),
+    })),
+  }
+}
+
 export function validateExtractItems(items: unknown, strippedText: string, units: ExtractionUnit[]): ExtractedItem[] {
   if (!Array.isArray(items)) throw new AuditInvalidError('extract response is not {items: [...]}')
   const out: ExtractedItem[] = []
   const seen = new Set<string>()
   for (const raw of items) {
+    const checked = normalizeExtractItem(raw)
     const check = reviewDefValidator('ExtractedItem')
-    if (!check(raw)) throw new AuditInvalidError(`extract response schema mismatch: ${ajvErrors(check)}`)
-    const item = raw as ExtractedItem
+    if (!check(checked)) throw new AuditInvalidError(`extract response schema mismatch: ${ajvErrors(check)}`)
+    const item = checked as ExtractedItem
     const spanProblem = spanError(item.span, strippedText)
     if (spanProblem) throw new AuditInvalidError(spanProblem)
     if (

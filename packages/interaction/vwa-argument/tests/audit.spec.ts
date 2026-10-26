@@ -1095,3 +1095,45 @@ describe('Fix 4 review fixes — cross-chunk check merging and cost-model approx
     expect(model.alignBatches).toBe(3)
   })
 })
+
+// ---- extract scope normalization (design §3.1) ----
+
+describe('executeAudit — extract scope normalization', () => {
+  it('empty model scopes are default-filled in the persisted record and the align envelope', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const base = item('The minutes record only the vote.', ARTIFACT, 'core')
+    const emptyScopeItem: ExtractedItem = {
+      ...base,
+      atomicClaims: [{ ...base.atomicClaims[0]!, scope: {} as ExtractedItem['atomicClaims'][number]['scope'] }],
+    }
+    let alignScope: ExtractedItem['atomicClaims'][number]['scope'] | undefined
+    const adapter = auditAdapter({
+      items: [emptyScopeItem],
+      align: (envelope) => {
+        alignScope = envelope.items[0]?.atomicClaims[0]?.scope
+        return {
+          stage: 'align',
+          rubricVersion: 'humanities-v1',
+          findings: [],
+          targets: [],
+          alignment: envelope.items.map((entry: { extractedId: string }) => ({
+            extractedId: entry.extractedId,
+            claimIds: [],
+            relation: 'new',
+            rationale: 'unregistered',
+          })),
+        }
+      },
+    })
+    const outcome = await executeAudit(auditInput(ARTIFACT, snapshot, adapter))
+    const expected = {
+      subject: 'unspecified',
+      corpus: [],
+      time: 'unspecified',
+      geography: 'unspecified',
+      exclusions: [],
+    }
+    expect(outcome.extractionRecord.response.items[0]!.atomicClaims[0]!.scope).toEqual(expected)
+    expect(alignScope).toEqual(expected)
+  })
+})
