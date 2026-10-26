@@ -31,8 +31,20 @@
   `baselines/<date>-P0-coverage-baseline.json`（各族检测命中数、含断言
   的文档数、候选覆盖率分母）。按 §8 在一周 dogfood 后重新校准。
 
+- `src/scorer.ts` —— 冻结的 `humanities-scorer@1`（设计
+  `docs/plans/2026-10-16-vwa-evidence-argument.md` §22.2）：纯函数实现原子
+  claim 匹配（编辑相似度与 span IoU）、拆分/合并计分、核心召回、重大缺陷召回、
+  clean 样本误报率、基于 `direct | inferential | partial | contradicted |
+  irrelevant` 的 support macro-F1，以及确定性 bootstrap 置信区间（种子
+  `20261016`，重采样 10,000 次；置信区间仅披露，不作阈值判断）。无 fs、无模型调用。
+- `humanities/` + `scripts/build-humanities-manifest.mjs` —— 人文类金标 manifest
+  （`gold-manifest.json`，schema 为 `gold-manifest.schema.json`），由
+  `humanities/cases/*.json` 构建（目前为三个合成开发用例）：每个用例的 SHA-256、
+  领域分层，以及冻结的 dev/holdout 划分（按 id 排序，每第三个用例为 holdout）。
+  `--check` 重新计算并与已提交的 manifest 比对。
+
 ## 测试
 
 `pnpm vitest run packages/evaluation/vwa-eval` — 选择器确定性与
 `--check` 往返、对活文件的 sha256、抽样数学（ceil/min 规则、预算钉住、
-手工 F1@K）、句子导出形状。
+手工 F1@K）、句子导出形状，以及 humanities scorer 指标（`tests/scorer.spec.ts`）。

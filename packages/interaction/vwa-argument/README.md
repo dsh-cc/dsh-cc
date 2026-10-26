@@ -26,10 +26,25 @@ disabled the tools are not registered and the feature is inert.
   〔src:ws:packages/interaction/vwa-argument/src/store.ts#L1-L40〕.
 - **Review pipeline** (`src/review-adapter.ts`, `src/review-runner.ts`,
   `src/review-tasks.ts`, `src/audit.ts`): stage prompts
-  (`prompts/sources|support|arguments|extract|align.md`), a budgeted
+  (`prompts/sources|support|claims|arguments|extract|align.md`), a budgeted
   background run registered by `argument.review` and returned immediately
   (§14, D14); reviews never modify the body or the author graph; the same
-  `requestId` returns the cached run state (D07).
+  `requestId` returns the cached run state (D07). `argument.review` takes
+  `input: {artifactId?, targetClaimIds?, stage, continue?}` with `stage` one of
+  `sources|support|claims|arguments|all|audit`. After an incomplete run, a call
+  with `input.continue: true` and a NEW `requestId` re-executes only the tasks
+  (audit included) that have no reusable completed record
+  (`src/review-continue.ts`, `src/audit-reuse.ts`); it is refused with
+  `NOTHING_TO_CONTINUE` when everything is already complete, or
+  `BUDGET_EXHAUSTED` when the shared review-cycle budget is spent. Before any
+  request is reserved, `src/feasibility.ts` makes a static budget estimate and
+  refuses an infeasible plan with `BUDGET_INSUFFICIENT` (the refusal carries a per-stage breakdown and a `suggestedClaimsBatchSize`; the `review-claims-batch-size` setting, default 1, range 1-4, batches consecutive `claims` tasks, `src/settings.ts:62`); its cost model
+  (`src/audit-cost.ts`) is shared with the audit runner. The audit packs
+  extract/align batches against the per-call output budget and, when a response
+  is truncated, bisects the batch (`src/audit-align.ts`). A `sources` task
+  windows an over-long prose source (head + tail) to fit the measured envelope;
+  structured data (JSON, JSONL, XML, CSV/TSV) is never windowed
+  (`src/review-input.ts`).
 - **Tools** (`src/tools.ts`, mounted only when `semantic-enabled`, §13):
   `evidence.register` (source snapshot + excerpts, runtime-read quotes),
   `evidence.search_log` (1–50 search-log entries, no searching performed),
@@ -43,7 +58,9 @@ disabled the tools are not registered and the feature is inert.
   〔src:ws:packages/interaction/vwa-argument/src/commands.ts#L1-L40〕.
 - **Report** (`src/report.ts`, `src/report-render.ts`): the four goal
   questions answerable from the report alone (§22.3), with reviewer
-  disagreement preserved (D19) and per-finding provenance.
+  disagreement preserved (D19) and per-finding provenance. The report also
+  carries per-stage review progress with per-task failure detail
+  (`stageProgress`, `src/review-progress.ts`).
 - **Validation** (`src/schema.ts`): Ajv 8 strict on the Draft 2020-12 entry
   point with `coerceTypes:false`, `useDefaults:false`,
   `removeAdditional:false` (§25). UUID/Hash/Span rules are explicit schema

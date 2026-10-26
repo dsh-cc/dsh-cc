@@ -76,6 +76,33 @@ inside vwa). The `agent/turn-stopping` listener:
   last-row-per-path selection over the session's monotonic event order
   (`staleAgainst`); no external ledger bookkeeping is added.
 
+## Lane-2 bound-artifact delivery (§16.2)
+
+When the `vwa-argument` service is mounted in the same realm, the turn-end
+evaluator also handles artifacts that a `vwa-argument` project has bound
+(`src/bound-eval.ts`, `src/vwa-delivery.ts`). The service is resolved
+structurally per dispatch with `ctx.get('vwa-argument')`
+(`resolveDeliveryProvider`); this package never imports `@dsh-cc/vwa-argument`.
+When the service is absent or lacks the provider face, the artifact stays on
+the lane-1 path above (fail-soft).
+
+- **Report first, then receipt.** The review report is written under
+  `docs/vwa-reports/<projectId>/<artifactId>.review.md` (`writeBoundReport`), and a
+  **v:2 receipt row** (`ReceiptV2`, `src/receipt.ts:110`) that references the
+  report hash is appended to the same session ledger, with read-back.
+  Its `checks` carry `mechanical`, `evidence`, `argument` and `audit` verdicts,
+  and `delivery` is one of `draft | reviewed | delivered-unverified |
+  delivered-reviewed`.
+- **Delivery event.** The only accepted delivery event is the host
+  `deliverables/presented` session event; hashes are computed from the
+  presented files' current bytes at check time and compared with the binding.
+  Events are never fabricated.
+- **Claim markers.** `〔claim:<id>〕` authoring-aid markers are plain text on the
+  lane-1 surface: they are skipped (no source spec, no `invalid-marker`) and
+  every character offset stays valid (`isClaimMarkerInner`, `src/marker.ts`).
+- Nudges still go through the single `vwa-evidence` inject source; a stale
+  binding produces its own nudge.
+
 This package is vwa-exclusive (absent from the capability manifest by
 design §3.2(a)).
 

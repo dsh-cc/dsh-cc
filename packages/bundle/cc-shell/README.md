@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The CC shell **host-plane infra** bundle. This package carries the pieces that are genuinely host-level — the tools-registry swap with deferred-name support — plus the `cc-shell-glue` plugin *code* (the glue code still lives here, but its mount action is performed by the CC preset, not this bundle's patch). All agent-facing composition — tool-search, skill loader, memory, coordinator, worktree/sleep/notebook/structured-output tools, the 21 slash commands, the hook bridge, output-style rendering — moved to the [`@dsh-cc/preset-cc`](../../preset/cc/README.md) composition package, so it can be isolated per preset instead of leaking into every mode.
+The CC shell **host-plane infra** bundle. This package carries the pieces that are genuinely host-level — the tools-registry swap with deferred-name support — plus the `cc-shell-glue` plugin *code* (the glue code still lives here, but its mount action is performed by the CC preset, not this bundle's patch). All agent-facing composition — tool-search, skill loader, memory, coordinator, worktree/sleep/notebook/structured-output tools, the 25 slash commands, the hook bridge, output-style rendering — moved to the [`@dsh-cc/preset-cc`](../../preset/cc/README.md) composition package, so it can be isolated per preset instead of leaking into every mode.
 
 ## What it does
 
@@ -11,6 +11,8 @@ The CC shell **host-plane infra** bundle. This package carries the pieces that a
   **lazy trampoline** over the `ccModelRoutes` service:
   `(model) => ctx.get('ccModelRoutes')?.resolve(model)` — queried on every spawn, degrading to
   inherit the parent route when the service is unmounted.
+
+- **Runtime-wide MCP singletons.** When several agent presets are standing-mounted in one runtime (the `tui` profile mounts `cc` and `vwa`), the shared `cc-services` body and its glue row are composed once per preset tree, but all trees share one root. The glue therefore publishes ONE `mcpConnections` registry from the root fiber (`ensureMcpConnections`, `src/mcpSingleton.ts:36`) and mounts each MCP server once per `serverName` under the root (`mountMcpServerOnce`, `src/mcpSingleton.ts:88`), so `/mcp` and `mcp__*` tools work in every preset's sessions. `mcpConnections` and `toolSearch` are deliberately not in the `cc-services` isolate map.
 
 ### What moved out of the glue
 

@@ -37,8 +37,23 @@ the scripts below or the package scripts.
   (detected-claim counts per family, documents with claims, candidate
   coverage denominator). Recalibration lands after one dogfood week (§8).
 
+- `src/scorer.ts` — the frozen `humanities-scorer@1` (design
+  `docs/plans/2026-10-16-vwa-evidence-argument.md` §22.2): pure functions for
+  atomic-claim matching (edit similarity and span IoU), claim split/merge
+  credit, core recall, major-fault recall, clean false-positive rate, support
+  macro-F1 over `direct | inferential | partial | contradicted | irrelevant`,
+  and deterministic bootstrap confidence intervals (seed `20261016`, 10,000
+  resamples; CIs are disclosed, never used as thresholds). No fs, no model
+  calls.
+- `humanities/` + `scripts/build-humanities-manifest.mjs` — the humanities
+  gold manifest (`gold-manifest.json`, schema `gold-manifest.schema.json`)
+  built from `humanities/cases/*.json` (three synthetic development cases at
+  present): SHA-256 per case, domain stratum, and the frozen dev/holdout split
+  (sorted by id, every third case holdout). `--check` recomputes and diffs
+  against the committed manifest.
+
 ## Tests
 
 `pnpm vitest run packages/evaluation/vwa-eval` — selector determinism and
 `--check` round-trip, sha256 against live files, sampling math (ceil/min
-rules, budget pins, a hand-computed F1@K), sentence-export shape.
+rules, budget pins, a hand-computed F1@K), sentence-export shape, and the humanities scorer metrics (`tests/scorer.spec.ts`).

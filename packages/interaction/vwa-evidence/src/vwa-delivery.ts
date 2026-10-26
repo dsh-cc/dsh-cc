@@ -202,7 +202,7 @@ type ReceiptV2Delivery = ReceiptV2['delivery']
 
 /**
  * Write the report artifact for the frozen evaluation under
- * `.dsh/vwa/<projectId>/reports/<artifactId>.md` (§16.1a: the report is
+ * `docs/vwa-reports/<projectId>/<artifactId>.review.md` (§16.1a: the report is
  * written FIRST; the receipt references its hash). Best-effort: on failure
  * the report hash is the empty-file digest and the gap is disclosed to the
  * debug sink by the caller.

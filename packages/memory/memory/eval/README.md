@@ -36,7 +36,7 @@ DSH_RECALL_EVAL=1 pnpm vitest run packages/memory/memory/tests/eval-recall-run.s
 Requires:
 
 - the `haiku` alias resolvable — point `DSH_RECALL_EVAL_ROUTES` at its route
-  JSON (e.g. `DSH_RECALL_EVAL_ROUTES='{"provider":"anthropic","model":"claude-3-5-haiku"}'`);
+  JSON (e.g. `DSH_RECALL_EVAL_ROUTES='{"provider":"deepseek","model":"deepseek-chat"}'`);
   without it the suite **skips cleanly**.
 - a real model adapter: set `DSH_RECALL_EVAL_PROVIDER` (provider name) and
   `DSH_RECALL_EVAL_ADAPTER_MODULE` (module path whose default export is an

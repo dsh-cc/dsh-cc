@@ -39,6 +39,8 @@ npm install -g @dsh-cc/cli@latest
 dsh-cc
 ```
 
+Stable releases (`vX.Y.Z`) publish to the npm `latest` dist-tag. Release candidates (`vX.Y.Z-rc.N`) publish to `next` and never take `latest`. To try a release candidate, use `npm install -g @dsh-cc/cli@next`.
+
 After an upgrade, the launcher updates the profile bundles at the next start. It records the version in `~/.dsh/profiles/tui/.dsh-cc-bootstrap.json`.
 
 If the update cannot complete, the launcher shows a warning and starts the active profile. The next start runs the update again.
@@ -72,8 +74,7 @@ Each release has one dsh version for CI verification. The launcher also uses tha
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
-| v0.9.0-rc.1 – v0.9.0-rc.4 | 0.2.0-rc.2 |
-| v0.8.3-rc.1 | 0.2.0-rc.2 |
+| v0.8.3-rc.1 – v0.9.2 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
 | v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
@@ -200,7 +201,7 @@ See the [plugin guide](packages/plugin/dsh-cc-agents/README.md#vwa-writing) and 
 | Change interfaces | Terminal and web profiles |
 | Review document evidence | Optional VWA runtime and vwa-writing skill |
 
-This project uses dsh-cc for development. See [the example model configuration](#example-model-configuration).
+This project uses dsh-cc for development. Its model routes are user configuration, expressed only through [model aliases](#model-aliases).
 
 ## Users
 
@@ -335,6 +336,8 @@ The CC preset includes these commands. Use `/help` to inspect the commands in yo
 
 The shared presets also include `/preset`. The VWA preset adds `/vwa` project commands.
 
+The TUI adds its own local commands: `/model`, `/effort`, `/clear` (`/new`, `/reset`), `/exit` (`/quit`), `/usage`, `/export-md`, `/copy`, and `/tui-help`. See the [TUI package](packages/ui/tui/README.md#keys).
+
 The TUI also has task lists, approvals, queued prompts, transcript export, usage displays, and local shell commands.
 
 ### Provider setup
@@ -380,19 +383,6 @@ inherit             -> parent agent route
 ```
 
 Aliases are configuration, not fixed vendor assignments. A missing built-in alias usually inherits the parent route.
-
-### Example model configuration
-
-The repository development configuration uses this mapping. It is an example, not a necessary default.
-
-| Alias | Model |
-| --- | --- |
-| `fable` / `masterplan` | `kimi-k3` |
-| `opus` / `blueprint` | `glm-5.3` |
-| `sonnet` / `draft` | `glm-5.3-flash` |
-| `haiku` / `sketch` | `deepseek-v4-flash-0731` |
-| `gauge` | `jev` (System One decision lane: typed verdicts, not generative) |
-| `architect` | inherit (main thread) |
 
 ## Product boundaries
 

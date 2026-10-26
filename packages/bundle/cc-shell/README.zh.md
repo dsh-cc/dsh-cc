@@ -2,12 +2,14 @@
 
 [English](README.md) | 中文
 
-CC 壳层的 **host-plane infra** 组合包。本包承载真正属于宿主层的部件——带 deferred-name 支持的 tools 注册表替换——以及 `cc-shell-glue` 插件的*代码*（glue 代码仍住在这里，但挂载动作由 CC preset 执行，而非本包的 patch）。所有 agent-face 组合——tool-search、skill loader、memory、coordinator、worktree/sleep/notebook/structured-output 工具、21 个斜杠命令、hook 桥、output-style 渲染——都已迁至 [`@dsh-cc/preset-cc`](../../preset/cc/README.md) 组合包，以便按 preset 隔离，而不是泄漏进每个模式。
+CC 壳层的 **host-plane infra** 组合包。本包承载真正属于宿主层的部件——带 deferred-name 支持的 tools 注册表替换——以及 `cc-shell-glue` 插件的*代码*（glue 代码仍住在这里，但挂载动作由 CC preset 执行，而非本包的 patch）。所有 agent-face 组合——tool-search、skill loader、memory、coordinator、worktree/sleep/notebook/structured-output 工具、25 个斜杠命令、hook 桥、output-style 渲染——都已迁至 [`@dsh-cc/preset-cc`](../../preset/cc/README.md) 组合包，以便按 preset 隔离，而不是泄漏进每个模式。
 
 ## 作用
 
 - **tools 注册表替换。** 禁用 in-box 的 `tools` 行，重挂 `@dsh-cc/tools`。`reserve()`/`isAdmitted()` 加入可限制名 universe，权限门可在 deferred 工具加载前按名门控；其余行为与上游一致。基础行的 `DSH_TOOLS_MODE` 开关被延续（$DSH_HOME / process.cwd() 语义不变）。
 - **glue 插件代码（由 CC preset 挂载）。** `cc-shell-glue` 挂载 cordis patch 行无法静态表达的部件：磁盘上的 Claude Code 插件、`.mcp.json` server 接线，以及内置的插件 `mcp` seam（`cc-mcp-seam`，使插件的 `mcpServers` 通过 mcp-client 真正挂载）。默认插件发现是双 home 合并视图：`enabledPlugins`（claude-user → dsh-user → project → local 级联）∩ 两个 home 合并后的 `installed_plugins.json`（精确 `name@marketplace` key,`installPath` 作为插件根）。**写入根是 dsh home**（`$DSH_HOME` / `~/.dsh`）；Claude home(`$CLAUDE_CONFIG_DIR` / `~/.claude`)保持可读以兼容，dsh 条目按 key 优先。显式 `pluginDirs` 仍 flatten 这些目录；`[]`/`null` 关闭。发现为尽力而为——缺失路径与无法读取的 JSON 都不挂载。它还暴露 `ccPlugins` 服务，用于对已挂载插件做实时枚举/重扫（`/reload-plugins` 会重读级联），以及绑定两个 home 的 `ccPluginManager` 服务（`/plugin` 变更落在 `~/.dsh`）。glue 以 **惰性 trampoline** 基于 `ccModelRoutes` 服务把派发时的 `resolveModel` 接入 `AgentProvider`：`(model) => ctx.get('ccModelRoutes')?.resolve(model)`——每次派发查询，服务未挂载时降级为继承父路由。
+
+- **运行时级 MCP 单例。** 同一运行时中挂载多个 agent 预设时（`tui` profile 同时挂载 `cc` 与 `vwa`），共享的 `cc-services` 主体及其 glue 行按预设树各组合一次，但所有树共用同一个 root。因此 glue 从 root fiber 发布唯一的 `mcpConnections` 注册表（`ensureMcpConnections`，`src/mcpSingleton.ts:36`），并在 root 下按 `serverName` 只挂载一次各 MCP 服务器（`mountMcpServerOnce`，`src/mcpSingleton.ts:88`），使 `/mcp` 与 `mcp__*` 工具在每个预设的会话中都可用。`mcpConnections` 与 `toolSearch` 有意不放入 `cc-services` 的 isolate 映射。
 
 ### 从 glue 迁出的部分
 

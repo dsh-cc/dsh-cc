@@ -24,9 +24,19 @@
   〔src:ws:packages/interaction/vwa-argument/src/store.ts#L1-L40〕。
 - **评审流水线**（`src/review-adapter.ts`、`src/review-runner.ts`、
   `src/review-tasks.ts`、`src/audit.ts`）：分阶段提示词
-  （`prompts/sources|support|arguments|extract|align.md`），由
+  （`prompts/sources|support|claims|arguments|extract|align.md`），由
   `argument.review` 注册的带预算后台运行并立即返回（§14、D14）；评审从不
-  修改正文或作者图；相同 `requestId` 返回缓存的运行状态（D07）。
+  修改正文或作者图；相同 `requestId` 返回缓存的运行状态（D07）。`argument.review`
+  的入参为 `input: {artifactId?, targetClaimIds?, stage, continue?}`，`stage`
+  取 `sources|support|claims|arguments|all|audit`。运行未完成后，用新的
+  `requestId` 并传 `input.continue: true`，只重新执行没有可复用完成记录的任务
+  （含审计）（`src/review-continue.ts`、`src/audit-reuse.ts`）；全部已完成时以
+  `NOTHING_TO_CONTINUE` 拒绝，共享的评审周期预算耗尽时以 `BUDGET_EXHAUSTED`
+  拒绝。在预留任何请求之前，`src/feasibility.ts` 先做静态预算估算，计划不可行时以
+  `BUDGET_INSUFFICIENT` 拒绝（拒绝信息含分阶段明细与 `suggestedClaimsBatchSize`；设置 `review-claims-batch-size`（默认 1，范围 1–4，`src/settings.ts:62`）可把连续的 `claims` 任务合批）；其成本模型（`src/audit-cost.ts`）与审计运行器共用。
+  审计按单次调用的输出预算打包 extract/align 批次，响应被截断时对批次二分重试
+  （`src/audit-align.ts`）。`sources` 任务会把过长的散文来源按头尾加窗以适配实测的
+  信封大小；结构化数据（JSON、JSONL、XML、CSV/TSV）从不加窗（`src/review-input.ts`）。
 - **工具**（`src/tools.ts`，仅在 `semantic-enabled` 时挂载，§13）：
   `evidence.register`（来源快照与摘录，引文由运行时读取）、
   `evidence.search_log`（1–50 条检索记录，本身不执行检索）、
@@ -39,7 +49,8 @@
   最新自校验候选（§14.2）
   〔src:ws:packages/interaction/vwa-argument/src/commands.ts#L1-L40〕。
 - **报告**（`src/report.ts`、`src/report-render.ts`）：四个目标问题仅凭
-  报告即可回答（§22.3），保留评审者分歧（D19）与逐发现的出处。
+  报告即可回答（§22.3），保留评审者分歧（D19）与逐发现的出处。报告还带有按阶段的
+  评审进度与逐任务失败明细（`stageProgress`，`src/review-progress.ts`）。
 - **校验**（`src/schema.ts`）：Ajv 8 strict、Draft 2020-12 入口，
   `coerceTypes:false`、`useDefaults:false`、`removeAdditional:false`（§25）。
   UUID/Hash/Span 规则为显式 schema 模式加运行时辅助函数（`isPrefixedId`、
