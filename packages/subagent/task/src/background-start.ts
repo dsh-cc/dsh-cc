@@ -12,6 +12,7 @@
  * @module @dsh-cc/subagent-task/background-start
  */
 
+import { acquireLiveCapacity, assertLiveCapacity, LIVE_CAPACITY_REFUSAL, MAX_LIVE_CONTINUABLE_CHILDREN } from './live-capacity.ts'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -26,28 +27,8 @@ import { SpawnPinCapture } from './resume-capture.ts'
 /** Fresh-child provider: no parent conversation (CC Task default). */
 export const PROVIDER_SPAWN = 'spawn'
 
-/**
- * Per-parent admission limit for continuable children (UX plan §3.6). As of
- * rc.2 the upstream subagent seam caps per-epoch resident activations
- * (`maxActiveSubagents`, default 8) and fails bare ACTIVATION_LIMIT_REACHED with
- * no remedy pointer; this cap counts a different thing — cross-epoch live
- * children (`listChildren` rows with a live running activation; the catalog row
- * no longer carries `activity`) — so the refusal can name the user-visible
- * remedy (release_agent / `/agents release`). A safety valve, not a
- * scheduling policy.
- */
-export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
-
-/**
- * The single runtime refusal literal for the live-capacity cap (D4). The
- * continuation guard in `@dsh-cc/subagent-resume-pins` reuses the same text
- * for the same cap, so the user-visible remedy cannot drift between the spawn
- * lanes and `send_message` continuations; a test pins byte equality.
- */
-export const LIVE_CAPACITY_REFUSAL = `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
-  + 'release_agent on a running child (or /agents release <id> interactively), or '
-  + 'let children settle — only running children hold slots, and only '
-  + 'list_agents-visible children are releasable'
+// The capacity cap, its refusal literal, and the guards live in live-capacity.ts.
+export { acquireLiveCapacity, assertLiveCapacity, LIVE_CAPACITY_REFUSAL, MAX_LIVE_CONTINUABLE_CHILDREN }
 
 /**
  * The env kill switch (UX plan §3.4): a non-empty value other than
@@ -209,41 +190,6 @@ export function preparedBackground(
   }
 }
 
-/**
- * The §3.6 capacity guard (both `startBackground` and the collect path):
- * refuse a new continuable child when the parent already has
- * {@link MAX_LIVE_CONTINUABLE_CHILDREN} live children. rc.2 dropped the
- * catalog's `activity` field, so liveness is re-derived from the live agents
- * registry (`agents.get(id)?.status === 'running'`) — the same derivation
- * rc.2's own consumer uses. Degrades open on seam/listing/registry trouble:
- * a safety valve never blocks starts on its own infrastructure.
- */
-export async function assertLiveCapacity(
-  seam: SubagentsLike,
-  parent: Agent,
-  signal: AbortSignal,
-  /** Lane-specific refusal (the ephemeral branch names one-shot runs); default keeps the D4 continuable literal. */
-  refuse?: (live: number) => Error,
-): Promise<void> {
-  if (typeof seam.listChildren !== 'function') return
-  let children: { id: string; mode?: string }[]
-  try {
-    children = await seam.listChildren(parent.id, signal)
-  } catch {
-    return
-  }
-  // The live registry sits beside the subagents seam on the same context;
-  // an absent registry (or a bare fixture agent without a ctx) degrades the
-  // guard open (no false blocks).
-  const agents = parent.ctx?.get?.('agents') as { get?(id: string): { status?: string } | undefined } | undefined
-  const live = children.filter(child => agents?.get?.(child.id)?.status === 'running').length
-  if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
-    // Single runtime literal (D4; T16 pins full equality against exactly it):
-    // the copy names the real release path — /agents stop cannot free a slot.
-    throw refuse !== undefined ? refuse(live) : new Error(LIVE_CAPACITY_REFUSAL)
-  }
-}
-
 /** Capability checks shared by `startBackground` and the collect path. */
 export function assertContinuableCapable(seam: SubagentsLike): void {
   if (typeof seam.startContinuable !== 'function') {
@@ -285,104 +231,120 @@ export async function collectForeground(
   if (agent === undefined) {
     throw new Error('subagent_fork requires a calling agent (exec.agent was undefined)')
   }
-  await assertLiveCapacity(seam, agent, exec.signal)
-  assertContinuableCapable(seam)
-  const { label, prompt, parent, signal, childId, captureDefinition, captureSelector, ...rest } = request
-  // The watch map keys on the durable child id, so the collect path ALWAYS
-  // preallocates one — via the capture flow when pins are armed, otherwise a
-  // fresh id (the child's session id, exactly as the harness would mint it).
-  const durableChildId = childId ?? randomUUID()
-  // §4.5 step 2 (parity with startBackground): the pin is written BEFORE the
-  // creation call; capture trouble becomes an explicit captureWarning line.
-  let captureWarning: string | undefined
-  if (capture !== undefined && childId !== undefined && captureSelector !== undefined) {
-    captureWarning = await capture.write({
-      parentSessionId: parent.id,
-      label,
-      childId,
-      definition: captureDefinition,
-      selector: captureSelector,
-      parentRoute: parent.options,
-      toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
-      cwd: cwdOf(parent),
-      dispatchTier: 'foreground',
-      ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
-    })
-  }
-  // R9 grace-window membership: recorded BEFORE the collect await — the
-  // foreground collect's first `subagent/end` fires during that await. Tier
-  // stamped INSIDE this entry point; kill-switched `background: true` pins run
-  // here and stamp foreground for free. `overrideMs` carries the definition
-  // override ONLY (identity check — 0 survives as the disable value).
-  recordGraceEntry({
-    childId: durableChildId,
-    parentId: agent.id,
-    tier: 'foreground',
-    ...(request.autoReleaseMs !== undefined ? { overrideMs: request.autoReleaseMs } : {}),
-  })
-  let startFailed = false
+  const lease = await acquireLiveCapacity(seam, agent, exec.signal)
+  // F-1: held until the creation call settles (the `start` callback below), or
+  // until any earlier failure unwinds; idempotent.
   try {
-    const outcome = await collectFirstEpoch({
-      bus: ctx as unknown as EpochEventBus,
-      childId: durableChildId,
-      agent,
-      signal,
-      subagents: seam,
-      // The promotion-registry key (§6): parent session + this call's
-      // registry token, so the TUI busy-branch Ctrl+B can find (and promote
-      // or abort) every armed foreground collect of this session.
-      parentSessionId: agent.id,
-      toolCallToken: exec.token !== undefined ? String(exec.token) : randomUUID(),
-      // R9 promotion re-tier: invoked synchronously inside promote() —
-      // cancel-and-replace the pending foreground timer with the background
-      // window, and persist `dispatchTier: 'background'` on the pin (a failed
-      // or skipped update is retention-safe in-process only and logged).
-      onPromoted: () => {
-        promoteGraceTier(durableChildId)
-        if (capture !== undefined && childId !== undefined) {
-          void capture.updateDispatchTier(childId, 'background')
-        }
-      },
-      start: async () => {
-        try {
-          await seam.startContinuable!({
-            provider: PROVIDER_SPAWN,
-            label,
-            childId: durableChildId,
-            request: {
-              prompt,
-              parent,
-              ...('persona' in rest ? { persona: rest.persona } : {}),
-              ...('toolFilter' in rest ? { toolFilter: rest.toolFilter } : {}),
-              ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
-              ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
-            },
-            signal,
-          })
-        } catch (error) {
-          startFailed = true
-          throw error
-        }
-      },
-    })
-    if (outcome.kind === 'promoted') return promotedResult(durableChildId, captureWarning)
-    return outcomeToResult(durableChildId, outcome, captureWarning)
+    assertContinuableCapable(seam)
   } catch (error) {
-    // §4.5 step 4 (parity with startBackground): a start that rolled back the
-    // creation must not leave the pin behind — tombstone, then rethrow. A
-    // non-`completed` epoch terminal or an abort keeps the child (it is
-    // resumable), so no tombstone on those.
-    if (startFailed && capture !== undefined && childId !== undefined) await capture.tombstone(childId)
-    const message = (error as Error).message ?? String(error)
-    if (startFailed
-      && (message.includes('UNSUPPORTED_CAPABILITY') || message.includes('does not support continuable'))) {
-      throw new Error(
-        `background subagents are unavailable: ${message}. Background subagents require a `
-        + 'provider that implements the continuable-creation capability (prepareContinuable) '
-        + 'and a session-persistence backend; run this Task in the foreground instead.',
-      )
-    }
+    lease()
     throw error
+  }
+  try {
+    const { label, prompt, parent, signal, childId, captureDefinition, captureSelector, ...rest } = request
+    // The watch map keys on the durable child id, so the collect path ALWAYS
+    // preallocates one — via the capture flow when pins are armed, otherwise a
+    // fresh id (the child's session id, exactly as the harness would mint it).
+    const durableChildId = childId ?? randomUUID()
+    // §4.5 step 2 (parity with startBackground): the pin is written BEFORE the
+    // creation call; capture trouble becomes an explicit captureWarning line.
+    let captureWarning: string | undefined
+    if (capture !== undefined && childId !== undefined && captureSelector !== undefined) {
+      captureWarning = await capture.write({
+        parentSessionId: parent.id,
+        label,
+        childId,
+        definition: captureDefinition,
+        selector: captureSelector,
+        parentRoute: parent.options,
+        toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
+        cwd: cwdOf(parent),
+        dispatchTier: 'foreground',
+        ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
+      })
+    }
+    // R9 grace-window membership: recorded BEFORE the collect await — the
+    // foreground collect's first `subagent/end` fires during that await. Tier
+    // stamped INSIDE this entry point; kill-switched `background: true` pins run
+    // here and stamp foreground for free. `overrideMs` carries the definition
+    // override ONLY (identity check — 0 survives as the disable value).
+    recordGraceEntry({
+      childId: durableChildId,
+      parentId: agent.id,
+      tier: 'foreground',
+      ...(request.autoReleaseMs !== undefined ? { overrideMs: request.autoReleaseMs } : {}),
+    })
+    let startFailed = false
+    try {
+      const outcome = await collectFirstEpoch({
+        bus: ctx as unknown as EpochEventBus,
+        childId: durableChildId,
+        agent,
+        signal,
+        subagents: seam,
+        // The promotion-registry key (§6): parent session + this call's
+        // registry token, so the TUI busy-branch Ctrl+B can find (and promote
+        // or abort) every armed foreground collect of this session.
+        parentSessionId: agent.id,
+        toolCallToken: exec.token !== undefined ? String(exec.token) : randomUUID(),
+        // R9 promotion re-tier: invoked synchronously inside promote() —
+        // cancel-and-replace the pending foreground timer with the background
+        // window, and persist `dispatchTier: 'background'` on the pin (a failed
+        // or skipped update is retention-safe in-process only and logged).
+        onPromoted: () => {
+          promoteGraceTier(durableChildId)
+          if (capture !== undefined && childId !== undefined) {
+            void capture.updateDispatchTier(childId, 'background')
+          }
+        },
+        start: async () => {
+          try {
+            await seam.startContinuable!({
+              provider: PROVIDER_SPAWN,
+              label,
+              childId: durableChildId,
+              request: {
+                prompt,
+                parent,
+                ...('persona' in rest ? { persona: rest.persona } : {}),
+                ...('toolFilter' in rest ? { toolFilter: rest.toolFilter } : {}),
+                ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
+                ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
+              },
+              signal,
+            })
+          } catch (error) {
+            startFailed = true
+            throw error
+          } finally {
+            // F-1: creation settled (child registered, or failed) — the next
+            // admission may now observe it. NOT held for the epoch.
+            lease()
+          }
+        },
+      })
+      if (outcome.kind === 'promoted') return promotedResult(durableChildId, captureWarning)
+      return outcomeToResult(durableChildId, outcome, captureWarning)
+    } catch (error) {
+      // §4.5 step 4 (parity with startBackground): a start that rolled back the
+      // creation must not leave the pin behind — tombstone, then rethrow. A
+      // non-`completed` epoch terminal or an abort keeps the child (it is
+      // resumable), so no tombstone on those.
+      if (startFailed && capture !== undefined && childId !== undefined) await capture.tombstone(childId)
+      const message = (error as Error).message ?? String(error)
+      if (startFailed
+        && (message.includes('UNSUPPORTED_CAPABILITY') || message.includes('does not support continuable'))) {
+        throw new Error(
+          `background subagents are unavailable: ${message}. Background subagents require a `
+          + 'provider that implements the continuable-creation capability (prepareContinuable) '
+          + 'and a session-persistence backend; run this Task in the foreground instead.',
+        )
+      }
+      throw error
+    }
+  } finally {
+    // Every pre-start failure path (capture write, watcher setup) unwinds here; idempotent.
+    lease()
   }
 }
 
@@ -403,26 +365,11 @@ export async function startBackground(
   assertContinuableCapable(seam)
   const { label, prompt, parent, signal, childId, captureDefinition, captureSelector, ...rest } = request
   // §3.6 capacity guard: refuse before any pin write or creation call.
-  await assertLiveCapacity(seam, parent, signal)
-  // §4.5 step 2: the pin is written BEFORE the creation call (crash
-  // consistency). A failed capture keeps the spawn alive but must never be
-  // silent: the returned reason becomes an explicit captureWarning line in
-  // the tool result ("this child will resume with legacy semantics").
+  // F-1: check + creation are ONE critical section per parent; the lease is
+  // released as soon as the creation call settled (not at child end).
+  const lease = await acquireLiveCapacity(seam, parent, signal)
+  let started: ContinuableStart
   let captureWarning: string | undefined
-  if (capture !== undefined && childId !== undefined && captureSelector !== undefined) {
-    captureWarning = await capture.write({
-      parentSessionId: parent.id,
-      label,
-      childId,
-      definition: captureDefinition,
-      selector: captureSelector,
-      parentRoute: parent.options,
-      toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
-      cwd: cwdOf(parent),
-      dispatchTier: 'background',
-      ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
-    })
-  }
   // R9 grace-window membership, tier stamped INSIDE this entry point. With a
   // preallocated id this lands BEFORE the creation await; without one the id
   // only exists once `startContinuable` resolves (and no `subagent/end` can
@@ -435,36 +382,57 @@ export async function startBackground(
       ...(request.autoReleaseMs !== undefined ? { overrideMs: request.autoReleaseMs } : {}),
     })
   }
-  if (childId !== undefined) recordTier(childId)
-  let started: ContinuableStart
   try {
-    started = await seam.startContinuable!({
-      provider: PROVIDER_SPAWN,
-      label,
-      ...(childId !== undefined ? { childId } : {}),
-      request: {
-        prompt,
-        parent,
-        ...('persona' in rest ? { persona: rest.persona } : {}),
-        ...('toolFilter' in rest ? { toolFilter: rest.toolFilter } : {}),
-        ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
-        ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
-      },
-      signal,
-    })
-  } catch (error) {
-    // §4.5 step 4: the creation rolled back fully (no child id), so the pin
-    // must not survive it — tombstone, then rethrow the error unchanged.
-    if (capture !== undefined && childId !== undefined) await capture.tombstone(childId)
-    const message = (error as Error).message ?? String(error)
-    if (message.includes('UNSUPPORTED_CAPABILITY') || message.includes('does not support continuable')) {
-      throw new Error(
-        `background subagents are unavailable: ${message}. Background subagents require a `
-        + 'provider that implements the continuable-creation capability (prepareContinuable) '
-        + 'and a session-persistence backend; run this Task in the foreground instead.',
-      )
+    // §4.5 step 2: the pin is written BEFORE the creation call (crash
+    // consistency). A failed capture keeps the spawn alive but must never be
+    // silent: the returned reason becomes an explicit captureWarning line in
+    // the tool result ("this child will resume with legacy semantics").
+    if (capture !== undefined && childId !== undefined && captureSelector !== undefined) {
+      captureWarning = await capture.write({
+        parentSessionId: parent.id,
+        label,
+        childId,
+        definition: captureDefinition,
+        selector: captureSelector,
+        parentRoute: parent.options,
+        toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
+        cwd: cwdOf(parent),
+        dispatchTier: 'background',
+        ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
+      })
     }
-    throw error
+    if (childId !== undefined) recordTier(childId)
+    try {
+      started = await seam.startContinuable!({
+        provider: PROVIDER_SPAWN,
+        label,
+        ...(childId !== undefined ? { childId } : {}),
+        request: {
+          prompt,
+          parent,
+          ...('persona' in rest ? { persona: rest.persona } : {}),
+          ...('toolFilter' in rest ? { toolFilter: rest.toolFilter } : {}),
+          ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
+          ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
+        },
+        signal,
+      })
+    } catch (error) {
+      // §4.5 step 4: the creation rolled back fully (no child id), so the pin
+      // must not survive it — tombstone, then rethrow the error unchanged.
+      if (capture !== undefined && childId !== undefined) await capture.tombstone(childId)
+      const message = (error as Error).message ?? String(error)
+      if (message.includes('UNSUPPORTED_CAPABILITY') || message.includes('does not support continuable')) {
+        throw new Error(
+          `background subagents are unavailable: ${message}. Background subagents require a `
+          + 'provider that implements the continuable-creation capability (prepareContinuable) '
+          + 'and a session-persistence backend; run this Task in the foreground instead.',
+        )
+      }
+      throw error
+    }
+  } finally {
+    lease()
   }
   if (childId === undefined) recordTier(started.childId)
   return {

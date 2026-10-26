@@ -47,6 +47,7 @@ import {
   spliceMoaRows,
   type TurnTier,
 } from './runtime-state.ts'
+import { restoreEscalationFloor, type OpeningSource } from './escalation-restore.ts'
 import { isMoaEscalationMessage } from './state.ts'
 import { collapseAppliedTier, ladderSnapshot, TIER_ALIASES, tierAt, type TierLadder } from './tiers.ts'
 import type { MoaCore, MoaSettings } from './index.ts'
@@ -317,6 +318,7 @@ export function createRequestRouter(
     turn: number,
     signal: AbortSignal,
     gate: boolean,
+    agent?: unknown,
   ): Promise<{ tier: number; classifiedNow: boolean; suppressRow: boolean } | undefined> => {
     const sticky = getTurnTier()
     if (sticky !== undefined && sticky.turn === turn) {
@@ -329,8 +331,7 @@ export function createRequestRouter(
       // re-classify would route the retry back to the cheap tier and make
       // escalation a no-op. Apply the live origin-seq floor instead.
       if (!gate) return undefined
-      const { originSeq } = opening.source as { originSeq: number }
-      const floor = bookkeeping.floorFor(originSeq)
+      const floor = restoreEscalationFloor(bookkeeping, agent, opening.source as OpeningSource, warn)
       if (floor === undefined) return undefined
       // §3.5 conformance (S4): NO queued row — the typed followup the judge
       // woke IS the escalation status row.
@@ -413,7 +414,7 @@ export function createRequestRouter(
       if (turn === undefined) return assembled
       const signal =
         (context as { signal?: AbortSignal } | undefined)?.signal ?? new AbortController().signal
-      const decision = await tierForTurn(turn, signal, gate)
+      const decision = await tierForTurn(turn, signal, gate, agent)
       if (process.env.MOA_DEBUG) console.log('MOA_DEBUG decision', JSON.stringify(decision), 'turn', turn)
       if (decision === undefined) return assembled
       const pair = tierRoutePair(decision.tier)

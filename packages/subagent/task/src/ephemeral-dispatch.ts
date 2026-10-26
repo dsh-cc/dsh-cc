@@ -9,7 +9,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolRestriction } from '@dsh-cc/claude-code-agents'
 import {
-  assertLiveCapacity,
+  acquireLiveCapacity,
   MAX_LIVE_CONTINUABLE_CHILDREN,
   PROVIDER_SPAWN,
   type SubagentsLike,
@@ -84,7 +84,8 @@ export async function dispatchEphemeral(
     refuseCapacity?: (live: number) => Error
   } = {},
 ): Promise<{ text: string; status: 'completed' }> {
-  await assertLiveCapacity(seam, folded.parent, folded.signal, opts.refuseCapacity ?? ephemeralCapacityRefusal)
+  // F-1: check + creation under one per-parent lease (released once the one-shot run was accepted).
+  const lease = await acquireLiveCapacity(seam, folded.parent, folded.signal, opts.refuseCapacity ?? ephemeralCapacityRefusal)
   // §3.1 ToolSearch strip: branch-local, post-sanitize (the sanitized filter
   // may have injected ToolSearch; a read-only child must not be able to
   // tool-search-load a deferred write-capable tool). preloadDeferredFilterTools
@@ -106,7 +107,12 @@ export async function dispatchEphemeral(
     // it must not cancel the turn signal (Task is concurrency-safe).
     ...(ttlController !== undefined ? { signal: AbortSignal.any([folded.signal, ttlController.signal]) } : {}),
   }
-  const run = await seam.start(PROVIDER_SPAWN, request)
+  let run
+  try {
+    run = await seam.start(PROVIDER_SPAWN, request)
+  } finally {
+    lease()
+  }
   let result
   try {
     result = await settle(run)

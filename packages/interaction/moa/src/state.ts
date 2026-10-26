@@ -5,9 +5,11 @@
  *
  * - Survives compaction: the origin seq is stable in the log (compaction
  *   replaces ranges; seqs are not renumbered).
- * - Resets empty on session resume (accepted §4 tradeoff: a resumed session
- *   may grant one extra escalation per message, documented rather than
- *   event-sourced).
+ * - Resets empty on session resume, but the escalation chain is NOT lost with
+ *   it (F-3): every escalation dispatch is a typed `moa-escalation` followup
+ *   whose `{ originSeq, fromTier, toTier }` provenance is durable in the
+ *   session log, so a retry turn whose entry is gone restores floor and
+ *   retries from that record ({@link EscalationBookkeeping.restoreFromEscalations}).
  * - Invariant violations THROW — they are bugs, not runtime conditions.
  *
  * @module
@@ -103,5 +105,35 @@ export class EscalationBookkeeping {
     if (toTier <= floor) fail(`toTier ${toTier} does not exceed the live floor ${floor} for seq ${seq}`)
     const retriesUsed = (existing?.retriesUsed ?? 0) + 1
     this.states.set(seq, { tierFloor: toTier, retriesUsed })
+  }
+
+  /**
+   * F-3: rebuild one origin's entry from durable `moa-escalation` followups
+   * (the in-memory entry is lost on crash/resume; the followups are not).
+   * Floor = highest `toTier` recorded, retries = number of escalations
+   * (at least one: the caller is serving a retry turn). Idempotent and
+   * monotonic: never lowers a live floor or a live retry count. Throws on a
+   * malformed record (tier non-integer or outside the ladder) — the caller
+   * must refuse to apply it rather than fall back to the launch selection.
+   */
+  restoreFromEscalations(
+    seq: number,
+    escalations: readonly { fromTier: number; toTier: number }[],
+  ): void {
+    if (!Number.isInteger(seq) || seq < 0) fail(`invalid origin seq ${seq}`)
+    if (escalations.length === 0) fail(`no escalation records to restore for seq ${seq}`)
+    let floor = -1
+    for (const { fromTier, toTier } of escalations) {
+      if (!Number.isInteger(fromTier) || !Number.isInteger(toTier)
+        || fromTier < 0 || toTier < 0 || fromTier >= TIER_COUNT || toTier >= TIER_COUNT || toTier <= fromTier) {
+        fail(`malformed escalation record (${fromTier} → ${toTier}) for seq ${seq}`)
+      }
+      floor = Math.max(floor, toTier)
+    }
+    const existing = this.states.get(seq)
+    this.states.set(seq, {
+      tierFloor: Math.max(floor, existing?.tierFloor ?? 0),
+      retriesUsed: Math.max(escalations.length, existing?.retriesUsed ?? 0),
+    })
   }
 }
