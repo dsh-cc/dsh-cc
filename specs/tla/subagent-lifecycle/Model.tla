@@ -13,7 +13,7 @@
 
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS MaxLive, SplitAdmission, SplitContinue
+CONSTANTS MaxLive, SplitAdmission, SplitContinue, CapacityObservable
 
 Children == 1..3
 
@@ -243,6 +243,11 @@ Restart(c) ==
   /\ status[c] = "ready"
   /\ c \in graceMember
   /\ c \notin released
+  (* Continuation admission needs a live slot (F-2 fix, PR #299): the
+     send_message gate refuses at the cap before pin admission. Capacity is
+     re-derived from the live registry; unobservable capacity degrades open
+     (the guard never wedges continuations on its own infrastructure). *)
+  /\ (CapacityObservable = FALSE \/ LiveCount < MaxLive)
   /\ \/ /\ ~SplitContinue
         /\ c \notin tombstoned
      \/ /\ SplitContinue

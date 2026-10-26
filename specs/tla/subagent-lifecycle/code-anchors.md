@@ -6,7 +6,7 @@ given per block. These excerpts exist so that `design.md` claims can carry
 workspace markers pointing at a markdown file (the evidence pipeline does
 not accept direct `.ts` citations).
 
-## A1 — capacity cap constant and its scope
+## A1 — capacity cap constant and its scope 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L9-L22〕
 
 Source: `packages/subagent/task/src/background-start.ts:29-40`
 
@@ -20,9 +20,9 @@ activation ...) — so the refusal can name the user-visible remedy
 (release_agent / `/agents release`). A safety valve, not a scheduling
 policy."
 
-## A2 — live-capacity guard (the TOCTOU window)
+## A2 — live-capacity guard (the TOCTOU window) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L23-L54〕
 
-Source: `packages/subagent/task/src/background-start.ts:210-241`
+Source: `packages/subagent/task/src/background-start.ts:221-244`
 
 ```ts
 export async function assertLiveCapacity(
@@ -41,14 +41,9 @@ export async function assertLiveCapacity(
   const agents = parent.ctx?.get?.('agents') as { get?(id: string): { status?: string } | undefined } | undefined
   const live = children.filter(child => agents?.get?.(child.id)?.status === 'running').length
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
-    throw refuse !== undefined
-      ? refuse(live)
-      : new Error(
-      `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
-      + 'release_agent on a running child (or /agents release <id> interactively), or '
-      + 'let children settle — only running children hold slots, and only '
-      + 'list_agents-visible children are releasable',
-    )
+    // Single runtime literal (D4; T16 pins full equality against exactly it):
+    // the copy names the real release path — /agents stop cannot free a slot.
+    throw refuse !== undefined ? refuse(live) : new Error(LIVE_CAPACITY_REFUSAL)
   }
 }
 ```
@@ -57,7 +52,7 @@ export async function assertLiveCapacity(
 await are two separate yielding points with no lock between them — the
 admission is check-then-act across awaits.
 
-## A3 — grace-window arm and fire (membership gate, re-arm, tombstone)
+## A3 — grace-window arm and fire (membership gate, re-arm, tombstone) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L55-L85〕
 
 Source: `packages/subagent/task/src/grace-window.ts:145-200` (excerpt)
 
@@ -88,7 +83,7 @@ async function fireGraceWindow(childId: string): Promise<void> {
 }
 ```
 
-## A4 — release marker algebra (releasing/released/tombstoned sets)
+## A4 — release marker algebra (releasing/released/tombstoned sets) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L86-L112〕
 
 Source: `packages/interaction/command-agents/src/release.ts:75-103`
 
@@ -115,7 +110,7 @@ export function clearReleasing(id: string): void {
 }
 ```
 
-## A5 — the accepted residual: in-flight send_message after a grace fire
+## A5 — the accepted residual: in-flight send_message after a grace fire 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L113-L124〕
 
 Source: `packages/interaction/command-agents/src/release.ts:105-117`
 
@@ -127,7 +122,7 @@ Source: `packages/interaction/command-agents/src/release.ts:105-117`
 // epoch and a fresh window (the accepted residual).
 ```
 
-## A6 — mark-before-issue and the refused clear (clobber-proofing)
+## A6 — mark-before-issue and the refused clear (clobber-proofing) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L125-L142〕
 
 Source: `packages/interaction/command-agents/src/release.ts:283-288`
 
@@ -145,7 +140,7 @@ and `release.ts:315-317`:
         // after markReleased (critic r6 #4 / grok r6 #6). Never throws.
 ```
 
-## A7 — promotion guard (settle-wins)
+## A7 — promotion guard (settle-wins) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L143-L167〕
 
 Source: `packages/subagent/task/src/epoch-collector.ts:283-302`
 
@@ -170,7 +165,7 @@ completes (`epoch-collector.ts:328-332`):
   }
 ```
 
-## A8 — send_message deny gate reads the tombstone marker before admission
+## A8 — send_message deny gate reads the tombstone marker before admission 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L168-L187〕
 
 Source: `packages/subagent/resume-pins/src/plugin.ts:303-320`
 
@@ -190,17 +185,17 @@ Source: `packages/subagent/resume-pins/src/plugin.ts:303-320`
     }
 ```
 
-## A9 — session-exit drain contract (prompt copy, pinned by tool.spec.ts:1448)
+## A9 — session-exit drain contract (prompt copy, pinned by tool.spec.ts:1448) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L188-L197〕
 
 Source: `packages/subagent/task/src/index.ts:183` (verbatim contract text
 pinned by `tests/tool.spec.ts:1448-1455`):
 
 > exiting the session drains every background child's in-flight turn
 > (whole-forest teardown); persisted session survives; a self-settled child
-> stays cold-resumable; a DRAINED child does not resume on the next
+> stays cold-resumable; a DRAINED child does not resume on the next 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L188-L197〕
 > `send_message`
 
-## A10 — release_agent one-way eviction contract (prompt copy)
+## A10 — release_agent one-way eviction contract (prompt copy) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L198-L213〕
 
 Source: `packages/subagent/task/src/release-agent.ts:47-61` and
 `release-agent.ts:84`:
@@ -211,7 +206,93 @@ Source: `packages/subagent/task/src/release-agent.ts:47-61` and
 ```
 
 with the tool description contract (pinned by `tests/release-agent.spec.ts`
-T5/T6/T15): release aborts the running turn, evicts the resident activation
+T5/T6/T15): release aborts the running turn, evicts the resident activation 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L198-L213〕
 and all resident descendants', frees the slot only for a running child, is a
 no-op on settled children, and `[released]` tags the agent for the rest of
 the process.
+
+## A11 — the shared refusal literal (post-#299) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L214-L232〕
+
+Source: `packages/subagent/task/src/background-start.ts:39-52`
+
+```ts
+export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
+
+/**
+ * The single runtime refusal literal for the live-capacity cap (D4). The
+ * continuation guard in `@dsh-cc/subagent-resume-pins` reuses the same text
+ * for the same cap, so the user-visible remedy cannot drift between the spawn
+ * lanes and `send_message` continuations; a test pins byte equality.
+ */
+export const LIVE_CAPACITY_REFUSAL = `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
+  + 'release_agent on a running child (or /agents release <id> interactively), or '
+  + 'let children settle — only running children hold slots, and only '
+  + 'list_agents-visible children are releasable'
+```
+
+## A12 — the continuation capacity guard wired into the send_message gate 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L233-L256〕
+
+Source: `packages/subagent/resume-pins/src/plugin.ts:322-339` (inside
+`tools/pre-execute`, after the tombstone gate and before pin admission)
+
+```ts
+    // Live-capacity gate (F-2): continuing a SETTLED child admits a fresh
+    // resident activation, so the same 25 live-child cap that guards the spawn
+    // lanes applies to continuations too. A same-epoch steer to a still-live
+    // agent needs no new slot and passes through untouched. Unobservable
+    // capacity (missing seam, listing error, absent registry) degrades open,
+    // mirroring the spawn guard.
+    const targetLive = (ctx as unknown as { agents?: { get?: (id: unknown) => unknown } })
+      .agents?.get?.(SessionId(target)) !== undefined
+    if (!targetLive) {
+      const capacityReason = await continuationCapacityRefusal(
+        ctx as unknown as CapacityServices,
+        exec.agent as { id?: unknown } | undefined,
+        exec.signal,
+      )
+      if (capacityReason !== undefined) return { kind: 'deny' as const, reason: capacityReason }
+    }
+```
+
+## A13 — the continuation capacity helpers 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L257-L298〕
+
+Source: `packages/subagent/resume-pins/src/live-capacity.ts:26-85`
+
+```ts
+export const LIVE_CAPACITY_REFUSAL = `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} live subagents; free a slot with `
+  + 'release_agent on a running child (or /agents release <id> interactively), or '
+  + 'let children settle — only running children hold slots, and only '
+  + 'list_agents-visible children are releasable'
+
+export async function countLiveChildren(
+  subagents: CapacitySubagentsLike | undefined,
+  agents: CapacityAgentsLike | undefined,
+  parentId: unknown,
+  signal?: AbortSignal,
+): Promise<number | undefined> {
+  if (subagents?.listChildren === undefined) return undefined
+  let children: { id: string }[]
+  try {
+    children = await subagents.listChildren(parentId, signal)
+  } catch {
+    return undefined
+  }
+  // Only a RUNNING activation holds a slot (idle/ready rows hold none) —
+  // the same predicate as the spawn lane's guard.
+  return children.filter(child => agents?.get?.(child.id)?.status === 'running').length
+}
+
+export async function continuationCapacityRefusal(
+  services: CapacityServices,
+  parent: { id?: unknown } | undefined,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  if (parent === undefined || parent.id === undefined) return undefined
+  const subagents = services.get?.('subagents') as CapacitySubagentsLike | undefined
+  if (subagents?.listChildren === undefined) return undefined
+  const agents = services.get?.('agents') as CapacityAgentsLike | undefined
+  const live = await countLiveChildren(subagents, agents, parent.id, signal)
+  if (live === undefined) return undefined
+  return live >= MAX_LIVE_CONTINUABLE_CHILDREN ? LIVE_CAPACITY_REFUSAL : undefined
+}
+```

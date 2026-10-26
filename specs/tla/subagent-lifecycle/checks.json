@@ -10,7 +10,8 @@
       "constants": {
         "MaxLive": "2",
         "SplitAdmission": "FALSE",
-        "SplitContinue": "FALSE"
+        "SplitContinue": "FALSE",
+        "CapacityObservable": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -33,7 +34,22 @@
       "constants": {
         "MaxLive": "2",
         "SplitAdmission": "TRUE",
-        "SplitContinue": "FALSE"
+        "SplitContinue": "FALSE",
+        "CapacityObservable": "TRUE"
+      },
+      "invariants": ["TypeOK", "CapOK"],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-cap-unobservable",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitAdmission": "FALSE",
+        "SplitContinue": "FALSE",
+        "CapacityObservable": "FALSE"
       },
       "invariants": ["TypeOK", "CapOK"],
       "properties": [],
@@ -46,7 +62,8 @@
       "constants": {
         "MaxLive": "2",
         "SplitAdmission": "FALSE",
-        "SplitContinue": "TRUE"
+        "SplitContinue": "TRUE",
+        "CapacityObservable": "TRUE"
       },
       "invariants": ["TypeOK", "NoLateEpoch", "TombstoneNonLive"],
       "properties": [],
