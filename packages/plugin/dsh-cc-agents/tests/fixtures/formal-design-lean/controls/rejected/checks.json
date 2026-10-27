@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "backend": "lean",
+  "modelId": "budget-reservation",
+  "properties": [
+    {
+      "id": "direct-sorry",
+      "requirementId": "REQ-1",
+      "declaration": "Formal.direct_sorry",
+      "statement": "forall b : Nat, b = b",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "indirect-sorry",
+      "requirementId": "REQ-2",
+      "declaration": "Formal.indirect_sorry",
+      "statement": "forall b : Nat, b = b",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "admitted",
+      "requirementId": "REQ-3",
+      "declaration": "Formal.admitted",
+      "statement": "forall b : Nat, b = b",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "custom-axiom",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.from_cheat",
+      "statement": "forall b : Nat, b = b",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "computation-axiom",
+      "requirementId": "REQ-5",
+      "declaration": "Formal.native_decide_ref",
+      "statement": "(List.range 3).length = 3",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "non-theorem",
+      "requirementId": "REQ-6",
+      "declaration": "Formal.helperValue",
+      "statement": "forall b : Nat, Formal.helperValue b = b",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "missing-declaration",
+      "requirementId": "REQ-7",
+      "declaration": "Formal.reserve_always_succeeds",
+      "statement": "forall b r a : Nat, Formal.reserve b r a = .ok (r + a)",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "type-mismatch",
+      "requirementId": "REQ-8",
+      "declaration": "Formal.identity_true",
+      "statement": "forall b : Nat, 0 + b = b",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "witness-not-theorem",
+      "requirementId": "REQ-9",
+      "declaration": "Formal.guarded_true",
+      "statement": "forall b : Nat, b = b -> b = b",
+      "witnessDeclaration": "Formal.helperValue"
+    }
+  ],
+  "limits": {
+    "proofTimeoutMs": 120000,
+    "conformanceTimeoutMs": 120000,
+    "maxHeartbeats": 2000000,
+    "maxRecDepth": 2048,
+    "maxCases": 10000
+  }
+}

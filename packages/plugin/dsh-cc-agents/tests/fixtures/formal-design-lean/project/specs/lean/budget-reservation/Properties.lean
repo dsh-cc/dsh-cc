@@ -10,6 +10,6 @@ theorem reserve_zero (b r : Nat) (h : r <= b) : reserve b r 0 = .ok r := by
 
 /-- Witness: an explicit, nonempty instance of the guarded domain. -/
 theorem admissible_example : reserve 10 3 4 = .ok 7 := by
-  decide
+  simp [reserve]
 
 end Formal
