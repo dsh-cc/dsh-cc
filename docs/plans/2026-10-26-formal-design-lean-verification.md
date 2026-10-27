@@ -3,7 +3,7 @@
 Status: **Implemented** — PR #304 (open, pending merge). This document
 adds a complete Lean
 path to the existing skill; PR #304 ships that path (runner scripts,
-inspector, driver, worked example, tests, CI, and documentation).
+inspector, driver, worked example, tests, CI, and documentation) 〔src:ws:specs/lean/budget-reservation/implementation.md#L40-L56〕.
 
 Baseline: `836487abfda9808f81faff713fc2422827245f00` on `main`.
 
@@ -993,9 +993,9 @@ preflight by design; provision the pinned archive rather than relaxing the
 check.
 
 Status of this document: three-seat review converged (all seats GO on the
-final text). Implemented by PR #304 per the section-13 work packages;
+final text). Implemented by PR #304 per the section-13 work packages 〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L797-L817〕;
 the real-tool chain (preflight, proof, conformance, both audits) was
 executed against the pinned Lean 4.35.0 toolchain with the
-budget-reservation example reaching `acceptanceReady: true`. r2 through
+budget-reservation example reaching `acceptanceReady: true` 〔src:ws:specs/lean/budget-reservation/implementation.md#L11-L16〕. r2 through
 r3b verified folds only; the
 first round was the only full review of the initial text.
