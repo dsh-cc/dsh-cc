@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "modelId": "ccr-pipeline",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "DeferRequests": "1",
+        "DRY": "FALSE",
+        "CrashWindow": "FALSE",
+        "HostDoubleFire": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "PrunePaired",
+        "StoreBeforeReference",
+        "AppliedImpliesMarker",
+        "DryRunNoAppend",
+        "SingleMarkerPerResult"
+      ],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    },
+    {
+      "id": "apply-lane",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "DeferRequests": "0",
+        "DRY": "FALSE",
+        "CrashWindow": "FALSE",
+        "HostDoubleFire": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "PrunePaired",
+        "StoreBeforeReference",
+        "AppliedImpliesMarker",
+        "SingleMarkerPerResult"
+      ],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    },
+    {
+      "id": "dry-run",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "DeferRequests": "1",
+        "DRY": "TRUE",
+        "CrashWindow": "FALSE",
+        "HostDoubleFire": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "PrunePaired",
+        "DryRunNoAppend",
+        "AppliedImpliesMarker",
+        "SingleMarkerPerResult"
+      ],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-swap-crash",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "DeferRequests": "1",
+        "DRY": "FALSE",
+        "CrashWindow": "TRUE",
+        "HostDoubleFire": "FALSE"
+      },
+      "invariants": ["TypeOK", "PrunePaired"],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-double-fire",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "DeferRequests": "1",
+        "DRY": "FALSE",
+        "CrashWindow": "FALSE",
+        "HostDoubleFire": "TRUE"
+      },
+      "invariants": ["TypeOK", "SingleMarkerPerResult", "PrunePaired"],
+      "properties": [],
+      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+    }
+  ]
+}

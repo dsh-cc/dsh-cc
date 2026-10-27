@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "modelId": "moa-cascade-routing",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxEsc": "1",
+        "ObserveOverlay": "FALSE",
+        "CrashResume": "FALSE",
+        "ShadowMode": "FALSE",
+        "Restorable": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "EscalationBound",
+        "FloorAboveBoot",
+        "ShadowInert",
+        "ClassifyOnlyArmed",
+        "ArmedNotAway",
+        "NoFloorlessRetry",
+        "NoFeedbackDisarm"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-self-feedback",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxEsc": "1",
+        "ObserveOverlay": "TRUE",
+        "CrashResume": "FALSE",
+        "ShadowMode": "FALSE",
+        "Restorable": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ArmedNotAway",
+        "NoFeedbackDisarm"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-crash-resume",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxEsc": "1",
+        "ObserveOverlay": "FALSE",
+        "CrashResume": "TRUE",
+        "ShadowMode": "FALSE",
+        "Restorable": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFloorlessRetry"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "shadow-mode",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxEsc": "1",
+        "ObserveOverlay": "FALSE",
+        "CrashResume": "FALSE",
+        "ShadowMode": "TRUE",
+        "Restorable": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ShadowInert",
+        "EscalationBound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

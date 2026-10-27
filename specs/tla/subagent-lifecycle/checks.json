@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "modelId": "subagent-lifecycle",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitContinue": "FALSE",
+        "CapacityObservable": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "CapOK",
+        "NoResurrect",
+        "ReleasedDisjoint",
+        "TombstoneNonLive",
+        "GraceMemberOnly",
+        "NoLateEpoch",
+        "DrainedQuiescent",
+        "PromotedIsBackground"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cap-unobservable",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitContinue": "FALSE",
+        "CapacityObservable": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "CapOK"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-late-continue",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitContinue": "TRUE",
+        "CapacityObservable": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLateEpoch",
+        "TombstoneNonLive"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
