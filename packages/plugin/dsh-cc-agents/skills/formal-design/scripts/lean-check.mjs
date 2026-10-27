@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { leanPreflight, parseLeanSyntax } from './lean-preflight.mjs'
 import { LEAN_SPEC_VERSION, PROOF_SOURCES, REASON_CODES as CONFIG_REASON_CODES, parseJsonTokens } from './lean-manifest.lib.mjs'
 import { hashFile, posix } from './lean-fingerprint.lib.mjs'
+import { loadBridge } from './bridge.lib.mjs'
 import { leanChildEnvironment, runLeanPhase } from './lean-process.lib.mjs'
 import {
   acquireLock, incompleteInspectorReport, lockPathFor, proofInputDigest, proofInputFiles,
@@ -70,8 +71,11 @@ export async function executeLeanCheck(options, deps = {}) {
       throw error
     }
 
-    // 2. snapshot exact input bytes and identity before compiling anything.
-    const inputFiles = await proofInputFiles(paths.model)
+    // 2. snapshot exact input bytes and identity before compiling anything. The
+    // opt-in bridge package joins the proof input enumeration before hashing.
+    const bridge = ready.bridge ?? (options.bridge ? await loadBridge(paths.root, options.bridge) : null)
+    const baseInputs = await proofInputFiles(paths.model)
+    const inputFiles = bridge ? [...baseInputs, ...bridge.entries] : baseInputs
     const inputDigest = proofInputDigest(inputFiles)
     const runnerEntries = await runnerFiles(SKILL_DIR)
     const runnerDigestValue = runnerDigest(runnerEntries)
@@ -83,12 +87,13 @@ export async function executeLeanCheck(options, deps = {}) {
     const phases = []
     const finish = async (evidenceFields) => {
       const evidence = {
-        schemaVersion: 1,
+        schemaVersion: bridge ? 2 : 1,
         backend: 'lean',
         modelId: manifest.modelId,
         runId,
         inputFiles,
         inputDigest,
+        ...(bridge ? { bridgeFiles: bridge.entries } : {}),
         runnerFiles: runnerEntries,
         runnerDigest: runnerDigestValue,
         runnerPackage: runner,
@@ -240,7 +245,10 @@ export async function executeLeanCheck(options, deps = {}) {
 
     // 8. hash the inputs again before publishing.
     let currentInputDigest = null
-    try { currentInputDigest = proofInputDigest(await proofInputFiles(paths.model)) } catch { currentInputDigest = null }
+    try {
+      const base = await proofInputFiles(paths.model)
+      currentInputDigest = proofInputDigest(bridge ? [...base, ...(await loadBridge(paths.root, options.bridge)).entries] : base)
+    } catch { currentInputDigest = null }
     if (currentInputDigest !== inputDigest) {
       return finish({ proofVerdict: 'incomplete', reason: { code: 'input-changed', detail: { message: 'proof inputs changed during the run' } }, properties })
     }
@@ -279,7 +287,7 @@ export async function main(argv = process.argv.slice(2)) {
     return 2
   }
   if (options.help) {
-    process.stdout.write('lean-check --project <root> --model specs/lean/<id> --lean-root <root>\n')
+    process.stdout.write('lean-check --project <root> --model specs/lean/<id> --lean-root <root> [--bridge specs/formal/<id>/bridge.json]\n')
     return 0
   }
   const controller = new AbortController()

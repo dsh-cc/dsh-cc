@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto'
 import { join, relative } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { leanEnvironment, leanPreflight, parseLeanSyntax } from './lean-preflight.mjs'
-import { PROOF_SOURCES, REASON_CODES as CONFIG_REASON_CODES } from './lean-manifest.lib.mjs'
+import { PROOF_SOURCES, REASON_CODES as CONFIG_REASON_CODES, canonicalJson } from './lean-manifest.lib.mjs'
 import { hashFile, posix, readUtf8, sha256 } from './lean-fingerprint.lib.mjs'
+import { loadBridge } from './bridge.lib.mjs'
 import { leanChildEnvironment, runLeanPhase } from './lean-process.lib.mjs'
 import { acquireLock, lockPathFor, releaseLock } from './lean-evidence.lib.mjs'
 import {
@@ -68,6 +69,7 @@ export async function executeLeanConformance(options, deps = {}) {
     if (ready.output.status === 'blocked') return blockedOutput(ready.output.reason, ready.output.blockers)
     ;({ paths, manifest } = ready)
     const { leanRoot, toolchain } = ready
+    const bridge = ready.bridge ?? (options.bridge ? await loadBridge(paths.root, options.bridge) : null)
     if (!toolchain) return blockedOutput('toolchain-missing', [{ code: 'toolchain-missing', detail: 'installation identity is unavailable' }])
     if (!manifest.conformance) return blockedOutput('config-invalid', [{ code: 'config-invalid', detail: 'the manifest declares no conformance contract' }])
 
@@ -80,11 +82,19 @@ export async function executeLeanConformance(options, deps = {}) {
 
     // A stale or non-verified proof is a missing prerequisite, never a partial run.
     let proof
-    try { proof = await readCurrentProof(paths.model, paths.modelRelative, manifest, io) } catch (error) {
+    try { proof = await readCurrentProof(paths.root, paths.model, paths.modelRelative, manifest, io) } catch (error) {
       if (BLOCKING.has(error.code) || ['artifact-changed', 'input-changed'].includes(error.code)) {
         return blockedOutput(error.code, [{ code: error.code, detail: error.detail ?? 'missing proof prerequisites' }])
       }
       throw error
+    }
+    // Combined mode: conformance must bind the same bridge package the current
+    // proof recorded, and TLA-only mode must not audit a bridged proof.
+    if (Boolean(bridge) !== (proof.evidence.schemaVersion === 2)) {
+      return blockedOutput('config-invalid', [{ code: 'config-invalid', detail: '--bridge must match the current proof evidence version' }])
+    }
+    if (bridge && canonicalJson(proof.evidence.bridgeFiles) !== canonicalJson(bridge.entries)) {
+      return blockedOutput('config-invalid', [{ code: 'config-invalid', detail: '--bridge package does not match the current proof evidence' }])
     }
 
     let corpusText
@@ -99,7 +109,7 @@ export async function executeLeanConformance(options, deps = {}) {
 
     // 2. snapshot the execution closure before anything executes.
     let executionFiles
-    try { executionFiles = await executionFilesFor(paths.root, paths.modelRelative, manifest, io) } catch (error) {
+    try { executionFiles = await executionFilesFor(paths.root, paths.modelRelative, manifest, io, bridge?.entries ?? []) } catch (error) {
       if (BLOCKING.has(error.code)) return blockedOutput(error.code, [{ code: error.code, detail: error.detail ?? 'the execution closure is incomplete' }])
       throw error
     }
@@ -113,7 +123,7 @@ export async function executeLeanConformance(options, deps = {}) {
     const phases = []
     const finish = async ({ conformanceVerdict, reason, caseCount = corpus.length, matchedCount = 0, firstMismatch = null }) => {
       const evidence = {
-        schemaVersion: 1,
+        schemaVersion: bridge ? 2 : 1,
         backend: 'lean',
         modelId: manifest.modelId,
         runId,
@@ -121,6 +131,7 @@ export async function executeLeanConformance(options, deps = {}) {
         proofInputDigest: proof.evidence.inputDigest,
         executionFiles,
         executionDigest: executionDigestValue,
+        ...(bridge ? { bridgeFiles: bridge.entries } : {}),
         runnerDigest: runner.digest,
         toolchain,
         conformanceVerdict,
@@ -229,7 +240,7 @@ export async function executeLeanConformance(options, deps = {}) {
     // Execution closure: any change during the phase means the run is not evidence.
     await hooks.afterAdapter?.({ runDir })
     let after = null
-    try { after = await executionFilesFor(paths.root, paths.modelRelative, manifest, io) } catch { after = null }
+    try { after = await executionFilesFor(paths.root, paths.modelRelative, manifest, io, bridge?.entries ?? []) } catch { after = null }
     if (after === null || executionDigestOf(after, node, proof.evidence.inputDigest) !== executionDigestValue) {
       return stopFailure({ code: 'input-changed', detail: 'the execution closure changed during the conformance run' })
     }
@@ -290,7 +301,7 @@ export async function main(argv = process.argv.slice(2)) {
     return 2
   }
   if (options.help) {
-    process.stdout.write('lean-check-conformance --project <root> --model specs/lean/<id> --lean-root <root>\n')
+    process.stdout.write('lean-check-conformance --project <root> --model specs/lean/<id> --lean-root <root> [--bridge specs/formal/<id>/bridge.json]\n')
     return 0
   }
   const controller = new AbortController()

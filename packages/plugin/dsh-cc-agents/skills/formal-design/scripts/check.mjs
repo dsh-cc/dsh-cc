@@ -6,7 +6,7 @@ export async function main(argv = process.argv.slice(2)) {
   let options
   try { options = parseSyntax(argv, 'check') }
   catch (e) { process.stdout.write(JSON.stringify({ schemaVersion: 1, command: 'check', status: 'blocked', reason: 'usage-invalid', blockers: [{ code: 'usage-invalid', detail: e.detail ?? 'invalid arguments' }], summary: null }) + '\n'); return 2 }
-  if (options.help) { process.stdout.write('check --project <root> --model specs/tla/<id> [--jar <file>] [--java <file>]\n'); return 0 }
+  if (options.help) { process.stdout.write('check --project <root> --model specs/tla/<id> [--jar <file>] [--java <file>] [--bridge specs/formal/<id>/bridge.json]\n'); return 0 }
   const controller = new AbortController()
   const cancel = () => controller.abort()
   process.on('SIGINT', cancel); process.on('SIGTERM', cancel)

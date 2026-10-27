@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { LEAN_SPEC_VERSION, canonicalJson, fail, parseJsonTokens, parseLeanManifest } from './lean-manifest.lib.mjs'
 import { loadToolchain, readUtf8, sha256 } from './lean-fingerprint.lib.mjs'
-import { validateInspectorReport, validateProofEvidence, proofInputDigest, proofInputFiles } from './lean-evidence.lib.mjs'
+import { validateInspectorReport, validateProofEvidence, bridgeInputsFor, proofInputDigest, proofInputFiles } from './lean-evidence.lib.mjs'
+import { BRIDGE_PATH, bridgeMatchesModel } from './bridge.lib.mjs'
 import {
   executionDigestOf, executionFilesFor, nodeIdentity, parseCorpus, replayConformance, validateConformanceEvidence, runnerIdentityOf,
 } from './lean-conformance.lib.mjs'
@@ -65,7 +66,7 @@ function derivedProofVerdict(properties) {
 }
 
 /** Proof stage: strict schema, artifact hashes, run binding, verdict replay, freshness. */
-export async function auditProof(root, model, modelId) {
+export async function auditProof(root, model, modelId, bridgeOption = null) {
   const modelDir = join(root, model)
   const manifest = parseLeanManifest(await readUtf8(join(modelDir, 'checks.json'), 'checks.json'))
   expect(manifest.modelId === modelId, 'schema-invalid', 'manifest modelId must equal the model directory name')
@@ -80,6 +81,19 @@ export async function auditProof(root, model, modelId) {
   expect(evidenceFile.sha256 === pointer.evidenceSha256, 'hash-mismatch', 'published proof evidence does not match its pointer hash')
   const evidence = validateProofEvidence(evidenceFile.value, manifest)
   expect(evidence.runId === pointer.runId && evidence.inputDigest === pointer.inputDigest, 'run-mismatch', 'proof evidence does not match its pointer identity')
+
+  // Version two: re-enumerate the recorded bridge package and require the same
+  // bytes the run hashed (design section 10). Version one stays TLA-only.
+  let bridge = null
+  if (evidence.schemaVersion === 2) {
+    const recorded = evidence.bridgeFiles.map(entry => entry.path).find(path => BRIDGE_PATH.test(path))
+    if (bridgeOption) expect(recorded === bridgeOption, 'schema-invalid', '--bridge does not match the recorded bridge package')
+    try { bridge = await bridgeInputsFor(root, evidence) } catch { expect(false, 'stale/input', 'the recorded bridge package is missing or invalid') }
+    expect(bridgeMatchesModel(bridge, model), 'schema-invalid', 'the recorded bridge package does not apply to this model')
+    expect(canonical(bridge.entries) === canonical(evidence.bridgeFiles), 'stale/input', 'the bridge package changed since the recorded run')
+  } else {
+    expect(!bridgeOption, 'schema-invalid', '--bridge requires version-two proof evidence')
+  }
 
   await checkArtifacts(root, evidence, modelId)
 
@@ -98,7 +112,10 @@ export async function auditProof(root, model, modelId) {
 
   // Freshness: the proof inputs on disk must still hash to the recorded digest.
   let current = null
-  try { current = proofInputDigest(await proofInputFiles(modelDir)) } catch { current = null }
+  try {
+    const base = await proofInputFiles(modelDir)
+    current = proofInputDigest(bridge ? [...base, ...bridge.entries] : base)
+  } catch { current = null }
   expect(current === evidence.inputDigest, 'stale/input', 'proof inputs changed since the recorded run')
   const runner = await runnerIdentityOf(SKILL_DIR)
   expect(runner.digest === evidence.runnerDigest, 'stale/runner', 'runner artifacts changed since the recorded run')
@@ -112,6 +129,14 @@ export async function auditConformance(root, model, modelId, proof) {
   const { evidence, manifest, modelDir } = proof
   const file = await readJson(root, `${model}/conformance-evidence.json`, 'conformance-evidence.json', 'missing-conformance')
   const conformance = validateConformanceEvidence(file.value, manifest)
+  // Bridge versions must agree across the two Lean packages (design section 10).
+  expect(conformance.schemaVersion === evidence.schemaVersion, 'schema-invalid', 'proof and conformance evidence use different bridge versions')
+  let confBridge = null
+  if (conformance.schemaVersion === 2) {
+    try { confBridge = await bridgeInputsFor(root, conformance) } catch { expect(false, 'stale/execution', 'the recorded conformance bridge package is missing or invalid') }
+    expect(canonical(confBridge.entries) === canonical(conformance.bridgeFiles), 'stale/execution', 'the conformance bridge package changed since the recorded run')
+    expect(canonical(confBridge.entries) === canonical(evidence.bridgeFiles), 'binding-invalid', 'conformance evidence binds a different bridge package than the proof')
+  }
   // An independent new proof run makes old conformance evidence ineligible.
   expect(conformance.proofRunId === evidence.runId, 'binding-invalid', 'conformance evidence does not bind the current proof run')
   expect(conformance.proofInputDigest === evidence.inputDigest, 'binding-invalid', 'conformance evidence does not bind the current proof inputs')
@@ -122,7 +147,7 @@ export async function auditConformance(root, model, modelId, proof) {
 
   // Execution closure: declared files, corpus and adapter must still match, and
   // the recorded digest must recompute from them, the Node identity and the pin.
-  const executionFiles = await executionFilesFor(root, model, manifest)
+  const executionFiles = await executionFilesFor(root, model, manifest, fs, confBridge?.entries ?? [])
   expect(canonical(executionFiles) === canonical(conformance.executionFiles), 'stale/execution', 'the execution closure changed since the recorded run')
   const digest = executionDigestOf(executionFiles, nodeIdentity(), conformance.proofInputDigest)
   expect(digest === conformance.executionDigest, 'stale/execution', 'the recorded execution digest does not recompute')
@@ -169,7 +194,7 @@ export async function auditLeanEvidence(options, { io = fs } = {}) {
     modelId = match[1]
     const stat = await io.stat(join(root, options.model)).catch(() => null)
     expect(stat?.isDirectory() === true, 'unsafe-path', 'model must be an existing directory')
-    const proof = await auditProof(root, options.model, modelId)
+    const proof = await auditProof(root, options.model, modelId, options.bridge ?? null)
     if (stage === 'proof') {
       return base('valid', { proofVerdict: proof.evidence.proofVerdict, runId: proof.evidence.runId, inputDigest: proof.evidence.inputDigest })
     }
@@ -194,7 +219,7 @@ export async function auditLeanEvidence(options, { io = fs } = {}) {
 
 export function parseAuditSyntax(argv) {
   if (argv.length === 1 && argv[0] === '--help') return { help: true }
-  const allowed = ['project', 'model', 'stage']
+  const allowed = ['project', 'model', 'stage', 'bridge']
   const options = {}
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i].slice(2)
@@ -214,7 +239,7 @@ export async function main(argv = process.argv.slice(2)) {
     return 2
   }
   if (options.help) {
-    process.stdout.write('lean-check-evidence --project <root> --model specs/lean/<id> --stage proof|acceptance\n')
+    process.stdout.write('lean-check-evidence --project <root> --model specs/lean/<id> --stage proof|acceptance [--bridge specs/formal/<id>/bridge.json]\n')
     return 0
   }
   const result = await auditLeanEvidence(options)

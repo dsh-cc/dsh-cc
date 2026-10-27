@@ -11,7 +11,7 @@ import {
 import { executionDigest, hashFile, posix, sha256 } from './lean-fingerprint.lib.mjs'
 import {
   BACKEND, BUILD_ORDER, PHASES, REASON_CODES, SCHEMA_VERSION, validateProofEvidence,
-  proofInputDigest, proofInputFiles, runnerDigest, runnerFiles, runnerPackage,
+  bridgeInputsFor, proofInputDigest, proofInputFiles, runnerDigest, runnerFiles, runnerPackage,
 } from './lean-evidence.lib.mjs'
 import { temporary } from './storage.lib.mjs'
 
@@ -23,6 +23,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const HASH = /^[a-f0-9]{64}$/
 const ERROR_CODE = /^[a-z][a-z0-9-]{0,63}$/
 const EVIDENCE_FIELDS = ['schemaVersion', 'backend', 'modelId', 'runId', 'proofRunId', 'proofInputDigest', 'executionFiles', 'executionDigest', 'runnerDigest', 'toolchain', 'conformanceVerdict', 'reason', 'caseCount', 'matchedCount', 'firstMismatch', 'phases', 'startedAt', 'finishedAt']
+// Version two adds exactly one field, `bridgeFiles` (design section 10).
+const EVIDENCE_FIELDS_V2 = [...EVIDENCE_FIELDS, 'bridgeFiles']
 const TOOLCHAIN_FIELDS = ['toolchain', 'platform', 'archiveSha256', 'contentDigest', 'version']
 const PHASE_FIELDS = ['id', 'argv', 'exitCode', 'signal', 'timedOut', 'cancelled', 'overflowed', 'stdout', 'stderr', 'report']
 const STREAM_FIELDS = ['path', 'bytes', 'sha256']
@@ -175,11 +177,15 @@ export function replayConformance(report, cases) {
 // audited by a different Node line is stale by design.
 export const nodeIdentity = (execPath = process.execPath, version = process.version) => `${realpathSync(execPath)}|${version}`
 
-export async function executionFilesFor(root, modelRelative, manifest, io = fs) {
+export async function executionFilesFor(root, modelRelative, manifest, io = fs, bridgeEntries = []) {
   assert(manifest.conformance, 'the manifest declares no conformance contract')
   const declared = [...manifest.conformance.implementationFiles, ...manifest.conformance.executionFiles]
   for (const path of declared) projectRelativePath(path, 'declared execution input')
-  const wanted = [`${modelRelative}/${ADAPTER}`, `${modelRelative}/${CORPUS}`, ...declared]
+  const base = [`${modelRelative}/${ADAPTER}`, `${modelRelative}/${CORPUS}`, ...declared]
+  // The opt-in bridge package is part of the execution closure before hashing.
+  const extra = bridgeEntries.map(({ path }) => path)
+  for (const path of extra) { projectRelativePath(path, 'bridge execution input'); assert(!base.includes(path), 'duplicate execution input path') }
+  const wanted = [...base, ...extra]
   const paths = [...new Set(wanted)].sort(compareCodepoint)
   assert(paths.length === wanted.length, 'duplicate execution input path')
   const entries = []
@@ -201,7 +207,7 @@ export const executionDigestOf = (entries, node, digest) => executionDigest(entr
 // Current proof prerequisites (design sections 7 and 8): a fresh, verified run
 // is required before the reference can be rebuilt.
 // ---------------------------------------------------------------------------
-export async function readCurrentProof(modelDir, modelRelative, manifest, io = fs) {
+export async function readCurrentProof(root, modelDir, modelRelative, manifest, io = fs) {
   const read = async (name, code, message) => {
     try { return await io.readFile(join(modelDir, name)) } catch (error) {
       if (error.code === 'ENOENT' || error.code === 'ENOTDIR') fail(code, message)
@@ -220,9 +226,14 @@ export async function readCurrentProof(modelDir, modelRelative, manifest, io = f
   validateProofEvidence(evidence, manifest)
   if (evidence.runId !== pointer.runId || evidence.inputDigest !== pointer.inputDigest) fail('artifact-changed', 'published proof evidence does not match its pointer identity')
   if (evidence.proofVerdict !== 'verified') fail('config-invalid', `missing proof prerequisites: the current proof verdict is ${evidence.proofVerdict}`)
-  // Freshness: the proof inputs on disk must still hash to the recorded digest.
+  // Freshness: the proof inputs on disk, plus the recorded bridge package, must
+  // still hash to the recorded digest (design section 10).
   let current = null
-  try { current = proofInputDigest(await proofInputFiles(modelDir)) } catch { current = null }
+  try {
+    const base = await proofInputFiles(modelDir)
+    const bridge = await bridgeInputsFor(root, evidence)
+    current = proofInputDigest(bridge ? [...base, ...bridge.entries] : base)
+  } catch { current = null }
   if (current !== evidence.inputDigest) fail('input-changed', 'missing proof prerequisites: proof inputs changed since the recorded run')
   return { evidence, evidenceSha256: pointer.evidenceSha256 }
 }
@@ -238,8 +249,10 @@ export async function runnerIdentityOf(skillDir) {
 export const reportPath = (modelId, runId) => posix(join('.formal-design', 'lean', modelId, runId, 'compare', 'comparison-report.json'))
 
 export function validateConformanceEvidence(evidence, manifest) {
-  exact(evidence, EVIDENCE_FIELDS, 'conformance evidence')
-  assert(evidence.schemaVersion === SCHEMA_VERSION && evidence.backend === BACKEND, 'conformance evidence must be schemaVersion 1 with backend "lean"')
+  const version = evidence?.schemaVersion
+  exact(evidence, version === 2 ? EVIDENCE_FIELDS_V2 : EVIDENCE_FIELDS, 'conformance evidence')
+  assert(version === 1 || version === 2, 'unknown conformance evidence schema version')
+  assert(evidence.backend === BACKEND, 'conformance evidence backend must be "lean"')
   assert(text(evidence.modelId) && evidence.modelId === manifest.modelId, 'conformance evidence modelId must equal the manifest modelId')
   assert(typeof evidence.runId === 'string' && UUID.test(evidence.runId), 'runId must be a fresh UUID')
   assert(typeof evidence.proofRunId === 'string' && UUID.test(evidence.proofRunId) && evidence.proofRunId !== evidence.runId, 'proofRunId must be a different fresh UUID')
@@ -253,6 +266,20 @@ export function validateConformanceEvidence(evidence, manifest) {
     if (previous !== null) assert(compareCodepoint(previous, entry.path) < 0, 'executionFiles must be sorted and unique')
     previous = entry.path
     seen.add(entry.path)
+  }
+  if (version === 2) {
+    assert(Array.isArray(evidence.bridgeFiles) && evidence.bridgeFiles.length > 0, 'version-two evidence must enumerate bridgeFiles')
+    const bridgeSeen = new Set()
+    let bridgeJson = false
+    for (const entry of evidence.bridgeFiles) {
+      exact(entry, ['path', 'sha256'], 'bridgeFiles entry')
+      assert(safeRelative(entry.path) && !bridgeSeen.has(entry.path) && hash(entry.sha256), 'invalid bridgeFiles entry')
+      bridgeSeen.add(entry.path)
+      if (/^specs\/formal\/[a-z][a-z0-9-]{0,63}\/bridge\.json$/.test(entry.path)) bridgeJson = true
+      // Bridge files join the execution closure before hashing.
+      assert(evidence.executionFiles.some(input => input.path === entry.path && input.sha256 === entry.sha256), 'bridgeFiles must be part of executionFiles')
+    }
+    assert(bridgeJson, 'bridgeFiles must contain the bridge.json entry')
   }
   exact(evidence.toolchain, TOOLCHAIN_FIELDS, 'toolchain')
   assert(/^leanprover\/lean4:v[0-9]+\.[0-9]+\.[0-9]+$/.test(evidence.toolchain.toolchain) && PLATFORMS.includes(evidence.toolchain.platform) && hash(evidence.toolchain.archiveSha256) && hash(evidence.toolchain.contentDigest) && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(evidence.toolchain.version), 'invalid toolchain identity')

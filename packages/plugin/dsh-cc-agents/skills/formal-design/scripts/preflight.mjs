@@ -4,7 +4,7 @@ import { parseArguments, preflight } from './preflight.lib.mjs'
 export async function main(argv = process.argv.slice(2)) {
   try {
     const options = await parseArguments(argv, 'preflight')
-    if (options.help) { process.stdout.write('preflight --project <root> --model specs/tla/<id> [--jar <file>] [--java <file>]\n'); return 0 }
+    if (options.help) { process.stdout.write('preflight --project <root> --model specs/tla/<id> [--jar <file>] [--java <file>] [--bridge specs/formal/<id>/bridge.json]\n'); return 0 }
     const { output } = await preflight(options)
     process.stdout.write(JSON.stringify(output) + '\n'); return output.status === 'ready-for-check' ? 0 : 2
   } catch (e) {

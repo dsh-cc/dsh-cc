@@ -142,8 +142,9 @@ describe('lean preflight model layout and source scan', () => {
     expect((await run(root, destination, { bridge: 'specs/formal/x/bridge.yaml' })).output.reason).toBe('config-invalid')
     expect((await run(root, destination, { bridge: 'specs/formal/demo/bridge.json' })).output.reason).toBe('missing-input')
     await mkdir(join(root, 'specs/formal/demo'), { recursive: true })
+    // A present but schema-invalid bridge is a strict-schema failure, not ready.
     await writeFile(join(root, 'specs/formal/demo/bridge.json'), '{}')
-    expect((await run(root, destination, { bridge: 'specs/formal/demo/bridge.json' })).output.status).toBe('ready')
+    expect((await run(root, destination, { bridge: 'specs/formal/demo/bridge.json' })).output.reason).toBe('config-invalid')
   })
 })
 

@@ -5,6 +5,7 @@ import { digestEntries, hashFile, posix, sha256 } from './lean-fingerprint.lib.m
 import { PROOF_SOURCES, PLATFORMS, REASON_CODES as CONFIG_REASON_CODES, assert, compareCodepoint, fail } from './lean-manifest.lib.mjs'
 import { runnerIdentity } from './fingerprint.lib.mjs'
 import { probeLock, temporary } from './storage.lib.mjs'
+import { BRIDGE_PATH, loadBridge } from './bridge.lib.mjs'
 
 // Proof evidence contract (design section 8) for the Lean backend.
 export const BACKEND = 'lean'
@@ -67,6 +68,18 @@ export async function proofInputFiles(modelDir) {
 }
 
 export const proofInputDigest = entries => digestEntries(entries)
+
+/**
+ * Re-enumerate the bridge package recorded by version-two evidence with the same
+ * regular-file and size checks the producer used (design section 10). Returns
+ * null for version-one (TLA-only) evidence.
+ */
+export async function bridgeInputsFor(root, evidence) {
+  if (evidence.schemaVersion !== 2) return null
+  const entry = evidence.bridgeFiles.map(record => record.path).find(path => BRIDGE_PATH.test(path))
+  if (!entry) fail('config-invalid', 'bridge evidence is missing its bridge.json entry')
+  return await loadBridge(root, entry)
+}
 
 // design section 8: the runner digest enumerates the shipped Lean scripts,
 // reports and pin from the skill directory.
@@ -145,11 +158,15 @@ export function incompleteInspectorReport(report, properties) {
 // Proof evidence (design section 8).
 // ---------------------------------------------------------------------------
 const EVIDENCE_FIELDS = ['schemaVersion', 'backend', 'modelId', 'runId', 'inputFiles', 'inputDigest', 'runnerFiles', 'runnerDigest', 'runnerPackage', 'toolchain', 'proofVerdict', 'reason', 'properties', 'phases', 'startedAt', 'finishedAt']
+// Version two adds exactly one field, `bridgeFiles` (design section 10).
+const EVIDENCE_FIELDS_V2 = [...EVIDENCE_FIELDS, 'bridgeFiles']
 const TOOLCHAIN_FIELDS = ['toolchain', 'platform', 'archiveSha256', 'contentDigest', 'version']
 
 export function validateProofEvidence(evidence, manifest) {
-  exact(evidence, EVIDENCE_FIELDS, 'proof evidence')
-  assert(evidence.schemaVersion === SCHEMA_VERSION && evidence.backend === BACKEND, 'proof evidence must be schemaVersion 1 with backend "lean"')
+  const version = evidence?.schemaVersion
+  exact(evidence, version === 2 ? EVIDENCE_FIELDS_V2 : EVIDENCE_FIELDS, 'proof evidence')
+  assert(version === 1 || version === 2, 'unknown proof evidence schema version')
+  assert(evidence.backend === BACKEND, 'proof evidence backend must be "lean"')
   assert(text(evidence.modelId) && evidence.modelId === manifest.modelId, 'proof evidence modelId must equal the manifest modelId')
   assert(typeof evidence.runId === 'string' && UUID.test(evidence.runId), 'runId must be a fresh UUID')
   for (const field of ['inputDigest', 'runnerDigest']) assert(hash(evidence[field]), `invalid ${field}`)
@@ -161,6 +178,20 @@ export function validateProofEvidence(evidence, manifest) {
       assert(safeRelative(entry.path) && !seen.has(entry.path) && hash(entry.sha256), `invalid ${field} entry`)
       seen.add(entry.path)
     }
+  }
+  if (version === 2) {
+    assert(Array.isArray(evidence.bridgeFiles) && evidence.bridgeFiles.length > 0, 'version-two evidence must enumerate bridgeFiles')
+    const seen = new Set()
+    let bridgeJson = false
+    for (const entry of evidence.bridgeFiles) {
+      exact(entry, ['path', 'sha256'], 'bridgeFiles entry')
+      assert(safeRelative(entry.path) && !seen.has(entry.path) && hash(entry.sha256), 'invalid bridgeFiles entry')
+      seen.add(entry.path)
+      if (BRIDGE_PATH.test(entry.path)) bridgeJson = true
+      // Bridge files join the proof input enumeration before hashing.
+      assert(evidence.inputFiles.some(input => input.path === entry.path && input.sha256 === entry.sha256), 'bridgeFiles must be part of inputFiles')
+    }
+    assert(bridgeJson, 'bridgeFiles must contain the bridge.json entry')
   }
   assert(digestEntries(evidence.inputFiles) === evidence.inputDigest, 'inputDigest does not match inputFiles')
   assert(digestEntries(evidence.runnerFiles) === evidence.runnerDigest, 'runnerDigest does not match runnerFiles')

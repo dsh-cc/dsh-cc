@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "modelId": "budget-guard",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "boundary-exhaustion",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": { "Budget": "10", "Reserved": "3", "Amount": "7" },
+      "invariants": ["TypeOK", "Bridge_boundary_exhaustion"],
+      "properties": [],
+      "limits": { "timeoutMs": 20000, "heapMiB": 256 }
+    },
+    {
+      "id": "zero-request",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": { "Budget": "10", "Reserved": "3", "Amount": "0" },
+      "invariants": ["TypeOK", "Bridge_zero_request"],
+      "properties": [],
+      "limits": { "timeoutMs": 20000, "heapMiB": 256 }
+    },
+    {
+      "id": "excess-by-one",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": { "Budget": "10", "Reserved": "3", "Amount": "8" },
+      "invariants": ["TypeOK", "Bridge_excess_by_one"],
+      "properties": [],
+      "limits": { "timeoutMs": 20000, "heapMiB": 256 }
+    }
+  ]
+}

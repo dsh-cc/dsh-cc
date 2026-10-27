@@ -5,6 +5,7 @@ import { join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { contentDigest, inside, loadToolchain, platformKey, posix, readUtf8, receiptPath } from './lean-fingerprint.lib.mjs'
 import { ADAPTER, CORPUS, LEAN_SPEC_VERSION, PLATFORMS, PROOF_SOURCES, REASON_CODES, assert, fail, parseJsonTokens, parseLeanManifest, projectRelativePath, sortBlockers } from './lean-manifest.lib.mjs'
+import { BRIDGE_PATH, bridgeMatchesModel, loadBridge } from './bridge.lib.mjs'
 
 const MB = 1024 * 1024
 const SOURCE_LIMIT = MB
@@ -13,7 +14,6 @@ const CORPUS_LIMIT = 20 * MB
 const CORPUS_LINE_LIMIT = 64 * 1024
 const DECLARED_LIMIT = 50 * MB
 const MODEL_PATH = /^specs\/lean\/([a-z][a-z0-9-]{0,63})$/
-const BRIDGE_PATH = /^specs\/formal\/([a-z][a-z0-9-]{0,63})\/bridge\.json$/
 // Generated artifacts live in the model directory (design section 4) but are
 // never proof inputs; implementation.md is an acceptance record.
 const GENERATED = ['implementation.md', 'evidence.json', 'current-run.json', 'conformance-evidence.json']
@@ -232,11 +232,14 @@ export async function leanPreflight(options, { env = process.env, platform: plat
     await attempt(() => checkSizes(paths, manifest, layout ?? {}))
     await attempt(() => checkSources(paths))
   }
+  let bridge = null
   if (options.bridge !== undefined) {
-    if (!BRIDGE_PATH.test(options.bridge)) blockers.push({ code: 'config-invalid', detail: '--bridge must be specs/formal/<feature-id>/bridge.json' })
+    if (typeof options.bridge !== 'string' || !BRIDGE_PATH.test(options.bridge)) blockers.push({ code: 'config-invalid', detail: '--bridge must be specs/formal/<feature-id>/bridge.json' })
     else if (paths) await attempt(async () => {
-      await safePath(paths.root, join(paths.root, options.bridge))
-      await requireRegularFile(join(paths.root, options.bridge), options.bridge)
+      const loaded = await loadBridge(paths.root, options.bridge)
+      // The argument is forbidden with a nonmatching model (design section 10).
+      if (!bridgeMatchesModel(loaded, paths.modelRelative)) fail('config-invalid', '--bridge bridge leanModel must equal the model being checked')
+      bridge = loaded
     })
   }
 
@@ -268,7 +271,7 @@ export async function leanPreflight(options, { env = process.env, platform: plat
     plannedImplementationFiles: manifest?.conformance?.implementationFiles ?? [],
     bridge: options.bridge ?? null,
   }
-  return { options, paths, manifest, pin, leanRoot, toolchain, output }
+  return { options, paths, manifest, pin, leanRoot, toolchain, bridge, output }
 }
 
 export async function main(argv = process.argv.slice(2)) {
