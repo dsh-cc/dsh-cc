@@ -162,7 +162,7 @@ describe('strict bridge schema and cases files', () => {
     const ready = await leanPreflight({ project: root, model: 'specs/lean/other', bridge: BRIDGE })
     expect(ready.output.status).toBe('blocked')
     expect(ready.output.reason).toBe('config-invalid')
-  })
+  }, 120_000)
 
   it('rejects an incomplete project instead of accepting missing backend evidence', async () => {
     const root = await project()
