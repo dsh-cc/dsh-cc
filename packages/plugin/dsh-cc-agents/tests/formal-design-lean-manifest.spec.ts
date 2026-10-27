@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, it, expect } from 'vitest'
@@ -183,6 +183,10 @@ async function installation() {
   const base = await mkdtemp(join(await realpath(tmpdir()), 'lean digest ')); roots.push(base)
   const root = join(base, 'lean-4.35.0')
   await cp(join(fixtureDir, 'fake-lean'), root, { recursive: true })
+  // The lib/ fixture tree cannot be committed: the root .gitignore excludes
+  // lib/ directories, so the library file is generated at run time instead.
+  await mkdir(join(root, 'lib/lean/library'), { recursive: true })
+  await writeFile(join(root, 'lib/lean/library/Init.olean'), 'fake-olean-bytes\n')
   return { base, root }
 }
 

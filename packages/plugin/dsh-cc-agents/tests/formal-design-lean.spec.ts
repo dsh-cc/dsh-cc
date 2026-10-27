@@ -19,6 +19,10 @@ async function installation({ version = '4.35.0' } = {}) {
   const root = await mkdtemp(join(await realpath(tmpdir()), 'lean root ')); roots.push(root)
   const destination = join(root, 'lean-4.35.0')
   await cp(join(fixtureDir, 'fake-lean'), destination, { recursive: true })
+  // The lib/ fixture tree cannot be committed: the root .gitignore excludes
+  // lib/ directories, so the library file is generated at run time instead.
+  await mkdir(join(destination, 'lib/lean/library'), { recursive: true })
+  await writeFile(join(destination, 'lib/lean/library/Init.olean'), 'fake init library\n')
   const binary = join(destination, 'bin/lean')
   if (version !== '4.35.0') await writeFile(binary, `#!/bin/sh\nprintf '%s\\n' '${version}'\n`)
   await chmod(binary, 0o755)
