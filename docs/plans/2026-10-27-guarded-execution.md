@@ -30,7 +30,7 @@ All paths in this table are relative to the pinned baseline. Implementation PRs 
 
 ## 3. Normative design map
 
-MUST/MUST NOT are requirements. All interfaces named as proposed are new contracts, not discovered APIs. Runtime JSON schemas own wire validation; TypeScript exports MUST match. Unknown keys, invalid enum values, non-finite numbers, prototype keys, and unsupported schema versions MUST be rejected. IDs are server-generated UUIDs unless a document explicitly defines a derived ID. UTC ISO timestamps are descriptive; monotonic clocks own deadlines. Documents own the following non-overlapping contracts:
+MUST/MUST NOT are requirements. All interfaces named as proposed are new contracts, not discovered APIs. Runtime JSON schemas own wire validation; TypeScript exports MUST match. Unknown keys, invalid enum values, non-finite numbers, prototype keys, and unsupported schema versions MUST be rejected. Features that need additional durable record shapes define separate versioned event types with their own payloads (for example C's verification receipts and D's automatic-tool events); they MUST NOT extend an already-specified closed payload with unknown keys. IDs are server-generated UUIDs unless a document explicitly defines a derived ID. UTC ISO timestamps are descriptive; monotonic clocks own deadlines. Documents own the following non-overlapping contracts:
 
 | Feature | Document | Owner and deliverable | Required predecessors |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ No changes to model weights, permission policies, source confidentiality rules, 
 
 1. **A1: contracts and logical accounting.** Implement attribution, append-only records, folds, failure reporting, and `/cost task`. Missing host attempt capability is visible as `logical-only`. This PR is useful independently and makes no complete-cost claim.
 2. **A2: host accounting capability and coverage.** In the harness repository, implement the versioned attempt/attribution contract from A. Merge and release it, then pin and integrate it in dsh-cc with contract tests. Cover every provider path used by the pilot, including subagents, one-shots, and retries. Only this stage can report complete physical coverage.
-3. **B: chain execution.** Implement pure schemas/guards first, then the host nested-event capability specified in B (B0), release/pin it, and integrate native dispatch, durable nested receipts, cancellation, and optional installation (B1). Tests initially use fake tools. No persistent scheduling or callback-savings claims.
+3. **B: chain execution.** Implement pure schemas/guards first, then native dispatch, durable nested receipts, cancellation, and optional installation. Nested-dispatch records are logged through an in-repo session event (declared and registered exactly like the existing Code Mode `tool/code-dispatch` event); no external harness release is required for B. Tests initially use fake tools. No persistent scheduling or callback-savings claims.
 4. **C: explicit verification batching.** Add batch ownership and result receipts; leave ordinary post-edit execution unchanged outside a batch. Test two sessions sharing a worktree and interactions with compression and recovery hints.
 5. **E1: offline runner and first comparison.** Implement the coding suite and paired evaluation with baseline, Code Mode, B, and B+C. This requires A2 for cost conclusions but does not wait for D or the optimizer. Stop if the evidence is insufficient.
 6. **D0 then D1: host boundary capability, then controller.** Implement/release the proposed host protocol in a separate harness PR; integrate only after its conformance tests pass. First shadow evaluation, then an explicitly enabled live pilot. A chain tool is not a substitute for this dependency.
@@ -63,3 +63,14 @@ Review every feature for: objective and non-goals; validated inputs; state trans
 ## 6. Evidence and attribution
 
 HarnessMM motivates literal decisions, observed guards, callback omission audits, and complete-task accounting. Its headline DeepSeek Harness token reduction combines multiple interventions; it is not a projected dsh-cc saving. Its ablations and reported quality regressions justify independent cost and quality gates. Token savings do not establish latency or energy savings. This set independently specifies conservative product contracts and does not copy paper implementation code or benchmark assets. No experiments or performance measurements were run for this documentation proposal.
+
+## 7. Review ledger
+
+This documentation set passed a three-seat blind review (internal critic seat; external reviewer A; external reviewer B), revised 2026-10-27:
+
+- Round 1 (full review): reviewer A returned NO-GO (10 findings); internal critic and reviewer B returned GO-WITH-CHANGES (12 and 14 findings, B including three blocker-severity items). The verdict divergence was adjudicated as severity calibration under the implement-as-written test: the blocker-severity items (Feature D automatic-tool conversation representation; Feature A child-binding contradiction; Feature A usage-mapping clash with the harness `TokenUsage` pricing assumptions) all produce incorrect or unimplementable contracts if implemented as written, so all findings were folded.
+- Two feature-level decisions were escalated to the repository owner and decided: (1) Feature C receipt reuse is window-scoped to the same session and task rather than the same live batch (the batch-only path was unreachable); (2) Feature B logs nested-dispatch records through an in-repo session event (Code Mode `tool/code-dispatch` precedent) instead of requiring a new external host event capability.
+- Round 2 (delta verification of 33 folds): three seats returned GO-WITH-CHANGES with only two residual defects (Feature C epoch self-increment on the reuse path; Feature A gap-record persistence edge case), both folded. Rounds 2–3 verified folds and residuals only; they were not full re-reviews.
+- Round 3 (micro-confirmation of the two residual fixes): three seats returned GO.
+
+Existing-code claims in §2 were verified against the inspected baseline by all three seats; no wrong claims about existing code were found. User sign-off on this ledger is recorded by the merge of this documentation PR.
