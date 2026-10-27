@@ -1,7 +1,9 @@
 # Lean verification for the formal-design skill
 
-Status: Proposed implementation specification. This document adds a complete Lean
-path to the existing skill. It does not claim that the path is already implemented.
+Status: **Implemented** — PR #304 (open, pending merge). This document
+adds a complete Lean
+path to the existing skill; PR #304 ships that path (runner scripts,
+inspector, driver, worked example, tests, CI, and documentation).
 
 Baseline: `836487abfda9808f81faff713fc2422827245f00` on `main`.
 
@@ -991,5 +993,9 @@ preflight by design; provision the pinned archive rather than relaxing the
 check.
 
 Status of this document: three-seat review converged (all seats GO on the
-final text). User sign-off pending. r2 through r3b verified folds only; the
+final text). Implemented by PR #304 per the section-13 work packages;
+the real-tool chain (preflight, proof, conformance, both audits) was
+executed against the pinned Lean 4.35.0 toolchain with the
+budget-reservation example reaching `acceptanceReady: true`. r2 through
+r3b verified folds only; the
 first round was the only full review of the initial text.
