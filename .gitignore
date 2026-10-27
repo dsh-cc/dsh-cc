@@ -175,6 +175,8 @@ packages/**/src/*.d.ts.map
 # committed contract; these two are machine-local run state)
 specs/**/current-run.json
 specs/**/evidence.json
+# Lean conformance evidence is current run state, like TLC evidence
+specs/**/conformance-evidence.json
 
 # Test-suite scratch dirs (workflow-journal/tool-workflow suites seed temp
 # journals here relative to the run cwd; regenerated on every run)

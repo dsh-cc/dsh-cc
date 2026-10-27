@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "backend": "lean",
+  "modelId": "budget-reservation",
+  "properties": [
+    {
+      "id": "budget-bound",
+      "requirementId": "REQ-1",
+      "declaration": "Formal.reserve_preserves_bound",
+      "statement": "forall b r a : Nat, r <= b -> a <= b - r -> r + a <= b",
+      "witnessDeclaration": "Formal.admissible_example"
+    },
+    {
+      "id": "adds-amount",
+      "requirementId": "REQ-2",
+      "declaration": "Formal.reserve_adds_amount",
+      "statement": "forall (b r a v : Nat), Formal.reserve b r a = .ok v -> v = r + a",
+      "witnessDeclaration": "Formal.admissible_example"
+    },
+    {
+      "id": "rejection-preserves-state",
+      "requirementId": "REQ-3",
+      "declaration": "Formal.reserve_rejection_preserves_state",
+      "statement": "forall (b r a : Nat) (code : String), Formal.reserve b r a = .error code -> (Formal.reserveState b r a).1 = r",
+      "witnessDeclaration": "Formal.rejection_example"
+    },
+    {
+      "id": "zero-request",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.reserve_zero",
+      "statement": "forall b r : Nat, r <= b -> Formal.reserve b r 0 = .ok r",
+      "witnessDeclaration": "Formal.admissible_example"
+    }
+  ],
+  "conformance": {
+    "adapter": "conformance/adapter.mjs",
+    "corpus": "conformance/cases.jsonl",
+    "implementationFiles": [
+      "packages/plugin/dsh-cc-agents/tests/fixtures/formal-design-lean/project/packages/example/src/budget.ts"
+    ],
+    "executionFiles": [
+      "packages/plugin/dsh-cc-agents/tests/fixtures/formal-design-lean/project/package.json"
+    ],
+    "command": ["node", "conformance/adapter.mjs"],
+    "comparison": "canonical-json"
+  },
+  "limits": {
+    "proofTimeoutMs": 120000,
+    "conformanceTimeoutMs": 120000,
+    "maxHeartbeats": 2000000,
+    "maxRecDepth": 2048,
+    "maxCases": 10000
+  }
+}
