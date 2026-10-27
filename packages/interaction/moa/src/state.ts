@@ -123,11 +123,16 @@ export class EscalationBookkeeping {
     if (!Number.isInteger(seq) || seq < 0) fail(`invalid origin seq ${seq}`)
     if (escalations.length === 0) fail(`no escalation records to restore for seq ${seq}`)
     let floor = -1
+    let previousTo: number | undefined
     for (const { fromTier, toTier } of escalations) {
       if (!Number.isInteger(fromTier) || !Number.isInteger(toTier)
         || fromTier < 0 || toTier < 0 || fromTier >= TIER_COUNT || toTier >= TIER_COUNT || toTier <= fromTier) {
         fail(`malformed escalation record (${fromTier} → ${toTier}) for seq ${seq}`)
       }
+      if (previousTo !== undefined && fromTier !== previousTo) {
+        fail(`inconsistent escalation chain (${previousTo} → ${fromTier}) for seq ${seq}`)
+      }
+      previousTo = toTier
       floor = Math.max(floor, toTier)
     }
     const existing = this.states.get(seq)

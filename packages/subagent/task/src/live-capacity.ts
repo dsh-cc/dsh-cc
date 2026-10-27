@@ -8,7 +8,7 @@
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { acquireAdmission, pendingContinuations, type AdmissionLease } from '@dsh-cc/subagent-resume-pins'
+import { acquireAdmission, type AdmissionLease } from '@dsh-cc/subagent-resume-pins'
 import type { SubagentsLike } from './background-start.ts'
 
 /**
@@ -50,21 +50,22 @@ export async function assertLiveCapacity(
   /** Lane-specific refusal (the ephemeral branch names one-shot runs); default keeps the D4 continuable literal. */
   refuse?: (live: number) => Error,
 ): Promise<void> {
+  signal.throwIfAborted()
   if (typeof seam.listChildren !== 'function') return
   let children: { id: string; mode?: string }[]
   try {
     children = await seam.listChildren(parent.id, signal)
   } catch {
+    signal.throwIfAborted()
     return
   }
+  signal.throwIfAborted()
   // The live registry sits beside the subagents seam on the same context;
   // an absent registry (or a bare fixture agent without a ctx) degrades the
   // guard open (no false blocks).
   const agents = parent.ctx?.get?.('agents') as { get?(id: string): { status?: string } | undefined } | undefined
   const isRunning = (id: string): boolean => agents?.get?.(id)?.status === 'running'
-  // Slots already promised to in-flight `send_message` continuations count too:
-  // the same admission (resume-pins/admission.ts) guards both lanes.
-  const live = children.filter(child => isRunning(child.id)).length + pendingContinuations(String(parent.id), isRunning)
+  const live = children.filter(child => isRunning(child.id)).length
   if (live >= MAX_LIVE_CONTINUABLE_CHILDREN) {
     // Single runtime literal (D4; T16 pins full equality against exactly it):
     // the copy names the real release path — /agents stop cannot free a slot.

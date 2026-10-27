@@ -16,7 +16,7 @@
  * mirroring the spawn guard — a hidden seam must not wedge continuations.
  */
 
-import { acquireAdmission, pendingContinuations, reserveContinuationSlot, type SlotReservation } from './admission.ts'
+import { acquireAdmission, type AdmissionLease } from './admission.ts'
 
 /** Per-parent admission limit for continuable children; mirrors the spawn lane. */
 export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
@@ -53,13 +53,16 @@ export async function countLiveChildren(
   parentId: unknown,
   signal?: AbortSignal,
 ): Promise<number | undefined> {
+  signal?.throwIfAborted()
   if (subagents?.listChildren === undefined) return undefined
   let children: { id: string }[]
   try {
     children = await subagents.listChildren(parentId, signal)
   } catch {
+    signal?.throwIfAborted()
     return undefined
   }
+  signal?.throwIfAborted()
   // Only a RUNNING activation holds a slot (idle/ready rows hold none) —
   // the same predicate as the spawn lane's guard.
   return children.filter(child => agents?.get?.(child.id)?.status === 'running').length
@@ -83,47 +86,43 @@ export async function continuationCapacityRefusal(
   const agents = services.get?.('agents') as CapacityAgentsLike | undefined
   const live = await countLiveChildren(subagents, agents, parent.id, signal)
   if (live === undefined) return undefined
-  // Slots already promised to in-flight continuations count too (admission.ts).
-  const pending = pendingContinuations(String(parent.id), id => agents?.get?.(id)?.status === 'running')
-  return live + pending >= MAX_LIVE_CONTINUABLE_CHILDREN ? LIVE_CAPACITY_REFUSAL : undefined
+  return live >= MAX_LIVE_CONTINUABLE_CHILDREN ? LIVE_CAPACITY_REFUSAL : undefined
 }
 
-/** Outcome of {@link admitContinuation}. */
+/** A successful admission owns the lease until the delivery settles. */
 export type ContinuationAdmission =
-  | { readonly admitted: true; readonly reservation: SlotReservation }
+  | { readonly admitted: true; readonly release: AdmissionLease }
   | { readonly admitted: false; readonly reason: string }
 
 /**
- * Atomic continuation admission: under the per-parent admission lease shared
- * with the spawn lanes, run the capacity check and — when admitted — reserve
- * the slot so a concurrent spawn (or continuation) counts it before the
- * activation is visible. The lease is released before returning (success,
- * refusal, abort or throw); the caller owns the returned reservation and must
- * release it when the tool settles (it is also released on abort and by TTL).
- * Unobservable capacity or an absent parent degrades open without a reservation.
- *
- * @param targetId - the settled child being continued.
- * @throws the signal's reason when aborted while queued for the lease.
+ * Acquire at tools/execute, after approval. Check liveness under the same
+ * parent lease as spawn; keep that lease through message acceptance (not the
+ * child's epoch). Running targets need no new slot but still keep the lease:
+ * they may settle while delivery waits. Child-to-parent reports need no slot.
  */
 export async function admitContinuation(
   services: CapacityServices,
-  parent: { id?: unknown } | undefined,
+  parent: { id?: unknown; session?: { header?: { parentSession?: unknown } } } | undefined,
   targetId: string,
   signal: AbortSignal,
 ): Promise<ContinuationAdmission> {
-  const open: ContinuationAdmission = { admitted: true, reservation: { expired: false, release: () => undefined } }
-  if (parent === undefined || parent.id === undefined) return open
-  const parentId = String(parent.id)
-  const lease = await acquireAdmission(parentId, signal)
+  signal.throwIfAborted()
+  const reportingTo = parent?.session?.header?.parentSession
+  if (parent?.id === undefined || (reportingTo !== undefined && String(reportingTo) === targetId)) {
+    return { admitted: true, release: () => undefined }
+  }
+  const lease = await acquireAdmission(String(parent.id), signal)
   try {
-    const reason = await continuationCapacityRefusal(services, parent, signal)
-    if (reason !== undefined) return { admitted: false, reason }
-    const subagents = services.get?.('subagents') as CapacitySubagentsLike | undefined
-    if (subagents?.listChildren === undefined) return open
-    const reservation = reserveContinuationSlot(parentId, targetId)
-    signal.addEventListener('abort', reservation.release, { once: true })
-    return { admitted: true, reservation }
-  } finally {
+    const agents = services.get?.('agents') as CapacityAgentsLike | undefined
+    if (agents?.get?.(targetId)?.status !== 'running') {
+      const reason = await continuationCapacityRefusal(services, parent, signal)
+      signal.throwIfAborted()
+      if (reason !== undefined) { lease(); return { admitted: false, reason } }
+    }
+    signal.throwIfAborted()
+    return { admitted: true, release: lease }
+  } catch (error) {
     lease()
+    throw error
   }
 }

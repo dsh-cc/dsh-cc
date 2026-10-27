@@ -38,27 +38,19 @@ function world(initialRunning: number) {
 }
 
 describe('review P1: spawn + continuation share one admission', () => {
-  it('24 live, one spawn and one continuation concurrently: at most 25 live, exactly one admitted', async () => {
+  it.each(['spawn', 'continuation'] as const)('%s first: only one lane gets the last slot', async (first) => {
     const w = world(CAP - 1)
-    const spawn = startBackground(w.seam, {
+    const spawn = () => startBackground(w.seam, {
       label: 'x', prompt: [{ type: 'text', text: 'go' }], parent: w.parent as never, signal: new AbortController().signal,
-    }).then(() => 'admitted' as const, () => 'refused' as const)
-    let release: (() => void) | undefined
-    const continuation = admitContinuation(w.services, w.parent, w.ended, new AbortController().signal).then(
-      admission => {
-        if (admission.admitted) release = admission.release
-        return admission.admitted ? 'admitted' as const : 'refused' as const
-      },
-    )
-    await w.flush()
-    w.releaseAll()
-    await w.flush()
-    const outcomes = await Promise.all([spawn, continuation])
-    // The admitted continuation activates the ended child only AFTER admission
-    // (the tool body runs after the pre-execute gate) — the real-world ordering.
-    if (outcomes[1] === 'admitted') w.running.add(w.ended)
-    expect(outcomes.filter(o => o === 'admitted')).toHaveLength(1)
-    release?.() // post-execute: the tool settled
-    expect(w.running.size).toBeLessThanOrEqual(CAP)
+    }).then(() => 'admitted', () => 'refused')
+    const continuation = async () => {
+      const admission = await admitContinuation(w.services, w.parent, w.ended, new AbortController().signal)
+      if (!admission.admitted) return 'refused'
+      try { w.running.add(w.ended); return 'admitted' } finally { admission.release() }
+    }
+    const outcomes = first === 'spawn' ? [spawn(), continuation()] : [continuation(), spawn()]
+    await w.flush(); w.releaseAll(); await w.flush()
+    expect((await Promise.all(outcomes)).filter(o => o === 'admitted')).toHaveLength(1)
+    expect(w.running.size).toBe(CAP)
   })
 })

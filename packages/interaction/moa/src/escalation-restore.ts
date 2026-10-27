@@ -8,8 +8,7 @@ export type OpeningSource = { originSeq: number } & Escalation
 /**
  * F-3: every durable `moa-escalation` followup of one origin, read from the
  * agent's session log (the opening's own record is always included, so the
- * result is non-empty even when the log is unreadable or the opening is not
- * yet appended). A chain's escalations are strictly increasing, so the
+ * result is non-empty when the opening has not yet been appended). A chain's escalations are strictly increasing, so the
  * `(fromTier, toTier)` pair identifies one escalation.
  */
 export function durableEscalations(
@@ -17,21 +16,19 @@ export function durableEscalations(
   opening: OpeningSource,
 ): Escalation[] {
   const out: Escalation[] = []
-  try {
-    const session = (agent as { session?: { snapshotEvents?: () => readonly unknown[] } } | undefined)?.session
-    const events = (session?.snapshotEvents?.() ?? []) as {
-      seq?: number
-      type?: string
-      data?: { source?: { kind?: string; originSeq?: unknown; fromTier?: unknown; toTier?: unknown } }
-    }[]
-    for (const event of events) {
-      const source = event.data?.source
-      if (event.type !== 'user/message' || source?.kind !== MOA_ESCALATION_KIND || source.originSeq !== opening.originSeq) continue
-      if (typeof source.fromTier !== 'number' || typeof source.toTier !== 'number') continue
-      out.push({ fromTier: source.fromTier, toTier: source.toTier })
+  const session = (agent as { session?: { snapshotEvents?: () => readonly unknown[] } } | undefined)?.session
+  const events = (session?.snapshotEvents?.() ?? []) as {
+    seq?: number
+    type?: string
+    data?: { source?: { kind?: string; originSeq?: unknown; fromTier?: unknown; toTier?: unknown } }
+  }[]
+  for (const event of events) {
+    const source = event.data?.source
+    if (event.type !== 'user/message' || source?.kind !== MOA_ESCALATION_KIND || source.originSeq !== opening.originSeq) continue
+    if (typeof source.fromTier !== 'number' || typeof source.toTier !== 'number') {
+      throw new Error(`malformed escalation record for origin ${opening.originSeq}`)
     }
-  } catch {
-    // Unreadable log: the opening's own record below still restores the floor.
+    out.push({ fromTier: source.fromTier, toTier: source.toTier })
   }
   // The opening itself is one of the escalations: add it unless the log already holds it.
   if (!out.some((e) => e.fromTier === opening.fromTier && e.toTier === opening.toTier)) {
@@ -39,7 +36,6 @@ export function durableEscalations(
   }
   return out
 }
-
 
 /**
  * F-3: restore the escalation floor of `opening`'s origin from the durable

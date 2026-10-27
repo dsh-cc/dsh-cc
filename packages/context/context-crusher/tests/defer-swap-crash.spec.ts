@@ -43,6 +43,7 @@ function fixture(id: string): { session: Session; seq: number } {
   s.append('turn/start', { turn: 1 })
   s.append('step/start', { turn: 1, step: 1 })
   s.append('assistant/message', {
+    stream: [],
     turn: 1,
     step: 1,
     message: createMessage({
@@ -125,16 +126,17 @@ describe('F-4: crash between the swap prune and its replace', () => {
     const cleanTotal = tokenMeter.measure(control.session).surfaceTokens
     expect(cleanTotal).toBeLessThan(untouched)
 
-    // Crash, then resume on the same persisted log and retry.
+    // Crash, serialize the durable events, then rebuild a fresh session and meter.
     const { session } = fixture('swap-crash-2')
     const restore = crashOnNthAppend(session, 2)
     expect(() => swap(session)).toThrow('simulated crash')
     restore()
-    expect(swap(session).outcome).toBe('applied')
+    const resumed = Session.create(SessionId('swap-crash-resumed'), JSON.parse(JSON.stringify(session.snapshotEvents())))
+    expect(swap(resumed).outcome).toBe('applied')
 
     // Exactly one deduction: same total as the clean run, never double-debited.
-    expect(tokenMeter.measure(session).surfaceTokens).toBe(cleanTotal)
-    const prunes = session.snapshotEvents().filter((e) => e.type === 'compaction/prune')
+    expect(meter().measure(resumed).surfaceTokens).toBe(cleanTotal)
+    const prunes = resumed.snapshotEvents().filter((e) => e.type === 'compaction/prune')
     expect(prunes).toHaveLength(2) // the orphan + the healing one
   })
 

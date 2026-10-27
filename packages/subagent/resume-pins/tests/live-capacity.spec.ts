@@ -3,7 +3,7 @@
  * through `send_message` admits a fresh resident activation, so the 25-cap that
  * guards the spawn lanes must guard continuations too. These tests pin the
  * counting predicate, the fail-open degradation and the gate wiring inside
- * `tools/pre-execute`.
+ * `tools/execute`.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -105,7 +105,7 @@ describe('continuationCapacityRefusal', () => {
   })
 })
 
-// ── Gate wiring (tools/pre-execute) ────────────────────────────────────────
+// ── Gate wiring (tools/execute) ────────────────────────────────────────
 
 describe('send_message live-capacity gate', () => {
   let root: string
@@ -132,8 +132,8 @@ describe('send_message live-capacity gate', () => {
       agents: {
         get: (id: unknown) => (opts.liveTarget === true && liveIds.has(String(id)) ? { status: 'running' } : undefined),
       },
-      on: (_name: string, handler: never) => {
-        preExecute.push({ handler })
+      on: (name: string, handler: never) => {
+        if (name === 'tools/execute') preExecute.push({ handler })
         return () => {}
       },
       effect: () => {},
@@ -143,15 +143,13 @@ describe('send_message live-capacity gate', () => {
     return preExecute[0]!.handler as (exec: unknown, next: () => Promise<string>) => Promise<unknown>
   }
 
-  it('denies a continuation at the cap BEFORE pin admission', async () => {
+  it('refuses a continuation at the cap before dispatch', async () => {
     const gate = fakeCtx({ live: MAX_LIVE_CONTINUABLE_CHILDREN })
     const next = vi.fn(async () => 'next-called')
-    const decision = await gate(
+    await expect(gate(
       { name: 'send_message', arguments: { agent_id: 'settled-child' }, agent: parent, signal: new AbortController().signal },
       next,
-    ) as { kind: string; reason: string }
-    expect(decision.kind).toBe('deny')
-    expect(decision.reason).toBe(LIVE_CAPACITY_REFUSAL)
+    )).rejects.toThrow(LIVE_CAPACITY_REFUSAL)
     expect(next).not.toHaveBeenCalled()
   })
 

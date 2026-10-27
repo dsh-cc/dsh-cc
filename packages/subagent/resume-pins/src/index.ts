@@ -56,13 +56,9 @@ export {
 export { apply, name } from './plugin.ts'
 export type { OverlayTuple } from './pin.ts'
 export {
-  CONTINUATION_RESERVATION_TTL_MS,
   acquireAdmission,
   admissionQueueSize,
-  pendingContinuations,
-  reserveContinuationSlot,
   type AdmissionLease,
-  type SlotReservation,
 } from './admission.ts'
 export {
   admitContinuation,

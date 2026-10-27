@@ -27,16 +27,16 @@ One cordis plugin (`apply`) with:
   tool availability (`PINNED_TOOL_UNAVAILABLE`), and pinned-route availability
   (`SUBAGENT_MODEL_UNAVAILABLE`) — every deny persisted into the pin
   (`resume.state='blocked'`) **before** the deny returns;
-- a **live-capacity pre-check** on `send_message`: continuing a settled child
-  admits a fresh resident activation, so at the 25 live-child cap the call is
-  refused with the spawn lanes' remedy copy (transient — nothing is persisted,
-  unlike the gate denials above). The check and a slot **reservation** run under the
-  per-parent admission lease shared with the Task spawn lanes (`admission.ts`), so a
-  concurrent spawn and a continuation cannot both take the last slot; the reservation
-  is released when the tool settles, on abort or deny, or by a safety TTL — never held
-  across the approval prompt. An expired reservation stops counting but is not a
-  grant: the admission is re-checked atomically at `tools/execute` time, so a
-  stale call can never over-admit;
+- **atomic live-capacity admission** on `send_message` at `tools/execute`, after
+  approval and the pin policy gate. Continuing a settled child at the 25 live-child
+  cap is refused with the spawn lanes' remedy copy (transient, not persisted).
+  The per-parent FIFO lease is shared with Task spawn and held through message
+  acceptance or activation failure, then released in `finally`. It is never held
+  across approval or the child's full epoch. There are no expiring reservations
+  or per-execution trackers. Every dispatch rechecks the target: same-child sends
+  share its running slot, and a child that settled during approval must be admitted
+  again. Cancellation during listing is propagated; missing infrastructure still
+  degrades open;
 - an **`agent/request` overlay** applying the pinned
   `{provider, model, reasoningEffort, maxTokens}` tuple field-by-field
   (absence included) to every resumed turn, whatever resumed it;
