@@ -78,3 +78,131 @@ jobs:
           path: ${{ runner.temp }}/formal-design-artifacts
           include-hidden-files: true
           if-no-files-found: warn
+
+  formal-design-lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: dsh-cc
+      - uses: actions/checkout@v4
+        with:
+          repository: dsh-cc/deepseek-harness
+          ref: ${{ env.DSH_HARNESS_REF }}
+          path: deepseek-harness
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            dsh-cc/pnpm-lock.yaml
+            deepseek-harness/pnpm-lock.yaml
+      - name: Install workspace dependencies (no harness build required)
+        working-directory: dsh-cc
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Provision the pinned Lean toolchain (checksum-validated)
+        working-directory: dsh-cc
+        run: |
+          node packages/plugin/dsh-cc-agents/skills/formal-design/scripts/lean-provision.mjs \
+            --dest "$RUNNER_TEMP/lean-4.35.0" --platform linux-x64
+          echo "FORMAL_DESIGN_LEAN_ROOT=$RUNNER_TEMP/lean-4.35.0" >> "$GITHUB_ENV"
+      - name: Contract, packaged default and real Lean integration tests
+        working-directory: dsh-cc
+        env:
+          FORMAL_DESIGN_CI: '1'
+          FORMAL_DESIGN_LEAN_CI: '1'
+          FORMAL_DESIGN_ARTIFACTS: ${{ runner.temp }}/formal-design-lean-artifacts
+        run: |
+          unset TLA2TOOLS_JAR
+          pnpm exec vitest run \
+            packages/plugin/dsh-cc-agents/tests/formal-design-lean.spec.ts \
+            packages/plugin/dsh-cc-agents/tests/formal-design-lean-manifest.spec.ts \
+            packages/plugin/dsh-cc-agents/tests/formal-design-lean-check.spec.ts \
+            packages/plugin/dsh-cc-agents/tests/formal-design-lean-conformance-contract.spec.ts \
+            packages/plugin/dsh-cc-agents/tests/formal-design-bridge.spec.ts \
+            packages/plugin/dsh-cc-agents/tests/formal-design-lean-integration.spec.ts \
+            packages/plugin/dsh-cc-agents/tests/formal-design-lean-conformance.spec.ts \
+            packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts
+      - name: Validate committed Lean models and bridges
+        working-directory: dsh-cc
+        env:
+          FORMAL_DESIGN_ARTIFACTS: ${{ runner.temp }}/formal-design-lean-artifacts
+        run: |
+          node --input-type=module - <<'JS'
+          import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { spawnSync } from 'node:child_process';
+
+          const root = process.cwd();
+          const scripts = 'packages/plugin/dsh-cc-agents/skills/formal-design/scripts';
+          const leanRoot = process.env.FORMAL_DESIGN_LEAN_ROOT;
+          if (!leanRoot) throw new Error('FORMAL_DESIGN_LEAN_ROOT is required for Lean verification');
+          mkdirSync(process.env.FORMAL_DESIGN_ARTIFACTS, { recursive: true });
+          // Code-point path order: UTF-8 byte comparison.
+          const byteOrder = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b));
+
+          function run(args) {
+            const result = spawnSync('node', args, { cwd: root, stdio: 'inherit' });
+            if (result.error) throw result.error;
+            if (result.status !== 0) throw new Error(`node ${args.join(' ')} exited ${result.status}`);
+          }
+          const regularFile = path => { try { return statSync(path).isFile(); } catch { return false; } };
+
+          const modelsDir = join(root, 'specs/lean');
+          const modelIds = readdirSync(modelsDir, { withFileTypes: true })
+            .filter(entry => entry.isDirectory())
+            .map(entry => entry.name)
+            .sort(byteOrder);
+          for (const id of modelIds) {
+            const model = `specs/lean/${id}`;
+            if (!regularFile(join(root, model, 'checks.json'))) {
+              throw new Error(`discovered Lean model directory ${model} has no regular checks.json`);
+            }
+            console.log(`validating committed Lean model ${model}`);
+            run([`${scripts}/lean-preflight.mjs`, '--project', root, '--model', model, '--lean-root', leanRoot]);
+            run([`${scripts}/lean-check.mjs`, '--project', root, '--model', model, '--lean-root', leanRoot]);
+            run([`${scripts}/lean-check-conformance.mjs`, '--project', root, '--model', model, '--lean-root', leanRoot]);
+            run([`${scripts}/lean-check-evidence.mjs`, '--project', root, '--model', model, '--stage', 'acceptance']);
+          }
+
+          const bridgeRoot = join(root, 'specs/formal');
+          const bridges = existsSync(bridgeRoot)
+            ? readdirSync(bridgeRoot, { withFileTypes: true })
+              .filter(entry => entry.isDirectory())
+              .map(entry => entry.name)
+              .sort(byteOrder)
+            : [];
+          if (bridges.length === 0) {
+            console.log('no committed specs/formal/*/bridge.json combined models; skipping the bridge flow');
+          }
+          for (const id of bridges) {
+            const bridge = `specs/formal/${id}/bridge.json`;
+            if (!regularFile(join(root, bridge))) {
+              throw new Error(`discovered combined model directory specs/formal/${id} has no regular bridge.json`);
+            }
+            const contract = JSON.parse(readFileSync(join(root, bridge), 'utf8'));
+            console.log(`validating combined model ${bridge}`);
+            run([`${scripts}/check.mjs`, '--project', root, '--model', contract.tlaModel, '--bridge', bridge]);
+            run([`${scripts}/lean-check.mjs`, '--project', root, '--model', contract.leanModel, '--lean-root', leanRoot, '--bridge', bridge]);
+            run([`${scripts}/lean-check-conformance.mjs`, '--project', root, '--model', contract.leanModel, '--lean-root', leanRoot, '--bridge', bridge]);
+            run([`${scripts}/check-combined-evidence.mjs`, '--project', root, '--bridge', bridge]);
+          }
+          JS
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: formal-design-lean-diagnostics
+          path: |
+            ${{ runner.temp }}/formal-design-lean-artifacts
+            dsh-cc/.formal-design
+          include-hidden-files: true
+          if-no-files-found: warn

@@ -1,5 +1,18 @@
 # Modeling and runner guide
 
+## Backend selection
+
+This guide covers the bounded TLA+ path. Select `tla` for event ordering,
+cancellation, retries, ownership and recovery; `lean` for high-impact
+deterministic rules or algorithms with a stated invariant, arithmetic bound or
+general correctness property; `both` when both kinds of behavior apply; `none`
+for formatting, layout and ordinary low-risk glue. Record the ordered
+`backends` subset and `modelDirs` next to the existing Formal design fields.
+Read [lean-modeling-guide.md](lean-modeling-guide.md) and
+[lean-conformance.md](lean-conformance.md) for the Lean path and
+[combined-models.md](combined-models.md) for shared operation contracts. A
+missing or failing backend is never silently replaced by the other.
+
 ## Business contract and coverage
 
 Restate all correctness requirements in design.md. A mutable external link

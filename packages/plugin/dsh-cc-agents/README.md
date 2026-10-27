@@ -14,7 +14,7 @@ Official dsh-cc plugin with three subagents, four skills, and optional Serena ho
 | `dsh-cc-agents-orchestration` | Agent selection and report contracts | Main agent |
 | `data-analysis` | Metric definitions, reconciliation, and report checks | Main agent |
 | `vwa-writing` | Source evidence, argument review, article writing, and delivery | Configured VWA reviewer |
-| `formal-design` | Bounded TLA+ modeling, TLC checks, and evidence review before the existing design review | Main agent |
+| `formal-design` | Bounded TLA+ modeling, TLC checks, Lean proofs with implementation conformance, and evidence review before the existing design review | Main agent |
 
 The critic has a read-only persona and usually runs in the background. Executor and marathon can change files and usually run in the foreground.
 
@@ -70,6 +70,45 @@ record the original artifact, source and licenses. See the
 [skill](skills/formal-design/SKILL.md), [modeling guide](skills/formal-design/references/modeling-guide.md),
 [review contract](skills/formal-design/references/review-contract.md) and
 [worked example](skills/formal-design/examples/task-lifecycle/workflow.md).
+
+### Lean verification
+
+Lean covers high-impact deterministic behavior: permission, policy, eligibility
+or configuration composition with a stated invariant; budget, quota, allocation
+or ranking arithmetic with a stated conservation, bound or ordering requirement;
+a deterministic transformation with a requested general correctness property; or
+an explicit Lean request. Event ordering, retries and recovery stay on the TLA+
+path; selection `both` adds a reviewed bridge.
+
+Lean is not bundled. Provision the pinned `leanprover/lean4:v4.35.0` archive
+once on Linux x86-64 or macOS arm64:
+
+```sh
+node skills/formal-design/scripts/lean-provision.mjs --dest <root>
+```
+
+The helper verifies the SHA-256 in `scripts/lean-toolchain.json`, extracts the
+archive and writes a receipt. Checks resolve the root from `--lean-root`, then
+`FORMAL_DESIGN_LEAN_ROOT`; a missing or mismatched installation blocks. No
+startup or check-time download occurs.
+
+The Lean commands are `lean-preflight.mjs`, `lean-check.mjs`,
+`lean-check-conformance.mjs` and `lean-check-evidence.mjs --stage
+proof|acceptance`; `check-combined-evidence.mjs` audits both backends. Proofs
+are checked for declaration kind, an exactly matching proposition and an allowed
+axiom set (`propext`, `Classical.choice`, `Quot.sound`). Conformance runs the
+Lean reference and the project implementation over a committed finite corpus.
+Limits: a deterministic pure function with JSON boundaries, bounded file and
+corpus sizes, no Mathlib, no Lake or third-party packages, and no
+TypeScript-to-Lean translation〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L51-L55〕.
+
+A Lean result means the listed propositions were kernel-checked under the
+recorded definitions, assumptions and allowed axioms, and the implementation
+matched the reference on the recorded corpus. It does not prove arbitrary
+TypeScript code equivalent to the model, nor whole-program or deployment〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L903-L911〕
+correctness. See the [Lean modeling guide](skills/formal-design/references/lean-modeling-guide.md),
+[conformance guide](skills/formal-design/references/lean-conformance.md) and
+[combined models](skills/formal-design/references/combined-models.md).
 
 Every configured case must verify, including expansion cases. Fresh valid
 evidence alone does not mean the model passed; check its verification field.

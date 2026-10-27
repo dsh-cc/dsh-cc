@@ -27,6 +27,28 @@ failing property/action or making an unsupported assumption merely to pass is
 forbidden. Reviewers challenge requirement completeness, fault/race coverage,
 critical abstractions, and preservation of atomicity and assumptions.
 
+## Proof-stage review versus acceptance-stage conformance
+
+Lean work has two review stages; neither substitutes for the other. At the
+proof stage, reviewers receive the fresh proof package and judge statements,
+assumptions, witness quality, axiom basis and coverage. `proofVerdict:
+verified` with a fresh valid proof audit admits the design review even when the
+implementation and corpus do not exist yet. Conformance is then `not-run` and
+implementation acceptance is pending. Do not call a proof-only result
+implementation acceptance, and do not admit a Lean-only task using vacuous
+TLC-case verification.
+
+At the acceptance stage, the executor's pinned implementation and the committed
+adapter are reviewed against the approved proof digest. Admission requires
+conformance evidence that is valid and fresh, `conformanceVerdict: passed`, and
+an `executionDigest` bound to the same proof run and proof input digest.
+`acceptanceReady` from `lean-check-evidence.mjs --stage acceptance` is a
+runner boolean, not project approval. Implementation deviations, changed
+requirements, theorem types, assumptions, model semantics, codec or shared
+operation contracts reopen the proof stage. For `both`, combined acceptance also
+needs both backends' current successful evidence and a non-stale bridge; see
+[combined-models.md](combined-models.md).
+
 ## Preparation before workflow integration
 
 For every remote lane, establish feasibility through its actual existing

@@ -102,7 +102,8 @@ needs one of these, report it as a blocker instead of working around it.
 
 ## Formal-design handoff
 
-For an enabled formal-design task require approved inputDigest/design path,
+For an enabled formal-design task require the approved inputDigest/design path,
+the Lean proof input digest and execution digest when a Lean backend applies,
 fresh complete evidence, approval references, concrete code plan, property/
 action → code/test mapping and commands with expected assertions. Implement
 only pinned semantics. You may mechanically generate specified files and run
@@ -115,7 +116,8 @@ atomicity or assumptions, report Blockers and pause affected work for the
 main dialog to re-screen/adjudicate. A separate read/write cannot silently
 replace an approved atomic guard/update. Record observed symbols/mechanisms,
 regression tests/results and deviations in implementation.md keyed to the
-approved digest, not in the digested planned design. Checked reports both
+approved digest and, for Lean, the proof input and execution digests, not in
+the digested planned design. Checked reports both
 actual code tests and model-check results; unknown/incomplete is never success.
 Keep Changed / Checked / Deviations / Blockers unchanged.
 

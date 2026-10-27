@@ -91,10 +91,16 @@ describe('packages/plugin/dsh-cc-agents package shape', () => {
 describe('formal-design skill distribution', () => {
   const skill = join(PKG_DIR, 'skills/formal-design')
   const required = ['SKILL.md', 'references/modeling-guide.md', 'references/review-contract.md', 'references/agents-snippet.md',
+    'references/lean-modeling-guide.md', 'references/lean-conformance.md', 'references/combined-models.md',
+    'lean/Inspector.lean', 'lean/Driver.lean',
     'toolchain/tla2tools.jar', 'toolchain/LICENSE', 'toolchain/THIRD-PARTY-NOTICES.md',
     'toolchain/licenses/JAVAMAIL-EPL-2.0.txt', 'toolchain/licenses/ACTIVATION-APACHE-2.0.txt',
     'toolchain/licenses/ACTIVATION-NOTICE.txt', 'scripts/preflight.mjs', 'scripts/check.mjs', 'scripts/check-evidence.mjs', 'scripts/manifest.lib.mjs',
     'scripts/fingerprint.lib.mjs', 'scripts/process.lib.mjs', 'scripts/tlc-output.lib.mjs', 'scripts/toolchain.json',
+    'scripts/lean-preflight.mjs', 'scripts/lean-check.mjs', 'scripts/lean-check-conformance.mjs', 'scripts/lean-check-evidence.mjs',
+    'scripts/lean-provision.mjs', 'scripts/lean-manifest.lib.mjs', 'scripts/lean-fingerprint.lib.mjs', 'scripts/lean-process.lib.mjs',
+    'scripts/lean-evidence.lib.mjs', 'scripts/lean-conformance.lib.mjs', 'scripts/lean-toolchain.json',
+    'scripts/check-combined-evidence.mjs', 'scripts/bridge.lib.mjs',
     'examples/task-lifecycle/Model.tla', 'examples/task-lifecycle/checks.json', 'examples/task-lifecycle/design.md',
     'examples/task-lifecycle/workflow.md', 'examples/task-lifecycle/cases/small.cfg']
   it('ships the workflow entry, references, executable runner and example', () => {
@@ -104,6 +110,11 @@ describe('formal-design skill distribution', () => {
     expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/preflight.mjs')
     expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/check.mjs')
     expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/check-evidence.mjs')
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/lean-preflight.mjs')
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/lean-check.mjs')
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/lean-check-conformance.mjs')
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/lean-check-evidence.mjs')
+    expect(entry).toContain('${CLAUDE_SKILL_DIR}/scripts/check-combined-evidence.mjs')
   })
   it('includes the complete skill tree in the actual npm publish manifest', () => {
     const pack = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json'], { cwd: PKG_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))[0]
