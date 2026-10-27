@@ -49,6 +49,32 @@ describe('escalation bookkeeping (§4/§3.4)', () => {
     expect(() => b.recordFloor(1, 1.5)).toThrow(/tier/)
   })
 
+  it('F-3: restoreFromEscalations rebuilds floor + retry count from the durable followup chain', () => {
+    const b = new EscalationBookkeeping()
+    b.restoreFromEscalations(4, [{ fromTier: 0, toTier: 1 }, { fromTier: 1, toTier: 3 }])
+    expect(b.stateFor(4)).toEqual({ tierFloor: 3, retriesUsed: 2 })
+    // The judge's retry accounting continues from the restored state.
+    expect(() => b.recordRetryUsed(4, 3, 3)).toThrow(/does not exceed/)
+  })
+
+  it('F-3: restoreFromEscalations is monotonic — never lowers a live floor or retry count', () => {
+    const b = new EscalationBookkeeping()
+    b.recordFloor(4, 0)
+    b.recordRetryUsed(4, 0, 2)
+    b.recordRetryUsed(4, 2, 3) // live: floor 3, retries 2
+    b.restoreFromEscalations(4, [{ fromTier: 0, toTier: 1 }])
+    expect(b.stateFor(4)).toEqual({ tierFloor: 3, retriesUsed: 2 })
+  })
+
+  it('F-3: restoreFromEscalations refuses malformed records (out of range, non-integer, not increasing, empty)', () => {
+    const b = new EscalationBookkeeping()
+    expect(() => b.restoreFromEscalations(1, [{ fromTier: 0, toTier: 99 }])).toThrow(/malformed/)
+    expect(() => b.restoreFromEscalations(1, [{ fromTier: 0, toTier: 1.5 }])).toThrow(/malformed/)
+    expect(() => b.restoreFromEscalations(1, [{ fromTier: 2, toTier: 2 }])).toThrow(/malformed/)
+    expect(() => b.restoreFromEscalations(1, [])).toThrow(/no escalation records/)
+    expect(b.floorFor(1)).toBeUndefined()
+  })
+
   it('typed provenance guard accepts and rejects (§3.4)', () => {
     expect(isMoaEscalationMessage({ kind: MOA_ESCALATION_KIND, originSeq: 1, fromTier: 0, toTier: 1 })).toBe(true)
     expect(isMoaEscalationMessage({ kind: 'user' })).toBe(false)

@@ -222,6 +222,39 @@ describe('moa router mechanism', () => {
     expect(disarmed.classifyStates).toHaveLength(0)
   })
 
+  // F-3 (TLA `strict-crash-resume`): the in-memory bookkeeping is lost on
+  // crash/resume, but the typed moa-escalation followup is durable in the
+  // session log and carries {originSeq, fromTier, toTier}. A retry turn whose
+  // bookkeeping entry is gone must restore the floor from that record, never
+  // fall back to the launch-time selection.
+  it('F-3: crash/resume between escalation dispatch and the retry turn — floor restored from the durable followup, never fail-open', async () => {
+    const rig = makeRig() // fresh bookkeeping == the post-resume process: NO recordFloor / recordRetryUsed
+    expect(rig.core.bookkeeping.floorFor(5)).toBeUndefined()
+    await rig.seedCapture(10, [escalationOpening('the first answer was rejected', 5, 1, 2)])
+    const applied = await fire(rig, 10, 1)
+    expect(rig.classifyStates).toHaveLength(0) // still never re-classify a retry
+    expect(applied.model).toBe('tier-blueprint') // escalation floor (toTier 2), NOT the boot 'mock'
+    expect(tierFor(10)).toBe(2)
+    // The restored entry also counts the escalation that already happened,
+    // so a resumed chain cannot silently exceed max-escalations.
+    expect(rig.core.bookkeeping.stateFor(5)).toEqual({ tierFloor: 2, retriesUsed: 1 })
+  })
+
+  it('F-3: a restored floor never lowers a live floor already above the record', async () => {
+    const rig = makeRig()
+    rig.core.bookkeeping.recordFloor(5, 3)
+    await rig.seedCapture(10, [escalationOpening('rejected', 5, 1, 2)])
+    expect((await fire(rig, 10, 1)).model).toBe('tier-masterplan')
+    expect(rig.core.bookkeeping.floorFor(5)).toBe(3)
+  })
+
+  it('F-3: a malformed durable record (tier out of range) is refused loudly, not applied', async () => {
+    const rig = makeRig()
+    await rig.seedCapture(10, [escalationOpening('rejected', 5, 1, 99)])
+    expect((await fire(rig, 10, 1)).model).toBe('mock')
+    expect(rig.warnings.some((w) => w.includes('escalation floor'))).toBe(true)
+  })
+
   it('disabled: the listener bails fast (§3.1 zero-overhead row), no classify, no override', async () => {
     const rig = makeRig({ enabled: false })
     await rig.seedCapture(1, [userOpening('go')])

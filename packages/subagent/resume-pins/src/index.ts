@@ -56,6 +56,15 @@ export {
 export { apply, name } from './plugin.ts'
 export type { OverlayTuple } from './pin.ts'
 export {
+  acquireAdmission,
+  admissionQueueSize,
+  type AdmissionLease,
+} from './admission.ts'
+export {
+  admitContinuation,
+  type ContinuationAdmission,
+} from './live-capacity.ts'
+export {
   MAX_LIVE_CONTINUABLE_CHILDREN,
   LIVE_CAPACITY_REFUSAL,
   countLiveChildren,

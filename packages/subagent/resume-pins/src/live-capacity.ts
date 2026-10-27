@@ -16,6 +16,8 @@
  * mirroring the spawn guard — a hidden seam must not wedge continuations.
  */
 
+import { acquireAdmission, type AdmissionLease } from './admission.ts'
+
 /** Per-parent admission limit for continuable children; mirrors the spawn lane. */
 export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
 
@@ -51,13 +53,16 @@ export async function countLiveChildren(
   parentId: unknown,
   signal?: AbortSignal,
 ): Promise<number | undefined> {
+  signal?.throwIfAborted()
   if (subagents?.listChildren === undefined) return undefined
   let children: { id: string }[]
   try {
     children = await subagents.listChildren(parentId, signal)
   } catch {
+    signal?.throwIfAborted()
     return undefined
   }
+  signal?.throwIfAborted()
   // Only a RUNNING activation holds a slot (idle/ready rows hold none) —
   // the same predicate as the spawn lane's guard.
   return children.filter(child => agents?.get?.(child.id)?.status === 'running').length
@@ -82,4 +87,42 @@ export async function continuationCapacityRefusal(
   const live = await countLiveChildren(subagents, agents, parent.id, signal)
   if (live === undefined) return undefined
   return live >= MAX_LIVE_CONTINUABLE_CHILDREN ? LIVE_CAPACITY_REFUSAL : undefined
+}
+
+/** A successful admission owns the lease until the delivery settles. */
+export type ContinuationAdmission =
+  | { readonly admitted: true; readonly release: AdmissionLease }
+  | { readonly admitted: false; readonly reason: string }
+
+/**
+ * Acquire at tools/execute, after approval. Check liveness under the same
+ * parent lease as spawn; keep that lease through message acceptance (not the
+ * child's epoch). Running targets need no new slot but still keep the lease:
+ * they may settle while delivery waits. Child-to-parent reports need no slot.
+ */
+export async function admitContinuation(
+  services: CapacityServices,
+  parent: { id?: unknown; session?: { header?: { parentSession?: unknown } } } | undefined,
+  targetId: string,
+  signal: AbortSignal,
+): Promise<ContinuationAdmission> {
+  signal.throwIfAborted()
+  const reportingTo = parent?.session?.header?.parentSession
+  if (parent?.id === undefined || (reportingTo !== undefined && String(reportingTo) === targetId)) {
+    return { admitted: true, release: () => undefined }
+  }
+  const lease = await acquireAdmission(String(parent.id), signal)
+  try {
+    const agents = services.get?.('agents') as CapacityAgentsLike | undefined
+    if (agents?.get?.(targetId)?.status !== 'running') {
+      const reason = await continuationCapacityRefusal(services, parent, signal)
+      signal.throwIfAborted()
+      if (reason !== undefined) { lease(); return { admitted: false, reason } }
+    }
+    signal.throwIfAborted()
+    return { admitted: true, release: lease }
+  } catch (error) {
+    lease()
+    throw error
+  }
 }

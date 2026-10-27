@@ -116,7 +116,7 @@ Judge route resolution: `moa.judgeRoute` alias entry, **defaulting to an explici
 
 ## 4. Bookkeeping and lifecycle
 
-Escalation state is an in-memory per-session map keyed by origin user-message seq. It survives compaction (origin seq is stable in the log; compaction replaces ranges, seqs are not renumbered). On session resume the map starts empty — conservative consequence: a resumed session may grant one extra escalation per message; accepted and documented rather than building event-sourced reconstruction in v1.
+Escalation state is an in-memory per-session map keyed by origin user-message seq. It survives compaction (origin seq is stable in the log; compaction replaces ranges, seqs are not renumbered). On session resume the map starts empty, but the chain is event-sourced from the durable record (F-3, 2026-10-26): every escalation dispatch is a typed `moa-escalation` followup whose `{originSeq, fromTier, toTier}` provenance lives in the session log, and a retry turn whose entry is gone restores the floor (highest `toTier`) and the retry count (number of followups for that origin) from it before routing — it never fails open to the launch-time selection. Malformed matching records (including wrong field types, out-of-range tiers, and inconsistent transitions) or an unreadable log are refused with a warning and the live selection is served; they never silently reduce the restored retry count. No new persisted format: the followup source was already durable.
 
 ## 5. Cost accounting (honest version)
 
