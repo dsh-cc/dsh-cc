@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-review-cycle",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxCalls": "1",
+        "RetryAllowance": "1",
+        "MaxHeadRev": "1"
+      },
+      "invariants": [
+        "TypeOK",
+        "CycleBudgetSound",
+        "RetryPoolSound",
+        "OneRunPerRequest",
+        "DeadOwnerLoadIncomplete",
+        "ContinuationSound",
+        "DefaultModeNoReuse",
+        "NoGhostDispatch"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-torn-lock",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxCalls": "2",
+        "RetryAllowance": "1",
+        "MaxHeadRev": "1"
+      },
+      "invariants": [
+        "TypeOK",
+        "LockNeverTorn"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-reserved-spend",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxCalls": "2",
+        "RetryAllowance": "1",
+        "MaxHeadRev": "1"
+      },
+      "invariants": [
+        "TypeOK",
+        "ReservedSettledAccounting"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
