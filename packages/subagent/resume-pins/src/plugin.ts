@@ -46,8 +46,7 @@ import {
 } from './policy.ts'
 import { serializePerKey, ExecutionNoticeBus } from './serialize.ts'
 import { admitContinuation, type CapacityServices } from './live-capacity.ts'
-import type { SlotReservation } from './admission.ts'
-import { wireDispatchRecheck } from './dispatch-recheck.ts'
+import { createReservationTracker, wireDispatchRecheck } from './dispatch-recheck.ts'
 import { PinStore, type CorruptPin } from './store.ts'
 import type { ResumePin } from './pin.ts'
 
@@ -210,16 +209,9 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   // cannot interleave their decisions or cross-deliver notices.
   const pendingNotices = new ExecutionNoticeBus()
   const childLocks = new Map<string, Promise<unknown>>()
-  /** Slot reservations keyed by the execution token (stable across hooks). */
-  const reservations = new Map<string, { reservation: SlotReservation, target: string }>()
-  const releaseReservation = (token: unknown): void => {
-    if (token === undefined) return
-    const key = String(token)
-    const held = reservations.get(key)
-    if (held === undefined) return
-    reservations.delete(key)
-    held.reservation.release()
-  }
+  // Slot reservations keyed by the RAW execution token (identity, never
+  // String(): all runtime tokens stringify identically). See dispatch-recheck.ts.
+  const tracker = createReservationTracker()
 
   /**
    * Lookup-level read: an unsafe childId (harness session ids are
@@ -356,7 +348,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
         )
         if (!admission.admitted) return { kind: 'deny' as const, reason: admission.reason }
         reservation = admission.reservation.release
-        reservations.set(String(exec.token), { reservation: admission.reservation, target })
+        tracker.set(exec.token, { reservation: admission.reservation, target })
       } catch (error) {
         if (exec.signal?.aborted === true) return { kind: 'cancel' as const }
         throw error
@@ -404,18 +396,18 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
       })
       if (gated.kind === 'deny' || gated.kind === 'cancel') {
         reservation?.()
-        releaseReservation(exec.token)
+        tracker.release(exec.token)
       }
       return gated
     } catch (error) {
       reservation?.()
-      releaseReservation(exec.token)
+      tracker.release(exec.token)
       throw error
     }
   })
 
   // P1 recheck: an expired reservation is re-checked atomically at dispatch.
-  wireDispatchRecheck(ctx, { reservations, release: releaseReservation }, () => ctx as unknown as CapacityServices)
+  wireDispatchRecheck(ctx, tracker, () => ctx as unknown as CapacityServices)
 
 
   // §4.7: prefix the gate's notices onto the send_message result; annotate
@@ -423,7 +415,7 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   ctx.on('tools/post-execute', async (exec, result, next) => {
     // The send_message tool body has run: its continuation reservation is no
     // longer needed (a visible running activation is counted directly).
-    releaseReservation(exec.token)
+    tracker.release(exec.token)
     const out = await next()
     if (out.kind !== 'accept') return out
     if (exec.name === 'send_message') {

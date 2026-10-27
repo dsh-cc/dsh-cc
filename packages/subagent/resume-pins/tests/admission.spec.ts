@@ -211,8 +211,11 @@ describe('send_message gate holds the reservation only until the tool settles', 
       execute: handlers.get('tools/execute') as unknown as (exec: unknown, next: () => Promise<unknown>) => Promise<unknown>,
     }
   }
+  // Runtime tokens are Symbol('dsh.tool.execution') — distinct identity, identical
+  // String() output. Stringifying them would collapse every execution onto one
+  // map key, so the rig must use real symbols (a string token once masked that).
   const execOf = (parentId: string, target: string, signal = new AbortController().signal) =>
-    ({ name: 'send_message', token: `tok-${parentId}-${target}`, arguments: { agent_id: target }, agent: { id: parentId }, signal })
+    ({ name: 'send_message', token: Symbol('dsh.tool.execution'), arguments: { agent_id: target }, agent: { id: parentId }, signal })
 
   it('reserves on admit, blocks a second continuation at the cap, and frees on post-execute', async () => {
     const running = new Set(ids(CAP - 1))
@@ -313,6 +316,25 @@ describe('send_message gate holds the reservation only until the tool settles', 
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('token collision: two same-description symbols never overwrite or cross-release each other', async () => {
+    const running = new Set(ids(CAP - 2))
+    const { pre, post, execute } = wire(running, [...running, 'ended-a', 'ended-b'])
+    const a = execOf('gate-sym', 'ended-a')
+    const b = execOf('gate-sym', 'ended-b')
+    await pre(a, async () => ({ kind: 'allow' }))
+    await pre(b, async () => ({ kind: 'allow' }))
+    expect(pendingContinuations('gate-sym', () => false)).toBe(2)
+    // A settles: ONLY A's reservation may be released — B's must survive.
+    await post(a, { content: [] }, async () => ({ kind: 'accept' }))
+    expect(pendingContinuations('gate-sym', () => false)).toBe(1)
+    // B is still pending and unexpired: its dispatch passes through untouched.
+    const ran = vi.fn(async () => ({ content: [] }))
+    await execute(b, ran)
+    expect(ran).toHaveBeenCalledTimes(1)
+    await post(b, { content: [] }, async () => ({ kind: 'accept' }))
+    expect(pendingContinuations('gate-sym', () => false)).toBe(0)
   })
 
   it('a queued continuation cancelled while waiting for the lease resolves as cancel', async () => {

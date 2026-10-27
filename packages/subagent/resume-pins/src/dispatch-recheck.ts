@@ -16,12 +16,41 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { admitContinuation, type CapacityServices } from './live-capacity.ts'
 import type { SlotReservation } from './admission.ts'
 
-/** The per-execution reservation tracker owned by the plugin (`plugin.ts`). */
+/** A reserved slot with its target child, tracked per execution token. */
+export interface ReservationEntry {
+  readonly reservation: SlotReservation
+  readonly target: string
+}
+
+/**
+ * The per-execution reservation tracker owned by the plugin. Keys are the RAW
+ * tool execution tokens (branded Symbols compared by identity, never
+ * `String()` — every runtime token is `Symbol('dsh.tool.execution')`, so
+ * stringifying them would collapse all executions onto one key and let one
+ * call overwrite or release another's reservation).
+ */
 export interface ReservationTracker {
-  /** Outstanding reservations keyed by the tool execution token. */
-  readonly reservations: Map<string, { reservation: SlotReservation, target: string }>
+  /** Outstanding reservations. */
+  readonly reservations: Map<unknown, ReservationEntry>
+  /** Record one admission's reservation under its execution token. */
+  readonly set: (token: unknown, entry: ReservationEntry) => void
   /** Idempotent release + map cleanup for one token. */
   readonly release: (token: unknown) => void
+}
+
+export function createReservationTracker(): ReservationTracker {
+  const reservations = new Map<unknown, ReservationEntry>()
+  return {
+    reservations,
+    set: (token, entry) => { if (token !== undefined) reservations.set(token, entry) },
+    release: token => {
+      if (token === undefined) return
+      const held = reservations.get(token)
+      if (held === undefined) return
+      reservations.delete(token)
+      held.reservation.release()
+    },
+  }
 }
 
 /**
@@ -45,8 +74,7 @@ export function wireDispatchRecheck(
       agent?: { id?: unknown }
     }
     if (call.name !== 'send_message') return next()
-    const key = call.token !== undefined ? String(call.token) : undefined
-    const held = key !== undefined ? tracker.reservations.get(key) : undefined
+    const held = call.token !== undefined ? tracker.reservations.get(call.token) : undefined
     if (held === undefined || !held.reservation.expired) return next()
     // The target became live meanwhile: a steer, not a new slot.
     const targetLive = context.agents?.get?.(SessionId(held.target)) !== undefined
@@ -60,7 +88,7 @@ export function wireDispatchRecheck(
       tracker.release(call.token)
       throw new Error(admission.reason)
     }
-    tracker.reservations.set(String(call.token), { reservation: admission.reservation, target: held.target })
+    tracker.set(call.token, { reservation: admission.reservation, target: held.target })
     return next()
   })
 }
