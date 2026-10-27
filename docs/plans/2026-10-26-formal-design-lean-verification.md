@@ -267,8 +267,10 @@ quantification, branches, assumptions, and whether the claimed result is useful.
 
 ## 6. Toolchain and execution contract
 
-Pin Lean to `leanprover/lean4:v4.24.0` for version one. No moving `stable`, nightly,
-or per-model version overrides are allowed. `lean-toolchain.json` contains exactly
+Pin Lean to `leanprover/lean4:v4.35.0` for version one. This is the current
+`stable` release; pinning the moving `stable` label itself, nightly, or
+per-model version overrides is not allowed. The pin-check exists precisely
+because a developer's locally installed toolchain is a different version. `lean-toolchain.json` contains exactly
 `schemaVersion`, `toolchain`, `platforms`, and `allowedAxioms`. Set schema version
 to 1 and allowed axioms to `["propext", "Classical.choice", "Quot.sound"]`.
 `platforms` maps `linux-x64` and `darwin-arm64` to objects containing `archiveUrl`
@@ -278,10 +280,10 @@ before extraction; metadata alone is not a successful installation check.
 
 | Platform | Official release asset | SHA-256 |
 | --- | --- | --- |
-| `linux-x64` | `lean-4.24.0-linux.tar.zst` | `b14f5e5159219dd1a1956c3b806813319f5e94ccd5bdfd56f54520609a5bb5ec` |
-| `darwin-arm64` | `lean-4.24.0-darwin_aarch64.tar.zst` | `17ee554702c199fc03f37b1c3708245671c93f5d932dcff55a03fa6cdb5e5adf` |
+| `linux-x64` | `lean-4.35.0-linux.tar.zst` | `7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d` |
+| `darwin-arm64` | `lean-4.35.0-darwin_aarch64.tar.zst` | `c0c6f34f35ba1dcc5c4a5fd106fefab9eb5e8469712624dd2c868d51b63177c2` |
 
-Each archive URL is `https://github.com/leanprover/lean4/releases/download/v4.24.0/`
+Each archive URL is `https://github.com/leanprover/lean4/releases/download/v4.35.0/`
 followed by its exact asset name. Do not infer filenames from operating-system
 names. Placeholders or mismatched downloaded bytes block release.
 
@@ -293,7 +295,7 @@ Do not run an elan shim, search PATH, or permit environment-driven fallback.
 Read and execute `<root>/bin/lean` directly. In the pinned release,
 `--version` prints a long header while `--short-version` prints the bare
 version string: verify the pin with `--short-version`, whose trimmed stdout
-must equal exactly `4.24.0`.
+must equal exactly `4.35.0`.
 
 An administrator provisions a read-only verified installation using the
 shipped `scripts/lean-provision.mjs`. The helper downloads the pinned archive,
@@ -540,7 +542,7 @@ Each property report records ID, declaration, exact elaborated proposition,
 axiom list, witness report or null, and a verdict from
 `verified | rejected | not-checked`. The toolchain record includes pinned
 name, platform, archive hash, installed content digest, and the observed
-`--short-version` output (`4.24.0`). `reason` codes come from the closed list `config-invalid`,
+`--short-version` output (`4.35.0`). `reason` codes come from the closed list `config-invalid`,
 `unsafe-path`, `missing-input`, `toolchain-missing`, `toolchain-mismatch`,
 `lock-conflict`, `input-changed`, `artifact-changed`, `timeout`, `cancelled`,
 `signal`, `stream-overflow`, `output-invalid`, `protocol-invalid`, `io`.
@@ -917,7 +919,7 @@ Primary references, consulted on October 26, 2026:
 - [Lean: Lake](https://lean-lang.org/doc/reference/latest/Build-Tools-and-Distribution/Lake/)
   documents build configuration and cache behavior. Version one deliberately uses
   direct compilation to keep project build hooks outside the proof pipeline.
-- [Lean 4.24.0 release](https://github.com/leanprover/lean4/releases/tag/v4.24.0)
+- [Lean 4.35.0 release](https://github.com/leanprover/lean4/releases/tag/v4.35.0)
   is the selected version-one toolchain. Implement against this release, not
   assumptions derived from newer `latest` documentation.
 - [Existing formal-design skill](../../packages/plugin/dsh-cc-agents/skills/formal-design/SKILL.md)
@@ -950,11 +952,13 @@ Adjudications worth recording:
 
 - The Lean import-path defect (clearing `LEAN_PATH` cannot resolve freshly
   compiled modules) was reported independently by all three seats and was
-  verified against the v4.24.0 `initSearchPath` implementation before folding.
+  verified against the upstream `initSearchPath` implementation and then
+  reproduced live on the installed v4.35.0 toolchain before folding.
 - Reviewer A's round-1 claim that `--version` prints the bare version string
-  was corrected by reviewer B in round 2 and verified against the v4.24.0
-  shell source: `--version` prints a long header; `--short-version` prints
-  the bare string. The pin check now uses `--short-version`.
+  was corrected by reviewer B in round 2 and verified against the upstream
+  shell source and the installed v4.35.0 binary: `--version` prints a long
+  header; `--short-version` prints the bare string. The pin check now uses
+  `--short-version`.
 - Reviewer B's round-2 blocker on `-D` option placement after `--run` was
   verified against the same source (option parsing stops at `--run`).
 - Witness conditionality is enforced only by a conservative top-level arrow
@@ -962,9 +966,27 @@ Adjudications worth recording:
   This split was proposed by two seats and adopted.
 
 Facts verified by the orchestrator during the cycle: the baseline commit
-exists on `main`; both v4.24.0 release asset SHA-256 digests match the values
+exists on `main`; both pinned release asset SHA-256 digests match the values
 in section 6; the repository Node engines are `^22.19 || >=24`; the
 existing skill layout matches section 4.
+
+The initial draft pinned v4.24.0. The pin was raised to v4.35.0 (the current
+`stable` release, and the version installed in the development environment)
+after live probes against the local toolchain: clearing `LEAN_PATH` fails to
+resolve a freshly compiled sibling module with `unknown module prefix`
+(the search path then contains only the toolchain's `lib/lean`); setting
+`LEAN_PATH` to the workspace resolves it while core libraries still load;
+`-D` options before `--run` reach the compiler while `-D` after `--run`
+becomes a script argument; `-D Elab.async=false`, `-DmaxHeartbeats`, and
+`-DmaxRecDepth` are accepted; `Lean.Util.CollectAxioms` ships in the
+toolchain; `#print axioms` reports `[propext, Quot.sound]` for a proved
+theorem, nothing for a constructive example, and `sorryAx` for a `sorry`;
+`set_option debug.skipKernelTC` exists; and `Lean.Json` /
+`Except String Lean.Json` have the signatures section 7 assumes. Both
+v4.35.0 release asset digests were verified through the GitHub release API.
+Developers whose local toolchain differs from the pin are blocked at
+preflight by design; provision the pinned archive rather than relaxing the
+check.
 
 Status of this document: three-seat review converged (all seats GO on the
 final text). User sign-off pending. r2 through r3b verified folds only; the
