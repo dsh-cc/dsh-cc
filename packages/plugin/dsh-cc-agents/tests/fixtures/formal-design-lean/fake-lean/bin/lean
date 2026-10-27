@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake pinned Lean binary for contract tests: the pin check reads only
+# --short-version, which the pinned release prints as the bare version.
+printf '%s\n' '4.35.0'

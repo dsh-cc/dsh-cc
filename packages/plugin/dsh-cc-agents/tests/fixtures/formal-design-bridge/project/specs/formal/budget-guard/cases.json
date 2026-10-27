@@ -1,0 +1,20 @@
+[
+  {
+    "id": "boundary-exhaustion",
+    "input": { "budget": "10", "reserved": "3", "amount": "7" },
+    "expected": { "ok": "10" },
+    "tlaExpression": "Reserved + Amount = 10"
+  },
+  {
+    "id": "zero-request",
+    "input": { "budget": "10", "reserved": "3", "amount": "0" },
+    "expected": { "ok": "3" },
+    "tlaExpression": "Reserved + Amount = 3"
+  },
+  {
+    "id": "excess-by-one",
+    "input": { "budget": "10", "reserved": "3", "amount": "8" },
+    "expected": { "error": { "code": "insufficient-budget" } },
+    "tlaExpression": "~AdmitReservation"
+  }
+]

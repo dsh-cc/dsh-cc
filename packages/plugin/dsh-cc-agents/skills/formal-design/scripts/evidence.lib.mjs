@@ -2,9 +2,10 @@ import * as fs from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { join, isAbsolute } from 'node:path'
 import { object, parseJson, parseManifest, assert, ID } from './manifest.lib.mjs'
-import { safePath, runnerIdentity, fingerprint, hashFile, cfgState, inspectProject } from './fingerprint.lib.mjs'
+import { safePath, runnerIdentity, fingerprint, hashFile, cfgState, inspectProject, digestEntries } from './fingerprint.lib.mjs'
 import { FrameParser, classify, aggregate } from './tlc-output.lib.mjs'
 import { probeLock } from './storage.lib.mjs'
+import { BRIDGE_PATH, bridgeMatchesModel, loadBridge } from './bridge.lib.mjs'
 const HASH = /^[a-f0-9]{64}$/
 const RUN = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,127}$/
 const DECIMAL = /^(0|[1-9][0-9]*)$/
@@ -26,14 +27,32 @@ export function validateMarker(m) {
   return m
 }
 export function validateEvidence(e, manifest) {
-  object(e, ['schemaVersion', 'runId', 'modelId', 'inputDigest', 'inputFiles', 'runnerDigest', 'runnerPackage', 'toolchainVersion', 'toolchainDigest', 'jarSha256', 'jarPath', 'javaVersion', 'javaExecutable', 'platform', 'startedAt', 'finishedAt', 'status', 'reason', 'warnings', 'cases'])
-  assert(e.schemaVersion === 1 && typeof e.runId === 'string' && RUN.test(e.runId) && e.modelId === manifest.modelId && ID.test(e.modelId), 'invalid evidence identity')
+  const base = ['schemaVersion', 'runId', 'modelId', 'inputDigest', 'inputFiles', 'runnerDigest', 'runnerPackage', 'toolchainVersion', 'toolchainDigest', 'jarSha256', 'jarPath', 'javaVersion', 'javaExecutable', 'platform', 'startedAt', 'finishedAt', 'status', 'reason', 'warnings', 'cases']
+  // Version two adds exactly one field, `bridgeFiles` (design section 10);
+  // version one keeps its exact shape for TLA-only use.
+  object(e, [1, 2].includes(e?.schemaVersion) && e.schemaVersion === 2 ? [...base, 'bridgeFiles'] : base)
+  assert(e.schemaVersion === 1 || e.schemaVersion === 2, 'unknown evidence schema version')
+  assert(typeof e.runId === 'string' && RUN.test(e.runId) && e.modelId === manifest.modelId && ID.test(e.modelId), 'invalid evidence identity')
   for (const k of ['inputDigest', 'runnerDigest', 'toolchainDigest', 'jarSha256']) assert(hash(e[k]), `invalid ${k}`)
   object(e.runnerPackage, ['name', 'version'])
   assert(e.runnerPackage.name === '@dsh-cc/plugin-dsh-cc-agents' && text(e.runnerPackage.version), 'invalid runner package')
   assert(Array.isArray(e.inputFiles) && e.inputFiles.length > 0, 'missing inputFiles')
   const seen = new Set()
   for (const f of e.inputFiles) { object(f, ['path', 'sha256']); assert(text(f.path) && !seen.has(f.path) && hash(f.sha256) && !isAbsolute(f.path) && !f.path.split('/').some(s => !s || s === '..' || s === '.'), 'invalid inputFile'); seen.add(f.path) }
+  if (e.schemaVersion === 2) {
+    assert(Array.isArray(e.bridgeFiles) && e.bridgeFiles.length > 0, 'version-two evidence must enumerate bridgeFiles')
+    const bridgeSeen = new Set()
+    let bridgeJson = false
+    for (const f of e.bridgeFiles) {
+      object(f, ['path', 'sha256'])
+      assert(text(f.path) && !bridgeSeen.has(f.path) && hash(f.sha256) && !isAbsolute(f.path) && !f.path.split('/').some(s => !s || s === '..' || s === '.'), 'invalid bridgeFiles entry')
+      bridgeSeen.add(f.path)
+      if (BRIDGE_PATH.test(f.path)) bridgeJson = true
+      // Bridge files join the input enumeration before hashing.
+      assert(seen.has(f.path) && e.inputFiles.find(entry => entry.path === f.path)?.sha256 === f.sha256, 'bridgeFiles must be part of inputFiles')
+    }
+    assert(bridgeJson, 'bridgeFiles must contain the bridge.json entry')
+  }
   assert(text(e.toolchainVersion) && text(e.jarPath) && isAbsolute(e.jarPath) && text(e.javaVersion) && (e.javaExecutable === null || (text(e.javaExecutable) && isAbsolute(e.javaExecutable))), 'invalid tool metadata')
   assert(['darwin', 'linux'].includes(e.platform) && time(e.startedAt) && time(e.finishedAt) && e.finishedAt >= e.startedAt, 'invalid platform or timestamps')
   assert(['verified', 'counterexample', 'error', 'incomplete'].includes(e.status) && pairs[e.status].includes(e.reason), 'invalid status/reason')
@@ -99,9 +118,24 @@ export async function auditEvidence(options, { identity = runnerIdentity, kill =
       runner = await identity()
     } catch (err) { return out(err.code && !['config-invalid', 'model-path-unsafe', 'input-limit', 'ENOENT', 'ENOTDIR'].includes(err.code) ? 'io' : 'schema-invalid') }
     if (e.runId !== marker.runId || e.inputDigest !== marker.inputDigest) return out('incomplete-run')
+    // Version two: the bridge package must still hash to the recorded entries and
+    // join the recomputed input enumeration. Version one stays TLA-only.
+    let bridgeEntries = []
+    if (e.schemaVersion === 2) {
+      const bridgePath = e.bridgeFiles.map(entry => entry.path).find(path => BRIDGE_PATH.test(path))
+      if (options.bridge && options.bridge !== bridgePath) return out('schema-invalid')
+      let loaded
+      try { loaded = await loadBridge(root, bridgePath) } catch { return out('stale/input') }
+      // The recorded package must apply to the model being audited.
+      if (!bridgeMatchesModel(loaded, options.model)) return out('schema-invalid')
+      if (!eq(loaded.entries, e.bridgeFiles)) return out('stale/input')
+      bridgeEntries = loaded.entries
+    } else if (options.bridge) return out('schema-invalid')
     let current
     try {
-      current = await fingerprint(model, manifest)
+      const base = await fingerprint(model, manifest)
+      const inputFiles = [...base.inputFiles, ...bridgeEntries]
+      current = { inputFiles, inputDigest: digestEntries(inputFiles) }
       const cfg = await cfgState(paths, manifest)
       if (cfg.missing.length) return out('schema-invalid')
       if (cfg.blockers.length) return out('stale/input')

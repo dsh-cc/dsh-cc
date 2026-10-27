@@ -1,0 +1,8 @@
+{"id":"boundary-exhaustion","input":{"budget":"10","reserved":"3","amount":"7"},"covers":["budget-bound"]}
+{"id":"zero-request","input":{"budget":"10","reserved":"3","amount":"0"},"covers":["zero-request"]}
+{"id":"above-safe-integer","input":{"budget":"9007199254740993","reserved":"0","amount":"9007199254740993"},"covers":["budget-bound"]}
+{"id":"excess-by-one","input":{"budget":"10","reserved":"3","amount":"8"},"covers":["budget-bound"]}
+{"id":"invalid-prior-state","input":{"budget":"5","reserved":"8","amount":"3"},"covers":["budget-bound"]}
+{"id":"malformed-amount","input":{"budget":"10","reserved":"3","amount":"ten"},"covers":["budget-bound"]}
+{"id":"negative-amount","input":{"budget":"10","reserved":"3","amount":"-1"},"covers":["budget-bound"]}
+{"id":"malformed-shape","input":{"budget":"10"},"covers":["budget-bound"]}

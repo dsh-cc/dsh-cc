@@ -4,10 +4,11 @@ import { join, relative, delimiter, isAbsolute } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { preflight as realPreflight } from './preflight.lib.mjs'
 import { runCase as realRunCase } from './process.lib.mjs'
-import { fingerprint, inspectProject, runnerIdentity, hashFile, exists, posix } from './fingerprint.lib.mjs'
+import { fingerprint, inspectProject, runnerIdentity, hashFile, exists, posix, digestEntries } from './fingerprint.lib.mjs'
 import { aggregate } from './tlc-output.lib.mjs'
 import { generateCfg, fail } from './manifest.lib.mjs'
 import { temporary, atomicJson, stageJson, probeLock } from './storage.lib.mjs'
+import { loadBridge } from './bridge.lib.mjs'
 const output = (status, reason, summary = null, blockers = []) => ({ schemaVersion: 1, command: 'check', status, reason, blockers, summary })
 const blocked = (reason, detail) => output('blocked', reason, null, [{ code: reason, detail }])
 export function notRun(c) {
@@ -86,20 +87,25 @@ export async function executeCheck(options, deps = {}) {
     if (cancelled() || ready.cancelled) return output('incomplete', 'cancelled')
     if (ready.output.status === 'blocked') return output('blocked', ready.output.reason, null, ready.output.blockers)
     const { manifest, runner, javaVersion, jarSha256 } = ready
+    // Opt-in bridge package (design section 10): its files join the input
+    // enumeration before hashing, and only then does evidence use schema two.
+    const bridgeEntries = ready.bridge?.entries ?? null
     await hooks.afterPreflight?.(ready)
     if (cancelled()) return output('incomplete', 'cancelled')
     await generateMissing(paths, manifest, { io, signal, diagnostic })
     if (cancelled()) return output('incomplete', 'cancelled')
     const captured = await fingerprint(paths.model, manifest)
     if (cancelled()) return output('incomplete', 'cancelled')
+    const inputFiles = bridgeEntries ? [...captured.inputFiles, ...bridgeEntries] : captured.inputFiles
+    const inputDigest = bridgeEntries ? digestEntries(inputFiles) : captured.inputDigest
     const runDir = join(paths.root, '.formal-design/runs', paths.modelId, runId)
     await io.mkdir(runDir, { recursive: true })
     if (cancelled()) return output('incomplete', 'cancelled')
-    const marker = { schemaVersion: 1, runId, inputDigest: captured.inputDigest, state: 'running' }
+    const marker = { schemaVersion: 1, runId, inputDigest, state: 'running' }
     const markerPath = join(paths.model, 'current-run.json')
     await atomicJson(markerPath, marker, io); markerStarted = true
     const snapshot = join(runDir, 'input')
-    ctx = { paths, manifest, runner, options, runDir, snapshot, marker, markerPath, startedAt, jarSha256, javaVersion, ...captured, cases: manifest.cases.map(notRun), globals: [] }
+    ctx = { paths, manifest, runner, options, runDir, snapshot, marker, markerPath, startedAt, jarSha256, javaVersion, ...captured, inputFiles, inputDigest, cases: manifest.cases.map(notRun), globals: [] }
     let cannotPersist = false
     try {
       if (!cancelled()) {
@@ -129,7 +135,11 @@ export async function executeCheck(options, deps = {}) {
       }
     } catch (e) { ctx.globals.push('io'); diagnostic('run preparation or log persistence failed'); if (e.lostOutput) cannotPersist = true }
     // Missing/unreadable captured inputs/artifacts are changes, not old success.
-    try { if ((await fingerprint(paths.model, manifest)).inputDigest !== captured.inputDigest) ctx.globals.push('input-changed') } catch { ctx.globals.push('input-changed') }
+    try {
+      const base = await fingerprint(paths.model, manifest)
+      const files = bridgeEntries ? [...base.inputFiles, ...(await loadBridge(paths.root, options.bridge)).entries] : base.inputFiles
+      if (digestEntries(files) !== inputDigest) ctx.globals.push('input-changed')
+    } catch { ctx.globals.push('input-changed') }
     try {
       const current = await runnerIdentity()
       if (current.runnerDigest !== runner.runnerDigest || JSON.stringify(current.runnerPackage) !== JSON.stringify(runner.runnerPackage) || current.toolchainDigest !== runner.toolchainDigest || await hashFile(options.jar) !== jarSha256) ctx.globals.push('artifact-changed')
@@ -138,7 +148,7 @@ export async function executeCheck(options, deps = {}) {
     await hooks.beforePublication?.(ctx)
     const build = async () => {
       const globals = [...ctx.globals, ...(cancelled() ? ['cancelled'] : [])]
-      return { schemaVersion: 1, runId, modelId: manifest.modelId, ...captured, runnerDigest: runner.runnerDigest, runnerPackage: runner.runnerPackage, toolchainVersion: runner.toolchainVersion, toolchainDigest: runner.toolchainDigest, jarSha256, jarPath: options.jar, javaVersion, javaExecutable: await javaLocation(options.java), platform: process.platform, startedAt, finishedAt: new Date(Math.max(Date.now(), Date.parse(startedAt))).toISOString(), ...aggregate(ctx.cases, globals), cases: ctx.cases.map(({ warningCodes, ...rest }) => rest) }
+      return { schemaVersion: bridgeEntries ? 2 : 1, runId, modelId: manifest.modelId, ...captured, inputFiles, inputDigest, ...(bridgeEntries ? { bridgeFiles: bridgeEntries } : {}), runnerDigest: runner.runnerDigest, runnerPackage: runner.runnerPackage, toolchainVersion: runner.toolchainVersion, toolchainDigest: runner.toolchainDigest, jarSha256, jarPath: options.jar, javaVersion, javaExecutable: await javaLocation(options.java), platform: process.platform, startedAt, finishedAt: new Date(Math.max(Date.now(), Date.parse(startedAt))).toISOString(), ...aggregate(ctx.cases, globals), cases: ctx.cases.map(({ warningCodes, ...rest }) => rest) }
     }
     let evidence, cancellationAtStage
     // One recovery attempt is allowed for Evidence staging, never for a failed

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "toolchain": "leanprover/lean4:v4.35.0",
+  "platforms": {
+    "linux-x64": {
+      "archiveUrl": "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-linux.tar.zst",
+      "sha256": "7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d"
+    },
+    "darwin-arm64": {
+      "archiveUrl": "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-darwin_aarch64.tar.zst",
+      "sha256": "c0c6f34f35ba1dcc5c4a5fd106fefab9eb5e8469712624dd2c868d51b63177c2"
+    }
+  },
+  "allowedAxioms": ["propext", "Classical.choice", "Quot.sound"]
+}

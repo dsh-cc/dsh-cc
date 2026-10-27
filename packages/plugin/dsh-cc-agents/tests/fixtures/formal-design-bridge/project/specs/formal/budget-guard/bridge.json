@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "featureId": "budget-guard",
+  "tlaModel": "specs/tla/budget-guard",
+  "leanModel": "specs/lean/budget-reservation",
+  "operations": [
+    {
+      "id": "boundary-exhaustion",
+      "requirementId": "REQ-1",
+      "tlaOperator": "AdmitReservation",
+      "leanFunction": "Formal.reserve",
+      "propertyIds": ["budget-bound"],
+      "domain": "budget 10, reserved 3, amount 7 reserves exactly to the budget",
+      "casesFile": "specs/formal/budget-guard/cases.json",
+      "implementationFiles": ["packages/example/src/budget.ts"]
+    },
+    {
+      "id": "zero-request",
+      "requirementId": "REQ-2",
+      "tlaOperator": "AdmitReservation",
+      "leanFunction": "Formal.reserve",
+      "propertyIds": ["zero-request"],
+      "domain": "a zero request returns the caller's prior reservation",
+      "casesFile": "specs/formal/budget-guard/cases.json",
+      "implementationFiles": ["packages/example/src/budget.ts"]
+    },
+    {
+      "id": "excess-by-one",
+      "requirementId": "REQ-1",
+      "tlaOperator": "AdmitReservation",
+      "leanFunction": "Formal.reserve",
+      "propertyIds": ["budget-bound"],
+      "domain": "one unit above the remaining budget is rejected",
+      "casesFile": "specs/formal/budget-guard/cases.json",
+      "implementationFiles": ["packages/example/src/budget.ts"]
+    }
+  ]
+}

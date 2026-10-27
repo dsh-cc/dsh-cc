@@ -3,9 +3,10 @@ import { join } from 'node:path'
 import { inspectProject, enumerate, hashFile, runnerIdentity, cfgState, SCRIPTS } from './fingerprint.lib.mjs'
 import { fail, parseManifest, sortBlockers } from './manifest.lib.mjs'
 import { probeJava } from './process.lib.mjs'
+import { BRIDGE_PATH, bridgeMatchesModel, loadBridge } from './bridge.lib.mjs'
 export function parseSyntax(argv, command) {
   if (argv.length === 1 && argv[0] === '--help') return { help: true }
-  const allowed = command === 'check-evidence' ? ['project', 'model'] : ['project', 'model', 'jar', 'java']
+  const allowed = command === 'check-evidence' ? ['project', 'model', 'bridge'] : ['project', 'model', 'jar', 'java', 'bridge']
   const options = {}
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i].slice(2)
@@ -35,7 +36,7 @@ export async function normalizeArguments(options, command, { env = process.env, 
 export async function parseArguments(argv, command) { return normalizeArguments(parseSyntax(argv, command), command) }
 export async function preflight(options, { probe = probeJava, signal, platform = process.platform, identity = runnerIdentity } = {}) {
   const blockers = [...(options.argumentBlockers ?? [])]
-  let paths, manifest, runner, javaVersion, jarSha256
+  let paths, manifest, runner, javaVersion, jarSha256, bridge = null
   const add = (e, code = 'io', context = {}) => blockers.push({ code: e.code && ['model-path-unsafe', 'config-invalid', 'input-limit'].includes(e.code) ? e.code : code, detail: e.detail ?? 'filesystem operation failed', ...context })
   try { paths = await inspectProject(options.project, options.model) } catch (e) { add(e, 'io') }
   if (!['darwin', 'linux'].includes(platform)) blockers.push({ code: 'unsupported-platform', detail: 'only macOS and Linux process termination is supported' })
@@ -49,6 +50,16 @@ export async function preflight(options, { probe = probeJava, signal, platform =
     if (manifest) {
       try { await enumerate(paths.model, manifest, true) } catch (e) { add(e) }
       try { const state = await cfgState(paths, manifest); missing = state.missing; blockers.push(...state.blockers) } catch (e) { add(e) }
+    }
+  }
+  // The opt-in bridge is accepted by preflight but must apply to this model.
+  if (options.bridge !== undefined) {
+    if (typeof options.bridge !== 'string' || !BRIDGE_PATH.test(options.bridge)) blockers.push({ code: 'config-invalid', detail: '--bridge must be specs/formal/<feature-id>/bridge.json' })
+    else if (paths) {
+      try {
+        bridge = await loadBridge(paths.root, options.bridge)
+        if (!bridgeMatchesModel(bridge, paths.modelRelative)) fail('config-invalid', '--bridge bridge tlaModel must equal the model being checked')
+      } catch (e) { bridge = null; add(e, ['missing-input', 'unsafe-path'].includes(e.code) ? 'config-invalid' : 'io') }
     }
   }
   if (options.java && paths && !signal?.aborted) {
@@ -67,5 +78,5 @@ export async function preflight(options, { probe = probeJava, signal, platform =
     } catch (e) { add(e, e.code === 'ENOENT' ? 'jar-missing' : 'io') }
   }
   const ordered = sortBlockers(blockers)
-  return { options, paths, manifest, runner, javaVersion, jarSha256, output: { schemaVersion: 1, command: 'preflight', status: ordered.length ? 'blocked' : 'ready-for-check', reason: ordered[0]?.code ?? 'ready-for-check', blockers: ordered, willGenerate: ordered.length ? [] : missing } }
+  return { options, paths, manifest, runner, javaVersion, jarSha256, bridge, output: { schemaVersion: 1, command: 'preflight', status: ordered.length ? 'blocked' : 'ready-for-check', reason: ordered[0]?.code ?? 'ready-for-check', blockers: ordered, willGenerate: ordered.length ? [] : missing, bridge: options.bridge ?? null } }
 }

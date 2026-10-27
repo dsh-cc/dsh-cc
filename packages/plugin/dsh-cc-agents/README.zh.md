@@ -14,7 +14,7 @@
 | `dsh-cc-agents-orchestration` | Agent 选择和报告契约 | 主 agent |
 | `data-analysis` | 指标口径、对账和报告检查 | 主 agent |
 | `vwa-writing` | 来源证据、论证审查、文章写作和交付 | 已配置的 VWA reviewer |
-| `formal-design` | 在现有设计评审前进行有界 TLA+ 建模、TLC 检查和证据审查 | 主 agent |
+| `formal-design` | 在现有设计评审前进行有界 TLA+ 建模、TLC 检查、带实现一致性校验的 Lean 证明和证据审查 | 主 agent |
 
 critic 采用只读人格，通常在后台运行；executor 和 marathon 可以修改文件，通常在前台运行。
 
@@ -62,6 +62,37 @@ critic 采用只读人格，通常在后台运行；executor 和 marathon 可以
 [第三方通知](skills/formal-design/toolchain/THIRD-PARTY-NOTICES.md)记录原始产物、源码和许可。
 详见 [skill](skills/formal-design/SKILL.md)、[建模指南](skills/formal-design/references/modeling-guide.md)、
 [评审契约](skills/formal-design/references/review-contract.md)和[完整示例](skills/formal-design/examples/task-lifecycle/workflow.md)。
+
+### Lean 验证
+
+Lean 适用于高影响的确定性行为：带明确不变式的权限、策略、资格或配置组合；
+带明确守恒、边界或排序要求的预算、配额、分配或排名算术；需要通用正确性性质的
+确定性转换；或用户明确要求 Lean 验证。事件顺序、重试和恢复仍走 TLA+ 路径；
+选择 `both` 时还会增加经过评审的 bridge。
+
+Lean 不随插件打包。请在 Linux x86-64 或 macOS arm64 上单独配置固定版本
+`leanprover/lean4:v4.35.0`：
+
+```sh
+node skills/formal-design/scripts/lean-provision.mjs --dest <root>
+```
+
+该辅助脚本会按 `scripts/lean-toolchain.json` 校验 SHA-256、解压归档并写入 receipt。
+检查按 `--lean-root`、`FORMAL_DESIGN_LEAN_ROOT` 的顺序解析根目录；缺失或不匹配会阻塞。
+启动和检查过程均不会下载。
+
+Lean 命令为 `lean-preflight.mjs`、`lean-check.mjs`、`lean-check-conformance.mjs`
+和 `lean-check-evidence.mjs --stage proof|acceptance`；`check-combined-evidence.mjs`
+审计两个后端。证明会校验声明种类、命题完全一致以及公理集合在
+`propext`、`Classical.choice`、`Quot.sound` 之内。一致性校验让 Lean 参考实现和项目
+实现在固定的有限语料上运行。限制：面向 JSON 边界的确定性纯函数、有界的文件与语料
+大小、不支持 Mathlib、Lake 或第三方包，也不做 TypeScript 到 Lean 的翻译〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L51-L55〕。
+
+Lean 结果表示所列命题在记录的定义、假设和允许公理下通过了内核检查，且实现与参考
+在记录语料上一致；它不证明任意 TypeScript 代码与模型等价，也不证明整个程序或部署正确〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L903-L911〕。
+详见 [Lean 建模指南](skills/formal-design/references/lean-modeling-guide.md)、
+[一致性指南](skills/formal-design/references/lean-conformance.md)和
+[组合模型](skills/formal-design/references/combined-models.md)。
 
 每个已配置 case 都必须验证通过，包括 expansion case。证据新鲜且审计有效不等于模型通过，
 还需读取 verification 字段。覆盖充分性和现有评审批准是独立条件。评审者必须收到同一次运行的
