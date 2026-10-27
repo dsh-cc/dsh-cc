@@ -1,10 +1,15 @@
 # Implementation record — ccr-pipeline
 
-Keyed to the final run of 2026-10-26. Not part of inputDigest.
+Keyed to the final run of 2026-10-27. Not part of inputDigest.
 
 ## Run lineage
 
-- Final run (after the evidence-marker backfill in design.md):
+- **Final run (2026-10-27, after the F-4 correction in design.md):**
+  runId `20261027T043657Z-591e55da-e06e-418f-bfb9-e120b9c54d54`,
+  inputDigest `b9c09eccae75687c4c01b80b9e624b44e62083935ba5d59d254ec1f6cbcd1e9c`.
+  Case outcomes and statistics are identical to the prior run
+  (the only input change is documentation: the F-4 meter claim was retracted).
+- Prior run (evidence-marker backfill):
   runId `20261026T074049Z-3324ea75-ca32-475e-b553-1d376446fdab`,
   inputDigest `e8f9c5248d8e51aad03ca119c72807c748c8f395f84e28ac2fe44ff1a68f41fb`.
   Per-case outcomes and statistics are byte-identical to the prior run
@@ -26,22 +31,31 @@ Keyed to the final run of 2026-10-26. Not part of inputDigest.
 | strict-swap-crash | counterexample — PrunePaired | 45/22/5 |
 | strict-double-fire | counterexample — SingleMarkerPerResult | 49/25/7 |## Counterexample dispositions
 
-### strict-swap-crash — FINDING F-4 (sharpest atomicity gap, pending disposition)
+### strict-swap-crash — F-4 RETRACTED (refuted by real-meter evidence, PR #301)
 
 Trace: `Arrive → DeferRecord → Send → SwapPrune` (+ crash before
-`SwapReplace`). The `compaction/prune` append and the `tool/result`
-replace append are two `await session.append` calls; a crash between them
-leaves an orphan prune row — the token meter has been debited
-(`shadowedTokenCount`) for a node still present on the surface, with no
-compensation and no idempotent replay of the pair. Post-restart the defer
-row folding (`foldDeferRows`) treats the entry by its ledger outcome, not
-by the half-applied session state.
+`SwapReplace`). An orphan `compaction/prune` row can indeed survive a torn
+tail frame — so the `PrunePaired` counterexample stands as a STRUCTURAL fact.
 
-Classification: **design defect (window is narrow but real)** — the code
-documents the pairing contract ("both synchronous, no await between") but
-the two awaits are still separate persistence points. A fix would be a
-single transactional append or a replayable compensation marker. Not
-fixed here.
+But the consequence this record originally asserted — "the token meter has
+been debited for a node still present on the surface" — was **wrong**: it was
+an assumption about meter semantics, never verified against the meter. PR
+#301 pinned the real behavior with the real `TokenMeter` and a real
+`Session` (`context-crusher/tests/defer-swap-crash.spec.ts`): the prune arms a
+delta-0 shadow-price claim that only the adjacent `replace` consumes, so an
+orphan prune **deducts nothing**, the surface stays unswapped, the resident
+stays swappable, and the retry on resume debits exactly once. The harness
+also buffers both appends into one persistence batch, so the residual window
+is only a torn final frame.
+
+Disposition: **no production fix required** (PR #301 ruling, accepted). The
+probe stays as a boundary pin for the structural gap; the model's invariants
+(`PrunePaired`, `StoreBeforeReference`, `AppliedImpliesMarker`) are unchanged
+because none of them asserted the meter consequence.
+
+Process lesson: never claim a side-effect ("event X already debited the
+meter") from `session.append` counts — check the consuming component's fold
+semantics first.
 
 ### strict-double-fire — host-assumption violation (expected)
 
@@ -88,3 +102,6 @@ violated (e.g. by a future event replay). No code change.
 2. Double-fire: fire `tools/post-execute` twice for the same result;
    assert `foldCounters` does not double-count (pins the host assumption
    inside the package).
+3. (No meter-regression test is needed for the swap window: PR #301's
+   `defer-swap-crash.spec.ts` already pins the inert-orphan behavior with the
+   real meter.)

@@ -11,7 +11,8 @@
         "MaxEsc": "1",
         "ObserveOverlay": "FALSE",
         "CrashResume": "FALSE",
-        "ShadowMode": "FALSE"
+        "ShadowMode": "FALSE",
+        "Restorable": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -24,7 +25,10 @@
         "NoFeedbackDisarm"
       ],
       "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "strict-self-feedback",
@@ -34,11 +38,19 @@
         "MaxEsc": "1",
         "ObserveOverlay": "TRUE",
         "CrashResume": "FALSE",
-        "ShadowMode": "FALSE"
+        "ShadowMode": "FALSE",
+        "Restorable": "TRUE"
       },
-      "invariants": ["TypeOK", "ArmedNotAway", "NoFeedbackDisarm"],
+      "invariants": [
+        "TypeOK",
+        "ArmedNotAway",
+        "NoFeedbackDisarm"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "strict-crash-resume",
@@ -48,11 +60,18 @@
         "MaxEsc": "1",
         "ObserveOverlay": "FALSE",
         "CrashResume": "TRUE",
-        "ShadowMode": "FALSE"
+        "ShadowMode": "FALSE",
+        "Restorable": "FALSE"
       },
-      "invariants": ["TypeOK", "NoFloorlessRetry"],
+      "invariants": [
+        "TypeOK",
+        "NoFloorlessRetry"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "shadow-mode",
@@ -62,11 +81,19 @@
         "MaxEsc": "1",
         "ObserveOverlay": "FALSE",
         "CrashResume": "FALSE",
-        "ShadowMode": "TRUE"
+        "ShadowMode": "TRUE",
+        "Restorable": "TRUE"
       },
-      "invariants": ["TypeOK", "ShadowInert", "EscalationBound"],
+      "invariants": [
+        "TypeOK",
+        "ShadowInert",
+        "EscalationBound"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
     }
   ]
 }

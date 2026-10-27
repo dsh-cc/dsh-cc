@@ -9,7 +9,6 @@
       "specification": "Spec",
       "constants": {
         "MaxLive": "2",
-        "SplitAdmission": "FALSE",
         "SplitContinue": "FALSE",
         "CapacityObservable": "TRUE"
       },
@@ -25,21 +24,10 @@
         "PromotedIsBackground"
       ],
       "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
-    },
-    {
-      "id": "strict-cap-toctou",
-      "coverage": "expansion",
-      "specification": "Spec",
-      "constants": {
-        "MaxLive": "2",
-        "SplitAdmission": "TRUE",
-        "SplitContinue": "FALSE",
-        "CapacityObservable": "TRUE"
-      },
-      "invariants": ["TypeOK", "CapOK"],
-      "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "strict-cap-unobservable",
@@ -47,13 +35,18 @@
       "specification": "Spec",
       "constants": {
         "MaxLive": "2",
-        "SplitAdmission": "FALSE",
         "SplitContinue": "FALSE",
         "CapacityObservable": "FALSE"
       },
-      "invariants": ["TypeOK", "CapOK"],
+      "invariants": [
+        "TypeOK",
+        "CapOK"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "strict-late-continue",
@@ -61,13 +54,19 @@
       "specification": "Spec",
       "constants": {
         "MaxLive": "2",
-        "SplitAdmission": "FALSE",
         "SplitContinue": "TRUE",
         "CapacityObservable": "TRUE"
       },
-      "invariants": ["TypeOK", "NoLateEpoch", "TombstoneNonLive"],
+      "invariants": [
+        "TypeOK",
+        "NoLateEpoch",
+        "TombstoneNonLive"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 120000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 120000,
+        "heapMiB": 1024
+      }
     }
   ]
 }

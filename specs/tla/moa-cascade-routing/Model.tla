@@ -12,18 +12,18 @@
 
 EXTENDS Naturals, FiniteSets, Sequences
 
-CONSTANTS MaxEsc, ObserveOverlay, CrashResume, ShadowMode
+CONSTANTS MaxEsc, ObserveOverlay, CrashResume, ShadowMode, Restorable
 
 MaxTier == 3
 NoTier == MaxTier + 1
 
 VARIABLES state, tier, away, armed, feedbackDisarm,
-          floorsDefined, floor, retries,
+          floorsDefined, floor, retries, logFloor,
           judgePending, judgeStale, judgeAcceptable,
           actedEver, lastClassifyArmed, retryTierMissing, lastServedTier
 
 vars == <<state, tier, away, armed, feedbackDisarm,
-          floorsDefined, floor, retries,
+          floorsDefined, floor, retries, logFloor,
           judgePending, judgeStale, judgeAcceptable,
           actedEver, lastClassifyArmed, retryTierMissing, lastServedTier>>
 
@@ -36,6 +36,7 @@ TypeOK ==
   /\ floorsDefined \in BOOLEAN
   /\ floor \in 0..MaxTier
   /\ retries \in 0..3
+  /\ logFloor \in 0..MaxTier
   /\ judgePending \in BOOLEAN
   /\ judgeStale \in BOOLEAN
   /\ judgeAcceptable \in BOOLEAN
@@ -57,6 +58,7 @@ Init ==
   /\ floorsDefined = FALSE
   /\ floor = 0
   /\ retries = 0
+  /\ logFloor = 0
   /\ judgePending = FALSE
   /\ judgeStale = FALSE
   /\ judgeAcceptable = TRUE
@@ -80,6 +82,7 @@ UserTurn ==
   /\ judgeStale' = IF judgePending THEN TRUE ELSE judgeStale
   /\ judgePending' = judgePending
   /\ armed' = armed
+  /\ logFloor' = logFloor
   /\ away' = away
   /\ feedbackDisarm' = feedbackDisarm
   /\ judgeAcceptable' = judgeAcceptable
@@ -100,6 +103,7 @@ UserTurn ==
 
 RequestObserve ==
   /\ state = "captured"
+  /\ logFloor' = logFloor
   /\ IF ObserveOverlay /\ lastServedTier # NoTier /\ lastServedTier > 0 /\ armed
        THEN /\ armed' = FALSE
             /\ feedbackDisarm' = TRUE
@@ -137,6 +141,7 @@ Classify ==
   /\ state' = "serving"
   /\ lastClassifyArmed' = TRUE
   /\ armed' = armed
+  /\ logFloor' = logFloor
   /\ away' = away
   /\ feedbackDisarm' = feedbackDisarm
   /\ floorsDefined' = floorsDefined
@@ -158,6 +163,7 @@ FailOpenServe ==
   /\ tier' = NoTier
   /\ lastClassifyArmed' = lastClassifyArmed
   /\ armed' = armed
+  /\ logFloor' = logFloor
   /\ away' = away
   /\ feedbackDisarm' = feedbackDisarm
   /\ floorsDefined' = floorsDefined
@@ -177,6 +183,7 @@ FailOpenServe ==
 
 ModelSwitchAway ==
   /\ away' = TRUE
+  /\ logFloor' = logFloor
   /\ armed' = FALSE
   /\ feedbackDisarm' = feedbackDisarm
   /\ state' = state
@@ -194,6 +201,7 @@ ModelSwitchAway ==
 
 ModelSwitchBack ==
   /\ away' = FALSE
+  /\ logFloor' = logFloor
   /\ armed' = TRUE
   /\ feedbackDisarm' = feedbackDisarm
   /\ state' = state
@@ -222,6 +230,7 @@ TurnEnd ==
   /\ judgeStale' = FALSE
   /\ \E acc \in BOOLEAN : judgeAcceptable' = acc
   /\ armed' = armed
+  /\ logFloor' = logFloor
   /\ away' = away
   /\ feedbackDisarm' = feedbackDisarm
   /\ tier' = tier
@@ -255,11 +264,13 @@ JudgeVerdict ==
             /\ floorsDefined' = TRUE
             /\ floor' = tier + 1
             /\ actedEver' = TRUE
+            /\ logFloor' = tier + 1
             /\ state' = "escalated"
        ELSE /\ retries' = retries
             /\ floorsDefined' = floorsDefined
             /\ floor' = floor
             /\ actedEver' = actedEver
+            /\ logFloor' = logFloor
             /\ state' = "answered"
   /\ armed' = armed
   /\ away' = away
@@ -285,13 +296,19 @@ RetryTurn ==
   /\ IF floorsDefined
        THEN /\ tier' = floor
             /\ retryTierMissing' = retryTierMissing
-       ELSE /\ tier' = NoTier
-            /\ retryTierMissing' = TRUE
+       ELSE IF Restorable /\ logFloor > 0
+            (* PR #301 (F-3): the typed moa-escalation followup is durable, so
+               the floor is rebuilt from the log instead of failing open. *)
+            THEN /\ tier' = logFloor
+                 /\ retryTierMissing' = retryTierMissing
+            ELSE /\ tier' = NoTier
+                 /\ retryTierMissing' = TRUE
+  /\ floorsDefined' = (floorsDefined \/ (Restorable /\ logFloor > 0))
+  /\ floor' = IF floorsDefined THEN floor ELSE logFloor
   /\ armed' = armed
+  /\ logFloor' = logFloor
   /\ away' = away
   /\ feedbackDisarm' = feedbackDisarm
-  /\ floorsDefined' = floorsDefined
-  /\ floor' = floor
   /\ retries' = retries
   /\ judgePending' = judgePending
   /\ judgeStale' = judgeStale
@@ -311,9 +328,11 @@ Crash ==
   /\ floorsDefined' = FALSE
   /\ floor' = 0
   /\ retries' = 0
+  (* logFloor survives: the followup is durable in the session log. *)
   /\ state' = state
   /\ tier' = tier
   /\ armed' = armed
+  /\ logFloor' = logFloor
   /\ away' = away
   /\ feedbackDisarm' = feedbackDisarm
   /\ judgePending' = judgePending

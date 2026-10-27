@@ -63,11 +63,17 @@ exclusion with justification below).
 ## Faults and races explicitly modeled
 
 1. **Swap crash window** (strict-swap-crash): the `compaction/prune` append
-   and the `tool/result` replace append are split across a crash — an
-   orphan prune leaves the token meter debited for a node still present on
-   the surface, with no compensation or idempotent replay. Expect a
-   counterexample — documented as the sharpest atomicity gap in the
-   package.
+   and the `tool/result` replace append are split across a crash, leaving an
+   orphan prune in the log. Expect a `PrunePaired` counterexample — the
+   structural gap is real — but its CONSEQUENCE is benign 〔src:ws:specs/tla/ccr-pipeline/code-anchors.md#L1-L120〕, as the real
+   `TokenMeter` proves (PR #301): the prune arms a **delta-0** shadow-price
+   claim and only the adjacent `replace` consumes it, so an orphan prune
+   deducts nothing, the surface stays unswapped, the resident stays swappable,
+   and the retry on resume debits exactly once. The earlier revision of this
+   document claimed "the token meter was already debited" — that claim was an
+   assumption about meter semantics, NOT verified against the meter 〔src:ws:specs/tla/ccr-pipeline/code-anchors.md#L1-L120〕, and is
+   RETRACTED here 〔src:ws:specs/tla/ccr-pipeline/code-anchors.md#L40-L71〕.
+   See `defer-swap-crash.spec.ts` in PR #301 for the real-meter evidence.
 2. **Host double-fire** (strict-double-fire): re-firing post-execute for an
    already-crushed result appends a second marker (double-counted by
    `foldCounters`), because `crush()` has no already-has-a-marker check.

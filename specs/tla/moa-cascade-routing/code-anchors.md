@@ -134,3 +134,69 @@ export function isSubagentAgent(agent: Agent): boolean {
 
 applied at nine shared-state writer call sites (capture, observe, assemble,
 pre-step splice, judge, sanitizer publish).
+
+## B9 — event-sourced escalation floor restore (PR #301, F-3 fix)
+
+Source: `packages/interaction/moa/src/escalation-restore.ts:1-63` (excerpt)
+
+```ts
+export function durableEscalations(
+  agent: unknown,
+  opening: OpeningSource,
+): Escalation[] {
+  const out: Escalation[] = []
+  try {
+    const session = (agent as { session?: { snapshotEvents?: () => readonly unknown[] } } | undefined)?.session
+    const events = (session?.snapshotEvents?.() ?? []) as {...}[]
+    for (const event of events) {
+      const source = event.data?.source
+      if (event.type !== 'user/message' || source?.kind !== MOA_ESCALATION_KIND || source.originSeq !== opening.originSeq) continue
+      if (typeof source.fromTier !== 'number' || typeof source.toTier !== 'number') continue
+      out.push({ fromTier: source.fromTier, toTier: source.toTier })
+    }
+  } catch {
+    // Unreadable log: the opening's own record below still restores the floor.
+  }
+  if (!out.some((e) => e.fromTier === opening.fromTier && e.toTier === opening.toTier)) {
+    out.push({ fromTier: opening.fromTier, toTier: opening.toTier })
+  }
+  return out
+}
+
+export function restoreEscalationFloor(
+  bookkeeping: EscalationBookkeeping,
+  agent: unknown,
+  opening: OpeningSource,
+  warn: (message: string) => void,
+): number | undefined {
+  const recorded = bookkeeping.floorFor(opening.originSeq)
+  if (recorded !== undefined && recorded >= opening.toTier) return recorded
+  try {
+    bookkeeping.restoreFromEscalations(opening.originSeq, durableEscalations(agent, opening))
+    return bookkeeping.floorFor(opening.originSeq)
+  } catch (error) {
+    warn(`moa: cannot restore the escalation floor for origin ${opening.originSeq} (...); serving the live selection`)
+    return undefined
+  }
+}
+```
+
+with the rebuilding rule at `packages/interaction/moa/src/state.ts:119-140`:
+floor = the highest recorded `toTier`, retries = the number of recorded
+escalations, monotonic (never lowers a live floor or retry count), and a
+malformed record **throws** so the caller warns and serves the live selection
+explicitly instead of silently failing open.
+
+## B10 — the restore call site (retry-turn routing) 〔src:ws:specs/tla/moa-cascade-routing/code-anchors.md#L190-L202〕
+
+Source: `packages/interaction/moa/src/router.ts:327-345`
+
+```ts
+      if (!gate) return undefined
+      const floor = restoreEscalationFloor(bookkeeping, agent, opening.source as OpeningSource, warn)
+      if (floor === undefined) return undefined
+```
+
+A retry turn is never re-classified; when the in-memory entry is gone or lower
+than the durable record (crash/resume between the escalation dispatch and the
+retry round) the floor is restored from the log instead of failing open.

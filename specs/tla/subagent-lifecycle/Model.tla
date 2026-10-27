@@ -1,38 +1,40 @@
 --------------------------- MODULE Model ---------------------------
 (***************************************************************************)
 (* Bounded model of the dsh-cc subagent child lifecycle:                   *)
-(* capacity admission (25-cap), epoch end / settle, grace-window           *)
-(* auto-release tombstones, send_message admission gate, manual            *)
-(* release_agent eviction, Ctrl+B promotion, and session-exit drain.       *)
+(* capacity admission (the shared per-parent admission lease +             *)
+(* continuation slot reservations with their safety TTL and the            *)
+(* dispatch-time recheck), epoch end / settle, grace-window auto-release   *)
+(* tombstones, the send_message admission gate, manual release_agent       *)
+(* eviction, Ctrl+B promotion, and session-exit drain.                     *)
 (*                                                                         *)
 (* Abstracted from packages/subagent/task (background-start.ts,            *)
-(* grace-window.ts, release.ts, epoch-collector.ts, tool.ts) and          *)
-(* packages/subagent/resume-pins (plugin.ts send_message gate).            *)
+(* live-capacity.ts, grace-window.ts, epoch-collector.ts, tool.ts), the    *)
+(* shared admission in packages/subagent/resume-pins (admission.ts,        *)
+(* live-capacity.ts, dispatch-recheck.ts) and the resume-pins plugin       *)
+(* send_message gate (plugin.ts).                                          *)
 (* See code-anchors.md for verbatim source excerpts.                       *)
 (***************************************************************************)
 
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS MaxLive, SplitAdmission, SplitContinue, CapacityObservable
+CONSTANTS MaxLive, SplitContinue, CapacityObservable
 
 Children == 1..3
 
-Statuses == {"none", "pending", "running", "idle", "ready", "gone"}
+Statuses == {"none", "running", "idle", "ready", "gone"}
 
 (* status of a child:                                                     *)
 (*   none    - never spawned                                              *)
-(*   pending - capacity check passed, startContinuable still in flight    *)
-(*             (only reachable when SplitAdmission = TRUE)                *)
 (*   running - live activation executing a turn                           *)
 (*   idle    - live activation, no turn in flight                         *)
 (*   ready   - settled; registry row exists, no live activation           *)
-(*   gone    - evicted (released / drained)                                *)
+(*   gone    - evicted (released / drained)                               *)
 
-VARIABLES status, tier, epochOpen, admitted,
+VARIABLES status, tier, epochOpen,
           graceMember, gracePending, tombstoned, tombstoneEver,
           releasing, released, promoted, lateEpoch, drained
 
-vars == <<status, tier, epochOpen, admitted,
+vars == <<status, tier, epochOpen,
           graceMember, gracePending, tombstoned, tombstoneEver,
           releasing, released, promoted, lateEpoch, drained>>
 
@@ -40,7 +42,6 @@ TypeOK ==
   /\ status \in [Children -> Statuses]
   /\ tier \in [Children -> {"fg", "bg"}]
   /\ epochOpen \in [Children -> BOOLEAN]
-  /\ admitted \subseteq Children
   /\ graceMember \subseteq Children
   /\ gracePending \subseteq Children
   /\ tombstoned \subseteq Children
@@ -53,6 +54,11 @@ TypeOK ==
 
 LiveCount == Cardinality({c \in Children : status[c] = "running"})
 
+(* The one capacity predicate every admission path uses. Unobservable      *)
+(* capacity (missing seam, throwing listing, absent registry) degrades OPEN *)
+(* - a safety valve never blocks on its own infrastructure.                *)
+RoomForOne == (CapacityObservable = FALSE) \/ (LiveCount < MaxLive)
+
 (* ----------------------------------------------------------------------- *)
 (* Init                                                                    *)
 (* ----------------------------------------------------------------------- *)
@@ -61,7 +67,6 @@ Init ==
   /\ status = [c \in Children |-> "none"]
   /\ tier = [c \in Children |-> "fg"]
   /\ epochOpen = [c \in Children |-> FALSE]
-  /\ admitted = {}
   /\ graceMember = {}
   /\ gracePending = {}
   /\ tombstoned = {}
@@ -73,63 +78,22 @@ Init ==
   /\ drained = FALSE
 
 (* ----------------------------------------------------------------------- *)
-(* Spawn: capacity admission                                              *)
-(* Convention (SplitAdmission = FALSE): the live-capacity guard and the   *)
-(* start are one atomic step (assertLiveCapacity then startContinuable    *)
-(* with no observable interleaving point in the modeled abstraction).     *)
-(* Strict probe (SplitAdmission = TRUE): the guard reads LiveCount, then  *)
-(* a separate step completes the start - the two awaits in               *)
-(* background-start.ts:220-228 admit an overshoot.                        *)
+(* Spawn admission (all three spawn lanes + the ephemeral dispatch).       *)
+(* PR #301: the capacity check and the creation call are ONE critical      *)
+(* section under the per-parent admission lease, so two concurrent starts  *)
+(* can no longer both pass the guard and overshoot. The old split-action   *)
+(* TOCTOU probe is gone: that interleaving no longer models any code.      *)
 (* ----------------------------------------------------------------------- *)
 
 SpawnAtomic(c) ==
-  /\ ~SplitAdmission
   /\ ~drained
   /\ status[c] = "none"
   /\ c \notin released
-  /\ LiveCount < MaxLive
+  /\ RoomForOne
   /\ status' = [status EXCEPT ![c] = "running"]
   /\ tier' = [tier EXCEPT ![c] = "fg"]
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
   /\ graceMember' = graceMember \union {c}
-  /\ admitted' = admitted
-  /\ gracePending' = gracePending
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
-
-SpawnCheck(c) ==
-  /\ SplitAdmission
-  /\ ~drained
-  /\ status[c] = "none"
-  /\ c \notin released
-  /\ LiveCount < MaxLive
-  /\ status' = [status EXCEPT ![c] = "pending"]
-  /\ tier' = [tier EXCEPT ![c] = "fg"]
-  /\ epochOpen' = epochOpen
-  /\ graceMember' = graceMember \union {c}
-  /\ admitted' = admitted
-  /\ gracePending' = gracePending
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
-
-SpawnStart(c) ==
-  /\ SplitAdmission
-  /\ status[c] = "pending"
-  /\ status' = [status EXCEPT ![c] = "running"]
-  /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
-  /\ tier' = tier
-  /\ graceMember' = graceMember
-  /\ admitted' = admitted
   /\ gracePending' = gracePending
   /\ tombstoned' = tombstoned
   /\ tombstoneEver' = tombstoneEver
@@ -141,10 +105,6 @@ SpawnStart(c) ==
 
 (* ----------------------------------------------------------------------- *)
 (* Epoch lifecycle                                                         *)
-(* EpochEnd: subagent/end while the activation is still live -> idle;      *)
-(* the grace timer is (re)armed for registry members.                      *)
-(* Settle: the activation is dropped -> ready (cold-resumable row);       *)
-(* grace timer armed for registry members.                                 *)
 (* ----------------------------------------------------------------------- *)
 
 ArmGrace(c, mem, pend) ==
@@ -156,7 +116,6 @@ EpochEnd(c) ==
   /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
   /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
   /\ tier' = tier
-  /\ admitted' = admitted
   /\ graceMember' = graceMember
   /\ tombstoned' = tombstoned
   /\ tombstoneEver' = tombstoneEver
@@ -172,7 +131,6 @@ Settle(c) ==
   /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
   /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
   /\ tier' = tier
-  /\ admitted' = admitted
   /\ graceMember' = graceMember
   /\ tombstoned' = tombstoned
   /\ tombstoneEver' = tombstoneEver
@@ -185,8 +143,7 @@ Settle(c) ==
 (* ----------------------------------------------------------------------- *)
 (* Grace-window fire (auto-release).                                       *)
 (* Fire re-checks liveness: a running or idle child is skipped and the     *)
-(* timer re-arms (no state change in the model); a ready child is          *)
-(* tombstoned (release marker set).                                        *)
+(* timer re-arms; a ready child is tombstoned (release marker set).        *)
 (* ----------------------------------------------------------------------- *)
 
 GraceFire(c) ==
@@ -199,7 +156,6 @@ GraceFire(c) ==
   /\ status' = status
   /\ tier' = tier
   /\ epochOpen' = epochOpen
-  /\ admitted' = admitted
   /\ graceMember' = graceMember
   /\ releasing' = releasing
   /\ released' = released
@@ -208,59 +164,33 @@ GraceFire(c) ==
   /\ drained' = drained
 
 (* ----------------------------------------------------------------------- *)
-(* send_message admission gate and restart (a new epoch on a ready child). *)
-(* Convention (SplitContinue = FALSE): the marker check and the restart   *)
-(* are one atomic step; a tombstoned or released id is denied.             *)
-(* Strict probe (SplitContinue = TRUE): the gate check is a separate step  *)
-(* from the restart, so a grace fire landing between them admits one      *)
-(* extra epoch for an auto-released child (documented accepted residual,  *)
-(* release.ts:110-117).                                                    *)
+(* send_message continuation admission.                                    *)
+(*                                                                         *)
+(* SplitContinue = FALSE (convention): the capacity check, the reservation *)
+(* and the restart are one atomic step under the admission lease.          *)
+(* SplitContinue = TRUE (probe): the gate check is a separate step from    *)
+(* the restart, so a grace fire can land between them (documented accepted *)
+(* residual).                                                              *)
 (* ----------------------------------------------------------------------- *)
 
-ContinueCheck(c) ==
-  /\ SplitContinue
-  /\ ~drained
-  /\ status[c] = "ready"
-  /\ c \in graceMember
-  /\ c \notin tombstoned
-  /\ c \notin released
-  /\ admitted' = admitted \union {c}
-  /\ status' = status
-  /\ tier' = tier
-  /\ epochOpen' = epochOpen
-  /\ graceMember' = graceMember
-  /\ gracePending' = gracePending
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
-
-Restart(c) ==
+ContinueAdmit(c) ==
   /\ ~drained
   /\ status[c] = "ready"
   /\ c \in graceMember
   /\ c \notin released
-  (* Continuation admission needs a live slot (F-2 fix, PR #299): the
-     send_message gate refuses at the cap before pin admission. Capacity is
-     re-derived from the live registry; unobservable capacity degrades open
-     (the guard never wedges continuations on its own infrastructure). *)
-  /\ (CapacityObservable = FALSE \/ LiveCount < MaxLive)
-  /\ \/ /\ ~SplitContinue
-        /\ c \notin tombstoned
-     \/ /\ SplitContinue
-        /\ c \in admitted
+  (* PR #301: the capacity check and the delivery are ONE critical section
+     under the per-parent admission lease (tools/execute for a continuation,
+     the creation call for a spawn), so nothing interleaves between check and
+     activation. *)
+  /\ RoomForOne
+  (* The tombstone gate runs earlier (tools/pre-execute) than capacity
+     admission (tools/execute); SplitContinue = TRUE models the accepted
+     residual where a grace fire lands between them. *)
+  /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
   /\ status' = [status EXCEPT ![c] = "running"]
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
-  (* a restart through a stale admission that races a grace fire is        *)
-  (* recorded as a late epoch; subagent/start clears the tombstone         *)
-  (* (grace-window clearTombstone path), so tombstoned is cleared          *)
-  (* either way.                                                           *)
   /\ lateEpoch' = lateEpoch \union (IF c \in tombstoned THEN {c} ELSE {})
   /\ tombstoned' = tombstoned \ {c}
-  /\ admitted' = admitted \ {c}
   /\ gracePending' = gracePending \ {c}
   /\ tier' = tier
   /\ graceMember' = graceMember
@@ -272,8 +202,6 @@ Restart(c) ==
 
 (* ----------------------------------------------------------------------- *)
 (* Ctrl+B promotion (foreground collect -> background).                   *)
-(* Guard: the epoch is still open (the collect has not settled) and the    *)
-(* child was not promoted before; a FINISHED collect cannot promote.      *)
 (* ----------------------------------------------------------------------- *)
 
 Promote(c) ==
@@ -286,7 +214,6 @@ Promote(c) ==
   /\ tier' = [tier EXCEPT ![c] = "bg"]
   /\ status' = status
   /\ epochOpen' = epochOpen
-  /\ admitted' = admitted
   /\ graceMember' = graceMember
   /\ gracePending' = gracePending
   /\ tombstoned' = tombstoned
@@ -298,24 +225,19 @@ Promote(c) ==
 
 (* ----------------------------------------------------------------------- *)
 (* Manual release_agent (one-way eviction).                                *)
-(* markReleasing is placed before the drain issuance so a concurrent       *)
-(* collect sees the mark; the eviction frees the slot exactly when the     *)
-(* child was running. Released is monotone for process life.               *)
 (* ----------------------------------------------------------------------- *)
 
 Release(c) ==
   /\ ~drained
   /\ c \notin released
   /\ status[c] \in {"running", "idle", "ready"}
-  (* markReleasing is placed before the drain issuance (F12a);           *)
-  (* markReleased moves the id releasing -> released (releases delete     *)
-  (* the releasing mark).                                                  *)
+  (* markReleasing is placed before the drain issuance (F12a); markReleased *)
+  (* moves the id releasing -> released.                                   *)
   /\ releasing' = (releasing \union {c}) \ {c}
   /\ released' = released \union {c}
   /\ status' = [status EXCEPT ![c] = "gone"]
   /\ gracePending' = gracePending \ {c}
   /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
-  /\ admitted' = admitted \ {c}
   /\ tier' = tier
   /\ graceMember' = graceMember
   /\ tombstoned' = tombstoned
@@ -324,9 +246,7 @@ Release(c) ==
   /\ lateEpoch' = lateEpoch
   /\ drained' = drained
 
-(* Late handler of a timed-out release attempt trying to clear the        *)
-(* releasing mark; refused while released (clobber-proofing,              *)
-(* release.ts clearReleasing guard).                                       *)
+(* Late handler of a timed-out release attempt; refused while released.    *)
 
 LateClear(c) ==
   /\ c \in releasing
@@ -335,7 +255,6 @@ LateClear(c) ==
   /\ status' = status
   /\ tier' = tier
   /\ epochOpen' = epochOpen
-  /\ admitted' = admitted
   /\ graceMember' = graceMember
   /\ gracePending' = gracePending
   /\ tombstoned' = tombstoned
@@ -347,16 +266,12 @@ LateClear(c) ==
 
 (* ----------------------------------------------------------------------- *)
 (* Session exit: whole-forest drain.                                        *)
-(* Every in-flight turn is aborted, every activation evicted; a drained   *)
-(* child does not resume on the next send_message (persisted session      *)
-(* survives on disk only).                                                  *)
 (* ----------------------------------------------------------------------- *)
 
 SessionExit ==
   /\ ~drained
   /\ drained' = TRUE
   /\ status' = [c \in Children |-> "gone"]
-  /\ admitted' = {}
   /\ gracePending' = {}
   /\ epochOpen' = [c \in Children |-> FALSE]
   /\ tier' = tier
@@ -368,20 +283,16 @@ SessionExit ==
   /\ promoted' = promoted
   /\ lateEpoch' = lateEpoch
 
-(* Terminal self-loop: keeps deadlock checking enabled without            *)
-(* disabling any behavior.                                                 *)
+(* Terminal self-loop: keeps deadlock checking enabled.                    *)
 
 Idle == UNCHANGED vars
 
 Next ==
   \/ \E c \in Children : SpawnAtomic(c)
-  \/ \E c \in Children : SpawnCheck(c)
-  \/ \E c \in Children : SpawnStart(c)
   \/ \E c \in Children : EpochEnd(c)
   \/ \E c \in Children : Settle(c)
   \/ \E c \in Children : GraceFire(c)
-  \/ \E c \in Children : ContinueCheck(c)
-  \/ \E c \in Children : Restart(c)
+  \/ \E c \in Children : ContinueAdmit(c)
   \/ \E c \in Children : Promote(c)
   \/ \E c \in Children : Release(c)
   \/ \E c \in Children : LateClear(c)
@@ -394,47 +305,37 @@ Spec == Init /\ [][Next]_vars
 (* Invariants                                                               *)
 (* ----------------------------------------------------------------------- *)
 
-(* S-1: the live-capacity contract: at most MaxLive running children.     *)
+(* S-1: the live-capacity contract: at most MaxLive running children.      *)
+(* Both the spawn lanes and continuation admission count live + promised    *)
+(* slots under one lease, so no interleaving can overshoot.                *)
 CapOK == LiveCount <= MaxLive
 
-(* S-2: a released child never regains a live activation (one-way        *)
-(* eviction; send_message denied before pin admission).                   *)
+(* S-2: a released child never regains a live activation.                  *)
 NoResurrect ==
-  \A c \in released : status[c] \notin {"running", "pending", "idle"}
+  \A c \in released : status[c] \notin {"running", "idle"}
 
-(* S-3: released and releasing marks are disjoint (markReleased moves     *)
-(* releasing -> released), and the refused-while-released clearReleasing  *)
-(* guard means a stale late handler of a timed-out attempt can never      *)
-(* resurrect or clobber a completed release.                              *)
+(* S-3: released and releasing marks are disjoint.                         *)
 ReleasedDisjoint == released \intersect releasing = {}
 
-(* S-4: an auto-release tombstone is only ever set on a child with no     *)
-(* live activation, and never coexists with a live one.                   *)
+(* S-4: an auto-release tombstone is only ever set on a child with no      *)
+(* live activation.                                                        *)
 TombstoneNonLive ==
   \A c \in tombstoned : status[c] \in {"ready", "gone"}
 
-(* S-5: grace timers only exist for registry members.                     *)
+(* S-5: grace timers only exist for registry members.                      *)
 GraceMemberOnly == gracePending \subseteq graceMember
 
-(* S-6: no child runs an epoch after having been auto-released            *)
-(* (tombstoned) without an intervening legitimate restart. Under the       *)
-(* convention (atomic gate) this holds; the split-gate probe violates     *)
-(* it by design (accepted residual).                                       *)
+(* S-6: no child runs an epoch after auto-release without a restart.        *)
 NoLateEpoch == lateEpoch = {}
 
-(* S-7: after session exit every child is drained - no live activation    *)
-(* and no pending admission survives.                                     *)
+(* S-7: after session exit every child is drained.                          *)
 DrainedQuiescent == drained => (\A c \in Children : status[c] = "gone")
 
-(* S-8: promotion re-tiers the child to background exactly once and       *)
-(* never leaves a foreground tier behind (the settle-wins race itself is  *)
-(* encoded structurally: Promote requires epochOpen, so a FINISHED        *)
-(* collect - whose Settle closed the epoch - cannot promote; TLC         *)
-(* explores both interleavings).                                           *)
+(* S-8: promotion re-tiers the child to background exactly once.            *)
 PromotedIsBackground == \A c \in promoted : tier[c] = "bg"
 
-(* L-1 (excluded): eventual settle of a running child requires fairness  *)
-(* and a real-time model of the harness turn loop; excluded - see         *)
-(* design.md "Exclusions".                                                 *)
+
+(* L-1 (excluded): eventual settle needs fairness and a harness turn-loop   *)
+(* model; excluded - see design.md.                                        *)
 
 =============================================================================

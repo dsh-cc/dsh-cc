@@ -4,7 +4,9 @@ Keyed to the final run of 2026-10-26. Not part of inputDigest.
 
 ## Final run
 
-- runId: `20261026T071949Z-0f408d71-b004-4126-bf07-ec34167d3239`
+- runId: `20261027T043654Z-5687877f-16b4-48e1-ab2f-22d8bf2487c8`,
+  inputDigest `dfd5ea7b0033d0c79f1a366970940389394c582cbb80c3f38cb49c10eff05127`
+  (supersedes `20261026T071949Z-0f408d71-…`, the pre-#301 run) 〔src:ws:specs/tla/moa-cascade-routing/code-anchors.md#L138-L201〕
 - runnerPackage: `@dsh-cc/plugin-dsh-cc-agents` 0.9.2, TLC 1.7.4
   (jarSha256 936a2620…), Java 25.0.2, darwin
 - check-evidence: `valid` / fresh / verification `counterexample`
@@ -14,7 +16,7 @@ Keyed to the final run of 2026-10-26. Not part of inputDigest.
 
 | Case | Status | Statistics |
 |---|---|---|
-| convention | **verified** | 6841/988/0 |
+| convention | **verified** | 13389/1928/0 |
 | shadow-mode | **verified** | 3481/500/0 |
 | strict-self-feedback | counterexample — ArmedNotAway | 209/75/43 |
 | strict-crash-resume | counterexample — NoFloorlessRetry | 464/164/99 |
@@ -35,7 +37,7 @@ removing it silently kills routing after one classified turn.
 Classification: modeling probe validating a design defense; no code
 change.
 
-### strict-crash-resume — FINDING F-3 (crash-recovery gap, pending disposition)
+### strict-crash-resume — F-3 CLOSED by PR #301 (probe keeps the pre-fix shape)
 
 Trace: `Classify → TurnEnd → JudgeVerdict → Crash → RetryTurn`. The judge
 escalates (recordRetryUsed → followup dispatched), the process crashes and
