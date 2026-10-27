@@ -100,10 +100,10 @@ describe('admitContinuation (shared lease + reservation)', () => {
     expect(first.admitted).toBe(true)
     const second = await admitContinuation(svc, parent, 'ended-b', new AbortController().signal)
     expect(second).toEqual({ admitted: false, reason: LIVE_CAPACITY_REFUSAL })
-    if (first.admitted) first.release()
+    if (first.admitted) first.reservation.release()
     const third = await admitContinuation(svc, parent, 'ended-b', new AbortController().signal)
     expect(third.admitted).toBe(true)
-    if (third.admitted) third.release()
+    if (third.admitted) third.reservation.release()
   })
 
   it('two concurrent continuations at cap - 1: exactly one admitted, and the lease is free afterwards', async () => {
@@ -115,7 +115,7 @@ describe('admitContinuation (shared lease + reservation)', () => {
       admitContinuation(svc, parent, 'ended-b', new AbortController().signal),
     ])
     expect(results.filter(r => r.admitted)).toHaveLength(1)
-    for (const r of results) if (r.admitted) r.release()
+    for (const r of results) if (r.admitted) r.reservation.release()
     await Promise.resolve()
     await Promise.resolve()
     expect(admissionQueueSize()).toBe(0)
@@ -134,8 +134,8 @@ describe('admitContinuation (shared lease + reservation)', () => {
     running.delete('c-0') // a slot frees: the stale reservation must not still block it
     const third = await admitContinuation(svc, parent, 'ended-b', new AbortController().signal)
     expect(third.admitted).toBe(true)
-    if (first.admitted) first.release()
-    if (third.admitted) third.release()
+    if (first.admitted) first.reservation.release()
+    if (third.admitted) third.reservation.release()
   })
 
   it('an aborted queued continuation rejects and does not wedge or reserve', async () => {
@@ -150,7 +150,7 @@ describe('admitContinuation (shared lease + reservation)', () => {
     expect(pendingContinuations('adm-4', () => false)).toBe(0)
     const after = await admitContinuation(svc, { id: 'adm-4' }, 'ended-a', new AbortController().signal)
     expect(after.admitted).toBe(true)
-    if (after.admitted) after.release()
+    if (after.admitted) after.reservation.release()
   })
 
   it('the signal aborting after admission releases the reservation', async () => {
@@ -199,7 +199,7 @@ describe('send_message gate holds the reservation only until the tool settles', 
     const ctx = {
       provide: () => {},
       get: (key: string) => key === 'ccReleaseMarkers' ? undefined : svc.get(key),
-      agents: { get: () => undefined },
+      agents: { get: (id: unknown) => running.has(String(id)) ? { status: 'running' } : undefined },
       on: (name: string, handler: never) => { handlers.set(name, handler); return () => {} },
       effect: () => {},
       logger: { warn: () => {} },
@@ -208,10 +208,11 @@ describe('send_message gate holds the reservation only until the tool settles', 
     return {
       pre: handlers.get('tools/pre-execute') as unknown as (exec: unknown, next: () => Promise<unknown>) => Promise<{ kind?: string }>,
       post: handlers.get('tools/post-execute') as unknown as (exec: unknown, result: unknown, next: () => Promise<unknown>) => Promise<unknown>,
+      execute: handlers.get('tools/execute') as unknown as (exec: unknown, next: () => Promise<unknown>) => Promise<unknown>,
     }
   }
   const execOf = (parentId: string, target: string, signal = new AbortController().signal) =>
-    ({ name: 'send_message', token: Symbol(target), arguments: { agent_id: target }, agent: { id: parentId }, signal })
+    ({ name: 'send_message', token: `tok-${parentId}-${target}`, arguments: { agent_id: target }, agent: { id: parentId }, signal })
 
   it('reserves on admit, blocks a second continuation at the cap, and frees on post-execute', async () => {
     const running = new Set(ids(CAP - 1))
@@ -233,6 +234,85 @@ describe('send_message gate holds the reservation only until the tool settles', 
     await expect(pre(execOf('gate-2', 'ended-a'), async () => { throw new Error('boom') })).rejects.toThrow('boom')
     expect(pendingContinuations('gate-2', () => false)).toBe(0)
     expect(admissionQueueSize()).toBe(0)
+  })
+
+  // ── Review P1: a TTL-expired reservation must be re-checked at dispatch ──
+
+  it('an expired reservation is observable as expired and stops counting (release stays idempotent)', async () => {
+    vi.useFakeTimers()
+    try {
+      const rel = reserveContinuationSlot('ttl-1', 'c-x', 50)
+      expect(pendingContinuations('ttl-1', () => false)).toBe(1)
+      expect(rel.expired).toBe(false)
+      await vi.advanceTimersByTimeAsync(50)
+      expect(rel.expired).toBe(true)
+      expect(pendingContinuations('ttl-1', () => false)).toBe(0)
+      expect(() => rel.release()).not.toThrow()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('P1 regression: TTL expiry, another admission fills the freed slot, the original call is re-checked and refused at dispatch', async () => {
+    vi.useFakeTimers()
+    try {
+      const running = new Set(ids(CAP - 1))
+      const { pre, execute, post } = wire(running, [...running, 'ended-a', 'ended-b'])
+      const a = execOf('gate-p1', 'ended-a')
+      await pre(a, async () => ({ kind: 'allow' }))
+      expect(pendingContinuations('gate-p1', () => false)).toBe(1)
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(pendingContinuations('gate-p1', () => false)).toBe(0)
+      // Another continuation takes the freed slot and its activation is now live.
+      const b = execOf('gate-p1', 'ended-b')
+      await pre(b, async () => ({ kind: 'allow' }))
+      running.add('ended-b')
+      try {
+        // The original call finally dispatches: the capacity recheck must refuse it.
+        await expect(execute(a, async () => ({ content: [] }))).rejects.toThrow(LIVE_CAPACITY_REFUSAL)
+      } finally {
+        await post(b, { content: [] }, async () => ({ kind: 'accept' }))
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('an expired reservation with the slot still free re-admits at dispatch and the tool proceeds', async () => {
+    vi.useFakeTimers()
+    try {
+      const running = new Set(ids(CAP - 1))
+      const { pre, execute, post } = wire(running, [...running, 'ended-a'])
+      const a = execOf('gate-4b', 'ended-a')
+      await pre(a, async () => ({ kind: 'allow' }))
+      await vi.advanceTimersByTimeAsync(30_000)
+      const ran = vi.fn(async () => ({ content: [] }))
+      await execute(a, ran)
+      expect(ran).toHaveBeenCalledTimes(1)
+      expect(pendingContinuations('gate-4b', () => false)).toBe(1)
+      await post(a, { content: [] }, async () => ({ kind: 'accept' }))
+      expect(pendingContinuations('gate-4b', () => false)).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('an expired reservation whose target became live needs no new slot: dispatch passes through unreserved', async () => {
+    vi.useFakeTimers()
+    try {
+      const running = new Set(ids(CAP - 1))
+      const { pre, execute } = wire(running, [...running, 'ended-a'])
+      const a = execOf('gate-4c', 'ended-a')
+      await pre(a, async () => ({ kind: 'allow' }))
+      await vi.advanceTimersByTimeAsync(30_000)
+      running.add('ended-a') // the target is now running: a steer, not a new slot
+      const ran = vi.fn(async () => ({ content: [] }))
+      await execute(a, ran)
+      expect(ran).toHaveBeenCalledTimes(1)
+      expect(pendingContinuations('gate-4c', () => false)).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('a queued continuation cancelled while waiting for the lease resolves as cancel', async () => {

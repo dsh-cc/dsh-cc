@@ -18,8 +18,12 @@
  *   held lease would starve every spawn for that long. Instead the continuation
  *   takes the lease only for check + reserve, and the slot stays reserved until
  *   the activation is visible as running, the tool settles (post-execute),
- *   its signal aborts, the call is denied, or a safety TTL expires. Both guards
- *   count live + outstanding reservations, so neither can over-admit.
+ *   its signal aborts, the call is denied, or a safety TTL expires. An expired
+ *   reservation stops counting but is NOT a grant: the resume-pins plugin
+ *   re-runs this admission atomically in its `tools/execute` listener right
+ *   before the tool body dispatches, so a TTL expiry during an approval wait
+ *   can never let a stale call create an over-capacity activation. Both guards
+ *   count live + outstanding reservations.
  *
  * State is process-global (keyed by `Symbol.for`) so duplicate copies of this
  * module in one process still share one queue.
@@ -30,10 +34,21 @@
 /** Release handle for a held lease or reservation; safe to call more than once. */
 export type AdmissionLease = () => void
 
+/**
+ * A continuation slot reservation. `release` is idempotent; `expired` flips
+ * when the safety TTL fired (the slot no longer counts, but the caller must
+ * RE-CHECK capacity before its tool body actually dispatches — see the
+ * `tools/execute` listener in the resume-pins plugin).
+ */
+export interface SlotReservation {
+  readonly expired: boolean
+  readonly release: () => void
+}
+
 /** Safety bound for an outstanding continuation reservation. */
 export const CONTINUATION_RESERVATION_TTL_MS = 30_000
 
-interface Reservation { readonly childId: string }
+interface Reservation { readonly childId: string; expired: boolean }
 
 interface AdmissionState {
   readonly tails: Map<string, Promise<void>>
@@ -97,29 +112,41 @@ export function admissionQueueSize(): number {
  * Reserve one slot for a continuation that has passed its capacity check but
  * whose activation is not yet visible. Call under the admission lease.
  * @param childId - the ended child being continued.
- * @returns an idempotent release; also fired by a safety TTL.
+ * @returns an idempotent release plus an `expired` flag; the safety TTL marks
+ *   the reservation expired (it stops counting) instead of erasing it, so the
+ *   dispatch-time recheck can re-admit or refuse the still-pending call.
  */
 export function reserveContinuationSlot(
   parentId: string,
   childId: string,
   ttlMs: number = CONTINUATION_RESERVATION_TTL_MS,
-): AdmissionLease {
-  const reservation: Reservation = { childId }
+): SlotReservation {
+  const reservation: Reservation = { childId, expired: false }
   let set = state.reservations.get(parentId)
   if (set === undefined) state.reservations.set(parentId, set = new Set())
   set.add(reservation)
   let released = false
-  const timer = setTimeout(() => release(), ttlMs)
+  // The TTL drops the slot from the guard's count (a lost release must never
+  // starve a parent) but MARKS the reservation expired instead of erasing the
+  // caller's knowledge of it: the dispatch-time recheck can then re-admit or
+  // refuse the still-pending tool call atomically.
+  const timer = setTimeout(() => {
+    reservation.expired = true
+    drop()
+  }, ttlMs)
   timer.unref?.()
-  function release(): void {
-    if (released) return
-    released = true
-    clearTimeout(timer)
+  function drop(): void {
     const current = state.reservations.get(parentId)
     current?.delete(reservation)
     if (current?.size === 0) state.reservations.delete(parentId)
   }
-  return release
+  function release(): void {
+    if (released) return
+    released = true
+    clearTimeout(timer)
+    drop()
+  }
+  return { get expired() { return reservation.expired }, release }
 }
 
 /**

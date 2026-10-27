@@ -16,7 +16,7 @@
  * mirroring the spawn guard — a hidden seam must not wedge continuations.
  */
 
-import { acquireAdmission, pendingContinuations, reserveContinuationSlot, type AdmissionLease } from './admission.ts'
+import { acquireAdmission, pendingContinuations, reserveContinuationSlot, type SlotReservation } from './admission.ts'
 
 /** Per-parent admission limit for continuable children; mirrors the spawn lane. */
 export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
@@ -90,7 +90,7 @@ export async function continuationCapacityRefusal(
 
 /** Outcome of {@link admitContinuation}. */
 export type ContinuationAdmission =
-  | { readonly admitted: true; readonly release: AdmissionLease }
+  | { readonly admitted: true; readonly reservation: SlotReservation }
   | { readonly admitted: false; readonly reason: string }
 
 /**
@@ -111,7 +111,7 @@ export async function admitContinuation(
   targetId: string,
   signal: AbortSignal,
 ): Promise<ContinuationAdmission> {
-  const open: ContinuationAdmission = { admitted: true, release: () => undefined }
+  const open: ContinuationAdmission = { admitted: true, reservation: { expired: false, release: () => undefined } }
   if (parent === undefined || parent.id === undefined) return open
   const parentId = String(parent.id)
   const lease = await acquireAdmission(parentId, signal)
@@ -120,9 +120,9 @@ export async function admitContinuation(
     if (reason !== undefined) return { admitted: false, reason }
     const subagents = services.get?.('subagents') as CapacitySubagentsLike | undefined
     if (subagents?.listChildren === undefined) return open
-    const release = reserveContinuationSlot(parentId, targetId)
-    signal.addEventListener('abort', release, { once: true })
-    return { admitted: true, release }
+    const reservation = reserveContinuationSlot(parentId, targetId)
+    signal.addEventListener('abort', reservation.release, { once: true })
+    return { admitted: true, reservation }
   } finally {
     lease()
   }

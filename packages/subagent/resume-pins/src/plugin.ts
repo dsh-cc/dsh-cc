@@ -46,7 +46,8 @@ import {
 } from './policy.ts'
 import { serializePerKey, ExecutionNoticeBus } from './serialize.ts'
 import { admitContinuation, type CapacityServices } from './live-capacity.ts'
-import type { AdmissionLease } from './admission.ts'
+import type { SlotReservation } from './admission.ts'
+import { wireDispatchRecheck } from './dispatch-recheck.ts'
 import { PinStore, type CorruptPin } from './store.ts'
 import type { ResumePin } from './pin.ts'
 
@@ -209,8 +210,16 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   // cannot interleave their decisions or cross-deliver notices.
   const pendingNotices = new ExecutionNoticeBus()
   const childLocks = new Map<string, Promise<unknown>>()
-  /** Continuation slot reservations, keyed by the in-flight tool execution. */
-  const reservations = new WeakMap<object, AdmissionLease>()
+  /** Slot reservations keyed by the execution token (stable across hooks). */
+  const reservations = new Map<string, { reservation: SlotReservation, target: string }>()
+  const releaseReservation = (token: unknown): void => {
+    if (token === undefined) return
+    const key = String(token)
+    const held = reservations.get(key)
+    if (held === undefined) return
+    reservations.delete(key)
+    held.reservation.release()
+  }
 
   /**
    * Lookup-level read: an unsafe childId (harness session ids are
@@ -333,12 +342,10 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
     // pre-execute waterfall.
     const targetLive = (ctx as unknown as { agents?: { get?: (id: unknown) => unknown } })
       .agents?.get?.(SessionId(target)) !== undefined
-    // The check + slot reservation run under the per-parent admission lease
-    // shared with the spawn lanes (admission.ts), so a concurrent spawn and
-    // this continuation cannot both take the last slot. The reservation is
-    // released when the tool settles (post-execute), on abort, on deny, or by
-    // TTL — never held across the approval prompt or the activation itself.
-    let reservation: AdmissionLease | undefined
+    // Check + slot reservation run under the per-parent admission lease shared
+    // with the spawn lanes; released when the tool settles, on abort, on deny,
+    // or by TTL.
+    let reservation: (() => void) | undefined
     if (!targetLive) {
       try {
         const admission = await admitContinuation(
@@ -348,8 +355,8 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
           exec.signal,
         )
         if (!admission.admitted) return { kind: 'deny' as const, reason: admission.reason }
-        reservation = admission.release
-        reservations.set(exec, reservation)
+        reservation = admission.reservation.release
+        reservations.set(String(exec.token), { reservation: admission.reservation, target })
       } catch (error) {
         if (exec.signal?.aborted === true) return { kind: 'cancel' as const }
         throw error
@@ -395,24 +402,28 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
         }
         return next()
       })
-      if (gated.kind === 'deny' || gated.kind === 'cancel') reservation?.()
+      if (gated.kind === 'deny' || gated.kind === 'cancel') {
+        reservation?.()
+        releaseReservation(exec.token)
+      }
       return gated
     } catch (error) {
       reservation?.()
+      releaseReservation(exec.token)
       throw error
     }
   })
+
+  // P1 recheck: an expired reservation is re-checked atomically at dispatch.
+  wireDispatchRecheck(ctx, { reservations, release: releaseReservation }, () => ctx as unknown as CapacityServices)
+
 
   // §4.7: prefix the gate's notices onto the send_message result; annotate
   // list_agents for pinned children.
   ctx.on('tools/post-execute', async (exec, result, next) => {
     // The send_message tool body has run: its continuation reservation is no
     // longer needed (a visible running activation is counted directly).
-    const held = reservations.get(exec)
-    if (held !== undefined) {
-      reservations.delete(exec)
-      held()
-    }
+    releaseReservation(exec.token)
     const out = await next()
     if (out.kind !== 'accept') return out
     if (exec.name === 'send_message') {

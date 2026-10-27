@@ -34,7 +34,9 @@ One cordis plugin (`apply`) with:
   per-parent admission lease shared with the Task spawn lanes (`admission.ts`), so a
   concurrent spawn and a continuation cannot both take the last slot; the reservation
   is released when the tool settles, on abort or deny, or by a safety TTL — never held
-  across the approval prompt;
+  across the approval prompt. An expired reservation stops counting but is not a
+  grant: the admission is re-checked atomically at `tools/execute` time, so a
+  stale call can never over-admit;
 - an **`agent/request` overlay** applying the pinned
   `{provider, model, reasoningEffort, maxTokens}` tuple field-by-field
   (absence included) to every resumed turn, whatever resumed it;

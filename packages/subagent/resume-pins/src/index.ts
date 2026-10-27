@@ -62,6 +62,7 @@ export {
   pendingContinuations,
   reserveContinuationSlot,
   type AdmissionLease,
+  type SlotReservation,
 } from './admission.ts'
 export {
   admitContinuation,
