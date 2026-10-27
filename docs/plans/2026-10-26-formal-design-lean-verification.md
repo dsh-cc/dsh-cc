@@ -267,10 +267,12 @@ quantification, branches, assumptions, and whether the claimed result is useful.
 
 ## 6. Toolchain and execution contract
 
-Pin Lean to `leanprover/lean4:v4.35.0` for version one. This is the current
-`stable` release; pinning the moving `stable` label itself, nightly, or
-per-model version overrides is not allowed. The pin-check exists precisely
-because a developer's locally installed toolchain is a different version. `lean-toolchain.json` contains exactly
+Pin Lean to `leanprover/lean4:v4.35.0` for version one — the release the
+`stable` channel resolved to when this document was written, and the version
+installed in the development environment. Pinning the moving `stable` label
+itself, nightly, or per-model version overrides is not allowed. The
+pin-check exists precisely because a developer's locally installed toolchain
+can be a different version. `lean-toolchain.json` contains exactly
 `schemaVersion`, `toolchain`, `platforms`, and `allowedAxioms`. Set schema version
 to 1 and allowed axioms to `["propext", "Classical.choice", "Quot.sound"]`.
 `platforms` maps `linux-x64` and `darwin-arm64` to objects containing `archiveUrl`
