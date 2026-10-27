@@ -32,7 +32,9 @@ async function artifact(path) {
  * child leaves a zero-length file with the SHA-256 of empty input.
  */
 export async function runLeanPhase(argv, options = {}) {
-  const { cwd, env, timeoutMs, signal, dir, io = fs, spawn = nodeSpawn, streamLimit = STREAM_LIMIT } = options
+  // `stdin` is the optional stdin payload for the corpus protocol (design section
+  // 7); when absent the child's stdin is ignored exactly as before.
+  const { cwd, env, timeoutMs, signal, dir, io = fs, spawn = nodeSpawn, streamLimit = STREAM_LIMIT, stdin } = options
   await io.mkdir(dir, { recursive: true })
   const stdoutPath = join(dir, 'stdout.log')
   const stderrPath = join(dir, 'stderr.log')
@@ -102,11 +104,17 @@ export async function runLeanPhase(argv, options = {}) {
       return
     }
     try {
-      child = spawn(argv[0], argv.slice(1), { cwd, shell: false, env, stdio: ['ignore', 'pipe', 'pipe'] })
+      child = spawn(argv[0], argv.slice(1), { cwd, shell: false, env, stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
     } catch {
       flags.spawnFailed = true
       settle({ exitCode: null, termSignal: null })
       return
+    }
+    if (stdin !== undefined) {
+      // A child that exits early closes the pipe; that surfaces as a short output
+      // stream (a protocol failure), never as a runner crash.
+      child.stdin.on('error', () => {})
+      child.stdin.end(stdin)
     }
     child.stdout.on('data', chunk => onData(0, chunk))
     child.stderr.on('data', chunk => onData(1, chunk))

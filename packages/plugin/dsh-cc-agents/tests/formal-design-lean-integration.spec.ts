@@ -1,14 +1,14 @@
 import { spawn } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, stat, symlink, writeFile, link } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { executeLeanCheck, exitCode } from '../skills/formal-design/scripts/lean-check.mjs'
 import { leanPreflight } from '../skills/formal-design/scripts/lean-preflight.mjs'
 import { leanChildEnvironment } from '../skills/formal-design/scripts/lean-process.lib.mjs'
-import { contentDigest, loadToolchain } from '../skills/formal-design/scripts/lean-fingerprint.lib.mjs'
+import { contentDigest } from '../skills/formal-design/scripts/lean-fingerprint.lib.mjs'
 import { ALLOWED_AXIOMS } from '../skills/formal-design/scripts/lean-manifest.lib.mjs'
+import { REQUIRED_IN_CI, TOOLCHAIN_AVAILABLE, resolveLeanRoot } from './helpers/lean-root'
 
 // Real pinned-toolchain integration tests (design section 14). They run against
 // an already provisioned installation: FORMAL_DESIGN_LEAN_ROOT, or a test root
@@ -18,47 +18,17 @@ const SKILL = join(import.meta.dirname, '../skills/formal-design')
 const FIXTURES = join(import.meta.dirname, 'fixtures/formal-design-lean')
 const MODEL = 'specs/lean/budget-reservation'
 const MODEL_ID = 'budget-reservation'
-const LOCAL_TOOLCHAIN = '/Users/bytedance/.elan/toolchains/leanprover--lean4---v4.35.0'
-const REQUIRED_IN_CI = process.env.FORMAL_DESIGN_LEAN_CI === '1'
-const PROVIDED_ROOT = process.env.FORMAL_DESIGN_LEAN_ROOT
-const DISCOVERED = PROVIDED_ROOT ?? (existsSync(join(LOCAL_TOOLCHAIN, 'bin/lean')) ? LOCAL_TOOLCHAIN : null)
-const suite = DISCOVERED || REQUIRED_IN_CI ? describe : describe.skip
-
+const suite = TOOLCHAIN_AVAILABLE || REQUIRED_IN_CI ? describe : describe.skip
 const roots: string[] = []
 let leanRoot: string | null = null
-
-// Hard links (or copies) of exactly the directories the installation content
-// digest enumerates, so the tree can be hashed and the binary still runs. Never
-// committed: the test root lives in the platform temporary directory.
-async function linkTree(source: string, target: string) {
-  await mkdir(target, { recursive: true })
-  for (const entry of await readdir(source, { withFileTypes: true })) {
-    const from = join(source, entry.name)
-    const to = join(target, entry.name)
-    if (entry.isSymbolicLink()) { await symlink(await readlink(from), to); continue }
-    if (entry.isDirectory()) { await linkTree(from, to); continue }
-    try { await link(from, to) } catch { await cp(from, to) }
-  }
-}
-
-async function provisionTestRoot(scratch: string) {
-  const destination = join(scratch, 'lean-4.35.0')
-  for (const name of ['bin', 'lib']) await linkTree(join(LOCAL_TOOLCHAIN, name), join(destination, name))
-  const pin = await loadToolchain()
-  const platform = process.platform === 'linux' ? 'linux-x64' : 'darwin-arm64'
-  await writeFile(`${destination}.receipt.json`, JSON.stringify({
-    schemaVersion: 1, toolchain: pin.toolchain, archiveSha256: pin.platforms[platform].sha256, contentDigest: await contentDigest(destination),
-  }))
-  return destination
-}
 
 beforeAll(async () => {
   const scratch = await mkdtemp(join(await realpath(tmpdir()), 'formal design lean integration '))
   roots.push(scratch)
-  if (PROVIDED_ROOT) leanRoot = await realpath(PROVIDED_ROOT)
-  else if (DISCOVERED) leanRoot = await provisionTestRoot(scratch)
+  leanRoot = await resolveLeanRoot(scratch)
   if (!leanRoot) throw new Error('FORMAL_DESIGN_LEAN_CI=1 requires a provisioned Lean installation')
 }, 300_000)
+
 
 afterAll(async () => { await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))) })
 
@@ -241,11 +211,11 @@ suite('trusted Lean interpreter driver', () => {
   it('answers one JSON line per input, in order, with ok and error results', async () => {
     const { root, lean, flags } = await workspace()
     const lines = [
-      { id: 'exhaustion', input: [10, 3, 7] },
-      { id: 'zero', input: [10, 3, 0] },
-      { id: 'insufficient', input: [10, 8, 3] },
-      { id: 'invalid-state', input: [5, 8, 3] },
-      { id: 'malformed', input: ['ten', 3, 0] },
+      { id: 'exhaustion', input: { budget: '10', reserved: '3', amount: '7' } },
+      { id: 'zero', input: { budget: '10', reserved: '3', amount: '0' } },
+      { id: 'insufficient', input: { budget: '10', reserved: '8', amount: '3' } },
+      { id: 'invalid-state', input: { budget: '5', reserved: '8', amount: '3' } },
+      { id: 'malformed', input: { budget: 'ten', reserved: '3', amount: '0' } },
     ]
     const result = await run([lean, ...flags, '--run', 'Driver.lean'], root, lines.map(line => JSON.stringify(line)).join('\n') + '\n')
     expect(result.code).toBe(0)
