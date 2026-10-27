@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "backend": "lean",
+  "modelId": "budget-reservation",
+  "properties": [
+    {
+      "id": "budget-bound",
+      "requirementId": "REQ-1",
+      "declaration": "Formal.reserve_preserves_bound",
+      "statement": "forall b r a : Nat, r <= b -> a <= b - r -> r + a <= b",
+      "witnessDeclaration": "Formal.admissible_example"
+    },
+    {
+      "id": "zero-request",
+      "requirementId": "REQ-2",
+      "declaration": "Formal.reserve_zero",
+      "statement": "forall b r : Nat, r <= b -> Formal.reserve b r 0 = .ok r",
+      "witnessDeclaration": "Formal.admissible_example"
+    }
+  ],
+  "conformance": {
+    "adapter": "conformance/adapter.mjs",
+    "corpus": "conformance/cases.jsonl",
+    "implementationFiles": ["packages/example/src/budget.ts"],
+    "executionFiles": ["package.json"],
+    "command": ["node", "conformance/adapter.mjs"],
+    "comparison": "canonical-json"
+  },
+  "limits": {
+    "proofTimeoutMs": 120000,
+    "conformanceTimeoutMs": 120000,
+    "maxHeartbeats": 2000000,
+    "maxRecDepth": 2048,
+    "maxCases": 10000
+  }
+}

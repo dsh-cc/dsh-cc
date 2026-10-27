@@ -1,0 +1,2 @@
+{"id":"boundary-exhaustion","input":{"budget":"10","reserved":"3","amount":"7"},"covers":["budget-bound","zero-request"]}
+{"id":"zero-request","input":{"budget":"10","reserved":"3","amount":"0"},"covers":["zero-request"]}
