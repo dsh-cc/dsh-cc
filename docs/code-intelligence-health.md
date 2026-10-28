@@ -41,5 +41,25 @@ mysteriously may simply be a startup failure. Check the harness logs first.
 | --- | --- | --- |
 | a. MCP startup failure | plugin activation rejected at session start | No — loud in logs only (`failOnStartupError`), the model is not told tools are missing |
 | b. Mid-session LS crash | Serena tool calls return errors | Yes, as tool errors |
-| c. Stale/empty/misrouted results | indexing races or per-language routing bugs return successful but wrong/empty results | No — successful tool results, structurally invisible to hooks; carried by the prompt-level fallback rules in `CLAUDE.md` (MCP routing → Serena fallback rules) |
+| c. Stale/empty/misrouted results | indexing races or per-language routing bugs return successful but wrong/empty results | No — successful tool results, structurally invisible to hooks; carried by the prompt-level fallback rules below |
 | d. Other tool-level errors | individual tool failures (timeouts, bad args) | Yes, as tool errors |
+
+## Prompt-level fallback rules
+
+These are prompt rules, not hook-enforced behavior: class (c) failures look like
+successful tool results, so the model must apply them itself. They are stated in
+AGENTS.md (MCP routing) and expanded here.
+
+- An EMPTY `find_symbol` / `get_symbols_overview` is not ground truth — confirm
+  with one cheap probe (a `grep` for an obvious token in that file, or
+  `get_diagnostics_for_file`) before concluding "no symbols".
+- After 2 Serena tool errors within 5 minutes: stop retrying Serena, use built-in
+  Read/Grep/Edit, and note the degradation to the user. Recovery ladder before
+  falling back: `get_diagnostics_for_file` → `get_current_config` →
+  `mcp__serena__restart_language_server` if available → built-ins.
+- Experimental languages (Deno, Erlang, LaTeX, Nextflow, Wolfram) degrade to
+  built-ins by default.
+- Where these rules conflict with Serena's injected `initial_instructions`, these
+  rules win.
+- The pinned v1.7.0 already carries the v1.6.0 Svelte↔TypeScript routing fixes;
+  these rules target the general class.
