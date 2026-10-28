@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/retry-attendant",
   "description": "Verify-before-retry attendant: ambiguous-outcome guidance and identical-retry escalation for mutating tool calls (M1 advice + M2 dedup ask)",
-  "version": "0.9.3-rc.3",
+  "version": "0.10.0-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
