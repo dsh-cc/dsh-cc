@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/moa",
   "description": "moa: tiered cascade routing of main-conversation turns over the sketch/draft/blueprint/masterplan lane aliases, with optional acceptance-judge escalation; default off",
-  "version": "0.9.3-rc.2",
+  "version": "0.9.3-rc.3",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
