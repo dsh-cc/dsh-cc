@@ -2,13 +2,13 @@
 
 ## First-use screening notice
 
-Effective project rules in this session: the root AGENTS.md is a 7-line 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-forwarding stub; the 209-line review-protocol text is not loadable from 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-the effective rules. Screening was adopted manually from the
-formal-design skill (session of 2026-10-27); **review-rule availability: 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-missing** — modeling and checking may proceed, but the formal review
-dispatch gate is blocked. No reviewer roster was invented and no formal
-review was dispatched this round.
+Effective project rules at modeling time: the root AGENTS.md was a 7-line 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L131〕
+forwarding stub, so the 209-line protocol (and its review rules) was not 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L131〕
+loadable; screening was adopted manually from the formal-design skill and no
+reviewer roster was invented. **Update 2026-10-27:** the stub was repaired by 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L131〕
+PR #306 (CLAUDE.md is no longer a symlink to AGENTS.md); the effective rules 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L131〕
+now load the full protocol, so the formal review gate this record reported as
+blocked is unblocked — see "Review / handoff state" below.
 
 ## Screening decision
 
@@ -110,12 +110,12 @@ test additions but no production code was touched this round.
 
 ## Review / handoff state
 
-- Formal review: **blocked** (missing effective review rules, see the
-  first-use notice). The complete same-run package exists under
-  `.formal-design/runs/vwa-review-cycle/20261027T095301Z-…/` for any 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-  future dispatch once rules are loadable.
-- Implementation handoff: not applicable — this round is modeling and
-  verification only; no production code change was planned or made.
+- Formal review: **unblocked but not yet dispatched** — effective review rules
+  load again after #306, and the complete same-run package sits under 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L131〕
+  `.formal-design/runs/vwa-review-cycle/20261027T141830Z-…/`. Dispatching the 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L131〕
+  three-seat pass is a user decision for this docs-only model change.
+- Implementation handoff: not applicable — modeling and verification only;
+  no production code change was planned or made.
 
 ## Run lineage
 
