@@ -8,13 +8,17 @@
       "coverage": "core",
       "specification": "Spec",
       "constants": {
+        "AdmissionEstimate": "1",
+        "EnforcePerCall": "TRUE",
         "MaxCalls": "1",
-        "RetryAllowance": "1",
-        "MaxHeadRev": "1"
+        "MaxHeadRev": "1",
+        "ProjectBudget": "1",
+        "RetryAllowance": "1"
       },
       "invariants": [
         "TypeOK",
         "CycleBudgetSound",
+        "ProjectBudgetSound",
         "RetryPoolSound",
         "OneRunPerRequest",
         "DeadOwnerLoadIncomplete",
@@ -33,9 +37,12 @@
       "coverage": "expansion",
       "specification": "Spec",
       "constants": {
+        "AdmissionEstimate": "1",
+        "EnforcePerCall": "TRUE",
         "MaxCalls": "2",
-        "RetryAllowance": "1",
-        "MaxHeadRev": "1"
+        "MaxHeadRev": "1",
+        "ProjectBudget": "4",
+        "RetryAllowance": "1"
       },
       "invariants": [
         "TypeOK",
@@ -52,13 +59,61 @@
       "coverage": "expansion",
       "specification": "Spec",
       "constants": {
+        "AdmissionEstimate": "1",
+        "EnforcePerCall": "TRUE",
         "MaxCalls": "2",
-        "RetryAllowance": "1",
-        "MaxHeadRev": "1"
+        "MaxHeadRev": "1",
+        "ProjectBudget": "4",
+        "RetryAllowance": "1"
       },
       "invariants": [
         "TypeOK",
         "ReservedSettledAccounting"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-admission-only",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdmissionEstimate": "1",
+        "EnforcePerCall": "FALSE",
+        "MaxCalls": "2",
+        "MaxHeadRev": "1",
+        "ProjectBudget": "2",
+        "RetryAllowance": "1"
+      },
+      "invariants": [
+        "TypeOK",
+        "ProjectBudgetSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "project-per-call",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdmissionEstimate": "1",
+        "EnforcePerCall": "TRUE",
+        "MaxCalls": "2",
+        "MaxHeadRev": "0",
+        "ProjectBudget": "1",
+        "RetryAllowance": "0"
+      },
+      "invariants": [
+        "TypeOK",
+        "CycleBudgetSound",
+        "ProjectBudgetSound"
       ],
       "properties": [],
       "limits": {

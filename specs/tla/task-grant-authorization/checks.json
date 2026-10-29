@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "modelId": "task-grant-authorization",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseRegistryOnly": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoUngrantedAutoApproval",
+        "OneApprovalPerCall",
+        "ModeWithinCeiling",
+        "BranchGuardHolds",
+        "NoForgedAdjudication",
+        "DeferredNeverPromoted",
+        "EligibilitySound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-grant-check",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "TRUE",
+        "UseRegistryOnly": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoUngrantedAutoApproval"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-stale-registry",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseRegistryOnly": "TRUE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoUngrantedAutoApproval"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-replay",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseRegistryOnly": "FALSE",
+        "ConsumeOnce": "FALSE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "OneApprovalPerCall"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-ceiling",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseRegistryOnly": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "TRUE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ModeWithinCeiling"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-branch",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseRegistryOnly": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "TRUE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "BranchGuardHolds"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-forged-adjudication",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseRegistryOnly": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "TRUE",
+        "WrongDeferFlip": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoForgedAdjudication"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-deferred-flip",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseRegistryOnly": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "DeferredNeverPromoted"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-batch-run",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "AdoptTorn": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "InitSound",
+        "FrozenBeforeReport",
+        "ReportBeforeCommit",
+        "DeliveryOrder",
+        "ClaimNeverAhead",
+        "SkipNeedsFailures",
+        "StateWriteExclusive",
+        "TerminalStable"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-commit-before-report",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "TRUE",
+        "SkipAfter": "2",
+        "AdoptTorn": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ReportBeforeCommit"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cache-first",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CacheFirst": "TRUE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "AdoptTorn": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ClaimNeverAhead"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-torn",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdoptTorn": "TRUE",
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "InitSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

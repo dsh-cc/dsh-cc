@@ -12,11 +12,15 @@
 (***************************************************************************)
 EXTENDS Naturals
 
-CONSTANT MaxCalls, RetryAllowance, MaxHeadRev
+CONSTANT MaxCalls, RetryAllowance, MaxHeadRev, ProjectBudget, AdmissionEstimate,
+         EnforcePerCall
 
 ASSUME /\ MaxCalls \in 1..4
        /\ RetryAllowance \in 0..2
        /\ MaxHeadRev \in 0..2
+       /\ ProjectBudget \in 1..4
+       /\ AdmissionEstimate \in 1..2
+       /\ EnforcePerCall \in BOOLEAN
 
 (* Bounded universes. *)
 Procs    == {"p1", "p2"}
@@ -89,8 +93,12 @@ CycleSpend(c) ==
   (IF runs["r1"].cycle = c THEN runs["r1"].reserved ELSE 0)
   + (IF runs["r2"].cycle = c THEN runs["r2"].reserved ELSE 0)
 
-(* A target has a reusable completed record: present in some admitted     *)
-(* run's records and not a disagreement copy (review-continue.ts           *)
+(* Durable project spend: every cycle's reserved usage rows, i.e. the      *)
+(* whole project ledger (design §5.1 projectUsage over all review-runs,    *)
+(* not filtered by cycle). Conservative across crashes: rows persist.      *)
+ProjectSpend == CycleSpend("r1") + CycleSpend("r2")
+
+(* A target has a reusable completed record: present in some admitted     *)(* run's records and not a disagreement copy (review-continue.ts           *)
 (* reusableRecord). Cache-key equality is abstracted to target identity.  *)
 ReusableFrom(t) ==
   \E r \in Runs :
@@ -176,6 +184,13 @@ AdmissionBody(p, k) ==
               /\ runs' = runs
               /\ reqMap' = reqMap
               /\ latestCycle' = latestCycle
+            ELSE IF ProjectSpend + AdmissionEstimate > ProjectBudget
+              THEN (* PROJECT_BUDGET_EXHAUSTED: admission refuses the fresh
+                      request before any cycle reservation (design §5.1; the
+                      check sits inside the same budget lock). *)
+                /\ runs' = runs
+                /\ reqMap' = reqMap
+                /\ latestCycle' = latestCycle
             ELSE
               /\ runs' = [runs EXCEPT ![k] =
                   [EmptyRun EXCEPT !.req = pend[p].req,
@@ -236,8 +251,12 @@ ReserveCall(p, t) ==
   /\ pend[p].kind = "run"
   /\ runs[pend[p].run].status = "running"
   /\ t \notin runs[pend[p].run].records
-  /\ IF CycleSpend(runs[pend[p].run].cycle) + 1 > MaxCalls
-     THEN (* in-run guard: budget-exhausted terminal *)
+  /\ IF (CycleSpend(runs[pend[p].run].cycle) + 1 > MaxCalls)
+       \/ (EnforcePerCall /\ ProjectSpend + 1 > ProjectBudget)
+     THEN (* in-run guard: budget-exhausted terminal; the second conjunct is
+             the project-cumulative per-call projection check (design §5.1,
+             reserveCycleCall inside the same lock). Disabled by
+             EnforcePerCall=FALSE only in the documented fault probe. *)
        /\ runs' = [runs EXCEPT ![pend[p].run] =
            [runs[pend[p].run] EXCEPT !.status = "budget-exhausted"]]
        /\ pend' = [pend EXCEPT ![p] = PendNone]
@@ -255,7 +274,8 @@ RetryReserve(p) ==
   /\ alive[p]
   /\ pend[p].kind = "retry"
   /\ runs[pend[p].run].status = "running"
-  /\ IF CycleSpend(runs[pend[p].run].cycle) + 1 > MaxCalls
+  /\ IF (CycleSpend(runs[pend[p].run].cycle) + 1 > MaxCalls)
+       \/ (EnforcePerCall /\ ProjectSpend + 1 > ProjectBudget)
      THEN
        /\ runs' = [runs EXCEPT ![pend[p].run] =
            [runs[pend[p].run] EXCEPT
@@ -443,6 +463,19 @@ Spec == Init /\ [][Next]_vars
 (* Invariants                                                               *)
 (***************************************************************************)
 
+(* S-9: the project-cumulative ledger never exceeds the project budget,   *)
+(* across every cycle and including reserved rows of crashed runs         *)
+(* (design §5.1 ProjectBudgetSound; enforced at fresh admission with the  *)
+(* estimate and at every reservation with the per-call projection).       *)
+ProjectBudgetSound ==
+  ProjectSpend <= ProjectBudget
+
+(* Probe: with the per-call project guard disabled (EnforcePerCall=FALSE)  *)
+(* a run admitted under the project ceiling can still spend its whole      *)
+(* cycle allowance, so the admission-time estimate alone does not bound    *)
+(* the ledger -- the expected counterexample that justifies the in-lock    *)
+(* per-call projection (codex r2 finding 11).                              *)
+
 TypeOK ==
   /\ alive \in [Procs -> BOOLEAN]
   /\ lockHolder \in (({"none"} \cup Procs) \cup {"torn"})
@@ -537,4 +570,5 @@ ReservedSettledAccounting ==
 (***************************************************************************)
 (* Never used at runtime; keeps SANY quiet about unused ASSUME ranges.     *)
 (***************************************************************************)
-ToolchainFingerprint == <<MaxCalls, RetryAllowance, MaxHeadRev>>
+ToolchainFingerprint == <<MaxCalls, RetryAllowance, MaxHeadRev, ProjectBudget,
+                         AdmissionEstimate, EnforcePerCall>>

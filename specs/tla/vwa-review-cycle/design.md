@@ -191,3 +191,27 @@ Regression assertions (all against the existing package,
   code change requested.
 - No convention-case counterexample arose, so no design defect / modeling
   defect / requirement ambiguity classification was required this round.
+
+## Extension: project-cumulative budget (design §5.1, 2026-10-28)
+
+Screening re-run for the batch-autonomous design
+(`docs/plans/2026-10-28-vwa-batch-autonomous-review.md` §5.1). The extension
+changes modeled behavior (a second ledger dimension read at admission and at
+every reservation), so FD-T4 (cross-cycle resource ownership) and FD-T2
+(estimate-vs-actual reservation, retry reservations) re-fire. Backend stays
+`tla`: the new mechanism is ledger concurrency, not arithmetic alone.
+
+Constants added by this extension: `ProjectBudget` (calls allowed across all
+cycles of one project), `AdmissionEstimate` (the plan estimate
+`estimatedWithRetries` charged only at fresh admission), `EnforcePerCall`
+(the documented fault switch: `FALSE` disables the per-call project
+projection, reproducing the pre-design behavior).
+
+| Requirement ID | Business outcome | Property ID | TLA operator | Case IDs and bounds | Fault-or-race trace | Assumption IDs | Planned code symbol and atomicity mechanism | Regression scenario | Exclusion and justification |
+|---|---|---|---|---|---|---|---|---|---|
+| R-7 project budget never overspent | the project ledger (all cycles, including reserved rows of crashed runs) stays within `projectBudget.maxCalls` | S-9 `ProjectBudgetSound` | `ProjectBudgetSound` | convention (ProjectBudget=1: the admission guard actually refuses a second fresh cycle — a looser bound left the guard unreached and the property vacuous); project-per-call (MaxCalls=2, ProjectBudget=1, RetryAllowance=0: the per-call projection blocks the second reservation while the cycle budget would allow it); strict-admission-only (expected red) | admit run r1 just under the ceiling, then let r1 spend its whole cycle allowance; crash between a reserved row and its dispatch | A-9 | `projectUsage` over every `review-runs/*/request` via `loadRequest` + `estimatedWithRetries` at `reserveCycleRequest`, and the per-call projection inside `reserveCycleCall` — both under the same `withBudgetLock` section (review-cycle.ts:72-77) | two cycles in one project each admitted, then run to exhaustion; assert no over-admission and ledger ≤ cap | token dimensions (input/output) abstracted away; only the calls dimension is modeled |
+| R-8 admission estimate is not a reservation | an admitted run cannot be bounded by its admission estimate alone; the per-call projection is the enforcement point | probe `strict-admission-only` (expected counterexample) | `ProjectBudgetSound` with `EnforcePerCall=FALSE` | strict-admission-only (ProjectBudget=2, MaxCalls=2, EnforcePerCall=FALSE) | admission passes at estimate 1, the run then reserves two calls | A-9 | same as R-7 (the disabled switch is the fault model, never a shipped configuration) | n/a — the probe documents why the in-lock per-call check exists (codex r2 finding 11) | the fault switch is constant-bound per case, so it adds no state space |
+
+Excluded from this extension: the streamed `usage.jsonl` reconciliation
+detail (`loadRequest` sums settled rows; the model uses the durable `reserved`
+counter exactly as R-2 does) and the wall-clock dimension (report-only).

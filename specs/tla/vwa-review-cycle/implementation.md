@@ -137,3 +137,19 @@ test additions but no production code was touched this round.
   identical across all four runs (convention 53,081,226 / 9,221,350 / 0; 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
   strict-torn-lock 199 / 106 / 81; strict-reserved-spend 5,293 / 1,687 / 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
   1,080), confirming no model, property, bound or cfg semantics changed 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕.
+
+## Run lineage — project-budget extension (2026-10-29)
+
+- R5 `20261029T013958Z-e49315a1`: first run of the extension. convention
+  verified at 53,081,226/9,221,350 — **identical to R4**, exposing a coverage
+  gap: with MaxCalls=1 and ProjectBudget=2 the new guards were never reached,
+  so ProjectBudgetSound was vacuously true. Not accepted as coverage.
+- R6 `20261029T014608Z-a34465e5`: convention tightened to ProjectBudget=1
+  (31,256,810/5,308,454 — the admission guard now refuses a second fresh
+  cycle) and a new expansion case `project-per-call` (MaxCalls=2,
+  ProjectBudget=1, RetryAllowance=0, 7,853,332/1,301,451 verified) exercises
+  the per-call project projection while the cycle budget would still allow
+  the call. Probes: strict-torn-lock / strict-reserved-spend unchanged red,
+  new strict-admission-only (EnforcePerCall=FALSE) red as designed.
+  check-evidence: valid/fresh, verification=counterexample (aggregate; the
+  core case verified and the red cases are the documented probes).
