@@ -44,7 +44,8 @@ interface InitInput {
 }
 
 const INPUT_KEYS = new Set(['mode', 'reviewSettings', 'setPointer'])
-const PATCH_KEYS = new Set(['budget', 'claimsBatchSize', 'maxArtifactChars', 'disagreementPolicy'])
+const PATCH_KEYS = new Set(['budget', 'claimsBatchSize', 'maxArtifactChars', 'disagreementPolicy', 'projectBudget'])
+const PROJECT_BUDGET_KEYS = new Set(['maxCalls', 'maxInputTokens', 'maxOutputTokens'])
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -100,7 +101,19 @@ function parseInput(raw: unknown): InitInput | Fail {
     return fail('SCHEMA_INVALID', 'input.reviewSettings must be a PatchReviewSettings object')
   for (const key of Object.keys(reviewSettings)) {
     if (!PATCH_KEYS.has(key))
-      return fail('SCHEMA_INVALID', `unknown reviewSettings field: ${key}; allowed: budget, claimsBatchSize, maxArtifactChars, disagreementPolicy`)
+      return fail('SCHEMA_INVALID', `unknown reviewSettings field: ${key}; allowed: budget, claimsBatchSize, maxArtifactChars, disagreementPolicy, projectBudget`)
+  }
+  const projectBudget = reviewSettings.projectBudget
+  if (projectBudget !== undefined) {
+    if (!isPlainObject(projectBudget))
+      return fail('SCHEMA_INVALID', 'reviewSettings.projectBudget must be an object')
+    for (const key of Object.keys(projectBudget)) {
+      if (!PROJECT_BUDGET_KEYS.has(key))
+        return fail('SCHEMA_INVALID', `unknown ProjectBudget field: ${key}`)
+      const value = projectBudget[key]
+      if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 1))
+        return fail('SCHEMA_INVALID', `reviewSettings.projectBudget.${key} must be a positive integer`)
+    }
   }
   const budget = reviewSettings.budget
   if (budget !== undefined && !isPlainObject(budget))

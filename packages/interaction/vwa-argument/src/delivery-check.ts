@@ -15,6 +15,7 @@ import { verifySnapshot } from './sources.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { ProjectStore } from './store.ts'
 import type { DisagreementPolicy } from './review-config.ts'
+import { auditSkipInEffect } from './audit-skip.ts'
 import type { DeliveryCheck } from './report.ts'
 import type { AdjudicationRecord, Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
 
@@ -195,6 +196,8 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   })
   const contractHash = semanticContractHash(snapshot.contract),
     artifactHash = sha256Hex(text)
+  // §5.2: the explicit-skip declaration in effect for THIS binding (shared predicate).
+  const auditSkip = auditSkipInEffect(input.root, snapshot.projectId, artifactId, artifactHash, artifact.entityVersion)
   const expectedAudit = auditDependencyDigest(snapshot, artifactId, selected.records)
   const audit = input.records.filter(
     (r) =>
@@ -416,7 +419,9 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     corePaths &&
     // §4.3 invariant (both modes): an unresolved disagreement blocks reviewed
     // eligibility until a human adjudicates it.
-    unresolvedMarkers.length === 0
+    unresolvedMarkers.length === 0 &&
+    // §5.2: an audit skip can never yield a "reviewed" candidate.
+    auditSkip === undefined
   return {
     gates: (input.gates ?? [])
       .filter((g) => ['link', 'style', 'exec'].includes(g.gate))
@@ -466,6 +471,7 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     assessments,
     findings,
     deferredDisagreements,
+    ...(auditSkip === undefined ? {} : { auditSkip }),
     reviewRunIds: [...new Set(records.map((r) => r.runId))],
     pendingRunIds: input.pendingRunIds,
     sources: snapshot.sources.map((s) => ({

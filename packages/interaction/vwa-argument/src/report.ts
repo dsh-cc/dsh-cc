@@ -78,6 +78,8 @@ export interface DeliveryCheck {
   findings: Finding[]
   /** Feature 3 §4.3: machine-deferred disagreements pending human adjudication. */
   deferredDisagreements: import('./delivery-check.ts').DeferredDisagreement[]
+  /** Feature 4 §5.2: the explicit audit-skip declaration in effect (if any). */
+  auditSkip?: import('./audit-skip.ts').AuditSkip
   reviewRunIds: Id[]
   sources: { sourceId: Id; snapshotHash: Hash; evidenceIds: Id[] }[]
   eligibleForReviewed: boolean
@@ -277,6 +279,7 @@ function reportInput(frozen: FrozenEvaluation): ReportInput {
     assessments: check.assessments,
     findings: check.findings,
     deferredDisagreements: check.deferredDisagreements ?? [],
+    ...(check.auditSkip === undefined ? {} : { auditSkip: check.auditSkip }),
     // Adjudications are frozen into the evaluation at checkForDelivery time.
     adjudications: readAdjudicationsFrozen(frozen),
     reviewRunIds: check.reviewRunIds,

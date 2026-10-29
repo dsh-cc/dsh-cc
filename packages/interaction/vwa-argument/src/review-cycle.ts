@@ -23,6 +23,7 @@ import { fail, ProjectStore, VwaFail, type Fail } from './store.ts'
 import { stableJson } from './schema.ts'
 import { acquireLock, releaseLock } from './lock.ts'
 import type { ReviewBudget } from './review-budget.ts'
+import type { ProjectBudget } from './review-config.ts'
 import type { Id } from './types.ts'
 
 export interface CycleUsage {
@@ -55,6 +56,20 @@ function latestCycle(all: Request[]): { cycleId: Id; cycleSequence: number } {
     (best, r) => (r.cycleSequence ?? 0) > (best?.cycleSequence ?? 0) ? r : best, undefined,
   )
   return { cycleId: latest?.cycleId ?? LEGACY_CYCLE, cycleSequence: latest?.cycleSequence ?? 0 }
+}
+
+function sumUsage(rows: Request[]): CycleUsage {
+  return rows.reduce<CycleUsage>((sum, r) => ({
+    calls: sum.calls + r.calls,
+    inputTokens: sum.inputTokens + r.inputTokens,
+    outputTokens: sum.outputTokens + r.outputTokens,
+  }), { calls: 0, inputTokens: 0, outputTokens: 0 })
+}
+
+function cycleSpend(all: Request[], excludeRunId?: Id, cycleId?: Id): CycleUsage {
+  const own = all.find((r) => r.runId === excludeRunId)
+  const selected = cycleId ?? (own ? own.cycleId ?? LEGACY_CYCLE : latestCycle(all).cycleId)
+  return sumUsage(all.filter((r) => r.runId !== excludeRunId && (r.cycleId ?? LEGACY_CYCLE) === selected))
 }
 
 /**
@@ -185,6 +200,9 @@ export function reserveCycleRequest(
     return withBudgetLock(root, projectId, () => {
       const store = new ReviewRunStore(root, projectId)
       const prior = store.readRequest(runId)
+      // §5.1 admission guard, inside the same budget lock as the cycle freeze.
+      const projectRefusal = projectAdmissionRefusal(root, projectId, request)
+      if (projectRefusal !== undefined) return projectRefusal
       const latest = latestCycle(requests(root, projectId))
       const identity = prior?.cycleId !== undefined
         ? { cycleId: prior.cycleId, cycleSequence: prior.cycleSequence ?? 0 }
@@ -215,7 +233,10 @@ export function reserveCycleRequest(
         // onto a NEWER cycle (F3).
         writeCycleBudget(root, projectId, runId, request.budget, request.budgetRevision ?? headRevision)
       }
-      const { budget: _transport, budgetRevision: _source, ...record } = request
+      const {
+        budget: _transport, budgetRevision: _source, projectBudget: _project,
+        projectEstimatedCalls: _estimate, ...record
+      } = request
       const reserved = { ...record, ...identity, startedAt: prior?.startedAt ?? request.startedAt }
       store.reserveRequest(runId, reserved)
       return reserved
@@ -233,15 +254,38 @@ export function reserveCycleRequest(
  * them to one legacy cycle. A new fresh request opens an independent cycle.
  */
 export function cycleUsage(root: string, projectId: Id, excludeRunId?: Id, cycleId?: Id): CycleUsage {
-  const all = requests(root, projectId)
-  const own = all.find((r) => r.runId === excludeRunId)
-  const selected = cycleId ?? (own ? own.cycleId ?? LEGACY_CYCLE : latestCycle(all).cycleId)
-  return all.filter((r) => r.runId !== excludeRunId && (r.cycleId ?? LEGACY_CYCLE) === selected)
-    .reduce<CycleUsage>((sum, r) => ({
-      calls: sum.calls + r.calls,
-      inputTokens: sum.inputTokens + r.inputTokens,
-      outputTokens: sum.outputTokens + r.outputTokens,
-    }), { calls: 0, inputTokens: 0, outputTokens: 0 })
+  return cycleSpend(requests(root, projectId), excludeRunId, cycleId)
+}
+
+/**
+ * §5.1: project-cumulative spend across EVERY cycle, read through
+ * `loadRequest` (the authoritative reconciled usage ledger — reserved rows of
+ * crashed runs count). Not filtered by cycle. `excludeRunId` removes one run
+ * (the per-call projection re-adds its own spend explicitly).
+ */
+export function projectUsage(root: string, projectId: Id, excludeRunId?: Id): CycleUsage {
+  return sumUsage(requests(root, projectId).filter((r) => r.runId !== excludeRunId))
+}
+
+/** §5.1 admission guard: usage + this request's estimate must fit the project ceiling. */
+function projectAdmissionRefusal(root: string, projectId: Id, request: Request): Fail | undefined {
+  const limit = request.projectBudget
+  if (limit === undefined) return undefined
+  const usage = projectUsage(root, projectId)
+  const estimate = request.projectEstimatedCalls ?? 0
+  const estimatedOutput = estimate * (request.budget?.maxOutputTokensPerCall ?? 0)
+  if (
+    (limit.maxCalls !== undefined && usage.calls + estimate > limit.maxCalls) ||
+    (limit.maxOutputTokens !== undefined && usage.outputTokens + estimatedOutput > limit.maxOutputTokens)
+  ) {
+    return fail(
+      'PROJECT_BUDGET_EXHAUSTED',
+      'The project-cumulative review budget is exhausted (all review cycles count). ' +
+        'Narrow the review scope, or raise reviewSettings.projectBudget with argument.update op set-review-settings.',
+      false,
+    )
+  }
+  return undefined
 }
 
 /**
@@ -258,10 +302,14 @@ export function cycleUsage(root: string, projectId: Id, excludeRunId?: Id, cycle
 export function reserveCycleCall(
   root: string, projectId: Id, cycleId: Id, budget: ReviewBudget, inputTokens: number,
   reserve: () => boolean,
+  /** §5.1: the project ceiling + the asking run (whose own spend is re-added per call). */
+  project?: { budget: ProjectBudget; runId: Id },
 ): boolean {
   return withBudgetLock(root, projectId, () => {
     const cycleBudget = readCycleBudget(root, projectId, cycleId) ?? budget
-    const used = cycleUsage(root, projectId, undefined, cycleId)
+    // ONE durable read serves both ledgers inside this lock.
+    const all = requests(root, projectId)
+    const used = cycleSpend(all, undefined, cycleId)
     if (used.calls + 1 > cycleBudget.maxCallsPerRun ||
         used.inputTokens + inputTokens > cycleBudget.maxInputTokensPerRun ||
         // The output headroom must be checked against the CALLING RUN's actual
@@ -269,6 +317,18 @@ export function reserveCycleCall(
         // (possibly revised) per-call cap: an in-flight run admitted before a
         // downward revision still reserves its old, larger per-call amount.
         used.outputTokens + budget.maxOutputTokensPerCall > cycleBudget.maxOutputTokensPerRun) return false
+    if (project !== undefined) {
+      const limit = project.budget
+      const own = all.find((r) => r.runId === project.runId)
+      const others = sumUsage(all.filter((r) => r.runId !== project.runId))
+      if (
+        (limit.maxCalls !== undefined && others.calls + (own?.calls ?? 0) + 1 > limit.maxCalls) ||
+        (limit.maxInputTokens !== undefined &&
+          others.inputTokens + (own?.inputTokens ?? 0) + inputTokens > limit.maxInputTokens) ||
+        (limit.maxOutputTokens !== undefined &&
+          others.outputTokens + (own?.outputTokens ?? 0) + budget.maxOutputTokensPerCall > limit.maxOutputTokens)
+      ) return false
+    }
     return reserve()
   })
 }

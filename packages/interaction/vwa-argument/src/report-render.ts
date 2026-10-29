@@ -110,6 +110,8 @@ export interface ReportInput {
   findings: Finding[]
   /** Feature 3 §4.3: machine-deferred disagreements pending human adjudication. */
   deferredDisagreements?: import('./delivery-check.ts').DeferredDisagreement[]
+  /** Feature 4 §5.2: explicit audit-skip declaration in effect (truthful rendering). */
+  auditSkip?: { runId: Id }
   adjudications: AdjudicationRecord[]
   reviewRunIds: Id[]
   metrics: { mappedAtomicClaims: number; extractedAtomicClaims: number; reviewedCoreClaims: number; coreClaims: number }
@@ -163,6 +165,8 @@ export function renderReportMarkdown(input: ReportInput): string {
   lines.push('# VWA Reader Report', '')
   lines.push(`reportVersion: ${input.reportVersion} · policy ${POLICY_VERSION} · rubric ${RUBRIC_VERSION}`, '')
   lines.push(`Status: ${statusOf(input)}`, '')
+  // §5.2 header disclosure: the report still succeeds, but the skipped layer is explicit.
+  if (input.auditSkip) lines.push(`audit: SKIPPED (declared at ${input.auditSkip.runId})`, '')
   const deferred = input.deferredDisagreements ?? []
   if (deferred.length) lines.push(`machine-deferred: ${deferred.length} pending`, '')
   lines.push(
@@ -184,12 +188,15 @@ export function renderReportMarkdown(input: ReportInput): string {
   lines.push(`| mechanical | ${input.checks.mechanical} |`)
   lines.push(`| evidence | ${input.checks.evidence} |`)
   lines.push(`| argument | ${input.checks.argument} |`)
-  lines.push(`| audit | ${input.checks.audit} |`, '')
+  const auditRow = input.auditSkip
+    ? `not-run (skipped by request ${input.auditSkip.runId})`
+    : input.checks.audit
+  lines.push(`| audit | ${auditRow} |`, '')
   const notExecuted: string[] = []
   if (input.checks.mechanical === 'not-run') notExecuted.push('mechanical gates not run')
   if (input.checks.evidence === 'not-run') notExecuted.push('evidence review not run')
   if (input.checks.argument === 'not-run') notExecuted.push('argument review not run')
-  if (input.checks.audit === 'not-run') notExecuted.push('full-text audit not run')
+  if (input.checks.audit === 'not-run' && !input.auditSkip) notExecuted.push('full-text audit not run')
   if (notExecuted.length > 0) lines.push(`Not executed: ${notExecuted.join('; ')}.`, '')
   for (const gate of input.gates)
     lines.push(`Gate ${gate.gate}: ${gate.status}${gate.detail ? ` — ${escape(gate.detail)}` : ''}`)

@@ -3,8 +3,16 @@ import type { ReviewBudget } from './review-budget.ts'
 import { DEFAULT_VWA_ARGUMENT_SETTINGS, type VwaArgumentSettings } from './settings.ts'
 /** Feature 3 §4.2: how an unresolved reviewer disagreement drives delivery. */
 export type DisagreementPolicy = 'blocking' | 'deferred'
+/** Feature 4 §5.1: project-cumulative budget (all optional; unset = unlimited). */
+export interface ProjectBudget {
+  maxCalls?: number
+  maxInputTokens?: number
+  maxOutputTokens?: number
+}
 export interface FrozenReviewSettings {
   budget: ReviewBudget
+  // Feature 4 §5.1: live project ledger ceiling (revisable; effective across cycles).
+  projectBudget?: ProjectBudget
   maxArtifactChars: number
   maxContextChars: number
   // Feature C §C.2.2: frozen at init; 1 = no batching.

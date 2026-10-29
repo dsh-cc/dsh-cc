@@ -34,7 +34,7 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
-import { admissionRequestRecord, reviewBudgetRefusal } from './feasibility.ts'
+import { admissionRequestRecord, reviewBudgetRefusal, skipAuditRefusal } from './feasibility.ts'
 import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
 import { replayReviewRequest } from './review-request.ts'
@@ -278,19 +278,21 @@ export function registerArgumentTools(
       'already completed, or BUDGET_EXHAUSTED when the review cycle budget (shared with the fresh request) is spent.',
     parameters: {
       ...common(),
-      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage, continue?: boolean}' },
+      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage, continue?: boolean, skipAudit?: boolean}' },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
       const args = guard(raw)
       if ('ok' in args) return args
-      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string; continue?: boolean }
+      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string; continue?: boolean; skipAudit?: boolean }
       if (body.continue !== undefined && typeof body.continue !== 'boolean')
         return fail('SCHEMA_INVALID', 'input.continue must be a boolean when present')
       const stage = body.stage
       if (stage === undefined || (stage !== 'all' && stage !== 'audit' && !REVIEW_STAGES.has(stage))) {
         return fail('SCHEMA_INVALID', `stage must be sources|support|claims|arguments|all|audit, got ${String(stage)}`)
       }
+      const skipRefusal = skipAuditRefusal(stage, body)
+      if (skipRefusal !== undefined) return skipRefusal
       const root = deps.workspaceRoot(exec.agent)
       if (root === undefined) return fail('STORE_IO_FAILED', 'no workspace root is bound to this session', false)
       const store = new ProjectStore(root, args.projectId)
@@ -430,6 +432,8 @@ export function registerArgumentTools(
             budget: review.budget,
             ...(review.maxArtifactChars ? { maxArtifactChars: review.maxArtifactChars } : {}),
             ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
+            ...(snapshot.contract.reviewSettings?.projectBudget === undefined
+              ? {} : { projectBudget: snapshot.contract.reviewSettings.projectBudget }),
             contractHash: semanticContractHash(snapshot.contract),
             readSnapshot,
             emitProgress: (event) => {

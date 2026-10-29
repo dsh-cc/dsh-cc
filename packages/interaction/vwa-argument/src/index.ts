@@ -134,6 +134,10 @@ export {
   type StoreOptions,
   type TransactionInput,
 } from './store.ts'
+// Feature 4 §5.1/§5.2: the batch layer shares the project ledger and skip predicate.
+export { projectUsage } from './review-cycle.ts'
+export { auditSkipForArtifact, auditSkipInEffect, type AuditSkip } from './audit-skip.ts'
+export type { ProjectBudget } from './review-config.ts'
 export {
   computeAssessments,
   dispositionFor,

@@ -22,6 +22,8 @@ import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { RUBRIC_VERSION, loadPrompt, promptHash, policyHash, responseSchemaFor, recordMatchesKey, semanticContract } from './review-contract.ts'
 import { allRecords, continuePreCheck, frozenCoreSet, reusableRecord } from './review-continue.ts'
 import { applyReusedAudit } from './audit-reuse-apply.ts'
+import { auditSkipForArtifact } from './audit-skip.ts'
+import { seedRunRequest } from './review-run-request.ts'
 import { reserveCycleCall, reserveCycleRequest } from './review-cycle.ts'
 import type { Hash, Id, ProjectSnapshot, ReviewJobStatus, ReviewRecord, ReviewErrorDetail } from './types.ts'
 export type { ReviewBudget } from './review-tasks.ts'
@@ -43,6 +45,8 @@ export interface ReviewRunnerDeps {
   now?: () => number
   maxArtifactChars?: number
   maxContextChars?: number
+  /** §5.1: project-cumulative ceiling the run was admitted under (unset = unlimited). */
+  projectBudget?: import('./review-config.ts').ProjectBudget
 }
 export interface ReviewRunOutcome {
   runId: Id
@@ -83,21 +87,11 @@ export async function executeReviewRun(input: {
   const history = allRecords(deps.root, snapshot.projectId)
   const index = buildReverseIndex(snapshot)
   const startedAt = new Date(deps.now?.() ?? Date.now()).toISOString()
-  const request = {
-    ...store.readRequest(runId),
-    schemaVersion: 1 as const,
-    requestId: input.requestId,
-    runId,
-    stage: input.stages.join('+'),
-    targetClaimIds: input.targetClaimIds,
+  const request = seedRunRequest(store, {
+    runId, requestId: input.requestId, stages: input.stages, targetClaimIds: input.targetClaimIds,
     ...(input.artifact ? { artifactId: input.artifact.id } : {}),
-    ...(input.continueMode ? { continue: true } : {}),
-    status: 'running' as ReviewJobStatus,
-    inputTokens: 0,
-    outputTokens: 0,
-    calls: 0,
-    startedAt,
-  }
+    ...(input.continueMode ? { continueMode: true } : {}),
+  }, startedAt)
   const reserved = reserveCycleRequest(deps.root, snapshot.projectId, runId, request)
   if (!('ok' in reserved)) Object.assign(request, reserved)
   let coreDiscovered = false,
@@ -150,6 +144,7 @@ export async function executeReviewRun(input: {
     deps.maxContextChars ?? 48_000,
     (tokens, reserve) => 'ok' in reserved ? false : reserveCycleCall(
       deps.root, snapshot.projectId, reserved.cycleId, deps.budget, tokens, reserve,
+      deps.projectBudget === undefined ? undefined : { budget: deps.projectBudget, runId },
     ),
     // F1.4: the run's retry pool, seeded from the request record (absent = legacy unlimited).
     request.retryAllowance,
@@ -250,6 +245,8 @@ export async function executeReviewRun(input: {
       input.signal.throwIfAborted()
       if (budget.wallExceeded()) return finish('incomplete')
       if (stage === 'audit') {
+        // §5.2: an in-effect skip declaration means audit is not re-planned/run.
+        if (auditSkipForArtifact(deps.root, snapshot, input.artifact) !== undefined) continue
         if (!input.artifact) return finish('incomplete')
         if (input.artifact.text.length > (deps.maxArtifactChars ?? 120_000))
           throw new ReviewInvalidError('artifact exceeds review-max-artifact-chars; full audit refused')
