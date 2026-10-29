@@ -235,11 +235,22 @@ counter exactly as R-2 does) and the wall-clock dimension (report-only).
   other properties are not blocked by the known defect; when #311 is fixed,
   this abstraction stays valid (the fix restores the modeled atomicity).
 - New case `project-retry-earn` (MaxCalls=2, RetryAllowance=1,
-  ProjectBudget=2, MaxHeadRev=1): covers a successful retry reservation and
-  concurrent retry consumers under the project ceiling (review finding:
+  ProjectBudget=2, MaxHeadRev=0 -- the graph-commit interleaving is already
+  covered by convention; dropping it keeps the case under the timeout): covers
+  a successful retry reservation and concurrent retry consumers under the
+  project ceiling (review finding:
   green bounds had never exercised retry earnings).
 - **K1 fix note**: the replay/IDEMPOTENCY_CONFLICT arm of `AdmissionBody`
   previously conjuncted `UNCHANGED vars` inside an action that had already
   assigned primed variables, making the arm dead code — R-4's replay
   semantics were never executed. Fixed; the convention state count grew
   from 31,256,810 to 31,313,450, confirming the arm is now reachable.
+- **E-9 (provenance tracking)**: `ContinuationSound` requires a distinct
+  source run (`r2 /= r`), but full provenance (recording WHICH run each
+  reused target was copied from) is not modeled: it would add a
+  [Targets -> Runs] field per run, multiplying the 31M-state space for a
+  property the selection guard already enforces structurally
+  (`ReusableFrom` excludes the destination's own records). The residual --
+  a regression in which a faulty copy self-witnesses via ANOTHER run's
+  record -- is covered by the r2 /= r check plus the implementation
+  regression test on the selection guard.

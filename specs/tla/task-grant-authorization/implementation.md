@@ -51,3 +51,12 @@ batch-autonomous design §3.4-§3.6 and §4.3-§4.4.
 
 Liveness; registry TTL and the missing-callId fallback; the shell-rule
 composition (E-1); the `signer` provenance hardening (design note).
+
+## Final run (r2/r3 residue fixes, 2026-10-29)
+
+- `20261029T062204Z-2e0c3e5b-aaed-4661-aeb7-4ad3ad863d39`: branch guard scoped to grant-path approvals (model C) /
+  MaxHeadRev wording + E-9 provenance exclusion (model A) / cl durability
+  wording (model B design) / the design doc gained the explicit
+  init-under-write-lock requirement. Convention verified; all probes red on
+  their intended invariants; check-evidence valid/fresh. Three-lane review
+  final verdicts: critic GO (r2), codex GO (r3), grok GO (r3).

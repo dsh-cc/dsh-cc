@@ -25,8 +25,9 @@ batch-autonomous design §2.4 and §8.
   codex F13): `RetryPrepare` takes the caller's input independently, a
   mismatching retry is refused (IDEMPOTENCY_CONFLICT returns via
   `ResolveConflict`), and the `strict-adopt-conflicting` probe is red on
-  `InitSound`. Convention verified 38,223/10,815; seven probes red on their
-  intended invariants; no TLC deadlock.
+  `InitSound`. Convention verified 38,223/10,815; six probes red on their
+  intended invariants (commit-before-report, cache-first, adopt-torn,
+  push-stale-cache, skip-content-gate, adopt-conflicting); no TLC deadlock.
 
 ## Design clarifications the v2 model produced (folded into the design doc)
 

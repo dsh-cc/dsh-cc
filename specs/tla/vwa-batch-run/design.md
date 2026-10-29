@@ -56,7 +56,7 @@ folds are listed in implementation.md.
 | Variable | Meaning | Durability |
 |---|---|---|
 | `ev` | durable evidence: reservation state/payload, project, bound, reviewed, frozen, rep, com, content, push, pr, nopr, ci, failure counter, page status | survives crashes |
-| `cl` | `state.json` cache claims | lost on crash |
+| `cl` | `state.json` cache claims | file-backed; survives a crash (`Crash` leaves it) |
 | `alive`, `lock`, `inLock`, `pend` | driver liveness, the state-writer lock, and the in-flight action (with `phase`: original write vs retry adoption) | pend/alive lost on crash |
 
 Atomicity mapping: `ReserveFile` = one `openSync('wx')` + single

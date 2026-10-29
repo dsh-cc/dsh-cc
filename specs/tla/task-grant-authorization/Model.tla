@@ -207,7 +207,7 @@ ApproveConsume ==
      IN
      /\ ( call.witness = "grant" => revalidate )
      /\ ( call.witness = "none" => (SkipGrantCheck \/ ~grantLive) )
-     /\ branchOk
+     /\ ( call.witness = "grant" => branchOk )
      /\ LET own == ( regSelf = "entry" )
             stray == ( regStray = "entry" )
             useStray == CrossConsume /\ stray

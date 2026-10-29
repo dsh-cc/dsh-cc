@@ -84,7 +84,12 @@ data:{workspaceIdentity}}` (RESULT_SCHEMA, tool-input.ts:19-32).
    (same code as §2.4).
 3. `newId = 'prj_' + randomUUID()` (same format as commands.ts:242);
    `contract = { ...defaultContract(...), mode }`.
-4. `ProjectStore.init(contract, frozenSettings)` (store.ts:200-220). On-disk
+4. `ProjectStore.init(contract, frozenSettings)` (store.ts:200-220),
+   **executed under the project write lock** (`locks/write.lock`): the
+   HEAD-exists check alone is not a create transaction — two adopters of the
+   same reservation can both pass it and write diverging workspaceIdentity
+   values (issue #312; the TLA+ model `specs/tla/vwa-batch-run` pins this as
+   the intended transaction). On-disk
    layout identical to `/vwa init` (except id/nonce/time):
    `.dsh/vwa/<projectId>/{HEAD.json, workspace.json, revisions/, operations/,
    locks/}`, `docs/vwa-sources/<projectId>/`, revision 1. When init returns

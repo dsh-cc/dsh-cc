@@ -153,3 +153,12 @@ test additions but no production code was touched this round.
   new strict-admission-only (EnforcePerCall=FALSE) red as designed.
   check-evidence: valid/fresh, verification=counterexample (aggregate; the
   core case verified and the red cases are the documented probes).
+
+## Final run (r2/r3 residue fixes, 2026-10-29)
+
+- `20261029T062214Z-84e4bf0c-0c8f-456e-823d-97237d02871b`: branch guard scoped to grant-path approvals (model C) /
+  MaxHeadRev wording + E-9 provenance exclusion (model A) / cl durability
+  wording (model B design) / the design doc gained the explicit
+  init-under-write-lock requirement. Convention verified; all probes red on
+  their intended invariants; check-evidence valid/fresh. Three-lane review
+  final verdicts: critic GO (r2), codex GO (r3), grok GO (r3).
