@@ -129,9 +129,10 @@ const METADATA = {
 }
 
 describe('tool registration (§13 gate surface)', () => {
-  it('mounts the three author tools plus argument.review', () => {
+  it('mounts the author tools plus argument.init and argument.review', () => {
     const { tools } = mount()
     expect([...tools.keys()].sort()).toEqual([
+      'argument.init',
       'argument.report',
       'argument.review',
       'argument.update',

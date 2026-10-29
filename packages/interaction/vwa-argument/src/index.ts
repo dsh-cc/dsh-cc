@@ -24,6 +24,7 @@ import { commandDeps } from './command-host.ts'
 import { registerVwaCommand } from './commands.ts'
 import { hostDeliveryDeps } from './host-delivery.ts'
 import { createReviewFactory } from './review-host.ts'
+import { freezeReviewSettings } from './review-config.ts'
 
 export {
   DEFAULT_VWA_ARGUMENT_SETTINGS,
@@ -297,6 +298,8 @@ export function apply(ctx: Context): void {
           readArtifact: readWorkspaceArtifact,
           snapshotTexts: new Map(),
           maxEntities: readUserSettingsSync(dshHome)['project-max-entities'],
+          // Same baseline source as `/vwa init` (command-host.ts).
+          reviewSettings: () => freezeReviewSettings(readUserSettingsSync(dshHome)),
           // §13/Appendix A: llm + jobs + alias route resolved per call (review-host.ts).
           review: createReviewFactory(ctx, dshHome),
         },

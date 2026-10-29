@@ -1,4 +1,4 @@
-import { defineTool, ToolArgsError, type ToolDefinition, type ToolRunContext } from '@dsh-cc/tools'
+import { defineTool, type ToolDefinition } from '@dsh-cc/tools'
 import { COMMON_PARAMS, RESULT_SCHEMA, guard, toText, type ToolArgs } from './tool-input.ts'
 /**
  * Author-facing tools (design docs/plans/2026-10-16-vwa-evidence-argument.md
@@ -40,28 +40,11 @@ import { ReviewRunStore } from './review-run-store.ts'
 import { replayReviewRequest } from './review-request.ts'
 import { cycleUsage, reserveCycleRequest } from './review-cycle.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
+import type { FrozenReviewSettings } from './review-config.ts'
+import { argumentInitTool } from './init-tool.ts'
+import { withSchemaEnvelope } from './tool-envelope.ts'
 
-/** The minimal registration face of the harness tool runtime (no hard dep). */
-export interface ToolRegistrar {
-  register(definition: ToolDefinition): unknown
-}
-
-export type { ToolDefinition } from '@dsh-cc/tools'
-
-/** Wrap a defineTool result so shape rejections keep the §10.1 SCHEMA_INVALID envelope (not a thrown ToolArgsError). */
-export function withSchemaEnvelope(tool: ToolDefinition): ToolDefinition {
-  return {
-    ...tool,
-    async execute(args: unknown, exec: ToolRunContext) {
-      try {
-        return await tool.execute(args, exec)
-      } catch (error) {
-        if (error instanceof ToolArgsError) return fail('SCHEMA_INVALID', error.violations.join('; '))
-        throw error
-      }
-    },
-  }
-}
+export { withSchemaEnvelope, type ToolRegistrar, type ToolDefinition } from './tool-envelope.ts'
 
 /** Collaborators injected per mount; tests substitute fakes. */
 export interface ToolDeps {
@@ -79,6 +62,8 @@ export interface ToolDeps {
   /** Source snapshot texts by sourceId (quote validation, §5.1). */
   snapshotTexts: Map<string, string>
   maxEntities: number
+  /** Frozen review settings baseline for `argument.init` (same source as `/vwa init`). */
+  reviewSettings?(): FrozenReviewSettings
   report?(root: string, agent: unknown): VwaArgumentService
   /**
    * Review collaborators (§10.6/Appendix A). Absent → `argument.review` is
@@ -145,6 +130,7 @@ export function registerArgumentTools(
   deps: ToolDeps,
 ): void {
   registrar.tools.register(withSchemaEnvelope(reportTool(deps)))
+  registrar.tools.register(argumentInitTool(deps))
   const common = () => ({
     projectId: COMMON_PARAMS.projectId,
     expectedRevision: COMMON_PARAMS.expectedRevision,
