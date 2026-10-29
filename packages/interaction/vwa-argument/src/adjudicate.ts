@@ -73,27 +73,23 @@ function conflictingSlot(
   findingId: string,
 ): { ruleId: string; targetId: Id } | undefined {
   const records = conflictingRecords(root, projectId, findingId)
-  const home = readReviewRecords(root, projectId).find(
-    (record) => record.stage !== 'extract' && record.response?.findings.some((f) => f.id === findingId),
-  )
-  if (home === undefined || home.stage === 'extract' || home.response === undefined) return undefined
-  const verdicts = new Map<string, string>()
+  const verdicts = new Map<string, Set<string>>()
   const slots = new Map<string, { ruleId: string; targetId: Id }>()
-  for (const target of home.response.targets)
-    for (const check of target.checks) {
-      const key = `${target.targetId}|${check.ruleId}`
-      verdicts.set(key, check.result)
-      slots.set(key, { ruleId: check.ruleId, targetId: target.targetId })
-    }
-  for (const record of records.slice(1)) {
+  // Compare actual judgments with each other. A marker is a copy of the
+  // detecting run, whose position in directory enumeration has no meaning.
+  for (const record of records) {
     if (record.stage === 'extract' || record.response === undefined) continue
     for (const target of record.response.targets)
       for (const check of target.checks) {
         const key = `${target.targetId}|${check.ruleId}`
-        if (verdicts.has(key) && verdicts.get(key) !== check.result) return slots.get(key)
+        const results = verdicts.get(key) ?? new Set<string>()
+        results.add(check.result)
+        verdicts.set(key, results)
+        slots.set(key, { ruleId: check.ruleId, targetId: target.targetId })
       }
   }
-  return undefined
+  const conflicting = [...verdicts].filter(([, results]) => results.size > 1)
+  return conflicting.length === 1 ? slots.get(conflicting[0]![0]) : undefined
 }
 
 /**
@@ -142,6 +138,12 @@ export async function vwaAdjudicate(
     runId = prevailingRunId
     supersededRunId = runs.find((candidate) => candidate !== prevailingRunId)
     slot = conflictingSlot(root, projectId, findingId)
+    if (slot === undefined) {
+      return {
+        kind: 'error',
+        text: `finding ${findingId} does not identify exactly one conflicting (target, rule) slot; re-run the review or repair the store.`,
+      }
+    }
   } else if (prevailingRunId !== undefined && prevailingRunId !== runId) {
     return {
       kind: 'error',

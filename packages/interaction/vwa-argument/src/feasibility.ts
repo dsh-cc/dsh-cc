@@ -21,7 +21,7 @@ import type { ReviewBudget } from './review-budget.ts'
 import type { ReviewStage, ReviewTask } from './review-plan.ts'
 import type { Id, ProjectSnapshot } from './types.ts'
 import type { ReviewCollaborators } from './tools.ts'
-import { artifactBinding, auditSkipForArtifact } from './audit-skip.ts'
+import { artifactBinding } from './audit-skip.ts'
 
 /** Retry headroom (Feature B): 50% of calls are expected to need one retry (design F1.4 shared contract). */
 export const RETRY_ALLOWANCE_FACTOR = 1.5
@@ -64,7 +64,7 @@ export function estimateReviewCalls(input: {
   let auditUnits = 0
   // §5.2: an explicit skip declaration and an already-effective one are the
   // same planning input (the shared predicate is authoritative).
-  const skipAudit = input.skipAudit === true || auditSkipForArtifact(input.root, input.snapshot, input.artifact) !== undefined
+  const skipAudit = input.skipAudit === true
   if (input.stages.includes('audit') && input.artifact && !skipAudit) {
     const unitChars = effectiveAuditUnitChars(
       input.maxContextChars === undefined ? {} : { maxContextChars: input.maxContextChars },
@@ -280,8 +280,8 @@ export function admissionRequestRecord(input: {
     projectEstimatedCalls: estimate.estimatedWithRetries,
     // §5.2: the declaration binds to ONE artifact binding and is excluded from
     // every identity hash; an old declaration auto-expires after a rebind.
-    ...(input.body.skipAudit === true && binding !== undefined && binding.entityVersion !== undefined
-      ? { skipAudit: true, artifactHash: binding.artifactHash, entityVersion: binding.entityVersion }
+    ...(binding !== undefined && binding.entityVersion !== undefined
+      ? { skipAudit: input.body.skipAudit === true, artifactHash: binding.artifactHash, entityVersion: binding.entityVersion }
       : {}),
     retryAllowance: Math.ceil(estimate.estimatedCalls * (RETRY_ALLOWANCE_FACTOR - 1)),
     inputTokens: 0,

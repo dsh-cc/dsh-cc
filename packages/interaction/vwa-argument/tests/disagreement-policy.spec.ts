@@ -176,6 +176,7 @@ describe('§4.4 adjudicate grammar', () => {
     const store = new ReviewRunStore(root, projectId)
     const runs = [`run_${randomUUID()}`, `run_${randomUUID()}`]
     const findingId = `finding_${randomUUID()}`
+    const targetId = `cl_${randomUUID()}`
     for (const [index, runId] of runs.entries())
       store.writeRecord(runId, {
         runId, stage: 'claims', targetRefs: [], dependencyDigest: '', artifactHash: undefined,
@@ -185,10 +186,10 @@ describe('§4.4 adjudicate grammar', () => {
         response: {
           stage: 'claims', rubricVersion: 'humanities-v1',
           findings: [{
-            id: findingId, code: 'REVIEWER_DISAGREEMENT', targetIds: [], severity: 'major',
+            id: findingId, code: 'REVIEWER_DISAGREEMENT', targetIds: [targetId], severity: 'major',
             explanation: 'x', evidenceIds: [], artifactSpans: [], repair: 'manual-review',
           }],
-          targets: [],
+          targets: [{ targetId, searchSufficiency: 'checked', checks: [{ ruleId: 'HIST-01', result: index === 0 ? 'fail' : 'pass', rationale: 'Conflicting judgments.', evidenceIds: [] }] }],
         },
       } as never)
     return { findingId, runs }

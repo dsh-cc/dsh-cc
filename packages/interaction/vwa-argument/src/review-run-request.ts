@@ -6,7 +6,8 @@
  */
 
 import type { ReviewRunStore } from './review-run-store.ts'
-import type { Id, ReviewJobStatus } from './types.ts'
+import { artifactBinding } from './audit-skip.ts'
+import type { Id, ProjectSnapshot, ReviewJobStatus } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 
 /** The durable request row seeded at run start (reservation transport fields are merged in later). */
@@ -18,12 +19,17 @@ export function seedRunRequest(
     stages: ReviewStage[]
     targetClaimIds: Id[]
     artifactId?: Id
+    artifact?: { id: Id; text: string }
+    snapshot: ProjectSnapshot
     continueMode?: boolean
   },
   startedAt: string,
 ): ReturnType<ReviewRunStore['readRequest']> & { status: ReviewJobStatus } {
+  const prior = store.readRequest(input.runId)
+  const binding = input.artifact ? artifactBinding(input.snapshot, input.artifact) : undefined
   return {
-    ...store.readRequest(input.runId),
+    ...(binding?.entityVersion === undefined ? {} : { artifactHash: binding.artifactHash, entityVersion: binding.entityVersion, skipAudit: false }),
+    ...prior,
     schemaVersion: 1 as const,
     requestId: input.requestId,
     runId: input.runId,
@@ -35,6 +41,6 @@ export function seedRunRequest(
     inputTokens: 0,
     outputTokens: 0,
     calls: 0,
-    startedAt,
+    startedAt: prior?.startedAt ?? startedAt,
   }
 }

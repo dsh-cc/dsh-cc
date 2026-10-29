@@ -13,7 +13,8 @@ import {
   type ReviewMessages,
 } from './review-adapter.ts'
 import { BudgetTracker, type ReviewBudget } from './review-tasks.ts'
-import { ReviewCaller, ReviewBudgetError, ReviewRetryBudgetError, RETRY_BUDGET_ADVICE } from './review-call.ts'
+import { reviewRunRefusal } from './review-project-budget.ts'
+import { ReviewCaller, ReviewBudgetError } from './review-call.ts'
 import { executeAudit } from './audit.ts'
 import { ProjectStore, fail, type Fail } from './store.ts'
 import { taskDependencyDigest, taskEnvelope, taskDependencyIds } from './review-input.ts'
@@ -88,8 +89,8 @@ export async function executeReviewRun(input: {
   const index = buildReverseIndex(snapshot)
   const startedAt = new Date(deps.now?.() ?? Date.now()).toISOString()
   const request = seedRunRequest(store, {
-    runId, requestId: input.requestId, stages: input.stages, targetClaimIds: input.targetClaimIds,
-    ...(input.artifact ? { artifactId: input.artifact.id } : {}),
+    runId, snapshot, requestId: input.requestId, stages: input.stages, targetClaimIds: input.targetClaimIds,
+    ...(input.artifact ? { artifactId: input.artifact.id, artifact: input.artifact } : {}),
     ...(input.continueMode ? { continueMode: true } : {}),
   }, startedAt)
   const reserved = reserveCycleRequest(deps.root, snapshot.projectId, runId, request)
@@ -144,7 +145,7 @@ export async function executeReviewRun(input: {
     deps.maxContextChars ?? 48_000,
     (tokens, reserve) => 'ok' in reserved ? false : reserveCycleCall(
       deps.root, snapshot.projectId, reserved.cycleId, deps.budget, tokens, reserve,
-      deps.projectBudget === undefined ? undefined : { budget: deps.projectBudget, runId },
+      { ...(deps.projectBudget === undefined ? {} : { budget: deps.projectBudget }), runId },
     ),
     // F1.4: the run's retry pool, seeded from the request record (absent = legacy unlimited).
     request.retryAllowance,
@@ -227,7 +228,7 @@ export async function executeReviewRun(input: {
       adapter: deps.adapter,
       contractHash: deps.contractHash,
       snapshot,
-      stages: input.stages,
+      stages: input.stages, skipAudit: auditSkipForArtifact(deps.root, snapshot, input.artifact) !== undefined,
       targetClaimIds: input.targetClaimIds,
       ...(input.artifact ? { artifact: { id: input.artifact.id, text: input.artifact.text } } : {}),
       ...(input.maxUnitChars === undefined ? {} : { maxUnitChars: input.maxUnitChars }),
@@ -245,7 +246,6 @@ export async function executeReviewRun(input: {
       input.signal.throwIfAborted()
       if (budget.wallExceeded()) return finish('incomplete')
       if (stage === 'audit') {
-        // §5.2: an in-effect skip declaration means audit is not re-planned/run.
         if (auditSkipForArtifact(deps.root, snapshot, input.artifact) !== undefined) continue
         if (!input.artifact) return finish('incomplete')
         if (input.artifact.text.length > (deps.maxArtifactChars ?? 120_000))
@@ -430,7 +430,7 @@ export async function executeReviewRun(input: {
                 ? 'budget-exhausted'
                 : 'incomplete',
             // F1.4: persist the retry-pool refusal on the run outcome here too.
-            failed.reason instanceof ReviewRetryBudgetError ? fail('REVIEW_RETRY_BUDGET', RETRY_BUDGET_ADVICE, false) : undefined,
+            reviewRunRefusal(failed.reason),
           )
       }
       deps.emitProgress?.({ runId, stage, message: `stage ${stage} done` })
@@ -498,8 +498,7 @@ export async function executeReviewRun(input: {
       ))
     }
     save(errorRecord(reachedStage, error))
-    // F1.4: persist the retry-pool refusal on the outer-catch path as well.
-    const retryRefusal = error instanceof ReviewRetryBudgetError ? fail('REVIEW_RETRY_BUDGET', RETRY_BUDGET_ADVICE, false) : undefined
+    const retryRefusal = reviewRunRefusal(error)
     return finish(status, retryRefusal)
   }
 }

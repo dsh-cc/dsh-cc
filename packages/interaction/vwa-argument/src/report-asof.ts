@@ -15,7 +15,8 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { sha256Hex, stableJson } from './schema.ts'
-import { evaluateDelivery } from './delivery-check.ts'
+import { evaluateDelivery, mechanicalFindings, type DeliveryInputs } from './delivery-check.ts'
+import { auditSkipInEffect } from './audit-skip.ts'
 import { renderReportJson, renderReportMarkdown, reportHashOf, type ReportInput } from './report-render.ts'
 import type { DeliveryCheck, FrozenEvaluation } from './report.ts'
 import type { AdjudicationRecord, Finding, Hash, Id, ReviewRecord, Verdict } from './types.ts'
@@ -25,6 +26,44 @@ export type StoredRecord = ReviewRecord & { kind?: 'disagreement' }
 
 /** The full frozen record set of one evaluation. */
 export type StoredRecords = StoredRecord[]
+
+/** Runtime observations read once at delivery-check time, never during replay. */
+export type FrozenRuntime = NonNullable<DeliveryInputs['runtime']>
+
+export function freezeDeliveryRuntime(
+  root: string,
+  snapshot: FrozenEvaluation['snapshot'],
+  artifactId: Id,
+  text: string,
+): FrozenRuntime {
+  const artifact = snapshot.artifacts.find((candidate) => candidate.id === artifactId)!
+  const auditSkip = auditSkipInEffect(root, snapshot.projectId, artifactId, sha256Hex(text), artifact.entityVersion)
+  return {
+    ...(auditSkip === undefined ? {} : { auditSkip }),
+    mechanicalFindings: mechanicalFindings(root, snapshot, artifactId, text),
+    sourceByteHashes: snapshot.sources.map((source) => {
+      try {
+        return sha256Hex(readFileSync(join(root, source.snapshotPath), 'utf8'))
+      } catch {
+        return 'unreadable'
+      }
+    }),
+  }
+}
+
+/** Older evaluations can recover only findings whose provenance is unambiguous. */
+function replayRuntime(frozen: FrozenEvaluation, records: StoredRecords): FrozenRuntime | undefined {
+  if (frozen.runtime !== undefined) return frozen.runtime
+  const recordedIds = new Set(records.flatMap((record) => record.stage === 'extract' ? [] :
+    (record.response?.findings ?? []).map((finding) => finding.id)))
+  const generated = frozen.check.findings.filter((finding) => !recordedIds.has(finding.id))
+  if (generated.some((finding) => finding.code !== 'EVID-01' && finding.code !== 'REVIEWER_DISAGREEMENT'))
+    return undefined
+  return {
+    ...(frozen.check.auditSkip === undefined ? {} : { auditSkip: frozen.check.auditSkip }),
+    mechanicalFindings: generated.filter((finding) => finding.code === 'EVID-01'),
+  }
+}
 
 /** §6.2 step 1: the minimal conflicting-verdict context the adjudication overlay needs. */
 export interface DisagreementContext {
@@ -119,11 +158,17 @@ export function applyAdjudicationOverlay(
   frozen: FrozenEvaluation,
   adjudications: AdjudicationRecord[],
 ): DeliveryCheck {
-  const records = frozen.records ?? []
+  // Missing replay records on legacy rows must not erase a completed review.
+  if (!Array.isArray(frozen.records)) return frozen.check
+  const records = frozen.records
+  const runtime = replayRuntime(frozen, records)
+  if (runtime === undefined) return frozen.check
   // The check's reviewerConfigHash is DERIVED when the freeze had no explicit
   // hash; feeding a derived value back in would filter every record out, so it
   // is only forwarded when it cannot have been derived from these records.
   const derived = sha256Hex(stableJson([...new Set(records.map((record) => record.reviewerConfigHash))].sort()))
+  const config = frozen.runtime !== undefined ? frozen.reviewerConfigHashInput
+    : frozen.check.reviewerConfigHash === derived ? undefined : frozen.check.reviewerConfigHash
   return evaluateDelivery({
     root,
     snapshot: frozen.snapshot,
@@ -133,7 +178,8 @@ export function applyAdjudicationOverlay(
     pendingRunIds: frozen.check.pendingRunIds,
     adjudications,
     gates: frozen.gates,
-    ...(frozen.check.reviewerConfigHash === derived ? {} : { reviewerConfigHash: frozen.check.reviewerConfigHash }),
+    runtime,
+    ...(config === undefined ? {} : { reviewerConfigHash: config }),
     disagreementPolicy: frozen.snapshot.contract.reviewSettings?.disagreementPolicy ?? 'blocking',
   })
 }

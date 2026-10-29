@@ -15,7 +15,8 @@ import { verifySnapshot } from './sources.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { ProjectStore } from './store.ts'
 import type { DisagreementPolicy } from './review-config.ts'
-import { auditSkipInEffect } from './audit-skip.ts'
+import { auditSkipInEffect, type AuditSkip } from './audit-skip.ts'
+import { effectiveReviewRecords } from './delivery-adjudication.ts'
 import type { DeliveryCheck } from './report.ts'
 import type { AdjudicationRecord, Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
 
@@ -31,6 +32,8 @@ export interface DeliveryInputs {
   gates?: GateEntry[]
   /** Feature 3 §4.2: read from HEAD at call time, never from the evaluated snapshot. */
   disagreementPolicy?: DisagreementPolicy
+  /** Frozen runtime observations; presence also freezes an absent audit skip. */
+  runtime?: { auditSkip?: AuditSkip; mechanicalFindings: Finding[]; sourceByteHashes?: Hash[] }
 }
 
 /** A machine-deferred disagreement, with the per-run verdicts for the pending-adjudication section. */
@@ -197,7 +200,9 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   const contractHash = semanticContractHash(snapshot.contract),
     artifactHash = sha256Hex(text)
   // §5.2: the explicit-skip declaration in effect for THIS binding (shared predicate).
-  const auditSkip = auditSkipInEffect(input.root, snapshot.projectId, artifactId, artifactHash, artifact.entityVersion)
+  const auditSkip = input.runtime === undefined
+    ? auditSkipInEffect(input.root, snapshot.projectId, artifactId, artifactHash, artifact.entityVersion)
+    : input.runtime.auditSkip
   const expectedAudit = auditDependencyDigest(snapshot, artifactId, selected.records)
   const audit = input.records.filter(
     (r) =>
@@ -245,55 +250,10 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     ...(deferredMode ? unresolvedMarkers.map((m) => m.id) : []),
     ...markers.filter((m) => adjudicatedMarkerIds.has(m.id)).map((m) => m.id),
   ])
-  const effective = structuredClone(records)
-  for (const record of effective) {
-    if (record.stage === 'extract' || !record.response) continue
-    for (const target of record.response.targets)
-      for (const check of target.checks) {
-        if (
-          adjudications.some(
-            (a) =>
-              a.decision === 'reject' &&
-              a.overrides.runId === record.runId &&
-              // A batched finding can cover several targets; the persisted
-              // override retains only its first target for legacy compatibility.
-              record.response?.findings.some(
-                (f) => f.id === a.findingId && f.targetIds.includes(target.targetId),
-              ) &&
-              a.overrides.ruleId === check.ruleId &&
-              !record.response?.findings.some(
-                (f) => f.code === check.ruleId && f.targetIds.includes(target.targetId) && !rejected.has(f.id),
-              ),
-          )
-        )
-          check.result = 'pass'
-        // §4.4: only the prevailingRunId record's verdict counts on that
-        // (target, rule); the superseded record's same-slot verdict is
-        // suppressed in this effective copy (the stored record is untouched).
-        if (
-          adjudications.some(
-            (a) =>
-              a.overrides.supersededRunId === record.runId &&
-              a.overrides.ruleId === check.ruleId &&
-              (a.overrides.targetId === target.targetId ||
-                record.response?.findings.some(
-                  (f) => f.id === a.findingId && f.targetIds.includes(target.targetId),
-                )),
-          )
-        )
-          check.result = 'pass'
-      }
-  }
-  const stripIds = new Set([...rejected, ...excludedMarkerIds])
+  const effective = effectiveReviewRecords(records, adjudications, excludedMarkerIds)
   if (adjudications.length || excludedMarkerIds.size) {
     for (const stage of ['sources', 'support', 'claims', 'arguments'] as const) {
-      const reviewed = effective
-        .filter((r) => r.stage === stage)
-        .map((r) =>
-          r.stage === 'extract' || !r.response
-            ? r
-            : { ...r, response: { ...r.response, findings: r.response.findings.filter((f) => !stripIds.has(f.id)) } },
-        ) as ReviewRecord[]
+      const reviewed = effective.filter((r) => r.stage === stage)
       if (reviewed.length && selected.stages[stage] !== 'not-run')
         selected.stages[stage] = stageVerdict(reviewed, [stage])
     }
@@ -357,13 +317,18 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
       ),
     ]
   }
+  const runtimeFindings = input.runtime?.mechanicalFindings ?? mechanicalFindings(input.root, snapshot, artifactId, text)
   const findings = [
     ...records.flatMap((r) => (r.stage === 'extract' ? [] : (r.response?.findings ?? []))),
     ...selected.findings,
-    ...mechanicalFindings(input.root, snapshot, artifactId, text),
+    ...runtimeFindings,
   ]
   // Accepted disagreement markers keep their major force (§4.4).
-  const active = findings.filter(
+  const active = [
+    ...effective.flatMap((r) => r.stage === 'extract' ? [] : r.response?.findings ?? []),
+    ...selected.findings,
+    ...runtimeFindings,
+  ].filter(
     (f) => !rejected.has(f.id) && (f.code !== 'REVIEWER_DISAGREEMENT' || accepted.has(f.id)),
   )
   const extraction = latest.find((r) => r.stage === 'extract')
@@ -454,13 +419,13 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
       stableJson({
         project: projectDependencyDigest(snapshot, records),
         gates: input.gates ?? [],
-        sourceBytes: snapshot.sources.map((source) => {
+        sourceBytes: input.runtime === undefined ? snapshot.sources.map((source) => {
           try {
             return sha256Hex(readFileSync(join(input.root, source.snapshotPath), 'utf8'))
           } catch {
             return 'unreadable'
           }
-        }),
+        }) : input.runtime.sourceByteHashes ?? snapshot.sources.map((source) => source.snapshotHash),
       }),
     ),
     policyHash: policyHash(),

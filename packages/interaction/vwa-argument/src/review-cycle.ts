@@ -16,12 +16,13 @@
  *
  * @module @dsh-cc/vwa-argument/review-cycle
  */
-import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeSync } from 'node:fs'
+import { existsSync, closeSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { ReviewRunStore } from './review-run-store.ts'
 import { fail, ProjectStore, VwaFail, type Fail } from './store.ts'
 import { stableJson } from './schema.ts'
 import { acquireLock, releaseLock } from './lock.ts'
+import { ProjectReviewBudgetError } from './review-project-budget.ts'
 import type { ReviewBudget } from './review-budget.ts'
 import type { ProjectBudget } from './review-config.ts'
 import type { Id } from './types.ts'
@@ -219,8 +220,10 @@ export function reserveCycleRequest(
       // before a concurrent commit would be stamped as the newer revision.
       // The refused admission gets REVISION_CONFLICT (retryable: re-read and
       // reload the budget).
+      const headRevision = headRevisionOf(root, projectId)
+      if (request.budgetRevision !== undefined && request.budgetRevision !== headRevision)
+        return fail('REVISION_CONFLICT', `review admission snapshot revision ${request.budgetRevision} is not HEAD ${headRevision}; reload and retry`, true)
       if (identity.cycleId === runId && request.budget !== undefined) {
-        const headRevision = headRevisionOf(root, projectId)
         if (request.budgetRevision !== undefined && request.budgetRevision !== headRevision) {
           return fail(
             'REVISION_CONFLICT',
@@ -303,7 +306,7 @@ export function reserveCycleCall(
   root: string, projectId: Id, cycleId: Id, budget: ReviewBudget, inputTokens: number,
   reserve: () => boolean,
   /** §5.1: the project ceiling + the asking run (whose own spend is re-added per call). */
-  project?: { budget: ProjectBudget; runId: Id },
+  project?: { budget?: ProjectBudget; runId: Id },
 ): boolean {
   return withBudgetLock(root, projectId, () => {
     const cycleBudget = readCycleBudget(root, projectId, cycleId) ?? budget
@@ -317,17 +320,27 @@ export function reserveCycleCall(
         // (possibly revised) per-call cap: an in-flight run admitted before a
         // downward revision still reserves its old, larger per-call amount.
         used.outputTokens + budget.maxOutputTokensPerCall > cycleBudget.maxOutputTokensPerRun) return false
-    if (project !== undefined) {
-      const limit = project.budget
-      const own = all.find((r) => r.runId === project.runId)
-      const others = sumUsage(all.filter((r) => r.runId !== project.runId))
+    // Every dispatch observes the current committed project ceiling, including
+    // ceilings first introduced after admission. Legacy standalone fixtures
+    // have no project revisions; a damaged real project must fail closed.
+    const projectStore = new ProjectStore(root, projectId)
+    const realProject = existsSync(join(projectStore.dir, 'HEAD.json')) || existsSync(join(projectStore.dir, 'revisions'))
+    const head = realProject ? projectStore.readHead() : undefined
+    if (head && !head.ok) throw new VwaFail(head)
+    const limit = head?.ok ? head.data.snapshot.contract.reviewSettings?.projectBudget : project?.budget
+    if (limit !== undefined) {
+      const own = all.find((r) => r.runId === project?.runId)
+      const others = sumUsage(all.filter((r) => r.runId !== project?.runId))
       if (
         (limit.maxCalls !== undefined && others.calls + (own?.calls ?? 0) + 1 > limit.maxCalls) ||
         (limit.maxInputTokens !== undefined &&
           others.inputTokens + (own?.inputTokens ?? 0) + inputTokens > limit.maxInputTokens) ||
         (limit.maxOutputTokens !== undefined &&
           others.outputTokens + (own?.outputTokens ?? 0) + budget.maxOutputTokensPerCall > limit.maxOutputTokens)
-      ) return false
+      ) {
+        if (realProject) throw new ProjectReviewBudgetError('project review budget exhausted')
+        return false
+      }
     }
     return reserve()
   })

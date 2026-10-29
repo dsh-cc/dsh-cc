@@ -14,8 +14,9 @@
  */
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { sha256Hex } from './schema.ts'
-import { ReviewRunStore } from './review-run-store.ts'
+import { validateExtractionRecord, validateReviewRecord, sha256Hex } from './schema.ts'
+import { AUDIT_RULE_IDS } from './audit-reuse.ts'
+import { ReviewRunStore, recordReusable } from './review-run-store.ts'
 import type { Hash, Id, ProjectSnapshot } from './types.ts'
 
 /** Who declared the skip in effect (the admission runId rendered to readers). */
@@ -24,7 +25,6 @@ export interface AuditSkip {
 }
 
 type Request = NonNullable<ReturnType<ReviewRunStore['readRequest']>>
-type Record = ReturnType<ReviewRunStore['readRecords']>[number]
 
 function runIds(root: string, projectId: Id): string[] {
   try {
@@ -75,16 +75,17 @@ export function auditSkipInEffect(
   const declaration = declarations.at(-1)
   if (declaration === undefined || declaration.skipAudit !== true) return undefined
   const declaredAt = requestOrder(declaration)
-  const complete = new Map<Id, Record[]>()
   for (const runId of runIds(root, projectId)) {
-    const records = store.readRecords(runId)
-    if (records.some((record) => record.stage === 'extract' && record.artifactHash === artifactHash) &&
-        records.some((record) => record.stage === 'align' && record.artifactHash === artifactHash))
-      complete.set(runId, records)
-  }
-  for (const runId of complete.keys()) {
     const request = store.readRequest(runId)
-    if (request !== undefined && requestOrder(request) > declaredAt) return undefined
+    if (request === undefined || requestOrder(request) <= declaredAt) continue
+    const records = store.readRecords(runId).filter((record) =>
+      record.runId === runId && record.status === 'completed' && record.kind !== 'disagreement' &&
+      record.artifactHash === artifactHash && record.targetRefs?.some((ref) =>
+        ref.id === artifactId && ref.entityVersion === entityVersion))
+    const extracts = records.filter((record) => record.stage === 'extract' && validateExtractionRecord(record))
+    if (records.some((record) => record.stage === 'align' && validateReviewRecord(record) &&
+      recordReusable(record, new Set(AUDIT_RULE_IDS)) && extracts.some((extract) =>
+        extract.inputHash === record.inputHash && extract.dependencyDigest === record.dependencyDigest))) return undefined
   }
   return { runId: declaration.runId }
 }

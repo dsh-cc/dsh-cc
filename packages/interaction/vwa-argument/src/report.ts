@@ -29,6 +29,7 @@ import { join } from 'node:path'
 import { sha256Hex, stableJson } from './schema.ts'
 import {
   disagreementContextOf,
+  freezeDeliveryRuntime,
   evaluationPath,
   loadEvaluation,
   persistEvaluation,
@@ -36,8 +37,8 @@ import {
   reportInput,
   type DisagreementContext,
   type StoredRecords,
+  type FrozenRuntime,
 } from './report-asof.ts'
-
 import {
   evaluateDelivery,
   defaultGates,
@@ -127,6 +128,9 @@ export interface FrozenEvaluation {
   artifactText: string
   /** §6.2 step 1: the frozen record set the check was computed from (as-of overlay input). */
   records: StoredRecords
+  /** Filesystem observations frozen with E (absent only on legacy rows). */
+  runtime?: FrozenRuntime
+  reviewerConfigHashInput?: Hash
   /** §6.2 step 1: the minimal conflicting-verdict context the overlay needs. */
   disagreementContext: DisagreementContext[]
 }
@@ -243,6 +247,7 @@ export class VwaArgumentService {
       snapshot, records, readAdjudications(this.deps.root, projectId),
       deliveryScope(snapshot, artifactId, text).targets, reviewerConfigHash,
     )
+    const runtime = freezeDeliveryRuntime(this.deps.root, snapshot, artifactId, text)
     const check = evaluateDelivery({
       root: this.deps.root,
       snapshot,
@@ -252,6 +257,7 @@ export class VwaArgumentService {
       adjudications,
       pendingRunIds: pendingRuns(this.deps.root, projectId),
       gates,
+      runtime,
       ...(reviewerConfigHash ? { reviewerConfigHash } : {}),
       // §4.2: the policy is read from HEAD at call time, never from the
       // snapshot under evaluation (the as-of path freezes a different state).
@@ -270,6 +276,8 @@ export class VwaArgumentService {
       gates,
       artifactText: text,
       records,
+      runtime,
+      ...(reviewerConfigHash === undefined ? {} : { reviewerConfigHashInput: reviewerConfigHash }),
       // §6.2 step 1: freeze the conflicting-verdict context of every marker
       // (the only input the adjudication overlay needs beyond the check).
       disagreementContext: disagreementContextOf(
@@ -347,7 +355,6 @@ export class VwaArgumentService {
     return renderAsOfReport(this.deps.root, frozen, format, readAdjudications(this.deps.root, projectId))
   }
 }
-
 /** D21 (§18): the adjudication surface rejects any non-user signer. */
 export function validateAdjudicationSource(record: { signer: string }): void {
   if (record.signer !== 'user') {
@@ -461,7 +468,6 @@ function readAdjudications(root: string, projectId: string): AdjudicationRecord[
     return []
   }
 }
-
 
 /**
  * The published `vwa-argument` service: one process-wide host, bound to a

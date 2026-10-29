@@ -205,3 +205,68 @@ describe('argument.init pointer and lock semantics (§2.2/§2.3)', () => {
     expect(await call({ requestId: uuid(), input: { mode: 'bogus' } })).toMatchObject({ ok: false, code: 'SCHEMA_INVALID' })
   })
 })
+
+describe('argument.init validates the complete frozen settings before creating state', () => {
+  it.each([
+    { budget: { concurrency: 0 } },
+    { budget: { concurrency: 5 } },
+    { budget: { maxCallsPerRun: -1 } },
+    { budget: { maxCallsPerRun: '10' } },
+    { budget: { maxOutputTokensPerCall: 255 } },
+    { budget: { typo: 1 } },
+    { claimsBatchSize: 'oops' },
+    { claimsBatchSize: 0 },
+    { claimsBatchSize: 5 },
+    { maxArtifactChars: 999 },
+    { projectBudget: { maxCalls: 1_000_001 } },
+  ])('rejects malformed reviewSettings %j without reserving or modifying a project', async (reviewSettings) => {
+    const { root, call } = mount()
+    const first = await call({ requestId: uuid(), input: {} })
+    const pointer = readFileSync(pointerPath(root), 'utf8')
+    const requestId = uuid()
+    expect(await call({ requestId, input: { reviewSettings } })).toMatchObject({
+      ok: false, code: 'SCHEMA_INVALID', retryable: false,
+    })
+    expect(existsSync(reservationPath(root, requestId))).toBe(false)
+    expect(projectIds(root)).toEqual([first.projectId])
+    expect(readFileSync(pointerPath(root), 'utf8')).toBe(pointer)
+  })
+
+  it('merges the project budget baseline key by key as well as the call budget', async () => {
+    const { root, call } = mount({
+      reviewSettings: () => ({ ...freezeReviewSettings(), projectBudget: { maxCalls: 10 } }),
+    })
+    const result = await call({
+      requestId: uuid(), input: { reviewSettings: { projectBudget: { maxOutputTokens: 5000 } } },
+    })
+    expect(result.ok).toBe(true)
+    const head = new ProjectStore(root, result.projectId as string).readHead()
+    expect(head.ok && head.data.snapshot.contract.reviewSettings?.projectBudget).toEqual({
+      maxCalls: 10, maxOutputTokens: 5000,
+    })
+  })
+
+  it('replays a completed init without consulting changed runtime defaults', async () => {
+    let reads = 0
+    const { call } = mount({ reviewSettings: () => {
+      if (++reads > 1) throw new Error('the previous runtime defaults are no longer available')
+      return freezeReviewSettings()
+    } })
+    const args = { requestId: uuid(), input: {} }
+    const first = await call(args)
+    expect(first.ok).toBe(true)
+    expect(await call(args)).toEqual(first)
+    expect(reads).toBe(1)
+  })
+
+  it.each(['projectId', 'workspaceIdentity'] as const)('rejects inconsistent recovery metadata: %s', async (field) => {
+    const { root, call } = mount()
+    const args = { requestId: uuid(), input: {} }
+    const first = await call(args)
+    const path = join(root, '.dsh', 'vwa', first.projectId as string, 'workspace.json')
+    const metadata = JSON.parse(readFileSync(path, 'utf8'))
+    metadata[field] = field === 'projectId' ? `prj_${uuid()}` : 'f'.repeat(64)
+    writeFileSync(path, stableJson(metadata))
+    expect(await call(args)).toMatchObject({ ok: false, code: 'STORE_CORRUPT' })
+  })
+})

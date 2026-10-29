@@ -20,11 +20,11 @@ import { defaultContract } from './command-host.ts'
 import { writePointer } from './commands.ts'
 import { acquireLock, releaseLock } from './lock.ts'
 import { freezeReviewSettings, type FrozenReviewSettings } from './review-config.ts'
-import type { PatchReviewSettings } from './review-settings-revision.ts'
+import { applyReviewSettingsPatch, type PatchReviewSettings } from './review-settings-revision.ts'
 import { isUuidV4, sha256Hex, stableJson } from './schema.ts'
 import { RESULT_SCHEMA, toText } from './tool-input.ts'
 import { defineTool, type ToolDefinition } from '@dsh-cc/tools'
-import { ProjectStore, fail, type Fail, type Result } from './store.ts'
+import { ProjectStore, VwaFail, fail, type Fail, type Result } from './store.ts'
 import { withSchemaEnvelope, type ToolDeps } from './tools.ts'
 
 /** The §2.4 reservation body. */
@@ -56,16 +56,6 @@ function pickDefined(patch: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined))
 }
 
-/** Recursive merge of plain objects (only `budget` is deep today; generic on purpose). */
-function deepMerge<T extends Record<string, unknown>>(base: T, patch: Record<string, unknown>): T {
-  const out: Record<string, unknown> = { ...base }
-  for (const [key, value] of Object.entries(pickDefined(patch))) {
-    const current = out[key]
-    out[key] = isPlainObject(current) && isPlainObject(value) ? deepMerge(current, value) : value
-  }
-  return out as T
-}
-
 /**
  * §2.2 commitment semantics: freeze the COMPLETE baseline first, then apply
  * the patch on the frozen object (never translate the patch into flat
@@ -75,14 +65,8 @@ export function mergeFrozenReviewSettings(
   base: FrozenReviewSettings,
   patch: PatchReviewSettings,
 ): FrozenReviewSettings {
-  return {
-    ...base,
-    ...pickDefined(patch as Record<string, unknown>),
-    budget: deepMerge(
-      base.budget as unknown as Record<string, unknown>,
-      (patch.budget ?? {}) as Record<string, unknown>,
-    ) as unknown as FrozenReviewSettings['budget'],
-  }
+  // Initialization and later revisions use the same closed schema and ranges.
+  return applyReviewSettingsPatch(base, pickDefined(patch as Record<string, unknown>)).settings
 }
 
 /** Parse/validate the closed `input` key set; SCHEMA_INVALID on anything else. */
@@ -224,9 +208,17 @@ function recover(root: string, projectId: string): Result<{ workspaceIdentity: s
   if (!head.ok) return head
   if (head.data.head.projectId !== projectId)
     return fail('STORE_CORRUPT', `project ${projectId} HEAD belongs to a different project`)
-  const workspaceIdentity = store.workspaceIdentity() ?? head.data.snapshot.workspaceIdentity
-  if (typeof workspaceIdentity !== 'string' || workspaceIdentity === '')
-    return fail('STORE_CORRUPT', `project ${projectId} workspace.json has no workspaceIdentity`)
+  let workspace: Record<string, unknown>
+  try {
+    workspace = JSON.parse(readFileSync(join(store.dir, 'workspace.json'), 'utf8'))
+  } catch {
+    return fail('STORE_CORRUPT', `project ${projectId} workspace.json is missing or unreadable`)
+  }
+  const workspaceIdentity = workspace?.workspaceIdentity
+  if (!isPlainObject(workspace) || workspace.schemaVersion !== 1 || workspace.projectId !== projectId ||
+      head.data.snapshot.projectId !== projectId || typeof workspaceIdentity !== 'string' || workspaceIdentity === '' ||
+      workspaceIdentity !== head.data.snapshot.workspaceIdentity)
+    return fail('STORE_CORRUPT', `project ${projectId} workspace.json does not match the committed project identity`)
   return { ok: true, projectId, revision: 1, data: { workspaceIdentity } }
 }
 
@@ -294,10 +286,26 @@ export function argumentInitTool(deps: ToolDeps): ToolDefinition {
         const root = deps.workspaceRoot(exec.agent)
         if (root === undefined) return fail('STORE_IO_FAILED', 'no workspace root is bound to this session', false)
         const payloadHash = sha256Hex(stableJson(args.input))
+        // A completed request replays the committed identity, regardless of
+        // changes to runtime defaults since the original successful call.
+        const existing = readReservation(root, args.requestId)
+        if (existing !== undefined) {
+          if ('ok' in existing) return existing
+          if (existing.payloadHash !== payloadHash)
+            return fail('IDEMPOTENCY_CONFLICT', `requestId ${args.requestId} was used with a different payload`)
+          if (existsSync(join(root, '.dsh', 'vwa', existing.projectId, 'HEAD.json')))
+            return recover(root, existing.projectId)
+        }
+        let reviewSettings: FrozenReviewSettings
+        try {
+          reviewSettings = mergeFrozenReviewSettings(deps.reviewSettings?.() ?? freezeReviewSettings(), input.reviewSettings)
+        } catch (error) {
+          if (error instanceof VwaFail) return error.fail
+          throw error
+        }
+        // Invalid fresh settings must leave no reservation, project or pointer.
         const reserved = reserve(root, args.requestId, payloadHash)
         if (!reserved.ok) return reserved
-        const base = deps.reviewSettings?.() ?? freezeReviewSettings()
-        const reviewSettings = mergeFrozenReviewSettings(base, input.reviewSettings)
         const created = initReservedProject(root, reserved.data.reservation, input, reviewSettings)
         if (!created.ok) return created
         // First result wins: only the caller that created the reservation

@@ -354,7 +354,7 @@ export function registerArgumentTools(
       // §12: the audit stage needs the bound artifact's ACTUAL bytes; the
       // artifact is resolved from the bound snapshot + the host text map.
       let artifact: { id: string; path: string; text: string } | undefined
-      if (stage === 'audit' || stage === 'all') {
+      if (stage === 'audit' || stage === 'all' || body.skipAudit === true || body.artifactId !== undefined || snapshot.artifacts.length === 1) {
         const bound =
           body.artifactId !== undefined
             ? snapshot.artifacts.find((art) => art.id === body.artifactId)
@@ -386,7 +386,7 @@ export function registerArgumentTools(
               signal: exec.signal,
               contractHash: semanticContractHash(snapshot.contract),
               snapshot,
-              stages,
+              stages, skipAudit: body.skipAudit === true,
               targetClaimIds: resolveTargetClaimIds(snapshot, body),
               ...(artifact === undefined ? {} : { artifact: { id: artifact.id, text: artifact.text } }),
               ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
