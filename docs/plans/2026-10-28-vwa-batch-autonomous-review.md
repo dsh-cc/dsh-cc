@@ -117,6 +117,15 @@ data:{workspaceIdentity}}` (RESULT_SCHEMA, tool-input.ts:19-32).
 - Payload mismatch (same requestId, different input): return the existing
   code `IDEMPOTENCY_CONFLICT` (already in the store Fail union) — no new
   project.
+- **Retry adoption is a required protocol action** (forced by the TLA+
+  model `specs/tla/vwa-batch-run`): the only way back from a crash between
+  the reservation and `ProjectStore.init` is re-reading the reservation,
+  adopting its projectId and continuing the init — not an optimization, so
+  the implementation must provide that path and a test.
+- **The reservation is consumed at the first successful create**: once init
+  has succeeded no process may rewrite or truncate that file (exclusive
+  create already guarantees one writer at a time; this rule closes the
+  post-success window).
 - The batch layer persists each page's init requestId into state.json
   (§8.3) so a crash replays the same requestId.
 
