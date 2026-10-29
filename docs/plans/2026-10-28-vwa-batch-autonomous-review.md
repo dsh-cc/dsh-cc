@@ -1,6 +1,6 @@
 # VWA Batch Autonomous Page Review (vwa-batch-autonomous)
 
-## Status: Design — three-lane blind review converged (r1 full review: 1 GO-WITH-CHANGES + 2 NO-GO; r2 delta verification: all r1 findings folded, residuals fold-precision only; r3 micro-confirmation: all seats GO; r3b single-item confirmation: GO). User sign-off pending; implementation not started.
+## Status: Implemented (slices A-D, F — PR open, pending merge; slice E task-grant chain ships as a separate follow-up PR). Design — three-lane blind review converged (r1 full review: 1 GO-WITH-CHANGES + 2 NO-GO; r2 delta verification: all r1 findings folded, residuals fold-precision only; r3 micro-confirmation: all seats GO; r3b single-item confirmation: GO).
 
 All code anchors cite tree `b3dfb054` (v0.9.3-rc.3), verified 2026-10-28.
 
