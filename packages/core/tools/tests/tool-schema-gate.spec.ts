@@ -283,8 +283,9 @@ const TOOL_SOURCE_CALLS: Record<string, number> = {
   'packages/core/tools/src/code-mode.ts': 1,
   // Test fixture factory; no model-facing runtime tool.
   'packages/core/tools/src/testing.ts': 1,
+  'packages/interaction/vwa-argument/src/init-tool.ts': 1,
   'packages/interaction/vwa-argument/src/report-tool.ts': 1,
-  'packages/interaction/vwa-argument/src/tools.ts': 9,
+  'packages/interaction/vwa-argument/src/tools.ts': 10,
   // External server inputSchema passthrough only.
   'packages/mcp/mcp-client/src/defer.ts': 2,
   'packages/mcp/mcp-client/src/resources.ts': 1,
