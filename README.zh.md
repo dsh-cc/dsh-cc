@@ -90,11 +90,11 @@ dsh web
 
 快速开始只需安装 bundles。`dsh-cc` 插件市场另提供五个可选的官方插件。
 
-- **`dsh-cc-agents`** 提供三个子代理、四个 skill 和可选的 Serena hooks。
+- **`dsh-cc-agents`** 提供三个子代理、五个 skill 和可选的 Serena hooks。
   - `critic` 使用 `opus` 做分析和评审。
   - `executor` 使用 `sonnet` 执行已明确的计划。
   - `marathon` 使用 `fable` 处理涉及大量文件的变更或需求未知的任务。
-  - 四个 skill 分别是 `dsh-cc-agents-orchestration`、`data-analysis`、**`vwa-writing`** 和 **`formal-design`**。
+  - 五个 skill 分别是 `dsh-cc-agents-orchestration`、`data-analysis`、**`vwa-writing`**、**`formal-design`** 和 **`vwa-batch`**。
   - `formal-design` 在现有设计评审前检查有界 TLA+ 模型，并用 Lean 证明高影响的确定性规则。TLC 检查需要 Java >=17，固定版本 JAR 已随插件提供。Lean 检查需要单独配置的固定版本工具链，启动和检查过程都不会下载。安装插件不会启用项目级筛查；需[手动采用规则片段](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md)，并在更新插件后重启。
 - **`dsh-cc-writing`** 提供文章写作、文章评审和语言修改三个 skill，另有一个支撑流程 skill。
   - 三个公开 skill 支持中文和英文文章，覆盖三类文体。

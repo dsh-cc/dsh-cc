@@ -4,7 +4,7 @@
     {
       "name": "dsh-cc-agents",
       "source": "./packages/plugin/dsh-cc-agents",
-      "description": "Official dsh-cc plugin with critic, executor, and marathon subagents; routing, data-analysis, VWA writing, and formal-design skills; optional Serena hooks."
+      "description": "Official dsh-cc plugin with critic, executor, and marathon subagents; routing, data-analysis, VWA writing, VWA batch, and formal-design skills; optional Serena hooks."
     },
     {
       "name": "dsh-cc-shunt",

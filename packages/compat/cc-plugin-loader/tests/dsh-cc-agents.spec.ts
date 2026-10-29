@@ -176,14 +176,14 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     const mount = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR, seams: { subagents } })
     try {
       const skills = mount.report.components.find(c => c.kind === 'skills')
-      expect(skills?.loaded).toBe(4)
+      expect(skills?.loaded).toBe(5)
       expect(skills?.skipped).toBe(0)
       expect(skills?.failed).toBe(0)
       // Real-registry visibility (a tally alone cannot prove it — a duplicate
       // name would register as a silent no-op).
       const listed = await ctx.skills.list()
       expect(listed.map(s => s.name).sort()).toEqual([
-        'data-analysis', 'dsh-cc-agents-orchestration', 'formal-design', 'vwa-writing',
+        'data-analysis', 'dsh-cc-agents-orchestration', 'formal-design', 'vwa-batch', 'vwa-writing',
       ])
       const loaded = await ctx.skills.get('dsh-cc-agents-orchestration')
       expect(loaded).toBeDefined()
