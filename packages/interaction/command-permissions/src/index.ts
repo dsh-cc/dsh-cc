@@ -37,7 +37,8 @@ import { applyUserLint, lintRuleSet, lintUserSection, renderLint } from './lint.
 import { PERMISSION_SETTINGS_NAMESPACE } from '@dsh-cc/permission-rules'
 import { foldPlanMode, foldPermissionMode } from '@dsh-cc/permission-rules'
 import { planPhaseOf, type PlanPhase, type PlanUnitStateLike } from './plan-phase.ts'
-import { renderPermissions } from './permissions.ts'
+import { renderPermissions, renderGrantList, renderGrantView } from './permissions.ts'
+import type { TaskGrant } from '@dsh-cc/permission-rules'
 import { helpable } from '@dsh-cc/command-usage'
 import { PERMISSION_MODE_OPTIONS } from './modes.ts'
 
@@ -67,6 +68,13 @@ type PermissionRulesLike = {
   /** The D1 seam: the rule set `mode` evaluates against (auto suspends rules). */
   effectiveRuleSet(mode: string): PermissionRulesLike['ruleSet']
   setMode(agent: Agent, mode: string): void
+  /** Task-grant surface (design §3.3) — absent on an engine without grants. */
+  grants?: {
+    of(agent: Agent): readonly TaskGrant[]
+    propose(agent: Agent, descriptorPath: string): Promise<TaskGrant>
+    create(agent: Agent, descriptorPath: string): Promise<TaskGrant>
+    revoke(agent: Agent, grantId: string): boolean
+  }
 }
 
 /** The shared modes list — the switch list and the client popup both read it. */
@@ -114,6 +122,11 @@ async function executePermissions(ctx: Context, invocation: CommandInvocation): 
     return { kind: 'error', text: 'The permission-rules engine is not mounted in this composition.' }
   }
   if (raw === 'lint' || raw.startsWith('lint ')) return executeLint(ctx, raw)
+  if (raw === 'grants' || raw.startsWith('grants ')) return executeGrants(service, invocation)
+  if (raw === 'revoke' || raw.startsWith('revoke ')) return executeRevoke(service, invocation, raw.slice('revoke'.length).trim())
+  if (raw === 'grant' || raw.startsWith('grant ')) {
+    return executeGrant(service, invocation, raw.slice('grant'.length).trim())
+  }
   const [mode = ''] = raw.split(/\s+/)
   if (!(MODES as readonly string[]).includes(mode)) {
     return { kind: 'error', text: `unknown permission mode "${mode}"; available: ${MODES.join(', ')}` }
@@ -149,6 +162,62 @@ async function executePermissions(ctx: Context, invocation: CommandInvocation): 
   } catch (error) {
     return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
   }
+}
+
+/**
+ * Execute `/permissions grant <descriptorPath> [--confirm]` (design §3.3):
+ * derive the complete grant, render EVERY derived field, and create it only on
+ * the user's explicit `--confirm` re-run. There is no agent-callable grant
+ * tool — this typed command is the only creation path.
+ */
+async function executeGrant(
+  service: PermissionRulesLike,
+  invocation: CommandInvocation,
+  rest: string,
+): Promise<CommandResult> {
+  const grants = service.grants
+  if (grants === undefined) {
+    return { kind: 'error', text: 'Task grants are not available in this composition.' }
+  }
+  // Token-boundary parse: only a standalone trailing `--confirm` confirms
+  // (`x--confirm` or `--confirm extra` stays propose-only, no silent create).
+  const tokens = rest.split(/\s+/).filter(token => token !== '')
+  const confirm = tokens[tokens.length - 1] === '--confirm'
+  const descriptorPath = (confirm ? tokens.slice(0, -1) : tokens).join(' ').trim()
+  if (descriptorPath === '') {
+    return { kind: 'error', text: 'usage: /permissions grant <descriptorPath> [--confirm]' }
+  }
+  try {
+    if (!confirm) {
+      const draft = await grants.propose(invocation.agent, descriptorPath)
+      return { kind: 'success', text: renderGrantView(draft, { confirmed: false, descriptorPath }) }
+    }
+    const grant = await grants.create(invocation.agent, descriptorPath)
+    return { kind: 'success', text: renderGrantView(grant, { confirmed: true }) }
+  } catch (error: unknown) {
+    return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/** Execute `/permissions grants` — list the session's live grants. */
+function executeGrants(service: PermissionRulesLike, invocation: CommandInvocation): CommandResult {
+  const grants = service.grants
+  if (grants === undefined) {
+    return { kind: 'error', text: 'Task grants are not available in this composition.' }
+  }
+  return { kind: 'success', text: renderGrantList(grants.of(invocation.agent)) }
+}
+
+/** Execute `/permissions revoke <grantId>` — revoke ONE grant. */
+function executeRevoke(service: PermissionRulesLike, invocation: CommandInvocation, grantId: string): CommandResult {
+  const grants = service.grants
+  if (grants === undefined) {
+    return { kind: 'error', text: 'Task grants are not available in this composition.' }
+  }
+  if (grantId === '') return { kind: 'error', text: 'usage: /permissions revoke <grantId>' }
+  return grants.revoke(invocation.agent, grantId)
+    ? { kind: 'success', text: `Task grant ${grantId} revoked.` }
+    : { kind: 'error', text: `No live task grant ${grantId} in this session.` }
 }
 
 /**
@@ -227,13 +296,16 @@ function installCatalogWrap(ctx: Context): void {
 export function apply(ctx: Context): void {
   ctx.commands.register(helpable({
     name: 'permissions',
-    description: 'show or switch the permission mode (default|acceptEdits|plan|auto|bypassPermissions)',
-    input: { hint: '[mode|lint [--apply]]' },
+    description: 'show or switch the permission mode (default|acceptEdits|plan|auto|bypassPermissions); manage task grants',
+    input: { hint: '[mode|lint [--apply]|grant <descriptorPath> [--confirm]|grants|revoke <grantId>]' },
     handler: (invocation: CommandInvocation) => executePermissions(ctx, invocation),
   }, {
     subcommands: [
       ...PERMISSION_MODE_OPTIONS.map(option => ({ word: option.id, summary: option.detail })),
       { word: 'lint', summary: 'report rule-hygiene findings; --apply cleans the user layer' },
+      { word: 'grant', summary: 'derive a task grant from a descriptor and render it for confirmation (--confirm creates it)' },
+      { word: 'grants', summary: 'list the session\'s live task grants' },
+      { word: 'revoke', summary: 'revoke one task grant by id' },
     ],
   }))
   if (ctx.get('agent') === undefined) installCatalogWrap(ctx)

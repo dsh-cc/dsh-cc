@@ -10,6 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { PostToolDecision, PreToolDecision, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
 import { ccToolAliases } from '@dsh-cc/tools'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
@@ -24,12 +25,14 @@ import {
   type AutoStage,
 } from './auto-stage.ts'
 import { exec as nodeExec } from 'node:child_process'
-import { decideCallVerbose, effectiveMode, mapPostWaterfall, type DecideDeps } from './decide.ts'
+import { decideCallVerbose, effectiveMode, mapPostWaterfall, type DecideDeps, type DecidedCall } from './decide.ts'
 import { createPiProbe, appendSessionProbe, foldProbes, probeInputText, type PiProbe } from './pi-probe.ts'
 import { foldClassifiers } from './classifier-audit.ts'
 import { summarizeChildHandoff, handoffWarningText } from './return-check.ts'
 import type { Config, PermissionSettings } from './settings-schema.ts'
+import { isBashToolName } from './matchers.ts'
 import type { PermissionMode, PermissionRuleSet } from './types.ts'
+import type { TaskGrant } from './task-grant.ts'
 
 /**
  * The structural host face the wiring needs from PermissionRulesService.
@@ -50,6 +53,21 @@ export type PreExecuteHost = {
   rules(): PermissionRuleSet
   bypassDisabled(): boolean
   sessionAllowMatches(exec: ToolExecution): boolean
+  /** The session workspace root (session-cwd fold), for §3.7 VWA guard scoping. */
+  workspaceOf(agent: Agent): string | undefined
+  /**
+   * The task-grant match (§3.4): the live grant that deterministically allows
+   * this call, or undefined. Consulted AFTER deny/HIGH risk, BEFORE the LLM
+   * arbitration stage.
+   */
+  taskGrantMatches(decided: DecidedCall, exec: ToolExecution): TaskGrant | undefined
+  /** Register the escalation-seam entry for a grant-allowed bash call (§3.5). */
+  registerGrantEscalation(grant: TaskGrant, exec: ToolExecution): void
+  /**
+   * Run the queued post-hoc `git commit -a` contentScope verification (§3.6).
+   * @returns violation reports (empty when in scope).
+   */
+  takeGrantPostHoc(exec: ToolExecution, succeeded: boolean): Promise<string[]>
   /** Hands the built auto stage back to the service (rebuilt on reload). */
   onAutoStage(stage: AutoStage): void
   /** Hands the built PI probe back to the service (rebuilt on reload). */
@@ -137,6 +155,32 @@ async function returnCheck(
   }
 
 /**
+ * §3.6 post-hoc verification of an auto-approved `git commit -a`: the commit
+ * has already happened (it cannot be rolled back), so a violation revokes the
+ * grant and reports prominently — the page stops as failed.
+ */
+async function grantPostHoc(
+  host: PreExecuteHost,
+  exec: ToolExecution,
+  result: Readonly<ToolExecutionResult>,
+  decision: PostToolDecision,
+): Promise<PostToolDecision> {
+  const agent = exec.agent
+  if (agent === undefined || decision.kind !== 'accept') return decision
+  if (!isBashToolName(exec.name, host.bashToolName)) return decision
+  const reports = await host.takeGrantPostHoc(exec, !result.isError)
+  if (reports.length === 0) return decision
+  const warning: UserMessage = createUserMessage({
+    content: [{
+      type: 'text',
+      text: `TASK GRANT REVOKED — contentScope is "tracked-md-only" and the commit touched files outside it: ${reports.join('; ')}. The commit has already happened and cannot be rolled back; the task grant is revoked, stop this page as failed and report it in the ledger.`,
+    }],
+    source: { kind: 'permission-rules' },
+  })
+  return { ...decision, additionalContexts: [...(decision.additionalContexts ?? []), warning] }
+}
+
+/**
  * Build the DecideDeps face, the auto stage, and register the pre-execute
  * listener. Called from the service constructor at the historical position
  * (after guard registration and the settings inject, before the approval
@@ -157,6 +201,7 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     bypassDisabled: () => host.bypassDisabled(),
     sessionAllowMatches: (exec) => host.sessionAllowMatches(exec),
     shellMode: () => ctx.get('shell')?.sandboxMode as SandboxMode | undefined,
+    workspaceOf: (agent) => host.workspaceOf(agent),
   }
 
   // The optional LLM classifier stage (§4.1/§4.4 of the LLM risk-classifier
@@ -274,6 +319,9 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
       let decision: PostToolDecision = await piProbe.scan(exec, result, downstream)
       // S6/D9 subagent-handoff return checks: warn-only, fail-open, auto-only.
       if (decision.kind === 'accept') decision = await returnCheck(ctx, decideDeps, piProbe, exec, result, decision)
+      // §3.6 post-hoc `git commit -a` contentScope verification: the commit has
+      // already happened, so the report is prominent and the grant is revoked.
+      decision = await grantPostHoc(host, exec, result, decision)
       return decision
     } catch (error: unknown) {
       // Fail-open (context-crusher D6 idiom): a probe fault must NEVER
@@ -286,6 +334,15 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
 
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     const decided = decideCallVerbose(decideDeps, exec)
+    // Task-grant match (§3.4): fixed order is ① deny rules and HIGH risk
+    // (already folded into `decided` — a grant never lifts a deny) ② the
+    // task grant ③ the current auto-stage path. A grant hit is a
+    // deterministic allow: no LLM arbitration runs for it.
+    const grant = host.taskGrantMatches(decided, exec)
+    if (grant !== undefined) {
+      host.registerGrantEscalation(grant, exec)
+      return { kind: 'allow' }
+    }
     // Armed + auto + LOW + passthrough-only ⇒ the LLM stage decides (§4.1;
     // D3: rule-derived asks are NOT arbitrated by the LLM): verdict allow
     // ⇒ allow, verdict ask/failure ⇒ ask(reason). The stage consult reads

@@ -1,14 +1,11 @@
 /**
  * Claude Code-compatible permission-rule engine. Owns a source-labelled rule
- * set (Config `rules` merged with the optional `permissions` settings section),
- * a `tools/pre-execute` listener that folds a mode-aware decision, and the
- * monotonic guard layer that enforces bypass-immune content rules so neither a
- * mode switch nor `bypassPermissions` can override them. A risk-classifier
- * escalation stage hard-denies catastrophic commands and asks on protected or
- * out-of-scope file writes before the normal waterfall. Rules fail loud at
- * load; settings hot-reloads by rebuilding merged state and re-registering
- * guards.
- *
+ * set (Config `rules` merged with the optional `permissions` settings
+ * section), a `tools/pre-execute` listener that folds a mode-aware decision,
+ * and the monotonic guard layer that enforces bypass-immune content rules
+ * (neither a mode switch nor `bypassPermissions` overrides them). A
+ * risk-classifier escalation stage hard-denies catastrophic commands and asks
+ * on out-of-scope file writes before the normal waterfall.
  * @module @dsh-cc/permission-rules
  */
 
@@ -16,8 +13,6 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { ToolExecution } from '@dsh-cc/tools'
-import { foldSessionCwd } from '@dsh-cc/session-cwd'
 import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import { installSectionSafe, registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import './message-source.ts' // declares the 'permission-rules' message kind
@@ -46,8 +41,10 @@ import {
   switchSessionPermissionMode,
 } from './mode.ts'
 import { ruleMatches, ruleMatchesAnyShellSegment, subjectOf, isBashToolName } from './matchers.ts'
-import { SessionAllowlist, foldSessionAllows } from './session-allowlist.ts'
-import { createSandboxApprovalListener } from './approval-listener.ts'
+import { SessionAllows } from './session-allow-service.ts'
+import { registerApprovalListener } from './approval-listener.ts'
+import { TaskGrants } from './task-grant-service.ts'
+import { activeGoalIdOf } from './task-grant-command.ts'
 
 export {
   SESSION_ALLOW_EVENT,
@@ -59,8 +56,10 @@ export {
 export {
   createSandboxApprovalListener,
   isSandboxEscalation,
+  type GrantEscalationFace,
   type SandboxApprovalListenerConfig,
 } from './approval-listener.ts'
+export * from './task-grant-public.ts'
 
 export {
   foldPlanMode,
@@ -209,10 +208,10 @@ export class PermissionRulesService extends Service {
   private state: { rules: PermissionRuleSet; defaultMode: PermissionMode }
   /** Disposers for the currently registered monotonic guards. */
   private guardDisposers: (() => void)[] = []
-  /** Session-scoped approval memory (WS4-PR-B): rules granted via the UI's "Allow for this session". */
-  private readonly sessionAllowlist = new SessionAllowlist()
-  /** Session ids already seeded from their log's `permission/session-allow` audit events. */
-  private readonly allowlistSeeded = new Set<string>()
+  /** Session-scoped approval memory + the session workspace root. */
+  private readonly sessionAllows: SessionAllows
+  /** Task-scoped grants (design §3.2), session-scoped and seed-on-first-use. */
+  private readonly taskGrants: TaskGrants
   /** The optional LLM classifier stage (armed per call from the live settings slice). */
   private autoStage: AutoStage | undefined
   /** The optional input-layer PI probe (S7); scans post-execute results in auto mode. */
@@ -229,7 +228,16 @@ export class PermissionRulesService extends Service {
     this.rulesConfig = config.rules as ConfigRules | undefined ?? {}
     this.configBypassImmuneRules = (this.rulesConfig.bypassImmune ?? []).map(raw => parseRule(raw, 'deny', 'config'))
     this.bypassImmuneRules = [...this.configBypassImmuneRules, ...this.criticalRules()]
+    this.sessionAllows = new SessionAllows(this.bashToolName)
     this.state = { rules: this.configRuleSet(), defaultMode: config.defaultMode as PermissionMode }
+    // The task-grant collaborator (design §3.2–§3.6): its store is
+    // session-scoped and seeds per session from that session's own log.
+    this.taskGrants = new TaskGrants({
+      bashToolName: this.bashToolName,
+      fileEditTools: this.fileEditTools,
+      workspaceOf: (agent) => this.sessionAllows.workspaceOf(agent),
+      activeGoalIdOfSession: (session) => activeGoalIdOf(this.ctx as unknown as { get(name: string): unknown }, session),
+    })
 
     // Monotonic guard layer for bypass-immune rules: never overridable.
     this.registerGuards()
@@ -264,7 +272,11 @@ export class PermissionRulesService extends Service {
       defaultMode: () => this.state.defaultMode,
       rules: () => this.state.rules,
       bypassDisabled: () => this.bypassDisabled(),
-      sessionAllowMatches: (exec) => this.sessionAllowMatches(exec),
+      sessionAllowMatches: (exec) => this.sessionAllows.matches(exec),
+      workspaceOf: (agent) => this.sessionAllows.workspaceOf(agent),
+      taskGrantMatches: (decided, exec) => this.taskGrants.match(decided, exec),
+      registerGrantEscalation: (grant, exec) => this.taskGrants.registerEscalation(grant, exec),
+      takeGrantPostHoc: (exec, succeeded) => this.taskGrants.takePostHoc(exec, succeeded),
       onAutoStage: (stage) => { this.autoStage = stage },
       onPiProbe: (probe) => { this.piProbe = probe },
       pauseAuto: (exec, notice) => {
@@ -276,24 +288,32 @@ export class PermissionRulesService extends Service {
       },
     })
 
-    // WS3 sandbox integration: the approval-seam listener auto-approves
-    // sandbox escalations in `auto` mode when the session has a resolvable
-    // workspace root. Registered ahead of any UI provider so an eligible
-    // escalation never reaches the modal queue; every auto-approval is
-    // audit-logged to the session log (`scope: 'sandbox-auto'`).
-    ctx.on('approval/request', createSandboxApprovalListener({
+    // WS3 sandbox integration + the §3.5 task-grant seam: the approval-seam
+    // listener auto-approves sandbox escalations under the rules the listener
+    // documents (a live grant replaces the baseline inside that task).
+    registerApprovalListener(ctx, {
       modeOf: (agent) => {
         if (foldPlanMode(agent.session.snapshotEvents())) return 'plan'
         return foldPermissionMode(agent.session.snapshotEvents()) ?? this.state.defaultMode
       },
-      workspaceOf: (agent) => this.sessionWorkspaceOf(agent),
-    }))
+      workspaceOf: (agent) => this.sessionAllows.workspaceOf(agent),
+      grants: {
+        anyActive: (session) => this.taskGrants.anyActive(session),
+        consume: (input) => this.taskGrants.consume(input),
+      },
+    })
 
     // Pin sessions created while the deployment default is a sandbox-affecting or
     // plan mode so a fresh session inherits the default durably.
     ctx.on('session/created', (session) => {
       pinDefaultMode(session, this.state.defaultMode, this.bypassDisabled(), () =>
         this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)
+    })
+
+    // §3.5 rule ②: session teardown clears every grant-derived registration
+    // and pending approval view of that session.
+    ctx.on('session/disposed', (session) => {
+      this.taskGrants.disposeSession(session)
     })
 
     // Optional model-facing mode sentence. Injected via ctx.inject so a missing
@@ -398,41 +418,23 @@ export class PermissionRulesService extends Service {
     )
   }
 
-  /**
-   * Whether the session-scoped allowlist matches this call. The session's
-   * rules are seeded once from its log's `permission/session-allow` audit
-   * events, so a resumed session keeps its grants. Agent-less calls never
-   * match (there is no session to scope to).
-   */
-  private sessionAllowMatches(exec: ToolExecution): boolean {
-    const agent = exec.agent
-    if (agent === undefined) return false
-    const id = String(agent.session.id)
-    if (!this.allowlistSeeded.has(id)) {
-      this.allowlistSeeded.add(id)
-      this.sessionAllowlist.seed(id, foldSessionAllows(agent.session.snapshotEvents()))
-    }
-    return this.sessionAllowlist.matches(id, exec.name, subjectOf(exec, this.bashToolName))
-  }
-
-  /**
-   * The session's workspace root: the durable `worktree/entered` fold
-   * (session-cwd, WS1), falling back to the session header cwd. Undefined
-   * when the session never recorded a cwd — the sandbox listener then cannot
-   * verify an escalation is in-scope and falls through to the normal ask.
-   */
-  private sessionWorkspaceOf(agent: Agent): string | undefined {
-    return foldSessionCwd(agent.session.snapshotEvents()) ?? agent.session.header?.cwd
-  }
-
   /** Grant a session-scoped allow rule (in-memory match + audit event); never touches settings. */
   addSessionAllow(agent: Agent, rule: string): void {
-    this.sessionAllowlist.add(agent.session, rule)
+    this.sessionAllows.add(agent, rule)
+  }
+
+  /**
+   * The task-grant collaborator (design §3.2–§3.6): the command-facing
+   * create/list/revoke API plus the lookup an engine consumer may inspect.
+   * Session-scoped only (§3.8): a new session needs a fresh grant.
+   */
+  get grants(): TaskGrants {
+    return this.taskGrants
   }
 
   /** Drop every session-scoped rule for the agent's session (audited clear). */
   clearSessionAllows(agent: Agent): void {
-    this.sessionAllowlist.clear(agent.session)
+    this.sessionAllows.clear(agent)
   }
 
   /** Whether bypassPermissions is disabled by Config or the settings section. */

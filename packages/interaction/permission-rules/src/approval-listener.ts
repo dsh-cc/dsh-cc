@@ -15,6 +15,15 @@
  *    is derived from the session cwd — WS3 — so a known workspace root is
  *    exactly the boundary the escalation was evaluated against).
  *
+ * Task-grant seam (design §3.5): when a grant for the session is live, this
+ * baseline is REPLACED inside that task. A registered escalation (decide-side
+ * registration for a grant-allowed call) is consumed and auto-approved only
+ * after the grant's own checks; anything that misses the registry, or arrives
+ * after the grant died, falls back to the USER — a grant relaxes the task and
+ * tightens it. With no grant active, behavior is unchanged, and the baseline
+ * re-validates grant ABSENCE at consume time so a grant created between the
+ * approval check and its consumption cannot be bypassed.
+ *
  * Otherwise the request falls through to `next()` and the normal approval
  * flow proceeds. Every auto-approval is audit-logged to the session log as a
  * `permission/session-allow` record with `scope: 'sandbox-auto'`.
@@ -23,9 +32,26 @@
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Context } from '@deepseek-ai/cordis'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
+import type { Session } from '@deepseek-ai/dsh-session'
 import { appendSessionAllow } from './session-allowlist.ts'
+import type { EscalationVerdict } from './grant-escalation.ts'
 import type { PermissionMode } from './types.ts'
+
+/** The task-grant face the listener consults (§3.5); absent without grants. */
+export interface GrantEscalationFace {
+  /** Whether any grant is live for the session (the consume-time re-validation). */
+  anyActive(session: Session): boolean
+  /** Consume one escalation request against the grant registry. */
+  consume(input: {
+    session: Session
+    agentId: string
+    toolName: string
+    callId: string | undefined
+    reason: string | undefined
+  }): Promise<EscalationVerdict>
+}
 
 /** Seams the listener reads off its configuring context; all injectable for tests. */
 export interface SandboxApprovalListenerConfig {
@@ -37,6 +63,8 @@ export interface SandboxApprovalListenerConfig {
    * verify the operation is in scope) and falls through to the next provider.
    */
   workspaceOf(agent: Agent): string | undefined
+  /** The task-grant seam (§3.5), when the engine composes one. */
+  grants?: GrantEscalationFace
 }
 
 /**
@@ -49,6 +77,18 @@ export function isSandboxEscalation(reason: string | undefined): boolean {
 }
 
 /**
+ * Register the listener on the `approval/request` waterfall. Register it ahead
+ * of the UI provider so an eligible sandbox escalation never reaches the modal
+ * queue; every auto-approval is audit-logged to the session log
+ * (`scope: 'sandbox-auto'`).
+ * @param ctx - the context carrying the approval seam.
+ * @param config - the mode/workspace/grant seams.
+ */
+export function registerApprovalListener(ctx: Context, config: SandboxApprovalListenerConfig): void {
+  ctx.on('approval/request', createSandboxApprovalListener(config))
+}
+
+/**
  * Build the `approval/request` waterfall listener. Register the returned
  * listener ahead of the UI provider so an eligible sandbox escalation never
  * reaches the modal queue.
@@ -57,13 +97,39 @@ export function createSandboxApprovalListener(config: SandboxApprovalListenerCon
   req: ApprovalRequest,
   next: () => Promise<ApprovalOutcome>,
 ) => Promise<ApprovalOutcome> {
+  const grants = config.grants
   return async (req, next) => {
     if (!isSandboxEscalation(req.reason)) return next()
     const agent = req.agent
     if (agent === undefined) return next()
+    const session = agent.session
+    if (grants !== undefined) {
+      // §3.5: a registered grant escalation decides inside the task; a live
+      // grant makes anything else a user decision.
+      const verdict = await grants.consume({
+        session,
+        agentId: String(agent.id),
+        toolName: req.toolName,
+        callId: req.callId === undefined ? undefined : String(req.callId),
+        reason: req.reason,
+      })
+      if (verdict.kind === 'allowed-once') {
+        appendSessionAllow(session, {
+          scope: 'sandbox-auto',
+          toolName: req.toolName,
+          timestamp: Date.now(),
+          ...req.reason === undefined ? {} : { reason: req.reason },
+        })
+        return 'allowed-once'
+      }
+      // Rule ① (TLA+ fold): the baseline re-validates grant ABSENCE at
+      // consume time — with a grant live, a missed escalation is anomalous
+      // and goes to the user. The revoked verdict already cleared its grant.
+      if (verdict.kind === 'revoked' || grants.anyActive(session)) return next()
+    }
     if (config.modeOf(agent) !== 'auto') return next()
     if (config.workspaceOf(agent) === undefined) return next()
-    appendSessionAllow(agent.session, {
+    appendSessionAllow(session, {
       scope: 'sandbox-auto',
       toolName: req.toolName,
       timestamp: Date.now(),

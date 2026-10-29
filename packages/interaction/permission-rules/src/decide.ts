@@ -17,6 +17,7 @@
 
 import type { ToolExecution } from '@dsh-cc/tools'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { evaluatePermission, evaluateShell } from './evaluate.ts'
 import { splitShellCommand } from './shell-segments.ts'
 import { assessBashCommand, assessFilePath, type RiskAssessment } from './classifier.ts'
@@ -24,6 +25,7 @@ import { filterAutoAllowRules } from './auto-rule-filter.ts'
 import { isBashToolName, subjectOf } from './matchers.ts'
 import { foldPlanMode } from './mode.ts'
 import { foldPermissionMode } from './mode.ts'
+import { VWA_STATE_ASK_REASON, isVwaStateWrite } from './vwa-state.ts'
 import type { PermissionDecision, PermissionMode, PermissionRuleSet } from './types.ts'
 
 /**
@@ -61,6 +63,12 @@ export type DecideDeps = {
   sessionAllowMatches(exec: ToolExecution): boolean
   /** The host shell service's sandbox mode, when mounted. */
   shellMode(): SandboxMode | undefined
+  /**
+   * The session workspace root (session-cwd fold, i.e. the CURRENT cwd after
+   * `worktree/enter`), or undefined when unknown. Optional so a bare test dep
+   * falls back to the session header cwd.
+   */
+  workspaceOf?(agent: Agent): string | undefined
 }
 
 /**
@@ -159,7 +167,37 @@ export function decideCallVerbose(deps: DecideDeps, exec: ToolExecution): Decide
   const decision = isBashToolName(exec.name, deps.bashToolName) && subject !== undefined
     ? evaluateShell(evaluationInput, splitShellCommand(subject))
     : evaluatePermission(evaluationInput)
-  return { decision, risk, mode, isReadOnly }
+  return { decision: vwaStateGuard(deps, exec, mode, decision), risk, mode, isReadOnly }
+}
+
+/**
+ * §3.7 hardening: a file-write into authoritative `.dsh/vwa/**` (except
+ * `.dsh/vwa/batches/**`) defaults to ASK, not deny. It is an authoritative
+ * DEFAULT, so a deny rule still stands and `bypassPermissions` — whose contract
+ * is skipping prompts — short-circuits above it exactly as it does for a
+ * settings ask rule.
+ */
+function vwaStateGuard(
+  deps: DecideDeps,
+  exec: ToolExecution,
+  mode: PermissionMode,
+  decision: PermissionDecision,
+): PermissionDecision {
+  if (decision.kind === 'deny' || mode === 'bypassPermissions') return decision
+  if (!deps.fileEditTools.has(exec.name)) return decision
+  const args = exec.arguments as Record<string, unknown>
+  const target = typeof args.file_path === 'string'
+    ? args.file_path
+    : typeof args.notebook_path === 'string'
+      ? args.notebook_path
+      : undefined
+  if (target === undefined) return decision
+  // Resolve the root through the SAME session-cwd fold every other guard uses,
+  // not the stale session header cwd (which lags `worktree/enter`).
+  const root = exec.agent === undefined
+    ? undefined
+    : deps.workspaceOf?.(exec.agent) ?? exec.agent.session?.header?.cwd
+  return isVwaStateWrite(target, root) ? { kind: 'ask', reason: VWA_STATE_ASK_REASON } : decision
 }
 
 /**
