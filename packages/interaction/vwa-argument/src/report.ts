@@ -24,9 +24,19 @@
  */
 
 import { randomUUID, createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { sha256Hex, stableJson } from './schema.ts'
+import {
+  disagreementContextOf,
+  evaluationPath,
+  loadEvaluation,
+  persistEvaluation,
+  renderAsOfReport,
+  reportInput,
+  type DisagreementContext,
+  type StoredRecords,
+} from './report-asof.ts'
 
 import {
   evaluateDelivery,
@@ -43,8 +53,8 @@ import {
   renderReportJson,
   renderReportMarkdown,
   reportHashOf,
+  type AsOfHeader,
   type GateEntry,
-  type ReportInput,
 } from './report-render.ts'
 import type {
   AdjudicationRecord,
@@ -115,6 +125,10 @@ export interface FrozenEvaluation {
   modelId: string
   gates: GateEntry[]
   artifactText: string
+  /** §6.2 step 1: the frozen record set the check was computed from (as-of overlay input). */
+  records: StoredRecords
+  /** §6.2 step 1: the minimal conflicting-verdict context the overlay needs. */
+  disagreementContext: DisagreementContext[]
 }
 
 export interface VwaArgumentServiceDeps {
@@ -132,6 +146,37 @@ export class InputChangedError extends Error {
     super(message)
     this.name = 'InputChangedError'
   }
+}
+
+/**
+ * §6.3: the frozen evaluation failed its hash read-back → the store is corrupt
+ * (report-tool maps it to STORE_CORRUPT, not retryable). It extends
+ * InputChangedError only so existing callers that catch the old type keep
+ * working; the two are distinguished by class in report-tool.
+ */
+export class EvaluationReadBackError extends InputChangedError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'EvaluationReadBackError'
+  }
+}
+
+/**
+ * §6.3: the requested evaluationId is unknown → REFERENCE_INVALID, not
+ * retryable (an as-of render can never fall back to a live evaluation).
+ */
+export class EvaluationNotFoundError extends InputChangedError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'EvaluationNotFoundError'
+  }
+}
+
+/** Distinguish "no such evaluation" from "the row failed read-back" (§6.3). */
+function evaluationLoadFailure(root: string, projectId: Id, evaluationId: Id): InputChangedError {
+  return existsSync(evaluationPath(root, projectId, evaluationId))
+    ? new EvaluationReadBackError(`evaluation ${evaluationId} failed its hash read-back`)
+    : new EvaluationNotFoundError(`evaluation ${evaluationId} does not exist in project ${projectId}`)
 }
 
 /** bindingDigest = SHA256(stableJson({…})) per §16.1a. */
@@ -224,6 +269,13 @@ export class VwaArgumentService {
       adjudications,
       gates,
       artifactText: text,
+      records,
+      // §6.2 step 1: freeze the conflicting-verdict context of every marker
+      // (the only input the adjudication overlay needs beyond the check).
+      disagreementContext: disagreementContextOf(
+        records,
+        check.findings.filter((finding) => finding.code === 'REVIEWER_DISAGREEMENT'),
+      ),
       inputTokens: records.reduce((sum, record) => sum + record.inputTokens, 0),
       outputTokens: records.reduce((sum, record) => sum + record.outputTokens, 0),
       calls: records.length,
@@ -245,10 +297,8 @@ export class VwaArgumentService {
     format: 'markdown' | 'json',
   ): Promise<{ text: string; reportHash: Hash; bindingDigest: Hash }> {
     const frozen = loadEvaluation(this.deps.root, projectId, evaluationId)
-    if (frozen === undefined) {
-      // D15: the read-back identifies the failure — no old row is mistaken for current.
-      throw new InputChangedError(`evaluation ${evaluationId} not found or failed its hash read-back`)
-    }
+    // D15: the read-back identifies the failure — no old row is mistaken for current.
+    if (frozen === undefined) throw evaluationLoadFailure(this.deps.root, projectId, evaluationId)
     for (let attempt = 1; ; attempt += 1) {
       let liveBinding: Hash
       try {
@@ -264,48 +314,38 @@ export class VwaArgumentService {
         )
       }
     }
-    const text = format === 'json' ? renderReportJson(reportInput(frozen)) : renderReportMarkdown(reportInput(frozen))
+    const input = reportInput(frozen)
+    const text = format === 'json' ? renderReportJson(input) : renderReportMarkdown(input)
     return { text, reportHash: reportHashOf(text), bindingDigest: frozen.bindingDigest }
   }
-}
 
-function reportInput(frozen: FrozenEvaluation): ReportInput {
-  const check = frozen.check
-  return {
-    snapshot: frozen.snapshot,
-    artifactId: check.artifactId,
-    artifactHash: check.artifactHash,
-    checks: check.checks,
-    assessments: check.assessments,
-    findings: check.findings,
-    deferredDisagreements: check.deferredDisagreements ?? [],
-    ...(check.auditSkip === undefined ? {} : { auditSkip: check.auditSkip }),
-    // Adjudications are frozen into the evaluation at checkForDelivery time.
-    adjudications: readAdjudicationsFrozen(frozen),
-    reviewRunIds: check.reviewRunIds,
-    metrics: check.metrics,
-    cost: {
-      inputTokens: frozen.inputTokens,
-      outputTokens: frozen.outputTokens,
-      calls: frozen.calls,
-      modelId: frozen.modelId,
-    },
-    gates: frozen.gates,
-    artifactText: frozen.artifactText,
-    stageProgress: check.stageProgress,
-    failures: check.failures,
-    eligibleCandidate: check.eligibleForReviewed,
-    hasV2Receipt: false,
-    hasLegacyReceipt: false,
-    bindingDigest: frozen.bindingDigest,
-    reportVersion: 'vwa-argument-report@1',
+  /**
+   * §6.2 step 3: render the frozen evaluation AS-OF. No live recheck (no
+   * checkForDelivery — a page fixed after its review still renders); only the
+   * adjudication state is live, replayed by the §4.3/§4.4 overlay.
+   */
+  async renderReportAsOf(
+    projectId: Id,
+    artifactId: Id,
+    evaluationId: Id,
+    format: 'markdown' | 'json',
+  ): Promise<{
+    text: string
+    reportHash: Hash
+    bindingDigest: Hash
+    eligible: boolean
+    revision: number
+    asOf: AsOfHeader
+  }> {
+    const frozen = loadEvaluation(this.deps.root, projectId, evaluationId)
+    if (frozen === undefined) throw evaluationLoadFailure(this.deps.root, projectId, evaluationId)
+    if (frozen.artifactId !== artifactId)
+      throw new EvaluationNotFoundError(
+        `evaluation ${evaluationId} was frozen for artifact ${frozen.artifactId}, not ${artifactId}`,
+      )
+    // §6.2: the overlay input is the LIVE adjudication set; nothing else is live.
+    return renderAsOfReport(this.deps.root, frozen, format, readAdjudications(this.deps.root, projectId))
   }
-}
-
-function readAdjudicationsFrozen(frozen: FrozenEvaluation): AdjudicationRecord[] {
-  // The frozen evaluation carries the adjudication state via the binding
-  // digest; per-record display copy is read at checkForDelivery time.
-  return frozen.adjudications ?? []
 }
 
 /** D21 (§18): the adjudication surface rejects any non-user signer. */
@@ -422,27 +462,6 @@ function readAdjudications(root: string, projectId: string): AdjudicationRecord[
   }
 }
 
-/** Evaluation layout: `.dsh/vwa/<projectId>/evaluations/<id>.json` with a frozenHash wrapper (D15). */
-function persistEvaluation(root: string, projectId: string, frozen: FrozenEvaluation): void {
-  const dir = join(root, '.dsh', 'vwa', projectId, 'evaluations')
-  mkdirSync(dir, { recursive: true })
-  const row = { frozenHash: sha256Hex(stableJson(frozen)), frozen }
-  const tmp = `${join(dir, frozen.evaluationId)}.json.tmp`
-  writeFileSync(tmp, stableJson(row))
-  renameSync(tmp, join(dir, `${frozen.evaluationId}.json`))
-}
-
-function loadEvaluation(root: string, projectId: string, evaluationId: string): FrozenEvaluation | undefined {
-  const path = join(root, '.dsh', 'vwa', projectId, 'evaluations', `${evaluationId}.json`)
-  if (!existsSync(path)) return undefined
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { frozenHash: Hash; frozen: FrozenEvaluation }
-    if (sha256Hex(stableJson(parsed.frozen)) !== parsed.frozenHash) return undefined
-    return parsed.frozen
-  } catch {
-    return undefined
-  }
-}
 
 /**
  * The published `vwa-argument` service: one process-wide host, bound to a

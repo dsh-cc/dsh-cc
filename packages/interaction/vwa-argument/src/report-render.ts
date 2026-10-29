@@ -128,6 +128,18 @@ export interface ReportInput {
   /** Feature D §D.2.1/§D.2.2: stage progress + failure detail (absent in legacy frozen inputs). */
   stageProgress?: Record<ReviewStage, StageProgress>
   failures?: ReviewFailure[]
+  /** Feature 5 §6.2 step 3: as-of disclosure (absent in a live render — then byte-identical to before). */
+  asOf?: AsOfHeader
+}
+
+/** The §6.2 step 3 as-of header: E, the reviewed hash, the current disk hash, divergence. */
+export interface AsOfHeader {
+  evaluationId: Id
+  reviewedArtifactHash: Hash
+  currentArtifactHash: Hash
+  diverged: boolean
+  /** The §4.3/§4.4 overlay ran at render time; everything else is as-of E. */
+  adjudicationOverlay: boolean
 }
 
 function escape(text: string): string {
@@ -165,6 +177,17 @@ export function renderReportMarkdown(input: ReportInput): string {
   lines.push('# VWA Reader Report', '')
   lines.push(`reportVersion: ${input.reportVersion} · policy ${POLICY_VERSION} · rubric ${RUBRIC_VERSION}`, '')
   lines.push(`Status: ${statusOf(input)}`, '')
+  // §6.2 step 3: as-of re-render — the frozen evaluation, never a live recheck.
+  if (input.asOf) {
+    lines.push(
+      `as-of evaluation ${input.asOf.evaluationId}; reviewed artifact hash ${input.asOf.reviewedArtifactHash}; current disk hash ${input.asOf.currentArtifactHash}; diverged: ${input.asOf.diverged}`,
+      '',
+    )
+    if (input.asOf.diverged)
+      lines.push('artifact was modified after review; findings apply to the reviewed revision', '')
+    if (input.asOf.adjudicationOverlay)
+      lines.push('adjudication overlay: applied at render time; all other inputs as-of E', '')
+  }
   // §5.2 header disclosure: the report still succeeds, but the skipped layer is explicit.
   if (input.auditSkip) lines.push(`audit: SKIPPED (declared at ${input.auditSkip.runId})`, '')
   const deferred = input.deferredDisagreements ?? []

@@ -6,14 +6,20 @@
  * @module tests/review-helpers
  */
 
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
-  Adequacy, Claim, Evidence, EvidenceGroup, ProjectSnapshot, ReviewRecord, ReviewResponse,
-  Source, Support, Verdict,
+  AdjudicationRecord, Adequacy, Claim, Evidence, EvidenceGroup, Id, ProjectSnapshot, ReviewRecord,
+  ReviewResponse, Source, Support, Verdict,
 } from '../src/types.ts'
+import { initWorkspace } from './helpers.ts'
+import { sha256Hex } from '../src/schema.ts'
+import { defaultGates, deliveryScope, projectDependencyDigest } from '../src/delivery-check.ts'
+import { auditDependencyDigest, currentReviews } from '../src/review-current.ts'
+import { semanticContractHash } from '../src/review-contract.ts'
+import { executeReviewRun } from '../src/review-runner.ts'
 import type {
   PreparedReviewCall, ReviewMessages, ReviewModelAdapter, ReviewTaskContract,
 } from '../src/review-adapter.ts'
@@ -227,4 +233,151 @@ export function supportResponse(groupId: string, evidenceIds: string[], support:
 /** Reverse index for an in-memory snapshot (test convenience). */
 export function indexOf(snapshot: ProjectSnapshot): ReturnType<typeof buildReverseIndex> {
   return buildReverseIndex(snapshot)
+}
+
+// ---- Feature 3/5 shared fixture: a fully reviewed page (+ a disagreement) ----
+
+export type ReviewedFixture = Awaited<ReturnType<typeof reviewedFixture>>
+
+/**
+ * One fully reviewed project (§4.3 acceptance fixture, shared by the
+ * disagreement-policy and as-of report specs).
+ */
+export async function reviewedFixture() {
+  const made = initWorkspace(),
+    claim = makeClaim('fact', 'The council closed the port in May.')
+  const source = makeSource(),
+    text = 'The council voted to close the port on 3 May.\n'
+  source.snapshotHash = sha256Hex(text)
+  source.snapshotPath = `docs/vwa-sources/${made.projectId}/${source.id}.md`
+  writeFileSync(join(made.root, source.snapshotPath), text)
+  const evidence = makeEvidence(source)
+  evidence.span = { start: 0, end: text.length }
+  evidence.contextSpan = evidence.span
+  evidence.quote = text
+  const group = makeGroup(claim.id, [evidence.id]),
+    artifactId = `art_${randomUUID()}`,
+    body = `# Port\n\n${claim.text}\n`
+  writeFileSync(join(made.root, 'report.md'), body)
+  const applied = made.store.withTransaction({
+    expectedRevision: 1,
+    requestId: randomUUID(),
+    payloadHash: 'seed',
+    applyFn(s) {
+      s.claims.push(claim)
+      s.sources.push(source)
+      s.evidence.push(evidence)
+      s.groups.push(group)
+      s.searches.push({
+        id: `search_${randomUUID()}`, entityVersion: 1, createdAt: '', updatedAt: '',
+        purpose: 'counterevidence', targetIds: [claim.id], corpus: [source.id],
+        query: 'port remained open?', tool: 'read', performedAt: NOW, state: 'executed',
+        resultSourceIds: [source.id], inaccessible: [], finding: 'none-found',
+        executionEventRef: 'read:archive',
+      })
+      s.artifacts.push({
+        id: artifactId, entityVersion: 1, createdAt: '', updatedAt: '', path: 'report.md',
+        contentHash: sha256Hex(body), outline: [],
+        occurrences: [{ claimId: claim.id, span: { start: 8, end: 8 + claim.text.length }, exactText: claim.text }],
+      })
+      return { result: {} }
+    },
+  })
+  if (!applied.ok) throw new Error(applied.message)
+  const head = made.store.readHead()
+  if (!head.ok) throw new Error(head.message)
+  const adapter = fakeAdapter([
+    (req) => {
+      const env = JSON.parse(req.messages[1]!.content)
+      if (env.stage === 'extract') {
+        return {
+          raw: JSON.stringify({
+            items: [{
+              span: { start: 8, end: 8 + claim.text.length }, exactText: claim.text, isQuotation: false,
+              atomicClaims: [{ text: claim.text, kind: 'fact', scope: claim.scope, importance: 'core' }],
+            }],
+          }),
+          inputTokens: 100, outputTokens: 50,
+        }
+      }
+      const response = {
+        stage: env.stage,
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: (env.targets ?? [{ id: artifactId }]).map((t: { id: string }) => ({
+          targetId: t.id,
+          checks: env.requiredRules
+            .filter((r: { targetId: string }) => r.targetId === t.id)
+            .map((r: { ruleId: string }) => ({ ruleId: r.ruleId, result: 'pass', rationale: 'ok', evidenceIds: [] })),
+          ...(env.stage === 'support'
+            ? { support: 'direct', adequacy: 'adequate', evidenceRelations: env.dependencies.evidence.map((e: { id: string }) => ({ evidenceId: e.id, support: 'direct', rationale: 'direct' })) }
+            : {}),
+          ...(env.stage === 'claims' ? { searchSufficiency: 'checked' } : {}),
+        })),
+        ...(env.stage === 'align'
+          ? { alignment: env.items.map((i: { extractedId: string }) => ({ extractedId: i.extractedId, claimIds: [claim.id], relation: 'exact', rationale: 'same' })) }
+          : {}),
+      }
+      return { raw: JSON.stringify(response), inputTokens: 100, outputTokens: 50 }
+    },
+  ])
+  const run = await executeReviewRun({
+    deps: {
+      root: made.root, adapter, budget: BUDGET,
+      contractHash: semanticContractHash(head.data.snapshot.contract),
+      readSnapshot: (id) => readFileSync(join(made.store.snapshotDir, `${id}.md`), 'utf8'),
+    },
+    runId: `run_${randomUUID()}`, requestId: randomUUID(),
+    snapshot: head.data.snapshot, targetClaimIds: [claim.id],
+    stages: ['sources', 'support', 'claims', 'arguments', 'audit'],
+    signal: new AbortController().signal,
+    artifact: { id: artifactId, path: 'report.md', text: body },
+  })
+  if (run.status !== 'completed')
+    throw new Error(`run ${run.status}: ${JSON.stringify(run.records.map((r) => [r.stage, r.status, r.errorCode, r.errorDetail]))}`)
+  return { ...made, claim, artifactId, body, snapshot: head.data.snapshot, records: run.records, gates: await defaultGates(made.root, 'report.md') }
+}
+
+/** Inject a second, conflicting claims record and the runner's marker record (§4.3). */
+export function withDisagreement(f: ReviewedFixture, records: ReviewRecord[]) {
+  const claims = records.find((r) => r.stage === 'claims')! as ReviewRecord & { response: NonNullable<ReviewRecord['response']> }
+  const fail = structuredClone(claims) as ReviewRecord & { response: NonNullable<ReviewRecord['response']> }
+  fail.runId = `run_${randomUUID()}`
+  for (const target of fail.response.targets) for (const check of target.checks) check.result = 'fail'
+  const findingId = `finding_${randomUUID()}`
+  const marker = structuredClone(claims) as ReviewRecord & { response: NonNullable<ReviewRecord['response']> }
+  // The marker is written on the detecting run, so it must live on one of the
+  // two conflicting runs (that is what makes cross-run liveness work).
+  marker.runId = claims.runId
+  ;(marker as ReviewRecord & { kind?: string }).kind = 'disagreement'
+  marker.response = {
+    ...marker.response,
+    findings: [{
+      id: findingId, code: 'REVIEWER_DISAGREEMENT', targetIds: [f.claim.id], severity: 'major',
+      explanation: 'identical inputs produced differing verdicts', evidenceIds: [], artifactSpans: [], repair: 'manual-review',
+    }],
+  }
+  const all = [...records, fail, marker]
+  const targets = deliveryScope(f.snapshot, f.artifactId, f.body).targets
+  const expectedAudit = auditDependencyDigest(f.snapshot, f.artifactId, currentReviews(f.snapshot, all, targets).records)
+  for (const record of all) if (record.stage === 'extract' || record.stage === 'align') record.dependencyDigest = expectedAudit
+  return { records: all, findingId, passRunId: claims.runId, failRunId: fail.runId, marker, fail }
+}
+
+export type DisagreementFixture = ReturnType<typeof withDisagreement>
+
+/** One live §4.4 adjudication record over the fixture's disagreement. */
+export function disagreementAdjudication(
+  f: ReviewedFixture,
+  records: ReviewRecord[],
+  findingId: Id,
+  decision: 'accept' | 'reject',
+  prevailingRunId: Id,
+  supersededRunId: Id,
+): AdjudicationRecord {
+  return {
+    adjudicationId: `adj_${randomUUID()}`, findingId, decision, reason: 'human decision', signer: 'user', ts: NOW,
+    dependencyDigest: projectDependencyDigest(f.snapshot, records),
+    overrides: { ruleId: 'HIST-01', targetId: f.claim.id, runId: prevailingRunId, supersededRunId },
+  }
 }
