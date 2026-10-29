@@ -120,6 +120,35 @@
         "timeoutMs": 300000,
         "heapMiB": 1024
       }
+    },
+    {
+      "id": "project-retry-earn",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdmissionEstimate": "1",
+        "EnforcePerCall": "TRUE",
+        "MaxCalls": "2",
+        "MaxHeadRev": "0",
+        "ProjectBudget": "2",
+        "RetryAllowance": "1"
+      },
+      "invariants": [
+        "TypeOK",
+        "CycleBudgetSound",
+        "ProjectBudgetSound",
+        "RetryPoolSound",
+        "OneRunPerRequest",
+        "DeadOwnerLoadIncomplete",
+        "ContinuationSound",
+        "DefaultModeNoReuse",
+        "NoGhostDispatch"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 1024
+      }
     }
   ]
 }

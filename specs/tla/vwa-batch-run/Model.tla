@@ -1,83 +1,99 @@
 -------------------------- MODULE Model --------------------------
 (***************************************************************************)
-(* vwa-batch-run: the batch page loop contract of the batch-autonomous     *)
+(* vwa-batch-run v2: the batch page loop contract of the batch-autonomous *)
 (* design (docs/plans/2026-10-28-vwa-batch-autonomous-review.md §2.4, §8). *)
-(* Two mechanisms share one per-page state machine:                        *)
-(*   F1 durable init idempotency -- reserve-before-create                 *)
-(*      (.dsh/vwa/inits/<requestId>.json then ProjectStore.init,           *)
-(*      store.ts:200-220; torn reservation write must never yield a        *)
-(*      project, §2.4);                                                    *)
-(*   F6 checkpoint ordering and crash recovery -- evidence over cache      *)
-(*      (state.json is a cache; every boolean is recomputed from disk      *)
-(*      evidence), the single commit that carries fix+report, the          *)
-(*      consecutive-failure skip rule (§8.3).                              *)
-(* Durable checkpoints are independent booleans so that ordering           *)
-(* invariants are non-vacuous: review -> frozen -> reportWritten ->        *)
-(* committed -> pushed -> ciConfirmed.                                     *)
+(*                                                                         *)
+(* F1 durable init idempotency -- reserve-before-create; the torn write    *)
+(*    window is restricted to the ORIGINAL reservation write (phase=       *)
+(*    "write"): a retry that re-reads an on-disk reservation never        *)
+(*    rewrites it (review fold: the v1 fault let a retry-adopted           *)
+(*    reservation be torn, a fault the design does not have).             *)
+(* F6 checkpoint contract -- per-checkpoint consecutive-failure counters  *)
+(*    (a checkpoint SUCCESS resets the counter of the checkpoint it        *)
+(*    completes, so skipping requires SkipAfter failures without an       *)
+(*    intervening success), graphBound before review, report before the   *)
+(*    single commit, commit -> push -> PR -> CI, the no-commit/no-PR      *)
+(*    terminal, the content gate (push only after clean content; a        *)
+(*    detected violation fails the page), and the stale-cache protocol    *)
+(*    fault (a driver that trusts the cache ahead of the evidence).       *)
+(*                                                                         *)
+(* CHECK_DEADLOCK is meaningful: the self-loop is enabled only when every  *)
+(* driver is dead, so a stuck LIVE state is a TLC deadlock (review fold;  *)
+(* the torn-reservation recovery is the AbandonReservation action).       *)
 (***************************************************************************)
 EXTENDS Naturals
 
-CONSTANT SkipAfter, CommitBeforeReport, CacheFirst, AdoptTorn
+CONSTANT SkipAfter, CommitBeforeReport, CacheFirst, AdoptTorn, SkipContentGate
 
 ASSUME /\ SkipAfter \in 1..2
        /\ CommitBeforeReport \in BOOLEAN
        /\ CacheFirst \in BOOLEAN
        /\ AdoptTorn \in BOOLEAN
+       /\ SkipContentGate \in BOOLEAN
 
 (* Bounded universes. *)
 Drivers == {"d1", "d2"}
 Reqs    == {"q1"}
 Payloads == {"h1", "h2"}
 Kinds   == {"none", "prep", "write"}
+Phases  == {"none", "write", "retry"}
+Contents == {"none", "md", "other"}
+PageStatuses == {"pending", "skipped", "failed"}
 
 PendType ==
   [ kind:  Kinds
+  , phase: Phases
   , req:   {"none"} \cup Reqs
   , payload: Payloads ]
 
-(* Durable evidence (disk truth: reservation file, project dir, report      *)
-(* file, git objects, CI run). Durable across crashes.                     *)
+(* Durable evidence. Content is sampled when the commit is built; the     *)
+(* content gate and the post-commit violation detection live on it.      *)
 EvType ==
   [ res:      {"none", "reserved", "torn"}
   , resFor:   Payloads
   , proj:     BOOLEAN
+  , bound:    BOOLEAN
   , reviewed: BOOLEAN
   , frozen:   BOOLEAN
   , rep:      BOOLEAN
   , com:      BOOLEAN
+  , content:  Contents
   , push:     BOOLEAN
+  , pr:       BOOLEAN
+  , nopr:     BOOLEAN
   , ci:       BOOLEAN
   , sf:       0..SkipAfter
-  , status:   {"pending", "skipped"} ]
+  , status:   PageStatuses ]
 
-(* state.json cache claims (lost on crash, may lag the evidence).          *)
 ClType ==
   [ rep:  BOOLEAN
   , com:  BOOLEAN
   , push: BOOLEAN
   , ci:   BOOLEAN
-  , status: {"pending", "skipped"} ]
+  , status: PageStatuses ]
 
 VARIABLES alive, lock, inLock, pend, ev, cl
 
 vars == <<alive, lock, inLock, pend, ev, cl>>
 
-PendNone == [kind |-> "none", req |-> "none", payload |-> "h1"]
+PendNone == [kind |-> "none", phase |-> "none", req |-> "none", payload |-> "h1"]
 
 Init ==
   /\ alive = [d \in Drivers |-> TRUE]
   /\ lock = "none"
   /\ inLock = FALSE
   /\ pend = [d \in Drivers |-> PendNone]
-  /\ ev = [ res |-> "none", resFor |-> "h1", proj |-> FALSE,
-            reviewed |-> FALSE, frozen |-> FALSE, rep |-> FALSE,
-            com |-> FALSE, push |-> FALSE, ci |-> FALSE,
-            sf |-> 0, status |-> "pending" ]
+  /\ ev = [ res |-> "none", resFor |-> "h1", proj |-> FALSE, bound |-> FALSE,
+            reviewed |-> FALSE, frozen |-> FALSE, rep |-> FALSE, com |-> FALSE,
+            content |-> "none", push |-> FALSE, pr |-> FALSE, nopr |-> FALSE,
+            ci |-> FALSE, sf |-> 0, status |-> "pending" ]
   /\ cl = [ rep |-> FALSE, com |-> FALSE, push |-> FALSE, ci |-> FALSE,
             status |-> "pending" ]
 
 (***************************************************************************)
-(* F1: reserve-before-create, including the torn write window.             *)
+(* F1: reserve-before-create (phase "write"), retry adoption (phase        *)
+(* "retry"), torn only inside the original write window, recovery by      *)
+(* abandoning the file (design §2.4 STORE_IO_FAILED delete-to-recover).   *)
 (***************************************************************************)
 
 ReserveFile(d, h) ==
@@ -87,23 +103,18 @@ ReserveFile(d, h) ==
   /\ ~ev.proj
   /\ ev' = [ev EXCEPT !.res = "reserved", !.resFor = h]
   /\ pend' = [pend EXCEPT ![d] =
-      [kind |-> "prep", req |-> "q1", payload |-> h]]
+      [kind |-> "prep", phase |-> "write", req |-> "q1", payload |-> h]]
   /\ UNCHANGED <<alive, lock, inLock, cl>>
 
-(* A retry re-prepares from the on-disk reservation: legitimate recovery   *)
-(* after a crash between reservation and creation (res = "reserved"), and  *)
-(* the fault path when AdoptTorn lets a truncated file be adopted.         *)
 RetryPrepare(d) ==
   /\ alive[d]
   /\ pend[d].kind = "none"
   /\ ev.res /= "none"
   /\ (AdoptTorn \/ ev.res = "reserved")
   /\ pend' = [pend EXCEPT ![d] =
-      [kind |-> "prep", req |-> "q1", payload |-> ev.resFor]]
+      [kind |-> "prep", phase |-> "retry", req |-> "q1", payload |-> ev.resFor]]
   /\ UNCHANGED <<alive, lock, inLock, ev, cl>>
 
-(* A retry adopts the reserved projectId and creates the project; init of  *)
-(* an existing project is the ownership-verified recovery path (§2.3).     *)
 CreateProject(d) ==
   /\ alive[d]
   /\ pend[d].kind = "prep"
@@ -112,17 +123,18 @@ CreateProject(d) ==
   /\ ev.resFor = "h1"
   /\ ~ev.proj
   /\ ev' = [ev EXCEPT !.proj = TRUE]
-  (* The reservation is consumed: any driver still holding a prepare action
-     yields to the created project (no later truncation of a live file). *)
-  /\ pend' = [x \in Drivers |->
-       IF pend[x].kind = "prep" THEN PendNone ELSE pend[x]]
+  /\ (* The reservation is consumed: any driver still holding a prepare
+        action yields to the created project. *)
+     pend' = [x \in Drivers |->
+        IF pend[x].kind = "prep" THEN PendNone ELSE pend[x]]
   /\ UNCHANGED <<alive, lock, inLock, cl>>
 
-(* Crash mid-write: the truncated file is not a usable reservation and no  *)
-(* project may exist behind it (STORE_IO_FAILED, §2.4).                    *)
+(* Torn is reachable ONLY in the original reservation write window: the   *)
+(* writing driver has phase "write" and the project does not exist yet.   *)
 CrashTornReservation(d) ==
   /\ alive[d]
   /\ pend[d].kind = "prep"
+  /\ pend[d].phase = "write"
   /\ ev.res = "reserved"
   /\ ~ev.proj
   /\ ev' = [ev EXCEPT !.res = "torn", !.proj = FALSE]
@@ -130,9 +142,16 @@ CrashTornReservation(d) ==
   /\ pend' = [pend EXCEPT ![d] = PendNone]
   /\ UNCHANGED <<lock, inLock, cl>>
 
+(* The documented recovery for a torn reservation: delete the file and    *)
+(* start over with a fresh requestId (design §2.4).                       *)
+AbandonReservation(d) ==
+  /\ alive[d]
+  /\ ev.res = "torn"
+  /\ ev' = [ev EXCEPT !.res = "none"]
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
+
 (***************************************************************************)
-(* state-writer lock (the design's state.lock; lock.ts primitive:          *)
-(* exclusive create, dead-holder reclaim, torn file never reclaimed).      *)
+(* state-writer lock                                                        *)
 (***************************************************************************)
 
 TakeLock(d) ==
@@ -142,7 +161,7 @@ TakeLock(d) ==
   /\ lock' = d
   /\ inLock' = TRUE
   /\ pend' = [pend EXCEPT ![d] =
-      [kind |-> "write", req |-> "none", payload |-> "h1"]]
+      [kind |-> "write", phase |-> "none", req |-> "none", payload |-> "h1"]]
   /\ UNCHANGED <<alive, ev, cl>>
 
 ReleaseLock(d) ==
@@ -155,18 +174,30 @@ ReleaseLock(d) ==
   /\ UNCHANGED <<alive, ev, cl>>
 
 (***************************************************************************)
-(* Checkpoint transitions. Each guarded action is one durable effect; the  *)
-(* ordering-guard placement is the design decision under test.             *)
+(* Checkpoints. Every SUCCESS resets the consecutive-failure counter of    *)
+(* the checkpoint it completes (review fold K5: a plain counter let        *)
+(* fail(review)/succeed/fail(freeze)/skip through, which the design's      *)
+(* "same checkpoint consecutively" forbids).                              *)
 (***************************************************************************)
+
+BindGraph(d) ==
+  /\ alive[d]
+  /\ lock = d
+  /\ inLock
+  /\ ev.status = "pending"
+  /\ ev.proj
+  /\ ~ev.bound
+  /\ ev' = [ev EXCEPT !.bound = TRUE, !.sf = 0]
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
 Review(d) ==
   /\ alive[d]
   /\ lock = d
   /\ inLock
   /\ ev.status = "pending"
-  /\ ev.proj
+  /\ ev.bound
   /\ ~ev.reviewed
-  /\ ev' = [ev EXCEPT !.reviewed = TRUE]
+  /\ ev' = [ev EXCEPT !.reviewed = TRUE, !.sf = 0]
   /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
 FreezeEvaluation(d) ==
@@ -176,11 +207,9 @@ FreezeEvaluation(d) ==
   /\ ev.status = "pending"
   /\ ev.reviewed
   /\ ~ev.frozen
-  /\ ev' = [ev EXCEPT !.frozen = TRUE]
+  /\ ev' = [ev EXCEPT !.frozen = TRUE, !.sf = 0]
   /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
-(* Report write (as-of re-render may follow fixes, hence only `frozen` is  *)
-(* required, not `reviewed` again).                                        *)
 WriteReport(d) ==
   /\ alive[d]
   /\ lock = d
@@ -188,31 +217,74 @@ WriteReport(d) ==
   /\ ev.status = "pending"
   /\ ev.frozen
   /\ ~ev.rep
-  /\ ev' = [ev EXCEPT !.rep = TRUE]
+  /\ ev' = [ev EXCEPT !.rep = TRUE, !.sf = 0]
   /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
-(* The single commit carries fix+report. CommitBeforeReport is the         *)
-(* documented fault switch: it drops the report guard so the ordering      *)
-(* invariant ReportBeforeCommit must catch the resulting commit.           *)
-Commit(d) ==
+(* The single commit carries fix+report; its content is sampled here      *)
+(* (md = tracked .md/.mdx only; other = a content-scope violation).      *)
+Commit(d, c) ==
+  /\ alive[d]
+  /\ lock = d
+  /\ inLock
+  /\ ev.status = "pending"
+  /\ ~ev.nopr
+  /\ ev.frozen
+  /\ ~ev.com
+  /\ c \in {"md", "other"}
+  /\ (CommitBeforeReport \/ ev.rep)
+  /\ ev' = [ev EXCEPT !.com = TRUE, !.content = c, !.sf = 0]
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
+
+(* Post-commit violation detection (the `commit -a` residual, §3.6): a    *)
+(* detected violation fails the page; pushing it is forbidden.           *)
+DetectViolation(d) ==
+  /\ alive[d]
+  /\ lock = d
+  /\ inLock
+  /\ ev.status = "pending"
+  /\ ~ev.nopr
+  /\ ev.com
+  /\ ev.content = "other"
+  /\ ev' = [ev EXCEPT !.status = "failed"]
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
+
+(* Content gate: push only clean content (§3.6 pre-check).                *)
+(* SkipContentGate is the fault that pushes a violating commit.          *)
+Push(d) ==
+  /\ alive[d]
+  /\ lock = d
+  /\ inLock
+  /\ ev.status = "pending"
+  /\ ~ev.nopr
+  /\ ev.com
+  /\ ~ev.push
+  /\ (SkipContentGate \/ ev.content = "md")
+  /\ ev' = [ev EXCEPT !.push = TRUE, !.sf = 0]
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
+
+PrOpen(d) ==
+  /\ alive[d]
+  /\ lock = d
+  /\ inLock
+  /\ ev.status = "pending"
+  /\ ~ev.nopr
+  /\ ev.push
+  /\ ~ev.pr
+  /\ ev' = [ev EXCEPT !.pr = TRUE, !.sf = 0]
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
+
+(* The no-commit / no-PR terminal (§8.3 checkpoint 8): a page with        *)
+(* nothing to deliver ends done without CI.                               *)
+MarkNoPr(d) ==
   /\ alive[d]
   /\ lock = d
   /\ inLock
   /\ ev.status = "pending"
   /\ ev.frozen
   /\ ~ev.com
-  /\ (CommitBeforeReport \/ ev.rep)
-  /\ ev' = [ev EXCEPT !.com = TRUE]
-  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
-
-Push(d) ==
-  /\ alive[d]
-  /\ lock = d
-  /\ inLock
-  /\ ev.status = "pending"
-  /\ ev.com
   /\ ~ev.push
-  /\ ev' = [ev EXCEPT !.push = TRUE]
+  /\ ~ev.nopr
+  /\ ev' = [ev EXCEPT !.nopr = TRUE]
   /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
 ConfirmCi(d) ==
@@ -220,58 +292,60 @@ ConfirmCi(d) ==
   /\ lock = d
   /\ inLock
   /\ ev.status = "pending"
-  /\ ev.push
+  /\ ~ev.nopr
+  /\ ev.pr
   /\ ~ev.ci
   /\ ev' = [ev EXCEPT !.ci = TRUE]
   /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
-(* Consecutive-failure accounting for the current checkpoint (§8.3).       *)
 FailCheckpoint(d) ==
   /\ alive[d]
   /\ lock = d
   /\ inLock
   /\ ev.status = "pending"
   /\ ~ev.ci
+  /\ ~ev.nopr
   /\ ev.sf < SkipAfter
   /\ ev' = [ev EXCEPT !.sf = ev.sf + 1]
   /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
-SucceedCheckpoint(d) ==
-  /\ alive[d]
-  /\ lock = d
-  /\ inLock
-  /\ ev.status = "pending"
-  /\ ev.sf > 0
-  /\ ev' = [ev EXCEPT !.sf = 0]
-  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
-
-(* Skip after SkipAfter consecutive failures; the batch continues.         *)
 SkipPage(d) ==
   /\ alive[d]
   /\ lock = d
   /\ inLock
   /\ ev.status = "pending"
   /\ ~ev.ci
+  /\ ~ev.nopr
   /\ ev.sf >= SkipAfter
   /\ ev' = [ev EXCEPT !.status = "skipped"]
-  /\ cl' = [cl EXCEPT !.status = "skipped"]
-  /\ UNCHANGED <<alive, lock, inLock, pend>>
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
 
-(* Cache write. Normal mode copies durable truth; CacheFirst is the        *)
-(* documented fault that lets the cache claim a checkpoint one step ahead, *)
-(* which ClaimNeverAhead must catch.                                       *)
+(* Cache write: normal mode copies durable truth (state.json is a cache); *)
+(* CacheFirst is the documented fault -- it claims push ahead of evidence. *)
 WriteClaim(d) ==
   /\ alive[d]
   /\ lock = d
   /\ inLock
-  /\ cl' = [ rep  |-> ev.rep,
-             com  |-> ev.com,
-             push |-> IF CacheFirst /\ ev.rep /\ ~ev.com THEN TRUE ELSE ev.push,
-             ci   |-> ev.ci,
+  /\ cl' = [ rep |-> ev.rep,
+             com |-> IF CacheFirst /\ ev.rep /\ ~ev.com THEN TRUE ELSE ev.com,
+             push |-> ev.push,
+             ci |-> ev.ci,
              status |-> ev.status ]
   /\ UNCHANGED <<alive, lock, inLock, pend, ev>>
 
-(* Resume: recompute the cache from disk evidence (never the reverse).     *)
+(* The stale-cache PROTOCOL fault: a driver that trusts the ahead cache   *)
+(* skips the commit and pushes directly -- the concrete violation the     *)
+(* shape invariant alone could not express (review fold).                  *)
+PushFromStaleCache(d) ==
+  /\ alive[d]
+  /\ CacheFirst
+  /\ cl.com
+  /\ ~ev.com
+  /\ ~ev.push
+  /\ ev' = [ev EXCEPT !.push = TRUE]
+  /\ UNCHANGED <<alive, lock, inLock, pend, cl>>
+
+(* Resume: recompute the cache from disk evidence (never the reverse).    *)
 Reconcile(d) ==
   /\ alive[d]
   /\ lock = d
@@ -283,15 +357,13 @@ Reconcile(d) ==
   /\ UNCHANGED <<alive, lock, inLock, pend, ev>>
 
 (***************************************************************************)
-(* Crashes                                                                 *)
+(* Crashes                                                                  *)
 (***************************************************************************)
 
 Crash(d) ==
   /\ alive[d]
   /\ alive' = [alive EXCEPT ![d] = FALSE]
   /\ pend' = [pend EXCEPT ![d] = PendNone]
-  (* inLock is in-process state: the crash loses it, while the lock FILE
-     stays behind, held by a now-dead holder (reclaimable). *)
   /\ inLock' = FALSE
   /\ UNCHANGED <<lock, ev, cl>>
 
@@ -306,25 +378,34 @@ CrashTornLock(d) ==
   /\ pend' = [pend EXCEPT ![d] = PendNone]
   /\ UNCHANGED <<ev, cl>>
 
-Idle == UNCHANGED vars
+(* The self-loop is enabled ONLY when every driver is dead, so a stuck    *)
+(* LIVE state is a genuine TLC deadlock (review fold).                     *)
+Idle ==
+  /\ \A d \in Drivers : ~alive[d]
+  /\ UNCHANGED vars
 
 Next ==
   \/ \E d \in Drivers, h \in Payloads : ReserveFile(d, h)
   \/ \E d \in Drivers : RetryPrepare(d)
   \/ \E d \in Drivers : CreateProject(d)
   \/ \E d \in Drivers : CrashTornReservation(d)
+  \/ \E d \in Drivers : AbandonReservation(d)
   \/ \E d \in Drivers : TakeLock(d)
   \/ \E d \in Drivers : ReleaseLock(d)
+  \/ \E d \in Drivers : BindGraph(d)
   \/ \E d \in Drivers : Review(d)
   \/ \E d \in Drivers : FreezeEvaluation(d)
   \/ \E d \in Drivers : WriteReport(d)
-  \/ \E d \in Drivers : Commit(d)
+  \/ \E d \in Drivers, c \in {"md", "other"} : Commit(d, c)
+  \/ \E d \in Drivers : DetectViolation(d)
   \/ \E d \in Drivers : Push(d)
+  \/ \E d \in Drivers : PrOpen(d)
+  \/ \E d \in Drivers : MarkNoPr(d)
   \/ \E d \in Drivers : ConfirmCi(d)
   \/ \E d \in Drivers : FailCheckpoint(d)
-  \/ \E d \in Drivers : SucceedCheckpoint(d)
   \/ \E d \in Drivers : SkipPage(d)
   \/ \E d \in Drivers : WriteClaim(d)
+  \/ \E d \in Drivers : PushFromStaleCache(d)
   \/ \E d \in Drivers : Reconcile(d)
   \/ \E d \in Drivers : Crash(d)
   \/ \E d \in Drivers : CrashTornLock(d)
@@ -344,45 +425,52 @@ TypeOK ==
   /\ ev \in EvType
   /\ cl \in ClType
 
-(* S-1 (F1): a project exists only behind one well-formed reservation for  *)
-(* this request/payload; a torn reservation never yields a project.        *)
 InitSound ==
   /\ (ev.proj => (ev.res = "reserved" /\ ev.resFor = "h1"))
   /\ (ev.res = "torn" => ~ev.proj)
-  /\ (ev.reviewed => ev.proj)
+  /\ (ev.bound => ev.proj)
+  /\ (ev.reviewed => ev.bound)
 
-(* S-2: the evaluation was frozen before the report was written.           *)
+(* The graph is bound before the review runs (checkpoint 2, review fold). *)
+BoundBeforeReview == ev.reviewed => ev.bound
+
 FrozenBeforeReport == ev.rep => ev.frozen
 
-(* S-3: the report is durable before the single commit carrying it.        *)
 ReportBeforeCommit == ev.com => ev.rep
 
-(* S-4/S-5: commit before push, push before CI confirmation.               *)
 DeliveryOrder ==
   /\ (ev.push => ev.com)
-  /\ (ev.ci => ev.push)
+  /\ (ev.pr => ev.push)
+  /\ (ev.ci => ev.pr)
 
-(* S-6: the state.json cache never claims progress the evidence lacks.     *)
+(* Content gate + violation stop (§3.6/§8.3, review fold K7).             *)
+ContentGateSound ==
+  /\ (ev.push => ev.content = "md")
+  /\ (ev.status = "failed" => ~ev.push)
+
+(* The no-PR terminal is only for pages with nothing delivered.           *)
+NoPrSound == ev.nopr => (~ev.com /\ ~ev.push /\ ~ev.pr /\ ~ev.ci)
+
 ClaimNeverAhead ==
   /\ (cl.rep => ev.rep)
   /\ (cl.com => ev.com)
   /\ (cl.push => ev.push)
   /\ (cl.ci => ev.ci)
+  /\ (cl.status = "skipped" => ev.status = "skipped")
+  /\ (cl.status = "failed" => ev.status = "failed")
 
-(* S-7: a page is skipped only after SkipAfter consecutive failures.       *)
 SkipNeedsFailures == ev.status = "skipped" => ev.sf >= SkipAfter
 
-(* S-8: only the live holder writes, and it holds a write action.          *)
 StateWriteExclusive ==
   inLock => ( /\ lock \in Drivers
               /\ alive[lock]
               /\ pend[lock].kind = "write" )
 
-(* S-9: a skipped page never reaches CI confirmation.                      *)
 TerminalStable ==
-  /\ (ev.status = "skipped" => ~ev.ci)
-  /\ (cl.status = "skipped" => ev.status = "skipped")
+  /\ (ev.status = "skipped" => (~ev.ci /\ ~ev.nopr))
+  /\ (ev.status = "failed" => (~ev.ci /\ ~ev.nopr))
 
-ToolchainFingerprint == <<SkipAfter, CommitBeforeReport, CacheFirst, AdoptTorn>>
+ToolchainFingerprint == <<SkipAfter, CommitBeforeReport, CacheFirst, AdoptTorn,
+                          SkipContentGate>>
 
 =============================================================================

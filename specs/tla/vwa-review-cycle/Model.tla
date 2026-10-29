@@ -173,11 +173,13 @@ AdmissionBody(p, k) ==
        /\ runs' = runs
        /\ reqMap' = reqMap
        /\ latestCycle' = latestCycle
-       /\ IF runs[reqMap[pend[p].req]].payload /= pend[p].payload
-          THEN (* IDEMPOTENCY_CONFLICT: fail-stop, no run created *)
-            UNCHANGED vars
-          ELSE (* replay returns the existing run; no new run *)
-            UNCHANGED vars
+        (* IDEMPOTENCY_CONFLICT (same requestId, different payload) is
+           fail-stop: also no run is created. Both outcomes leave the
+           durable maps untouched -- only the outer lock release and
+           pending reset take effect, so this arm is REACHABLE. The
+           earlier inner IF conjuncted UNCHANGED vars, contradicting the
+           outer primed assignments and making the whole arm dead code
+           (three-lane model review, fold K1). *)
      ELSE IF pend[p].mode = "fresh"
        THEN IF pend[p].snap /= headRev
             THEN (* REVISION_CONFLICT: retryable, no run created *)
@@ -210,6 +212,21 @@ AdmissionBody(p, k) ==
            /\ latestCycle' = latestCycle
          ELSE IF \A t \in Targets : ReusableFrom(t)
            THEN (* NOTHING_TO_CONTINUE: every target reusable *)
+             /\ runs' = runs
+             /\ reqMap' = reqMap
+             /\ latestCycle' = latestCycle
+         ELSE IF pend[p].snap /= headRev
+           THEN (* REVISION_CONFLICT for continuations too: the budget
+                   snapshot a continuation was computed from must still be
+                   the current head (review-cycle.ts F4 fence applies to
+                   every request carrying budgetRevision; review fold). *)
+             /\ runs' = runs
+             /\ reqMap' = reqMap
+             /\ latestCycle' = latestCycle
+         ELSE IF ProjectSpend + AdmissionEstimate > ProjectBudget
+           THEN (* PROJECT_BUDGET_EXHAUSTED applies to continuation
+                   admission as well (design SS5.1: the check sits at
+                   reserveCycleRequest, mode-independent). *)
              /\ runs' = runs
              /\ reqMap' = reqMap
              /\ latestCycle' = latestCycle
@@ -527,6 +544,7 @@ ContinuationSound ==
   \A r \in Runs : \A t \in runs[r].reused :
     /\ runs[r].mode = "continue"
     /\ \E r2 \in Runs :
+         /\ r2 /= r
          /\ runs[r2].status \in Statuses
          /\ t \in runs[r2].records
          /\ t \notin runs[r2].dis

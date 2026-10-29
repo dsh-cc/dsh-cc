@@ -281,6 +281,14 @@ New form:
   look), not the current blanket allowed-once; with no grant active, current
   behavior is unchanged. A grant is a relaxation within the task and a
   tightening within the task; it does not change the no-grant baseline.
+  **Two re-validation rules pinned by the TLA+ model
+  (`specs/tla/task-grant-authorization`, v2 review folds)**: ① the
+  baseline path re-validates grant-ABSENCE at consume time — a grant CREATED
+  between the approval check and the consumption must not be bypassed by a
+  baseline approval; ② **registrations die with their grant** — revoke,
+  expiry and reset clear the escalation registry, so a grant that died and
+  was re-created never consumes a stale entry (the new grant's ceiling and
+  branch are what the consume checks).
 
 ### 3.6 contentScope: tracked-md-only (conditional default)
 

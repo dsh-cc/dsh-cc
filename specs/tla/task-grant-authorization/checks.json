@@ -9,22 +9,27 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "FALSE",
-        "UseRegistryOnly": "FALSE",
+        "UseStaleAfterGit": "FALSE",
         "ConsumeOnce": "TRUE",
         "IgnoreCeiling": "FALSE",
         "IgnoreBranch": "FALSE",
         "AgentCanForge": "FALSE",
-        "WrongDeferFlip": "FALSE"
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
-        "NoUngrantedAutoApproval",
+        "GrantPathSound",
+        "BaselineOnlyWithoutActiveGrant",
         "OneApprovalPerCall",
         "ModeWithinCeiling",
         "BranchGuardHolds",
         "NoForgedAdjudication",
-        "DeferredNeverPromoted",
-        "EligibilitySound"
+        "ForceSound",
+        "NoCrossConsume",
+        "ContentGateSound"
       ],
       "properties": [],
       "limits": {
@@ -38,16 +43,19 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "TRUE",
-        "UseRegistryOnly": "FALSE",
+        "UseStaleAfterGit": "FALSE",
         "ConsumeOnce": "TRUE",
         "IgnoreCeiling": "FALSE",
         "IgnoreBranch": "FALSE",
         "AgentCanForge": "FALSE",
-        "WrongDeferFlip": "FALSE"
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
-        "NoUngrantedAutoApproval"
+        "BaselineOnlyWithoutActiveGrant"
       ],
       "properties": [],
       "limits": {
@@ -61,16 +69,19 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "FALSE",
-        "UseRegistryOnly": "TRUE",
+        "UseStaleAfterGit": "TRUE",
         "ConsumeOnce": "TRUE",
         "IgnoreCeiling": "FALSE",
         "IgnoreBranch": "FALSE",
         "AgentCanForge": "FALSE",
-        "WrongDeferFlip": "FALSE"
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
-        "NoUngrantedAutoApproval"
+        "GrantPathSound"
       ],
       "properties": [],
       "limits": {
@@ -84,12 +95,15 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "FALSE",
-        "UseRegistryOnly": "FALSE",
+        "UseStaleAfterGit": "FALSE",
         "ConsumeOnce": "FALSE",
         "IgnoreCeiling": "FALSE",
         "IgnoreBranch": "FALSE",
         "AgentCanForge": "FALSE",
-        "WrongDeferFlip": "FALSE"
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -107,12 +121,15 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "FALSE",
-        "UseRegistryOnly": "FALSE",
+        "UseStaleAfterGit": "FALSE",
         "ConsumeOnce": "TRUE",
         "IgnoreCeiling": "TRUE",
         "IgnoreBranch": "FALSE",
         "AgentCanForge": "FALSE",
-        "WrongDeferFlip": "FALSE"
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -130,12 +147,15 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "FALSE",
-        "UseRegistryOnly": "FALSE",
+        "UseStaleAfterGit": "FALSE",
         "ConsumeOnce": "TRUE",
         "IgnoreCeiling": "FALSE",
         "IgnoreBranch": "TRUE",
         "AgentCanForge": "FALSE",
-        "WrongDeferFlip": "FALSE"
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -153,12 +173,15 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "FALSE",
-        "UseRegistryOnly": "FALSE",
+        "UseStaleAfterGit": "FALSE",
         "ConsumeOnce": "TRUE",
         "IgnoreCeiling": "FALSE",
         "IgnoreBranch": "FALSE",
         "AgentCanForge": "TRUE",
-        "WrongDeferFlip": "FALSE"
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -176,16 +199,97 @@
       "specification": "Spec",
       "constants": {
         "SkipGrantCheck": "FALSE",
-        "UseRegistryOnly": "FALSE",
+        "UseStaleAfterGit": "FALSE",
         "ConsumeOnce": "TRUE",
         "IgnoreCeiling": "FALSE",
         "IgnoreBranch": "FALSE",
         "AgentCanForge": "FALSE",
-        "WrongDeferFlip": "TRUE"
+        "WrongDeferFlip": "TRUE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
       },
       "invariants": [
         "TypeOK",
-        "DeferredNeverPromoted"
+        "ForceSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-accept-clears",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "TRUE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ForceSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cross-consume",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "TRUE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoCrossConsume"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-content-gate",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ContentGateSound"
       ],
       "properties": [],
       "limits": {
