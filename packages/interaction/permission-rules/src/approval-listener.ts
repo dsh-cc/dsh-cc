@@ -31,6 +31,7 @@
  * @module @dsh-cc/permission-rules/approval-listener
  */
 
+import { currentToolExecution, type ToolExecution } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
@@ -45,6 +46,7 @@ export interface GrantEscalationFace {
   anyActive(session: Session): boolean
   /** Consume one escalation request against the grant registry. */
   consume(input: {
+    execution?: Readonly<ToolExecution>
     session: Session
     agentId: string
     toolName: string
@@ -106,7 +108,10 @@ export function createSandboxApprovalListener(config: SandboxApprovalListenerCon
     if (grants !== undefined) {
       // §3.5: a registered grant escalation decides inside the task; a live
       // grant makes anything else a user decision.
+      const hadActive = grants.anyActive(session)
+      const execution = currentToolExecution()
       const verdict = await grants.consume({
+        ...(execution === undefined ? {} : { execution }),
         session,
         agentId: String(agent.id),
         toolName: req.toolName,
@@ -125,7 +130,7 @@ export function createSandboxApprovalListener(config: SandboxApprovalListenerCon
       // Rule ① (TLA+ fold): the baseline re-validates grant ABSENCE at
       // consume time — with a grant live, a missed escalation is anomalous
       // and goes to the user. The revoked verdict already cleared its grant.
-      if (verdict.kind === 'revoked' || grants.anyActive(session)) return next()
+      if (verdict.kind === 'revoked' || (verdict.kind === 'fallback' && verdict.grantBound) || hadActive || grants.anyActive(session)) return next()
     }
     if (config.modeOf(agent) !== 'auto') return next()
     if (config.workspaceOf(agent) === undefined) return next()

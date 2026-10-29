@@ -2191,13 +2191,19 @@ capabilities:
           same source+behavior, bare whole-tool Bash allows, unknown tool
           names) grouped by source with a proposed before/after diff;
           `--apply` cleans the user settings layer only, via the
-          settings-cascade raw user-layer edit seam.
+          settings-cascade raw user-layer edit seam. Task grants are explicitly
+          confirmed by the user, scoped to canonical workspace paths and runtime
+          execution tokens, and revalidated before execution. Markdown-only Git
+          grants require separate foreground add, commit, and push operations;
+          unsupported commit flags and compound publication require approval.
       ux: full
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: command-permissions" }
       - { type: test, path: packages/interaction/command-permissions/tests/command-permissions.spec.ts }
       - { type: test, path: packages/interaction/command-permissions/tests/lint.spec.ts }
       - { type: source, path: packages/interaction/command-permissions/src/lint.ts }
+      - { type: test, path: packages/interaction/permission-rules/tests/task-grant-admission.spec.ts }
+      - { type: test, path: packages/interaction/permission-rules/tests/grant-execution-binding.spec.ts }
       - { type: test, path: packages/ui/tui/tests/driver-permissions.spec.ts }
     deviation: { kind: none }
 

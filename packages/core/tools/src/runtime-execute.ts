@@ -15,6 +15,7 @@ import { createExecutionToken, fuseToolSignals, isAborted, toolAbortedBeforeDisp
 import { RUN_CODE_NAME } from './code-mode.ts'
 import type { MutableToolRunContext, PreToolDecision, ScheduledToolDispatch, ScheduledToolPreparation, ToolDefinition, ToolExecution, ToolExecutionInput, ToolExecutionResult, ToolRunContext } from './tool-types.ts'
 import type { ToolRuntimeCore } from './runtime-core.ts'
+import { executionForBody, rememberToolExecution, runWithToolExecution } from './current-execution.ts'
 
 /**
  * Execute through pre-policy, guards, around-dispatch, post-policy,
@@ -106,6 +107,7 @@ export function createExecution(rt: ToolRuntimeCore, exec: ToolExecutionInput): 
       throw new TypeError('tool execution arguments must be losslessly JSON-serializable')
     }
     const execution: MutableToolRunContext = { ...base, arguments: deepFreeze(detached) }
+    rememberToolExecution(execution)
     rt.deferredContexts.set(execution, deferredContexts)
     rt.contentFinalizers.set(execution, finalizerFor())
     rt.cancellationStates.set(execution, {
@@ -241,10 +243,11 @@ export async function dispatchToolBody(rt: ToolRuntimeCore, exec: MutableToolRun
   }
   exec.signal = signal
   try {
-    const tool = rt.resolveExecution(exec.name, exec.agent, exec.parent !== undefined)
-    if (!tool) throw new ToolNotFoundError(exec.name)
+    const execution = executionForBody(exec)
+    const tool = rt.resolveExecution(execution.name, execution.agent, execution.parent !== undefined)
+    if (!tool) throw new ToolNotFoundError(execution.name)
     state.bodyInvoked = true
-    const returned = await tool.execute(exec.arguments, exec)
+    const returned = await runWithToolExecution(execution, () => tool.execute(execution.arguments, exec))
     const result = rt.createSuccessResult(exec, tool, returned)
     return isAborted(signal)
       ? toolAbortedResult(result)

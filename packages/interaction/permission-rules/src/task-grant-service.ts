@@ -7,12 +7,15 @@
  * @module @dsh-cc/permission-rules/task-grant-service
  */
 
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
+import { serializeGrantExecution, verifyGrantExecution } from './grant-execute.ts'
+import type { ToolExecutionResult } from '@dsh-cc/tools'
 import type { ToolExecution } from '@dsh-cc/tools'
 import type { DecidedCall } from './decide.ts'
-import type { GitRunner } from './grant-content-scope.ts'
+import { checkGrantContentScope, type GitRunner } from './grant-content-scope.ts'
+import { isVwaStateWrite } from './vwa-state.ts'
 import { GrantEscalations, type EscalationVerdict } from './grant-escalation.ts'
 import { grantAdmitsExec, type GrantMatchContext } from './task-grant-match.ts'
 import { deriveBranch, loadDescriptorFingerprint } from './task-grant-command.ts'
@@ -23,6 +26,7 @@ import {
   buildTaskGrant,
   grantGoalExpired,
   normalizePath,
+  isPathWithin,
   type TaskGrant,
 } from './task-grant.ts'
 import { isBashToolName } from './matchers.ts'
@@ -55,6 +59,7 @@ interface PendingGrant {
  * Every session reads its own log; a new session needs a fresh grant.
  */
 export class TaskGrants {
+  private readonly authorized = new Map<symbol, { grant: TaskGrant; decided: DecidedCall }>()
   private readonly store = new TaskGrantStore()
   private readonly escalations: GrantEscalations
   /** View → confirm binding (P1b): keyed by session + descriptor path. */
@@ -63,13 +68,21 @@ export class TaskGrants {
   constructor(private readonly host: TaskGrantHostFace, deps: TaskGrantDeps = {}) {
     this.escalations = new GrantEscalations({
       store: this.store,
+      validateContext: async (grant, exec) => {
+        if (exec.agent === undefined) return false
+        const workspace = this.host.workspaceOf(exec.agent)
+        const args = exec.arguments as Record<string, unknown>
+        if (workspace === undefined || normalizePath(workspace) !== grant.root
+          || (typeof args.workdir === 'string' && normalizePath(resolve(grant.root, args.workdir)) !== grant.root)) return false
+        return await deriveBranch(grant.root) === grant.branch
+      },
       activeGoalId: (session) => this.host.activeGoalIdOfSession(session),
       ...deps.git === undefined ? {} : { git: deps.git },
     })
   }
 
-  private static pendingKey(agent: Agent, descriptorPath: string): string {
-    return `${String(agent.session.id)}\u0000${resolve(descriptorPath)}`
+  private pendingKey(agent: Agent, descriptorPath: string): string {
+    return `${String(agent.session.id)}\u0000${normalizePath(resolve(this.host.workspaceOf(agent) ?? '', descriptorPath))}`
   }
 
   /** The live grants of one session (seeded from its log on first use). */
@@ -84,10 +97,15 @@ export class TaskGrants {
    * @throws {GrantValidationError} when the descriptor or the host facts fail.
    */
   async propose(agent: Agent, descriptorPath: string): Promise<TaskGrant> {
-    const { face, hash } = loadDescriptorFingerprint(descriptorPath)
+    const { face, hash } = loadDescriptorFingerprint(normalizePath(resolve(this.host.workspaceOf(agent) ?? '', descriptorPath)))
     const facts = await this.hostFacts(agent)
+    for (const path of face.writePaths) {
+      const target = normalizePath(join(facts.root, path))
+      if (!isPathWithin(facts.root, target)) throw new GrantValidationError('writePath escapes workspace root')
+      if (isVwaStateWrite(target, facts.root) || isPathWithin(target, normalizePath(join(facts.root, '.dsh/vwa')))) throw new GrantValidationError('writePath covers authoritative VWA state')
+    }
     const grant = buildTaskGrant({ ...facts, face })
-    this.pending.set(TaskGrants.pendingKey(agent, descriptorPath), { grant, hash, facts })
+    this.pending.set(this.pendingKey(agent, descriptorPath), { grant, hash, facts })
     return grant
   }
 
@@ -99,14 +117,14 @@ export class TaskGrants {
    * @throws {GrantValidationError} when no view is pending or anything drifted.
    */
   async create(agent: Agent, descriptorPath: string): Promise<TaskGrant> {
-    const key = TaskGrants.pendingKey(agent, descriptorPath)
+    const key = this.pendingKey(agent, descriptorPath)
     const pending = this.pending.get(key)
     if (pending === undefined) {
       throw new GrantValidationError(
         'no proposed grant is pending for this descriptor; run `/permissions grant <descriptorPath>` first',
       )
     }
-    const { hash } = loadDescriptorFingerprint(descriptorPath)
+    const { hash } = loadDescriptorFingerprint(normalizePath(resolve(this.host.workspaceOf(agent) ?? '', descriptorPath)))
     if (hash !== pending.hash) {
       throw new GrantValidationError(
         'the descriptor changed since the approval view; re-run `/permissions grant` to review the new content',
@@ -178,9 +196,47 @@ export class TaskGrants {
       fileEditTools: this.host.fileEditTools,
     }
     const activeGoalId = this.host.activeGoalIdOfSession(agent.session)
+    const workspace = this.host.workspaceOf(agent)
     return this.of(agent).find(grant =>
-      !grantGoalExpired(grant, activeGoalId) && grantAdmitsExec(grant, exec, context))
+      workspace !== undefined && normalizePath(workspace) === grant.root && !grantGoalExpired(grant, activeGoalId) && grantAdmitsExec(grant, exec, context))
   }
+
+  /** Validate actual execution facts before any grant relaxation, including unsandboxed calls. */
+  async authorize(decided: DecidedCall, exec: ToolExecution): Promise<TaskGrant | undefined> {
+    const grant = this.match(decided, exec)
+    if (grant === undefined) return undefined
+    if (!isBashToolName(exec.name, this.host.bashToolName)) return grant
+    const args = exec.arguments as Record<string, unknown>
+    const workdir = typeof args.workdir === 'string' ? normalizePath(resolve(grant.root, args.workdir)) : grant.root
+    if (workdir !== grant.root) throw new GrantValidationError('Task grant does not authorize this working directory')
+    const branch = await deriveBranch(grant.root)
+    if (branch !== grant.branch) throw new GrantValidationError('Task grant branch changed')
+    const command = String(args.command)
+    if (grant.contentScope === 'tracked-md-only' && args.run_in_background === true) throw new GrantValidationError('Scoped background calls require human approval')
+    const violations = await checkGrantContentScope(grant, command)
+    if (violations.length > 0) {
+      this.revoke(exec.agent!, grant.grantId)
+      throw new GrantValidationError(violations.join('; '))
+    }
+    if (this.match(decided, exec) !== grant) throw new GrantValidationError('Task grant changed during verification')
+    if (await deriveBranch(grant.root) !== branch || this.match(decided, exec) !== grant) throw new GrantValidationError('Task grant context changed during verification')
+    this.authorized.set(exec.token, { grant, decided })
+    return grant
+  }
+
+  async execute(exec: ToolExecution, next: () => Promise<ToolExecutionResult>, waitBackground?: (id: string) => Promise<void>): Promise<ToolExecutionResult> {
+    const workspace = exec.agent === undefined ? undefined : this.host.workspaceOf(exec.agent)
+    if (workspace === undefined || !isBashToolName(exec.name, this.host.bashToolName)) return next()
+    return serializeGrantExecution(normalizePath(workspace), async () => {
+      const admitted = this.authorized.get(exec.token)
+      if (admitted === undefined) return next()
+      const live = await this.authorize(admitted.decided, exec)
+      if (live !== admitted.grant) throw new GrantValidationError('Task grant changed before execution')
+      return verifyGrantExecution(live, exec, next, () => { this.revoke(exec.agent!, live.grantId) }, waitBackground)
+    })
+  }
+
+  clearExecution(exec: ToolExecution): void { this.authorized.delete(exec.token); this.escalations.clearExecution(exec.token) }
 
   /** Register the escalation-seam entry for a grant-allowed bash call (§3.5). */
   registerEscalation(grant: TaskGrant, exec: ToolExecution): void {
@@ -191,6 +247,7 @@ export class TaskGrants {
     const command = (exec.arguments as Record<string, unknown>).command
     if (typeof command !== 'string') return
     this.escalations.register({
+      executionToken: exec.token,
       session: agent.session,
       agentId: String(agent.id),
       toolName: exec.name,
@@ -214,6 +271,7 @@ export class TaskGrants {
 
   /** Consume one sandbox escalation request against the grant registry. */
   consume(input: {
+    execution?: Readonly<ToolExecution>
     session: Session
     agentId: string
     toolName: string

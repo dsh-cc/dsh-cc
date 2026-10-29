@@ -24,6 +24,8 @@ import { applyFinalContent, callerCancelled, cancellationResult, completeSchedul
 import { createSuccessResult, markCanonical, materializeFinalResult, normalizeDispatchResult, notifyResult, postExecute } from './runtime-results.ts'
 import { requirePtcRuntime, requireCodeTransport, serviceAsk, shapeDispatchLog } from './runtime-code.ts'
 
+export { currentToolExecution } from './current-execution.ts'
+
 export {
   defineTool,
   valueSchemaSpecToJsonSchema,

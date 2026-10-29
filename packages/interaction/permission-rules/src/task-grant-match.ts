@@ -19,6 +19,7 @@ import { grantAdmitsSegment } from './evaluate.ts'
 import { isBashToolName, ruleMatchesTool } from './matchers.ts'
 import { parseRule } from './parser.ts'
 import { splitShellCommand, type ShellSegment } from './shell-segments.ts'
+import { parseTaskGrantGitInvocation } from './task-grant-git.ts'
 import {
   TASK_GRANT_RULE_SOURCE,
   isPathWithin,
@@ -27,6 +28,7 @@ import {
   type TaskGrant,
 } from './task-grant.ts'
 import type { PermissionRule } from './types.ts'
+import { isCanonicalVwaStateWrite } from './vwa-state.ts'
 
 /** The per-call host facts the matcher needs. */
 export interface GrantMatchContext {
@@ -42,12 +44,6 @@ export function grantRules(grant: TaskGrant): PermissionRule[] {
 /** The whitespace tokens of one shell segment's stripped subject. */
 function segmentTokens(segment: ShellSegment): string[] {
   return segment.subject.trim().split(/\s+/).filter(token => token !== '')
-}
-
-/** Whether a segment is exactly `git push ...` (structured matching then decides alone). */
-function isPushShaped(segment: ShellSegment): boolean {
-  const tokens = segmentTokens(segment)
-  return tokens[0] === 'git' && tokens[1] === 'push'
 }
 
 /** Whether the rule list grants the `git push` prefix at all (structure still has to match). */
@@ -99,7 +95,9 @@ function segmentAdmitted(
   branch: string | null,
 ): boolean {
   if (segment.tainted) return false
-  if (isPushShaped(segment)) return structuredPushAdmits(rules, toolName, segment, branch)
+  const git = parseTaskGrantGitInvocation(segment)
+  if (git.kind === 'unsupported') return false
+  if (git.kind === 'git' && git.subcommand === 'push') return structuredPushAdmits(rules, toolName, segment, branch)
   return grantAdmitsSegment(rules, toolName, segment, TASK_GRANT_RULE_SOURCE) !== undefined
 }
 
@@ -126,14 +124,20 @@ export function grantAdmitsTool(grant: TaskGrant, toolName: string): boolean {
 }
 
 /**
- * Whether the grant admits a write target: both sides normalize identically —
- * the writePath is `join(root, writePath)` realpath-normalized, the target is
- * realpath-normalized, and the comparison is a separator-aware prefix test.
+ * Whether the grant admits a write target: canonical targets and grant prefixes
+ * must stay inside the canonical workspace root. Authoritative VWA state never
+ * matches, even through a broad prefix or a symlink retargeted since approval.
+ * Prefixes and targets are resolved on every call before separator-aware matching.
  */
 export function grantAdmitsWritePath(grant: TaskGrant, target: string): boolean {
+  const normalizedRoot = normalizePath(grant.root)
   const normalizedTarget = normalizePath(resolve(grant.root, target))
-  return grant.writePaths.some(writePath =>
-    isPathWithin(writePathBase(grant.root, writePath), normalizedTarget))
+  if (!isPathWithin(normalizedRoot, normalizedTarget)) return false
+  if (isCanonicalVwaStateWrite(normalizedTarget, normalizedRoot)) return false
+  return grant.writePaths.some(writePath => {
+    const base = writePathBase(grant.root, writePath)
+    return isPathWithin(normalizedRoot, base) && isPathWithin(base, normalizedTarget)
+  })
 }
 
 /** The write target of a file-writing call (`file_path`, else `notebook_path`). */

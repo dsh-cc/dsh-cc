@@ -3713,7 +3713,7 @@
         },
         "behavioral": {
           "status": "full",
-          "notes": "dsh-cc extension — `/permissions lint` reports rule-hygiene findings (malformed rules, exact duplicates, prefix-subsumed rules within the same source+behavior, bare whole-tool Bash allows, unknown tool names) grouped by source with a proposed before/after diff; `--apply` cleans the user settings layer only, via the settings-cascade raw user-layer edit seam."
+          "notes": "dsh-cc extension — `/permissions lint` reports rule-hygiene findings (malformed rules, exact duplicates, prefix-subsumed rules within the same source+behavior, bare whole-tool Bash allows, unknown tool names) grouped by source with a proposed before/after diff; `--apply` cleans the user settings layer only, via the settings-cascade raw user-layer edit seam. Task grants are explicitly confirmed by the user, scoped to canonical workspace paths and runtime execution tokens, and revalidated before execution. Markdown-only Git grants require separate foreground add, commit, and push operations; unsupported commit flags and compound publication require approval."
         },
         "ux": {
           "status": "full"
@@ -3736,6 +3736,14 @@
         {
           "type": "source",
           "path": "packages/interaction/command-permissions/src/lint.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/task-grant-admission.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/grant-execution-binding.spec.ts"
         },
         {
           "type": "test",

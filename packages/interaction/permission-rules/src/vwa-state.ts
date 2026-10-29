@@ -12,11 +12,21 @@
  */
 
 import { join, resolve } from 'node:path'
-import { isPathWithin, normalizePath, VWA_BATCH_ROOT, VWA_STATE_ROOT } from './task-grant.ts'
+import { isPathWithin, normalizePath, VWA_STATE_ROOT } from './task-grant.ts'
 
 /** The ask reason surfaced for an unexempted VWA state write. */
 export const VWA_STATE_ASK_REASON =
   'writes under .dsh/vwa are authoritative VWA state (use the VWA tools); only .dsh/vwa/batches/** is writable directly'
+
+/** Shared canonical-path boundary for grant matching and the approval guard. */
+export function isCanonicalVwaStateWrite(normalizedTarget: string, normalizedRoot: string): boolean {
+  const stateRoot = normalizePath(join(normalizedRoot, VWA_STATE_ROOT))
+  if (!isPathWithin(stateRoot, normalizedTarget)) return false
+  // The exemption is the physical batches subtree, never a symlink's alternate
+  // destination (batches -> prj_1 must not exempt adjudications in prj_1).
+  const batchRoot = join(stateRoot, 'batches')
+  return !isPathWithin(batchRoot, normalizedTarget)
+}
 
 /**
  * Whether a file-write target lands in authoritative VWA state.
@@ -27,8 +37,5 @@ export const VWA_STATE_ASK_REASON =
 export function isVwaStateWrite(target: string, root: string | undefined): boolean {
   if (root === undefined || root === '') return false
   const normalized = normalizePath(resolve(root, target))
-  const stateRoot = normalizePath(join(root, VWA_STATE_ROOT))
-  if (!isPathWithin(stateRoot, normalized)) return false
-  const batchRoot = normalizePath(join(root, VWA_BATCH_ROOT))
-  return !isPathWithin(batchRoot, normalized)
+  return isCanonicalVwaStateWrite(normalized, normalizePath(root))
 }

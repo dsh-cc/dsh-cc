@@ -43,6 +43,7 @@ import {
 import { ruleMatches, ruleMatchesAnyShellSegment, subjectOf, isBashToolName } from './matchers.ts'
 import { SessionAllows } from './session-allow-service.ts'
 import { registerApprovalListener } from './approval-listener.ts'
+import { registerGrantExecution } from './grant-execute.ts'
 import { TaskGrants } from './task-grant-service.ts'
 import { activeGoalIdOf } from './task-grant-command.ts'
 
@@ -274,7 +275,7 @@ export class PermissionRulesService extends Service {
       bypassDisabled: () => this.bypassDisabled(),
       sessionAllowMatches: (exec) => this.sessionAllows.matches(exec),
       workspaceOf: (agent) => this.sessionAllows.workspaceOf(agent),
-      taskGrantMatches: (decided, exec) => this.taskGrants.match(decided, exec),
+      taskGrantMatches: (decided, exec) => this.taskGrants.authorize(decided, exec),
       registerGrantEscalation: (grant, exec) => this.taskGrants.registerEscalation(grant, exec),
       takeGrantPostHoc: (exec, succeeded) => this.taskGrants.takePostHoc(exec, succeeded),
       onAutoStage: (stage) => { this.autoStage = stage },
@@ -310,8 +311,7 @@ export class PermissionRulesService extends Service {
         this.ctx.get('shell')?.sandboxMode as SandboxMode | undefined)
     })
 
-    // §3.5 rule ②: session teardown clears every grant-derived registration
-    // and pending approval view of that session.
+    registerGrantExecution(ctx, this.taskGrants)
     ctx.on('session/disposed', (session) => {
       this.taskGrants.disposeSession(session)
     })

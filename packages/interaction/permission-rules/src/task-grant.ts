@@ -23,6 +23,9 @@ import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { parseRule } from './parser.ts'
+import { splitShellCommand } from './shell-segments.ts'
+import { firstShellToken, stripLeadingAssignments } from './shell-words.ts'
+import { parseTaskGrantGitInvocation } from './task-grant-git.ts'
 import type { PermissionRule, PermissionRuleSource } from './types.ts'
 
 /** The session event type carrying one task grant (payload = the grant). */
@@ -124,16 +127,10 @@ function normalizeWritePath(raw: string): string {
   return segments.join('/')
 }
 
-/** Tokenize a bash rule's content by whitespace (rule content is a command prefix). */
-function ruleTokens(content: string): string[] {
-  return content.trim().split(/\s+/)
-}
-
 /**
  * Reject the bash rule shapes §3.4 pins out of grant rules: whole-tool bash
- * rules, wildcards, `X:*` colon-prefix forms, and git invocations that place
- * `-c`/`--config-env` before the subcommand (a config override can change what
- * the admitted command does).
+ * rules, wildcards, `X:*` colon-prefix forms, and ambiguous Git invocations.
+ * Git globals and config overrides can change the repository or command effects.
  */
 function validateBashRule(rule: string): PermissionRule {
   const parsed = parseRule(rule, 'allow', TASK_GRANT_RULE_SOURCE)
@@ -146,13 +143,18 @@ function validateBashRule(rule: string): PermissionRule {
   if (parsed.content.endsWith(':*')) {
     throw new GrantValidationError(`rules: "${rule}" uses the ":*" colon-prefix form; write the plain prefix instead`)
   }
-  const tokens = ruleTokens(parsed.content)
-  if (tokens[0] === 'git') {
-    for (const token of tokens.slice(1)) {
-      if (!token.startsWith('-')) break
-      if (token === '-c' || token === '--config-env' || token.startsWith('--config-env=')) {
+  const segments = splitShellCommand(parsed.content)
+  if (segments.kind === 'opaque' && firstShellToken(stripLeadingAssignments(parsed.content)) === 'git') {
+    throw new GrantValidationError(`rules: "${rule}" has unsupported git syntax`)
+  }
+  if (segments.kind === 'segments') {
+    for (const segment of segments.segments) {
+      const git = parseTaskGrantGitInvocation(segment)
+      if (git.kind !== 'unsupported') continue
+      if (git.reason === 'config') {
         throw new GrantValidationError(`rules: "${rule}" overrides git config before the subcommand`)
       }
+      throw new GrantValidationError(`rules: "${rule}" must name a literal git subcommand without global options or commit/push assignments`)
     }
   }
   return parsed
@@ -172,8 +174,11 @@ function namesGitSubcommand(rules: readonly string[], subcommand: string): boole
   return rules.some(raw => {
     const parsed = parseRule(raw, 'allow', TASK_GRANT_RULE_SOURCE)
     if (parsed.matcher?.kind !== 'prefix') return false
-    const tokens = ruleTokens(parsed.content ?? '')
-    return tokens[0] === 'git' && tokens[1] === subcommand
+    const result = splitShellCommand(parsed.content ?? '')
+    return result.kind === 'segments' && result.segments.some(segment => {
+      const git = parseTaskGrantGitInvocation(segment)
+      return git.kind === 'git' && git.subcommand === subcommand
+    })
   })
 }
 

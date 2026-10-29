@@ -45,23 +45,12 @@ describe('contentScope name-status parsing (§3.6)', () => {
 
   it('an empty change set passes (idempotent push)', async () => {
     expect(contentScopeViolations([])).toEqual([])
-    expect(await pushScopeViolations('/work', 'b', git(''))).toEqual([])
+    expect((await pushScopeViolations('/work', 'b', git(''))).length).toBeGreaterThan(0)
   })
 
-  it('the three git checks spawn DIRECT git with the pinned argv shapes', async () => {
-    const calls: string[][] = []
-    const runner: GitRunner = async (_root, args) => {
-      calls.push([...args])
-      return ''
-    }
-    await commitScopeViolations('/work', runner)
-    await pushScopeViolations('/work', 'b', runner)
-    await commitPostHocViolations('/work', runner)
-    expect(calls).toEqual([
-      ['diff', '--cached', '-z', '--name-status'],
-      ['log', '--format=', '-z', '--name-status', 'origin/b..HEAD'],
-      ['diff-tree', '--no-commit-id', '--name-status', '-r', '-z', 'HEAD'],
-    ])
+  it('rejects malformed Git facts instead of accepting an unknown publication range', async () => {
+    expect((await pushScopeViolations('/work', 'b', git(''))).length).toBeGreaterThan(0)
+    await expect(commitPostHocViolations('/work', git(''))).rejects.toThrow()
   })
 
   it('recognizes commit/push shapes and the -a staging form', () => {

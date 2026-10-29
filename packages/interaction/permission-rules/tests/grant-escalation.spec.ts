@@ -223,7 +223,8 @@ describe('grant escalation consumption (§3.5)', () => {
     const sess = session()
     const built = grant()
     const gitRunner: GitRunner = async (_root, args) => {
-      if (args[0] === 'rev-parse') return 'task-grant-chain\n'
+      if (args[0] === 'rev-parse') return args.includes('--verify') ? 'a'.repeat(40) : 'task-grant-chain\n'
+      if (args[0] === 'rev-list') return 'a'.repeat(40)
       if (args[0] === 'diff-tree') return 'M\0src/a.ts\0'
       return ''
     }
@@ -244,7 +245,8 @@ describe('grant escalation consumption (§3.5)', () => {
     const built = grant()
     let diffTreeCalls = 0
     const gitRunner: GitRunner = async (_root, args) => {
-      if (args[0] === 'rev-parse') return 'task-grant-chain\n'
+      if (args[0] === 'rev-parse') return args.includes('--verify') ? 'a'.repeat(40) : 'task-grant-chain\n'
+      if (args[0] === 'rev-list') return 'a'.repeat(40)
       if (args[0] === 'diff-tree') {
         diffTreeCalls += 1
         return 'M\0docs/a.md\0'

@@ -798,3 +798,38 @@ documents + batch-tail template. E runs parallel to A–D; F last.
    write:true before fixing and let the as-of re-render overwrite it.)
 5. state.lock and genuinely concurrent sessions on one batch (is dual-driver
    support actually needed?).
+
+### PR #314 implementation hardening (2026-10-29)
+
+The grant path uses the tool runtime's host-only asynchronous execution context.
+The runtime captures immutable identity and arguments before policy hooks run;
+only the active tool body exposes that snapshot. Sandbox approval matches the
+runtime token, agent, session, tool, call ID, and command fingerprint. Settling a
+call invalidates the context and removes its registration. A revoked grant cannot
+be revived by an approval that was awaiting Git verification.
+
+Grant descriptors and confirmation identities resolve against the active session
+workspace. Canonical write targets must remain within that workspace and outside
+authoritative VWA state, including when a broad prefix or symlink is granted.
+The batches exemption does not follow a symlink into another state directory.
+
+Markdown-only automation supports separate `git add`, index-only `git commit`
+(with literal message options), and branch-pinned `git push origin <branch>`.
+Compound commit/push commands, implicit staging, pathspec commits, amend/reuse
+options, Git global configuration/directory overrides, and explicit background
+execution require human approval. These restrictions avoid predicting repository
+state after an earlier command. The ordinary permission path checks content even
+when no sandbox escalation occurs, and repeats validation under a per-root
+execution lock. If foreground Bash promotes to a job, the lock and verification
+remain active until the job settles. Commit verification checks every newly
+reachable commit from the recorded pre-execution OID; it does not inspect only
+final HEAD. A violation revokes authorization and reports that mutations may
+already have occurred; it never rolls back user history.
+
+Push checks resolve the actual source branch and live destination ref, reject
+publication-broadening configuration and multiple/different push endpoints, and
+inspect root commits and merge deltas explicitly. Remote access failure or an
+unknown remote object requires human review. Managed calls are serialized;
+external processes and repository hooks can still mutate repository state.
+Resulting commits are verified and violations stop grant automation, rather than
+claiming that a preflight check makes arbitrary external mutation impossible.

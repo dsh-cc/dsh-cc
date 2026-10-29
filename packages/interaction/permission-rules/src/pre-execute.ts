@@ -60,7 +60,7 @@ export type PreExecuteHost = {
    * this call, or undefined. Consulted AFTER deny/HIGH risk, BEFORE the LLM
    * arbitration stage.
    */
-  taskGrantMatches(decided: DecidedCall, exec: ToolExecution): TaskGrant | undefined
+  taskGrantMatches(decided: DecidedCall, exec: ToolExecution): Promise<TaskGrant | undefined>
   /** Register the escalation-seam entry for a grant-allowed bash call (§3.5). */
   registerGrantEscalation(grant: TaskGrant, exec: ToolExecution): void
   /**
@@ -338,7 +338,8 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     // (already folded into `decided` — a grant never lifts a deny) ② the
     // task grant ③ the current auto-stage path. A grant hit is a
     // deterministic allow: no LLM arbitration runs for it.
-    const grant = host.taskGrantMatches(decided, exec)
+    let grant: TaskGrant | undefined
+    try { grant = await host.taskGrantMatches(decided, exec) } catch (error) { return { kind: 'ask', reason: String(error) } }
     if (grant !== undefined) {
       host.registerGrantEscalation(grant, exec)
       return { kind: 'allow' }

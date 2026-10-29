@@ -8,21 +8,15 @@
  * grant still live, branch guard, contentScope. Anything else falls back to
  * the user — fail closed.
  *
- * DEVIATION (noted, design §3.5 cites a bare callId): this harness's approval
- * seam ({@link ApprovalRequest}) carries no execution token AND NO COMMAND TEXT
- * — the runtime token is a process-private Symbol (runtime-execute.ts) and
- * never reaches `approval/request`. The registry therefore binds on
- * `(sessionId, callId)`, and the property that makes that safe is the runtime's
- * one-callId-per-execution guarantee: the entry consumed at approval time is
- * the entry the decide side registered for THAT execution. `commandHash` is
- * recorded as a corroborating fingerprint and checked at registration (a live
- * entry with the same callId but a different hash means callId reuse — the
- * entry is dropped and the escalation falls back to the user). It cannot be
- * compared at consume time because the request carries no command text.
+ * Production entries use the runtime-minted execution token. The approval
+ * listener reads the active body context; call IDs are audit labels only.
+ * Entries without a token are retained solely for existing host-only controller
+ * clients and cannot consume a production token-bound registration.
  *
  * @module @dsh-cc/permission-rules/grant-escalation
  */
 
+import { currentToolExecution, type ToolExecution } from '@dsh-cc/tools'
 import { createHash } from 'node:crypto'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
@@ -83,6 +77,7 @@ export function withinModeCeiling(ceiling: SandboxMode, requested: SandboxMode):
 
 /** One registry entry: the execution identity a grant-allowed call registered. */
 export interface EscalationEntry {
+  readonly executionToken?: symbol
   readonly sessionId: string
   readonly agentId: string
   readonly toolName: string
@@ -109,7 +104,7 @@ interface PostHocCheck {
  * TLA+ fold, §3.5).
  */
 export class EscalationRegistry {
-  private readonly entries = new Map<string, EscalationEntry>()
+  private readonly entries = new Map<string | symbol, EscalationEntry>()
 
   private static key(sessionId: string, callId: string): string {
     return `${sessionId}\u0000${callId}`
@@ -122,7 +117,7 @@ export class EscalationRegistry {
    * @returns whether the entry was registered.
    */
   register(entry: EscalationEntry): boolean {
-    const key = EscalationRegistry.key(entry.sessionId, entry.callId)
+    const key = entry.executionToken ?? EscalationRegistry.key(entry.sessionId, entry.callId)
     const existing = this.entries.get(key)
     if (existing !== undefined && existing.commandHash !== entry.commandHash) {
       this.entries.delete(key)
@@ -138,12 +133,14 @@ export class EscalationRegistry {
   }
 
   /** Consume: take the entry and delete it in one step. */
-  consume(sessionId: string, callId: string): EscalationEntry | undefined {
-    const key = EscalationRegistry.key(sessionId, callId)
+  consume(sessionId: string, callId: string, token?: symbol): EscalationEntry | undefined {
+    const key = token ?? EscalationRegistry.key(sessionId, callId)
     const entry = this.entries.get(key)
     this.entries.delete(key)
     return entry
   }
+
+  clearExecution(token: symbol): void { this.entries.delete(token) }
 
   /** Drop every entry registered by one grant. */
   clearGrant(grantId: string): void {
@@ -170,12 +167,13 @@ export type EscalationVerdict =
   /** Registry hit and every check passed: answer `allowed-once`. */
   | { kind: 'allowed-once'; grantId: string; mode: SandboxMode }
   /** Missed the registry or failed a check: fall back (the listener decides user vs baseline). */
-  | { kind: 'fallback'; why: string }
+  | { kind: 'fallback'; why: string; grantBound?: boolean }
   /** A pre-check violation revoked the grant as well. */
   | { kind: 'revoked'; grantId: string; why: string }
 
 /** Dependency face of the escalation controller. */
 export interface GrantEscalationDeps {
+  readonly validateContext?: (grant: TaskGrant, exec: Readonly<ToolExecution>) => Promise<boolean>
   readonly store: TaskGrantStore
   /** Direct git runner (never the shell service). */
   readonly git?: GitRunner
@@ -213,8 +211,9 @@ export class GrantEscalations {
    * Register the escalation entry for one grant-allowed bash call.
    * @param input - the call identity and the admitting grant.
    */
-  register(input: { session: Session; agentId: string; toolName: string; callId: string; command: string; grant: TaskGrant }): void {
+  register(input: { executionToken?: symbol; session: Session; agentId: string; toolName: string; callId: string; command: string; grant: TaskGrant }): void {
     this.registry.register({
+      ...(input.executionToken === undefined ? {} : { executionToken: input.executionToken }),
       sessionId: String(input.session.id),
       agentId: input.agentId,
       toolName: input.toolName,
@@ -226,6 +225,8 @@ export class GrantEscalations {
       ts: (this.deps.now ?? Date.now)(),
     })
   }
+
+  clearExecution(token: symbol): void { this.registry.clearExecution(token) }
 
   /** Drop every registration of one grant (revoke/expiry/reset). */
   clearGrant(grantId: string): void {
@@ -244,6 +245,7 @@ export class GrantEscalations {
    * @returns the verdict (always after the entry is consumed).
    */
   async consume(input: {
+    execution?: Readonly<ToolExecution>
     session: Session
     agentId: string
     toolName: string
@@ -251,8 +253,18 @@ export class GrantEscalations {
     reason: string | undefined
   }): Promise<EscalationVerdict> {
     if (input.callId === undefined) return { kind: 'fallback', why: 'no call id on the approval request' }
-    const entry = this.registry.consume(String(input.session.id), input.callId)
+    const entry = this.registry.consume(String(input.session.id), input.callId, input.execution?.token)
     if (entry === undefined) return { kind: 'fallback', why: 'no registered grant escalation for this call' }
+    if (entry.executionToken !== undefined) {
+      const exec = input.execution
+      if (exec === undefined || currentToolExecution() !== exec || exec.token !== entry.executionToken
+        || exec.agent?.session !== input.session || String(exec.agent.id) !== input.agentId
+        || exec.name !== input.toolName || String(exec.callId) !== input.callId
+        || entry.agentId !== input.agentId || entry.toolName !== input.toolName
+        || commandHash(String((exec.arguments as Record<string, unknown>).command)) !== entry.commandHash) {
+        return { kind: 'fallback', why: 'execution identity mismatch', grantBound: true }
+      }
+    }
     const requested = parseEscalationMode(input.reason)
     if (requested === undefined) return { kind: 'fallback', why: 'unrecognized escalation reason shape' }
     if (!withinModeCeiling(entry.modeCeiling, requested)) {
@@ -280,6 +292,10 @@ export class GrantEscalations {
       pending.push({ grantId: grant.grantId, root: grant.root })
       this.postHoc.set(String(input.session.id), pending)
     }
+    if (input.execution !== undefined && (currentToolExecution() !== input.execution
+      || (this.deps.validateContext !== undefined && !await this.deps.validateContext(grant, input.execution)))) return { kind: 'fallback', why: 'execution context changed', grantBound: true }
+    if (this.deps.store.byId(String(input.session.id), () => input.session.snapshotEvents(), grant.grantId) !== grant
+      || grantGoalExpired(grant, this.deps.activeGoalId?.(input.session) ?? null)) return { kind: 'fallback', why: 'grant revoked during verification', grantBound: true }
     return { kind: 'allowed-once', grantId: grant.grantId, mode: requested }
   }
 
