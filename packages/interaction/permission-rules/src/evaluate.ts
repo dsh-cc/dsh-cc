@@ -389,6 +389,32 @@ function matchAllowForSegment(
   return undefined
 }
 
+/**
+ * Grant-side segment admission (design §3.4): the SAME allow-segment path the
+ * shell evaluator uses, plus the token boundary grant rules pin — a prefix hit
+ * must land on a token boundary, so `Bash(git commit)` never admits
+ * `git commit-tree`. Returns the admitting rule, or undefined.
+ * @param list - the grant's parsed allow rules.
+ * @param toolName - the harness tool name of the call.
+ * @param segment - the shell segment to admit.
+ * @param source - the source the grant rules carry.
+ */
+export function grantAdmitsSegment(
+  list: readonly PermissionRule[],
+  toolName: string,
+  segment: ShellSegment,
+  source: PermissionRule['source'],
+): PermissionRule | undefined {
+  const rule = matchAllowForSegment(list, toolName, segment, source)
+  if (rule === undefined || rule.matcher?.kind !== 'prefix') return undefined
+  const matchedText = segment.assignmentOnly || segment.subject !== segment.raw ? segment.raw : segment.subject
+  const prefix = rule.matcher.prefix
+  if (prefix === '' || matchedText.length < prefix.length) return undefined
+  const rest = matchedText.slice(prefix.length)
+  if (rest !== '' && !/^\s/.test(rest)) return undefined
+  return rule
+}
+
 /** Whether EVERY segment finds an admissible allow rule at one source. */
 function allSegmentsAdmissible(
   list: readonly PermissionRule[],
