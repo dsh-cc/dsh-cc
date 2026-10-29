@@ -55,6 +55,14 @@ describe('tracked markdown command shape', () => {
 })
 
 describe('live exact-ref publication checks', () => {
+  it('keeps rename-by-new-path semantics for published markdown renames', async () => {
+    const root = repo()
+    commit(root, 'README.md')
+    git(root, 'push', 'origin', 'docs')
+    git(root, 'mv', 'README.md', 'renamed.md')
+    git(root, 'commit', '-m', 'rename')
+    expect(await pushScopeViolations(root, 'docs')).toEqual([])
+  })
   it('checks root commits when publishing an initial branch', async () => {
     const root = repo()
     commit(root, 'code.ts')

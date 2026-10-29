@@ -128,7 +128,7 @@ export function contentScopeViolations(entries: readonly NameStatusEntry[]): str
 /** The pre-commit check inspects the actual cached set; pathspec commits are refused. */
 export async function commitScopeViolations(root: string, git: GitRunner = spawnGit): Promise<string[]> {
   return contentScopeViolations(parseNameStatusZ(await git(root, [
-    'diff', '--cached', '--no-ext-diff', '--no-textconv', '--no-renames', '-z', '--name-status',
+    'diff', '--cached', '--no-ext-diff', '--no-textconv', '--find-renames', '-z', '--name-status',
   ])))
 }
 
@@ -166,7 +166,7 @@ export async function commitRangeScopeViolations(
   for (const line of history.trim().split('\n').filter(Boolean)) {
     const [oid, ...parents] = line.split(' ')
     if (oid === undefined || ![oid, ...parents].every(value => OID.test(value))) throw new Error('malformed Git commit graph')
-    const options = ['--no-commit-id', '--name-status', '--no-ext-diff', '--no-textconv', '--no-renames', '-r', '-z']
+    const options = ['--no-commit-id', '--name-status', '--no-ext-diff', '--no-textconv', '--find-renames', '-r', '-z']
     // Default git log omits merge diffs; explicitly compare every parent instead.
     for (const parent of parents.length === 0 ? [null] : parents) {
       const args = parent === null
@@ -184,7 +184,7 @@ export async function commitPostHocViolations(root: string, git: GitRunner = spa
   const parents = (await gitLine(root, ['rev-list', '--parents', '-n', '1', head], git)).split(' ')
   if (parents[0] !== head || !parents.every(value => OID.test(value))) throw new Error('malformed Git commit graph')
   const violations: string[] = []
-  const options = ['--no-commit-id', '--name-status', '--no-ext-diff', '--no-textconv', '--no-renames', '-r', '-z']
+  const options = ['--no-commit-id', '--name-status', '--no-ext-diff', '--no-textconv', '--find-renames', '-r', '-z']
   for (const parent of parents.length === 1 ? [null] : parents.slice(1)) {
     violations.push(...contentScopeViolations(parseNameStatusZ(await git(root,
       parent === null ? ['diff-tree', '--root', ...options, head] : ['diff-tree', ...options, parent, head],
