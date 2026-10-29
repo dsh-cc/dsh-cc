@@ -76,6 +76,8 @@ export interface DeliveryCheck {
   metrics: { mappedAtomicClaims: number; extractedAtomicClaims: number; reviewedCoreClaims: number; coreClaims: number }
   assessments: Assessment[]
   findings: Finding[]
+  /** Feature 3 §4.3: machine-deferred disagreements pending human adjudication. */
+  deferredDisagreements: import('./delivery-check.ts').DeferredDisagreement[]
   reviewRunIds: Id[]
   sources: { sourceId: Id; snapshotHash: Hash; evidenceIds: Id[] }[]
   eligibleForReviewed: boolean
@@ -204,6 +206,9 @@ export class VwaArgumentService {
       pendingRunIds: pendingRuns(this.deps.root, projectId),
       gates,
       ...(reviewerConfigHash ? { reviewerConfigHash } : {}),
+      // §4.2: the policy is read from HEAD at call time, never from the
+      // snapshot under evaluation (the as-of path freezes a different state).
+      disagreementPolicy: snapshot.contract.reviewSettings?.disagreementPolicy ?? 'blocking',
     })
     const bindingDigest = computeBindingDigest(check, adjudications)
     const evaluationId = `eval_${randomUUID()}`
@@ -271,6 +276,7 @@ function reportInput(frozen: FrozenEvaluation): ReportInput {
     checks: check.checks,
     assessments: check.assessments,
     findings: check.findings,
+    deferredDisagreements: check.deferredDisagreements ?? [],
     // Adjudications are frozen into the evaluation at checkForDelivery time.
     adjudications: readAdjudicationsFrozen(frozen),
     reviewRunIds: check.reviewRunIds,

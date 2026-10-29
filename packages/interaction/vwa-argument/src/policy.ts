@@ -434,16 +434,28 @@ export function computeAssessments(world: PolicyWorld): Assessment[] {
   })
 }
 
-/** §17.2: active blocker/major count — disagreement findings are excluded (§11.3), as are rejected adjudications. */
+/**
+ * §17.2: active blocker/major count — disagreement findings are excluded
+ * (§11.3) unless an accept adjudication confirms their force (§4.4), as are
+ * rejected adjudications.
+ */
 export function activeMajorCount(
-  findings: { id: Id; severity: 'blocker' | 'major' | 'minor'; kind?: string; targetId?: Id }[],
+  findings: { id: Id; severity: 'blocker' | 'major' | 'minor'; kind?: string; code?: string; targetId?: Id }[],
   adjudications: AdjudicationRecord[],
 ): { blocker: number; major: number } {
   const rejected = new Set(adjudications.filter((a) => a.decision === 'reject').map((a) => a.findingId))
+  const accepted = new Set(adjudications.filter((a) => a.decision === 'accept').map((a) => a.findingId))
   let blocker = 0
   let major = 0
+  const seen = new Set<Id>()
   for (const finding of findings) {
-    if (finding.kind === 'disagreement' || rejected.has(finding.id)) continue
+    // A disagreement marker can be present both as a finding and inside its
+    // detecting record; count each finding id once.
+    if (seen.has(finding.id)) continue
+    seen.add(finding.id)
+    if (rejected.has(finding.id)) continue
+    if ((finding.kind === 'disagreement' || finding.code === 'REVIEWER_DISAGREEMENT') && !accepted.has(finding.id))
+      continue
     if (finding.severity === 'blocker') blocker += 1
     else if (finding.severity === 'major') major += 1
   }

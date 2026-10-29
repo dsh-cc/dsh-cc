@@ -44,7 +44,7 @@ interface InitInput {
 }
 
 const INPUT_KEYS = new Set(['mode', 'reviewSettings', 'setPointer'])
-const PATCH_KEYS = new Set(['budget', 'claimsBatchSize', 'maxArtifactChars'])
+const PATCH_KEYS = new Set(['budget', 'claimsBatchSize', 'maxArtifactChars', 'disagreementPolicy'])
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -100,11 +100,14 @@ function parseInput(raw: unknown): InitInput | Fail {
     return fail('SCHEMA_INVALID', 'input.reviewSettings must be a PatchReviewSettings object')
   for (const key of Object.keys(reviewSettings)) {
     if (!PATCH_KEYS.has(key))
-      return fail('SCHEMA_INVALID', `unknown reviewSettings field: ${key}; allowed: budget, claimsBatchSize, maxArtifactChars`)
+      return fail('SCHEMA_INVALID', `unknown reviewSettings field: ${key}; allowed: budget, claimsBatchSize, maxArtifactChars, disagreementPolicy`)
   }
   const budget = reviewSettings.budget
   if (budget !== undefined && !isPlainObject(budget))
     return fail('SCHEMA_INVALID', 'reviewSettings.budget must be an object of ReviewBudget fields')
+  const disagreementPolicy = reviewSettings.disagreementPolicy
+  if (disagreementPolicy !== undefined && disagreementPolicy !== 'blocking' && disagreementPolicy !== 'deferred')
+    return fail('SCHEMA_INVALID', "reviewSettings.disagreementPolicy must be 'blocking' or 'deferred'")
   return {
     mode,
     setPointer,

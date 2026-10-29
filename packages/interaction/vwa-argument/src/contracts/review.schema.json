@@ -929,6 +929,9 @@
             },
             "runId": {
               "$ref": "#/$defs/RunId"
+            },
+            "supersededRunId": {
+              "$ref": "#/$defs/RunId"
             }
           }
         }

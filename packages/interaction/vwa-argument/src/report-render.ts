@@ -108,6 +108,8 @@ export interface ReportInput {
   checks: { mechanical: MechanicalStatus; evidence: Verdict; argument: Verdict; audit: Verdict }
   assessments: Assessment[]
   findings: Finding[]
+  /** Feature 3 §4.3: machine-deferred disagreements pending human adjudication. */
+  deferredDisagreements?: import('./delivery-check.ts').DeferredDisagreement[]
   adjudications: AdjudicationRecord[]
   reviewRunIds: Id[]
   metrics: { mappedAtomicClaims: number; extractedAtomicClaims: number; reviewedCoreClaims: number; coreClaims: number }
@@ -161,6 +163,8 @@ export function renderReportMarkdown(input: ReportInput): string {
   lines.push('# VWA Reader Report', '')
   lines.push(`reportVersion: ${input.reportVersion} · policy ${POLICY_VERSION} · rubric ${RUBRIC_VERSION}`, '')
   lines.push(`Status: ${statusOf(input)}`, '')
+  const deferred = input.deferredDisagreements ?? []
+  if (deferred.length) lines.push(`machine-deferred: ${deferred.length} pending`, '')
   lines.push(
     'Experimental semantic review: human-calibrated extraction recall is not yet available; gold-set version: humanities-scorer@1 (synthetic development cases only).',
     '',
@@ -231,6 +235,7 @@ export function renderReportMarkdown(input: ReportInput): string {
   // Part 5 — unresolved disputes and gaps, ordered by impact.
   lines.push('## 5. Unresolved disputes and evidence gaps', '')
   appendDisputes(lines, input)
+  appendDeferredDisagreements(lines, input)
   // Part 6 — sources and lineage.
   lines.push('## 6. Sources and lineage', '')
   appendSources(lines, input)
@@ -312,8 +317,34 @@ function appendDisputes(lines: string[], input: ReportInput): void {
     )
   }
   for (const finding of input.findings) {
+    const adjudication = input.adjudications.find((a) => a.findingId === finding.id)
+    const note =
+      adjudication?.decision === 'reject'
+        ? '; human-rejected, historical'
+        : adjudication
+          ? `; human-accepted (prevailing run ${adjudication.overrides.runId}` +
+            `${adjudication.overrides.supersededRunId ? `, ~~run ${adjudication.overrides.supersededRunId} superseded — verdict retained for audit~~` : ''})`
+          : ''
     lines.push(
-      `- finding ${finding.code} (${finding.severity}${input.adjudications.some((a) => a.findingId === finding.id && a.decision === 'reject') ? '; human-rejected, historical' : ''}) on ${finding.targetIds.join(', ') || 'artifact'}: ${escape(finding.explanation)}`,
+      `- finding ${finding.code} (${finding.severity}${note}) on ${finding.targetIds.join(', ') || 'artifact'}: ${escape(finding.explanation)}`,
+    )
+  }
+  lines.push('')
+}
+
+function appendDeferredDisagreements(lines: string[], input: ReportInput): void {
+  const deferred = input.deferredDisagreements ?? []
+  if (deferred.length === 0) return
+  lines.push('### Pending adjudication (machine-deferred)', '')
+  lines.push(`machine-deferred: ${deferred.length} pending`, '')
+  for (const entry of deferred) {
+    const conflicts = (entry.conflicts ?? [])
+      .map((conflict) => `run ${conflict.runId} = ${conflict.verdict}`)
+      .join(', ')
+    lines.push(
+      `- finding ${entry.id} on ${entry.targetIds.join(', ') || 'artifact'}${entry.runId ? ` (detected by run ${entry.runId})` : ''}: ` +
+        `${conflicts || 'conflicting verdicts not readable from the selected records'}. ` +
+        `Pending human adjudication (/vwa adjudicate ${entry.targetIds[0] ?? '<target>'} ...).`,
     )
   }
   lines.push('')
@@ -341,8 +372,11 @@ function appendConfiguration(lines: string[], input: ReportInput): void {
     `- cost: calls ${input.cost.calls}, input tokens ${input.cost.inputTokens}, output tokens ${input.cost.outputTokens}`,
   )
   for (const adjudication of input.adjudications) {
+    const superseded = adjudication.overrides.supersededRunId
+      ? `; superseded run ${adjudication.overrides.supersededRunId} (same-slot verdict struck through, retained)`
+      : ''
     lines.push(
-      `- human adjudication ${adjudication.adjudicationId}: ${adjudication.decision} of finding ${adjudication.findingId} — ${escape(adjudication.reason)}`,
+      `- human adjudication ${adjudication.adjudicationId}: ${adjudication.decision} of finding ${adjudication.findingId} — ${escape(adjudication.reason)}${superseded}`,
     )
   }
   lines.push(
