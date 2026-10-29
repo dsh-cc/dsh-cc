@@ -1,0 +1,301 @@
+{
+  "schemaVersion": 1,
+  "modelId": "task-grant-authorization",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "GrantPathSound",
+        "BaselineOnlyWithoutActiveGrant",
+        "OneApprovalPerCall",
+        "ModeWithinCeiling",
+        "BranchGuardHolds",
+        "NoForgedAdjudication",
+        "ForceSound",
+        "NoCrossConsume",
+        "ContentGateSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-grant-check",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "TRUE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "BaselineOnlyWithoutActiveGrant"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-stale-registry",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "TRUE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "GrantPathSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-replay",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "FALSE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "OneApprovalPerCall"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-ceiling",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "TRUE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ModeWithinCeiling"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-branch",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "TRUE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "BranchGuardHolds"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-forged-adjudication",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "TRUE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoForgedAdjudication"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-deferred-flip",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "TRUE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ForceSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-accept-clears",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "TRUE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ForceSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cross-consume",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "TRUE",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoCrossConsume"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-content-gate",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "SkipGrantCheck": "FALSE",
+        "UseStaleAfterGit": "FALSE",
+        "ConsumeOnce": "TRUE",
+        "IgnoreCeiling": "FALSE",
+        "IgnoreBranch": "FALSE",
+        "AgentCanForge": "FALSE",
+        "WrongDeferFlip": "FALSE",
+        "WrongAcceptClears": "FALSE",
+        "CrossConsume": "FALSE",
+        "SkipContentGate": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ContentGateSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-batch-run",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "AdoptTorn": "FALSE",
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "InitSound",
+        "BoundBeforeReview",
+        "FrozenBeforeReport",
+        "ReportBeforeCommit",
+        "DeliveryOrder",
+        "ContentGateSound",
+        "NoPrSound",
+        "ClaimNeverAhead",
+        "SkipNeedsFailures",
+        "StateWriteExclusive",
+        "TerminalStable"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-commit-before-report",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "TRUE",
+        "SkipAfter": "2",
+        "AdoptTorn": "FALSE",
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ReportBeforeCommit"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cache-first",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CacheFirst": "TRUE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "AdoptTorn": "FALSE",
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ClaimNeverAhead"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-torn",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdoptTorn": "TRUE",
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "InitSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-push-stale-cache",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdoptTorn": "FALSE",
+        "CacheFirst": "TRUE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "DeliveryOrder"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-content-gate",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdoptTorn": "FALSE",
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "SkipContentGate": "TRUE",
+        "AdoptConflicting": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ContentGateSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-conflicting",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdoptConflicting": "TRUE",
+        "AdoptTorn": "FALSE",
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "InitSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
