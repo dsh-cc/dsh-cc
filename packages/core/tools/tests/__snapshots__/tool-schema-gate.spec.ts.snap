@@ -99,6 +99,7 @@ exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/tools: every 
 
 exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/vwa-argument: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/vwa-argument 1`] = `
 [
+  "argument.init",
   "argument.report",
   "argument.review",
   "argument.update",

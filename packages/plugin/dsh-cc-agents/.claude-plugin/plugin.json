@@ -1,5 +1,5 @@
 {
   "name": "dsh-cc-agents",
-  "description": "Official dsh-cc plugin with three subagents, four skills, and optional Serena hooks.",
+  "description": "Official dsh-cc plugin with three subagents, five skills, and optional Serena hooks.",
   "version": "0.9.3-rc.3"
 }

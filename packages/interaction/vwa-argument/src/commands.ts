@@ -51,15 +51,12 @@ import { sha256Hex, stableJson } from './schema.ts'
 import { ProjectStore } from './store.ts'
 import { verifySnapshot } from './sources.ts'
 import {
-  appendAdjudication,
   appendSignature,
-  currentDependencyDigest,
   readPendingRuns,
-  readReviewRecords,
   VwaArgumentService,
   type Signature,
 } from './report.ts'
-import type { AdjudicationRecord, Finding, Hash, Id } from './types.ts'
+import type { Hash, Id } from './types.ts'
 
 /** The closed subcommand enum (§10.2). */
 export const VWA_SUBCOMMANDS = ['init', 'status', 'import', 'sign', 'adjudicate', 'repair'] as const
@@ -90,7 +87,7 @@ export const VWA_USAGE = [
   '  /vwa status                        current project, revision, pending review runs',
   '  /vwa import <relativeDirectory>    re-verify sources + artifact and rebind the pointer',
   '  /vwa sign <artifactId> <receiptHash>',
-  '  /vwa adjudicate <findingId> accept|reject <reason>',
+  '  /vwa adjudicate [projectId] <findingId> accept|reject [prevailingRunId] <reason>',
   '  /vwa repair <projectId>            list and adopt a STORE_CORRUPT recovery candidate',
 ].join('\n')
 
@@ -110,15 +107,27 @@ export function parseVwaArgs(rawInput: string): ParsedVwaArgs {
     import: 1,
     sign: 2,
     repair: 1,
-    // adjudicate: reason = the rest of the line (one argument slot).
-    adjudicate: 3,
+    // adjudicate: [projectId] findingId decision [prevailingRunId] reason.
+    adjudicate: 5,
   }
   const limit = limits[sub as VwaSubcommand]
   let used = rest
   if (sub === 'adjudicate') {
+    const segments = [...rest]
+    // §4.4: an optional leading projectId replaces the pointer fallback.
+    const projectId = segments[0]?.startsWith('prj_') ? segments.shift() : undefined
+    const findingId = segments.shift() ?? ''
+    const decision = segments.shift() ?? ''
+    const prevailingRunId = segments[0]?.startsWith('run_') ? segments.shift() : undefined
     // The reason is the REST OF THE LINE (one argument slot, §10.2): keep
     // its interior spaces instead of token-splitting it.
-    used = [rest[0] ?? '', rest[1] ?? '', rest.slice(2).join(' ')]
+    used = [
+      ...(projectId === undefined ? [] : [projectId]),
+      findingId,
+      decision,
+      ...(prevailingRunId === undefined ? [] : [prevailingRunId]),
+      segments.join(' '),
+    ]
   }
   if (used.length > limit) {
     return { ok: false, usage: `too many arguments for /vwa ${sub} (expected at most ${limit}).\n${VWA_USAGE}` }
@@ -154,26 +163,9 @@ export function writePointer(root: string, projectId: Id, workspaceIdentity: Has
   renameSync(tmp, join(dir, 'current-project.json'))
 }
 
-/** Deterministic failures (path/hash/quote mismatch) can never be adjudicated away (§18). */
-const DETERMINISTIC_FINDING_PREFIXES = ['MECH', 'EVID-01', 'HIST-04']
-
-function isDeterministicFinding(finding: Finding): boolean {
-  return DETERMINISTIC_FINDING_PREFIXES.some((prefix) => finding.code.startsWith(prefix))
-}
-
 /** Find one finding by id across all completed review records. */
-export function findFinding(
-  root: string,
-  projectId: string,
-  findingId: string,
-): (Finding & { kind?: string; runId?: string }) | undefined {
-  for (const record of readReviewRecords(root, projectId)) {
-    const finding =
-      record.stage === 'extract' ? undefined : record.response?.findings.find((candidate) => candidate.id === findingId)
-    if (finding !== undefined) return { ...finding, runId: record.runId }
-  }
-  return undefined
-}
+export { conflictingRunIds, findFinding, vwaAdjudicate } from './adjudicate.ts'
+import { vwaAdjudicate } from './adjudicate.ts'
 
 /** Execute the parsed /vwa subcommand. All output is user-facing text. */
 export async function executeVwa(
@@ -207,14 +199,23 @@ export async function executeVwa(
         )
       }
       case 'adjudicate': {
-        const pointer = readPointer(root)
-        if (pointer === undefined)
+        const segments = [...parsed.rest]
+        // §4.4: batch runs set setPointer:false, so the explicit projectId
+        // wins; the pointer remains the fallback when it is omitted.
+        const explicitProject = segments[0]?.startsWith('prj_') === true
+        const projectId = explicitProject ? segments.shift()! : readPointer(root)?.projectId
+        if (projectId === undefined)
           return { kind: 'error', text: '/vwa adjudicate requires a current project (/vwa init first).' }
-        const [findingId, decision, ...reasonParts] = parsed.rest
+        const [findingId = '', decision = ''] = segments
+        const tail = segments.slice(2)
+        const prevailingRunId = tail[0]?.startsWith('run_') ? tail.shift() : undefined
         if (decision !== 'accept' && decision !== 'reject') {
-          return { kind: 'error', text: 'usage: /vwa adjudicate <findingId> accept|reject <reason>' }
+          return {
+            kind: 'error',
+            text: 'usage: /vwa adjudicate [projectId] <findingId> accept|reject [prevailingRunId] <reason>',
+          }
         }
-        return vwaAdjudicate(root, pointer.projectId, findingId ?? '', decision, reasonParts.join(' '))
+        return vwaAdjudicate(root, projectId, findingId, decision, tail.join(' '), prevailingRunId)
       }
     }
   } catch (error: unknown) {
@@ -396,52 +397,6 @@ export async function vwaSign(
   return {
     kind: 'success',
     text: `Signed ${artifactId} (receipt ${receiptHash.slice(0, 12)}…, artifact ${check.artifactHash.slice(0, 12)}…). Signature ${signature.signatureId}.${knownGaps}`,
-  }
-}
-
-/** The /vwa adjudicate transaction (§18). */
-export async function vwaAdjudicate(
-  root: string,
-  projectId: string,
-  findingId: string,
-  decision: 'accept' | 'reject',
-  reason: string,
-): Promise<CommandResult> {
-  if (reason.trim() === '') {
-    return { kind: 'error', text: 'adjudication requires a non-empty reason (§18).' }
-  }
-  const finding = findFinding(root, projectId, findingId)
-  if (finding === undefined) {
-    return { kind: 'error', text: `finding "${findingId}" not found among this project's review records.` }
-  }
-  if (isDeterministicFinding(finding)) {
-    return {
-      kind: 'error',
-      text: `finding ${findingId} (${finding.code}) is a deterministic failure (path/hash/quote); it cannot be overridden by adjudication.`,
-    }
-  }
-  const dependencyDigest = currentDependencyDigest(root, projectId)
-  if (dependencyDigest === undefined) {
-    return { kind: 'error', text: 'cannot read the project HEAD; repair the store first (/vwa repair).' }
-  }
-  const record: AdjudicationRecord = {
-    adjudicationId: `adj_${randomUUID()}`,
-    findingId,
-    decision,
-    reason: reason.trim(),
-    signer: 'user',
-    ts: new Date().toISOString(),
-    dependencyDigest,
-    overrides: { ruleId: finding.code, targetId: finding.targetIds[0] ?? '', runId: finding.runId ?? '' },
-  }
-  appendAdjudication(root, projectId, record)
-  const effect =
-    decision === 'reject'
-      ? 'The finding is removed from the active set and the rule shows pass (human-adjudicated); grades are recomputed by policy on the next checkForDelivery. The original review record is NOT rewritten.'
-      : 'The finding stays active and still needs fixing (accept is not ignore).'
-  return {
-    kind: 'success',
-    text: `Adjudication ${record.adjudicationId} recorded: ${decision} ${findingId}. ${effect}`,
   }
 }
 

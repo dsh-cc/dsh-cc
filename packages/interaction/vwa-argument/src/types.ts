@@ -378,7 +378,7 @@ export interface AdjudicationRecord {
   signer: 'user'
   ts: string
   dependencyDigest: Hash
-  overrides: { ruleId: string; targetId: Id; runId: Id }
+  overrides: { ruleId: string; targetId: Id; runId: Id; supersededRunId?: Id }
 }
 
 export interface Assessment {

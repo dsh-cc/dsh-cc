@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-官方 dsh-cc 插件，提供三个子代理、四个 skill 和可选的 Serena hooks。
+官方 dsh-cc 插件，提供三个子代理、五个 skill 和可选的 Serena hooks。
 
 ## 组件
 
@@ -15,6 +15,7 @@
 | `data-analysis` | 指标口径、对账和报告检查 | 主 agent |
 | `vwa-writing` | 来源证据、论证审查、文章写作和交付 | 已配置的 VWA reviewer |
 | `formal-design` | 在现有设计评审前进行有界 TLA+ 建模、TLC 检查、带实现一致性校验的 Lean 证明和证据审查 | 主 agent |
+| `vwa-batch` | 无人值守的多页 VWA 审查批次：manifest、单次任务授权、九个检查点、断点续跑和批次台账 | 已配置的 VWA reviewer |
 
 critic 采用只读人格，通常在后台运行；executor 和 marathon 可以修改文件，通常在前台运行。
 
@@ -194,6 +195,22 @@ skill 不会修改全局设置、冒充用户命令，也不会直接写入项�
 包内包含 [skill](skills/vwa-writing/SKILL.md)、[工具契约](skills/vwa-writing/references/tool-contract.md)和[写作规范](skills/vwa-writing/references/writing-rules.md)。
 
 相对资源路径以已安装的 skill 目录为基准，无需仓库源码副本。
+
+## VWA batch
+
+当用户给出一条指令和一份页面清单、希望无需逐页交互就把整轮跑完并产出台账时，使用 `vwa-batch`：
+每页一个项目、审查、冻结评估、一次修复加报告的提交、推送、PR、CI，最后产出
+`docs/vwa-reports/batch-<batchId>.md`。
+
+驱动者是 agent 本身，没有常驻 runner，也没有守护进程。批次目录
+`.dsh/vwa/batches/<batchId>/` 存放 manifest、授权描述文件和状态文件；续跑时逐项从磁盘证据
+重算检查点，不信任状态缓存。
+
+唯一的用户动作是 `/permissions grant .dsh/vwa/batches/<batchId>/grant-descriptor.json`。
+该命令由任务授权链单独交付；在它落地前，批次会在授权检查点中止，两种情况下契约一致。
+
+详见 [skill](skills/vwa-batch/SKILL.md)、[状态契约](skills/vwa-batch/references/state-contract.md)
+和[报告模板](skills/vwa-batch/references/batch-report-template.md)。
 
 ## 名称冲突
 

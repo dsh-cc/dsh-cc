@@ -108,6 +108,10 @@ export interface ReportInput {
   checks: { mechanical: MechanicalStatus; evidence: Verdict; argument: Verdict; audit: Verdict }
   assessments: Assessment[]
   findings: Finding[]
+  /** Feature 3 §4.3: machine-deferred disagreements pending human adjudication. */
+  deferredDisagreements?: import('./delivery-check.ts').DeferredDisagreement[]
+  /** Feature 4 §5.2: explicit audit-skip declaration in effect (truthful rendering). */
+  auditSkip?: { runId: Id }
   adjudications: AdjudicationRecord[]
   reviewRunIds: Id[]
   metrics: { mappedAtomicClaims: number; extractedAtomicClaims: number; reviewedCoreClaims: number; coreClaims: number }
@@ -124,6 +128,18 @@ export interface ReportInput {
   /** Feature D §D.2.1/§D.2.2: stage progress + failure detail (absent in legacy frozen inputs). */
   stageProgress?: Record<ReviewStage, StageProgress>
   failures?: ReviewFailure[]
+  /** Feature 5 §6.2 step 3: as-of disclosure (absent in a live render — then byte-identical to before). */
+  asOf?: AsOfHeader
+}
+
+/** The §6.2 step 3 as-of header: E, the reviewed hash, the current disk hash, divergence. */
+export interface AsOfHeader {
+  evaluationId: Id
+  reviewedArtifactHash: Hash
+  currentArtifactHash: Hash
+  diverged: boolean
+  /** The §4.3/§4.4 overlay ran at render time; everything else is as-of E. */
+  adjudicationOverlay: boolean
 }
 
 function escape(text: string): string {
@@ -161,6 +177,21 @@ export function renderReportMarkdown(input: ReportInput): string {
   lines.push('# VWA Reader Report', '')
   lines.push(`reportVersion: ${input.reportVersion} · policy ${POLICY_VERSION} · rubric ${RUBRIC_VERSION}`, '')
   lines.push(`Status: ${statusOf(input)}`, '')
+  // §6.2 step 3: as-of re-render — the frozen evaluation, never a live recheck.
+  if (input.asOf) {
+    lines.push(
+      `as-of evaluation ${input.asOf.evaluationId}; reviewed artifact hash ${input.asOf.reviewedArtifactHash}; current disk hash ${input.asOf.currentArtifactHash}; diverged: ${input.asOf.diverged}`,
+      '',
+    )
+    if (input.asOf.diverged)
+      lines.push('artifact was modified after review; findings apply to the reviewed revision', '')
+    if (input.asOf.adjudicationOverlay)
+      lines.push('adjudication overlay: applied at render time; all other inputs as-of E', '')
+  }
+  // §5.2 header disclosure: the report still succeeds, but the skipped layer is explicit.
+  if (input.auditSkip) lines.push(`audit: SKIPPED (declared at ${input.auditSkip.runId})`, '')
+  const deferred = input.deferredDisagreements ?? []
+  if (deferred.length) lines.push(`machine-deferred: ${deferred.length} pending`, '')
   lines.push(
     'Experimental semantic review: human-calibrated extraction recall is not yet available; gold-set version: humanities-scorer@1 (synthetic development cases only).',
     '',
@@ -180,12 +211,15 @@ export function renderReportMarkdown(input: ReportInput): string {
   lines.push(`| mechanical | ${input.checks.mechanical} |`)
   lines.push(`| evidence | ${input.checks.evidence} |`)
   lines.push(`| argument | ${input.checks.argument} |`)
-  lines.push(`| audit | ${input.checks.audit} |`, '')
+  const auditRow = input.auditSkip
+    ? `not-run (skipped by request ${input.auditSkip.runId})`
+    : input.checks.audit
+  lines.push(`| audit | ${auditRow} |`, '')
   const notExecuted: string[] = []
   if (input.checks.mechanical === 'not-run') notExecuted.push('mechanical gates not run')
   if (input.checks.evidence === 'not-run') notExecuted.push('evidence review not run')
   if (input.checks.argument === 'not-run') notExecuted.push('argument review not run')
-  if (input.checks.audit === 'not-run') notExecuted.push('full-text audit not run')
+  if (input.checks.audit === 'not-run' && !input.auditSkip) notExecuted.push('full-text audit not run')
   if (notExecuted.length > 0) lines.push(`Not executed: ${notExecuted.join('; ')}.`, '')
   for (const gate of input.gates)
     lines.push(`Gate ${gate.gate}: ${gate.status}${gate.detail ? ` — ${escape(gate.detail)}` : ''}`)
@@ -231,6 +265,7 @@ export function renderReportMarkdown(input: ReportInput): string {
   // Part 5 — unresolved disputes and gaps, ordered by impact.
   lines.push('## 5. Unresolved disputes and evidence gaps', '')
   appendDisputes(lines, input)
+  appendDeferredDisagreements(lines, input)
   // Part 6 — sources and lineage.
   lines.push('## 6. Sources and lineage', '')
   appendSources(lines, input)
@@ -312,8 +347,34 @@ function appendDisputes(lines: string[], input: ReportInput): void {
     )
   }
   for (const finding of input.findings) {
+    const adjudication = input.adjudications.find((a) => a.findingId === finding.id)
+    const note =
+      adjudication?.decision === 'reject'
+        ? '; human-rejected, historical'
+        : adjudication
+          ? `; human-accepted (prevailing run ${adjudication.overrides.runId}` +
+            `${adjudication.overrides.supersededRunId ? `, ~~run ${adjudication.overrides.supersededRunId} superseded — verdict retained for audit~~` : ''})`
+          : ''
     lines.push(
-      `- finding ${finding.code} (${finding.severity}${input.adjudications.some((a) => a.findingId === finding.id && a.decision === 'reject') ? '; human-rejected, historical' : ''}) on ${finding.targetIds.join(', ') || 'artifact'}: ${escape(finding.explanation)}`,
+      `- finding ${finding.code} (${finding.severity}${note}) on ${finding.targetIds.join(', ') || 'artifact'}: ${escape(finding.explanation)}`,
+    )
+  }
+  lines.push('')
+}
+
+function appendDeferredDisagreements(lines: string[], input: ReportInput): void {
+  const deferred = input.deferredDisagreements ?? []
+  if (deferred.length === 0) return
+  lines.push('### Pending adjudication (machine-deferred)', '')
+  lines.push(`machine-deferred: ${deferred.length} pending`, '')
+  for (const entry of deferred) {
+    const conflicts = (entry.conflicts ?? [])
+      .map((conflict) => `run ${conflict.runId} = ${conflict.verdict}`)
+      .join(', ')
+    lines.push(
+      `- finding ${entry.id} on ${entry.targetIds.join(', ') || 'artifact'}${entry.runId ? ` (detected by run ${entry.runId})` : ''}: ` +
+        `${conflicts || 'conflicting verdicts not readable from the selected records'}. ` +
+        `Pending human adjudication (/vwa adjudicate ${entry.targetIds[0] ?? '<target>'} ...).`,
     )
   }
   lines.push('')
@@ -341,8 +402,11 @@ function appendConfiguration(lines: string[], input: ReportInput): void {
     `- cost: calls ${input.cost.calls}, input tokens ${input.cost.inputTokens}, output tokens ${input.cost.outputTokens}`,
   )
   for (const adjudication of input.adjudications) {
+    const superseded = adjudication.overrides.supersededRunId
+      ? `; superseded run ${adjudication.overrides.supersededRunId} (same-slot verdict struck through, retained)`
+      : ''
     lines.push(
-      `- human adjudication ${adjudication.adjudicationId}: ${adjudication.decision} of finding ${adjudication.findingId} — ${escape(adjudication.reason)}`,
+      `- human adjudication ${adjudication.adjudicationId}: ${adjudication.decision} of finding ${adjudication.findingId} — ${escape(adjudication.reason)}${superseded}`,
     )
   }
   lines.push(

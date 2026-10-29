@@ -14,8 +14,11 @@ import { computeStageProgress } from './review-progress.ts'
 import { verifySnapshot } from './sources.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { ProjectStore } from './store.ts'
+import type { DisagreementPolicy } from './review-config.ts'
+import { auditSkipInEffect, type AuditSkip } from './audit-skip.ts'
+import { effectiveReviewRecords } from './delivery-adjudication.ts'
 import type { DeliveryCheck } from './report.ts'
-import type { AdjudicationRecord, Finding, Hash, Id, ProjectSnapshot, ReviewRecord } from './types.ts'
+import type { AdjudicationRecord, Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
 
 export interface DeliveryInputs {
   root: string
@@ -27,6 +30,39 @@ export interface DeliveryInputs {
   adjudications: AdjudicationRecord[]
   reviewerConfigHash?: Hash
   gates?: GateEntry[]
+  /** Feature 3 §4.2: read from HEAD at call time, never from the evaluated snapshot. */
+  disagreementPolicy?: DisagreementPolicy
+  /** Frozen runtime observations; presence also freezes an absent audit skip. */
+  runtime?: { auditSkip?: AuditSkip; mechanicalFindings: Finding[]; sourceByteHashes?: Hash[] }
+}
+
+/** A machine-deferred disagreement, with the per-run verdicts for the pending-adjudication section. */
+export interface DeferredDisagreement extends Finding {
+  runId?: Id
+  conflicts?: { runId: Id; verdict: Verdict }[]
+}
+
+/** Per-run verdicts of the records that produced one disagreement marker (§4.3 render data). */
+function describeDeferred(records: ReviewRecord[], marker: Finding): DeferredDisagreement {
+  const home = records.find(
+    (r) => r.stage !== 'extract' && r.response?.findings.some((f) => f.id === marker.id),
+  )
+  if (home === undefined) return marker
+  const candidates = records.filter(
+    (r) =>
+      r.stage === home.stage &&
+      r.status === 'completed' &&
+      r.response !== undefined &&
+      // The marker copy is not a conflicting verdict.
+      (r as { kind?: string }).kind !== 'disagreement' &&
+      r.inputHash === home.inputHash,
+  )
+  const conflicts = [
+    ...new Map(
+      candidates.map((r) => [r.runId, { runId: r.runId, verdict: stageVerdict([r], [r.stage]) }]),
+    ).values(),
+  ]
+  return { ...marker, runId: home.runId, ...(conflicts.length ? { conflicts } : {}) }
 }
 export function activeAdjudications(
   snapshot: ProjectSnapshot,
@@ -47,7 +83,9 @@ export function activeAdjudications(
       current.some(
         (r) =>
           r.stage !== 'extract' &&
-          r.runId === a.overrides.runId &&
+          // §4.4 liveness: the marker lives on the detecting run, so a
+          // cross-run adjudication counts when EITHER run is current.
+          (r.runId === a.overrides.runId || r.runId === a.overrides.supersededRunId) &&
           r.response?.findings.some((f) => f.id === a.findingId),
       ),
   )
@@ -161,6 +199,10 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   })
   const contractHash = semanticContractHash(snapshot.contract),
     artifactHash = sha256Hex(text)
+  // §5.2: the explicit-skip declaration in effect for THIS binding (shared predicate).
+  const auditSkip = input.runtime === undefined
+    ? auditSkipInEffect(input.root, snapshot.projectId, artifactId, artifactHash, artifact.entityVersion)
+    : input.runtime.auditSkip
   const expectedAudit = auditDependencyDigest(snapshot, artifactId, selected.records)
   const audit = input.records.filter(
     (r) =>
@@ -189,39 +231,29 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
   const records = [...selected.records, ...latest]
   const adjudications = activeAdjudications(snapshot, input.records, input.adjudications, targets, input.reviewerConfigHash)
   const rejected = new Set(adjudications.filter((a) => a.decision === 'reject').map((a) => a.findingId))
-  const effective = structuredClone(records)
-  for (const record of effective) {
-    if (record.stage === 'extract' || !record.response) continue
-    for (const target of record.response.targets)
-      for (const check of target.checks) {
-        if (
-          adjudications.some(
-            (a) =>
-              a.decision === 'reject' &&
-              a.overrides.runId === record.runId &&
-              // A batched finding can cover several targets; the persisted
-              // override retains only its first target for legacy compatibility.
-              record.response?.findings.some(
-                (f) => f.id === a.findingId && f.targetIds.includes(target.targetId),
-              ) &&
-              a.overrides.ruleId === check.ruleId &&
-              !record.response?.findings.some(
-                (f) => f.code === check.ruleId && f.targetIds.includes(target.targetId) && !rejected.has(f.id),
-              ),
-          )
-        )
-          check.result = 'pass'
-      }
-  }
-  if (adjudications.length) {
+  const acceptedAdjudications = adjudications.filter((a) => a.decision === 'accept')
+  const accepted = new Set(acceptedAdjudications.map((a) => a.findingId))
+  // Feature 3 §4.3: policy-aware post-pass. currentReviews stays pure (it keeps
+  // reporting marker-level needs-review); delivery decides which markers may
+  // drive the argument force.
+  const markers = selected.findings.filter((f) => f.code === 'REVIEWER_DISAGREEMENT')
+  const adjudicatedMarkerIds = new Set(adjudications.map((a) => a.findingId))
+  const unresolvedMarkers = markers.filter((m) => !adjudicatedMarkerIds.has(m.id))
+  const deferredMode = (input.disagreementPolicy ?? 'blocking') === 'deferred'
+  // ① = deferred mode with no active adjudication: the machine-deferred set.
+  const deferredDisagreements: DeferredDisagreement[] = deferredMode
+    ? unresolvedMarkers.map((marker) => describeDeferred(input.records, marker))
+    : []
+  // ② = an active adjudication exists: its effect is the §4.4 override, not a
+  // marker force. Blocking mode excludes only ②.
+  const excludedMarkerIds = new Set([
+    ...(deferredMode ? unresolvedMarkers.map((m) => m.id) : []),
+    ...markers.filter((m) => adjudicatedMarkerIds.has(m.id)).map((m) => m.id),
+  ])
+  const effective = effectiveReviewRecords(records, adjudications, excludedMarkerIds)
+  if (adjudications.length || excludedMarkerIds.size) {
     for (const stage of ['sources', 'support', 'claims', 'arguments'] as const) {
-      const reviewed = effective
-        .filter((r) => r.stage === stage)
-        .map((r) =>
-          r.stage === 'extract' || !r.response
-            ? r
-            : { ...r, response: { ...r.response, findings: r.response.findings.filter((f) => !rejected.has(f.id)) } },
-        ) as ReviewRecord[]
+      const reviewed = effective.filter((r) => r.stage === stage)
       if (reviewed.length && selected.stages[stage] !== 'not-run')
         selected.stages[stage] = stageVerdict(reviewed, [stage])
     }
@@ -285,12 +317,20 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
       ),
     ]
   }
+  const runtimeFindings = input.runtime?.mechanicalFindings ?? mechanicalFindings(input.root, snapshot, artifactId, text)
   const findings = [
     ...records.flatMap((r) => (r.stage === 'extract' ? [] : (r.response?.findings ?? []))),
     ...selected.findings,
-    ...mechanicalFindings(input.root, snapshot, artifactId, text),
+    ...runtimeFindings,
   ]
-  const active = findings.filter((f) => !rejected.has(f.id) && f.code !== 'REVIEWER_DISAGREEMENT')
+  // Accepted disagreement markers keep their major force (§4.4).
+  const active = [
+    ...effective.flatMap((r) => r.stage === 'extract' ? [] : r.response?.findings ?? []),
+    ...selected.findings,
+    ...runtimeFindings,
+  ].filter(
+    (f) => !rejected.has(f.id) && (f.code !== 'REVIEWER_DISAGREEMENT' || accepted.has(f.id)),
+  )
   const extraction = latest.find((r) => r.stage === 'extract')
   const items = extraction?.stage === 'extract' ? extraction.response.items : []
   const alignment = align?.stage === 'align' && align.response?.stage === 'align' ? align.response.alignment : []
@@ -313,8 +353,10 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     argument: stageFamily(selected.stages, ['claims', 'arguments']),
     audit: latest.length ? stageVerdict(latest, ['extract', 'align']) : ('not-run' as const),
   }
-  if (selected.findings.length) checks.argument = combineVerdicts([checks.argument, 'needs-review'])
-  const counts = activeMajorCount(active, [])
+  // Only non-excluded markers drive the stage-level needs-review force (§4.3).
+  const forcedFindings = selected.findings.filter((f) => !excludedMarkerIds.has(f.id))
+  if (forcedFindings.length) checks.argument = combineVerdicts([checks.argument, 'needs-review'])
+  const counts = activeMajorCount(active, acceptedAdjudications)
   const findingCounts = { ...counts, minor: active.filter((f) => f.severity === 'minor').length }
   const stanceSafe = assessments.every((a) => {
     const c = index.claims.get(a.claimId)!
@@ -339,7 +381,12 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     metrics.reviewedCoreClaims === metrics.coreClaims &&
     assessments.every((a) => a.reviewState === 'current') &&
     stanceSafe &&
-    corePaths
+    corePaths &&
+    // §4.3 invariant (both modes): an unresolved disagreement blocks reviewed
+    // eligibility until a human adjudicates it.
+    unresolvedMarkers.length === 0 &&
+    // §5.2: an audit skip can never yield a "reviewed" candidate.
+    auditSkip === undefined
   return {
     gates: (input.gates ?? [])
       .filter((g) => ['link', 'style', 'exec'].includes(g.gate))
@@ -372,13 +419,13 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
       stableJson({
         project: projectDependencyDigest(snapshot, records),
         gates: input.gates ?? [],
-        sourceBytes: snapshot.sources.map((source) => {
+        sourceBytes: input.runtime === undefined ? snapshot.sources.map((source) => {
           try {
             return sha256Hex(readFileSync(join(input.root, source.snapshotPath), 'utf8'))
           } catch {
             return 'unreadable'
           }
-        }),
+        }) : input.runtime.sourceByteHashes ?? snapshot.sources.map((source) => source.snapshotHash),
       }),
     ),
     policyHash: policyHash(),
@@ -388,6 +435,8 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     metrics,
     assessments,
     findings,
+    deferredDisagreements,
+    ...(auditSkip === undefined ? {} : { auditSkip }),
     reviewRunIds: [...new Set(records.map((r) => r.runId))],
     pendingRunIds: input.pendingRunIds,
     sources: snapshot.sources.map((s) => ({

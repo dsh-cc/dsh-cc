@@ -40,11 +40,12 @@ async function call(tool: ToolDefinition, args: Record<string, unknown>): Promis
 
 describe('defineTool schema compilation (model-facing regression pins)', () => {
   const REQUIRED_FOUR = ['projectId', 'expectedRevision', 'requestId', 'input']
+  const INIT_REQUIRED = ['requestId', 'input']
   const REPORT_REQUIRED = ['projectId', 'artifactId', 'format', 'write']
 
   it('every registered definition exposes a compiled object-rooted JSON Schema parameters', () => {
     const { tools } = mount()
-    expect(tools.size).toBe(5)
+    expect(tools.size).toBe(6)
     for (const tool of tools.values()) {
       const parameters = tool.parameters as {
         type: string
@@ -53,11 +54,15 @@ describe('defineTool schema compilation (model-facing regression pins)', () => {
       }
       // The pre-fix flat spec degraded to {} on CC-compatible backends.
       expect(parameters.type).toBe('object')
-      expect(parameters.properties.projectId?.type).toBe('string')
       const required = parameters.required ?? []
       if (tool.name === 'argument.report') {
+        expect(parameters.properties.projectId?.type).toBe('string')
         for (const key of REPORT_REQUIRED) expect(required).toContain(key)
+      } else if (tool.name === 'argument.init') {
+        // Init creates the project: requestId + input only, no projectId.
+        for (const key of INIT_REQUIRED) expect(required).toContain(key)
       } else {
+        expect(parameters.properties.projectId?.type).toBe('string')
         for (const key of REQUIRED_FOUR) expect(required).toContain(key)
       }
       // The repo DSL's root-level `required` array must not leak into property nodes.

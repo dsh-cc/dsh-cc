@@ -95,6 +95,19 @@ export class ReviewRunStore {
        * the budget lock and refuses with REVISION_CONFLICT on mismatch.
        */
       budgetRevision?: number
+      /**
+       * §5.1 transport-only: the project-cumulative ceiling and this request's
+       * admission estimate, consumed and STRIPPED by reserveCycleRequest.
+       */
+      projectBudget?: import('./review-config.ts').ProjectBudget
+      projectEstimatedCalls?: number
+      /**
+       * §5.2: explicit audit-skip declaration, bound to ONE artifact binding by
+       * artifactHash + entityVersion. Excluded from every identity hash.
+       */
+      skipAudit?: boolean
+      artifactHash?: Hash
+      entityVersion?: number
       taskId?: string
       processId?: number
       processNonce?: string

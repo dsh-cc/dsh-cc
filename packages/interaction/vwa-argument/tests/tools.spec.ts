@@ -129,9 +129,10 @@ const METADATA = {
 }
 
 describe('tool registration (§13 gate surface)', () => {
-  it('mounts the three author tools plus argument.review', () => {
+  it('mounts the author tools plus argument.init and argument.review', () => {
     const { tools } = mount()
     expect([...tools.keys()].sort()).toEqual([
+      'argument.init',
       'argument.report',
       'argument.review',
       'argument.update',
@@ -914,6 +915,45 @@ describe('argument.review continue with stage all (§A.2 audit reuse)', () => {
   }
   /** The claim occurs at the same span in both artifact versions used below. */
   const occurrence = (claimId: string) => [{ claimId, span: { start: 4, end: 8 }, exactText: 'body' }]
+
+  it.each([
+    { stage: 'audit', continue: false },
+    { stage: 'audit', continue: true },
+    { stage: 'all', continue: true },
+  ])('runs audit after a prior skip for a default-false request: %j', async (input) => {
+    const dispatches: Record<string, number> = {}
+    const { tools, workspace, deps } = mount({ review: stageAwareReview(dispatches) })
+    const { revision } = await boundProject(tools, workspace, deps)
+    const review = tools.get('argument.review') as ToolDefinition
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    const first = await call(review, { projectId: workspace.projectId, expectedRevision: revision, requestId: `skip-${uuid()}`, input: { stage: 'all', skipAudit: true } })
+    expect(first.ok).toBe(true)
+    expect((await settle(store, (first.data as { runId: string }).runId))?.skipAudit).toBe(true)
+    expect(dispatches).toEqual({ claims: 1 })
+    const next = await call(review, { projectId: workspace.projectId, expectedRevision: revision, requestId: `ordinary-${uuid()}`, input })
+    expect(next.ok).toBe(true)
+    const request = await settle(store, (next.data as { runId: string }).runId)
+    expect(request).toMatchObject({ status: 'completed', skipAudit: false, entityVersion: 1 })
+    expect(request.artifactHash).toBe(sha256Hex(deps.artifactTexts.get('report.md')!))
+    expect(dispatches.extract).toBe(1)
+    expect(dispatches.align).toBe(1)
+  })
+
+  it('persists a semantic-stage skip and leaves it unchanged when a later admission fails', async () => {
+    const dispatches: Record<string, number> = {}
+    const { tools, workspace, deps } = mount({ review: stageAwareReview(dispatches) })
+    const { revision } = await boundProject(tools, workspace, deps)
+    const review = tools.get('argument.review') as ToolDefinition
+    const store = new ReviewRunStore(workspace.root, workspace.projectId)
+    const first = await call(review, { projectId: workspace.projectId, expectedRevision: revision, requestId: `semantic-skip-${uuid()}`, input: { stage: 'claims', skipAudit: true } })
+    expect(first.ok).toBe(true)
+    const request = await settle(store, (first.data as { runId: string }).runId)
+    expect(request).toMatchObject({ skipAudit: true, entityVersion: 1, artifactHash: sha256Hex(deps.artifactTexts.get('report.md')!) })
+    const failed = await call(review, { projectId: workspace.projectId, expectedRevision: revision - 1, requestId: `refused-${uuid()}`, input: { stage: 'audit', skipAudit: false } })
+    expect(failed.code).toBe('REVISION_CONFLICT')
+    const { auditSkipInEffect } = await import('../src/audit-skip.ts')
+    expect(auditSkipInEffect(workspace.root, workspace.projectId, request.artifactId!, request.artifactHash!, 1)).toEqual({ runId: request.runId })
+  })
 
   it('refuses NOTHING_TO_CONTINUE without a model call once every stage and the audit are complete', async () => {
     const dispatches: Record<string, number> = {}

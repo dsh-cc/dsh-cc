@@ -10,7 +10,7 @@
 import { ajvErrors, authorDefValidator } from './schema.ts'
 import { VwaFail, fail } from './store.ts'
 import type { ReviewBudget } from './review-budget.ts'
-import type { FrozenReviewSettings } from './review-config.ts'
+import type { DisagreementPolicy, FrozenReviewSettings, ProjectBudget } from './review-config.ts'
 import { updateLatestCycleBudget } from './review-cycle.ts'
 
 /** The seven ReviewBudget keys, each with its settings field name (F3.3 field map). */
@@ -19,7 +19,7 @@ export const REVIEW_BUDGET_KEYS = [
   'maxOutputTokensPerCall', 'wallMs', 'callTimeoutMs', 'concurrency',
 ] as const satisfies readonly (keyof ReviewBudget)[]
 
-const ALLOWED_TOP = new Set(['budget', 'claimsBatchSize', 'maxArtifactChars'])
+const ALLOWED_TOP = new Set(['budget', 'claimsBatchSize', 'maxArtifactChars', 'disagreementPolicy', 'projectBudget'])
 
 /** F3.3 reuse disclosure surfaced with every successful revision result. */
 export const REUSE_STATEMENT =
@@ -28,7 +28,7 @@ export const REUSE_STATEMENT =
   'within the same claims-batch shape, so delivery/progress may report claims not-run after a ' +
   'reshape. In-flight admissions that lose the revision race get REVISION_CONFLICT and must retry.'
 
-type Patch = { budget?: Record<string, unknown>; claimsBatchSize?: unknown; maxArtifactChars?: unknown }
+type Patch = { budget?: Record<string, unknown>; claimsBatchSize?: unknown; maxArtifactChars?: unknown; disagreementPolicy?: unknown; projectBudget?: ProjectBudget }
 
 function reject(code: Parameters<typeof fail>[0], message: string): never {
   throw new VwaFail(fail(code, message))
@@ -51,7 +51,7 @@ export function applyReviewSettingsPatch(
       reject('SCHEMA_INVALID', 'maxContextChars cannot be revised: it is part of review-record identity (effectiveAuditUnitChars in the audit key) and the envelope windowing budget')
     }
     if (!ALLOWED_TOP.has(key)) {
-      reject('SCHEMA_INVALID', `unknown set-review-settings field: ${key}; allowed: budget (7 ReviewBudget fields), claimsBatchSize, maxArtifactChars`)
+      reject('SCHEMA_INVALID', `unknown set-review-settings field: ${key}; allowed: budget (7 ReviewBudget fields), claimsBatchSize, maxArtifactChars, disagreementPolicy, projectBudget`)
     }
   }
   const patchBudget = patch.budget
@@ -64,6 +64,19 @@ export function applyReviewSettingsPatch(
     }
   }
   const budget: ReviewBudget = { ...current.budget, ...(patchBudget ?? {}) }
+  const patchProjectBudget = patch.projectBudget
+  if (patchProjectBudget !== undefined && (typeof patchProjectBudget !== 'object' || patchProjectBudget === null || Array.isArray(patchProjectBudget))) {
+    reject('SCHEMA_INVALID', 'reviewSettings.projectBudget must be an object of ProjectBudget fields')
+  }
+  // §5.1 trap: the rebuilt literal below must carry projectBudget too, or the
+  // next revision silently drops it.
+  const projectBudget = patchProjectBudget === undefined
+    ? current.projectBudget
+    : { ...current.projectBudget, ...patchProjectBudget }
+  const disagreementPolicy =
+    patch.disagreementPolicy !== undefined
+      ? (patch.disagreementPolicy as DisagreementPolicy)
+      : current.disagreementPolicy
   const merged: FrozenReviewSettings = {
     budget,
     maxArtifactChars: patch.maxArtifactChars !== undefined
@@ -73,6 +86,8 @@ export function applyReviewSettingsPatch(
     claimsBatchSize: patch.claimsBatchSize !== undefined
       ? (patch.claimsBatchSize as number)
       : current.claimsBatchSize,
+    ...(projectBudget === undefined ? {} : { projectBudget }),
+    ...(disagreementPolicy === undefined ? {} : { disagreementPolicy }),
   }
   const validate = authorDefValidator('FrozenReviewSettings')
   if (!validate(merged)) {
@@ -85,6 +100,9 @@ export function applyReviewSettingsPatch(
   for (const key of REVIEW_BUDGET_KEYS) note(`budget.${key}`, current.budget[key], budget[key])
   if (patch.claimsBatchSize !== undefined) note('claimsBatchSize', current.claimsBatchSize, merged.claimsBatchSize)
   if (patch.maxArtifactChars !== undefined) note('maxArtifactChars', current.maxArtifactChars, merged.maxArtifactChars)
+  if (patch.disagreementPolicy !== undefined)
+    note('disagreementPolicy', current.disagreementPolicy, merged.disagreementPolicy)
+  if (patch.projectBudget !== undefined) note('projectBudget', current.projectBudget, merged.projectBudget)
   return { settings: merged, fieldsChanged }
 }
 
@@ -93,6 +111,9 @@ export interface PatchReviewSettings {
   budget?: Partial<ReviewBudget>
   claimsBatchSize?: number
   maxArtifactChars?: number
+  disagreementPolicy?: DisagreementPolicy
+  /** Feature 4 §5.1: project-cumulative budget (merged key by key). */
+  projectBudget?: ProjectBudget
 }
 
 /**

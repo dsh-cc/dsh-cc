@@ -90,11 +90,11 @@ Maintainers: keep this table consistent with `DSH_HARNESS_REF` in `.github/workf
 
 The bundles are sufficient for the quick start. The `dsh-cc` marketplace has five optional official plugins.
 
-- **`dsh-cc-agents`** has three subagents, four skills, and optional Serena hooks.
+- **`dsh-cc-agents`** has three subagents, five skills, and optional Serena hooks.
   - `critic` uses `opus` for analysis and review.
   - `executor` uses `sonnet` to execute a specified plan.
   - `marathon` uses `fable` for changes to many files or tasks with unknown requirements.
-  - The skills are `dsh-cc-agents-orchestration`, `data-analysis`, **`vwa-writing`**, and **`formal-design`**.
+  - The skills are `dsh-cc-agents-orchestration`, `data-analysis`, **`vwa-writing`**, **`formal-design`**, and **`vwa-batch`**.
   - `formal-design` checks bounded TLA+ models and proves high-impact deterministic rules in Lean before the existing design review. TLC checks need Java >=17 and the pinned JAR ships with the plugin. Lean checks need the separately provisioned pinned Lean toolchain and never download anything at startup or check time. Installing the plugin does not enable project-wide screening; [adopt the rules manually](packages/plugin/dsh-cc-agents/skills/formal-design/references/agents-snippet.md) and restart after plugin updates.
 - **`dsh-cc-writing`** has three skills for article writing, article review, and language editing, plus one supporting workflow skill.
   - The public skills accept Chinese and English articles in three genres.

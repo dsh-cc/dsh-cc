@@ -139,11 +139,11 @@ describe('dsh-cc-agents install round-trip (marketplace → cache → mount)', (
         'dsh-cc-agents:executor',
         'dsh-cc-agents:marathon',
       ])
-      expect(skillNames.sort()).toEqual(['data-analysis', 'dsh-cc-agents-orchestration', 'formal-design', 'vwa-writing'])
+      expect(skillNames.sort()).toEqual(['data-analysis', 'dsh-cc-agents-orchestration', 'formal-design', 'vwa-batch', 'vwa-writing'])
       const agents = mount.report.components.find(c => c.kind === 'agents')
       expect(agents?.loaded).toBe(3)
       const skills = mount.report.components.find(c => c.kind === 'skills')
-      expect(skills?.loaded).toBe(4)
+      expect(skills?.loaded).toBe(5)
       expect(skills?.skipped).toBe(0)
       expect(skills?.failed).toBe(0)
       const formalDir = join(cachePath, 'skills/formal-design')

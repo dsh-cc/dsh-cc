@@ -84,6 +84,7 @@ export interface ContinuePlanInput {
   targetClaimIds: Id[]
   artifact?: { id: Id; text: string }
   /** Audit unit sizing (same defaults as the runner) — part of the audit cache key. */
+  skipAudit?: boolean
   maxUnitChars?: number
   maxContextChars?: number
   /** Frozen per-cycle budget; when present, a spent cycle refuses with BUDGET_EXHAUSTED. */
@@ -166,6 +167,8 @@ export function continueHasWork(input: ContinuePlanInput): boolean {
   if (semantic || !input.stages.includes('audit')) return semantic
   // Without a bound artifact the runner ends 'incomplete'; never refuse that as "nothing to do".
   if (input.artifact === undefined) return true
+  // §5.2: the shared predicate — an in-effect skip means audit is not re-planned.
+  if (input.skipAudit === true) return false
   const inputHash = auditInputHash({
     snapshot: input.snapshot,
     artifact: input.artifact,

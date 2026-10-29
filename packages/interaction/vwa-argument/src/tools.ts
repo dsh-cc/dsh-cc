@@ -1,4 +1,4 @@
-import { defineTool, ToolArgsError, type ToolDefinition, type ToolRunContext } from '@dsh-cc/tools'
+import { defineTool, type ToolDefinition } from '@dsh-cc/tools'
 import { COMMON_PARAMS, RESULT_SCHEMA, guard, toText, type ToolArgs } from './tool-input.ts'
 /**
  * Author-facing tools (design docs/plans/2026-10-16-vwa-evidence-argument.md
@@ -34,34 +34,17 @@ import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
 import { executeReviewRun } from './review-runner.ts'
-import { admissionRequestRecord, reviewBudgetRefusal } from './feasibility.ts'
+import { admissionRequestRecord, reviewBudgetRefusal, skipAuditRefusal } from './feasibility.ts'
 import { prepareContinuePreCheck, resolveTargetClaimIds } from './review-continue.ts'
 import { ReviewRunStore } from './review-run-store.ts'
 import { replayReviewRequest } from './review-request.ts'
 import { cycleUsage, reserveCycleRequest } from './review-cycle.ts'
 import type { ReviewModelAdapter } from './review-adapter.ts'
+import type { FrozenReviewSettings } from './review-config.ts'
+import { argumentInitTool } from './init-tool.ts'
+import { withSchemaEnvelope } from './tool-envelope.ts'
 
-/** The minimal registration face of the harness tool runtime (no hard dep). */
-export interface ToolRegistrar {
-  register(definition: ToolDefinition): unknown
-}
-
-export type { ToolDefinition } from '@dsh-cc/tools'
-
-/** Wrap a defineTool result so shape rejections keep the §10.1 SCHEMA_INVALID envelope (not a thrown ToolArgsError). */
-export function withSchemaEnvelope(tool: ToolDefinition): ToolDefinition {
-  return {
-    ...tool,
-    async execute(args: unknown, exec: ToolRunContext) {
-      try {
-        return await tool.execute(args, exec)
-      } catch (error) {
-        if (error instanceof ToolArgsError) return fail('SCHEMA_INVALID', error.violations.join('; '))
-        throw error
-      }
-    },
-  }
-}
+export { withSchemaEnvelope, type ToolRegistrar, type ToolDefinition } from './tool-envelope.ts'
 
 /** Collaborators injected per mount; tests substitute fakes. */
 export interface ToolDeps {
@@ -79,6 +62,8 @@ export interface ToolDeps {
   /** Source snapshot texts by sourceId (quote validation, §5.1). */
   snapshotTexts: Map<string, string>
   maxEntities: number
+  /** Frozen review settings baseline for `argument.init` (same source as `/vwa init`). */
+  reviewSettings?(): FrozenReviewSettings
   report?(root: string, agent: unknown): VwaArgumentService
   /**
    * Review collaborators (§10.6/Appendix A). Absent → `argument.review` is
@@ -145,6 +130,7 @@ export function registerArgumentTools(
   deps: ToolDeps,
 ): void {
   registrar.tools.register(withSchemaEnvelope(reportTool(deps)))
+  registrar.tools.register(argumentInitTool(deps))
   const common = () => ({
     projectId: COMMON_PARAMS.projectId,
     expectedRevision: COMMON_PARAMS.expectedRevision,
@@ -292,19 +278,21 @@ export function registerArgumentTools(
       'already completed, or BUDGET_EXHAUSTED when the review cycle budget (shared with the fresh request) is spent.',
     parameters: {
       ...common(),
-      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage, continue?: boolean}' },
+      input: { type: 'object', additionalProperties: true, required: true, description: 'body: {artifactId?, targetClaimIds?: Id[], stage, continue?: boolean, skipAudit?: boolean}' },
     },
     output: { schema: RESULT_SCHEMA, render: (_args: unknown, value: unknown) => toText(value) },
     async execute(raw, exec) {
       const args = guard(raw)
       if ('ok' in args) return args
-      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string; continue?: boolean }
+      const body = args.input as { artifactId?: string; targetClaimIds?: string[]; stage?: string; continue?: boolean; skipAudit?: boolean }
       if (body.continue !== undefined && typeof body.continue !== 'boolean')
         return fail('SCHEMA_INVALID', 'input.continue must be a boolean when present')
       const stage = body.stage
       if (stage === undefined || (stage !== 'all' && stage !== 'audit' && !REVIEW_STAGES.has(stage))) {
         return fail('SCHEMA_INVALID', `stage must be sources|support|claims|arguments|all|audit, got ${String(stage)}`)
       }
+      const skipRefusal = skipAuditRefusal(stage, body)
+      if (skipRefusal !== undefined) return skipRefusal
       const root = deps.workspaceRoot(exec.agent)
       if (root === undefined) return fail('STORE_IO_FAILED', 'no workspace root is bound to this session', false)
       const store = new ProjectStore(root, args.projectId)
@@ -366,7 +354,7 @@ export function registerArgumentTools(
       // §12: the audit stage needs the bound artifact's ACTUAL bytes; the
       // artifact is resolved from the bound snapshot + the host text map.
       let artifact: { id: string; path: string; text: string } | undefined
-      if (stage === 'audit' || stage === 'all') {
+      if (stage === 'audit' || stage === 'all' || body.skipAudit === true || body.artifactId !== undefined || snapshot.artifacts.length === 1) {
         const bound =
           body.artifactId !== undefined
             ? snapshot.artifacts.find((art) => art.id === body.artifactId)
@@ -398,7 +386,7 @@ export function registerArgumentTools(
               signal: exec.signal,
               contractHash: semanticContractHash(snapshot.contract),
               snapshot,
-              stages,
+              stages, skipAudit: body.skipAudit === true,
               targetClaimIds: resolveTargetClaimIds(snapshot, body),
               ...(artifact === undefined ? {} : { artifact: { id: artifact.id, text: artifact.text } }),
               ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
@@ -444,6 +432,8 @@ export function registerArgumentTools(
             budget: review.budget,
             ...(review.maxArtifactChars ? { maxArtifactChars: review.maxArtifactChars } : {}),
             ...(review.maxContextChars ? { maxContextChars: review.maxContextChars } : {}),
+            ...(snapshot.contract.reviewSettings?.projectBudget === undefined
+              ? {} : { projectBudget: snapshot.contract.reviewSettings.projectBudget }),
             contractHash: semanticContractHash(snapshot.contract),
             readSnapshot,
             emitProgress: (event) => {

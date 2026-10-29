@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Official dsh-cc plugin with three subagents, four skills, and optional Serena hooks.
+Official dsh-cc plugin with three subagents, five skills, and optional Serena hooks.
 
 ## Components
 
@@ -15,6 +15,7 @@ Official dsh-cc plugin with three subagents, four skills, and optional Serena ho
 | `data-analysis` | Metric definitions, reconciliation, and report checks | Main agent |
 | `vwa-writing` | Source evidence, argument review, article writing, and delivery | Configured VWA reviewer |
 | `formal-design` | Bounded TLA+ modeling, TLC checks, Lean proofs with implementation conformance, and evidence review before the existing design review | Main agent |
+| `vwa-batch` | Unattended multi-page VWA review batch: manifest, one task grant, nine checkpoints, resume, and the batch ledger | Configured VWA reviewer |
 
 The critic has a read-only persona and usually runs in the background. Executor and marathon can change files and usually run in the foreground.
 
@@ -213,6 +214,26 @@ Semantic review is experimental. Human calibration and live-model acceptance are
 The package includes the [skill](skills/vwa-writing/SKILL.md), [tool contract](skills/vwa-writing/references/tool-contract.md), and [writing rules](skills/vwa-writing/references/writing-rules.md).
 
 Relative resources resolve from the installed skill directory. A repository checkout is not necessary.
+
+## VWA batch
+
+Use `vwa-batch` when the user gives one instruction plus a page list and wants
+the loop run to a ledger without per-page interaction: a project per page,
+review, a frozen evaluation, one fix-and-report commit, push, PR, CI, then the
+ledger in `docs/vwa-reports/batch-<batchId>.md`.
+
+The driver is the agent. There is no runner and no daemon. The batch directory
+`.dsh/vwa/batches/<batchId>/` holds the manifest, the grant descriptor and the
+state file, and a resumed session recomputes every checkpoint from disk evidence
+instead of trusting the state cache.
+
+The one user action is `/permissions grant .dsh/vwa/batches/<batchId>/grant-descriptor.json`.
+That command comes from the task-grant chain, delivered separately. Until it
+lands, the batch aborts at the grant checkpoint; the contract is the same either
+way.
+
+See the [skill](skills/vwa-batch/SKILL.md), [state contract](skills/vwa-batch/references/state-contract.md)
+and [report template](skills/vwa-batch/references/batch-report-template.md).
 
 ## Name collisions
 

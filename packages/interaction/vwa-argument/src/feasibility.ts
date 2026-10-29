@@ -21,6 +21,7 @@ import type { ReviewBudget } from './review-budget.ts'
 import type { ReviewStage, ReviewTask } from './review-plan.ts'
 import type { Id, ProjectSnapshot } from './types.ts'
 import type { ReviewCollaborators } from './tools.ts'
+import { artifactBinding } from './audit-skip.ts'
 
 /** Retry headroom (Feature B): 50% of calls are expected to need one retry (design F1.4 shared contract). */
 export const RETRY_ALLOWANCE_FACTOR = 1.5
@@ -44,6 +45,8 @@ export function estimateReviewCalls(input: {
   contractHash: string
   adapter: Pick<import('./review-adapter.ts').ReviewModelAdapter, 'configFingerprint'>
   continueMode: boolean
+  /** §5.2: an explicit skip (or an in-effect declaration) zeroes the audit estimate. */
+  skipAudit?: boolean
 }): {
   plannedCalls: { sources: number; support: number; claims: number; arguments: number; audit: number }
   auditUnits: number
@@ -59,7 +62,10 @@ export function estimateReviewCalls(input: {
   // runtime's `?? Infinity` fallback (F1.1).
   let auditCalls = 0
   let auditUnits = 0
-  if (input.stages.includes('audit') && input.artifact) {
+  // §5.2: an explicit skip declaration and an already-effective one are the
+  // same planning input (the shared predicate is authoritative).
+  const skipAudit = input.skipAudit === true
+  if (input.stages.includes('audit') && input.artifact && !skipAudit) {
     const unitChars = effectiveAuditUnitChars(
       input.maxContextChars === undefined ? {} : { maxContextChars: input.maxContextChars },
     )
@@ -127,6 +133,8 @@ export function budgetFeasibilityRefusal(input: {
   contractHash: string
   adapter: Pick<import('./review-adapter.ts').ReviewModelAdapter, 'configFingerprint'>
   continueMode: boolean
+  /** §5.2: skip declaration (also picked up through the shared predicate). */
+  skipAudit?: boolean
   /** Cycle spend so far (continue mode only); continue gates against the REMAINING cycle budget. */
   remainingCycleUsed?: CycleUsage
 }): Fail | undefined {
@@ -188,16 +196,16 @@ export function budgetFeasibilityRefusal(input: {
   )
 }
 
-/** F1.4: the per-run retry pool the runtime enforces, from the same estimate the gate reserves. */
-export function reviewRetryAllowance(input: {
+/** The one admission estimate shared by retry-pool and project-budget charging. */
+function admissionEstimate(input: {
   root: string
   review: ReviewCollaborators
   snapshot: ProjectSnapshot
   stages: ReviewStage[]
-  body: { targetClaimIds?: string[]; continue?: boolean }
+  body: { targetClaimIds?: string[]; continue?: boolean; skipAudit?: boolean }
   artifact?: { id: Id; text: string }
-}): number {
-  const { estimatedCalls } = estimateReviewCalls({
+}): ReturnType<typeof estimateReviewCalls> {
+  return estimateReviewCalls({
     root: input.root,
     snapshot: input.snapshot,
     stages: input.stages,
@@ -208,8 +216,28 @@ export function reviewRetryAllowance(input: {
     contractHash: semanticContractHash(input.snapshot.contract),
     adapter: input.review.adapter,
     continueMode: input.body.continue === true,
+    ...(input.body.skipAudit === true ? { skipAudit: true } : {}),
   })
-  return Math.ceil(estimatedCalls * (RETRY_ALLOWANCE_FACTOR - 1))
+}
+
+/** F1.4: the per-run retry pool the runtime enforces, from the same estimate the gate reserves. */
+export function reviewRetryAllowance(input: Parameters<typeof admissionEstimate>[0]): number {
+  return Math.ceil(admissionEstimate(input).estimatedCalls * (RETRY_ALLOWANCE_FACTOR - 1))
+}
+
+/** §5.2 explicit-skip declaration guard: the input shape and the mutually exclusive audit declaration. */
+export function skipAuditRefusal(
+  stage: string | undefined,
+  body: { skipAudit?: unknown },
+): Fail | undefined {
+  if (body.skipAudit !== undefined && typeof body.skipAudit !== 'boolean')
+    return fail('SCHEMA_INVALID', 'input.skipAudit must be a boolean when present')
+  if (body.skipAudit === true && stage === 'audit')
+    return fail(
+      'SCHEMA_INVALID',
+      "input.skipAudit and an explicit stage:'audit' are mutually exclusive: use stage 'all' to review everything except the audit",
+    )
+  return undefined
 }
 
 /** F1.4: admission-time request record for `reserveCycleRequest` (retry pool included). */
@@ -218,7 +246,7 @@ export function admissionRequestRecord(input: {
   review: ReviewCollaborators
   snapshot: ProjectSnapshot
   stages: ReviewStage[]
-  body: { targetClaimIds?: string[]; continue?: boolean }
+  body: { targetClaimIds?: string[]; continue?: boolean; skipAudit?: boolean }
   requestId: string
   runId: Id
   taskId: string
@@ -227,6 +255,9 @@ export function admissionRequestRecord(input: {
   /** The head revision the budget/snapshot was read from (F4 consistency stamp). */
   headRevision?: number
 }): Parameters<ReviewRunStore['writeRequest']>[1] {
+  const estimate = admissionEstimate(input)
+  const projectBudget = input.snapshot.contract.reviewSettings?.projectBudget
+  const binding = input.artifact === undefined ? undefined : artifactBinding(input.snapshot, input.artifact)
   return {
     schemaVersion: 1,
     requestId: input.requestId,
@@ -235,6 +266,7 @@ export function admissionRequestRecord(input: {
     targetClaimIds: resolveTargetClaimIds(input.snapshot, input.body),
     payloadHash: input.payloadHash,
     ...(input.body.continue === true ? { continue: true } : {}),
+    ...(input.artifact === undefined ? {} : { artifactId: input.artifact.id }),
     taskId: input.taskId,
     status: 'queued',
     // F3.4: the snapshot budget frozen on the cycle's lead request at admission.
@@ -242,7 +274,16 @@ export function admissionRequestRecord(input: {
     // F4: the snapshot revision that budget was computed from — verified
     // against HEAD inside the reservation lock (review-cycle.ts).
     ...(input.headRevision === undefined ? {} : { budgetRevision: input.headRevision }),
-    retryAllowance: reviewRetryAllowance(input),
+    // §5.1 transport: the project ceiling and this request's admission estimate
+    // (stripped by reserveCycleRequest; the spend ledger stays authoritative).
+    ...(projectBudget === undefined ? {} : { projectBudget }),
+    projectEstimatedCalls: estimate.estimatedWithRetries,
+    // §5.2: the declaration binds to ONE artifact binding and is excluded from
+    // every identity hash; an old declaration auto-expires after a rebind.
+    ...(binding !== undefined && binding.entityVersion !== undefined
+      ? { skipAudit: input.body.skipAudit === true, artifactHash: binding.artifactHash, entityVersion: binding.entityVersion }
+      : {}),
+    retryAllowance: Math.ceil(estimate.estimatedCalls * (RETRY_ALLOWANCE_FACTOR - 1)),
     inputTokens: 0,
     outputTokens: 0,
     calls: 0,
@@ -256,7 +297,7 @@ export function reviewBudgetRefusal(input: {
   review: ReviewCollaborators
   snapshot: ProjectSnapshot
   stages: ReviewStage[]
-  body: { targetClaimIds?: string[]; continue?: boolean }
+  body: { targetClaimIds?: string[]; continue?: boolean; skipAudit?: boolean }
   artifact?: { id: Id; text: string }
   /** Cycle spend so far (continue mode); threads remaining-cycle gating from the caller. */
   remainingCycleUsed?: CycleUsage
@@ -272,6 +313,7 @@ export function reviewBudgetRefusal(input: {
     contractHash: semanticContractHash(input.snapshot.contract),
     adapter: input.review.adapter,
     continueMode: input.body.continue === true,
+    ...(input.body.skipAudit === true ? { skipAudit: true } : {}),
     ...(input.remainingCycleUsed === undefined ? {} : { remainingCycleUsed: input.remainingCycleUsed }),
   })
 }
