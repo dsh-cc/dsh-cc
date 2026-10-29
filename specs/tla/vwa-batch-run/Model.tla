@@ -23,13 +23,15 @@
 (***************************************************************************)
 EXTENDS Naturals
 
-CONSTANT SkipAfter, CommitBeforeReport, CacheFirst, AdoptTorn, SkipContentGate
+CONSTANT SkipAfter, CommitBeforeReport, CacheFirst, AdoptTorn, SkipContentGate,
+         AdoptConflicting
 
 ASSUME /\ SkipAfter \in 1..2
        /\ CommitBeforeReport \in BOOLEAN
        /\ CacheFirst \in BOOLEAN
        /\ AdoptTorn \in BOOLEAN
        /\ SkipContentGate \in BOOLEAN
+       /\ AdoptConflicting \in BOOLEAN
 
 (* Bounded universes. *)
 Drivers == {"d1", "d2"}
@@ -51,6 +53,7 @@ PendType ==
 EvType ==
   [ res:      {"none", "reserved", "torn"}
   , resFor:   Payloads
+  , projFor:  Payloads
   , proj:     BOOLEAN
   , bound:    BOOLEAN
   , reviewed: BOOLEAN
@@ -83,7 +86,8 @@ Init ==
   /\ lock = "none"
   /\ inLock = FALSE
   /\ pend = [d \in Drivers |-> PendNone]
-  /\ ev = [ res |-> "none", resFor |-> "h1", proj |-> FALSE, bound |-> FALSE,
+  /\ ev = [ res |-> "none", resFor |-> "h1", projFor |-> "h1",
+            proj |-> FALSE, bound |-> FALSE,
             reviewed |-> FALSE, frozen |-> FALSE, rep |-> FALSE, com |-> FALSE,
             content |-> "none", push |-> FALSE, pr |-> FALSE, nopr |-> FALSE,
             ci |-> FALSE, sf |-> 0, status |-> "pending" ]
@@ -106,23 +110,33 @@ ReserveFile(d, h) ==
       [kind |-> "prep", phase |-> "write", req |-> "q1", payload |-> h]]
   /\ UNCHANGED <<alive, lock, inLock, cl>>
 
-RetryPrepare(d) ==
+(* The caller's input `h` is independent of the reservation's payload: a
+   matching retry adopts the reserved id; a mismatching one is refused. *)
+RetryPrepare(d, h) ==
   /\ alive[d]
   /\ pend[d].kind = "none"
   /\ ev.res /= "none"
   /\ (AdoptTorn \/ ev.res = "reserved")
   /\ pend' = [pend EXCEPT ![d] =
-      [kind |-> "prep", phase |-> "retry", req |-> "q1", payload |-> ev.resFor]]
+      [kind |-> "prep", phase |-> "retry", req |-> "q1", payload |-> h]]
+  /\ UNCHANGED <<alive, lock, inLock, ev, cl>>
+
+(* IDEMPOTENCY_CONFLICT: the tool call RETURNS the error -- the pending
+   action clears and no project is created (design SS2.4). *)
+ResolveConflict(d) ==
+  /\ alive[d]
+  /\ pend[d].kind = "prep"
+  /\ pend[d].payload /= ev.resFor
+  /\ pend' = [pend EXCEPT ![d] = PendNone]
   /\ UNCHANGED <<alive, lock, inLock, ev, cl>>
 
 CreateProject(d) ==
   /\ alive[d]
   /\ pend[d].kind = "prep"
   /\ (ev.res = "reserved" \/ (AdoptTorn /\ ev.res = "torn"))
-  /\ pend[d].payload = ev.resFor
-  /\ ev.resFor = "h1"
+  /\ (AdoptConflicting \/ pend[d].payload = ev.resFor)
   /\ ~ev.proj
-  /\ ev' = [ev EXCEPT !.proj = TRUE]
+  /\ ev' = [ev EXCEPT !.proj = TRUE, !.projFor = pend[d].payload]
   /\ (* The reservation is consumed: any driver still holding a prepare
         action yields to the created project. *)
      pend' = [x \in Drivers |->
@@ -386,7 +400,8 @@ Idle ==
 
 Next ==
   \/ \E d \in Drivers, h \in Payloads : ReserveFile(d, h)
-  \/ \E d \in Drivers : RetryPrepare(d)
+  \/ \E d \in Drivers, h \in Payloads : RetryPrepare(d, h)
+  \/ \E d \in Drivers : ResolveConflict(d)
   \/ \E d \in Drivers : CreateProject(d)
   \/ \E d \in Drivers : CrashTornReservation(d)
   \/ \E d \in Drivers : AbandonReservation(d)
@@ -426,7 +441,7 @@ TypeOK ==
   /\ cl \in ClType
 
 InitSound ==
-  /\ (ev.proj => (ev.res = "reserved" /\ ev.resFor = "h1"))
+  /\ (ev.proj => (ev.res = "reserved" /\ ev.projFor = ev.resFor))
   /\ (ev.res = "torn" => ~ev.proj)
   /\ (ev.bound => ev.proj)
   /\ (ev.reviewed => ev.bound)
@@ -471,6 +486,6 @@ TerminalStable ==
   /\ (ev.status = "failed" => (~ev.ci /\ ~ev.nopr))
 
 ToolchainFingerprint == <<SkipAfter, CommitBeforeReport, CacheFirst, AdoptTorn,
-                          SkipContentGate>>
+                          SkipContentGate, AdoptConflicting>>
 
 =============================================================================

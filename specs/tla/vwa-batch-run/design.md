@@ -71,7 +71,7 @@ effect-then-cache is the crash window the resume path closes.
 
 | Requirement ID | Business outcome | Property ID | TLA operator | Case IDs and bounds | Fault-or-race trace | Assumption IDs | Planned code symbol and atomicity mechanism | Regression scenario | Exclusion and justification |
 |---|---|---|---|---|---|---|---|---|---|
-| REQ-1 | duplicate projects impossible in every crash window | S-1 `InitSound` | `InitSound` | convention; strict-adopt-torn (expected red) | ReserveFile → CrashTornReservation → retry must not create; ReserveFile → Crash → RetryPrepare adopts the reserved id | A-1, A-2 | `argument.init` reserve record then `ProjectStore.init` under the project write lock (issue #312) | crash between reservation and init; replay same requestId | the payload-hash conflict branch is abstracted to the `resFor` guard |
+| REQ-1 | duplicate projects impossible in every crash window; the adopted payload matches the reservation | S-1 `InitSound` | `InitSound` | convention; strict-adopt-torn (expected red); strict-adopt-conflicting (expected red) | ReserveFile → CrashTornReservation → retry must not create; ReserveFile(h2) → Crash → RetryPrepare(h2) adopts the reserved id; RetryPrepare with a mismatched input is refused (IDEMPOTENCY_CONFLICT returns, `ResolveConflict`); the AdoptConflicting fault creates a mismatched project | A-1, A-2 | `argument.init` reserve record (payload-hashed) then `ProjectStore.init` under the project write lock (issue #312); the conflict refusal is the tool's IDEMPOTENCY_CONFLICT return | crash between reservation and init; replay same requestId; replay with a different input | — |
 | REQ-2 | no review of an unbound graph | S-2 `BoundBeforeReview` | `BoundBeforeReview` | convention | Review attempted right after project creation | A-3 | checkpoint 2 (`bind-artifact`) before any review | assert review requires a bound artifact | — |
 | REQ-3 | freeze → report → single commit | S-3 `FrozenBeforeReport`, S-4 `ReportBeforeCommit` | same | convention; strict-commit-before-report (expected red) | Commit with `rep = FALSE` under the fault switch | A-3 | §8.3 checkpoints 4-6 | assert the report file is inside the commit | git's own object model is a durable boolean here |
 | REQ-4 | commit → push → PR → CI | S-5 `DeliveryOrder` | `DeliveryOrder` | convention; strict-push-stale-cache (expected red) | Push without commit via the stale cache | A-4 | §8.3 checkpoints 6-9 | assert `head_sha == pushedSha` | the remote is abstracted to durable booleans |
@@ -108,6 +108,7 @@ effect-then-cache is the crash window the resume path closes.
 | `CacheFirst` | an optimistic cache write ahead of evidence | strict-cache-first (shape) / strict-push-stale-cache (protocol) |
 | `AdoptTorn` | adopting a truncated reservation | strict-adopt-torn |
 | `SkipContentGate` | pushing a violating commit | strict-skip-content-gate |
+| `AdoptConflicting` | creating a project from a payload-mismatched retry (IDEMPOTENCY_CONFLICT dropped) | strict-adopt-conflicting |
 
 ## Exclusions
 

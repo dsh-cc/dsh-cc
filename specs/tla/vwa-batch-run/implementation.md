@@ -20,8 +20,13 @@ batch-autonomous design §2.4 and §8.
 - R7 `20261029T044420Z-e3a47aa7`: v2 convention verified 11,963/3,985 with
   FIVE probes red on their intended invariants; no TLC deadlock with the
   self-loop restricted to all-dead drivers (REQ-10 holds).
-- R8 `20261029T051108Z-b480cf51`: final (design.md v2 rewrite). Same
-  verdicts; check-evidence valid/fresh.
+- R8 `20261029T051108Z-b480cf51`: design.md v2 rewrite rerun; same verdicts.
+- R9 `20261029T060744Z-155b2a4c-8dbd-4089-899c-6fd03789d57e`: payload-conflict coverage (critic F5 /
+  codex F13): `RetryPrepare` takes the caller's input independently, a
+  mismatching retry is refused (IDEMPOTENCY_CONFLICT returns via
+  `ResolveConflict`), and the `strict-adopt-conflicting` probe is red on
+  `InitSound`. Convention verified 38,223/10,815; seven probes red on their
+  intended invariants; no TLC deadlock.
 
 ## Design clarifications the v2 model produced (folded into the design doc)
 

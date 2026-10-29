@@ -12,7 +12,8 @@
         "CommitBeforeReport": "FALSE",
         "SkipAfter": "2",
         "AdoptTorn": "FALSE",
-        "SkipContentGate": "FALSE"
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -43,7 +44,8 @@
         "CommitBeforeReport": "TRUE",
         "SkipAfter": "2",
         "AdoptTorn": "FALSE",
-        "SkipContentGate": "FALSE"
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -64,7 +66,8 @@
         "CommitBeforeReport": "FALSE",
         "SkipAfter": "2",
         "AdoptTorn": "FALSE",
-        "SkipContentGate": "FALSE"
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -85,7 +88,8 @@
         "CacheFirst": "FALSE",
         "CommitBeforeReport": "FALSE",
         "SkipAfter": "2",
-        "SkipContentGate": "FALSE"
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -106,7 +110,8 @@
         "CacheFirst": "TRUE",
         "CommitBeforeReport": "FALSE",
         "SkipAfter": "2",
-        "SkipContentGate": "FALSE"
+        "SkipContentGate": "FALSE",
+        "AdoptConflicting": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -127,11 +132,34 @@
         "CacheFirst": "FALSE",
         "CommitBeforeReport": "FALSE",
         "SkipAfter": "2",
-        "SkipContentGate": "TRUE"
+        "SkipContentGate": "TRUE",
+        "AdoptConflicting": "FALSE"
       },
       "invariants": [
         "TypeOK",
         "ContentGateSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-conflicting",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdoptConflicting": "TRUE",
+        "AdoptTorn": "FALSE",
+        "CacheFirst": "FALSE",
+        "CommitBeforeReport": "FALSE",
+        "SkipAfter": "2",
+        "SkipContentGate": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "InitSound"
       ],
       "properties": [],
       "limits": {
