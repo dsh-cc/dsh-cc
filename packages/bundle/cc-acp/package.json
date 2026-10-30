@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/bundle-acp",
-  "version": "0.9.3-rc.3",
+  "version": "0.9.3-rc.4",
   "description": "Agent Client Protocol bundle for the dsh acp profile: host-plane swap to the CC preset + the @dsh-cc/acp protocol driver over dsh-base and dsh-acp-app",
   "type": "module",
   "files": [

@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/completion-gate",
   "description": "Completion gate: records hashed tool-execution receipts (plus an optional privacy-scrubbed bash command head) and, when enabled, nudges at turn-stopping when the final assistant message claims done-ness (tests pass / committed / pushed / build succeeded) with no matching executed evidence in the session window; default off",
-  "version": "0.9.3-rc.3",
+  "version": "0.9.3-rc.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
