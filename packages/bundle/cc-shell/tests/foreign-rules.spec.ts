@@ -82,7 +82,7 @@ async function mountGlue(
       get: (ns: string) => (ns === 'cc-foreign-rules' ? structuredClone(settings) : undefined),
     })
   }
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })

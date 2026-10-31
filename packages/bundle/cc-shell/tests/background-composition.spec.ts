@@ -21,7 +21,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
@@ -36,7 +36,7 @@ afterEach(() => {
 /** Compose the delegation surface the cc preset + host patch mount. */
 async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []) {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'cc-shell-background-'))
   roots.push(root)
   // (a) host-plane persistence: the jsonl backend (dsh base cordis.patch row).
@@ -83,11 +83,12 @@ describe('cc-shell background composition (§4.11)', () => {
   it('installs the control tools exactly once and exposes send_message to a continuable child', async () => {
     // 'hang' keeps the child's Activation resident while the scope is inspected.
     const { ctx, parent } = await compose(['hang', textResponse('done'), textResponse('ack')])
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'pinned child',
       request: { prompt: [{ type: 'text', text: 'child task' }], parent },
       signal: new AbortController().signal,
+      delivery: 'parent',
     })
 
     const child = await vi.waitFor(() => {
@@ -130,11 +131,12 @@ describe('cc-shell background composition (§4.11)', () => {
       })
     })
 
-    await ctx.subagents.startContinuable({
+    await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'reporting child',
       request: { prompt: [{ type: 'text', text: 'child task' }], parent },
       signal: new AbortController().signal,
+      delivery: 'parent',
     })
 
     await vi.waitFor(() => {
@@ -155,11 +157,12 @@ describe('cc-shell background composition (§4.11)', () => {
       })
     })
 
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'settling child',
       request: { prompt: [{ type: 'text', text: 'child task' }], parent },
       signal: new AbortController().signal,
+      delivery: 'parent',
     })
 
     await vi.waitFor(() => {

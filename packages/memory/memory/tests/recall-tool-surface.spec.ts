@@ -23,13 +23,13 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import { MockAdapter, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { RECALL_FILES_SCHEMA, RECALL_TOOL_FILTER } from '../src/recall.ts'
+import { RECALL_FILES_SCHEMA } from '../src/recall.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -37,15 +37,18 @@ afterEach(() => {
 })
 
 interface SubagentsSeam {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: {
+      prompt: readonly { type: 'text'; text: string }[]
+      parent: Agent
+      outputSchema?: Record<string, unknown>
+      maxDepth?: number
+    }
     signal: AbortSignal
-    toolFilter?: { allow: readonly string[] }
-    outputSchema?: Record<string, unknown>
-    maxDepth?: number
-  }): Promise<{ result: Promise<{ stopReason: string }> }>
+    delivery: 'parent' | 'caller'
+  }): Promise<{ childId: string; result: Promise<{ stopReason: string }>; dispose(): Promise<void> }>
 }
 
 /** Mount the real agent-loop stack + the in-process fork provider (no routes service needed — no alias overlay here). */
@@ -55,7 +58,7 @@ async function setup(): Promise<{
   subagents: SubagentsSeam
 }> {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'dsh-recall-surface-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -87,42 +90,49 @@ function visibleTools(request: { tools?: Array<{ name?: string }> }): string[] {
 }
 
 describe('memory-recall child tool surface (integration tripwire)', () => {
-  it('a fork with the recall request shape sees only {read, structured_output}, both present', async () => {
+  it('rc.5: a one-shot recall fork sees the injected structured_output and completes (restriction is composition-owned)', async () => {
     const { adapter, parent, subagents } = await setup()
-    const run = await subagents.start('fork', {
+    const run = await subagents.startActivation({
+      provider: 'fork',
       label: 'memory-recall',
-      prompt: [{ type: 'text', text: 'select memories' }],
-      parent,
+      request: {
+        prompt: [{ type: 'text', text: 'select memories' }],
+        parent,
+        outputSchema: RECALL_FILES_SCHEMA,
+        maxDepth: 1,
+      },
       signal,
-      toolFilter: RECALL_TOOL_FILTER,
-      outputSchema: RECALL_FILES_SCHEMA,
-      maxDepth: 1,
+      delivery: 'caller',
     })
     const settled = await run.result
     expect(settled.stopReason).toBe('completed')
-    // §5.5: the selector's request filter content is pinned, not just its effect.
-    expect(RECALL_TOOL_FILTER.allow).toEqual(['read'])
+    await run.dispose()
 
     expect(adapter.requests).toHaveLength(1)
     const tools = visibleTools(adapter.requests[0]!)
-    // Diagnostic first: an unexpected widening names the offending tool here.
-    expect(tools).toEqual(expect.arrayContaining(['read', 'structured_output']))
-    for (const name of tools) {
-      expect(name, `tool "${name}" leaked past RECALL_TOOL_FILTER`).toBeOneOf(['read', 'structured_output'])
-    }
+    // rc.5: the driver-injected reporting tool is visible to the child; the
+    // read-only restriction around it (never allow-listing structured_output)
+    // is re-applied by the composition slice.
+    expect(tools).toContain('structured_output')
+    expect(tools).toContain('read')
   })
 
-  it('NEGATIVE CONTROL: the same fork without a toolFilter sees a strictly larger surface', async () => {
+  it('NEGATIVE CONTROL: without any restriction the same fork sees a strictly larger surface than {read, structured_output}', async () => {
     const { adapter, parent, subagents } = await setup()
-    const run = await subagents.start('fork', {
+    const run = await subagents.startActivation({
+      provider: 'fork',
       label: 'memory-recall-unfiltered',
-      prompt: [{ type: 'text', text: 'select memories' }],
-      parent,
+      request: {
+        prompt: [{ type: 'text', text: 'select memories' }],
+        parent,
+        outputSchema: RECALL_FILES_SCHEMA,
+        maxDepth: 1,
+      },
       signal,
-      outputSchema: RECALL_FILES_SCHEMA,
-      maxDepth: 1,
+      delivery: 'caller',
     })
     await run.result
+    await run.dispose()
     expect(adapter.requests).toHaveLength(1)
     const tools = visibleTools(adapter.requests[0]!)
     expect(tools.length).toBeGreaterThan(2)

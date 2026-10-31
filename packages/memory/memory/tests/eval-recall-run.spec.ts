@@ -59,7 +59,7 @@ async function bootStack(): Promise<{ ctx: Context; parent: Agent }> {
   const { tmpdir } = await import('node:os')
   const { SessionId } = await import('@deepseek-ai/dsh-session')
   const ctx = new Context()
-  await Testkit.mountAgentLoopTestDependencies(ctx)
+  await Testkit.mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(JsonlPersistence, { root: mkdtempSync(join(tmpdir(), 'dsh-recall-eval-')) })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)

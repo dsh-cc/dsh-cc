@@ -37,6 +37,20 @@
     maxRedirects: 3
     userAgent: 'dsh-cc/0.4.1 (+https://github.com/dsh-cc/dsh-cc)'
 
+# Subagent capacity: restate dsh-base's stock `subagent` row at top level to keep
+# the documented 25-live-children budget. Upstream's pool counts tree-wide
+# *residents* (idle parents waiting on children, cold resumes), not only
+# running children; at the stock default of 8 a 16-way workflow plus siblings
+# would refuse long before dsh-cc's documented contract. Same-id restatement
+# replaces the base row's config wholesale.
+# WARNING: this row MUST stay top-level. Inside `- insert:` it would compose a
+# SECOND loader entry with the same id as dsh-base's and boot hard-fails on the
+# duplicate loader entry id. User settings still override this composition value.
+- id: subagent
+  name: '@deepseek-ai/dsh-subagent'
+  config:
+    maxActiveSubagents: 25
+
 - insert:
     # Remount below (in the insert list) with fetch enabled and the fetch provider.
     - id: tools-cc

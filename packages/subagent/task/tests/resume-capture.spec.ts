@@ -22,7 +22,7 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime, { resolveChildAgentOptions } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
@@ -86,7 +86,7 @@ async function setup(
   opts: SetupOptions = {},
 ) {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'dsh-cc-task-resume-capture-'))
   roots.push(root)
   const workspace = join(root, 'workspace')
@@ -218,6 +218,9 @@ describe('resume pin capture — complete pin after a real background spawn (§6
       },
       modelSelector: { raw: 'sonnet', via: 'alias' },
       effective: { provider: 'mock', model: 'mock-sonnet', reasoningEffort: 'low', maxTokens: 2048, complete: true },
+      // rc.5: the pin records the definition's RAW filter (gate fidelity for
+      // PINNED_TOOL_UNAVAILABLE); the composition plan carries the sanitized
+      // live filter applied at agent/created.
       toolFilter: { allow: ['read'], deny: [] },
       workspace: { cwd: workspace },
       resume: { state: 'ok' },
@@ -275,10 +278,10 @@ describe('resume pin capture — effective tuple equivalence (§4.3)', () => {
 })
 
 describe('resume pin capture — spawn-failure tombstone (§4.5 step 4)', () => {
-  it('removes the pin when startContinuable throws and rethrows unchanged', async () => {
+  it('removes the pin when startActivation throws and rethrows unchanged', async () => {
     const { ctx, parent, store, pinsRoot } = await setup([textResponse('never used')])
-    const seam = ctx.get('subagents') as { startContinuable(): Promise<unknown> }
-    seam.startContinuable = () => Promise.reject(new Error('boom'))
+    const seam = ctx.get('subagents') as { startActivation(): Promise<unknown> }
+    seam.startActivation = () => Promise.reject(new Error('boom'))
     await expect(startBackground(ctx, parent)).rejects.toThrow('boom')
     // The pin was tombstoned (file removed) — nothing orphaned under the root.
     expect(readdirSync(pinsRoot).filter(name => name.endsWith('.json'))).toEqual([])

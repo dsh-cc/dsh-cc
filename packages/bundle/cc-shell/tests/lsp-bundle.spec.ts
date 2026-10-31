@@ -48,6 +48,14 @@ function stubProvider(
 async function mountLsp(): Promise<{ ctx: Context; dispose: () => Promise<void> }> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
+  // Upstream rc.5's tool-lsp injects `workingDirectory`; without the service the
+  // tool never registers. A structural stub keeps this suite focused on the LSP
+  // seam: `ensure` reads the fixture agent's session header (the suite's cwd).
+  ctx.provide('workingDirectory', {
+    get: (session: { header?: { cwd?: string } }) => session.header?.cwd ?? null,
+    ensure: (agent: { session?: { header?: { cwd?: string } } }) =>
+      Promise.resolve(agent.session?.header?.cwd ?? workspaceRoot),
+  } as never)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(Lsp)
   await ctx.plugin(ToolLsp)
@@ -130,6 +138,10 @@ describe('cc-shell bundle — LSP rows (dsh-lsp + dsh-lsp-stdio + dsh-tool-lsp)'
   it('unregisters the lsp tool when its plugin fiber is disposed', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
+    ctx.provide('workingDirectory', {
+      get: () => null,
+      ensure: () => Promise.resolve(workspaceRoot),
+    } as never)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(Lsp)
     const fiber = await ctx.plugin(ToolLsp)

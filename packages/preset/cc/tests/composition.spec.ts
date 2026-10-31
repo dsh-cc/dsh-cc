@@ -227,6 +227,23 @@ describe('agent.cordis.yml composition', () => {
     expect(row.config).toBeUndefined()
   })
 
+  it('mounts the preset-scoped tool-schedule row right after tool-jobs', () => {
+    // Harness 0.2.1-rc.5 moved the reminder tools out of the host-plane
+    // `@deepseek-ai/dsh-schedule` service into this preset-scoped package, so
+    // the row is the ONLY thing that gives cc agents schedule_create/list/
+    // update/delete. Position matches the upstream standard preset (directly
+    // after tool-jobs, before the skills rows) and carries no config and no
+    // `toolFilter.deny`: a delegated child is refused at execute time
+    // (`subagent_session`), never by a mounting-level deny list.
+    const ids = doc.map((r) => r.id)
+    const row = doc.find((r) => r.id === 'tool-schedule')!
+    expect(row.name).toBe('@deepseek-ai/dsh-tool-schedule')
+    expect(row.disabled).toBeUndefined()
+    expect(row.config).toBeUndefined()
+    expect(row.toolFilter).toBeUndefined()
+    expect(ids.indexOf('tool-schedule')).toBe(ids.indexOf('tool-jobs') + 1)
+  })
+
   it('isolates exactly the nine cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')
@@ -839,6 +856,15 @@ const DRIFT_ALLOWANCE: Record<string, string> = {
   // Upstream-only surfaces cc does not ship.
   present: 'upstream-only surface',
   'tool-plugin-manager': 'upstream-only (disabled) surface',
+  // rc.5 additions cc deliberately does not mount: the upstream plugin-market
+  // tool is `disabled: true` there (cc ships its own CC-marketplace manager),
+  // and the time-context row is a web-app preset surface with no CC parity
+  // meaning — mounting it would change the rendered system prompt.
+  'tool-plugin-market': 'upstream-only (disabled) surface',
+  'time-context': 'upstream-only surface without CC parity',
+  // cc keeps its own plan-mode wording (the section text is a prompt contract
+  // pinned by composition tests), so an upstream wording change is expected.
+  planning: 'cc-authored plan-mode section wording',
   // Deliberate name swaps, ids unchanged: the CC engine subclass folds a
   // /compact hint into the summarizer; the CC command forwards the argument.
   compaction: '@dsh-cc/compaction-basic + @dsh-cc/command-compact replace the upstream rows',

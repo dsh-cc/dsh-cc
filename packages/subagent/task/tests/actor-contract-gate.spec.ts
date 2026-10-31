@@ -79,8 +79,7 @@ async function mount(opts: {
   }
   const continuableStarts: Record<string, unknown>[] = []
   ctx.provide('subagents', {
-    async start() { throw new Error('not used') },
-    async startContinuable(spec: Record<string, unknown>) {
+    async startActivation(spec: Record<string, unknown>) {
       const childId = (spec['childId'] as string | undefined) ?? 'child-1'
       emit('subagent/start', { runId: 'run-1', provider: spec['provider'], id: childId, local: true })
       continuableStarts.push(spec['request'] as Record<string, unknown>)
@@ -88,7 +87,12 @@ async function mount(opts: {
         runId: 'run-1', provider: spec['provider'], id: childId, local: true,
         stopReason: COMPLETED.stopReason, lastAssistantMessage: COMPLETED.output,
       })
-      return { childId, messageId: 'm-1' }
+      return {
+        childId,
+        messageId: 'm-1',
+        result: Promise.resolve(COMPLETED),
+        dispose: () => Promise.resolve(),
+      }
     },
     getProvider: () => ({ prepareContinuable: async () => ({}) }),
     list: () => ['spawn'],
@@ -152,70 +156,68 @@ describe('gate candidate selection', () => {
 })
 
 describe('Task dispatch persona gate', () => {
+  // rc.5: persona no longer rides the start request at all — the composition
+  // slice (plan C5) re-applies the GATED persona to the child. These scenarios
+  // keep pinning the gate's strip/keep semantics against applyActorContract
+  // with the exact candidate/pattern inputs the dispatch fold used to feed.
+
   it('gate OPEN by default: route resolves sonnet → glm-4.7, block kept, markers gone', async () => {
-    const ws = freshWorkspace()
-    writeAgent(ws, 'gated', markedBody('sonnet'))
-    const { ctx, continuableStarts: starts } = await mount({
-      routes: { resolve: (m) => m === 'sonnet' ? { provider: 'glm', model: 'glm-4.7' } : undefined },
-    })
-    const r = await call(ctx, { subagent_type: 'gated', description: 'x', prompt: 't' }, agentAt(ws))
-    const persona = starts()[0]!['persona'] as string
+    const persona = applyActorContract(
+      markedBody('sonnet'),
+      gateCandidates('sonnet', { provider: 'glm', model: 'glm-4.7' }),
+      DEFAULT_ACTOR_CONTRACT_MODELS,
+    )
     expect(persona).toContain('NO-USER-IDENTITY-SENTINEL')
     expect(persona).toContain('AFTER')
     expect(persona).not.toContain('actor-contract:')
   })
 
   it('route resolves to a non-glm model: block stripped, unmarked persona byte-identical', async () => {
-    const ws = freshWorkspace()
-    writeAgent(ws, 'gated', markedBody('sonnet'))
-    writeAgent(ws, 'plain', '---\nname: plain\ndescription: P\n---\nPlain.\n')
-    const { ctx, continuableStarts: starts } = await mount({
-      routes: { resolve: (m) => m === 'sonnet' ? { model: 'claude-sonnet-4-20250514' } : undefined },
-    })
-    await call(ctx, { subagent_type: 'gated', description: 'x', prompt: 't' }, agentAt(ws))
-    const persona = starts()[0]!['persona'] as string
+    const persona = applyActorContract(
+      markedBody('sonnet'),
+      gateCandidates('sonnet', { model: 'claude-sonnet-4-20250514' }),
+      DEFAULT_ACTOR_CONTRACT_MODELS,
+    )
     expect(persona).not.toContain('NO-USER-IDENTITY-SENTINEL')
     expect(persona).not.toContain('actor-contract:')
     expect(persona).toContain('AFTER')
-
-    await call(ctx, { subagent_type: 'plain', description: 'x', prompt: 't' }, agentAt(ws))
-    expect(starts()[1]!['persona']).toBe('Plain.')
+    const plain = applyActorContract('Plain.', gateCandidates('sonnet', { model: 'claude-sonnet-4-20250514' }), DEFAULT_ACTOR_CONTRACT_MODELS)
+    expect(plain).toBe('Plain.')
   })
 
   it('no ccModelRoutes service + literal glm-4.7 frontmatter → gate OPEN (raw-token fallback)', async () => {
-    const ws = freshWorkspace()
-    writeAgent(ws, 'gated', markedBody('glm-4.7'))
-    const { ctx, continuableStarts: starts } = await mount()
-    await call(ctx, { subagent_type: 'gated', description: 'x', prompt: 't' }, agentAt(ws))
-    expect(starts()[0]!['persona']).toContain('NO-USER-IDENTITY-SENTINEL')
+    const persona = applyActorContract(markedBody('glm-4.7'), gateCandidates('glm-4.7', undefined), DEFAULT_ACTOR_CONTRACT_MODELS)
+    expect(persona).toContain('NO-USER-IDENTITY-SENTINEL')
   })
 
   it('model undefined (inherit) with a marked definition → gate CLOSED regardless of services', async () => {
-    const ws = freshWorkspace()
-    writeAgent(ws, 'gated', markedBody(null))
-    const { ctx, continuableStarts: starts } = await mount({
-      routes: { resolve: () => ({ model: 'glm-4.7' }) },
-    })
-    await call(ctx, { subagent_type: 'gated', description: 'x', prompt: 't' }, agentAt(ws))
-    const persona = starts()[0]!['persona'] as string
+    const persona = applyActorContract(markedBody(null), gateCandidates(undefined, { model: 'glm-4.7' }), DEFAULT_ACTOR_CONTRACT_MODELS)
     expect(persona).not.toContain('NO-USER-IDENTITY-SENTINEL')
     expect(persona).not.toContain('actor-contract:')
   })
 
   it('settings override driven through the gate hooks: ["*"] opens non-glm, [] closes glm', async () => {
-    const ws = freshWorkspace()
-    writeAgent(ws, 'gated', markedBody('sonnet'))
-    const { ctx, gate, continuableStarts: starts } = await mount({
+    const { ctx, gate } = await mount({
       routes: { resolve: (m) => m === 'sonnet' ? { model: 'claude-sonnet-4-20250514' } : undefined },
     })
+    const candidates = gateCandidates('sonnet', { model: 'claude-sonnet-4-20250514' })
     gate.setSource(() => ({ models: ['*'] }))
     gate.onChange()
-    await call(ctx, { subagent_type: 'gated', description: 'x', prompt: 't' }, agentAt(ws))
-    expect(starts()[0]!['persona']).toContain('NO-USER-IDENTITY-SENTINEL')
+    expect(applyActorContract(markedBody('sonnet'), candidates, actorContractPatterns(ctx))).toContain('NO-USER-IDENTITY-SENTINEL')
 
     gate.setSource(() => ({ models: [] }))
     gate.onChange()
+    expect(applyActorContract(markedBody('sonnet'), candidates, actorContractPatterns(ctx))).not.toContain('NO-USER-IDENTITY-SENTINEL')
+  })
+
+  it('rc.5 invariant: the dispatch path itself never puts persona on the start request', async () => {
+    const ws = freshWorkspace()
+    writeAgent(ws, 'gated', markedBody('sonnet'))
+    const { ctx, continuableStarts: starts } = await mount({
+      routes: { resolve: (m) => m === 'sonnet' ? { provider: 'glm', model: 'glm-4.7' } : undefined },
+    })
     await call(ctx, { subagent_type: 'gated', description: 'x', prompt: 't' }, agentAt(ws))
-    expect(starts()[1]!['persona']).not.toContain('NO-USER-IDENTITY-SENTINEL')
+    expect(starts()).toHaveLength(1)
+    expect(starts()[0]!['persona']).toBeUndefined()
   })
 })

@@ -12,16 +12,24 @@ import { tempPluginRoot, writeFileAt } from './helpers.ts'
 interface FakeSeam {
   registerProvider: (p: unknown) => () => void
   getProvider: () => unknown
+  startActivation: (spec: Record<string, unknown>) => Promise<unknown>
+  specs: Array<Record<string, unknown>>
   providers: Array<{ name: string; start: (r: unknown) => Promise<unknown> }>
 }
 
-/** A fake subagent seam that captures registered providers and a fixed backend. */
+/** A fake subagent seam that captures registered providers and records activation specs. */
 function fakeSeam(): FakeSeam {
   const providers: Array<{ name: string; start: (r: unknown) => Promise<unknown> }> = []
+  const specs: Array<Record<string, unknown>> = []
   return {
     providers,
+    specs,
     registerProvider: (p) => { providers.push(p as never); return () => {} },
-    getProvider: (name: string) => (name === 'fork' ? { start: (request: unknown) => ({ forwarded: request }) } : undefined),
+    getProvider: (name: string) => (name === 'spawn' ? { name: 'spawn' } : undefined),
+    startActivation: async (spec: Record<string, unknown>) => {
+      specs.push(spec)
+      return { childId: 'fake-child', messageId: 'fake-m', result: Promise.resolve(), dispose: () => Promise.resolve() }
+    },
   }
 }
 
@@ -41,29 +49,29 @@ async function mountOne(model: string | undefined, resolveModel?: ResolveModel, 
   await mountAgents({
     pluginRoot: root,
     manifest: { name: 'p', agents: [] } as never,
-    subagents: { registerProvider: seam.registerProvider, getProvider: seam.getProvider },
+    subagents: { registerProvider: seam.registerProvider, getProvider: seam.getProvider, startActivation: seam.startActivation },
     resolveModel,
   })
   await dispose()
   return seam
 }
 
-/** The delegating request the fake backend forwards, unwrapped from the wrapper. */
-function delegationOf(result: unknown): Record<string, unknown> {
-  return (result as { forwarded: Record<string, unknown> }).forwarded
+/** The delegating request the provider put on the last recorded activation spec. */
+function delegationOf(seam: FakeSeam): Record<string, unknown> {
+  return seam.specs[seam.specs.length - 1]!['request'] as Record<string, unknown>
 }
 
 describe('AgentProvider model resolution', () => {
   it('no resolver: overlays the literal model id (byte-identical fallback)', async () => {
     const seam = await mountOne('deepseek-chat')
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toMatchObject({ provider: 'parent', model: 'deepseek-chat' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toMatchObject({ provider: 'parent', model: 'deepseek-chat' })
   })
 
   it('no resolver, no model: no agentOptions model overlay', async () => {
     const seam = await mountOne(undefined)
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toEqual({ provider: 'parent' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toEqual({ provider: 'parent' })
   })
 
   it('resolver returns a route: overlays the resolved provider+model', async () => {
@@ -71,8 +79,8 @@ describe('AgentProvider model resolution', () => {
       'opus',
       (model) => model === 'opus' ? { provider: 'deepseek-official', model: 'deepseek-v4-pro' } : undefined,
     )
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-v4-pro' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toMatchObject({ provider: 'deepseek-official', model: 'deepseek-v4-pro' })
   })
 
   it('resolver returns a model-only route: overlays model, inherits parent provider', async () => {
@@ -80,14 +88,14 @@ describe('AgentProvider model resolution', () => {
       'sonnet',
       (model) => model === 'sonnet' ? { model: 'deepseek-flash' } : undefined,
     )
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toMatchObject({ provider: 'parent', model: 'deepseek-flash' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toMatchObject({ provider: 'parent', model: 'deepseek-flash' })
   })
 
   it('resolver returns undefined (inherit): no model override (inherits parent route)', async () => {
     const seam = await mountOne('inherit', () => undefined)
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toEqual({ provider: 'parent' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toEqual({ provider: 'parent' })
   })
 
   it('resolver returns a route with reasoningEffort: forwards all three fields', async () => {
@@ -97,8 +105,8 @@ describe('AgentProvider model resolution', () => {
         ? { provider: 'orchestrix', model: 'glm-5.3', reasoningEffort: 'xhigh' }
         : undefined,
     )
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toEqual({
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toEqual({
       provider: 'orchestrix',
       model: 'glm-5.3',
       reasoningEffort: 'xhigh',
@@ -112,16 +120,16 @@ describe('AgentProvider model resolution', () => {
         ? { provider: 'orchestrix', model: 'glm-5.3', reasoningEffort: 'max' }
         : undefined,
     )
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toEqual({ provider: 'parent' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toEqual({ provider: 'parent' })
   })
 })
 
 describe('AgentProvider def.effort fold', () => {
   it('no resolver: frontmatter effort is stamped onto agentOptions', async () => {
     const seam = await mountOne('deepseek-chat', undefined, 'low')
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toMatchObject({ model: 'deepseek-chat', reasoningEffort: 'low' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toMatchObject({ model: 'deepseek-chat', reasoningEffort: 'low' })
   })
 
   it('route effort wins over frontmatter def.effort', async () => {
@@ -130,13 +138,13 @@ describe('AgentProvider def.effort fold', () => {
       (model) => model === 'opus' ? { model: 'glm-5.3', reasoningEffort: 'high' } : undefined,
       'low',
     )
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toMatchObject({ reasoningEffort: 'high' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toMatchObject({ reasoningEffort: 'high' })
   })
 
   it('resolver route without effort + no frontmatter effort: no reasoningEffort key', async () => {
     const seam = await mountOne('sonnet', (model) => model === 'sonnet' ? { model: 'glm-5.3' } : undefined)
-    const result = await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
-    expect(delegationOf(result)['agentOptions']).toEqual({ provider: 'parent', model: 'glm-5.3' })
+    await seam.providers[0]!.start({ agentOptions: { provider: 'parent' } })
+    expect(delegationOf(seam)['agentOptions']).toEqual({ provider: 'parent', model: 'glm-5.3' })
   })
 })

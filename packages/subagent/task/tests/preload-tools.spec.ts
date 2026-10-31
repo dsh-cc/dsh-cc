@@ -95,7 +95,7 @@ async function mount(opts: { toolSearch?: unknown; order?: string[] } = {}): Pro
   const continuableStarts: Array<{ provider: string; request: Record<string, unknown> }> = []
   const order = opts.order ?? []
   const seam: Record<string, unknown> = {
-    async startContinuable(spec: Record<string, unknown>): Promise<{ childId: string; messageId: string }> {
+    async startActivation(spec: Record<string, unknown>) {
       order.push('start')
       continuableStarts.push({ provider: spec['provider'] as string, request: spec['request'] as Record<string, unknown> })
       const childId = (spec['childId'] as string | undefined) ?? `child-${continuableStarts.length}`
@@ -112,7 +112,12 @@ async function mount(opts: { toolSearch?: unknown; order?: string[] } = {}): Pro
         stopReason: settled.stopReason,
         ...(settled.output !== undefined ? { lastAssistantMessage: settled.output } : {}),
       })
-      return { childId, messageId: 'm-1' }
+      return {
+        childId,
+        messageId: 'm-1',
+        result: Promise.resolve({ stopReason: 'completed' }),
+        dispose: () => Promise.resolve(),
+      }
     },
     getProvider(name: string) { return name === 'spawn' ? provider : undefined },
     list() { return ['spawn'] },
@@ -156,8 +161,9 @@ describe('spawn-time preload of deferred toolFilter names', () => {
     // Pre-activation must happen before the child start on BOTH paths.
     expect(order).toEqual(['activate', 'start'])
     expect(continuableStarts).toHaveLength(1)
-    const filter = continuableStarts[0]!.request['toolFilter'] as { allow?: string[] }
-    expect(filter.allow).toContain(DEFERRED_MCP)
+    // rc.5: the filter itself stays off the request (composition slice);
+    // preload activation remains driven by the definition's raw/sanitized lists.
+    expect(continuableStarts[0]!.request['toolFilter']).toBeUndefined()
     expect(result.content[0]!.text).toContain(`Preloaded deferred tools for child: ${DEFERRED_MCP}`)
   })
 
@@ -293,7 +299,7 @@ describe('integration: real DeferredToolRegistry preload', () => {
     const search = vi.spyOn(ctx.toolSearch, 'search')
     const provider = capableProvider('spawn')
     const seam: Record<string, unknown> = {
-      async startContinuable(spec: Record<string, unknown>): Promise<{ childId: string; messageId: string }> {
+      async startActivation(spec: Record<string, unknown>) {
         const childId = String(spec['childId'])
         ;(ctx as unknown as { emit(event: string, info: unknown): void }).emit('subagent/start', {
           runId: 'run-1',
@@ -310,7 +316,12 @@ describe('integration: real DeferredToolRegistry preload', () => {
           stopReason: 'completed',
           lastAssistantMessage: [{ type: 'text', text: 'done' }],
         })
-        return { childId, messageId: 'm-1' }
+        return {
+          childId,
+          messageId: 'm-1',
+          result: Promise.resolve({ stopReason: 'completed' }),
+          dispose: () => Promise.resolve(),
+        }
       },
       getProvider(name: string) { return name === 'spawn' ? provider : undefined },
       list() { return ['spawn'] },

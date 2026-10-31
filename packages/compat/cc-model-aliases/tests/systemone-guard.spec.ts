@@ -13,7 +13,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -100,7 +100,7 @@ afterEach(() => {
 /** Real llm runtime + the routes service (its `llm/stream` guard) under one context. */
 async function mountGuarded(aliases: Record<string, unknown> = BLESSED, withSubagents = false) {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   if (withSubagents) {
     const root = mkdtempSync(join(tmpdir(), 'dsh-systemone-guard-'))
     roots.push(root)
@@ -163,13 +163,14 @@ describe('chat boundary rejects System One models (llm/stream guard)', () => {
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'haiku-chat' })
     const routes = ctx.get('ccModelRoutes') as { resolve(m: string): { model: string } }
     const subagents = ctx.get('subagents') as {
-      start(name: string, request: Record<string, unknown>): Promise<{ result: Promise<{ stopReason: string; error?: unknown }> }>
+      startActivation(spec: Record<string, unknown>): Promise<{ result: Promise<{ stopReason: string; error?: unknown }>; dispose(): Promise<void> }>
     }
-    const run = await subagents.start('spawn', {
-      prompt: [{ type: 'text', text: 'work' }],
-      parent: parent as Agent,
+    const run = await subagents.startActivation({
+      provider: 'spawn',
+      label: 'gauge-child',
+      request: { prompt: [{ type: 'text', text: 'work' }], parent: parent as Agent, agentOptions: { provider: 'mock', model: routes.resolve('gauge').model } },
       signal: new AbortController().signal,
-      agentOptions: { provider: 'mock', model: routes.resolve('gauge').model },
+      delivery: 'caller',
     })
     const settled = await run.result
     expect(settled.stopReason).toBe('error')

@@ -73,7 +73,7 @@ describe('ACP connection ownership', () => {
     // A continuable Activation outlives the turn that started it, so the bridge
     // must release that forest before the agents whose runtime it depends on.
     harness.ctx.provide('subagents', {
-      drainContinuableDescendants: (parents: readonly Agent[]) => {
+      drainDescendants: (parents: readonly Agent[]) => {
         drainedParents = parents
         order.push('drained')
         return Promise.resolve()
@@ -96,7 +96,7 @@ describe('ACP connection ownership', () => {
     const order: string[] = []
     const release = Promise.withResolvers<undefined>()
     harness.ctx.provide('subagents', {
-      drainContinuableDescendants: async () => {
+      drainDescendants: async () => {
         order.push('drain started')
         await release.promise
         order.push('drain finished')
@@ -132,7 +132,7 @@ describe('ACP connection ownership', () => {
     const warnings: string[] = []
     harness.ctx.logger.warn = (message: string) => { warnings.push(message) }
     harness.ctx.provide('subagents', {
-      drainContinuableDescendants: () => Promise.reject(new Error('activation teardown failed')),
+      drainDescendants: () => Promise.reject(new Error('activation teardown failed')),
     } as never)
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
     const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })

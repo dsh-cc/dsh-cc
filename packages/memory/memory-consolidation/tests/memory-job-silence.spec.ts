@@ -13,13 +13,13 @@ import { startMemoryJob } from '../src/memory-job.ts'
 
 const PROD_MESSAGE = 'tools.restrict() names unknown global tool "structured_output"'
 
-/** Subagent seam that resolves immediately; the run's result is caller-controlled. */
+/** Subagent seam (rc.5 activation shape) that resolves immediately; the run's result is caller-controlled. */
 function subagentsWith(result: Promise<unknown>) {
   return {
     calls: [] as Array<{ label?: string; signal: AbortSignal }>,
-    async start(_name: string, request: { label?: string; signal: AbortSignal }) {
-      this.calls.push(request)
-      return { result }
+    async startActivation(spec: { label: string; signal: AbortSignal }) {
+      this.calls.push({ label: spec.label, signal: spec.signal })
+      return { childId: 'job-child', messageId: 'job-m', result, dispose: () => Promise.resolve() }
     },
   }
 }

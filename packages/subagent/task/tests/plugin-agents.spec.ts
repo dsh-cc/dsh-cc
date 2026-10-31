@@ -182,24 +182,26 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
     })
     const continuable: Array<Record<string, unknown>> = []
     const seam: Record<string, unknown> = {
-      async start(name: string, request: Record<string, unknown>) {
-        const provider = providers.get(name) as { start(r: unknown): Promise<unknown> } | undefined
-        if (provider === undefined) throw new Error(`unknown provider "${name}"`)
-        return provider.start(request)
-      },
-      async startContinuable(spec: Record<string, unknown>) {
+      async startActivation(spec: Record<string, unknown>) {
+        const providerName = spec['provider'] as string
+        if (providers.get(providerName) === undefined) throw new Error(`unknown provider "${providerName}"`)
         const childId = (spec['childId'] as string | undefined) ?? `child-${continuable.length + 1}`
         const runId = `run-${continuable.length + 1}`
-        emit('subagent/start', { runId, provider: spec['provider'], id: childId, local: true })
+        emit('subagent/start', { runId, provider: providerName, id: childId, local: true })
         continuable.push(spec['request'] as Record<string, unknown>)
         void (async () => {
           emit('subagent/end', {
-            runId, provider: spec['provider'], id: childId, local: true,
+            runId, provider: providerName, id: childId, local: true,
             stopReason: 'completed',
             lastAssistantMessage: [{ type: 'text', text: 'REASONED OUTPUT' }],
           })
         })()
-        return { childId, messageId: 'm-1' }
+        return {
+          childId,
+          messageId: 'm-1',
+          result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text: 'REASONED OUTPUT' }] }),
+          dispose: () => Promise.resolve(),
+        }
       },
       getProvider: (name: string) => providers.get(name),
       list: () => [...providers.keys()],
@@ -244,7 +246,7 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
     return { ctx, continuable, workspace, taskDef: taskDef! }
   }
 
-  it('dispatches dsh-cc-agents:critic foreground: persona folds, collected text returns', async () => {
+  it('dispatches dsh-cc-agents:critic foreground: collected text returns (persona travels via composition)', async () => {
     const { continuable, workspace, taskDef } = await setup()
     const result = await taskDef.execute(
       { subagent_type: 'dsh-cc-agents:critic', description: 'reason', prompt: 'think hard', run_in_background: false },
@@ -256,12 +258,13 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
 
     expect(continuable).toHaveLength(1)
     const request = continuable[0]!
-    // The persona folds into the spawn request.
-    expect(String(request['persona'])).toContain('Staff Engineer')
+    // rc.5: persona/toolFilter no longer ride the start request — the
+    // composition slice applies the definition's prompt and restriction to
+    // the child.
+    expect(request['persona']).toBeUndefined()
+    expect(request['toolFilter']).toBeUndefined()
     // No routes service: the opus alias is unconfigured → no agentOptions.
     expect(request['agentOptions']).toBeUndefined()
-    // The shipped tools list sanitizes untouched against the built-in set.
-    expect(request['toolFilter']).toBeDefined()
   })
 
   it('the catalog lists all scoped ids', async () => {

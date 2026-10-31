@@ -335,7 +335,7 @@ describe('/agents release <id> (T20–T22)', () => {
           : async () => opts.children ?? [],
       interrupt: () => {},
       ...(opts.drain === undefined ? {} : {
-        drainContinuableChildren: async (parent: unknown, ids: unknown[]) => {
+        drainChildren: async (parent: unknown, ids: unknown[]) => {
           drains.push({ parent, ids })
           await opts.drain(parent, ids)
         },
@@ -417,11 +417,11 @@ describe('/agents release <id> (T20–T22)', () => {
         + 'marks it [released] for the rest of this process.',
       )
 
-    // no-drain-seam: the service exposes no drainContinuableChildren.
+    // no-drain-seam: the service exposes no drainChildren.
     const noSeam = await harness({ children: [{ id: 'c2', mode: 'continuable' }] })
     expect(await noSeam.execute('/agents release c2'))
       .toBe(
-        "Cannot release c2: this composition's subagents seam exposes no drainContinuableChildren; "
+        "Cannot release c2: this composition's subagents seam exposes no drainChildren; "
         + 'free capacity by letting children settle or by restarting the session.',
       )
 
@@ -468,7 +468,7 @@ describe('/agents release <id> (T20–T22)', () => {
     ctx.provide('subagents', {
       listChildren: async () => [{ id: 'c5', mode: 'continuable' }],
       interrupt: () => {},
-      drainContinuableChildren: async (_parent: unknown, ids: unknown[]) => { drains.push(ids) },
+      drainChildren: async (_parent: unknown, ids: unknown[]) => { drains.push(ids) },
     })
     ctx.provide('resumePinStore', { read: () => undefined, pathFor: (id: string) => `/p/${id}.json` })
     await ctx.plugin(commandAgents)

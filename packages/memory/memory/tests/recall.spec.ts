@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { MAX_RECALL_MEMORIES, MemoryRecall, RECALL_FILES_SCHEMA, RECALL_TOOL_FILTER, SubagentMemorySelector, type MemorySelector } from '../src/recall.ts'
+import { MAX_RECALL_MEMORIES, MemoryRecall, RECALL_FILES_SCHEMA, SubagentMemorySelector, type MemorySelector } from '../src/recall.ts'
+
+/** Wrap a one-shot run result in the rc.5 activation shape the selector disposes. */
+function activationOf(result: Promise<unknown>): { childId: string; result: Promise<unknown>; dispose(): Promise<void> } {
+  return { childId: 'recall-child', result, dispose: () => Promise.resolve() }
+}
 import { apply as applyMemory } from '../src/index.ts'
 import { FakeMemoryFs } from './helpers.ts'
 
@@ -13,9 +18,9 @@ describe('SubagentMemorySelector structured selection', () => {
   ]
 
   /** Mount a selector against a fake subagents service returning the given run. */
-  function selectorWith(run: unknown) {
+  function selectorWith(run: { result: Promise<unknown> }) {
     const ctx = new Context()
-    ctx.provide('subagents' as never, { start: async () => run } as never)
+    ctx.provide('subagents' as never, { startActivation: async () => activationOf(run.result) } as never)
     return new SubagentMemorySelector(ctx, parent)
   }
 
@@ -76,12 +81,12 @@ describe('SubagentMemorySelector structured selection', () => {
 /** Mount a fresh-module selector with a fake subagents service and warn capture. */
 function selectorWithRun(
   fresh: typeof import('../src/recall.ts'),
-  run: unknown,
+  run: { result: Promise<unknown> },
   warnings: string[],
 ): InstanceType<typeof SubagentMemorySelector> {
   const parent = { session: { header: { cwd: '/work/repo' } } } as unknown as Agent
   const ctx = new Context()
-  ctx.provide('subagents' as never, { start: async () => run } as never)
+  ctx.provide('subagents' as never, { startActivation: async () => activationOf(run.result) } as never)
   ;(ctx as { logger: Record<string, unknown> }).logger = { ...(ctx as { logger?: Record<string, unknown> }).logger, warn: (format: string) => warnings.push(format) }
   return new fresh.SubagentMemorySelector(ctx, parent)
 }
@@ -98,14 +103,14 @@ describe('RECALL_FILES_SCHEMA', () => {
     })
   })
 
-  it('is attached to the subagents.start request', async () => {
+  it('is attached to the startActivation request', async () => {
     const parent = { session: { header: { cwd: '/work/repo' } } } as unknown as Agent
     const requests: Array<Record<string, unknown>> = []
     const ctx = new Context()
     ctx.provide('subagents' as never, {
-      start: async (_name: string, request: Record<string, unknown>) => {
-        requests.push(request)
-        return { result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }) }
+      startActivation: async (spec: { request: Record<string, unknown> }) => {
+        requests.push(spec.request)
+        return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)
     await new SubagentMemorySelector(ctx, parent).select('q', [], new AbortController().signal, [])
@@ -125,22 +130,21 @@ describe('SubagentMemorySelector start request hardening', () => {
     const requests: Array<Record<string, unknown>> = []
     const ctx = new Context()
     ctx.provide('subagents' as never, {
-      start: async (_name: string, request: Record<string, unknown>) => {
-        requests.push(request)
-        return {
-          result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }),
-        }
+      startActivation: async (spec: { request: Record<string, unknown> }) => {
+        requests.push(spec.request)
+        return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)
     return { selector: new SubagentMemorySelector(ctx, parent), requests }
   }
 
-  it('restricts the child to read-only tools and depth 1', async () => {
+  it('caps the child at depth 1 and carries no request-level toolFilter (rc.5: composition restricts)', async () => {
     const { selector, requests } = selectorCapturing()
     await selector.select('q', CANDIDATES, new AbortController().signal, [])
     expect(requests).toHaveLength(1)
-    expect(requests[0]!['toolFilter']).toEqual({ allow: ['read'] })
-    expect(requests[0]!['toolFilter']).toEqual(RECALL_TOOL_FILTER)
+    // rc.5: the read-only filter no longer rides the start request — the
+    // composition seam applies it to the selector child.
+    expect(requests[0]!['toolFilter']).toBeUndefined()
     expect(requests[0]!['maxDepth']).toBe(1)
   })
 
@@ -347,15 +351,13 @@ describe('SubagentMemorySelector agentOptions forwarding', () => {
     { path: '/root/b.md', filename: 'b.md', description: 'B' },
   ]
 
-  it('forwards agentOptions onto the subagents.start request', async () => {
+  it('forwards agentOptions onto the startActivation request', async () => {
     const requests: Array<Record<string, unknown>> = []
     const ctx = new Context()
     ctx.provide('subagents' as never, {
-      start: async (_name: string, request: Record<string, unknown>) => {
-        requests.push(request)
-        return {
-          result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }),
-        }
+      startActivation: async (spec: { request: Record<string, unknown> }) => {
+        requests.push(spec.request)
+        return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)
     const selector = new SubagentMemorySelector(ctx, parent, 'fork', { provider: 'p', model: 'flash-1' })
@@ -383,11 +385,9 @@ describe('memory apply() recall model stamping', () => {
       section: (_def: unknown) => {},
     } as never)
     ctx.provide('subagents' as never, {
-      start: async (name: string, request: Record<string, unknown>) => {
-        calls.push({ name, request })
-        return {
-          result: Promise.resolve({ stopReason: 'completed', structured: { files: [] } }),
-        }
+      startActivation: async (spec: { provider: string; request: Record<string, unknown> }) => {
+        calls.push({ name: spec.provider, request: spec.request })
+        return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)
     if (options.routes !== undefined) {

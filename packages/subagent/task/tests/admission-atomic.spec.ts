@@ -22,23 +22,26 @@ function world(initialRunning: number) {
   const gates: Array<() => void> = []
   let holdCreation = true
   const seam = {
-    // Yields before answering: the snapshot is taken BEFORE any in-flight creation lands.
-    listChildren: async () => {
-      const snapshot = [...running].map(id => ({ id }))
-      await Promise.resolve()
-      await Promise.resolve()
-      return snapshot
-    },
-    startContinuable: async (spec: { childId?: string }) => {
+    // rc.5: the capacity DECISION is the harness pool's. This fake plays the
+    // pool: it rejects with ACTIVATION_LIMIT_REACHED once the world is full,
+    // which is what the lanes map onto the D4 refusal copy.
+    startActivation: async (spec: { childId?: string }) => {
       if (holdCreation) await new Promise<void>(resolve => { gates.push(resolve) })
+      if (running.size >= CAP) {
+        throw Object.assign(new Error('subagent limit reached (active child limit: 25)'), { code: 'ACTIVATION_LIMIT_REACHED' })
+      }
       const childId = spec.childId ?? `child-${created.length}`
       created.push(childId)
       running.add(childId) // a created child is a running activation
-      return { childId, messageId: 'm' }
+      return {
+        childId,
+        messageId: 'm',
+        result: Promise.resolve({ stopReason: 'completed' }),
+        dispose: () => Promise.resolve(),
+      }
     },
     getProvider: () => ({ prepareContinuable: () => undefined }),
     list: () => [],
-    start: async () => { throw new Error('unused') },
   } satisfies SubagentsLike
   const parentOf = (id: string) => ({
     id,
@@ -89,7 +92,7 @@ describe('F-1: spawn admission is atomic per parent', () => {
 
   it('releases the slot when the creation fails, so a later admission proceeds', async () => {
     const w = world(CAP - 1)
-    const failing = { ...w.seam, startContinuable: async () => { throw new Error('boom') } }
+    const failing = { ...w.seam, startActivation: async () => { throw new Error('boom') } }
     await expect(startBackground(failing, w.request('parent-c'))).rejects.toThrow('boom')
     w.open()
     await expect(startBackground(w.seam, w.request('parent-c'))).resolves.toMatchObject({ status: 'async_launched' })
