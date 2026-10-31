@@ -59,7 +59,7 @@ env:
   # deepseek-harness pin: single source of truth for the checkout ref and
   # the harness-artifact cache key. publish.yml greps this file for exactly
   # one occurrence of this line — keep it workflow-level and unique.
-  DSH_HARNESS_REF: c1b47e41fcd54d20a0f061df28683bfc29ee24e5 # 0.2.0-rc.2 release commit
+  DSH_HARNESS_REF: 31cfe2aafead959a4dbd9d8cfaae258eb28a19fd # 0.2.1-rc.5 release commit
 
 permissions:
   contents: read

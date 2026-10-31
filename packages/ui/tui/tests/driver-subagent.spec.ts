@@ -452,7 +452,7 @@ describe('createDriver /agents release', () => {
     const baseGet = ctxAny.get.bind(built.ctx)
     ctxAny.get = (key: string) => {
       if (key === 'ccAgents') return { list: ccAgentsList }
-      if (key === 'subagents') return { interrupt, listChildren: async () => [], drainContinuableChildren: drain }
+      if (key === 'subagents') return { interrupt, listChildren: async () => [], drainChildren: drain }
       return baseGet(key)
     }
     return { ctx: built.ctx, drain, interrupt, ccAgentsList }
@@ -473,7 +473,7 @@ describe('createDriver /agents release', () => {
     const baseGet = ctxAny.get.bind(harness.ctx)
     ctxAny.get = (key: string) => {
       if (key === 'subagents') {
-        return { interrupt: harness.interrupt, listChildren: async () => [], drainContinuableChildren: releaseDrain }
+        return { interrupt: harness.interrupt, listChildren: async () => [], drainChildren: releaseDrain }
       }
       return baseGet(key)
     }
@@ -512,7 +512,7 @@ describe('createDriver /agents release', () => {
     const baseGet = ctxAny.get.bind(harness.ctx)
     ctxAny.get = (key: string) => {
       if (key === 'subagents') {
-        return { interrupt: harness.interrupt, listChildren: async () => [{ id: 'child-1', mode: 'continuable' }], drainContinuableChildren: harness.drain }
+        return { interrupt: harness.interrupt, listChildren: async () => [{ id: 'child-1', mode: 'continuable' }], drainChildren: harness.drain }
       }
       return baseGet(key)
     }

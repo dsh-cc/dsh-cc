@@ -1,9 +1,10 @@
 /**
- * F-2 (live-capacity for continuation admission): continuing a settled child
- * through `send_message` admits a fresh resident activation, so the 25-cap that
- * guards the spawn lanes must guard continuations too. These tests pin the
- * counting predicate, the fail-open degradation and the gate wiring inside
- * `tools/execute`.
+ * F-2 (continuation admission at rc.5): the harness residency pool is the
+ * ONLY capacity valve — for cold-resumed continuations as for spawns — so
+ * the dsh-cc running-count guard was deleted. What these tests pin is what
+ * remains: the refusal literal (kept byte-shared with the spawn lane), and
+ * the per-parent admission lease the `tools/execute` wiring holds across
+ * `send_message` acceptance.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -12,102 +13,67 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   LIVE_CAPACITY_REFUSAL,
   MAX_LIVE_CONTINUABLE_CHILDREN,
+  admitContinuation,
   applyResumePinsPlugin,
-  continuationCapacityRefusal,
-  countLiveChildren,
 } from '../src/index.ts'
-
-const runningIds = (n: number) => Array.from({ length: n }, (_, i) => `child-${i + 1}`)
-
-function registryOf(running: string[], idle: string[] = []) {
-  const status = new Map<string, string>()
-  for (const id of running) status.set(id, 'running')
-  for (const id of idle) status.set(id, 'idle')
-  return { get: (id: unknown) => (status.has(String(id)) ? { status: status.get(String(id)) } : undefined) }
-}
-
-function servicesOf(opts: {
-  live: number
-  idle?: number
-  listThrows?: boolean
-  seamAbsent?: boolean
-  registryAbsent?: boolean
-}): { get: (name: string, strict?: boolean) => unknown } {
-  const registry = registryOf(runningIds(opts.live), opts.idle === undefined ? [] : runningIds(opts.idle).map(i => `idle-${i}`))
-  return {
-    get: (name: string) => {
-      if (name === 'subagents') {
-        if (opts.seamAbsent === true) return {}
-        return {
-          listChildren: async () => {
-            if (opts.listThrows === true) throw new Error('listChildren exploded')
-            return [
-              ...runningIds(opts.live).map(id => ({ id })),
-              ...(opts.idle === undefined ? [] : runningIds(opts.idle).map(i => ({ id: `idle-${i}` }))),
-            ]
-          },
-        }
-      }
-      if (name === 'agents') return opts.registryAbsent === true ? undefined : registry
-      return undefined
-    },
-  }
-}
 
 const parent = { id: 'parent-1' }
 
-describe('countLiveChildren', () => {
-  it('counts only RUNNING children (idle rows hold no slot)', async () => {
-    const services = servicesOf({ live: 3, idle: 2 })
-    const live = await countLiveChildren(
-      services.get('subagents') as never,
-      services.get('agents') as never,
-      parent.id,
-    )
-    expect(live).toBe(3)
-  })
-
-  it('is unobservable (undefined) without the listChildren seam', async () => {
-    await expect(countLiveChildren({}, registryOf(runningIds(3)), parent.id)).resolves.toBeUndefined()
-  })
-
-  it('is unobservable when the listing throws', async () => {
-    const services = servicesOf({ live: 3, listThrows: true })
-    await expect(
-      countLiveChildren(services.get('subagents') as never, services.get('agents') as never, parent.id),
-    ).resolves.toBeUndefined()
-  })
-
-  it('counts zero when the activation registry is absent', async () => {
-    const services = servicesOf({ live: 3, registryAbsent: true })
-    await expect(
-      countLiveChildren(services.get('subagents') as never, undefined, parent.id),
-    ).resolves.toBe(0)
+describe('live-capacity constants (rc.5)', () => {
+  it('keeps the refusal literal on residency semantics and the shared cap', () => {
+    expect(MAX_LIVE_CONTINUABLE_CHILDREN).toBe(25)
+    expect(LIVE_CAPACITY_REFUSAL).toContain('25 resident subagents')
+    expect(LIVE_CAPACITY_REFUSAL).toContain('cold-resumed')
+    expect(LIVE_CAPACITY_REFUSAL).toContain('already-resident')
+    expect(LIVE_CAPACITY_REFUSAL).toContain('release_agent')
   })
 })
 
-describe('continuationCapacityRefusal', () => {
-  it('admits one below the cap', async () => {
-    const services = servicesOf({ live: MAX_LIVE_CONTINUABLE_CHILDREN - 1 })
-    await expect(continuationCapacityRefusal(services, parent)).resolves.toBeUndefined()
+describe('admitContinuation (lease-only at rc.5)', () => {
+  it('admits a cold-resume target and a resident target identically (the pool decides capacity)', async () => {
+    const services = { get: () => undefined }
+    const signal = new AbortController().signal
+    const cold = await admitContinuation(services, { id: 'parent-1', session: { header: {} } }, 'settled-child', signal)
+    expect(cold.admitted).toBe(true)
+    cold.release()
+    const resident = await admitContinuation(services, { id: 'parent-1', session: { header: {} } }, 'running-child', signal)
+    expect(resident.admitted).toBe(true)
+    resident.release()
   })
 
-  it('refuses at the cap with the shared refusal literal', async () => {
-    const services = servicesOf({ live: MAX_LIVE_CONTINUABLE_CHILDREN })
-    await expect(continuationCapacityRefusal(services, parent)).resolves.toBe(LIVE_CAPACITY_REFUSAL)
+  it('exempts child-to-parent reports from the lease', async () => {
+    const services = { get: () => undefined }
+    const admission = await admitContinuation(
+      services,
+      { id: 'child-x', session: { header: { parentSession: 'parent-target' } } },
+      'parent-target',
+      new AbortController().signal,
+    )
+    expect(admission.admitted).toBe(true)
+    admission.release()
   })
 
-  it('degrades open when capacity is unobservable or unattributable', async () => {
-    await expect(continuationCapacityRefusal(servicesOf({ live: 99, seamAbsent: true }), parent)).resolves.toBeUndefined()
-    await expect(continuationCapacityRefusal(servicesOf({ live: 99, listThrows: true }), parent)).resolves.toBeUndefined()
-    await expect(continuationCapacityRefusal(servicesOf({ live: 99 }), undefined)).resolves.toBeUndefined()
-    await expect(continuationCapacityRefusal(servicesOf({ live: 99 }), {})).resolves.toBeUndefined()
+  it('serializes continuations per parent (a second admission queues behind the first)', async () => {
+    const services = { get: () => undefined }
+    const first = await admitContinuation(services, { id: 'parent-1', session: { header: {} } }, 'a', new AbortController().signal)
+    let secondAdmitted = false
+    const queued = admitContinuation(services, { id: 'parent-1', session: { header: {} } }, 'b', new AbortController().signal)
+      .then((admission) => {
+        secondAdmitted = admission.admitted
+        admission.release()
+        return admission.admitted
+      })
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+    expect(secondAdmitted).toBe(false)
+    first.release()
+    await expect(queued).resolves.toBe(true)
+    expect(secondAdmitted).toBe(true)
   })
 })
 
 // ── Gate wiring (tools/execute) ────────────────────────────────────────
 
-describe('send_message live-capacity gate', () => {
+describe('send_message admission wiring', () => {
   let root: string
 
   beforeEach(() => {
@@ -118,71 +84,41 @@ describe('send_message live-capacity gate', () => {
     rmSync(root, { recursive: true, force: true })
   })
 
-  function fakeCtx(opts: { live: number; liveTarget?: boolean; seamAbsent?: boolean }) {
-    const preExecute: { handler: (exec: unknown, next: () => unknown) => unknown }[] = []
-    const capacity = servicesOf({ live: opts.live, seamAbsent: opts.seamAbsent })
-    const liveIds = new Set(runningIds(opts.live))
+  function fakeGate() {
+    const handlers: Array<(exec: unknown, next: () => Promise<string>) => Promise<unknown>> = []
     const ctx = {
       provide: () => {},
-      get: (key: string, strict?: boolean) => {
-        if (key === 'ccReleaseMarkers') return undefined
-        if (key === 'subagents' || key === 'agents') return capacity.get(key, strict)
-        return undefined
-      },
-      agents: {
-        get: (id: unknown) => (opts.liveTarget === true && liveIds.has(String(id)) ? { status: 'running' } : undefined),
-      },
+      get: () => undefined,
       on: (name: string, handler: never) => {
-        if (name === 'tools/execute') preExecute.push({ handler })
+        if (name === 'tools/execute') handlers.push(handler)
         return () => {}
       },
       effect: () => {},
       logger: { warn: () => {} },
     }
     applyResumePinsPlugin(ctx as never, { pinsRoot: root })
-    return preExecute[0]!.handler as (exec: unknown, next: () => Promise<string>) => Promise<unknown>
+    return handlers[0]! as (exec: unknown, next: () => Promise<string>) => Promise<unknown>
   }
 
-  it('refuses a continuation at the cap before dispatch', async () => {
-    const gate = fakeCtx({ live: MAX_LIVE_CONTINUABLE_CHILDREN })
+  function sendMessage(callId: string, agent: unknown = { id: 'parent-1', session: { header: {} } }) {
+    return { name: 'send_message', arguments: { agent_id: callId }, agent, signal: new AbortController().signal }
+  }
+
+  it('admits a continuation and releases the admission after the body settles', async () => {
+    const gate = fakeGate()
     const next = vi.fn(async () => 'next-called')
-    await expect(gate(
-      { name: 'send_message', arguments: { agent_id: 'settled-child' }, agent: parent, signal: new AbortController().signal },
-      next,
-    )).rejects.toThrow(LIVE_CAPACITY_REFUSAL)
-    expect(next).not.toHaveBeenCalled()
+    await expect(gate(sendMessage('settled-child'), next)).resolves.toBe('next-called')
+    expect(next).toHaveBeenCalledOnce()
+    // Admission released: a follow-up does not queue behind the settled first.
+    const next2 = vi.fn(async () => 'next-again')
+    await expect(gate(sendMessage('settled-child'), next2)).resolves.toBe('next-again')
   })
 
-  it('passes a same-epoch steer to a live agent (no new slot needed)', async () => {
-    const gate = fakeCtx({ live: MAX_LIVE_CONTINUABLE_CHILDREN, liveTarget: true })
-    const next = vi.fn(async () => 'next-called')
+  it('passes non-send_message executions straight through without admission', async () => {
+    const gate = fakeGate()
+    const next = vi.fn(async () => 'passed')
     await expect(
-      gate(
-        { name: 'send_message', arguments: { agent_id: 'child-1' }, agent: parent, signal: new AbortController().signal },
-        next,
-      ),
-    ).resolves.toBe('next-called')
-  })
-
-  it('admits one below the cap', async () => {
-    const gate = fakeCtx({ live: MAX_LIVE_CONTINUABLE_CHILDREN - 1 })
-    const next = vi.fn(async () => 'next-called')
-    await expect(
-      gate(
-        { name: 'send_message', arguments: { agent_id: 'settled-child' }, agent: parent, signal: new AbortController().signal },
-        next,
-      ),
-    ).resolves.toBe('next-called')
-  })
-
-  it('degrades open when the capacity seam is absent', async () => {
-    const gate = fakeCtx({ live: 0, seamAbsent: true })
-    const next = vi.fn(async () => 'next-called')
-    await expect(
-      gate(
-        { name: 'send_message', arguments: { agent_id: 'settled-child' }, agent: parent, signal: new AbortController().signal },
-        next,
-      ),
-    ).resolves.toBe('next-called')
+      gate({ name: 'read', arguments: {}, agent: { id: 'parent-1' }, signal: new AbortController().signal }, next),
+    ).resolves.toBe('passed')
   })
 })

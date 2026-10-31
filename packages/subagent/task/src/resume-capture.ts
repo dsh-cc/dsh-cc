@@ -1,6 +1,6 @@
 /**
  * Spawn-time resume-pin capture (plan §4.3 + §4.5): build and write the pin
- * for a continuable background child BEFORE `startContinuable`, and tombstone
+ * for a continuable background child BEFORE `startActivation`, and tombstone
  * it when the creation throws.
  *
  * The capture flow lives in the task package (not resume-pins) because it is
@@ -13,7 +13,7 @@
  * route degrades the pin to explicit-fields-only (`effective.complete:false` +
  * a warning); an unwriteable pin skips capture entirely (a missing pin reads
  * as a legacy/foreign child). Only the tombstone path rethrows nothing — the
- * original `startContinuable` error is rethrown unchanged by the caller.
+ * original `startActivation` error is rethrown unchanged by the caller.
  *
  * @module @dsh-cc/subagent-task/resume-capture
  */
@@ -151,6 +151,8 @@ export interface CaptureInput {
   readonly parentRoute: ParentRouteLike
   /** The sanitized tool filter exactly as forwarded to the seam. */
   readonly toolFilter?: ToolRestriction | undefined
+  /** The gated persona forwarded to the composition listener (rc.5 bridge). */
+  readonly persona?: string | undefined
   /** The session workspace cwd (workspace-identity probe root). */
   readonly cwd: string
   /** R9: the delivery tier stamped by the dispatch entry point. */
@@ -200,7 +202,7 @@ export class SpawnPinCapture {
   }
 
   /**
-   * Tombstone the pin after a failed `startContinuable`: delete the file; if
+   * Tombstone the pin after a failed `startActivation`: delete the file; if
    * the delete fails, rewrite it as blocked so it can never be mistaken for
    * a live agent. Idempotent; never throws.
    */
@@ -270,6 +272,7 @@ export class SpawnPinCapture {
         allow: [...(input.toolFilter?.allow ?? [])],
         deny: [...(input.toolFilter?.deny ?? [])],
       },
+      ...input.persona !== undefined && input.persona.length > 0 ? { persona: input.persona } : {},
       ...input.definition?.maxTurns !== undefined ? { maxTurns: input.definition.maxTurns } : {},
       // R9: the delivery tier + definition override only; absent fields are
       // omitted (legacy pins read tier-indistinguishable → 2h fail-safe).

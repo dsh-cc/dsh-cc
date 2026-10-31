@@ -23,7 +23,7 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@deepseek-ai/dsh-agent": ">=0.2.0-rc.2"
+    "@deepseek-ai/dsh-agent": ">=0.2.1-rc.5"
   },
   "dependencies": {
     "@dsh-cc/settings-ns": "workspace:^",

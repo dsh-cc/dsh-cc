@@ -1,0 +1,124 @@
+{
+  "src/index.ts": {
+    "ccOnly": [
+      "import { installAgentLifecycleListeners } from './lifecycle.ts'",
+      "installAgentLifecycleListeners(ctx, ownedRecord)"
+    ],
+    "upstreamOnly": [
+      "ctx.on('agent/error', ({ agent, error }) => {",
+      "ownedRecord(agent)?.onAgentError(error)",
+      "ctx.on('agent/status', ({ agent, status }) => {",
+      "ownedRecord(agent)?.onAgentStatus(status)"
+    ]
+  },
+  "src/session.ts": {
+    "ccOnly": [
+      "import type { Agent, AgentHandle, AgentOptions, ModelSelection } from '@deepseek-ai/dsh-agent'",
+      "import { noteAgentError, settleCancelledOnStatus } from './cancellation-status.ts'",
+      "/** The continuable-subagent teardown used without depending on the subagent package. */",
+      "interface ContinuableDrain {",
+      "/** Dispose continuable descendants below exact host-owned parents child-first. */",
+      "cancelRequested: boolean",
+      "* Admit, enqueue, and settle one prompt at whole-Agent quiescence.",
+      "cancelRequested: false,",
+      "if (inflight.cancelRequested) {",
+      "/** Correlate an interval failure with the active prompt. */",
+      "if (this.inflight === undefined) return",
+      "noteAgentError(this.inflight, errorChain(error), () => this.settleAfterQuiescence(this.inflight!))",
+      "/** Complete cancelled activity on an idle transition (rc.5 agent/status). */",
+      "onAgentStatus(status: string): void {",
+      "settleCancelledOnStatus(this.inflight, status, () => this.settleAfterQuiescence(this.inflight!))",
+      "await this.agent.whenIdle()",
+      "const subagents = this.ctx.get('subagents') as ContinuableDrain | undefined",
+      "this.ctx.logger.warn(`acp: continuable subagent teardown failed: ${errorChain(error)}`)",
+      "failures.push(new Error('continuable subagent teardown failed', { cause: error }))",
+      "inflight.cancelRequested = true",
+      "if (inflight.messageQueued) this.agent.cancel({ kind: 'user' })"
+    ],
+    "upstreamOnly": [
+      "}",
+      "/**",
+      "*/",
+      "this.settleAfterQuiescence(inflight)",
+      "const inflight = this.inflight",
+      "return",
+      "import type { Agent, AgentHandle, AgentOptions, AgentStatus, ModelSelection } from '@deepseek-ai/dsh-agent'",
+      "/** Subagent completion and teardown without depending on the subagent package. */",
+      "interface SubagentLifecycle {",
+      "/** Dispose subagent descendants below exact host-owned parents child-first. */",
+      "/** Observe currently managed descendants without closing future admission. */",
+      "waitForChildren(parent: Agent): Promise<boolean>",
+      "cancellationDone: PromiseWithResolvers<void>",
+      "cancelStartedIdle: boolean",
+      "* Admit one prompt and settle after the root, descendants, and updates finish.",
+      "cancellationDone: Promise.withResolvers<void>(),",
+      "cancelStartedIdle: false,",
+      "if (inflight.admissionController.signal.aborted) {",
+      "if (event.type === 'turn/start' && this.inflight?.turn !== undefined) {",
+      "this.inflight.turn = event.data.turn",
+      "this.inflight.endReason = undefined",
+      "inflight.agentError = undefined",
+      "* Correlate an Agent interval failure with the active ACP prompt.",
+      "* @param error - original same-process failure.",
+      "if (inflight === undefined || !inflight.messageQueued) return",
+      "// A later committed turn/end supersedes this live failure. Failed turn",
+      "// start/end appends have no terminal record and keep the failure observable.",
+      "inflight.agentError = new Error(errorChain(error))",
+      "* Complete cancelled activity without following a later root driver.",
+      "* @param status - the emitted transition, which may precede a reentrant wake.",
+      "onAgentStatus(status: AgentStatus): void {",
+      "if (inflight === undefined || !inflight.messageQueued || !inflight.admissionController.signal.aborted) return",
+      "// Maintenance remains publicly idle; its next running transition belongs",
+      "// to work released after the maintenance task finished.",
+      "if (status === 'idle' || inflight.cancelStartedIdle) inflight.cancellationDone.resolve(this.outputTail)",
+      "const subagents = this.ctx.get('subagents') as SubagentLifecycle | undefined",
+      "this.ctx.logger.warn(`acp: subagent teardown failed: ${errorChain(error)}`)",
+      "failures.push(new Error('subagent teardown failed', { cause: error }))",
+      "const firstCancellation = !inflight.admissionController.signal.aborted",
+      "if (firstCancellation) inflight.cancelStartedIdle = this.agent.status === 'idle'",
+      "if (!inflight.messageQueued) {",
+      "inflight.cancellationDone.resolve()",
+      "this.agent.cancel({ kind: 'user' })",
+      "if (firstCancellation) {",
+      "const done = inflight.cancellationDone",
+      "// Plugin disposal can detach status observers before this activity retires.",
+      "void this.agent.whenIdle().then(() => { done.resolve(this.outputTail) }, done.reject)",
+      "const cancelled = inflight.cancellationDone.promise",
+      "const isCancelled = (): boolean => inflight.admissionController.signal.aborted",
+      "const idleAt = (seq: Session['seq']): boolean => this.agent.status === 'idle' && this.agent.session.seq === seq",
+      "while (true) {",
+      "await Promise.race([this.agent.whenIdle(), cancelled])",
+      "if (isCancelled()) break",
+      "const idleSeq = this.agent.session.seq",
+      "const children = await Promise.race([subagents?.waitForChildren(this.agent), cancelled])",
+      "if (children || !idleAt(idleSeq)) continue",
+      "if (isCancelled() || idleAt(idleSeq)) break",
+      "if (isCancelled()) await cancelled"
+    ]
+  },
+  "tests/bridge.spec.ts": {
+    "ccOnly": [
+      "harness = await makeBridgeHarness({ persona: 'Automation persona for {{model}} in {{cwd}}.', script: [textResponse('ok')] })",
+      "expect(head?.content).toContainEqual({ type: 'text', text: expect.stringContaining(`Automation persona for mock in ${process.cwd()}.`) as unknown })"
+    ],
+    "upstreamOnly": [
+      "harness = await makeBridgeHarness({ persona: 'Automation persona for {{model}}.', script: [textResponse('ok')] })",
+      "expect(head?.content.some(part => part.type === 'text' && part.text.includes('Automation persona for mock.'))).toBe(true)"
+    ]
+  },
+  "tests/dispose.spec.ts": {
+    "ccOnly": [
+      "expect(warnings.some(warning => warning.includes('continuable subagent teardown failed'))).toBe(true)"
+    ],
+    "upstreamOnly": [
+      "expect(warnings.some(warning => warning.includes('subagent teardown failed'))).toBe(true)"
+    ]
+  },
+  "tests/harness.ts": {
+    "ccOnly": [
+      "// rc.5: strict prompt variables — the upstream persona.spec idiom.",
+      "ctx.systemPrompt.variable('cwd', context => context.agent?.session.header.cwd)"
+    ],
+    "upstreamOnly": []
+  }
+}

@@ -15,6 +15,7 @@ import {
   type StopReason,
 } from '@agentclientprotocol/sdk'
 import type { Agent, AgentHandle, AgentOptions, ModelSelection } from '@deepseek-ai/dsh-agent'
+import { noteAgentError, settleCancelledOnStatus } from './cancellation-status.ts'
 import { createUserMessage, errorChain, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { type Session, type SessionEvent, type SessionId, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { AcpContentError, admitAcpPrompt } from './content.ts'
@@ -26,7 +27,7 @@ import { assistantUpdates, toolCallUpdate, toolResultUpdate } from './updates.ts
 /** The continuable-subagent teardown used without depending on the subagent package. */
 interface ContinuableDrain {
   /** Dispose continuable descendants below exact host-owned parents child-first. */
-  drainContinuableDescendants(parents: readonly Agent[]): Promise<void>
+  drainDescendants(parents: readonly Agent[]): Promise<void>
 }
 
 /** The preset-registry seam composed into every ACP session (§5.2). */
@@ -434,19 +435,16 @@ export class AcpSession {
     if (selection !== undefined) this.modelControl.pinTurn(turn, selection)
   }
 
-  /**
-   * Correlate an Agent interval failure with the active ACP prompt.
-   * @param turn - failed turn number.
-   * @param error - original same-process failure.
-   */
-  onAgentError(turn: number, error: unknown): void {
-    const inflight = this.inflight
-    if (inflight === undefined || !inflight.messageQueued) return
-    // AgentLoop balances an in-turn failure with durable turn/end; settlement
-    // reads that exact error reason. This slot records interval failures outside it.
-    if (inflight.turn === turn) return
-    inflight.agentError = new Error(errorChain(error))
-    this.settleAfterQuiescence(inflight)
+  /** Correlate an interval failure with the active prompt. */
+  onAgentError(error: unknown): void {
+    if (this.inflight === undefined) return
+    noteAgentError(this.inflight, errorChain(error), () => this.settleAfterQuiescence(this.inflight!))
+  }
+
+  /** Complete cancelled activity on an idle transition (rc.5 agent/status). */
+  onAgentStatus(status: string): void {
+    if (this.inflight === undefined) return
+    settleCancelledOnStatus(this.inflight, status, () => this.settleAfterQuiescence(this.inflight!))
   }
 
   /** Await every update queued before this call. */
@@ -475,7 +473,7 @@ export class AcpSession {
       }
       const subagents = this.ctx.get('subagents') as ContinuableDrain | undefined
       try {
-        await subagents?.drainContinuableDescendants([this.agent])
+        await subagents?.drainDescendants([this.agent])
       } catch (error: unknown) {
         this.ctx.logger.warn(`acp: continuable subagent teardown failed: ${errorChain(error)}`)
         failures.push(new Error('continuable subagent teardown failed', { cause: error }))

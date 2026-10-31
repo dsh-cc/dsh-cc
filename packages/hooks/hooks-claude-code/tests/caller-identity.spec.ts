@@ -53,7 +53,7 @@ function capturingHook(dir: string, name: string, marker: string): string {
 
 async function harness(configDir: string, adapter: MockAdapter): Promise<Context> {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })

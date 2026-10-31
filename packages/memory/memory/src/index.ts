@@ -74,8 +74,6 @@ export {
 export type { MemoryWrite, MemoryWritePolicy } from './writeback.ts'
 export { PRESSURE_FILE, readPressure, armPressure, markPressureForced, clearPressure } from './pressure.ts'
 export type { PressureState } from './pressure.ts'
-export { startWithFilterResilience, resetRestrictWarnState } from './restrict-resilience.ts'
-export type { ResilienceLogger } from './restrict-resilience.ts'
 
 export const name = 'memory'
 /** Core services required for section registration and event listeners. */

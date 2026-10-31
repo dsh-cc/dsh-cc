@@ -24,7 +24,6 @@ import { isAbsolute, relative } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
-import { applyActorContract } from '@dsh-cc/claude-code-agents'
 import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
 import { setSessionCwd } from '@dsh-cc/session-cwd'
 import {
@@ -43,7 +42,6 @@ import {
   type GitCmd,
 } from '@dsh-cc/tool-git-worktree'
 import { SpawnPinCapture } from './resume-capture.ts'
-import { actorContractPatterns, gateCandidates } from './actor-contract-gate.ts'
 import type { BackgroundRequest } from './background-start.ts'
 import type { ShellRunResult } from '@deepseek-ai/dsh-shell'
 import type {} from '@deepseek-ai/dsh-shell'
@@ -90,19 +88,6 @@ export function sandboxRefusal(parentCwd: string, worktreePath: string): string 
     + 'the parent runs at (or inside) a directory that contains <repoRoot>/.claude/worktrees — '
     + 'run the session at the repository root, or drop `isolation: worktree` from the agent definition.'
   )
-}
-
-/** The persona paragraph appended to an isolated child's system prompt. */
-export function worktreeContract(worktreePath: string, parentCwd: string): string {
-  return [
-    '## Isolated worktree',
-    '',
-    `Your working directory is ${worktreePath} (an isolated git worktree). Pass absolute paths `,
-    `inside it to every tool, and pass \`workdir: ${worktreePath}\` to every shell call. `,
-    `The parent checkout at ${parentCwd} is off-limits — never read or write there. `
-      + 'Writes outside the worktree are denied, and a delegated subagent cannot answer approval '
-      + 'prompts, so a denied write hard-fails: the absolute-path contract is not optional.',
-  ].join('')
 }
 
 /** Prepend the one-line worktree note to the child's first user message. */
@@ -400,7 +385,6 @@ export async function dispatchWorktreeIsolation(
     label: string
     signal: AbortSignal
     maxDepth: number
-    toolFilter?: unknown
     agentOptions?: Record<string, string> | undefined
   },
   start: (request: BackgroundRequest) => Promise<
@@ -416,25 +400,15 @@ export async function dispatchWorktreeIsolation(
   const record = await createIsolationWorktree(ctx, { parentCwd, childId, signal: parts.signal })
   worktrees.record(childId, record)
 
-  // Actor-contract gate (§3.1): the isolation persona is built from the raw
-  // definition body BEFORE the dispatch fold exists, so the gate applies here,
-  // before the worktree contract is appended.
-  const gatedPersona = applyActorContract(
-    definition.systemPrompt,
-    gateCandidates(definition.model, routes?.resolve(definition.model)),
-    actorContractPatterns(ctx),
-  )
-  const persona = `${gatedPersona}\n\n${worktreeContract(record.worktreePath, record.parentCwd)}`
+  // The persona/restriction fold is gone from the start request (the
+  // composition slice applies it); the worktree contract already rides in the
+  // first prompt line, which keeps the isolation guidance reachable.
   const request: BackgroundRequest = {
     label: parts.label,
     prompt: [{ type: 'text', text: promptWithWorktreeNote(parts.argsPrompt, record.worktreePath) }],
     parent: parts.parent,
     signal: parts.signal,
     maxDepth: parts.maxDepth,
-    persona,
-    ...(parts.toolFilter !== undefined
-      ? { toolFilter: parts.toolFilter as NonNullable<BackgroundRequest['toolFilter']> }
-      : {}),
     ...(parts.agentOptions !== undefined ? { agentOptions: parts.agentOptions } : {}),
     childId,
     captureDefinition: definition,

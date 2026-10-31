@@ -50,7 +50,7 @@ interface SubagentsLike {
   listDescendants?(rootSessionId: SessionId): Promise<readonly { id: SessionId; hasChildren?: boolean }[]>
   interrupt(targetSessionId: SessionId, authority: unknown): void
   /** The release-valve seam (D1); absent → no-drain-seam gate error. */
-  drainContinuableChildren?(parent: Agent, ids: SessionId[]): Promise<void>
+  drainChildren?(parent: Agent, ids: SessionId[]): Promise<void>
 }
 interface PinStoreLike {
   read(childId: string): unknown

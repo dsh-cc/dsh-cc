@@ -5,7 +5,7 @@
  *
  * One shared `subagent/start` + `subagent/end` listener pair and one watch
  * map (`Map<childId, { runId?, resolve }>`) serve every collector of the
- * process. The reservation is placed BEFORE `startContinuable` so an
+ * process. The reservation is placed BEFORE `startActivation` so an
  * immediate settle cannot fall between start and subscription; the runId is
  * captured from the child's first `subagent/start` and the end event is
  * matched by runId (a cold-resumed later epoch has a new runId and never
@@ -223,7 +223,7 @@ export interface CollectFirstEpochDeps {
   /** The subagents seam, probed for `interrupt` (M5). */
   subagents?: SubagentsInterruptLike
   /**
-   * Performs the actual `startContinuable` call. The reservation is placed
+   * Performs the actual `startActivation` call. The reservation is placed
    * BEFORE this runs (subscribe-before-start, §8); a throw from it releases
    * the reservation and the suppression mark (tombstone parity lives in the
    * caller, mirroring `startBackground`).
@@ -274,7 +274,7 @@ export async function collectFirstEpoch(deps: CollectFirstEpochDeps): Promise<Ep
     resolvePromoted = resolve
   })
   // The promotion-registry registration (§6): registered BEFORE start, so a
-  // Ctrl+B fired during the still-in-flight `startContinuable` finds the
+  // Ctrl+B fired during the still-in-flight `startActivation` finds the
   // armed handle; unregistered on EVERY resolution path (settle, abort,
   // promote, start-throw) — a resolved collect is never promotable.
   const registrationKey = deps.parentSessionId !== undefined && deps.toolCallToken !== undefined
@@ -340,7 +340,7 @@ export async function collectFirstEpoch(deps: CollectFirstEpochDeps): Promise<Ep
   }
   if (signal.aborted) onAbort()
   // Pre-acceptance promotion (§6): a promote() that fired while
-  // `startContinuable` was still in flight resolves the tool call AS SOON AS
+  // `startActivation` was still in flight resolves the tool call AS SOON AS
   // start resolves — the child is accepted, its id durable, the epoch never
   // awaited. The watch was already released by promote(); the settled notice
   // was already un-suppressed.

@@ -39,19 +39,30 @@ const markedBody = (model: string | null): string => {
 function fakeSeam(): {
   registerProvider: (p: unknown) => () => void
   getProvider: (name: string) => unknown
+  startActivation: (spec: Record<string, unknown>) => Promise<unknown>
+  specs: Array<Record<string, unknown>>
   providers: Array<{ name: string; start: (r: unknown) => Promise<unknown> }>
 } {
   const providers: Array<{ name: string; start: (r: unknown) => Promise<unknown> }> = []
+  const specs: Array<Record<string, unknown>> = []
   return {
     providers,
+    specs,
     registerProvider: (p) => { providers.push(p as never); return () => {} },
-    getProvider: (name) => (name === 'fork' ? { start: async (r: unknown) => ({ forwarded: r }) } : undefined),
+    getProvider: (name) => (name === 'spawn' ? { name: 'spawn' } : undefined),
+    // rc.5: the provider routes through startActivation (delivery 'caller');
+    // the fake records the spec and returns activation material.
+    startActivation: async (spec: Record<string, unknown>) => {
+      specs.push(spec)
+      return { childId: 'fake-child', messageId: 'fake-m', result: Promise.resolve(), dispose: () => Promise.resolve() }
+    },
   }
 }
 
-/** The prompt the child receives, unwrapped from the fake backend's echo. */
-function promptOf(result: unknown): string {
-  return ((result as { forwarded: Record<string, unknown> }).forwarded['prompt']) as string
+/** The prompt the child receives, unwrapped from the fake seam's recorded activation spec. */
+function promptOf(specs: Array<Record<string, unknown>>, index = 0): string {
+  const request = specs[index]!['request'] as Record<string, unknown>
+  return (request['prompt'] as readonly { text: string }[])[0]!.text
 }
 
 /** Mount one agent over the seam, with the gate patterns threaded live. */
@@ -59,19 +70,19 @@ async function mountOne(
   body: string,
   resolveModel?: (model: string | undefined) => { provider?: string; model?: string } | undefined,
   gate?: ActorContractGate,
-): Promise<{ start(r: unknown): Promise<unknown> }> {
+): Promise<{ start(r: unknown): Promise<unknown>; specs: Array<Record<string, unknown>> }> {
   const { root, dispose } = await tempPluginRoot()
   await writeFileAt(root, 'agents/test.md', body)
   const seam = fakeSeam()
   await mountAgents({
     pluginRoot: root,
     manifest: { name: 'p', agents: [] } as never,
-    subagents: { registerProvider: seam.registerProvider, getProvider: seam.getProvider },
+    subagents: { registerProvider: seam.registerProvider, getProvider: seam.getProvider, startActivation: seam.startActivation },
     ...(resolveModel !== undefined ? { resolveModel: resolveModel as never } : {}),
     ...(gate !== undefined ? { gatePatterns: () => gate.patterns() } : {}),
   })
   await dispose()
-  return seam.providers[0]!
+  return { start: r => seam.providers[0]!.start(r), specs: seam.specs }
 }
 
 describe('actor-contract gate reader (loader-local duplicate)', () => {
@@ -111,7 +122,8 @@ describe('AgentProvider.start persona gate', () => {
       (m) => m === 'sonnet' ? { provider: 'glm', model: 'glm-4.7' } : undefined,
       mountActorContractGate(new Context()),
     )
-    const persona = promptOf(await provider.start({}))
+    await provider.start({})
+    const persona = promptOf(provider.specs)
     expect(persona).toContain('NO-USER-IDENTITY-SENTINEL')
     expect(persona).toContain('AFTER')
     expect(persona).not.toContain('actor-contract:')
@@ -125,15 +137,18 @@ describe('AgentProvider.start persona gate', () => {
       gate,
     )
     const plain = await mountOne('---\ndescription: p\n---\nPlain.\n', undefined, gate)
-    const persona = promptOf(await gated.start({}))
+    await gated.start({})
+    const persona = promptOf(gated.specs)
     expect(persona).not.toContain('NO-USER-IDENTITY-SENTINEL')
     expect(persona).not.toContain('actor-contract:')
-    expect(promptOf(await plain.start({}))).toBe('Plain.')
+    await plain.start({})
+    expect(promptOf(plain.specs)).toBe('Plain.')
   })
 
   it('no resolver + literal glm-4.7 frontmatter → block present (raw-token fallback)', async () => {
     const provider = await mountOne(markedBody('glm-4.7'), undefined, mountActorContractGate(new Context()))
-    expect(promptOf(await provider.start({}))).toContain('NO-USER-IDENTITY-SENTINEL')
+    await provider.start({})
+    expect(promptOf(provider.specs)).toContain('NO-USER-IDENTITY-SENTINEL')
   })
 
   it('model undefined (inherit) → stripped regardless of resolver', async () => {
@@ -142,7 +157,8 @@ describe('AgentProvider.start persona gate', () => {
       () => ({ model: 'glm-4.7' }),
       mountActorContractGate(new Context()),
     )
-    const persona = promptOf(await provider.start({}))
+    await provider.start({})
+    const persona = promptOf(provider.specs)
     expect(persona).not.toContain('NO-USER-IDENTITY-SENTINEL')
     expect(persona).not.toContain('actor-contract:')
   })
@@ -155,18 +171,20 @@ describe('mountCcPlugin wiring', () => {
       await writeFileAt(root, 'plugin.json', JSON.stringify({ name: 'p' }))
       await writeFileAt(root, 'agents/gated.md', markedBody('glm-4.7'))
       const ctx = new Context()
-      const providers: Array<{ name: string; start: (r: unknown) => Promise<unknown> }> = []
+      const seam = fakeSeam()
       const mount = await mountCcPlugin(ctx, {
         root,
         seams: {
           subagents: {
-            registerProvider: (p) => { providers.push(p as never); return () => {} },
-            getProvider: (name: string) => (name === 'fork' ? { start: async (r: unknown) => ({ forwarded: r }) } : undefined),
+            registerProvider: seam.registerProvider,
+            getProvider: seam.getProvider,
+            startActivation: seam.startActivation,
           },
         },
       })
-      expect(providers).toHaveLength(1)
-      expect(promptOf(await providers[0]!.start({}))).toContain('NO-USER-IDENTITY-SENTINEL')
+      expect(seam.providers).toHaveLength(1)
+      await seam.providers[0]!.start({})
+      expect(promptOf(seam.specs)).toContain('NO-USER-IDENTITY-SENTINEL')
       mount.dispose()
     } finally {
       await dispose()
@@ -179,22 +197,25 @@ describe('mountCcPlugin wiring', () => {
       await writeFileAt(root, 'plugin.json', JSON.stringify({ name: 'p' }))
       await writeFileAt(root, 'agents/gated.md', markedBody('sonnet'))
       const ctx = new Context()
-      const providers: Array<{ name: string; start: (r: unknown) => Promise<unknown> }> = []
+      const seam = fakeSeam()
       const mount = await mountCcPlugin(ctx, {
         root,
         seams: {
           subagents: {
-            registerProvider: (p) => { providers.push(p as never); return () => {} },
-            getProvider: (name: string) => (name === 'fork' ? { start: async (r: unknown) => ({ forwarded: r }) } : undefined),
+            registerProvider: seam.registerProvider,
+            getProvider: seam.getProvider,
+            startActivation: seam.startActivation,
           },
         },
       })
-      expect(promptOf(await providers[0]!.start({}))).not.toContain('NO-USER-IDENTITY-SENTINEL')
+      await seam.providers[0]!.start({})
+      expect(promptOf(seam.specs)).not.toContain('NO-USER-IDENTITY-SENTINEL')
       // Hot-reload path without a full settings provider, per the Slice-2a
       // test precedent: drive the gate hooks directly.
       mount.gate.setSource(() => ({ models: ['*'] }))
       mount.gate.onChange()
-      expect(promptOf(await providers[0]!.start({}))).toContain('NO-USER-IDENTITY-SENTINEL')
+      await seam.providers[0]!.start({})
+      expect(promptOf(seam.specs, 1)).toContain('NO-USER-IDENTITY-SENTINEL')
       mount.dispose()
     } finally {
       await dispose()

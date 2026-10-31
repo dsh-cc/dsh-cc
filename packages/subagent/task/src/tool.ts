@@ -42,8 +42,7 @@ import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { defineTool } from '@dsh-cc/tools'
 import { cwdOf } from '@dsh-cc/memory'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
-import { applyActorContract, classifyEphemeral } from '@dsh-cc/claude-code-agents'
-import { actorContractPatterns, gateCandidates } from './actor-contract-gate.ts'
+import { applyActorContract, classifyEphemeral, gateCandidates } from '@dsh-cc/claude-code-agents'
 import { resolveSpawnEffort, toAgentOptions } from '@dsh-cc/model-aliases'
 import type { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex } from './plugin-agents.ts'
@@ -51,6 +50,8 @@ import { SpawnPinCapture } from './resume-capture.ts'
 import { armEphemeralTtl, EPHEMERAL_TTL_MS_DEFAULT, type EphemeralReaperLedger } from './ephemeral-reaper.ts'
 import { preloadDeferredFilterTools, renderPreloadLines, type ToolSearchActivateSeam } from './preload-tools.ts'
 import { sanitizeToolFilter } from './sanitize-filter.ts'
+import { actorContractPatterns } from './actor-contract-gate.ts'
+import { ephemeralToolFilter } from './composition-plan.ts'
 import {
   backgroundTasksDisabled,
   collectForeground,
@@ -92,7 +93,6 @@ export {
   EPHEMERAL_PIN_IGNORED_NOTICE,
   EPHEMERAL_PROMOTION_NOTICE,
   EPHEMERAL_WORKTREE_REJECT,
-  ephemeralCapacityRefusal,
 } from './ephemeral-dispatch.ts'
 
 /**
@@ -282,8 +282,28 @@ export function registerTaskTool(
             + 'run_in_background: true.',
           )
         }
-        const run = await seam.start(FORK_SENTINEL, base)
-        return settle(run)
+        const activation = await seam.startActivation({
+          provider: FORK_SENTINEL,
+          label: base.label,
+          request: base,
+          signal: exec.signal,
+          delivery: 'caller',
+        })
+        // One-shot dispose policy: post-publication abort goes through
+        // dispose() (the activation signal covers pre-publication only), and
+        // the resident slot is released once the result settles.
+        const onAbort = (): void => { void activation.dispose().catch(() => {}) }
+        exec.signal.addEventListener('abort', onAbort, { once: true })
+        try {
+          return await settle(activation)
+        } finally {
+          exec.signal.removeEventListener('abort', onAbort)
+          try {
+            await activation.dispose()
+          } catch {
+            /* one-shot slot release is best-effort; the settle outcome stands */
+          }
+        }
       }
 
       const root = cwdOf(agent)
@@ -322,14 +342,6 @@ export function registerTaskTool(
         const agentOptions = spawnEffort === undefined
           ? toAgentOptions(route)
           : { ...toAgentOptions(route), reasoningEffort: spawnEffort }
-        // Actor-contract gate (§3.1): strip/keep the marked block per the
-        // configured model patterns, read live at spawn time. Inherit model
-        // → no candidates → fail-closed strip.
-        const gatedPersona = applyActorContract(
-          definition.systemPrompt,
-          gateCandidates(definition.model, routes?.resolve(definition.model)),
-          actorContractPatterns(ctx),
-        )
         // LIVE known set, read at execute time so MCP tools mounted or deferred
         // after this plugin's apply (including hash-suffixed public names) are
         // all restrictable candidates for the child's filter. Pass the calling
@@ -359,6 +371,20 @@ export function registerTaskTool(
           if (args.run_in_background === true) throw new Error(EPHEMERAL_BACKGROUND_REJECT)
           if (definition.isolation === 'worktree') throw new Error(EPHEMERAL_WORKTREE_REJECT)
         }
+        // rc.5 composition bridge (plan C5): persona and filter no longer ride
+        // the start request — they are applied to the child at `agent/created`.
+        const gatedPersona = applyActorContract(
+          definition.systemPrompt,
+          gateCandidates(definition.model, route),
+          actorContractPatterns(ctx),
+        )
+        // Ephemeral one-shots keep the post-sanitize ToolSearch strip: a
+        // read-only child must not regain eager tool search.
+        const composedFilter = ephemeralToolFilter(toolFilter, ephemeral)
+        const composition = {
+          ...(gatedPersona.length > 0 ? { persona: gatedPersona } : {}),
+          ...(composedFilter !== undefined ? { toolFilter: composedFilter } : {}),
+        }
         // WS-3: `isolation: worktree` definitions create a hardened worktree
         // first and dispatch the child into it (create/adopt/settle/lock live
         // in ./worktree-isolation.ts). Any creation failure refuses the
@@ -370,26 +396,36 @@ export function registerTaskTool(
             label: args.description,
             signal: exec.signal,
             maxDepth: DEFAULT_MAX_DEPTH,
-            toolFilter,
             agentOptions,
           }, async request => {
+            // Composition applies to isolated children as well (they are still
+            // definition children: same persona, same restriction).
+            const withComposition = composition.persona !== undefined || composition.toolFilter !== undefined
+              ? { ...request, composition }
+              : request
             // R9: the definition `autoReleaseMs` override is resolved at the
             // dispatch site — capture-INDEPENDENT (arm-registry must not
             // depend on pin capture). Identity check; 0 is the disable value.
             const withOverride = definition.autoReleaseMs !== undefined
-              ? { ...request, autoReleaseMs: definition.autoReleaseMs }
-              : request
+              ? { ...withComposition, autoReleaseMs: definition.autoReleaseMs }
+              : withComposition
             return wantsBackground(args, definition, disabled)
               ? await startBackground(seam, withOverride, capture)
               : await collectForeground(ctx, seam, withOverride, capture, exec)
           })
           return preloadText === '' ? isolated : { ...isolated, text: `${isolated.text}\n${preloadText}` }
         }
+        // rc.5: persona and toolFilter no longer ride the start request — the
+        // composition listener applies them to the child at `agent/created`.
         const folded = {
           ...base,
-          persona: gatedPersona,
-          ...(toolFilter !== undefined ? { toolFilter } : {}),
           ...(agentOptions !== undefined ? { agentOptions } : {}),
+          ...(composition.persona !== undefined || composition.toolFilter !== undefined
+            ? { composition }
+            : {}),
+          // The pin records the definition's RAW filter (gate fidelity); the
+          // composition carries the sanitized live one.
+          ...(definition.toolRestriction !== undefined ? { captureToolFilter: definition.toolRestriction } : {}),
           // R9: the definition override only — a resolved default is never
           // written here (the grace-window module derives defaults itself).
           ...(definition.autoReleaseMs !== undefined ? { autoReleaseMs: definition.autoReleaseMs } : {}),

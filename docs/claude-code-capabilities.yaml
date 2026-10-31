@@ -977,13 +977,19 @@ capabilities:
     evidence:
       - { type: source, path: packages/bundle/cc-shell/cordis.patch.yml, anchor: "- id: schedule" }
       - { type: source, path: packages/bundle/cc-shell/src/schedule-mount.ts }
+      - { type: source, path: packages/preset/cc/agent.shared.cordis.yml, anchor: "- id: tool-schedule" }
       - { type: test, path: packages/bundle/cc-shell/tests/schedule-bundle.spec.ts }
     deviation:
       kind: downgrade
       summary: >-
         after_seconds / at / every_seconds (>=300s) supported; CC's
         cron-expression selectors are unsupported until the dsh-schedule
-        selector seam lands (upstream extension planned).
+        selector seam lands (upstream extension planned). The four reminder
+        tools are registered by the preset-scoped upstream
+        @deepseek-ai/dsh-tool-schedule row; delegated children still see the
+        names but every call is refused at execute time with
+        `subagent_session` (upstream's depth check), not by a tool-filter deny
+        list.
 
   engine.sleep:
     title: Sleep tool
@@ -2810,7 +2816,7 @@ capabilities:
         Not an upstream CC surface: a dsh-cc extension. The model-facing
         release_agent tool (and the symmetric /agents release <id> command)
         evicts a direct continuable child's resident activation through the
-        harness drainContinuableChildren seam — cooperatively, together with
+        harness drainChildren seam — cooperatively, together with
         the resident activations of any descendants — freeing the child's
         capacity slot when it was running; the durable session survives on
         disk, and the process-local [released] marker keeps /agents honest
@@ -2833,10 +2839,15 @@ capabilities:
     deviation:
       kind: divergent
       summary: >-
-        dsh-cc extension with no upstream CC equivalent: only RUNNING children
-        hold capacity slots (idle activations are evicted one-way but free no
-        slot; one-shot running occupants are not releasable and are disclosed
-        as such); same-session continuation of a released child is UNAVAILABLE
+        dsh-cc extension with no upstream CC equivalent. Capacity is the
+        harness pool's tree-wide RESIDENT count (configured to 25 on the
+        host-plane subagent row): running children, idle parents waiting on
+        child settlement, and cold-resumed children all hold a slot — a
+        follow-up to an already-resident child takes none — and the pool
+        throws ACTIVATION_LIMIT_REACHED with no queue. Releasing an idle
+        resident frees its slot; one-shot running occupants are not releasable
+        and are disclosed as such. Same-session continuation of a released
+        child is UNAVAILABLE
         (send_message resolves but runs no turn — the known upstream
         cold-resume-after-drain gap; cross-session resume after a drain is
         unverified); eviction is cooperative (a cancel-resistant turn keeps
@@ -2885,12 +2896,17 @@ capabilities:
       - { type: source, path: CLAUDE.md }
       - { type: source, path: packages/plugin/dsh-cc-agents/skills/dsh-cc-agents-orchestration/SKILL.md }
       - { type: source, path: packages/subagent/resume-pins/src/plugin.ts }
+      - { type: source, path: packages/subagent/task/src/composition-plan.ts }
+      - { type: test, path: packages/subagent/task/tests/integration.spec.ts }
     deviation:
       kind: divergent
       summary: >-
         subagent_type dispatch over per-workspace .claude/agents (persona =
         definition systemPrompt, alias routing via ccModelRoutes, sanitized
-        toolFilter, maxDepth 3, bundled explore/dsh-cc-guide agents, the
+        toolFilter applied to the child at agent/created by the dsh-cc
+        composition listener (harness 0.2.1 dropped per-spawn persona/tool
+        composition from the start request; the plan is persisted in the resume
+        pin so cold resume re-applies it), maxDepth 3, bundled explore/dsh-cc-guide agents, the
         bundled explore additionally carrying read-only serena symbol
         retrieval tools mcp__serena__find_symbol /
         find_referencing_symbols / get_symbols_overview) plus the

@@ -24,7 +24,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
@@ -40,24 +40,29 @@ afterEach(() => {
 })
 
 interface SubagentsSeam {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: {
+      prompt: readonly { type: 'text'; text: string }[]
+      parent: Agent
+      agentOptions?: Record<string, string>
+      maxDepth?: number
+    }
     signal: AbortSignal
-    agentOptions?: Record<string, string>
-    maxDepth?: number
-  }): Promise<{ id: unknown; localAgent: Agent | undefined; result: Promise<{ stopReason: string }> }>
+    delivery: 'parent' | 'caller'
+  }): Promise<{ childId: string; result: Promise<{ stopReason: string }>; dispose(): Promise<void> }>
 }
 
 /** Mount the real agent-loop stack + the routes service under one context. */
 async function setup(script: ConstructorParameters<typeof MockAdapter>[0]): Promise<{
+  ctx: Context
   adapter: MockAdapter
   parent: Agent
   subagents: SubagentsSeam
 }> {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'dsh-alias-effort-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -82,7 +87,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]): Prom
   // `agent/request` overlay listener being registered by apply().
   applyModelAliases(ctx, {})
   const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
-  return { adapter, parent, subagents: ctx.get('subagents') as SubagentsSeam }
+  return { ctx, adapter, parent, subagents: ctx.get('subagents') as SubagentsSeam }
 }
 
 const signal = new AbortController().signal
@@ -90,13 +95,17 @@ const signal = new AbortController().signal
 describe('alias-stamped reasoningEffort reaches the model request (integration)', () => {
   it('a spawned child with a stamped agentOptions requests with that effort (M1 canary)', async () => {
     const { adapter, parent, subagents } = await setup([textResponse('child done')])
-    const run = await subagents.start('spawn', {
+    const run = await subagents.startActivation({
+      provider: 'spawn',
       label: 'stamped-child',
-      prompt: [{ type: 'text', text: 'work' }],
-      parent,
+      request: {
+        prompt: [{ type: 'text', text: 'work' }],
+        parent,
+        agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
+        maxDepth: 3,
+      },
       signal,
-      agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
-      maxDepth: 3,
+      delivery: 'caller',
     })
     const settled = await run.result
     expect(settled.stopReason).toBe('completed')
@@ -110,11 +119,16 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
 
   it('a child without a stamp requests without an effort (no overlay, no leak)', async () => {
     const { adapter, parent, subagents } = await setup([textResponse('plain child')])
-    const run = await subagents.start('spawn', {
-      prompt: [{ type: 'text', text: 'work' }],
-      parent,
+    const run = await subagents.startActivation({
+      provider: 'spawn',
+      label: 'plain-child',
+      request: {
+        prompt: [{ type: 'text', text: 'work' }],
+        parent,
+        agentOptions: { provider: 'mock', model: 'glm-5.3' },
+      },
       signal,
-      agentOptions: { provider: 'mock', model: 'glm-5.3' },
+      delivery: 'caller',
     })
     await run.result
     expect(adapter.requests[0]).toMatchObject({ provider: 'mock', model: 'glm-5.3' })
@@ -139,12 +153,17 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
 
     // A fork child on the SAME route (mock/mock) restores 'high' from the seed
     // header — the alias stamp 'max' must win on the wire.
-    const run = await subagents.start('fork', {
-      prompt: [{ type: 'text', text: 'inherited work' }],
-      parent,
+    const run = await subagents.startActivation({
+      provider: 'fork',
+      label: 'fork-child',
+      request: {
+        prompt: [{ type: 'text', text: 'inherited work' }],
+        parent,
+        agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
+        maxDepth: 3,
+      },
       signal,
-      agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
-      maxDepth: 3,
+      delivery: 'caller',
     })
     const settled = await run.result
     expect(settled.stopReason).toBe('completed')
@@ -154,26 +173,41 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
   })
 
   it('a grandchild spawned without agentOptions inherits the same-route effort (upstream >=0.1.3 semantics)', async () => {
-    const { adapter, parent, subagents } = await setup([
-      textResponse('stamped child'),
+    // rc.5: the child's live Agent must be looked up while it is still
+    // resident (a settled child leaves the registry), so it hangs until its
+    // turn is disposed; the grandchild runs on the next script entry.
+    const { ctx, adapter, parent, subagents } = await setup([
+      'hang' as never,
       textResponse('grandchild'),
     ])
-    const child = await subagents.start('spawn', {
+    const child = await subagents.startActivation({
+      provider: 'spawn',
       label: 'stamped-parent-of-grandchild',
-      prompt: [{ type: 'text', text: 'work' }],
-      parent,
+      request: {
+        prompt: [{ type: 'text', text: 'work' }],
+        parent,
+        agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
+        maxDepth: 3,
+      },
       signal,
-      agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
-      maxDepth: 3,
+      delivery: 'caller',
     })
-    await child.result
-    expect(child.localAgent).toBeDefined()
+    // Continuable by construction here (not disposed): the child stays
+    // resident mid-turn as the grandchild's parent. rc.5: no localAgent on
+    // the activation — the live child Agent resolves through the registry.
+    const childAgent = ctx.agents.get(child.childId)
+    expect(childAgent).toBeDefined()
 
-    const grandchild = await subagents.start('spawn', {
-      prompt: [{ type: 'text', text: 'nested work' }],
-      parent: child.localAgent!,
+    const grandchild = await subagents.startActivation({
+      provider: 'spawn',
+      label: 'grandchild',
+      request: {
+        prompt: [{ type: 'text', text: 'nested work' }],
+        parent: childAgent!,
+        maxDepth: 3,
+      },
       signal,
-      maxDepth: 3,
+      delivery: 'caller',
     })
     await grandchild.result
     expect(adapter.requests).toHaveLength(2)
@@ -188,5 +222,6 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
       model: 'glm-5.3',
       reasoningEffort: 'max',
     })
+    await child.dispose().catch(() => {})
   })
 })

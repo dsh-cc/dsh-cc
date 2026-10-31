@@ -12,7 +12,7 @@
  * @module @dsh-cc/subagent-task/background-start
  */
 
-import { acquireLiveCapacity, assertLiveCapacity, LIVE_CAPACITY_REFUSAL, MAX_LIVE_CONTINUABLE_CHILDREN } from './live-capacity.ts'
+import { acquireLiveCapacity, LIVE_CAPACITY_REFUSAL, MAX_LIVE_CONTINUABLE_CHILDREN, capacityErrorRefusal } from './live-capacity.ts'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -21,14 +21,15 @@ import type { AgentDefinition, ToolRestriction } from '@dsh-cc/claude-code-agent
 import { cwdOf } from '@dsh-cc/memory'
 import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
 import { collectFirstEpoch, type EpochEventBus } from './epoch-collector.ts'
+import { planComposition, type ChildComposition } from './composition-plan.ts'
 import { promoteGraceTier, recordGraceEntry } from './grace-window.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
 
 /** Fresh-child provider: no parent conversation (CC Task default). */
 export const PROVIDER_SPAWN = 'spawn'
 
-// The capacity cap, its refusal literal, and the guards live in live-capacity.ts.
-export { acquireLiveCapacity, assertLiveCapacity, LIVE_CAPACITY_REFUSAL, MAX_LIVE_CONTINUABLE_CHILDREN }
+// The capacity cap, its refusal literal, and the admission lease live in live-capacity.ts.
+export { acquireLiveCapacity, LIVE_CAPACITY_REFUSAL, MAX_LIVE_CONTINUABLE_CHILDREN, capacityErrorRefusal }
 
 /**
  * The env kill switch (UX plan §3.4): a non-empty value other than
@@ -37,44 +38,41 @@ export { acquireLiveCapacity, assertLiveCapacity, LIVE_CAPACITY_REFUSAL, MAX_LIV
 export const CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = 'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS'
 
 /** A structural subset of the subagents seam the tool dispatches through. */
-export interface ContinuableStart {
+export interface ActivationLike {
+  /** Durable id of the accepted child (its session id for local children). */
   childId: string
-  messageId: string
+  /** Accepted inbox message id (local children). */
+  messageId?: string
+  /** Terminal outcome after teardown settles; rejects on infrastructure faults. */
+  result: Promise<{ stopReason: string; output?: readonly { type: string; text?: string }[] }>
+  /** Stop and release this exact activation; idempotent. */
+  dispose(): Promise<void>
 }
 
 export interface SubagentsLike {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
-    signal: AbortSignal
-    agentOptions?: Record<string, string>
-    toolFilter?: ToolRestriction
-    maxDepth?: number
-    persona?: string
-  }): Promise<{
-    result: Promise<{ stopReason: string; output?: readonly { type: string; text?: string }[] }>
-  }>
   /**
-   * Duck-typed continuable-creation entry (harness `ctx.subagents.startContinuable`):
-   * establishes a durable child that accepts follow-up turns by its `childId`.
-   * A seam without it cannot serve background dispatch.
+   * Duck-typed activation entry (harness `ctx.subagents.startActivation`):
+   * establishes a child under a registered provider and returns its
+   * identities, result, and disposal. `delivery: 'parent'` wakes the parent at
+   * settlement (the continuable/background lanes); `'caller'` only resolves
+   * the returned result (the one-shot lanes). The spec `signal` covers
+   * cancellation before publication only; later abort goes through
+   * `dispose()`.
    */
-  startContinuable?(spec: {
+  startActivation(spec: {
     provider: string
     label: string
-    /** Caller-reserved durable id (becomes the child's session id). */
+    /** Caller-reserved durable id (becomes the child's session id; local backends only). */
     childId?: string
     request: {
       prompt: readonly { type: 'text'; text: string }[]
       parent: Agent
       agentOptions?: Record<string, string>
-      toolFilter?: ToolRestriction
       maxDepth?: number
-      persona?: string
     }
     signal: AbortSignal
-  }): Promise<ContinuableStart>
+    delivery: 'parent' | 'caller'
+  }): Promise<ActivationLike>
   getProvider(name: string): unknown
   list(): string[]
   /**
@@ -102,8 +100,10 @@ interface ProviderLike {
 }
 
 /**
- * The background request shape: everything `startContinuable` forwards except
+ * The background request shape: everything `startActivation` forwards except
  * the provider/label envelope and the signal, which live at the spec level.
+ * Persona and tool restriction no longer travel on the start request — the
+ * composition slice applies them to the child (plan C5).
  */
 export type BackgroundRequest = {
   label: string
@@ -111,9 +111,7 @@ export type BackgroundRequest = {
   parent: Agent
   signal: AbortSignal
   maxDepth?: number
-  persona?: string
   agentOptions?: Record<string, string>
-  toolFilter?: ToolRestriction
   /**
    * Caller-reserved durable child id — preallocated by the capture flow so
    * the pin can be written before the child exists (plan §4.5 step 1).
@@ -129,6 +127,17 @@ export type BackgroundRequest = {
    * default. `0` disables arming; identity-checked, never truthy-tested.
    */
   autoReleaseMs?: number
+  /**
+   * rc.5 composition bridge: persona + sanitized filter applied at
+   * `agent/created` (never forwarded to the seam).
+   */
+  composition?: ChildComposition
+  /**
+   * The definition's RAW tool filter for pin capture. The pin records what the
+   * definition asked for (not the sanitized live set), so the resume gate can
+   * still detect a pinned tool that disappeared from the composition.
+   */
+  captureToolFilter?: ToolRestriction
 }
 
 /**
@@ -192,12 +201,12 @@ export function preparedBackground(
 
 /** Capability checks shared by `startBackground` and the collect path. */
 export function assertContinuableCapable(seam: SubagentsLike): void {
-  if (typeof seam.startContinuable !== 'function') {
+  if (typeof seam.startActivation !== 'function') {
     throw new Error(
       'background subagents are unavailable: the subagents seam does not expose '
-      + 'startContinuable. Background subagents require a subagent service with the '
+      + 'startActivation. Background subagents require a subagent service with the '
       + 'continuable-creation capability (prepareContinuable on the provider) and a '
-      + 'session-persistence backend; run this Task in the foreground instead.',
+      + 'session-persistence backend.',
     )
   }
   const provider = seam.getProvider(PROVIDER_SPAWN) as ProviderLike | undefined
@@ -206,9 +215,18 @@ export function assertContinuableCapable(seam: SubagentsLike): void {
       `background subagents are unavailable: provider "${PROVIDER_SPAWN}" does not support `
       + 'continuable children (UNSUPPORTED_CAPABILITY: no prepareContinuable). Background '
       + 'subagents require a provider that implements the continuable-creation capability '
-      + 'and a session-persistence backend; run this Task in the foreground instead.',
+      + 'and a session-persistence backend.',
     )
   }
+}
+
+/** The capability-gap throw shapes the dispatch lanes remap to actionable copy (harness `SubagentError` carries the code off-message; legacy seams inline it). */
+function isContinuableCapabilityError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  if ((error as { code?: unknown }).code === 'UNSUPPORTED_CAPABILITY') return true
+  const message = String((error as { message?: unknown }).message ?? error)
+  return message.includes('UNSUPPORTED_CAPABILITY') || message.includes('does not support continuable')
+    || message.includes('reserved child ids require a local backend')
 }
 
 
@@ -231,7 +249,7 @@ export async function collectForeground(
   if (agent === undefined) {
     throw new Error('subagent_fork requires a calling agent (exec.agent was undefined)')
   }
-  const lease = await acquireLiveCapacity(seam, agent, exec.signal)
+  const lease = await acquireLiveCapacity(agent, exec.signal)
   // F-1: held until the creation call settles (the `start` callback below), or
   // until any earlier failure unwinds; idempotent.
   try {
@@ -246,6 +264,7 @@ export async function collectForeground(
     // preallocates one — via the capture flow when pins are armed, otherwise a
     // fresh id (the child's session id, exactly as the harness would mint it).
     const durableChildId = childId ?? randomUUID()
+    if (request.composition !== undefined) planComposition(durableChildId, request.composition)
     // §4.5 step 2 (parity with startBackground): the pin is written BEFORE the
     // creation call; capture trouble becomes an explicit captureWarning line.
     let captureWarning: string | undefined
@@ -257,7 +276,8 @@ export async function collectForeground(
         definition: captureDefinition,
         selector: captureSelector,
         parentRoute: parent.options,
-        toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
+        ...(rest.captureToolFilter !== undefined ? { toolFilter: rest.captureToolFilter } : {}),
+        ...(rest.composition?.persona !== undefined ? { persona: rest.composition.persona } : {}),
         cwd: cwdOf(parent),
         dispatchTier: 'foreground',
         ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
@@ -299,19 +319,20 @@ export async function collectForeground(
         },
         start: async () => {
           try {
-            await seam.startContinuable!({
+            // Continuable child: stays resident after settle for send_message
+            // — never disposed here (dispose policy: one-shot lanes only).
+            await seam.startActivation({
               provider: PROVIDER_SPAWN,
               label,
               childId: durableChildId,
               request: {
                 prompt,
                 parent,
-                ...('persona' in rest ? { persona: rest.persona } : {}),
-                ...('toolFilter' in rest ? { toolFilter: rest.toolFilter } : {}),
                 ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
                 ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
               },
               signal,
+              delivery: 'parent',
             })
           } catch (error) {
             startFailed = true
@@ -331,13 +352,16 @@ export async function collectForeground(
       // non-`completed` epoch terminal or an abort keeps the child (it is
       // resumable), so no tombstone on those.
       if (startFailed && capture !== undefined && childId !== undefined) await capture.tombstone(childId)
+      if (startFailed) {
+        const capacity = capacityErrorRefusal(error)
+        if (capacity !== undefined) throw capacity
+      }
       const message = (error as Error).message ?? String(error)
-      if (startFailed
-        && (message.includes('UNSUPPORTED_CAPABILITY') || message.includes('does not support continuable'))) {
+      if (startFailed && isContinuableCapabilityError(error)) {
         throw new Error(
           `background subagents are unavailable: ${message}. Background subagents require a `
           + 'provider that implements the continuable-creation capability (prepareContinuable) '
-          + 'and a session-persistence backend; run this Task in the foreground instead.',
+          + 'and a session-persistence backend.',
         )
       }
       throw error
@@ -350,12 +374,13 @@ export async function collectForeground(
 
 /**
  * Dispatch a background call as a durable continuable child on the `spawn`
- * provider. The definition folding (persona, sanitized toolFilter,
- * alias-resolved agentOptions, maxDepth) happened before this call — cold
+ * provider. The definition fold (alias-resolved agentOptions, maxDepth — the
+ * composition slice owns persona/toolFilter) happened before this call — cold
  * resume never re-captures the parent's policy, so the creation input must
  * already be final. Resolves once the child accepted its initial prompt.
- * Capability gaps (seam without `startContinuable`, provider without
- * `prepareContinuable`) surface as actionable tool errors naming the cause.
+ * Capability gaps (seam without `startActivation`, provider without
+ * `prepareContinuable`) and a full harness residency pool
+ * (ACTIVATION_LIMIT_REACHED) surface as actionable tool errors naming the cause.
  */
 export async function startBackground(
   seam: SubagentsLike,
@@ -364,15 +389,20 @@ export async function startBackground(
 ): Promise<{ text: string; status: 'async_launched'; agentId: string }> {
   assertContinuableCapable(seam)
   const { label, prompt, parent, signal, childId, captureDefinition, captureSelector, ...rest } = request
-  // §3.6 capacity guard: refuse before any pin write or creation call.
-  // F-1: check + creation are ONE critical section per parent; the lease is
-  // released as soon as the creation call settled (not at child end).
-  const lease = await acquireLiveCapacity(seam, parent, signal)
-  let started: ContinuableStart
+  // F-1: admission + creation are ONE critical section per parent; the lease
+  // is released as soon as the creation call settled (not at child end). The
+  // capacity refusal itself comes from the harness pool throwing
+  // ACTIVATION_LIMIT_REACHED inside startActivation (mapped below).
+  const lease = await acquireLiveCapacity(parent, signal)
+  // Reserve an id even without pin capture: the composition plan must be keyed
+  // before the agent is announced (and the resumed descriptor carries no
+  // composition of its own).
+  const durableChildId = childId ?? randomUUID()
+  let started: ActivationLike
   let captureWarning: string | undefined
   // R9 grace-window membership, tier stamped INSIDE this entry point. With a
   // preallocated id this lands BEFORE the creation await; without one the id
-  // only exists once `startContinuable` resolves (and no `subagent/end` can
+  // only exists once `startActivation` resolves (and no `subagent/end` can
   // fire before that — startBackground has no collect race).
   const recordTier = (childId: string): void => {
     recordGraceEntry({
@@ -395,38 +425,43 @@ export async function startBackground(
         definition: captureDefinition,
         selector: captureSelector,
         parentRoute: parent.options,
-        toolFilter: 'toolFilter' in rest ? rest.toolFilter : undefined,
+        ...(rest.captureToolFilter !== undefined ? { toolFilter: rest.captureToolFilter } : {}),
+        ...(rest.composition?.persona !== undefined ? { persona: rest.composition.persona } : {}),
         cwd: cwdOf(parent),
         dispatchTier: 'background',
         ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
       })
     }
-    if (childId !== undefined) recordTier(childId)
+    if (rest.composition !== undefined) planComposition(durableChildId, rest.composition)
+    recordTier(durableChildId)
     try {
-      started = await seam.startContinuable!({
+      // Continuable child: stays resident after settle for send_message —
+      // never disposed here (dispose policy: one-shot lanes only).
+      started = await seam.startActivation({
         provider: PROVIDER_SPAWN,
         label,
-        ...(childId !== undefined ? { childId } : {}),
+        childId: durableChildId,
         request: {
           prompt,
           parent,
-          ...('persona' in rest ? { persona: rest.persona } : {}),
-          ...('toolFilter' in rest ? { toolFilter: rest.toolFilter } : {}),
           ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
           ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
         },
         signal,
+        delivery: 'parent',
       })
     } catch (error) {
       // §4.5 step 4: the creation rolled back fully (no child id), so the pin
       // must not survive it — tombstone, then rethrow the error unchanged.
       if (capture !== undefined && childId !== undefined) await capture.tombstone(childId)
+      const capacity = capacityErrorRefusal(error)
+      if (capacity !== undefined) throw capacity
       const message = (error as Error).message ?? String(error)
-      if (message.includes('UNSUPPORTED_CAPABILITY') || message.includes('does not support continuable')) {
+      if (isContinuableCapabilityError(error)) {
         throw new Error(
           `background subagents are unavailable: ${message}. Background subagents require a `
           + 'provider that implements the continuable-creation capability (prepareContinuable) '
-          + 'and a session-persistence backend; run this Task in the foreground instead.',
+          + 'and a session-persistence backend.',
         )
       }
       throw error
@@ -434,7 +469,6 @@ export async function startBackground(
   } finally {
     lease()
   }
-  if (childId === undefined) recordTier(started.childId)
   return {
     text:
       `Background subagent started (agentId: ${started.childId}). It is running in the `

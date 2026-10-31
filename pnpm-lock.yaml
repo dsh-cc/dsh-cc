@@ -290,6 +290,9 @@ importers:
       '@deepseek-ai/dsh-tool-lsp':
         specifier: link:../../../../deepseek-harness/packages/lsp/tool-lsp
         version: link:../../../../deepseek-harness/packages/lsp/tool-lsp
+      '@deepseek-ai/dsh-tool-schedule':
+        specifier: link:../../../../deepseek-harness/packages/schedule/tool-schedule
+        version: link:../../../../deepseek-harness/packages/schedule/tool-schedule
       '@deepseek-ai/dsh-tool-subagent-control':
         specifier: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
         version: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
@@ -378,9 +381,6 @@ importers:
       '@deepseek-ai/dsh-compaction-basic':
         specifier: link:../../../../deepseek-harness/packages/compaction/compaction-basic
         version: link:../../../../deepseek-harness/packages/compaction/compaction-basic
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -427,9 +427,6 @@ importers:
       '@deepseek-ai/dsh-compaction':
         specifier: link:../../../../deepseek-harness/packages/compaction/compaction
         version: link:../../../../deepseek-harness/packages/compaction/compaction
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -475,9 +472,6 @@ importers:
       '@deepseek-ai/dsh-compaction':
         specifier: link:../../../../deepseek-harness/packages/compaction/compaction
         version: link:../../../../deepseek-harness/packages/compaction/compaction
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -610,9 +604,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-scope':
         specifier: link:../../../../deepseek-harness/packages/core/scope
         version: link:../../../../deepseek-harness/packages/core/scope
@@ -724,9 +715,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -779,9 +767,6 @@ importers:
       '@deepseek-ai/dsh-compaction':
         specifier: link:../../../../deepseek-harness/packages/compaction/compaction
         version: link:../../../../deepseek-harness/packages/compaction/compaction
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -952,9 +937,6 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: link:../../../../deepseek-harness/packages/fs/fs-local
         version: link:../../../../deepseek-harness/packages/fs/fs-local
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -976,9 +958,6 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../../../deepseek-harness/packages/core/agent
         version: link:../../../../deepseek-harness/packages/core/agent
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1000,9 +979,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1021,9 +997,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1042,9 +1015,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1084,9 +1054,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1126,9 +1093,6 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../../../deepseek-harness/packages/core/agent
         version: link:../../../../deepseek-harness/packages/core/agent
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1153,6 +1117,9 @@ importers:
       '@deepseek-ai/dsh-util-values':
         specifier: link:../../../../deepseek-harness/packages/util/values
         version: link:../../../../deepseek-harness/packages/util/values
+      '@deepseek-ai/dsh-working-directory':
+        specifier: link:../../../../deepseek-harness/packages/session/working-directory
+        version: link:../../../../deepseek-harness/packages/session/working-directory
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -1205,9 +1172,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1239,9 +1203,6 @@ importers:
       '@deepseek-ai/dsh-bash-local':
         specifier: link:../../../../deepseek-harness/packages/shell/bash-local
         version: link:../../../../deepseek-harness/packages/shell/bash-local
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-jobs':
         specifier: link:../../../../deepseek-harness/packages/jobs/jobs
         version: link:../../../../deepseek-harness/packages/jobs/jobs
@@ -1364,9 +1325,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1423,9 +1381,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1491,9 +1446,6 @@ importers:
       '@deepseek-ai/dsh-compaction-basic':
         specifier: link:../../../../deepseek-harness/packages/compaction/compaction-basic
         version: link:../../../../deepseek-harness/packages/compaction/compaction-basic
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1519,9 +1471,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1550,9 +1499,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-sandbox':
         specifier: link:../../../../deepseek-harness/packages/sandbox/sandbox
         version: link:../../../../deepseek-harness/packages/sandbox/sandbox
@@ -1584,9 +1530,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1615,9 +1558,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1640,9 +1580,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1671,9 +1608,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1708,9 +1642,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1754,9 +1685,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-plan-mode':
         specifier: link:../../../../deepseek-harness/packages/plan/plan-mode
         version: link:../../../../deepseek-harness/packages/plan/plan-mode
@@ -1794,9 +1722,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1850,9 +1775,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1878,9 +1800,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1906,9 +1825,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -1937,9 +1853,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -1971,9 +1884,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-permission-presets':
         specifier: link:../../../../deepseek-harness/packages/interaction/permission-presets
         version: link:../../../../deepseek-harness/packages/interaction/permission-presets
@@ -2002,9 +1912,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-jobs':
         specifier: link:../../../../deepseek-harness/packages/jobs/jobs
         version: link:../../../../deepseek-harness/packages/jobs/jobs
@@ -2036,9 +1943,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
@@ -2140,15 +2044,15 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-scope':
+        specifier: link:../../../../deepseek-harness/packages/core/scope
+        version: link:../../../../deepseek-harness/packages/core/scope
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
         version: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
-      '@deepseek-ai/dsh-scope':
-        specifier: link:../../../../deepseek-harness/packages/core/scope
-        version: link:../../../../deepseek-harness/packages/core/scope
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2186,9 +2090,6 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../../../deepseek-harness/packages/core/agent
         version: link:../../../../deepseek-harness/packages/core/agent
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -2608,9 +2509,6 @@ importers:
       '@deepseek-ai/dsh-credentials-local':
         specifier: link:../../../../deepseek-harness/packages/credentials/credentials-local
         version: link:../../../../deepseek-harness/packages/credentials/credentials-local
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -2651,9 +2549,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2688,9 +2583,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -2746,9 +2638,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-jobs':
         specifier: link:../../../../deepseek-harness/packages/jobs/jobs
         version: link:../../../../deepseek-harness/packages/jobs/jobs
@@ -3089,6 +2978,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-tool-schedule':
+        specifier: link:../../../../deepseek-harness/packages/schedule/tool-schedule
+        version: link:../../../../deepseek-harness/packages/schedule/tool-schedule
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
@@ -3108,9 +3000,6 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -3133,9 +3022,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -3173,9 +3059,6 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: link:../../../../deepseek-harness/packages/fs/fs-local
         version: link:../../../../deepseek-harness/packages/fs/fs-local
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -3256,9 +3139,6 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: link:../../../../deepseek-harness/packages/interaction/commands
         version: link:../../../../deepseek-harness/packages/interaction/commands
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -3283,9 +3163,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -3333,9 +3210,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-skill':
         specifier: link:../../../../deepseek-harness/packages/skill/skill
         version: link:../../../../deepseek-harness/packages/skill/skill
@@ -3415,9 +3289,6 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
         version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -3568,9 +3439,6 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: link:../../../../deepseek-harness/packages/fs/fs-local
         version: link:../../../../deepseek-harness/packages/fs/fs-local
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -3610,6 +3478,9 @@ importers:
       '@deepseek-ai/dsh-tool-subagent-control':
         specifier: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
         version: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
+      '@deepseek-ai/dsh-working-directory':
+        specifier: link:../../../../deepseek-harness/packages/session/working-directory
+        version: link:../../../../deepseek-harness/packages/session/working-directory
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -3667,12 +3538,18 @@ importers:
       '@deepseek-ai/dsh-subprocess-local':
         specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
         version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: link:../../../../deepseek-harness/packages/core/system-prompt
+        version: link:../../../../deepseek-harness/packages/core/system-prompt
       '@deepseek-ai/dsh-workflow':
         specifier: link:../../../../deepseek-harness/packages/workflow/workflow
         version: link:../../../../deepseek-harness/packages/workflow/workflow
       '@deepseek-ai/dsh-workflow-ptc':
         specifier: link:../../../../deepseek-harness/packages/workflow/workflow-ptc
         version: link:../../../../deepseek-harness/packages/workflow/workflow-ptc
+      '@deepseek-ai/dsh-working-directory':
+        specifier: link:../../../../deepseek-harness/packages/session/working-directory
+        version: link:../../../../deepseek-harness/packages/session/working-directory
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -3732,8 +3609,8 @@ importers:
         version: 4.5.4
     devDependencies:
       '@earendil-works/pi-ai':
-        specifier: ^0.87.1
-        version: 0.87.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)
+        specifier: 1.1.0
+        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.5.4)
 
   packages/test-support/token-efficiency:
     dependencies:
@@ -3875,9 +3752,6 @@ importers:
       '@deepseek-ai/dsh-config-editor':
         specifier: link:../../../../deepseek-harness/packages/boot/config-editor
         version: link:../../../../deepseek-harness/packages/boot/config-editor
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -3953,9 +3827,6 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: link:../../../../deepseek-harness/packages/fs/fs-local
         version: link:../../../../deepseek-harness/packages/fs/fs-local
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -3994,8 +3865,8 @@ packages:
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
-  '@anthropic-ai/sdk@0.124.0':
-    resolution: {integrity: sha512-cN5O8i9UVxHeOQAzj/XjshWXG8KiibJDw9OGpH2Z/eR3n/RBxdoLxDJOcfqAJWvjaMDFfHTBADU04hWRJVkDyA==}
+  '@anthropic-ai/sdk@0.129.0':
+    resolution: {integrity: sha512-MH7LB20kNpGLUpPTe2OG5XvL/KhX8HUO9XyBaFjgFk6TLS4Xjt0VPIuMKywe7POKKPslX+QxSlVok9e+8kG5Nw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -4116,13 +3987,13 @@ packages:
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
 
-  '@earendil-works/pi-ai@0.87.1':
-    resolution: {integrity: sha512-X/3PfQBnnoeVdO9Cv8zHghUMglzlgNZYGNzoPnbRoGnHl3Rw3TlA2UKSUB7BRHUOxMryHXYa8dnjWZlbRheDZA==}
+  '@earendil-works/pi-ai@1.1.0':
+    resolution: {integrity: sha512-1T7LAkc/5Bvc0v6w4vAGVdCrli0o/E0pEmYKTnixu95vSFArBjvbhS/G4ZwI0RUePgf0Imcu0VyqlM4EcXxqfw==}
     engines: {node: '>=22.19.0'}
     hasBin: true
 
-  '@earendil-works/pi-telemetry@0.87.1':
-    resolution: {integrity: sha512-MC6TRQH5lgMXpcN+Vku2WMI2T8BsiUPzMQHGo81uqFZD3/9O79WWJAysEDGuzduP6R4tvtgwMLwmqIxynM10JQ==}
+  '@earendil-works/pi-telemetry@1.4.0':
+    resolution: {integrity: sha512-MLIfowwUYIY65jSjMX82paZOrX/NTvLk6D08h+3Jq42a99RzUOewzuCR0zOlPul3D6UBfddat76VT6LvsHEs1w==}
     engines: {node: '>=22.19.0'}
 
   '@emnapi/core@1.10.0':
@@ -5348,12 +5219,25 @@ packages:
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
-  openai@6.40.0:
-    resolution: {integrity: sha512-MWtTjd/gQt4jpbji61NTgFWJLoY/PdRJ6wG9/ZDRMYNMlBKrCrSlkLI+KgHP1vR1qT6LKSAyAqIxno6lcK9JiA==}
+  openai@7.19.0:
+    resolution: {integrity: sha512-MX2s3u2L5racTO0CC/SWpCOasJQBCJrqLKXK+l82cAhdeF8mPMBEe/gxMm0ZFa2xpKpOFLRjxv5afYEZbBXmbQ==}
+    engines: {node: '>=22.0.0'}
     peerDependencies:
-      ws: ^8.18.0
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      undici: '>=5 <9'
+      ws: ^8.21.0
       zod: ^3.25 || ^4.0
     peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      undici:
+        optional: true
       ws:
         optional: true
       zod:
@@ -5822,7 +5706,7 @@ snapshots:
     dependencies:
       zod: 4.5.4
 
-  '@anthropic-ai/sdk@0.124.0(zod@4.5.4)':
+  '@anthropic-ai/sdk@0.129.0(zod@4.5.4)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1
@@ -6039,28 +5923,32 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
-  '@earendil-works/pi-ai@0.87.1(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(ws@8.21.3)(zod@4.5.4)':
+  '@earendil-works/pi-ai@1.1.0(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.5.4)':
     dependencies:
-      '@anthropic-ai/sdk': 0.124.0(zod@4.5.4)
+      '@anthropic-ai/sdk': 0.129.0(zod@4.5.4)
       '@aws-sdk/client-bedrock-runtime': 3.1127.0
-      '@earendil-works/pi-telemetry': 0.87.1
+      '@earendil-works/pi-telemetry': 1.4.0
       '@google/genai': 2.21.0(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))
       '@smithy/node-http-handler': 4.12.1
       http-proxy-agent: 9.1.0
       https-proxy-agent: 9.1.0
-      openai: 6.40.0(ws@8.21.3)(zod@4.5.4)
+      openai: 7.19.0(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.5.4)
       partial-json: 0.1.7
       typebox: 1.3.27
     transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
       - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
       - bufferutil
       - kerberos
       - supports-color
+      - undici
       - utf-8-validate
       - ws
       - zod
 
-  '@earendil-works/pi-telemetry@0.87.1': {}
+  '@earendil-works/pi-telemetry@1.4.0': {}
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -7164,8 +7052,10 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@6.40.0(ws@8.21.3)(zod@4.5.4):
+  openai@7.19.0(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.5.4):
     optionalDependencies:
+      '@aws-sdk/credential-provider-node': 3.972.83
+      '@smithy/signature-v4': 5.7.3
       ws: 8.21.3
       zod: 4.5.4
 

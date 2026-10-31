@@ -24,6 +24,7 @@ import {
   registeredCollectorCount,
 } from './epoch-collector.ts'
 import { SpawnPinCapture, type ResumePinsConfig } from './resume-capture.ts'
+import { installCompositionListener, type ChildComposition } from './composition-plan.ts'
 import { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex } from './plugin-agents.ts'
 import { registerTaskTool } from './tool.ts'
@@ -181,7 +182,7 @@ export const BACKGROUND_SECTION_TEXT = [
   '- `subagent_type: "fork"` cannot run in the background (upstream harness issue #2124); use a',
   '  plain background spawn instead.',
   '- Exiting your session drains every background child\'s in-flight turn (whole-forest teardown); its persisted session survives on disk — a child that settled on its own stays cold-resumable, but a DRAINED child does not resume on the next send_message (known upstream gap; cross-session resume after a drain is unverified).',
-  '- A background child holds one of 25 live-child capacity slots while it is running; settled children free theirs automatically. Continuing a settled child through send_message admits a fresh activation, so at the cap it is refused with the same remedy. A settled child auto-releases after its inactivity grace window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so send_message promptly if you plan to continue it. release_agent <id> remains the interactive override for a RUNNING child: it evicts the resident activation (and resident descendants\') one-way — same-session continuation is unavailable after release; its persisted session survives; eviction is cooperative — a cancel-resistant turn keeps its slot until it settles.',
+  '- A background child holds one of 25 tree-wide resident capacity slots until it is disposed or released — running children, idle parents waiting on child settlement, and cold-resumed children all count; a send_message follow-up to an already-resident child takes no new slot, while a cold resume of a settled child needs one and is refused at the cap with the same remedy. A settled child auto-releases after its inactivity grace window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so send_message promptly if you plan to continue it. release_agent <id> remains the interactive override for a RUNNING child: it evicts the resident activation (and resident descendants\') one-way — same-session continuation is unavailable after release; its persisted session survives; eviction is cooperative — a cancel-resistant turn keeps its slot until it settles.',
 ].join('\n')
 
 /**
@@ -240,6 +241,24 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
         ? new SpawnPinCapture(ctx, sharedStore)
         : undefined
       : new SpawnPinCapture(ctx, sharedStore ?? pins.store ?? new PinStore(pins.pinsRoot))
+  // rc.5 composition bridge (plan C5): apply persona/toolFilter to every child
+  // at `agent/created`. Resumed children re-materialize from a descriptor that
+  // no longer records composition, so a fresh process recovers it from the pin.
+  installCompositionListener(ctx, (childId: string): ChildComposition | undefined => {
+    const pin = capture?.store.read(childId)
+    if (pin === undefined || !('childId' in pin)) return undefined
+    const persona = pin.persona
+    const allow = pin.toolFilter.allow
+    const deny = pin.toolFilter.deny
+    const toolFilter = allow.length > 0 || deny.length > 0
+      ? { ...(allow.length > 0 ? { allow } : {}), ...(deny.length > 0 ? { deny } : {}) }
+      : undefined
+    if (persona === undefined && toolFilter === undefined) return undefined
+    return {
+      ...(persona !== undefined ? { persona } : {}),
+      ...(toolFilter !== undefined ? { toolFilter } : {}),
+    }
+  })
   // One PluginAgentIndex serves both dispatch and catalog; it reads the seam
   // lazily on every call so effect-scoped plugin mounts after apply() are seen.
   const pluginIndex = new PluginAgentIndex(ctx)

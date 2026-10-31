@@ -67,7 +67,7 @@ function makeFsMock(seed: Record<string, string> = {}) {
 
 function mount(config: { fs?: unknown; sessionsRoot?: string; withSeams?: boolean } = {}) {
   const ctx = new Context()
-  const subagents = { start: vi.fn() }
+  const subagents = { startActivation: vi.fn() }
   const fs = config.fs ?? makeFsMock()
   if (config.withSeams !== false) {
     ctx.provide('subagents' as never, subagents as never)
@@ -127,7 +127,7 @@ describe('dream dispatch diagnostics', () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, subagents, fs } = mount({ fs: makeFsMock({ [LOCK]: '1\n0\n' }) })
     const warnSpy = vi.spyOn(ctx.logger, 'warn')
-    subagents.start.mockRejectedValue(new Error('boom'))
+    subagents.startActivation.mockRejectedValue(new Error('boom'))
 
     await stopTurn(ctx, fakeAgent('/mem'))
 
@@ -148,7 +148,7 @@ describe('dream dispatch diagnostics', () => {
   it('an outcome-failed dream (stopReason error) rolls the lock back and writes an outcome-failed breadcrumb', async () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, subagents, fs } = mount()
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ stopReason: 'error' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ stopReason: 'error' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => expect(fs.backing.get(LOCK)).toBe('0\n0\n'))
@@ -185,7 +185,7 @@ describe('dream dispatch diagnostics', () => {
     }
     const { ctx, subagents } = mount({ fs })
     const warnSpy = vi.spyOn(ctx.logger, 'warn')
-    subagents.start.mockRejectedValue(new Error('boom'))
+    subagents.startActivation.mockRejectedValue(new Error('boom'))
 
     await expect(stopTurn(ctx, fakeAgent('/mem'))).resolves.toBeUndefined()
 
@@ -212,7 +212,7 @@ describe('dream dispatch diagnostics', () => {
   it('a never-settling fork leaves the diagnostic at dispatch-started (hang is distinguishable)', async () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, subagents, fs } = mount()
-    subagents.start.mockImplementation(async () => ({ result: new Promise(() => {}) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: new Promise(() => {}) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => expect(diagnosticOf(fs).phase).toBe('dispatch-started'))
@@ -234,10 +234,13 @@ describe('dream bounded retry (design §4.2)', () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, subagents, fs } = mount()
     const spawnCount = { n: 0 }
-    subagents.start.mockImplementation(async () => {
+    subagents.startActivation.mockImplementation(async () => {
       spawnCount.n += 1
-      if (spawnCount.n === 1) return { result: Promise.resolve({ stopReason: 'error' }) }
+      if (spawnCount.n === 1) return { childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ stopReason: 'error' }) }
       return {
+        childId: 'job-child',
+        messageId: 'job-m',
+        dispose: () => Promise.resolve(),
         result: Promise.resolve({
           structured: { writes: [{ path: 'MEMORY.md', content: '# index\n' }, { path: 'topic-a.md', content: 'fact\n' }] },
           stopReason: 'completed',
@@ -254,18 +257,18 @@ describe('dream bounded retry (design §4.2)', () => {
     expect(fs.backing.get(`${DIR}/MEMORY.md`)).toBe('# index\n')
     expect(fs.backing.get(`${DIR}/topic-a.md`)).toBe('fact\n')
     expect(fs.backing.get(DIAG)).toBeDefined()
-    expect(subagents.start).toHaveBeenCalledTimes(2) // one dispatch window, two spawn calls (attempt + retry)
+    expect(subagents.startActivation).toHaveBeenCalledTimes(2) // one dispatch window, two spawn calls (attempt + retry)
   })
 
   it('retry also fails: exactly two spawns, rollback, no third attempt', async () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, subagents, fs } = mount()
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ stopReason: 'error' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ stopReason: 'error' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => expect(fs.backing.get(LOCK)).toBe('0\n0\n'))
 
-    expect(subagents.start).toHaveBeenCalledTimes(2)
+    expect(subagents.startActivation).toHaveBeenCalledTimes(2)
     const entry = diagnosticOf(fs)
     expect(entry.phase).toBe('outcome-failed')
     expect(String(entry.detail)).toContain('retry')
@@ -276,9 +279,9 @@ describe('dream bounded retry (design §4.2)', () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, subagents, fs } = mount()
     let n = 0
-    subagents.start.mockImplementation(async () => {
+    subagents.startActivation.mockImplementation(async () => {
       n += 1
-      if (n === 1) return { result: Promise.resolve({ stopReason: 'error' }) }
+      if (n === 1) return { childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ stopReason: 'error' }) }
       throw new Error('retry dispatch exploded')
     })
 
@@ -295,7 +298,7 @@ describe('dream bounded retry (design §4.2)', () => {
     await seedFresh(tmpRoot, 5)
     const { ctx, subagents, fs } = mount()
     const pending = Promise.withResolvers<never>()
-    subagents.start.mockImplementation(async () => ({ result: pending.promise }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: pending.promise }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => expect(fs.backing.get(LOCK)).toContain(String(process.pid)))
@@ -304,7 +307,7 @@ describe('dream bounded retry (design §4.2)', () => {
     jobControl.abort('disposed')
     pending.reject(new Error('aborted'))
     await vi.waitFor(() => expect(fs.backing.get(LOCK)).toMatch(/^0\n/))
-    expect(subagents.start).toHaveBeenCalledTimes(1)
+    expect(subagents.startActivation).toHaveBeenCalledTimes(1)
     expect(String(diagnosticOf(fs).detail)).not.toContain('retry')
   })
 })

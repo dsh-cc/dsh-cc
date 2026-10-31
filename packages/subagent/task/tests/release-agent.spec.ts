@@ -37,7 +37,7 @@ const COPY = {
   notContinuable: (id: string, mode: string) =>
     `Agent ${id} is not a continuable child (mode: ${mode}); release only covers continuable children.`,
   noDrainSeam: (id: string) =>
-    `Cannot release ${id}: this composition's subagents seam exposes no drainContinuableChildren; free capacity by letting children settle or by restarting the session.`,
+    `Cannot release ${id}: this composition's subagents seam exposes no drainChildren; free capacity by letting children settle or by restarting the session.`,
   catalogUnreadable: (id: string, cause: string) =>
     `Cannot verify ${id} against this session's child catalog (${cause}); refusing to release blind. Retry, or restart the session if listing stays broken.`,
   notDirectChild: (id: string) =>
@@ -86,7 +86,7 @@ interface DrainControl {
   rejectDrain: (error: unknown) => void
 }
 
-/** A recorded, externally-resolvable drainContinuableChildren stub. */
+/** A recorded, externally-resolvable drainChildren stub. */
 function makeDrain(): DrainControl {
   const calls: DrainControl['calls'] = []
   let resolveDrain!: () => void
@@ -146,7 +146,7 @@ describe('runRelease gate errors (no marking, no drain)', () => {
     const reg = makeRegistry()
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
       .rejects.toEqual(new ReleaseFailure('unknown-id', COPY.unknownId(CHILD_ID)))
@@ -160,13 +160,13 @@ describe('runRelease gate errors (no marking, no drain)', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow('one-shot')],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
       .rejects.toEqual(new ReleaseFailure('not-continuable', COPY.notContinuable(CHILD_ID, 'one-shot')))
     const subagentsNoMode: ReleaseSubagentsLike = {
       listChildren: async () => [{ id: CHILD_ID }],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsNoMode, agents: reg.registry }))
       .rejects.toEqual(new ReleaseFailure('not-continuable', COPY.notContinuable(CHILD_ID, 'unknown')))
@@ -178,7 +178,7 @@ describe('runRelease gate errors (no marking, no drain)', () => {
     const reg = makeRegistry()
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     expect(outcome).toEqual({ kind: 'not-resident', id: CHILD_ID, releasedEarlier: false })
@@ -192,7 +192,7 @@ describe('runRelease gate errors (no marking, no drain)', () => {
     markReleased(CHILD_ID)
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     expect(outcome).toEqual({ kind: 'not-resident', id: CHILD_ID, releasedEarlier: true })
@@ -213,7 +213,7 @@ describe('runRelease gate errors (no marking, no drain)', () => {
   it('T10c: listChildren method absent + registry miss → catalog-unreadable with the exposes-no-listChildren cause, no drain', async () => {
     const d = makeDrain()
     const reg = makeRegistry()
-    const subagents: ReleaseSubagentsLike = { drainContinuableChildren: d.drain as never }
+    const subagents: ReleaseSubagentsLike = { drainChildren: d.drain as never }
     await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
       .rejects.toEqual(new ReleaseFailure(
         'catalog-unreadable',
@@ -227,7 +227,7 @@ describe('runRelease gate errors (no marking, no drain)', () => {
     const reg = makeRegistry()
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => { throw new Error('catalog io failed') },
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
       .rejects.toEqual(new ReleaseFailure(
@@ -246,7 +246,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const parent = parentAgent()
     const pending = runRelease({ parent, id: CHILD_ID, subagents, agents: reg.registry })
@@ -268,7 +268,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'idle' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -284,7 +284,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'paused' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -300,7 +300,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -316,7 +316,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -331,7 +331,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -350,7 +350,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagentsMiss: ReleaseSubagentsLike = {
       listChildren: async () => [],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsMiss, agents: reg.registry })
     await flush()
@@ -366,7 +366,7 @@ describe('runRelease drain paths', () => {
     const reg2 = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagentsHit: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d3.drain as never,
+      drainChildren: d3.drain as never,
     }
     const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsHit, agents: reg2.registry })
     await flush()
@@ -382,7 +382,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => { throw new Error('catalog io failed') },
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -403,7 +403,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -419,7 +419,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -434,7 +434,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -449,7 +449,7 @@ describe('runRelease drain paths', () => {
     const reg2 = makeRegistry({ [CHILD_ID]: { status: 'running' } }) // the child is resident again
     const subagents2: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d2.drain as never,
+      drainChildren: d2.drain as never,
     }
     const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagents2, agents: reg2.registry })
     await flush()
@@ -463,7 +463,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'idle' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: (parent, ids) => {
+      drainChildren: (parent, ids) => {
         void d.drain(parent, ids)
         // The seam's own disposal drops the entry; no cancel/end signal of ours.
         reg.drop(CHILD_ID)
@@ -480,7 +480,7 @@ describe('runRelease drain paths', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -496,7 +496,7 @@ describe('runRelease drain paths', () => {
     const d = makeDrain()
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: undefined })
     await flush()
@@ -512,7 +512,7 @@ describe('runRelease drain paths', () => {
     const d = makeDrain()
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: undefined })
     await flush()
@@ -531,7 +531,7 @@ describe('runRelease timing arms', () => {
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     }
     const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
     await flush()
@@ -553,7 +553,7 @@ describe('runRelease timing arms', () => {
       const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
       const subagents: ReleaseSubagentsLike = {
         listChildren: async () => [catalogRow()],
-        drainContinuableChildren: d.drain as never,
+        drainChildren: d.drain as never,
       }
       const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
       await flush()
@@ -590,7 +590,7 @@ describe('runRelease timing arms', () => {
       const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
       const subagents: ReleaseSubagentsLike = {
         listChildren: async () => [catalogRow()],
-        drainContinuableChildren: d.drain as never,
+        drainChildren: d.drain as never,
       }
       const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
       await flush()
@@ -645,7 +645,7 @@ describe('runRelease timing arms', () => {
       const reg2 = makeRegistry({ [CHILD_ID]: { status: 'running' } })
       const subagents2: ReleaseSubagentsLike = {
         listChildren: async () => [catalogRow()],
-        drainContinuableChildren: d2.drain as never,
+        drainChildren: d2.drain as never,
       }
       const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagents2, agents: reg2.registry })
       await flush()
@@ -752,7 +752,7 @@ describe('release_agent tool surface', () => {
     registerReleaseAgentTool(ctx)
     ctx.provide('subagents', {
       listChildren: async () => [catalogRow()],
-      drainContinuableChildren: d.drain as never,
+      drainChildren: d.drain as never,
     } satisfies ReleaseSubagentsLike)
     const def = ctx.tools.get(RELEASE_AGENT_TOOL) as { description: string }
     expect(def.description).toBe(
