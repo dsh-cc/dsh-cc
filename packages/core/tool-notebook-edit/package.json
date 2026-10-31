@@ -13,10 +13,6 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./invariant": {
-      "types": "./lib/invariant.d.ts",
-      "default": "./lib/invariant.js"
-    },
     "./render": {
       "types": "./lib/render.d.ts",
       "default": "./lib/render.js"
@@ -29,9 +25,8 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/dsh-fs": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-invariants": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-fs": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.5",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
@@ -40,7 +35,6 @@
     "@deepseek-ai/dsh-fs": "link:../../../../deepseek-harness/packages/fs/fs",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
-    "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",

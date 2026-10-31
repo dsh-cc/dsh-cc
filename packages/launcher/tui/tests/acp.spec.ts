@@ -36,7 +36,7 @@ describe('ACP floor constants', () => {
       '@dsh-cc/bundle-shell',
       '@dsh-cc/bundle-acp',
     ])
-    expect(ACP_APP_PIN).toBe('0.2.0-rc.2')
+    expect(ACP_APP_PIN).toBe('0.2.1-rc.5')
   })
 
   it('builds install specifiers: dsh-base bare, dsh-acp-app pinned, @dsh-cc at launcher version', () => {

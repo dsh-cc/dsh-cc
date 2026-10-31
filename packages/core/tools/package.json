@@ -13,10 +13,6 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./invariant": {
-      "types": "./lib/invariant.d.ts",
-      "default": "./lib/invariant.js"
-    },
     "./types": {
       "types": "./lib/types.d.ts",
       "default": "./lib/types.js"
@@ -33,30 +29,30 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-ptc-runtime": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-invariants": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-scope": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-session": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-system-prompt": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-user-approval": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-ptc-runtime": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-scope": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-session": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-system-prompt": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-tools": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-user-approval": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-working-directory": ">=0.2.1-rc.5",
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@deepseek-ai/dsh-util-values": ">=0.2.0-rc.2"
+    "@deepseek-ai/dsh-util-values": ">=0.2.1-rc.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-ptc-runtime": "link:../../../../deepseek-harness/packages/ptc-runtime/ptc-runtime",
-    "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
     "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
     "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
+    "@deepseek-ai/dsh-working-directory": "link:../../../../deepseek-harness/packages/session/working-directory",
     "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "fast-check": "4.8.0",

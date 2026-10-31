@@ -29,7 +29,7 @@ export const ACP_BUNDLES = [
   '@dsh-cc/bundle-acp',
 ]
 /** Exact pin for dsh-acp-app: its npm latest is a fossil, never bare-install it. */
-export const ACP_APP_PIN = '0.2.0-rc.2'
+export const ACP_APP_PIN = '0.2.1-rc.5'
 
 /**
  * Install specifier for an ACP floor bundle. dsh-base is passed bare (it
@@ -555,7 +555,7 @@ export function slugRetryDecision({ named, attempt, maxAttempts = 5 }) {
 // acceptable — it happens once, before the profile exists.
 
 /** Lowest harness version the published bundles are known to work with. */
-export const MIN_DSH_VERSION = '0.2.0-rc.2'
+export const MIN_DSH_VERSION = '0.2.1-rc.5'
 
 const VERSION_RE = /\d+\.\d+\.\d+(?:-[\w.+-]+)?/
 
