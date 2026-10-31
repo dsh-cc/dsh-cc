@@ -259,7 +259,7 @@ Source: `packages/subagent/task/src/epoch-collector.ts:283-302` and
 ```ts
   signal.throwIfAborted()
   markReleasing(id)
-  const drain = subagents.drainContinuableChildren!(parent, [SessionId(id)])
+  const drain = subagents.drainChildren!(parent, [SessionId(id)])
 ```
 
 ## A10 — session-exit drain contract (prompt copy, pinned by tool.spec.ts) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L265-L273〕
