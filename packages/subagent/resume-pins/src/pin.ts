@@ -119,6 +119,12 @@ export interface ResumePin {
   readonly modelSelector: PinModelSelector
   readonly effective: PinEffective
   readonly toolFilter: PinToolFilter
+  /**
+   * Gated persona text forwarded at spawn (rc.5 composition bridge). The hash
+   * alone cannot re-apply it on cold resume, so the text is persisted here and
+   * re-registered by the child-composition listener.
+   */
+  readonly persona?: string | undefined
   /** Audit metadata only — never enforced at spawn or resume. */
   readonly maxTurns?: number | undefined
   /**
@@ -325,6 +331,7 @@ export function parsePin(text: string): ResumePin {
     modelSelector: parseModelSelector(record['modelSelector']),
     effective: parseEffective(record['effective']),
     toolFilter: parseToolFilter(record['toolFilter']),
+    persona: optionalString(record, 'persona'),
     maxTurns: record['maxTurns'] === undefined ? undefined : requiredNumber(record, 'maxTurns'),
     // R9 fields: the closed field set must carry BOTH — every
     // `PinStore.update` round-trips through this parser, so omitting them

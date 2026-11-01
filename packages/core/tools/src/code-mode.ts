@@ -52,6 +52,8 @@ function escalationGuidance(runtime: PtcRuntime | undefined): string {
  * off its public service API and flow here as closures instead.
  */
 export interface RunCodeBridgeOptions {
+  /** Captures the calling Session current directory before program creation. */
+  resolveWorkingDirectory: (exec: ToolRunContext) => Promise<string | undefined>
   /** Resolves `ctx.ptcRuntime` or throws the loud misconfiguration error (shared with the registry's assembly-time checks). */
   requireRuntime: () => PtcRuntime
   /**
@@ -79,7 +81,7 @@ export interface RunCodeBridgeOptions {
  * @returns the registry-ready definition.
  */
 export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBridgeOptions): ToolDefinition {
-  const { requireRuntime, peekRuntime, maxParallel, shapeDispatchLog } = options
+  const { resolveWorkingDirectory, requireRuntime, peekRuntime, maxParallel, shapeDispatchLog } = options
   const definition = defineTool({
     name: RUN_CODE_NAME,
     // The description and `code` parameter description are placeholders here:
@@ -130,6 +132,9 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
         throw new Error('invalid description: expected a non-empty string')
       }
       const runtime = requireRuntime()
+      // Only Agent-owned programs require directory state; native registries
+      // and unowned programs can run without this service.
+      const cwd = await resolveWorkingDirectory(exec)
 
       // The run-scoped abort: follows the outer signal in, and fires when the
       // run settles for ANY reason, so an in-flight sub-dispatch is aborted
@@ -318,6 +323,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
                 arguments: normalized.logged,
                 isError: result.isError,
                 content: logged,
+                ...result.meta !== undefined ? { meta: result.meta } : {},
               })
             })().finally(() => { logWork.delete(task) })
             logWork.add(task)
@@ -421,6 +427,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
               errorClass: { name: 'ToolCallError', memberNameProperty: 'toolName' },
             }],
             signal: runController.signal,
+            ...cwd !== undefined ? { cwd } : {},
           }))
         } finally {
           // Abort sub-dispatches and drain every in-flight dispatch before

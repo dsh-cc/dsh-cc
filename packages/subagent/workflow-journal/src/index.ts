@@ -15,8 +15,8 @@ import { CcWorkflowJournalProvider } from './provider.ts'
 export const name = 'subagent-workflow-journal'
 export const inject = ['subagents', 'ccWorkflowRunRegistry']
 
-export { CcWorkflowJournalProvider } from './provider.ts'
-export type { CcWorkflowJournalProviderOptions, SubagentServiceLike, WorkflowJournalRegistry } from './provider.ts'
+export { CcWorkflowJournalProvider, admitJournalReplay, recordJournalOutcome } from './provider.ts'
+export type { CcWorkflowJournalProviderOptions, JournalRun, SubagentServiceLike, WorkflowJournalRegistry } from './provider.ts'
 export { canonicalJson, fnv1a32hex, hashSubagentRequest, JournalWriter, sweepExpiredSessionDirs } from './journal-io.ts'
 
 /** Plugin config. */

@@ -74,7 +74,8 @@ Each release has one dsh version for CI verification. The launcher also uses tha
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
-| v0.8.3-rc.1 – v0.9.2 | 0.2.0-rc.2 |
+| v0.9.3-rc.5 onward | 0.2.1-rc.5 |
+| v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
 | v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
@@ -83,6 +84,8 @@ Each release has one dsh version for CI verification. The launcher also uses tha
 There is no maximum version limit. A newer dsh version can be untested. Upgrade dsh first when a dsh-cc release raises its minimum.
 
 The two packages have different release schedules. Their `@latest` versions are not always a verified pair.
+
+Sessions written by the 0.2.1 line record job and working-directory events that pre-0.2.1 readers refuse, so a dsh downgrade after using this release cannot resume those sessions. Finish or export the sessions you need before downgrading.
 
 Maintainers: keep this table consistent with `DSH_HARNESS_REF` in `.github/workflows/presubmit.yml` and `MIN_DSH_VERSION` in `packages/launcher/tui/bootstrap.mjs`.
 

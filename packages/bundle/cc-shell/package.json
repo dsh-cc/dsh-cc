@@ -35,10 +35,10 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-agent": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-home-paths": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-schedule": ">=0.2.0-rc.2"
+    "@deepseek-ai/dsh-agent": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-schedule": ">=0.2.1-rc.5"
   },
   "dependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",
@@ -66,6 +66,7 @@
     "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-schedule": "link:../../../../deepseek-harness/packages/schedule/schedule",
+    "@deepseek-ai/dsh-tool-schedule": "link:../../../../deepseek-harness/packages/schedule/tool-schedule",
     "@deepseek-ai/dsh-storage": "link:../../../../deepseek-harness/packages/storage/storage",
     "@deepseek-ai/dsh-storage-domain": "link:../../../../deepseek-harness/packages/storage/storage-domain",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",

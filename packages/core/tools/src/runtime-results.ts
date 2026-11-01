@@ -110,7 +110,7 @@ export function createSuccessResult(rt: ToolRuntimeCore, exec: ToolExecution, to
   }
   const content = snapshotProjection(tool.name, 'render', rendered)
   let meta: JsonValue | undefined
-  if (exec.parent === undefined && tool.output.presentationMeta !== undefined) {
+  if (tool.output.presentationMeta !== undefined) {
     let projected: JsonValue
     try {
       projected = tool.output.presentationMeta(exec.arguments, value)

@@ -74,7 +74,8 @@ dsh web
 
 | dsh-cc 版本 | 已验证的 dsh |
 | --- | --- |
-| v0.8.3-rc.1 – v0.9.2 | 0.2.0-rc.2 |
+| v0.9.3-rc.5 及之后 | 0.2.1-rc.5 |
+| v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
 | v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
@@ -83,6 +84,8 @@ dsh web
 没有最高版本限制，但更高版本的 dsh 可能尚未验证。当 dsh-cc 提高最低要求时，请先升级 dsh。
 
 这两个包独立发布，各自的 `@latest` 不一定构成已验证的版本组合。
+
+0.2.1 线写入的会话会记录 job 与工作目录事件，低于 0.2.1 的读取端会拒绝打开；因此使用该版本后降级 dsh，这些会话无法恢复。降级前请先完成或导出需要的会话。
 
 维护者：请保持本表与 `.github/workflows/presubmit.yml` 的 `DSH_HARNESS_REF`、`packages/launcher/tui/bootstrap.mjs` 的 `MIN_DSH_VERSION` 一致。
 

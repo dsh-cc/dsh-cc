@@ -20,7 +20,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import type { LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
@@ -91,7 +91,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]): Prom
 }> {
   const home = seedHomes(`${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(JsonlSessionPersistence, { root: newRoot('transcript') })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)
@@ -188,13 +188,17 @@ describe('config-snapshot integration (§5 item 4)', () => {
     const parentSessionId = SessionId(`parent-${Date.now()}`)
     const parent = await ctx.agentLoop.create(parentSessionId, { provider: 'mock', model: 'mock' })
     const subagents = ctx.get('subagents') as SubagentsSeam
-    const run = await subagents.start('spawn', {
+    const run = await subagents.startActivation({
+      provider: 'spawn',
       label: 'snapshot-child',
-      prompt: [{ type: 'text', text: 'work' }],
-      parent,
+      request: {
+        prompt: [{ type: 'text', text: 'work' }],
+        parent,
+        agentOptions: { provider: 'mock', model: 'mock' },
+        maxDepth: 2,
+      },
       signal,
-      agentOptions: { provider: 'mock', model: 'mock' },
-maxDepth: 2,
+      delivery: 'caller',
     })
     const settled = await run.result
     expect(settled.stopReason).toBe('completed')

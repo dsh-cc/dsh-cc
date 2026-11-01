@@ -79,6 +79,18 @@
 - id: tool-jobs
   name: '@deepseek-ai/dsh-tool-jobs'
 
+# ── reminders ───────────────────────────────────────────────────────────────
+
+# `schedule_create/list/update/delete`. Harness 0.2.1-rc.5 moved these tools
+# OUT of `@deepseek-ai/dsh-schedule` (which cc-shell still mounts host-plane
+# for the `schedule` service) into this preset-scoped toolkit, so a preset must
+# list the row or its agents get no reminder tools at all. The service is
+# resolved per scope; a delegated child is not filtered out by a yml deny list
+# but refused at execute time (`subagent_session`), so the row is mounted
+# unconditionally.
+- id: tool-schedule
+  name: '@deepseek-ai/dsh-tool-schedule'
+
 # ── skills ──────────────────────────────────────────────────────────────────
 
 # The skill REGISTRY lives in the host composition and is layered per scope:
@@ -272,10 +284,16 @@
     # cc-workflow-journal provider wrap is unchanged — only the engine row
     # moved. Prerequisites (ptc-runtime + fs/subprocess/sandbox) mount in the
     # host base bundle.
+    # rc.5: the journal provider routes as external AND starts the live child
+    # through an inner spawn activation, so one in-flight workflow child holds
+    # TWO residency-pool slots until disposed. maxConcurrentAgents 8 keeps peak
+    # usage at 16 of the tree-wide 25 (the engine default min(16, cores-2)
+    # could otherwise refuse the 13th concurrent child on big machines).
     - id: workflow-ptc
       name: '@deepseek-ai/dsh-workflow-ptc'
       config:
         provider: cc-workflow-journal
+        maxConcurrentAgents: 8
 
     # Harness adapter row superseded by @dsh-cc/tool-workflow: both register the
     # `workflow` tool name, and the harness `tools` registry throws

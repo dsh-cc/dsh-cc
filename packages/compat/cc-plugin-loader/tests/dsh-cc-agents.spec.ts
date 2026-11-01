@@ -36,19 +36,30 @@ const BUILTIN_KNOWN_NAMES = new Set([
   'handoff_put', 'handoff_get',
 ])
 
-/** A capture-only subagent seam (records providers, resolves no backend). */
+/** A capture-only subagent seam (records providers and activation specs). */
 function subagentsSeam(): {
-  subagents: { registerProvider(p: unknown): () => void; getProvider(): undefined }
+  subagents: {
+    registerProvider(p: unknown): () => void
+    getProvider(): unknown
+    startActivation(spec: Record<string, unknown>): Promise<unknown>
+  }
+  specs: Array<Record<string, unknown>>
   providers: Array<{ name: string; definition: AgentDefinition; start(r: unknown): Promise<unknown> }>
 } {
   const providers: Array<{ name: string; definition: AgentDefinition; start(r: unknown): Promise<unknown> }> = []
+  const specs: Array<Record<string, unknown>> = []
   return {
     subagents: {
       registerProvider: (p) => { providers.push(p as never); return () => {} },
-      // Only the `fork` backend resolves (AgentProvider.start's default), and
-      // it echoes the delegation request so tests can inspect the overlay.
-      getProvider: (name: string) => (name === 'fork' ? { start: async (r: unknown) => ({ forwarded: r }) } : undefined),
+      // rc.5: AgentProvider routes through the spawn backend's activation;
+      // the fake records the spec for assertion.
+      getProvider: (name: string) => (name === 'spawn' ? { name: 'spawn' } : undefined),
+      startActivation: async (spec: Record<string, unknown>) => {
+        specs.push(spec)
+        return { childId: 'fake-child', messageId: 'fake-m', result: Promise.resolve(), dispose: () => Promise.resolve() }
+      },
     },
+    specs,
     providers,
   }
 }
@@ -150,7 +161,7 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
 
   it('with an unconfigured alias (resolver yields inherit), start adds no agentOptions', async () => {
     const ctx = new Context()
-    const { subagents, providers } = subagentsSeam()
+    const { subagents, providers, specs } = subagentsSeam()
     const mount = await mountCcPlugin(ctx, {
       root: REAL_PLUGIN_DIR,
       seams: { subagents },
@@ -159,11 +170,11 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     })
     try {
       const reasoner = providers.find(p => p.definition.agentType === 'critic')!
-      const forwarded = (await reasoner.start({ prompt: 'x' })) as { forwarded?: Record<string, unknown> }
-      const delegation = (forwarded['forwarded'] ?? forwarded) as Record<string, unknown>
+      await reasoner.start({ prompt: 'x' })
+      const delegation = specs[specs.length - 1]!['request'] as Record<string, unknown>
       expect(delegation['agentOptions']).toBeUndefined()
-      // The persona still folds into the delegation.
-      expect(String(delegation['prompt'])).toContain('Staff Engineer')
+      // The gated persona still folds into the activation request's prompt.
+      expect(String((delegation['prompt'] as readonly { text: string }[])[0]!.text)).toContain('Staff Engineer')
     } finally {
       mount.dispose()
     }

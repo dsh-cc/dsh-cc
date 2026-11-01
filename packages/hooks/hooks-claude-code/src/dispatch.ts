@@ -43,14 +43,19 @@ interface DispatchOptions {
 
 /** Minimal structural subset of the `subagents` fork seam used by prompt/agent executors. */
 interface HookSubagentLike {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: {
+      prompt: readonly { type: 'text'; text: string }[]
+      parent: Agent
+      agentOptions?: unknown
+    }
     signal: AbortSignal
-    agentOptions?: unknown
+    delivery: 'parent' | 'caller'
   }): Promise<{
     result: Promise<{ stopReason: string; content: readonly { type: string; text?: string }[] }>
+    dispose(): Promise<void>
   }>
 }
 
@@ -101,20 +106,31 @@ export async function dispatchHook(ctx: Context, hook: HookCommand, opts: Dispat
     const agentOptions = toAgentOptions(
       hook.model !== undefined ? routes?.resolve(hook.model) : routes?.resolve('haiku'),
     )
-    let run
+    let activation
     try {
-      run = await subagents.start('fork', {
+      activation = await subagents.startActivation({
+        provider: 'fork',
         label: hook.type === 'prompt' ? 'hook-prompt' : 'hook-agent',
+        request: {
+          prompt: [{ type: 'text', text: prompt }],
+          parent: opts.agent,
+          ...(agentOptions !== undefined ? { agentOptions } : {}),
+        },
         signal: opts.signal,
-        prompt: [{ type: 'text', text: prompt }],
-        parent: opts.agent,
-        ...(agentOptions !== undefined ? { agentOptions } : {}),
+        delivery: 'caller',
       })
     } catch (error: unknown) {
       ctx.logger.warn(`hooks-claude-code: ${opts.expectedEventName} ${hook.type} hook could not fork a subagent: ${String(error)}`)
       return { output: emptyHookOutput(), durationMs: now() - started }
     }
-    const result = await run.result
+    let result
+    try {
+      result = await activation.result
+    } finally {
+      // One-shot hook fork: dispose so the resident activation pool does not
+      // leak a slot per hook evaluation (teardown failure is swallowed).
+      void activation.dispose().catch(() => {})
+    }
     const decoded = contentToHookOutput(result, (m) => ctx.logger.debug(m))
     if (decoded.error !== undefined) {
       ctx.logger.warn(`hooks-claude-code: ${opts.expectedEventName} ${hook.type} hook errored: ${decoded.error.message}`)

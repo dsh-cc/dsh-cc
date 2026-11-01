@@ -14,7 +14,8 @@ import {
   type SessionNotification,
   type StopReason,
 } from '@agentclientprotocol/sdk'
-import type { Agent, AgentHandle, AgentOptions, ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentStatus, ModelSelection } from '@deepseek-ai/dsh-agent'
+import { awaitQuiescence, noteAgentError, requestPromptCancellation, settleCancelledOnStatus } from './cancellation-status.ts'
 import { createUserMessage, errorChain, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { type Session, type SessionEvent, type SessionId, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { AcpContentError, admitAcpPrompt } from './content.ts'
@@ -23,10 +24,12 @@ import { mountAcpMcpServers } from './mcp.ts'
 import { AcpModelControl } from './model-control.ts'
 import { assistantUpdates, toolCallUpdate, toolResultUpdate } from './updates.ts'
 
-/** The continuable-subagent teardown used without depending on the subagent package. */
-interface ContinuableDrain {
-  /** Dispose continuable descendants below exact host-owned parents child-first. */
-  drainContinuableDescendants(parents: readonly Agent[]): Promise<void>
+/** Subagent completion and teardown without depending on the subagent package. */
+interface SubagentLifecycle {
+  /** Dispose subagent descendants below exact host-owned parents child-first. */
+  drainDescendants(parents: readonly Agent[]): Promise<void>
+  /** Observe currently managed descendants without closing future admission. */
+  waitForChildren(parent: Agent): Promise<boolean>
 }
 
 /** The preset-registry seam composed into every ACP session (§5.2). */
@@ -71,7 +74,8 @@ interface InflightPrompt {
   admissionDone: Promise<void>
   finishAdmission: () => void
   admissionController: AbortController
-  cancelRequested: boolean
+  cancellationDone: PromiseWithResolvers<void>
+  cancelStartedIdle: boolean
   settlementStarted: boolean
   outputError: Error | undefined
   agentError: Error | undefined
@@ -143,22 +147,13 @@ export class AcpSession {
     const modelControl = new AcpModelControl(ctx.llm, options.fallbackSelection)
     const handle = await ctx.agents.create({
       sessionId: options.sessionId,
-      // §5.2 (docs/plans/2026-10-09-acp-m2-own-plugin.md): the create header
-      // records the composed preset identity (frozen creation fact, copied
-      // into the header by agents.create — core/session/src/index.ts:1058).
+      // §5.2: the frozen create header records the composed preset identity.
       meta: { cwd: options.cwd, agentPreset: options.presetId },
       agentOptions: options.agentOptions,
       signal: options.signal,
       setup: async (agentCtx) => {
-        // §5.2, revised after live acceptance (2026-10-09): the preset join
-        // moved OUT of the create setup — mount() inside setup double-applies
-        // the roster rows in the composed profile (persona/command
-        // double-registration surfacing at session/new). The join now runs
-        // on the serial `agent/created` event via registry select() in
-        // index.ts (the live-verified P2b form; select also appends the
-        // model-visible `agent-preset/selected` event). Setup keeps the
-        // remaining order: model control, then MCP (mounts plugins
-        // immediately, so it goes last).
+        // §5.2 revised 2026-10-09: the preset join runs on agent/created via
+        // select() (index.ts); setup order: model control, then MCP (last).
         modelControl.install(agentCtx)
         await mountAcpMcpServers(agentCtx, options.mcpServers, options.cwd)
       },
@@ -179,12 +174,7 @@ export class AcpSession {
       agentOptions: options.agentOptions,
       signal: options.signal,
       setup: async (agentCtx, agent) => {
-        // §5.2, revised after live acceptance (2026-10-09): the preset join
-        // runs on the serial `agent/created` event (index.ts) for resumed
-        // agents too — it joins the RECORDED header stamp, so a presetless
-        // session stays presetless and an unrecorded id fails loudly
-        // through select(). Resume therefore only re-installs model control
-        // and MCP here.
+        // §5.2: resume's preset join also runs on agent/created (index.ts).
         modelControl = new AcpModelControl(
           ctx.llm,
           selectionFor(agent.session.requestHeader(), options.fallbackSelection),
@@ -268,7 +258,7 @@ export class AcpSession {
   }
 
   /**
-   * Admit, enqueue, and settle one prompt at whole-Agent quiescence.
+   * Admit one prompt and settle after the root, descendants, and updates finish.
    * @param params - standard ACP prompt request for this session.
    * @param imageEnabled - connection capability advertised at initialization.
    * @param requestSignal - JSON-RPC request cancellation signal.
@@ -294,7 +284,8 @@ export class AcpSession {
       admissionDone: admission.promise,
       finishAdmission: admission.resolve,
       admissionController,
-      cancelRequested: false,
+      cancellationDone: Promise.withResolvers<void>(),
+      cancelStartedIdle: false,
       settlementStarted: false,
       outputError: undefined,
       agentError: undefined,
@@ -342,7 +333,7 @@ export class AcpSession {
         inflight.finishAdmission()
       }
 
-      if (inflight.cancelRequested) {
+      if (inflight.admissionController.signal.aborted) {
         this.settleAfterQuiescence(inflight)
         return { stopReason: await completion.promise }
       }
@@ -377,6 +368,10 @@ export class AcpSession {
    * @param event - committed durable event.
    */
   onSessionEvent(session: Session, event: SessionEvent): void {
+    if (event.type === 'turn/start' && this.inflight?.turn !== undefined) {
+      this.inflight.turn = event.data.turn
+      this.inflight.endReason = undefined
+    }
     try {
       if (event.type === 'assistant/message') {
         const inflight = this.inflight?.turn === event.data.turn ? this.inflight : undefined
@@ -417,6 +412,7 @@ export class AcpSession {
       const inflight = this.inflight
       if (inflight !== undefined && event.type === 'turn/end' && inflight.turn === event.data.turn) {
         inflight.endReason = event.data.reason
+        inflight.agentError = undefined
       }
       if (event.type === 'turn/end') this.modelControl.releaseTurn(event.data.turn)
     }
@@ -436,17 +432,22 @@ export class AcpSession {
 
   /**
    * Correlate an Agent interval failure with the active ACP prompt.
-   * @param turn - failed turn number.
    * @param error - original same-process failure.
    */
-  onAgentError(turn: number, error: unknown): void {
+  onAgentError(error: unknown): void {
     const inflight = this.inflight
-    if (inflight === undefined || !inflight.messageQueued) return
-    // AgentLoop balances an in-turn failure with durable turn/end; settlement
-    // reads that exact error reason. This slot records interval failures outside it.
-    if (inflight.turn === turn) return
-    inflight.agentError = new Error(errorChain(error))
-    this.settleAfterQuiescence(inflight)
+    if (inflight === undefined) return
+    noteAgentError(inflight, errorChain(error), () => this.settleAfterQuiescence(inflight))
+  }
+
+  /**
+   * Complete cancelled activity without following a later root driver.
+   * @param status - the emitted transition, which may precede a reentrant wake.
+   */
+  onAgentStatus(status: AgentStatus): void {
+    const inflight = this.inflight
+    if (inflight === undefined) return
+    settleCancelledOnStatus(inflight, status, this.outputTail)
   }
 
   /** Await every update queued before this call. */
@@ -473,12 +474,12 @@ export class AcpSession {
       } catch (error: unknown) {
         failures.push(new Error('ACP session activity drain failed', { cause: error }))
       }
-      const subagents = this.ctx.get('subagents') as ContinuableDrain | undefined
+      const subagents = this.ctx.get('subagents') as SubagentLifecycle | undefined
       try {
-        await subagents?.drainContinuableDescendants([this.agent])
+        await subagents?.drainDescendants([this.agent])
       } catch (error: unknown) {
-        this.ctx.logger.warn(`acp: continuable subagent teardown failed: ${errorChain(error)}`)
-        failures.push(new Error('continuable subagent teardown failed', { cause: error }))
+        this.ctx.logger.warn(`acp: subagent teardown failed: ${errorChain(error)}`)
+        failures.push(new Error('subagent teardown failed', { cause: error }))
       }
       try {
         await this.ctx.sessions.flush(this.agent.session)
@@ -508,10 +509,7 @@ export class AcpSession {
   private cancelPrompt(detail: string): void {
     const inflight = this.inflight
     if (inflight === undefined) return
-    inflight.cancelRequested = true
-    inflight.admissionController.abort(new Error(detail))
-    this.settleAfterQuiescence(inflight)
-    if (inflight.messageQueued) this.agent.cancel({ kind: 'user' })
+    requestPromptCancellation(this.agent, inflight, detail, () => this.settleAfterQuiescence(inflight), () => this.outputTail)
   }
 
   private settleAfterQuiescence(inflight: InflightPrompt): void {
@@ -520,13 +518,13 @@ export class AcpSession {
     void (async () => {
       await inflight.admissionDone
       if (inflight.messageQueued) {
-        await this.agent.whenIdle()
-        await this.outputTail
+        const subagents = this.ctx.get('subagents') as SubagentLifecycle | undefined
+        await awaitQuiescence(this.agent, subagents, inflight, () => this.outputTail)
       }
       /* v8 ignore next -- this prompt owns the slot until this exact settlement clears it. */
       if (this.inflight !== inflight) return
       this.inflight = undefined
-      if (inflight.cancelRequested) {
+      if (inflight.admissionController.signal.aborted) {
         inflight.resolve('cancelled')
         return
       }

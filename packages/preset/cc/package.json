@@ -91,13 +91,17 @@
     "@dsh-cc/vwa-evidence": "workspace:^",
     "@dsh-cc/vwa-argument": "workspace:^"
   },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tool-schedule": ">=0.2.1-rc.5"
+  },
   "devDependencies": {
-    "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
-    "js-yaml": "^4.1.0",
-    "vitest": "^4.1.8",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
+    "@deepseek-ai/dsh-jobs-local": "link:../../../../deepseek-harness/packages/jobs/jobs-local",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-tool-schedule": "link:../../../../deepseek-harness/packages/schedule/tool-schedule",
     "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
-    "@deepseek-ai/dsh-jobs-local": "link:../../../../deepseek-harness/packages/jobs/jobs-local"
+    "js-yaml": "^4.1.0",
+    "vitest": "^4.1.8"
   }
 }

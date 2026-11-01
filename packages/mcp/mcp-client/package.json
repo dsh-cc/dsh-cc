@@ -13,10 +13,6 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./invariant": {
-      "types": "./lib/invariant.d.ts",
-      "default": "./lib/invariant.js"
-    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -25,12 +21,11 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/dsh-credentials": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-invariants": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-llm": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-skill": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-subprocess": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-timeout": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-credentials": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-skill": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-subprocess": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-timeout": ">=0.2.1-rc.5",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
@@ -42,7 +37,6 @@
   "devDependencies": {
     "@deepseek-ai/dsh-credentials": "link:../../../../deepseek-harness/packages/credentials/credentials",
     "@deepseek-ai/dsh-credentials-local": "link:../../../../deepseek-harness/packages/credentials/credentials-local",
-    "@deepseek-ai/dsh-invariants": "link:../../../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-skill": "link:../../../../deepseek-harness/packages/skill/skill",
     "@deepseek-ai/dsh-subprocess": "link:../../../../deepseek-harness/packages/subprocess/subprocess",

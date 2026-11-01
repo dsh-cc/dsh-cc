@@ -64,7 +64,7 @@ async function harnessWithFiber(
   beforeHooks?: (ctx: Context) => void,
 ): Promise<{ ctx: Context; hooks: Fiber }> {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
@@ -146,7 +146,9 @@ describe('hooks-claude-code bridge — UserPromptSubmit', () => {
 
     // The injected context reached the model and is recorded with the plugin source.
     expect(JSON.stringify(adapter.requests[0]!.messages)).toContain('remember: be brief')
-    const ctxMsg = events(agent).find(e => e.type === 'user/message' && e.data.source.kind !== 'user')
+    // rc.5: the working-directory service also injects runtime-context
+    // messages, so locate the hook-injected one by its exact source kind.
+    const ctxMsg = events(agent).find(e => e.type === 'user/message' && e.data.source.kind === 'hooks-claude-code')
     expect(ctxMsg?.type === 'user/message' && ctxMsg.data.source).toEqual({ kind: 'hooks-claude-code' })
   })
 })
@@ -237,7 +239,9 @@ describe('hooks-claude-code bridge — PostToolUse', () => {
 
     const log = events(agent)
     const resultIdx = log.findIndex(e => e.type === 'tool/result')
-    const ctxIdx = log.findIndex(e => e.type === 'user/message' && e.data.source.kind !== 'user')
+    // rc.5: the working-directory runtime-context message also qualifies as
+    // non-user; locate the hook-injected one by its exact source kind.
+    const ctxIdx = log.findIndex(e => e.type === 'user/message' && e.data.source.kind === 'hooks-claude-code')
     expect(ctxIdx).toBeGreaterThan(resultIdx) // context appended AFTER the tool result
     const ctxMsg = log[ctxIdx]
     expect(ctxMsg?.type === 'user/message' && ctxMsg.data.content.some(b => b.type === 'text' && b.text.includes('tool was slow'))).toBe(true)
@@ -425,7 +429,7 @@ describe('hooks-claude-code bridge — load resilience', () => {
   it('a missing config file registers no hooks and does not crash the loop', async () => {
     const adapter = new MockAdapter([textResponse('fine')])
     const ctx = new Context()
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(LocalSubprocessRuntime)
     await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
@@ -485,7 +489,7 @@ describe('hooks-claude-code bridge — load resilience', () => {
     const dir = writeConfig({ UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'exit 2' }] }] })
     const adapter = new MockAdapter([textResponse('ok')])
     const ctx = new Context()
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(LocalSubprocessRuntime)
     await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })

@@ -75,7 +75,6 @@ class FakeDelegate implements SubagentProvider {
     }
     return {
       id: `spawn-${index}` as never,
-      localAgent: undefined,
       result: Promise.resolve(result),
       dispose: () => Promise.resolve(),
     }
@@ -112,7 +111,32 @@ function setup(maxJournalBytes = 1 << 20): Fixture {
   const delegate = new FakeDelegate()
   const warnings: string[] = []
   const provider = new CcWorkflowJournalProvider(
-    { getProvider: name => name === 'spawn' ? delegate : undefined },
+    {
+      getProvider: name => name === 'spawn' ? delegate : undefined,
+      // rc.5: the live path rides the seam's activation entry; the delegate's
+      // capabilities stay the mirror source, while the recording previously
+      // done by delegate.start happens here.
+      startActivation: async (spec) => {
+        const index = delegate.spawns.length
+        const request = spec.request as ResolvedSubagentStartRequest
+        delegate.spawns.push({
+          promptText: promptText(request),
+          ...(request.agentOptions !== undefined ? { agentOptions: request.agentOptions } : {}),
+          ...(request.outputSchema !== undefined ? { outputSchema: request.outputSchema } : {}),
+        })
+        await new Promise(resolve => setTimeout(resolve, 1))
+        return {
+          childId: `spawn-${index}` as never,
+          messageId: `m-${index}` as never,
+          result: Promise.resolve({
+            output: [{ type: 'text' as const, text: `out-${index}` }],
+            ...(request.outputSchema !== undefined ? { structured: { structuredFor: index } } : {}),
+            stopReason: 'completed' as const,
+          }),
+          dispose: () => Promise.resolve(),
+        }
+      },
+    },
     registry,
     { maxJournalBytes, warn: message => warnings.push(message) },
   )
@@ -360,10 +384,10 @@ describe('CcWorkflowJournalProvider', () => {
     expect(fx.registry.cached.get(second.runId)).toEqual([1, 2])
   })
 
-  it('throws loudly on an unknown signal with no pending claim', async () => {
+  it('throws loudly on a start with no pending claim (no claimed run, no deposit)', async () => {
     const fx = setup()
     await expect(fx.provider.start(requestOf('x', new AbortController().signal)))
-      .rejects.toThrow('cc-workflow-journal: start on an unknown signal with no pending workflow-run claim')
+      .rejects.toThrow('cc-workflow-journal: start with no pending workflow-run claim')
   })
 
   it('mirrors the delegate capabilities through lazy getters and throws loudly while the delegate is missing', () => {

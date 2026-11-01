@@ -48,13 +48,13 @@ async function harness(
   return ctx
 }
 
-/** A minimal fork-subagent seam whose start records the full request and returns a chosen result. */
+/** A minimal fork-subagent seam (rc.5 activation shape) whose startActivation records the request and returns a chosen result. */
 function fakeSubagents(hook: { stopReason: string; content: readonly { type: string; text?: string }[] }) {
   const calls: Array<{ name: string; request: Record<string, unknown> }> = []
   const service = {
-    start(name: string, request: Record<string, unknown>) {
-      calls.push({ name, request })
-      return { result: Promise.resolve(hook) }
+    startActivation(spec: { provider: string; request: Record<string, unknown> }) {
+      calls.push({ name: spec.provider, request: spec.request })
+      return { childId: 'hook-child', messageId: 'hook-m', result: Promise.resolve(hook), dispose: () => Promise.resolve() }
     },
   }
   return { service, calls }

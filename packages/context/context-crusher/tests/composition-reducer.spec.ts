@@ -10,6 +10,8 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent, SessionEvent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
+import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
 import * as ShellEnv from '@deepseek-ai/dsh-shell-env'
@@ -88,7 +90,11 @@ export async function harness(opts: HarnessOptions): Promise<{ ctx: Context; age
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
   if (opts.realBash === true) {
-    await ctx.plugin(ShellEnv as never)
+    // rc.5: the bash tool injects fs + working-directory; neither is part of
+    // the loop testkit, and the harness service stays PENDING on a missing fs.
+    await ctx.plugin(LocalFileSystem, { cwd: process.cwd() })
+    await ctx.plugin(WorkingDirectory, { cwd: process.cwd() })
+    await ctx.plugin(ShellEnv as never, {})
     await ctx.plugin(ToolBash as never)
   }
   void new TokenMeter(ctx)
@@ -242,6 +248,7 @@ describe('reducer composition', () => {
     // 'bash' first; assert on whatever ran: the eligibility input must have
     // been exec.arguments.command, else no receipt row appears.
     await run(agent, adapter)
+    console.log('PROBE-REQ', JSON.stringify((adapter as unknown as { requests?: unknown[] }).requests ?? []).slice(0, 1200))
     const rows = ledgerRows(home).filter((r) => r.kind === 'receipt')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ applied: true })

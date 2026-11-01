@@ -10,7 +10,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -18,7 +18,7 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
@@ -72,8 +72,12 @@ async function setup(
   } = {},
 ) {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
-  const root = mkdtempSync(join(tmpdir(), 'dsh-cc-task-integration-'))
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+  // Canonicalize the temp root: `tmpdir()` is a symlink on macOS, and rc.5's
+  // working-directory service resolves to the canonical path — a header cwd
+  // that differs only by the symlink would emit a spurious change notice as
+  // the child's first user message.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-cc-task-integration-')))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
   // The subagent runtime's cold-resume delivery resolves sessions through
@@ -350,8 +354,8 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
     await vi.waitFor(() => expect(ctx.agents.get(childId)).toBeDefined(), { timeout: 10_000 })
 
     // The parent-teardown release path for one durable direct child
-    // (drainContinuableChildren — the per-child arm of the teardown drain).
-    await ctx.subagents.drainContinuableChildren(parent, [childId])
+    // (drainChildren — the per-child arm of the teardown drain).
+    await ctx.subagents.drainChildren(parent, [childId])
 
     // The in-flight turn was stopped and the Activation released…
     await waitNoActivation(ctx, childId)
@@ -373,7 +377,7 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
     // itself: continuation from the still-live drained parent is refused with
     // DRAINING — callers must let the parent leave the registry (session
     // dispose + resume/restart) before continuing a drained child.
-    await ctx.subagents.drainContinuableDescendants([parent])
+    await ctx.subagents.drainDescendants([parent])
     await waitNoActivation(ctx, childId)
     await expect(ctx.subagents.sendMessage(parent, childId,
       [{ type: 'text' as const, text: 'too early' }],
@@ -385,7 +389,7 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
 
   // SKIPPED (re-probed at 0.1.5-rc.1): the final §4.13 leg — `send_message`
   // cold-resuming a child whose Activation was torn down by
-  // `drainContinuableChildren` — still does not complete end to end. Progress
+  // `drainChildren` — still does not complete end to end. Progress
   // since 0.1.2-rc.1: the delivery seam was reworked (deliverToChild /
   // steerPrompt, continuation-messages.ts) and the send now RESOLVES — no
   // DRAINING error from assertAdmitting on the per-child arm (the parent is

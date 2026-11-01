@@ -62,6 +62,7 @@ import { supportsAcpImagePrompts } from './content.ts'
 import { AcpMcpConfigError } from './mcp.ts'
 import { AcpModelConfigError } from './model-control.ts'
 import { AcpSession, type AcpPresetsService } from './session.ts'
+import { installAgentLifecycleListeners } from './lifecycle.ts'
 import { readOwnVersion } from './version.ts'
 
 const DEFAULT_SESSION_LIST_PAGE_SIZE = 100
@@ -198,9 +199,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
     ownedRecord(agent)?.onInboxClaimed(message, turn)
   })
 
-  ctx.on('agent/error', ({ agent, turn, error }) => {
-    ownedRecord(agent)?.onAgentError(turn, error)
-  })
+  installAgentLifecycleListeners(ctx, ownedRecord)
 
   ctx.on('llm/adapters-updated', () => {
     for (const record of sessions.values()) record.topologyChanged()

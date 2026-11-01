@@ -52,10 +52,17 @@ interface SetupOptions {
   maxParallelSubCalls?: number
   runtime?: false | { language?: string }
   toolOrder?: string[]
+  /** Omit the directory collaborator to exercise the misconfiguration path. */
+  workingDirectory?: false
 }
 
 async function setup(options: SetupOptions = {}) {
   const ctx = new Context()
+  if (options.workingDirectory !== false) {
+    // Structural stand-in for the working-directory service: fixed directory,
+    // no filesystem or durable-change work.
+    ctx.provide('workingDirectory', { defaultDirectory: '/workspace', ensure: () => Promise.resolve('/workspace') })
+  }
   await ctx.plugin(SystemPrompt, { ...options.toolOrder ? { toolOrder: options.toolOrder } : {} })
   await ctx.plugin(ToolRuntime, { mode: options.mode ?? 'code', ...options.maxParallelSubCalls !== undefined ? { maxParallelSubCalls: options.maxParallelSubCalls } : {} })
   let runtime: FakeRuntime | undefined
@@ -803,6 +810,44 @@ describe('the sub-dispatch scheduler (native concurrency contract)', () => {
 })
 
 describe('the run_code dispatch bridge', () => {
+  it('resolves the caller session directory into the runtime request', async () => {
+    const { ctx, runtime } = await setup({ mode: 'code' })
+    const { agent } = fakeAgent()
+    const result = await runCode(ctx, 'return 1', { agent })
+    expect(result.isError).toBe(false)
+    expect(runtime.lastRequest?.cwd).toBe('/workspace')
+  })
+
+  it('fails loudly when an Agent-owned run has no workingDirectory service', async () => {
+    const { ctx } = await setup({ mode: 'code', workingDirectory: false })
+    const { agent } = fakeAgent()
+    const result = await runCode(ctx, 'return 1', { agent })
+    expect(result.isError).toBe(true)
+    if (!result.isError) throw new Error('expected a failed run')
+    expect(result.error.message).toContain('dsh-tools: run_code with an Agent requires workingDirectory')
+  })
+
+  it('persists nested presentation metadata on the settle event', async () => {
+    const { ctx, runtime } = await setup({ mode: 'code' })
+    ctx.tools.register(defineTool({
+      name: 'card',
+      description: 'Card tool.',
+      parameters: {},
+      output: { schema: { type: 'string' }, render: () => [], presentationMeta: () => ({ card: true }) },
+      execute: () => Promise.resolve('card'),
+    }))
+    const { agent, events } = fakeAgent()
+    runtime.behavior = async (request) => {
+      await request.bindings[0]!.functions.card!({})
+      return { logs: [] }
+    }
+    const result = await runCode(ctx, 'card', { agent })
+    expect(result.isError).toBe(false)
+    const settled = events.filter(event => event.type === 'tool/code-dispatch')
+    expect(settled).toHaveLength(1)
+    expect((settled[0]!.data as { meta?: JsonValue }).meta).toEqual({ card: true })
+  })
+
   it('bridges tool calls, returns only the curated output, and logs one event per dispatch', async () => {
     const { ctx, runtime } = await setup({ mode: 'code' })
     const calls = registerEcho(ctx)

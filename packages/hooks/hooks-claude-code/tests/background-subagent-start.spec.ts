@@ -13,7 +13,7 @@ import { Context, type Fiber } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime, { type SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
@@ -47,7 +47,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   } }))
 
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const persistRoot = mkdtempSync(join(tmpdir(), 'dsh-hooks-background-persist-'))
   dirs.push(persistRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: persistRoot })
@@ -95,13 +95,14 @@ describe('hooks-claude-code — SubagentStart on background starts (§4.14)', ()
       [textResponse('background answer'), textResponse('resumed answer')],
     )
 
-    // Background start through the harness continuable entry the Task tool
-    // dispatches to (`startContinuable`, provider 'spawn').
-    const started = await ctx.subagents.startContinuable({
+    // Background start through the harness activation entry the Task tool
+    // dispatches to (`startActivation`, provider 'spawn', delivery 'parent').
+    const started = await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'background probe',
       request: { prompt: [{ type: 'text', text: 'slow work' }], parent },
       signal: new AbortController().signal,
+      delivery: 'parent',
     })
 
     // Initial epoch: exactly one SubagentStart event, and the hook process ran

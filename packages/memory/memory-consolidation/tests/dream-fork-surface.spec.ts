@@ -15,13 +15,13 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import { MockAdapter, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { MEMORY_TOOL_FILTER, MEMORY_WRITES_SCHEMA, validateMemoryWrites, writeMemoryFiles } from '@dsh-cc/memory'
+import { MEMORY_WRITES_SCHEMA, validateMemoryWrites, writeMemoryFiles } from '@dsh-cc/memory'
 
 const roots: string[] = []
 afterEach(() => {
@@ -29,15 +29,18 @@ afterEach(() => {
 })
 
 interface SubagentsSeam {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: {
+      prompt: readonly { type: 'text'; text: string }[]
+      parent: Agent
+      outputSchema?: Record<string, unknown>
+      maxDepth?: number
+    }
     signal: AbortSignal
-    toolFilter?: { allow: readonly string[] }
-    outputSchema?: Record<string, unknown>
-    maxDepth?: number
-  }): Promise<{ result: Promise<{ stopReason: string; structured?: unknown }> }>
+    delivery: 'parent' | 'caller'
+  }): Promise<{ childId: string; result: Promise<{ stopReason: string; structured?: unknown }>; dispose(): Promise<void> }>
 }
 
 const TOPIC_WRITE = { path: 'dream-topic.md', content: '# Dream topic\n\nBody.\n' }
@@ -49,7 +52,7 @@ async function setup(): Promise<{
   subagents: SubagentsSeam
 }> {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'dsh-dream-surface-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -76,26 +79,31 @@ async function setup(): Promise<{
 const signal = new AbortController().signal
 
 describe('memory dream fork tool surface (integration tripwire)', () => {
-  it('dispatches with MEMORY_TOOL_FILTER, sees the injected structured_output, and reports writes', async () => {
+  it('rc.5: dispatches a one-shot fork activation, sees the injected structured_output, and reports writes', async () => {
     const { adapter, parent, subagents } = await setup()
-    const run = await subagents.start('fork', {
+    const activation = await subagents.startActivation({
+      provider: 'fork',
       label: 'memory-consolidation',
-      prompt: [{ type: 'text', text: 'consolidate memories' }],
-      parent,
+      request: {
+        prompt: [{ type: 'text', text: 'consolidate memories' }],
+        parent,
+        outputSchema: MEMORY_WRITES_SCHEMA,
+        maxDepth: 1,
+      },
       signal,
-      toolFilter: MEMORY_TOOL_FILTER,
-      outputSchema: MEMORY_WRITES_SCHEMA,
-      maxDepth: 1,
+      delivery: 'caller',
     })
-    const settled = await run.result
+    const settled = await activation.result
     expect(settled.stopReason).toBe('completed')
     // The child's structured_output call was captured into res.structured.
     expect(settled.structured).toEqual({ writes: [TOPIC_WRITE] })
+    await activation.dispose()
 
     expect(adapter.requests).toHaveLength(1)
     const tools = (adapter.requests[0]!.tools ?? []).map(tool => tool.name ?? '')
-    // The driver-injected reporting tool is visible even though the filter
-    // does not (and must not) allow-list it.
+    // The driver-injected reporting tool is visible (the composition slice
+    // re-applies the read-only restriction around it — never allow-listing
+    // the injected tool).
     expect(tools).toContain('structured_output')
     expect(tools).toContain('read')
   })

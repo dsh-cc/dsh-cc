@@ -27,7 +27,7 @@ import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, St
 import { type GenerateOptions, LlmAdapter, ReasoningEffortId, type LlmResolvedModelInfo, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import * as AcpPlugin from '../src/index.ts'
@@ -283,6 +283,10 @@ export async function makeBridgeHarness(options: {
       return presetId
     },
     composedPreset: () => undefined,
+    // The real SubagentRuntime unconditionally inherits a parent preset via
+    // composeFrom (upstream child-agent.ts:200); the spy composes nothing,
+    // so delegation-test children run preset-free.
+    composeFrom: () => undefined,
   } as never)
   // The registry registers this projection in production; the spy rig
   // registers the definition directly so resume reads the recorded identity

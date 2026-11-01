@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import {
   LIVE_CAPACITY_REFUSAL as TASK_REFUSAL,
   MAX_LIVE_CONTINUABLE_CHILDREN as TASK_MAX,
-  assertLiveCapacity,
+  capacityErrorRefusal,
 } from '../src/background-start.ts'
 import {
   LIVE_CAPACITY_REFUSAL as PINS_REFUSAL,
@@ -25,21 +25,24 @@ describe('live-capacity refusal copy', () => {
     expect(TASK_MAX).toBe(25)
   })
 
-  it('names the remedy and the slot rule', () => {
-    expect(TASK_REFUSAL).toContain('25 live subagents')
+  it('describes the resident-cap rule and names the remedy', () => {
+    // rc.5 residency semantics: running children, idle parents waiting on
+    // children, and cold-resumed children hold slots; resident follow-ups do not.
+    expect(TASK_REFUSAL).toContain('25 resident subagents')
     expect(TASK_REFUSAL).toContain('release_agent')
-    expect(TASK_REFUSAL).toContain('only running children hold slots')
+    expect(TASK_REFUSAL).toContain('cold-resumed')
+    expect(TASK_REFUSAL).toContain('already-resident')
   })
 
-  it('the spawn guard still throws that exact literal at the cap', async () => {
-    const running = Array.from({ length: TASK_MAX }, (_, i) => ({ id: `spawned-${i}` }))
-    const seam = { listChildren: async () => running }
-    const parent = {
-      id: 'parent-1',
-      ctx: { get: () => ({ get: (id: string) => ({ status: id.startsWith('spawned-') ? 'running' : 'idle' }) }) },
-    }
-    await expect(
-      assertLiveCapacity(seam as never, parent as never, new AbortController().signal),
-    ).rejects.toThrow(TASK_REFUSAL)
+  it('a pool ACTIVATION_LIMIT_REACHED throw maps onto that exact literal', () => {
+    // rc.5: the capacity DECISION belongs to the harness pool; the dsh-cc
+    // lanes only translate its bare throw into the D4 remedy copy.
+    const poolError = Object.assign(
+      new Error('subagent limit reached (active child limit: 25); wait for an existing child to finish or complete this work with the current agents'),
+      { code: 'ACTIVATION_LIMIT_REACHED' },
+    )
+    const mapped = capacityErrorRefusal(poolError)
+    expect(mapped?.message).toBe(TASK_REFUSAL)
+    expect(capacityErrorRefusal(new Error('some other failure'))).toBeUndefined()
   })
 })

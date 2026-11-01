@@ -185,7 +185,7 @@ export function installCoordinatorMode(
       }],
     },
     async execute(args, exec) {
-      const started = await provider.startContinuable({
+      const started = await provider.startActivation({
         provider: registry.provider,
         label: args.name,
         request: {
@@ -193,6 +193,7 @@ export function installCoordinatorMode(
           parent: agent,
         },
         signal: exec.signal,
+        delivery: 'parent',
       })
       registry.track(args.name, started.childId)
       return { worker: args.name, worker_id: started.childId }

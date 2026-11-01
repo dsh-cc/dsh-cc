@@ -5,7 +5,6 @@ import { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // Type-only: the `compaction/prune` shadow-price SessionEventMap merge.
 import type {} from '@deepseek-ai/dsh-compaction'
-import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import Microcompactor, {
@@ -302,16 +301,5 @@ describe('Microcompactor content guard', () => {
     expect(isMicrocompactPlaceholder([
       { type: 'text', text: `${MICROCOMPACT_MARKER} extra` },
     ])).toBe(true)
-  })
-
-  it('invariant companion loads as a plugin and reserves its package name', async () => {
-    const ctx = new Context()
-    await ctx.plugin(InvariantRegistry)
-    const MicroInvariant = await import('@dsh-cc/compaction-micro/invariant')
-    await ctx.plugin(MicroInvariant)
-    // The plugin install reserves the package name against duplicate registration.
-    expect(() => {
-      ctx.invariants.register('@dsh-cc/compaction-micro', () => {})
-    }).toThrow(/already registered/)
   })
 })

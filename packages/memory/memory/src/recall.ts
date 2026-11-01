@@ -13,7 +13,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { startWithFilterResilience } from './restrict-resilience.ts'
 import { scanMemoryDirectory } from './scan.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 
@@ -29,9 +28,6 @@ declare module '@deepseek-ai/dsh-llm' {
 
 /** How many topic files the selector may surface per query. */
 export const MAX_RECALL_MEMORIES = 5
-
-/** Recall selector children are read-only: they only choose memory filenames. */
-export const RECALL_TOOL_FILTER: { allow: readonly string[] } = { allow: ['read'] }
 
 /**
  * The `outputSchema` the selector child must satisfy: the driver injects a
@@ -127,45 +123,44 @@ export class SubagentMemorySelector implements MemorySelector {
     const toolsSection = recentTools.length > 0
       ? `\n\nRecently used tools: ${recentTools.join(', ')}`
       : ''
-    let run
+    // rc.5: one-shot activation (delivery 'caller'); the read-only tool
+    // restriction no longer rides the start request — the composition seam
+    // applies it (plan C5). The activation is disposed once the result is in:
+    // a selector child per pre-step must never linger in the residency pool.
+    let activation
     try {
-      run = await startWithFilterResilience(
-        subagents,
-        this.providerName,
-        {
-          label: 'memory-recall',
-          signal,
+      activation = await subagents.startActivation({
+        provider: this.providerName,
+        label: 'memory-recall',
+        request: {
           prompt: [{ type: 'text', text: `${system}\n\n<user_query>\n${query}\n</user_query>\n\nAvailable memories:\n${manifest}${toolsSection}` }],
           parent: this.parent,
-          toolFilter: RECALL_TOOL_FILTER,
           outputSchema: RECALL_FILES_SCHEMA,
           // Defense-in-depth recursion cap: the pre-step listener already gates
           // recall to depth-zero agents, so this child never needs to delegate.
           maxDepth: 1,
           ...(this.agentOptions !== undefined ? { agentOptions: this.agentOptions } : {}),
         },
-        // Same logger fallback shape as warnOnce above.
-        {
-          warn: (message: string): void => {
-            const logger = (this.ctx as { logger?: { warn?: (message: string) => void } }).logger
-            if (typeof logger?.warn === 'function') logger.warn(message)
-            else console.warn(message)
-          },
-        },
-      ) as Awaited<ReturnType<SubagentLike['start']>>
+        signal,
+        delivery: 'caller',
+      })
     } catch {
       // Provider absent or services unavailable: best-effort recall skips.
       return []
     }
-    // run.result rejects only on infrastructure faults; child-level failures
-    // arrive RESOLVED with a non-completed stopReason. Both must skip recall
-    // quietly — this path is fire-and-forget, so a throw becomes an unhandled
-    // rejection in the host.
+    // activation.result rejects only on infrastructure faults; child-level
+    // failures arrive RESOLVED with a non-completed stopReason. Both must skip
+    // recall quietly — this path is fire-and-forget, so a throw becomes an
+    // unhandled rejection in the host.
     let result
     try {
-      result = await run.result
+      result = await activation.result
     } catch {
       return []
+    } finally {
+      // One-shot dispose policy: the settled selector must not hold a
+      // residency slot (fire-and-forget; teardown failure is swallowed).
+      void activation.dispose().catch(() => {})
     }
     // The payload arrives as `result.structured` (via the injected
     // structured_output tool); the transcript text is ignored. A schema
@@ -205,17 +200,21 @@ export const INJECTED_SOURCE_DENYLIST: readonly string[] = ['memory', 'cc-subage
 
 /** Structural subset of the subagent seam used by the selector. */
 interface SubagentLike {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: {
+      prompt: readonly { type: 'text'; text: string }[]
+      parent: Agent
+      maxDepth?: number
+      outputSchema?: Record<string, unknown>
+      agentOptions?: unknown
+    }
     signal: AbortSignal
-    toolFilter?: { allow: readonly string[] }
-    maxDepth?: number
-    outputSchema?: Record<string, unknown>
-    agentOptions?: unknown
+    delivery: 'parent' | 'caller'
   }): Promise<{
     result: Promise<{ stopReason: string; structured?: unknown }>
+    dispose(): Promise<void>
   }>
 }
 

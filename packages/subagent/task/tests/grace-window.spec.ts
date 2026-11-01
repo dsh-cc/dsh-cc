@@ -254,8 +254,12 @@ const fakeAgent = { id: 'parent-1' } as unknown as Agent
 
 function continuableSeam(childId: string): SubagentsLike {
   return {
-    start: async () => ({ result: Promise.resolve({ stopReason: 'completed' }) }),
-    startContinuable: async () => ({ childId, messageId: 'm1' }),
+    startActivation: async () => ({
+      childId,
+      messageId: 'm1',
+      result: Promise.resolve({ stopReason: 'completed' }),
+      dispose: () => Promise.resolve(),
+    }),
     getProvider: () => ({ prepareContinuable() {} }),
     list: () => [],
   } as unknown as SubagentsLike
@@ -271,8 +275,13 @@ describe('entry-point stamping', () => {
     let releaseStart: (() => void) | undefined
     const seam = {
       ...continuableSeam('c1'),
-      startContinuable: () => new Promise<{ childId: string; messageId: string }>(resolve => {
-        releaseStart = () => resolve({ childId: 'c1', messageId: 'm1' })
+      startActivation: () => new Promise<{ childId: string; messageId: string; result: Promise<{ stopReason: string }>; dispose(): Promise<void> }>(resolve => {
+        releaseStart = () => resolve({
+          childId: 'c1',
+          messageId: 'm1',
+          result: Promise.resolve({ stopReason: 'completed' }),
+          dispose: () => Promise.resolve(),
+        })
       }),
     } as unknown as SubagentsLike
     const exec = { agent: fakeAgent, signal: freshSignal(), token: 't1' }
@@ -561,7 +570,7 @@ describe('release tombstone algebra', () => {
     const agents = { get: (_id: string) => (status === undefined ? undefined : { status }) }
     const subagents = {
       listChildren: async () => [{ id: 'c1', mode: 'continuable' }],
-      drainContinuableChildren: async () => {},
+      drainChildren: async () => {},
     }
     return { subagents, agents }
   }

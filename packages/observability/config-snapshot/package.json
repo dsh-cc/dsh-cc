@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/config-snapshot",
-  "description": "Session config snapshot sidecar ledger — per-Session-construction attribution substrate",
+  "description": "Session config snapshot sidecar ledger \u2014 per-Session-construction attribution substrate",
   "version": "0.9.3-rc.4",
   "repository": {
     "type": "git",
@@ -25,7 +25,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-session": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": ">=0.2.1-rc.5",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {

@@ -11,6 +11,7 @@ import { isAbsolute, resolve } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { appendWorktreeEntered } from './events.ts'
+import { writeThroughWorkingDirectory } from './service-holder.ts'
 import { sessionCwdStore, type SessionCwdStore } from './state.ts'
 
 /** Options accepted by the cwd APIs; default to the shared process store. */
@@ -86,4 +87,7 @@ export function setSessionCwd(agent: Agent, path: string, options: SessionCwdOpt
   const normalized = resolve(path)
   appendWorktreeEntered(agent.session, normalized)
   store.set(String(agent.session.id), normalized)
+  // Single-owner migration (S10): execution resolves the harness
+  // `workingDirectory` service, so mirror the change there best-effort.
+  if (store === sessionCwdStore) writeThroughWorkingDirectory(agent, normalized)
 }

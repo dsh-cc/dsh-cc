@@ -1,17 +1,19 @@
 /**
- * Ephemeral (read-only one-shot) dispatch: the §3.2 fail-fast copy constants,
- * capacity refusal, and the one-shot foreground dispatch used by `tool.ts`.
- * Extracted verbatim to keep that module under the file-size budget.
+ * Ephemeral (read-only one-shot) dispatch: the §3.2 fail-fast copy constants
+ * and the one-shot foreground dispatch used by `tool.ts`. Extracted verbatim
+ * to keep that module under the file-size budget.
  *
  * @module @dsh-cc/subagent-task/ephemeral-dispatch
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { ToolRestriction } from '@dsh-cc/claude-code-agents'
+import { randomUUID } from 'node:crypto'
+import { clearComposition, planComposition, type ChildComposition } from './composition-plan.ts'
 import {
   acquireLiveCapacity,
-  MAX_LIVE_CONTINUABLE_CHILDREN,
   PROVIDER_SPAWN,
+  capacityErrorRefusal,
+  type ActivationLike,
   type SubagentsLike,
 } from './background-start.ts'
 import { EPHEMERAL_TTL_KILL_COPY } from './ephemeral-reaper.ts'
@@ -35,19 +37,6 @@ export const EPHEMERAL_WORKTREE_REJECT =
   + '`isolation: worktree` from the definition, or dispatch a continuable agent '
   + '(foreground or run_in_background) for isolated work.'
 
-/**
- * Capacity refusal on the ephemeral branch (§3.2): distinguishes one-shot runs
- * from the continuable D4 literal (which stays byte-identical). One-shot
- * children free their slot on settle and are not release_agent-releasable.
- */
-export function ephemeralCapacityRefusal(live: number): Error {
-  return new Error(
-    `ephemeral dispatch refused: ${live} ephemeral/one-shot runs in flight (limit `
-    + `${MAX_LIVE_CONTINUABLE_CHILDREN}); one-shot children free their slot on settle — wait `
-    + 'for one to finish. release_agent does not apply: one-shot children are not listable',
-  )
-}
-
 /** The one-line Ctrl+B note carried on every ephemeral result (§3.2). */
 export const EPHEMERAL_PROMOTION_NOTICE =
   '(ephemeral one-shot run: no durable child is created; Ctrl+B cannot promote this '
@@ -55,16 +44,17 @@ export const EPHEMERAL_PROMOTION_NOTICE =
 
 /** The one-line notice when a `background: true` pin was ignored for the lane (§3.2). */
 export const EPHEMERAL_PIN_IGNORED_NOTICE =
-  'the definition\u2019s `background: true` pin was ignored: read-only ephemeral agents always run as a foreground one-shot'
+  'the definition’s `background: true` pin was ignored: read-only ephemeral agents always run as a foreground one-shot'
 
 /**
- * The §3.2 ephemeral (one-shot) foreground dispatch: capacity-guard, then a
- * one-shot `seam.start(PROVIDER_SPAWN, …)` with the same request fold as
- * `collectForeground` (persona, toolFilter, agentOptions, maxDepth) and the
- * `settle()` collector. Slice-3 reaper seam: pass `ttlController` (armed at
- * dispatch) and the start request signal becomes
- * `AbortSignal.any([exec.signal, ttlController.signal])` — the caller keeps
- * ownership of the timer; this function only threads the signal.
+ * The §3.2 ephemeral (one-shot) foreground dispatch: admission lease, then a
+ * one-shot `startActivation({ provider: spawn, delivery: 'caller' })` with the
+ * request fold (agentOptions, maxDepth) and the `settle()` collector. The
+ * activation is DISPOSED once its result settles (or on abort) — a one-shot
+ * child stays resident for nothing and must not hold a pool slot. Slice-3
+ * reaper seam: pass `ttlController` (armed at dispatch) and the start request
+ * signal becomes `AbortSignal.any([exec.signal, ttlController.signal])` — the
+ * caller keeps ownership of the timer; this function only threads the signal.
  */
 export async function dispatchEphemeral(
   seam: SubagentsLike,
@@ -74,62 +64,89 @@ export async function dispatchEphemeral(
     parent: Agent
     signal: AbortSignal
     maxDepth?: number
-    persona?: string
     agentOptions?: Record<string, string>
-    toolFilter?: ToolRestriction
+    /** rc.5 composition applied at `agent/created` (never sent to the seam). */
+    composition?: ChildComposition
   },
   opts: {
     pinIgnored?: boolean
     ttlController?: AbortController
-    refuseCapacity?: (live: number) => Error
   } = {},
 ): Promise<{ text: string; status: 'completed' }> {
-  // F-1: check + creation under one per-parent lease (released once the one-shot run was accepted).
-  const lease = await acquireLiveCapacity(seam, folded.parent, folded.signal, opts.refuseCapacity ?? ephemeralCapacityRefusal)
-  // §3.1 ToolSearch strip: branch-local, post-sanitize (the sanitized filter
-  // may have injected ToolSearch; a read-only child must not be able to
-  // tool-search-load a deferred write-capable tool). preloadDeferredFilterTools
-  // already ran BEFORE this strip at the dispatch site.
+  // F-1: admission + creation under one per-parent lease (released once the
+  // one-shot activation was accepted); the capacity DECISION is the harness
+  // pool's (ACTIVATION_LIMIT_REACHED mapped to the D4 remedy copy).
+  const lease = await acquireLiveCapacity(folded.parent, folded.signal)
   const { ttlController } = opts
-  const toolFilter = folded.toolFilter === undefined
-    ? undefined
-    // exactOptionalPropertyTypes: drop `allow` entirely when there is none.
-    : {
-      ...folded.toolFilter,
-      ...(folded.toolFilter.allow === undefined
-        ? {}
-        : { allow: folded.toolFilter.allow.filter(name => name !== 'ToolSearch') }),
-    }
-  const request = {
-    ...folded,
-    ...(toolFilter !== undefined ? { toolFilter } : {}),
-    // Slice-3 seam: the reaper arms a per-run controller at dispatch; aborting
-    // it must not cancel the turn signal (Task is concurrency-safe).
-    ...(ttlController !== undefined ? { signal: AbortSignal.any([folded.signal, ttlController.signal]) } : {}),
-  }
-  let run
+  // Slice-3 seam: the reaper arms a per-run controller at dispatch; aborting
+  // it must not cancel the turn signal (Task is concurrency-safe). The
+  // activation signal covers pre-publication cancellation; the TTL kill
+  // reaches execution through the dispose() in the finally below.
+  const signal = ttlController !== undefined
+    ? AbortSignal.any([folded.signal, ttlController.signal])
+    : folded.signal
+  // Ephemeral children are one-shot but still local activations; reserve an id
+  // so the composition plan can be keyed before the agent is announced. A
+  // provider without the continuable capability allocates its own id (external
+  // execution), so composition is applied post-publication there instead.
+  const local = (seam.getProvider(PROVIDER_SPAWN) as { prepareContinuable?: unknown } | undefined)?.prepareContinuable !== undefined
+  const childId = local ? randomUUID() : undefined
+  if (childId !== undefined && folded.composition !== undefined) planComposition(childId, folded.composition)
+  let activation: ActivationLike
   try {
-    run = await seam.start(PROVIDER_SPAWN, request)
+    activation = await seam.startActivation({
+      provider: PROVIDER_SPAWN,
+      label: folded.label ?? 'ephemeral',
+      ...(childId !== undefined ? { childId } : {}),
+      request: {
+        prompt: folded.prompt,
+        parent: folded.parent,
+        ...(folded.agentOptions !== undefined ? { agentOptions: folded.agentOptions } : {}),
+        ...(folded.maxDepth !== undefined ? { maxDepth: folded.maxDepth } : {}),
+      },
+      signal,
+      delivery: 'caller',
+    })
+  } catch (error) {
+    if (childId !== undefined) clearComposition(childId)
+    const capacity = capacityErrorRefusal(error)
+    if (capacity !== undefined) throw capacity
+    throw error
   } finally {
     lease()
   }
-  let result
+  // Post-publication abort (TTL kill or caller cancel) must go through
+  // dispose() — the activation signal covers pre-publication only.
+  const onAbort = (): void => { void activation.dispose().catch(() => {}) }
+  signal.addEventListener('abort', onAbort, { once: true })
   try {
-    result = await settle(run)
-  } catch (error) {
-    // §3.4 foreground failure copy: a TTL kill of a foreground-waited child
-    // surfaces with the pinned remedy text (settle throws on non-completed).
-    if (ttlController?.signal.aborted === true) throw new Error(EPHEMERAL_TTL_KILL_COPY)
-    throw error
+    let result
+    try {
+      result = await settle(activation)
+    } catch (error) {
+      // §3.4 foreground failure copy: a TTL kill of a foreground-waited child
+      // surfaces with the pinned remedy text (settle throws on non-completed).
+      if (ttlController?.signal.aborted === true) throw new Error(EPHEMERAL_TTL_KILL_COPY)
+      throw error
+    }
+    const notes = [
+      EPHEMERAL_PROMOTION_NOTICE,
+      ...(opts.pinIgnored === true ? [EPHEMERAL_PIN_IGNORED_NOTICE] : []),
+    ]
+    return { ...result, text: `${result.text}\n${notes.join(' ')}` }
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+    // Dispose policy (one-shot): release the resident slot on settle or abort.
+    // Teardown failure must not replace a captured result.
+    try {
+      await activation.dispose()
+    } catch {
+      /* released on a best-effort basis; the TTL/abort path already surfaced */
+    }
   }
-  const notes = [
-    EPHEMERAL_PROMOTION_NOTICE,
-    ...(opts.pinIgnored === true ? [EPHEMERAL_PIN_IGNORED_NOTICE] : []),
-  ]
-  return { ...result, text: `${result.text}\n${notes.join(' ')}` }
 }
 
-/** Await a run's terminal result and project it onto the tool output shape. */
+/** Await an activation's terminal result and project it onto the tool output shape. */
 export async function settle(run: { result: Promise<{ stopReason: string; output?: readonly { type: string; text?: string }[] }> }): Promise<{ text: string; status: 'completed' }> {
   let result
   try {

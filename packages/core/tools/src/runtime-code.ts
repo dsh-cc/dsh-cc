@@ -16,6 +16,7 @@ import type { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 // Type-only: makes `ctx.get('approval')` resolve to the ApprovalService
 // augmentation. The seam stays optional at runtime — see `serviceAsk`.
 import type {} from '@deepseek-ai/dsh-user-approval'
+import type {} from '@deepseek-ai/dsh-working-directory'
 import { createRunCodeTool } from './code-mode.ts'
 import { errorMessage } from './abort-utils.ts'
 import type { CodeDispatchLog, PreToolDecision, ToolDefinition, ToolExecution, ToolPresentationMode } from './tool-types.ts'
@@ -35,6 +36,14 @@ import type { ToolRuntimeCore } from './runtime-core.ts'
  */
 export function requireCodeTransport(rt: ToolRuntimeCore): ToolDefinition {
   rt.codeTransport ??= createRunCodeTool(rt, {
+    resolveWorkingDirectory: async (exec) => {
+      // Only Agent-owned PTC requires directory state; native registries and
+      // unowned programs can run without this service.
+      if (exec.agent === undefined) return undefined
+      const directories = rt.ctx.get('workingDirectory')
+      if (directories === undefined) throw new Error('dsh-tools: run_code with an Agent requires workingDirectory')
+      return directories.ensure(exec.agent, exec.signal)
+    },
     requireRuntime: () => rt.requirePtcRuntime(rt.defaultMode),
     // The language-aware description/parameters getters read the runtime
     // without demanding one, so a native-default process can still project

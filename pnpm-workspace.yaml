@@ -27,7 +27,7 @@ allowBuilds:
   protobufjs: false
 
 minimumReleaseAgeExclude:
-  - '@deepseek-ai/dsh-timeout@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-http-proxy@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-timeout@0.2.1-rc.5'
+  - '@deepseek-ai/dsh-http-proxy@0.2.1-rc.5'
   # Inert without minimumReleaseAge (unset in this workspace); bumped forward for consistency so a future enablement doesn't silently un-pin these three.
-  - '@deepseek-ai/dsh-ptc-runtime@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-ptc-runtime@0.2.1-rc.5'

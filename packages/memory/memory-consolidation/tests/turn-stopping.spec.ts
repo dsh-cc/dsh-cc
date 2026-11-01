@@ -93,7 +93,7 @@ function deferred<T>() {
 
 function mount(config: { memoryHome: string; dreamEnabled?: boolean; extractEnabled?: boolean; fs?: unknown; sessionsRoot?: string }) {
   const ctx = new Context()
-  const subagents = { start: vi.fn() }
+  const subagents = { startActivation: vi.fn() }
   // The startMemoryJob observation spy is module-scoped: reset it per mount
   // so call counts and results stay per-test.
   vi.mocked(startMemoryJob).mockClear()
@@ -115,8 +115,8 @@ async function stopTurn(ctx: Context, agent: Agent): Promise<void> {
 }
 
 /** Count subagent starts with a given label. */
-function startsWithLabel(subagents: { start: ReturnType<typeof vi.fn> }, label: string): number {
-  return subagents.start.mock.calls.filter((c) => c[1]?.label === label).length
+function startsWithLabel(subagents: { startActivation: ReturnType<typeof vi.fn> }, label: string): number {
+  return subagents.startActivation.mock.calls.filter((c) => c[0]?.label === label).length
 }
 
 /** The done/cancel handles returned by startMemoryJob calls with the given label. */
@@ -170,20 +170,22 @@ async function seedFresh(root: string, n: number, startAt = Date.now()): Promise
 describe('agent/turn-stopping listener', () => {
   it('awaits the async subagents.start before reading run.result', async () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/tmp'))
 
     await vi.waitFor(() => expect(startMemoryJob).toHaveBeenCalledTimes(1))
-    expect(subagents.start).toHaveBeenCalledWith('fork', expect.objectContaining({
+    expect(subagents.startActivation).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'fork',
       label: 'extract-memories',
-      parent: expect.anything(),
+      request: expect.objectContaining({ parent: expect.anything() }),
+      delivery: 'caller',
     }))
   })
 
   it('never fails the turn when the subagent run rejects', async () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    subagents.start.mockImplementation(async () => ({ result: Promise.reject(new Error('model exploded')) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.reject(new Error('model exploded')) }))
 
     await expect(stopTurn(ctx, fakeAgent('/tmp'))).resolves.toBeUndefined()
     await vi.waitFor(() => expect(startMemoryJob).toHaveBeenCalledTimes(1))
@@ -191,7 +193,7 @@ describe('agent/turn-stopping listener', () => {
 
   it('never fails the turn when subagents.start itself rejects', async () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    subagents.start.mockRejectedValue(new Error('no such provider'))
+    subagents.startActivation.mockRejectedValue(new Error('no such provider'))
 
     await expect(stopTurn(ctx, fakeAgent('/tmp'))).resolves.toBeUndefined()
   })
@@ -200,22 +202,22 @@ describe('agent/turn-stopping listener', () => {
 describe('agent/turn-stopping recursion & single-flight gates', () => {
   it('a subagent (delegationDepth 1) turn-end spawns nothing', async () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/tmp', 1))
 
-    expect(subagents.start).not.toHaveBeenCalled()
+    expect(subagents.startActivation).not.toHaveBeenCalled()
     expect(startMemoryJob).not.toHaveBeenCalled()
   })
 
   it('depth gate fails closed: invalid subagentDepth spawns nothing without throwing', async () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
     const agent = fakeAgent('/tmp', -1) // delegates to delegationDepthOf, which throws
 
     await expect(stopTurn(ctx, agent)).resolves.toBeUndefined()
 
-    expect(subagents.start).not.toHaveBeenCalled()
+    expect(subagents.startActivation).not.toHaveBeenCalled()
     expect(startMemoryJob).not.toHaveBeenCalled()
   })
 
@@ -223,12 +225,12 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
     const agent = fakeAgent('/tmp')
     const pending = deferred<unknown>()
-    subagents.start.mockImplementation(async () => ({ result: pending.promise }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: pending.promise }))
 
     await stopTurn(ctx, agent)
     await stopTurn(ctx, agent) // still in flight
 
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalledTimes(1))
     expect(startMemoryJob).toHaveBeenCalledTimes(1)
     pending.resolve({ structured: { writes: [] }, stopReason: 'completed' })
   })
@@ -236,30 +238,30 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
   it('content gate: no re-spawn on unchanged events, spawns again on growth', async () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
     const agent = fakeAgent('/tmp')
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     // First turn: some events exist, spawns.
     agent.session.events.push({ source: 'user', message: 'a' } as never)
     await stopTurn(ctx, agent)
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalledTimes(1))
     await vi.waitFor(async () => expect((await controlsOf('extract-memories')).length).toBe(1))
     // Let the extraction settle so the in-flight flag clears.
-    await vi.waitFor(() => expect(subagents.start.mock.calls.length).toBe(1))
+    await vi.waitFor(() => expect(subagents.startActivation.mock.calls.length).toBe(1))
 
     // Same event count again: content gate skips (no in-flight either).
     await stopTurn(ctx, agent)
-    expect(subagents.start).toHaveBeenCalledTimes(1)
+    expect(subagents.startActivation).toHaveBeenCalledTimes(1)
 
     // Events grew: spawns again.
     agent.session.events.push({ source: 'assistant', message: 'b' } as never)
     await stopTurn(ctx, agent)
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalledTimes(2))
   })
 
   it('job outcome: rejection maps to failed/killed; a completed run writes back and completes', async () => {
     // failed
     const a = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    a.subagents.start.mockImplementation(async () => ({ result: Promise.reject(new Error('boom')) }))
+    a.subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.reject(new Error('boom')) }))
     await stopTurn(a.ctx, fakeAgent('/tmp'))
     await vi.waitFor(() => expect(startMemoryJob).toHaveBeenCalledTimes(1))
     const [failedDone] = await controlsOf('extract-memories')
@@ -267,7 +269,10 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
 
     // completed: a valid structured report is written host-side.
     const b = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    b.subagents.start.mockImplementation(async () => ({
+    b.subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
       result: Promise.resolve({
         structured: { writes: [{ path: 'user-profile.md', content: 'body' }] },
         stopReason: 'completed',
@@ -284,7 +289,7 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
     // killed: aborted before the result rejects.
     const c = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
     const pending = deferred<unknown>()
-    c.subagents.start.mockImplementation(async () => ({ result: pending.promise }))
+    c.subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: pending.promise }))
     await stopTurn(c.ctx, fakeAgent('/tmp'))
     await vi.waitFor(() => expect(startMemoryJob).toHaveBeenCalledTimes(1))
     const [cancellable] = await controlsOf('extract-memories')
@@ -296,7 +301,7 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
   it('job outcome: child-level failures surface as failed, not fake-completed', async () => {
     // A non-completed stopReason (e.g. outputSchema never reported → 'error').
     const a = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    a.subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ stopReason: 'error' }) }))
+    a.subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ stopReason: 'error' }) }))
     await stopTurn(a.ctx, fakeAgent('/tmp'))
     await vi.waitFor(() => expect(startMemoryJob).toHaveBeenCalledTimes(1))
     const [errored] = await controlsOf('extract-memories')
@@ -304,7 +309,10 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
 
     // A completed run whose payload fails validation (path escape attempt).
     const b = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    b.subagents.start.mockImplementation(async () => ({
+    b.subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
       result: Promise.resolve({
         structured: { writes: [{ path: '../escape.md', content: 'x' }] },
         stopReason: 'completed',
@@ -321,18 +329,23 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
 
   it('forwards maxDepth: 1 and the writes outputSchema on the subagent request', async () => {
     const { ctx, subagents } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/tmp'))
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalledTimes(1))
 
-    expect(subagents.start.mock.calls[0][1]).toMatchObject({ maxDepth: 1 })
-    expect(subagents.start.mock.calls[0][1].outputSchema).toBe(MEMORY_WRITES_SCHEMA)
+    expect(subagents.startActivation.mock.calls[0][0].request).toMatchObject({ maxDepth: 1 })
+    expect(subagents.startActivation.mock.calls[0][0].request.outputSchema).toBe(MEMORY_WRITES_SCHEMA)
+    expect(subagents.startActivation.mock.calls[0][0].provider).toBe('fork')
+    expect(subagents.startActivation.mock.calls[0][0].delivery).toBe('caller')
   })
 
   it('writes back into each turning agent\'s own workspace directory', async () => {
     const { ctx, subagents, fs } = mount({ memoryHome: '/tmp/mem', dreamEnabled: false })
-    subagents.start.mockImplementation(async () => ({
+    subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
       result: Promise.resolve({
         structured: { writes: [{ path: 'fact.md', content: 'body' }] },
         stopReason: 'completed',
@@ -357,9 +370,9 @@ describe('dream sessions gate (scanned session store)', () => {
   // The dream agent's cwd is '/mem', so its workspace memory dir is here.
   const LOCK = '/mem/projects/mem/.consolidation-lock'
 
-  function dreamPromptOf(subagents: { start: ReturnType<typeof vi.fn> }): string {
-    const call = subagents.start.mock.calls.find((c) => c[1]?.label === 'memory-consolidation')
-    return call ? call[1].prompt[0].text : ''
+  function dreamPromptOf(subagents: { startActivation: ReturnType<typeof vi.fn> }): string {
+    const call = subagents.startActivation.mock.calls.find((c) => c[0]?.label === 'memory-consolidation')
+    return call ? call[0].request.prompt[0].text : ''
   }
 
   it('spawns the dream once five or more new sessions exist since lastAt; prompt carries hint ids and the sessions root', async () => {
@@ -368,7 +381,7 @@ describe('dream sessions gate (scanned session store)', () => {
     await seedFresh(tmpRoot, 5, NOW)
     // lastAt = 1000: only sessions created after it qualify.
     const { ctx, subagents } = mount({ memoryHome: '/mem', fs: makeFsMock({ [LOCK]: '1\n1000\n' }), sessionsRoot: tmpRoot })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
 
@@ -388,7 +401,7 @@ describe('dream sessions gate (scanned session store)', () => {
   it('an empty store blocks the dream', async () => {
     await mkdir(tmpRoot, { recursive: true })
     const { ctx, subagents } = mount({ memoryHome: '/mem', sessionsRoot: tmpRoot })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await new Promise(r => setTimeout(r, 30))
@@ -400,7 +413,7 @@ describe('dream sessions gate (scanned session store)', () => {
     const missing = join(tmpRoot, 'absent')
     const { ctx, subagents } = mount({ memoryHome: '/mem', sessionsRoot: missing })
     const warnSpy = vi.spyOn(ctx.logger, 'warn')
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await new Promise(r => setTimeout(r, 30))
@@ -425,7 +438,7 @@ describe('dream sessions gate (scanned session store)', () => {
       },
     }
     const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessionsRoot: tmpRoot })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await stopTurn(ctx, fakeAgent('/mem'))
@@ -450,7 +463,7 @@ describe('dream sessions gate (scanned session store)', () => {
       fs: makeFsMock({ ['/mem/projects/mem2/.consolidation-lock']: '1\n1000\n' }),
     })
     const debugSpy = vi.spyOn(ctx.logger, 'debug')
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1), { timeout: 2000 })
@@ -466,9 +479,9 @@ describe('dream sessions gate (scanned session store)', () => {
     expect(scans.length).toBe(1)
     expect(memoHits.length).toBe(1)
 
-    const dreamPrompts = subagents.start.mock.calls
-      .filter((c) => c[1]?.label === 'memory-consolidation')
-      .map((c) => c[1].prompt[0].text as string)
+    const dreamPrompts = subagents.startActivation.mock.calls
+      .filter((c) => c[0]?.label === 'memory-consolidation')
+      .map((c) => c[0].request.prompt[0].text as string)
     expect(dreamPrompts.length).toBe(2)
     expect(dreamPrompts[0]).toContain('- old')
     for (let i = 1; i <= 5; i++) expect(dreamPrompts[1]).toContain(`s${i}`)
@@ -486,8 +499,11 @@ describe('dream pressure marker (forced consolidation)', () => {
     return mount({ memoryHome: '/mem', fs: makeFsMock({ [PRESSURE]: marker, ...extra }), sessionsRoot: tmpRoot })
   }
 
-  async function spawnDream(ctx: Context, subagents: { start: ReturnType<typeof vi.fn> }): Promise<void> {
-    subagents.start.mockImplementation(async () => ({
+  async function spawnDream(ctx: Context, subagents: { startActivation: ReturnType<typeof vi.fn> }): Promise<void> {
+    subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
       result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }),
     }))
     await stopTurn(ctx, fakeAgent('/mem'))
@@ -565,7 +581,10 @@ describe('dream pressure marker (forced consolidation)', () => {
     await seedFresh(tmpRoot, 1)
     const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`
     const { ctx, subagents, fs } = pressureMount(marker)
-    subagents.start.mockImplementation(async () => ({
+    subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
       result: Promise.resolve({ structured: undefined, stopReason: 'error' }),
     }))
 
@@ -623,7 +642,7 @@ describe('dream pressure marker (forced consolidation)', () => {
       },
     }
     const { ctx, subagents } = mount({ memoryHome: '/mem', fs, sessionsRoot: tmpRoot })
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await stopTurn(ctx, fakeAgent('/mem'))
@@ -642,9 +661,9 @@ describe('extract-memories index injection', () => {
   // The extraction agent's cwd is MEM, so its workspace memory dir is here.
   const WS = '/mem/projects/mem'
 
-  function extractionPromptOf(subagents: { start: ReturnType<typeof vi.fn> }): string {
-    const call = subagents.start.mock.calls.find((c) => c[1]?.label === 'extract-memories')
-    return call ? call[1].prompt[0].text : ''
+  function extractionPromptOf(subagents: { startActivation: ReturnType<typeof vi.fn> }): string {
+    const call = subagents.startActivation.mock.calls.find((c) => c[0]?.label === 'extract-memories')
+    return call ? call[0].request.prompt[0].text : ''
   }
 
   function agentWithTypes(types: readonly string[]): Agent {
@@ -668,10 +687,10 @@ describe('extract-memories index injection', () => {
   it('injects the MEMORY.md index into the prompt under "Existing topics:"', async () => {
     const fs = makeFsMock({ [`${WS}/MEMORY.md`]: 'topic-a.md\n  - summary of a' })
     const { ctx, subagents } = mountExtract(fs)
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent(MEM))
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalled())
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalled())
 
     const prompt = extractionPromptOf(subagents)
     expect(prompt).toContain('Existing topics:')
@@ -681,22 +700,22 @@ describe('extract-memories index injection', () => {
   it('performs the MEMORY.md read before the subagent start', async () => {
     const fs = makeFsMock({ [`${WS}/MEMORY.md`]: 'topic-a.md' })
     const { ctx, subagents } = mountExtract(fs)
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent(MEM))
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalled())
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalled())
 
-    expect(fs.stat.mock.invocationCallOrder[0]).toBeLessThan(subagents.start.mock.invocationCallOrder[0])
-    expect(fs.readText.mock.invocationCallOrder[0]).toBeLessThan(subagents.start.mock.invocationCallOrder[0])
+    expect(fs.stat.mock.invocationCallOrder[0]).toBeLessThan(subagents.startActivation.mock.invocationCallOrder[0])
+    expect(fs.readText.mock.invocationCallOrder[0]).toBeLessThan(subagents.startActivation.mock.invocationCallOrder[0])
   })
 
   it('falls back to listing topic .md files when MEMORY.md is absent', async () => {
     const fs = makeFsMock({ [`${WS}/topic-b.md`]: 'b', [`${WS}/topic-a.md`]: 'a' })
     const { ctx, subagents } = mountExtract(fs)
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent(MEM))
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalled())
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalled())
 
     const prompt = extractionPromptOf(subagents)
     expect(prompt).toContain('topic-a.md')
@@ -705,9 +724,9 @@ describe('extract-memories index injection', () => {
     // With neither an index nor topic files, the "(none yet)" placeholder shows.
     const fs2 = makeFsMock({})
     const c2 = mountExtract(fs2)
-    c2.subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    c2.subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
     await stopTurn(c2.ctx, fakeAgent(MEM))
-    await vi.waitFor(() => expect(c2.subagents.start).toHaveBeenCalled())
+    await vi.waitFor(() => expect(c2.subagents.startActivation).toHaveBeenCalled())
     expect(extractionPromptOf(c2.subagents)).toContain('(none yet)')
   })
 
@@ -715,10 +734,10 @@ describe('extract-memories index injection', () => {
     const big = Array.from({ length: 500 }, (_, i) => `line-${i}`).join('\n')
     const fs = makeFsMock({ [`${WS}/MEMORY.md`]: big })
     const { ctx, subagents } = mountExtract(fs)
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent(MEM))
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalled())
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalled())
 
     const prompt = extractionPromptOf(subagents)
     expect(prompt).toContain('line-0')
@@ -731,10 +750,10 @@ describe('extract-memories index injection', () => {
     const fs = makeFsMock({ [`${WS}/MEMORY.md`]: 'topic-a.md' })
     fs.readText.mockRejectedValueOnce(new Error('io gone'))
     const { ctx, subagents } = mountExtract(fs)
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await expect(stopTurn(ctx, fakeAgent(MEM))).resolves.toBeUndefined()
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalledTimes(1))
 
     expect(extractionPromptOf(subagents)).toContain('(none yet)')
     expect(startMemoryJob).toHaveBeenCalledTimes(1)
@@ -742,10 +761,10 @@ describe('extract-memories index injection', () => {
 
   it('adds the read-scope and early-exit prompt contract lines', async () => {
     const { ctx, subagents } = mountExtract(makeFsMock())
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent(MEM))
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalled())
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalled())
 
     const prompt = extractionPromptOf(subagents)
     expect(prompt).toContain('The conversation to review is already in your context — do not open files or browse directories outside the memory directory.')
@@ -761,10 +780,10 @@ describe('extract-memories index injection', () => {
       'system', 'system', 'system', 'system', 'system', 'system', 'system', 'system', 'system', 'system',
     ] as const
     const { ctx, subagents } = mountExtract(makeFsMock())
-    subagents.start.mockImplementation(async () => ({ result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, agentWithTypes(types))
-    await vi.waitFor(() => expect(subagents.start).toHaveBeenCalled())
+    await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalled())
 
     expect(extractionPromptOf(subagents)).toContain('last 6 messages')
   })
@@ -813,7 +832,10 @@ describe('memory write fallback (entrypoint gate livelock, design §2.4)', () =>
     const fs = makeFsMock()
     const { ctx, subagents } = mount({ memoryHome: MEM, dreamEnabled: false, fs })
     const overLimit = Array.from({ length: 500 }, (_, i) => `- [topic-${i}]: detail ${i}`).join('\n')
-    subagents.start.mockImplementation(async () => ({
+    subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
       result: Promise.resolve({
         structured: { writes: [topicWrite, { path: 'MEMORY.md', content: overLimit }] },
         stopReason: 'completed',
@@ -837,7 +859,10 @@ describe('memory write fallback (entrypoint gate livelock, design §2.4)', () =>
     const fs = makeFsMock()
     const { ctx, subagents } = mount({ memoryHome: MEM, dreamEnabled: false, fs })
     const compliantIndex = '- [topic-a]: see topic-a.md\n- [topic-b]: fine\n'
-    subagents.start.mockImplementation(async () => ({
+    subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
       result: Promise.resolve({
         structured: { writes: [{ path: 'MEMORY.md', content: compliantIndex }, topicWrite] },
         stopReason: 'completed',

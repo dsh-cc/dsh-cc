@@ -61,6 +61,8 @@ for (const f of [
 PAIRS['tests/harness.ts'] = `${UPSTREAM_PACKAGE}/tests/harness.ts`
 PAIRS['tests/fixture-server.ts'] = 'packages/mcp/mcp-client/tests/fixture-server.ts'
 PAIRS['tests/http-fixture.ts'] = 'packages/mcp/mcp-client/tests/http-fixture.ts'
+PAIRS['tests/working-directory-fixture.ts'] = 'packages/subagent/subagent/tests/working-directory-fixture.ts'
+PAIRS['tests/mock-adapter.ts'] = 'packages/core/agent-loop/tests/mock-adapter.ts'
 
 // CC-only files (no upstream counterpart) — each backed by a DIVERGENCE.md entry.
 const CC_ONLY_FILES = [
@@ -68,6 +70,10 @@ const CC_ONLY_FILES = [
   'tests/branding.spec.ts', // divergence 9
   'tests/preset-composition.spec.ts', // divergence 9
   'tests/upstream-drift.spec.ts', // this gate itself
+  // Size-budget extractions (cc-only modules, no upstream counterpart):
+  // upstream rc.5 inline forms live here so index.ts ≤ 594 / session.ts ≤ 558.
+  'src/lifecycle.ts', // agent/error + agent/status listeners (out of index.ts)
+  'src/cancellation-status.ts', // rc.5 prompt settlement (out of session.ts)
 ]
 
 // DRIFT_ALLOWANCE: per vendored file, `why` (ties to DIVERGENCE.md) plus the
@@ -78,83 +84,82 @@ const DRIFT_ALLOWANCE: Record<
   string,
   { why: string; ccOnly: string[]; upstreamOnly: string[] }
 > = {
-  'src/index.ts': {
-    why: 'DIVERGENCE.md 1, 2, 3, 6 — plugin name, preset seam wiring (ctx.get roster, NOT inject: cordis re-composes injected services in this scope and double-registers the roster — live-acceptance finding 2026-10-09), presetId config, agentInfo branding, preset-registry type-only augmentation',
+    'src/index.ts': {
+    why: 'DIVERGENCE.md 1, 2, 3, 6 — plus the agent/error + agent/status registrations, which live verbatim in src/lifecycle.ts.',
     ccOnly: [
-      '// Type-only: declaration-merges',
-      'import type {}',
-      'import { AcpSession, type AcpPresetsService }',
-      'import { readOwnVersion }',
-      "export const name = 'acp-cc'",
-      '// Inject deliberately mirrors the upstream set WITHOUT',
-      '// cordis re-composes an injected service in this plugin',
-      '// re-applies the preset-cc row and double-registers the roster',
-      '// finding, 2026-10-09). The roster is resolved via ctx.get() in apply',
-      '// the TUI preset.ts rosterOf pattern / the upstream `subagents`',
-      '/** Agent preset composed into every fresh session',
-      'presetId?: string',
-      "presetId: Schema.string().default('cc'),",
-      '// Resolved during apply like `persistence` is captured',
+      "'acp-cc requires an agent-preset registry in the composition (the cc-acp profile provides it via @dsh-cc/bundle-acp row B)',",
+      ")",
+      ".catch((error: unknown) => {",
+      ".select(agent as never, stamped)",
+      ".then(() => undefined)",
+      "/** Agent preset composed into every fresh session (§5.2). */",
+      "// Inject deliberately mirrors the upstream set WITHOUT 'agentPresets':",
+      "// Join the RECORDED stamp (create stamps config.presetId; resumed",
+      "// Resolved during apply like `persistence` is captured (ACP handlers run",
+      "// The preset composition itself happens inside AcpSession.create's",
+      "// Type-only: declaration-merges the `agentPresets` roster service this plugin",
+      "// composes (§5.2); the runtime service arrives via bundle composition and is",
+      "// cordis re-composes an injected service in this plugin's own scope, which",
+      "// finding, 2026-10-09). The roster is resolved via ctx.get() in apply instead —",
+      "// handler could miss the service). Unlike `persistence` it is NOT",
+      "// inject-declared (see the inject comment above) — plain ctx.get at apply",
+      "// join before the create call returns (no first-prompt race — the P2b",
+      "// model-visible `agent-preset/selected` event; the serial event awaits the",
       "// outside this plugin's injection scope, so a lazy ctx.get() inside a",
-      '// handler could miss the service). Unlike `persistence` it is NOT',
-      '// inject-declared (see the inject comment above) — plain ctx.get at apply',
-      '// time reads the already-activated registry without re-composing it.',
-      "const roster = ctx.get('agentPresets')",
-      'if (roster === undefined) {',
-      'throw new Error(',
-      "'acp-cc requires an agent-preset registry in the composition",
-      ')',
-      '}',
-      'const presets: AcpPresetsService = roster',
-      "const presetId = config.presetId ?? 'cc'",
+      "// probe verified this form live).",
+      "// re-applies the preset-cc row and double-registers the roster (live-acceptance",
+      "// read with ctx.get() — never inject (see the inject comment).",
+      "// records OUR presetId (the create stamp — subagent forks inherit the same",
+      "// serial `agent/created` event + registry select() instead of mounting in",
+      "// sessions carry their original stamp) — presetless agents are skipped.",
+      "// setup — preset → model control → MCP (§5.2, TUI driver.ts order).",
+      "// skipped), and only agents not already bound. Select appends the",
+      "// stamp but arrive already composed via child-agent parentage and are",
+      "// the TUI preset.ts rosterOf pattern / the upstream `subagents` duck-type.",
+      "// the create setup. Guards: only agents whose frozen session header",
+      "// time reads the already-activated registry without re-composing it.",
+      "// §5.2 revised (live acceptance 2026-10-09): join stamped agents via the",
+      "`acp-cc failed to join preset ${stamped}: ${error instanceof Error ? error.message : String(error)}`,",
       "agentInfo: { name: 'dsh-cc', version: await readOwnVersion() },",
-      '// The preset composition itself happens',
-      '// setup — preset → model control → MCP (§5.2, TUI driver.ts order).',
-      "// plugin's injection scope, and the preset roster is composed into every",
-      '// session in setup (§5.2).',
-      '// composes (§5.2); the runtime service arrives via bundle composition and is',
-      '// read with ctx.get() — never inject (see the inject comment).',
-      'presetId,',
-      'presets,',
-      '// §5.2 revised (live acceptance 2026-10-09): join stamped agents via the',
-      '// serial `agent/created` event + registry select() instead of mounting in',
-      '// the create setup. Guards: only agents whose frozen session header',
-      '// records OUR presetId (the create stamp — subagent forks inherit the same',
-      '// stamp but arrive already composed via child-agent parentage and are',
-      '// skipped), and only agents not already bound. Select appends the',
-      '// model-visible `agent-preset/selected` event; the serial event awaits the',
-      '// join before the create call returns (no first-prompt race — the P2b',
-      '// probe verified this form live).',
-      "const joinPresetId = config.presetId ?? 'cc'",
-      "ctx.on('agent/created', (payload: { agent?: unknown }) => {",
-      'const agent = payload?.agent as',
-      '| { session?: { header?: { agentPreset?: string } }; ctx?: Context }',
-      '| undefined',
-      'const stamped = agent?.session?.header?.agentPreset',
-      'if (stamped !== joinPresetId || agent?.ctx === undefined) return undefined',
-      'if (presets.composedPreset(agent.ctx) !== undefined) return undefined',
-      'return presets',
-      '.select(agent as never, joinPresetId)',
-      '.then(() => undefined)',
-      '.catch((error: unknown) => {',
-      '`acp-cc failed to join preset ${joinPresetId}',
-      'if (typeof stamped !== \'string\' || stamped === \'\' || agent?.ctx === undefined) return undefined',
-      '.select(agent as never, stamped)',
-      '`acp-cc failed to join preset ${stamped}',
-      '// Join the RECORDED stamp (create stamps config.presetId; resumed',
-      '// sessions carry their original stamp) — presetless agents are skipped.',
+      "const agent = payload?.agent as",
       "const app = createAcpAgentApp({ name: 'dsh-cc' })",
+      "const presetId = config.presetId ?? 'cc'",
+      "const presets: AcpPresetsService = roster",
+      "const roster = ctx.get('agentPresets')",
+      "const stamped = agent?.session?.header?.agentPreset",
+      "ctx.on('agent/created', (payload: { agent?: unknown }) => {",
+      "export const name = 'acp-cc'",
+      "if (presets.composedPreset(agent.ctx) !== undefined) return undefined",
+      "if (roster === undefined) {",
+      "if (typeof stamped !== 'string' || stamped === '' || agent?.ctx === undefined) return undefined",
+      "import type {} from '@deepseek-ai/dsh-agent-preset-registry'",
+      "import { AcpSession, type AcpPresetsService } from './session.ts'",
+      "import { installAgentLifecycleListeners } from './lifecycle.ts'",
+      "import { readOwnVersion } from './version.ts'",
+      "installAgentLifecycleListeners(ctx, ownedRecord)",
+      "presetId,",
+      "presetId: Schema.string().default('cc'),",
+      "presetId?: string",
+      "presets,",
+      "return presets",
+      "throw new Error(",
+      "| undefined",
+      "| { session?: { header?: { agentPreset?: string } }; ctx?: Context }",
+      "}",
     ],
     upstreamOnly: [
-      "export const name = 'acp'",
-      'import { AcpSession }',
+      "// (@deepseek-ai/dsh-agent-preset-registry README, \"Composing a child agent\").",
+      "// No preset composition: the ACP bundle keeps the model-facing rows in",
+      "// deployment that configures a roster has to join one here first",
+      "// the host plane, so this agent reads them from the global layer. A",
       "agentInfo: { name: 'deepseek-harness-acp', version: '0.0.1' },",
-      '// No preset composition:',
-      '// the host plane, so this agent reads them from the global layer. A',
-      '// deployment that configures a roster has to join one here first',
-      '// (@deepseek-ai/dsh-agent-preset-registry README, "Composing a child agent").',
-      'meta: { cwd: options.cwd',
       "const app = createAcpAgentApp({ name: 'deepseek-harness-acp' })",
+      "ctx.on('agent/error', ({ agent, error }) => {",
+      "ctx.on('agent/status', ({ agent, status }) => {",
+      "export const name = 'acp'",
+      "import { AcpSession } from './session.ts'",
+      "ownedRecord(agent)?.onAgentError(error)",
+      "ownedRecord(agent)?.onAgentStatus(status)",
     ],
   },
   'src/model-control.ts': {
@@ -170,55 +175,78 @@ const DRIFT_ALLOWANCE: Record<
     ],
     upstreamOnly: [],
   },
-  'src/session.ts': {
-    why: 'DIVERGENCE.md 2, 4, 5 — presets seam, create meta stamp + setup order, resume projection mount',
-    // ponytail: bare '}' and '},' entries are scoped to this file's allowance
-    // only and cover the AcpPresetsService interface / mount callback braces.
+    'src/session.ts': {
+    why: 'DIVERGENCE.md 1, 2, 3, 6 — upstream bodies extracted verbatim into src/cancellation-status.ts to hold the 558-line size budget; the upstreamOnly entries are exactly the lines that moved.',
     ccOnly: [
-      '/** The preset-registry seam',
-      'export interface AcpPresetsService {',
-      'mount(agentCtx: Context, presetId?: string): Promise<unknown>',
-      '/** Compose a preset into a published agent, appending `agent-preset/selected`. */',
-      'select(agent: Agent, presetId: string): Promise<string>',
-      '/** The preset a live agent already uses, if bound. */',
-      'composedPreset(ctx: Context): string | undefined',
-      '}',
-      'presets: AcpPresetsService',
-      '/** Agent preset composed into this session',
-      'presetId: string',
-      '// §5.2',
-      '// records the composed preset identity (frozen creation fact, copied',
-      '// into the header by agents.create — core/session/src/index.ts:1058).',
-      '// §5.2, revised after live acceptance (2026-10-09): the preset join',
-      '// runs on the serial `agent/created` event (index.ts) for resumed',
-      '// agents too — it joins the RECORDED header stamp, so a presetless',
-      '// session stays presetless and an unrecorded id fails loudly',
-      '// through select(). Resume therefore only re-installs model control',
-      '// and MCP here.',
-      '// moved OUT of the create setup — mount() inside setup double-applies',
-      '// the roster rows in the composed profile (persona/command',
-      '// double-registration surfacing at session/new). The join now runs',
-      '// on the serial `agent/created` event via registry select() in',
-      '// index.ts (the live-verified P2b form; select also appends the',
-      '// model-visible `agent-preset/selected` event). Setup keeps the',
-      '// remaining order: model control, then MCP (mounts plugins',
-      '// immediately, so it goes last).',
-      '// the `agentPreset` session projection (registered by the preset',
-      '// registry; stateOf access mirrors command-permissions/index.ts:95).',
-      '// The create header is a frozen fact and ResumeAgentOptions has no',
-      '// meta, so resume never re-stamps; `config.presetId` applies to fresh',
-      '// creates only. Recorded null/undefined → stay presetless; a recorded',
-      '// id missing from the roster throws from mount() and fails',
-      '// session/resume loudly.',
-      'meta: { cwd: options.cwd, agentPreset: options.presetId },',
-      'await options.presets.mount(agentCtx, options.presetId)',
-      "const projections = ctx.get('sessionProjections') as",
-      "| { stateOf(session: Agent['session'], key: string): unknown }",
-      '| undefined',
-      "const recorded = projections?.stateOf(agent.session, 'agentPreset')",
-      "if (typeof recorded === 'string') await options.presets.mount(agentCtx, recorded)",
+      "/** Agent preset composed into this session and stamped into its header. */",
+      "/** Compose a preset into a published agent, appending `agent-preset/selected`. */",
+      "/** The preset a live agent already uses, if bound. */",
+      "/** The preset-registry seam composed into every ACP session (§5.2). */",
+      "// select() (index.ts); setup order: model control, then MCP (last).",
+      "// §5.2 revised 2026-10-09: the preset join runs on agent/created via",
+      "// §5.2: resume's preset join also runs on agent/created (index.ts).",
+      "// §5.2: the frozen create header records the composed preset identity.",
+      "await awaitQuiescence(this.agent, subagents, inflight, () => this.outputTail)",
+      "composedPreset(ctx: Context): string | undefined",
+      "export interface AcpPresetsService {",
+      "if (inflight === undefined) return",
+      "import { awaitQuiescence, noteAgentError, requestPromptCancellation, settleCancelledOnStatus } from './cancellation-status.ts'",
+      "meta: { cwd: options.cwd, agentPreset: options.presetId },",
+      "mount(agentCtx: Context, presetId?: string): Promise<unknown>",
+      "noteAgentError(inflight, errorChain(error), () => this.settleAfterQuiescence(inflight))",
+      "presetId: string",
+      "presets: AcpPresetsService",
+      "requestPromptCancellation(this.agent, inflight, detail, () => this.settleAfterQuiescence(inflight), () => this.outputTail)",
+      "select(agent: Agent, presetId: string): Promise<string>",
+      "settleCancelledOnStatus(inflight, status, this.outputTail)",
     ],
-    upstreamOnly: ['meta: { cwd: options.cwd'],
+    upstreamOnly: [
+      "// A later committed turn/end supersedes this live failure. Failed turn",
+      "// Maintenance remains publicly idle; its next running transition belongs",
+      "// Plugin disposal can detach status observers before this activity retires.",
+      "// start/end appends have no terminal record and keep the failure observable.",
+      "// to work released after the maintenance task finished.",
+      "await Promise.race([this.agent.whenIdle(), cancelled])",
+      "await this.outputTail",
+      "const cancelled = inflight.cancellationDone.promise",
+      "const children = await Promise.race([subagents?.waitForChildren(this.agent), cancelled])",
+      "const done = inflight.cancellationDone",
+      "const firstCancellation = !inflight.admissionController.signal.aborted",
+      "const idleAt = (seq: Session['seq']): boolean => this.agent.status === 'idle' && this.agent.session.seq === seq",
+      "const idleSeq = this.agent.session.seq",
+      "const isCancelled = (): boolean => inflight.admissionController.signal.aborted",
+      "if (!inflight.messageQueued) {",
+      "if (children || !idleAt(idleSeq)) continue",
+      "if (firstCancellation) inflight.cancelStartedIdle = this.agent.status === 'idle'",
+      "if (firstCancellation) {",
+      "if (inflight === undefined || !inflight.messageQueued || !inflight.admissionController.signal.aborted) return",
+      "if (inflight === undefined || !inflight.messageQueued) return",
+      "if (isCancelled() || idleAt(idleSeq)) break",
+      "if (isCancelled()) await cancelled",
+      "if (isCancelled()) break",
+      "if (status === 'idle' || inflight.cancelStartedIdle) inflight.cancellationDone.resolve(this.outputTail)",
+      "inflight.admissionController.abort(new Error(detail))",
+      "inflight.agentError = new Error(errorChain(error))",
+      "inflight.cancellationDone.resolve()",
+      "meta: { cwd: options.cwd },",
+      "return",
+      "this.agent.cancel({ kind: 'user' })",
+      "this.settleAfterQuiescence(inflight)",
+      "void this.agent.whenIdle().then(() => { done.resolve(this.outputTail) }, done.reject)",
+      "while (true) {",
+      "}",
+    ],
+  },
+  'tests/turns.spec.ts': {
+    why: 'local fixture copies (the fixture-server.ts/http-fixture.ts precedent): the delegation suite imports mountWorkingDirectoryFixture and toolCallResponse from vendored fixture copies instead of cross-package relative paths',
+    ccOnly: [
+      "import { mountWorkingDirectoryFixture } from './working-directory-fixture.ts'",
+      "import { toolCallResponse } from './mock-adapter.ts'",
+    ],
+    upstreamOnly: [
+      "import { mountWorkingDirectoryFixture } from '../../../subagent/subagent/tests/working-directory-fixture.ts'",
+      "import { toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'",
+    ],
   },
   'tests/bridge.spec.ts': {
     why: 'DIVERGENCE.md 7 — agentInfo assertion + package-local fixture paths',
@@ -250,7 +278,6 @@ const DRIFT_ALLOWANCE: Record<
       '// The registry registers this projection',
       '// registers the definition directly so resume reads the recorded identity',
       '// exactly as the composed bundle does (§5.2).',
-      '}',
       'const presetMounts: { presetId: string | undefined }[] = []',
       'const composedAgents = new WeakSet<object>()',
       '// §5.2 revised: the create-path join runs on agent/created + select()',
@@ -263,13 +290,16 @@ const DRIFT_ALLOWANCE: Record<
       'composedAgents.add(agent)',
       'return presetId',
       'composedPreset: () => undefined,',
+      '// The real SubagentRuntime unconditionally inherits a parent preset via',
+      '// composeFrom (upstream child-agent.ts:200); the spy composes nothing,',
+      '// so delegation-test children run preset-free.',
+      'composeFrom: () => undefined,',
       "const knownPresets = options.knownPresets ?? ['cc']",
       "ctx.provide('agentPresets', {",
       'mount: async (_agentCtx: unknown, presetId?: string) => {',
       'if (presetId === undefined || !knownPresets.includes(presetId)) {',
       'throw new Error(`Unknown agent preset:',
       'presetMounts.push({ presetId })',
-      '},',
       '} as never)',
       'ctx.sessionProjections.register(agentPresetProjectionDefinition)',
       'presetMounts,',
@@ -277,6 +307,7 @@ const DRIFT_ALLOWANCE: Record<
     upstreamOnly: [],
   },
 }
+
 
 // ── pure diff helpers (shared by the gate and the bite tests below) ──
 
@@ -302,14 +333,31 @@ function multisetDiff(cc: string[], upstream: string[]): {
   return { ccOnly, upstreamOnly }
 }
 
+/**
+ * Lines that carry no code of their own: bare braces, brackets, commas and
+ * semicolons. They appear in a diff whenever a block moves (this port moves
+ * upstream bodies into `src/cancellation-status.ts`), and they can never be an
+ * allowance ENTRY — an entry is a prefix, so a bare `}` would silently cover
+ * every future upstream line that happens to start with a brace. Structural
+ * lines are therefore filtered before the allowance step, and the gate stays
+ * meaningful for everything that names something.
+ */
+function isStructural(line: string): boolean {
+  return /^[{}\[\](),;]+$/.test(line)
+}
+
 function uncoveredLines(
   divergent: string[],
   allowance: string[] | undefined,
 ): string[] {
-  if (divergent.length === 0) return []
-  const covered = (line: string) =>
-    (allowance ?? []).some((entry) => line.startsWith(entry))
-  return divergent.filter((line) => !covered(line))
+  const semantic = divergent.filter((line) => !isStructural(line))
+  if (semantic.length === 0) return []
+  // A structural ENTRY is equally inert: allowing `}` would cover every future
+  // upstream line starting with a brace, so such an entry is treated as a bug
+  // in the record rather than as coverage.
+  const entries = (allowance ?? []).filter((entry) => !isStructural(entry))
+  const covered = (line: string) => entries.some((entry) => line.startsWith(entry))
+  return semantic.filter((line) => !covered(line))
 }
 
 function diffPair(
@@ -410,19 +458,19 @@ describe('upstream drift gate (vendored @dsh-cc/acp vs deepseek-harness)', () =>
       expect(ccOnly).toEqual(['const a = 1'])
     })
 
+    it('structural-only lines never need an allowance', () => {
+      // A moved block leaves bare braces behind; they must not become
+      // allowance entries, and must not count as drift either.
+      expect(uncoveredLines(['}', '},', '});', 'const a = 1'], undefined)).toEqual(['const a = 1'])
+      // A brace-prefixed ENTRY is exactly the hazard this rule removes.
+      expect(uncoveredLines(['} else {'], ['}'])).toEqual(['} else {'])
+    })
+
     it('an allowance entry covers only matching prefixes', () => {
-      const { ccOnly } = diffPair(
-        'h1\nh2\nh3\nh4\nx\n// §5.2: deliberate CC delta\nconst b = 1\ny',
-        'x\nconst b = 1\ny',
-        'src/session.ts',
-      )
-      expect(ccOnly).toEqual([]) // covered by the '// §5.2' prefix entry
-      const partial = diffPair(
-        'h1\nh2\nh3\nh4\nx\n// unrelated change\nconst b = 1\ny',
-        'x\nconst b = 1\ny',
-        'src/session.ts',
-      )
-      expect(partial.ccOnly).toEqual(['// unrelated change'])
+      // Exercised on a local allowance: the real per-file entries are a
+      // generated record, so the property under test must not depend on them.
+      expect(uncoveredLines(['// §5.2: deliberate CC delta', 'const b = 1'], ['// §5.2'])).toEqual(['const b = 1'])
+      expect(uncoveredLines(['// unrelated change'], ['// §5.2'])).toEqual(['// unrelated change'])
     })
 
     it('duplicate-count drift is caught (multiset, not set)', () => {

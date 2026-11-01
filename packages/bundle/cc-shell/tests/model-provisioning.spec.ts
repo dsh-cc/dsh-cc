@@ -29,7 +29,7 @@ interface ProviderRecord {
 }
 
 /** A subagents seam that captures plugin-shipped agent providers. */
-function makeSubagentsSeam(): { seam: { registerProvider: (p: unknown) => () => void; getProvider: (name: string) => unknown }; providers: ProviderRecord[]; backend: FakeBackend } {
+function makeSubagentsSeam(): { seam: { registerProvider: (p: unknown) => () => void; getProvider: (name: string) => unknown; startActivation(spec: Record<string, unknown>): Promise<unknown> }; providers: ProviderRecord[]; backend: FakeBackend } {
   const backend: FakeBackend = {
     last: undefined,
     start: async (request) => { backend.last = request; return { forwarded: request } },
@@ -40,9 +40,15 @@ function makeSubagentsSeam(): { seam: { registerProvider: (p: unknown) => () => 
     providers,
     seam: {
       registerProvider: (p) => { providers.push(p as never); return () => {} },
-      // Only the 'fork' backend name resolves — a wildcard answer reads as a
+      // Only the 'spawn' backend name resolves — a wildcard answer reads as a
       // duplicate under mountAgents' duplicate preflight and skips every agent.
-      getProvider: (name: string) => (name === 'fork' ? backend : undefined),
+      getProvider: (name: string) => (name === 'spawn' ? backend : undefined),
+      // rc.5: the provider routes through spawn's activation; the fake records
+      // the activation REQUEST (same record the old fork echo captured).
+      startActivation: async (spec: Record<string, unknown>) => {
+        backend.last = spec['request'] as never
+        return { childId: 'fake-child', messageId: 'fake-m', result: Promise.resolve(), dispose: () => Promise.resolve() }
+      },
     },
   }
 }

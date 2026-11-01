@@ -31,7 +31,7 @@ import { apply } from '../src/index.ts'
  */
 async function mountGlue(adapter: MockAdapter): Promise<{ ctx: Context; seam: RulesSeam }> {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })

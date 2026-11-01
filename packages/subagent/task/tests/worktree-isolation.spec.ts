@@ -149,8 +149,7 @@ async function mount(opts: { parentCwdInSubdir?: boolean; definitionBody?: strin
     ;(ctx as unknown as { emit(event: string, info: unknown): void }).emit(event, info)
   }
   ctx.provide('subagents', {
-    async start() { throw new Error('not used') },
-    async startContinuable(spec: Record<string, unknown>) {
+    async startActivation(spec: Record<string, unknown>) {
       const childId = (spec['childId'] as string | undefined) ?? 'child-iso-1'
       emit('subagent/start', { runId: 'run-1', provider: spec['provider'], id: childId, local: true })
       continuableStarts.push(spec['request'] as Record<string, unknown>)
@@ -158,7 +157,12 @@ async function mount(opts: { parentCwdInSubdir?: boolean; definitionBody?: strin
         runId: 'run-1', provider: 'spawn', id: childId, local: true,
         stopReason: COMPLETED.stopReason, lastAssistantMessage: COMPLETED.output,
       })
-      return { childId, messageId: 'm-1' }
+      return {
+        childId,
+        messageId: 'm-1',
+        result: Promise.resolve({ stopReason: 'completed' }),
+        dispose: () => Promise.resolve(),
+      }
     },
     getProvider: () => ({ prepareContinuable: async () => ({}) }),
     list: () => ['spawn'],
@@ -218,11 +222,10 @@ describe('WS-3 subagent isolation: worktree (fake shell)', () => {
     const lock = reqs.find(r => r.command.includes('worktree lock'))
     expect(lock!.command).toMatch(/lock --reason='dsh-cc subagent [0-9a-f-]+'/)
 
-    // Persona: definition prompt + the absolute-path contract.
-    const persona = m.continuableStarts()[0]!['persona'] as string
-    expect(persona).toContain('ISOLATED PERSONA MARKER')
-    expect(persona).toContain('## Isolated worktree')
-    expect(persona).toMatch(/Your working directory is [^ ]*\.claude\/worktrees\/subagent-[0-9a-f-]+/)
+    // rc.5: persona no longer rides the start request — the composition
+    // slice re-applies the definition prompt and the worktree contract to
+    // the child; the dispatch request carries only the first-line note.
+    expect(m.continuableStarts()[0]!['persona']).toBeUndefined()
     // Prompt: first-line worktree note.
     const prompt = m.continuableStarts()[0]!['prompt'] as { type: string; text: string }[]
     expect(prompt[0]!.text.startsWith('Working directory: ')).toBe(true)
@@ -311,26 +314,26 @@ const ISOLATED_BODY = (model: string | null): string =>
   + '<!-- actor-contract:end -->\n'
 
 describe('WS-3 + actor-contract gate (§3.1 worktree seam)', () => {
-  it('gate open (raw glm-4.7 token): marked block kept BEFORE the worktree contract, markers gone', async () => {
+  // rc.5: the isolated persona fold (gate + worktree contract append) moved
+  // to the composition slice; the dispatch request itself never carries a
+  // persona. These two pins keep the worktree branch's prompt-note and the
+  // no-persona invariant for both gate states (the gate's strip/keep matrix
+  // itself is pinned in actor-contract-gate.spec).
+  it('gate open (raw glm-4.7 token): no persona on the request; prompt note carries the worktree', async () => {
     const m = await mount({ definitionBody: ISOLATED_BODY('glm-4.7') })
     const result = await call(m.ctx, { subagent_type: 'isolated', description: 'w', prompt: 't' }, m.agent)
     expect(result.isError).toBe(false)
-    const persona = m.continuableStarts()[0]!['persona'] as string
-    expect(persona).toContain('NO-USER-IDENTITY-SENTINEL')
-    expect(persona).not.toContain('actor-contract:')
-    expect(persona.indexOf('NO-USER-IDENTITY-SENTINEL')).toBeLessThan(persona.indexOf('## Isolated worktree'))
+    expect(m.continuableStarts()[0]!['persona']).toBeUndefined()
+    const prompt = m.continuableStarts()[0]!['prompt'] as { type: string; text: string }[]
+    expect(prompt[0]!.text).toContain('isolated git worktree')
   })
 
-  it('gate closed: block+markers absent, worktree contract still appended', async () => {
+  it('gate closed: no persona on the request regardless of gate state', async () => {
     const m = await mount({ definitionBody: ISOLATED_BODY('sonnet') })
     m.gate.setSource(() => ({ models: [] }))
     m.gate.onChange()
     const result = await call(m.ctx, { subagent_type: 'isolated', description: 'w', prompt: 't' }, m.agent)
     expect(result.isError).toBe(false)
-    const persona = m.continuableStarts()[0]!['persona'] as string
-    expect(persona).not.toContain('NO-USER-IDENTITY-SENTINEL')
-    expect(persona).not.toContain('actor-contract:')
-    expect(persona).toContain('ISOLATED MARKER')
-    expect(persona).toContain('## Isolated worktree')
+    expect(m.continuableStarts()[0]!['persona']).toBeUndefined()
   })
 })

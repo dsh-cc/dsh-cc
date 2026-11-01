@@ -18,20 +18,21 @@ import {
   MAX_ENTRYPOINT_BYTES,
   truncateEntrypointContent,
 } from '@dsh-cc/memory'
-import { startWithFilterResilience } from '@dsh-cc/memory'
-import { MEMORY_TOOL_FILTER } from './tools.ts'
 
 /** Structural subset of the subagent seam used here. */
 interface SubagentService {
-  start(name: string, request: {
-    label?: string
-    prompt: readonly { type: 'text'; text: string }[]
-    parent: Agent
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: {
+      prompt: readonly { type: 'text'; text: string }[]
+      parent: Agent
+      maxDepth?: number
+      outputSchema?: Record<string, unknown>
+    }
     signal: AbortSignal
-    toolFilter?: { allow: readonly string[] }
-    maxDepth?: number
-    outputSchema?: Record<string, unknown>
-  }): Promise<{ result: Promise<SubagentResultLike> }>
+    delivery: 'parent' | 'caller'
+  }): Promise<{ result: Promise<SubagentResultLike>; dispose(): Promise<void> }>
 }
 
 /**
@@ -107,36 +108,36 @@ export async function startMemoryJob(
     return { abort: () => {}, settled: Promise.resolve(false), done: Promise.resolve({ status: 'failed', detail: 'subagents seam unavailable' }) }
   }
   const fs = ctx.get('fs') as FileSystem | undefined
-  // Same logger fallback shape as recall.ts's warnOnce; called bound so the
-  // host logger method keeps its `this`.
-  const hostLogger = (ctx as { logger?: { warn?: (message: string) => void } }).logger
-  const logger = { warn: (message: string): void => {
-    if (typeof hostLogger?.warn === 'function') hostLogger.warn(message)
-    else console.warn(message)
-  } }
   const controller = new AbortController()
-  // `subagents.start` is async upstream — awaiting it is what exposes the run's
-  // `result` promise. Reading `run.result` on the un-awaited Promise throws
-  // "Cannot read properties of undefined (reading 'then')" and poisons the
-  // turn-stopping dispatch.
-  const run = await startWithFilterResilience(subagents, provider, {
+  // rc.5: one-shot activation (delivery 'caller'). The read-only tool
+  // restriction no longer rides the start request — the composition seam
+  // applies it (plan C5). The controller signal now covers ONLY cancellation
+  // before publication; execution-time abort goes through `dispose()`.
+  const activation = await subagents.startActivation({
+    provider,
     label,
     signal: controller.signal,
-    prompt: [{ type: 'text', text: prompt }],
-    parent: agent,
-    toolFilter: MEMORY_TOOL_FILTER,
-    // Defense-in-depth recursion cap: the top-level listener already gates on
-    // depth zero, so this fork's child never delegates. maxDepth is compared
-    // against the CHILD's resolved depth (parent + 1); a top-level parent's
-    // child resolves to 1 and passes, a grandchild to 2 is rejected.
-    maxDepth: 1,
-    outputSchema: MEMORY_WRITES_SCHEMA,
-  }, logger) as { result: Promise<SubagentResultLike> }  // Real job-done wiring: `done` maps the subagent outcome onto the JobHooks
+    request: {
+      prompt: [{ type: 'text', text: prompt }],
+      parent: agent,
+      // Defense-in-depth recursion cap: the top-level listener already gates on
+      // depth zero, so this fork's child never delegates. maxDepth is compared
+      // against the CHILD's resolved depth (parent + 1); a top-level parent's
+      // child resolves to 1 and passes, a grandchild to 2 is rejected.
+      maxDepth: 1,
+      outputSchema: MEMORY_WRITES_SCHEMA,
+    },
+    delivery: 'caller',
+  })
+  // Kill the running fork exactly once (idempotent upstream): on abort, on
+  // settle, and on agent disposal. Teardown failures never surface.
+  const kill = (): void => { void activation.dispose().catch(() => {}) }
+  // Real job-done wiring: `done` maps the subagent outcome onto the JobHooks
   // contract (must never reject). Aborted → killed (rolls back the dream
   // lock); a non-completed stopReason, a missing/invalid payload, or a
   // write-back failure → failed with detail; a validated, persisted batch →
   // completed. All branches resolve.
-  const done: Promise<JobOutcome> = run.result.then(
+  const done: Promise<JobOutcome> = activation.result.then(
     async (res): Promise<JobOutcome> => {
       if (controller.signal.aborted) return { status: 'killed' }
       if (res?.stopReason !== 'completed') {
@@ -166,9 +167,11 @@ export async function startMemoryJob(
   try {
     dispose = agent.ctx.effect(() => async () => {
       controller.abort('agent disposed')
+      kill()
       await done.catch(() => {})
     }, 'memory-consolidation: cancel the fork on agent disposal')
   } catch { /* agent scope already disposing: the fork dies with it anyway */ }
-  void done.finally(() => { dispose?.() })
-  return { abort: (reason?: string) => { controller.abort(reason) }, settled, done }
+  // One-shot dispose policy: a settled job never keeps the fork resident.
+  void done.finally(() => { kill(); dispose?.() })
+  return { abort: (reason?: string) => { controller.abort(reason); kill() }, settled, done }
 }

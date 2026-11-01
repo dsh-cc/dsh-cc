@@ -6,6 +6,7 @@
 
 import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 /** Payload recorded when one nested Code Mode Tool dispatch starts. */
 export interface CodeDispatchStartEventData {
@@ -20,6 +21,8 @@ export interface CodeDispatchStartEventData {
 export interface CodeDispatchEventData extends CodeDispatchStartEventData {
   isError: boolean
   content: ContentBlock[]
+  /** Replayable tool-owned presentation metadata, separate from model content. */
+  meta?: JsonValue
 }
 
 declare module '@deepseek-ai/dsh-session/types' {

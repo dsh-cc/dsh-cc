@@ -23,6 +23,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import { SANDBOX_MODES } from '@deepseek-ai/dsh-sandbox-policy'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { PLAN_READONLY_REASON, SWITCHABLE_PERMISSION_MODES, type PermissionMode, type SwitchablePermissionMode } from './types.ts'
 
@@ -143,6 +144,12 @@ export function foldResumeSandbox(events: readonly SessionEvent[]): SandboxMode 
 export function setPermissionMode(session: Session, mode: SwitchablePermissionMode, resumeSandbox?: SandboxMode): void {
   if (!(SWITCHABLE_PERMISSION_MODES as readonly string[]).includes(mode)) {
     throw new TypeError(`permission mode must be one of ${SWITCHABLE_PERMISSION_MODES.join(', ')}`)
+  }
+  // Closed-vocabulary guard carried over from the removed runtime invariant:
+  // an unknown resumeSandbox would persist a mode record the restore path
+  // cannot interpret, so reject it at the single write point.
+  if (resumeSandbox !== undefined && !(SANDBOX_MODES as readonly string[]).includes(resumeSandbox)) {
+    throw new TypeError(`resumeSandbox must be a known sandbox mode: ${JSON.stringify(resumeSandbox)}`)
   }
   const data: PermissionModeEventData = {
     mode,

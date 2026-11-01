@@ -3,11 +3,12 @@
  *
  * Loads `AgentDefinition`s from the plugin's standard `agents/` directory and
  * any inline manifest `agents` paths via the claude-code-agents loader, then
- * registers each as a named subagent provider backing `context: fork`. The
- * provider is a thin forwarder: `start` resolves a named execution backend on
- * the subagent seam (default `fork`) and delegates, overlaying the agent's
- * system prompt, model, and tool restriction. Registration is effect-scoped so
- * unmounting the plugin removes every agent.
+ * registers each as a named subagent provider. The provider's `start` routes
+ * the delegation through the spawn backend's `startActivation`
+ * (`delivery: 'caller'`), overlaying the agent's gated system prompt and
+ * model; tool restriction no longer rides the request (the composition seam
+ * applies it). Registration is effect-scoped so unmounting the plugin removes
+ * every agent.
  *
  * @module
  */
@@ -36,7 +37,7 @@ export type ResolveModel = (model: string | undefined) => {
   readonly reasoningEffort?: string | undefined
 } | undefined
 
-/** The subagent seam: a named-provider registry with a backend resolver. */
+/** The subagent seam: a named-provider registry with the activation entry. */
 export interface SubagentsSeam {
   /**
    * Register a named execution provider.
@@ -46,6 +47,18 @@ export interface SubagentsSeam {
   registerProvider(provider: unknown): () => void
   /** Look up a provider by name, for backend resolution at `start`. */
   getProvider(name: string): unknown | undefined
+  /** Establish a managed child (rc.5); the plugin provider's execution path. */
+  startActivation(spec: {
+    provider: string
+    label: string
+    request: Record<string, unknown>
+    signal: AbortSignal
+    delivery: 'parent' | 'caller'
+  }): Promise<{
+    childId: string
+    result: Promise<unknown>
+    dispose(): Promise<void>
+  }>
 }
 
 /**
@@ -61,22 +74,22 @@ export function isPluginAgentProvider(value: unknown): boolean {
     && (value as Record<symbol, unknown>)[PLUGIN_AGENT_PROVIDER_BRAND] === true
 }
 
-/** The execution backend a CC agent provider forwards to. */
+/** The manager-facing start contract a CC agent provider satisfies (called on the external routing of `startActivation` for the scoped plugin provider). */
 export interface SubagentBackend {
   /** Start a one-shot child run against a delegation request. */
   start(request: unknown): Promise<unknown>
 }
 
-/** A thin forwarder provider: overlays an AgentDefinition and delegates. Exported for the cc-shell bundle's base-agent glue. */
+/** A thin forwarder provider: overlays an AgentDefinition and routes through the spawn backend's activation. Exported for the cc-shell bundle's base-agent glue. */
 export class AgentProvider implements SubagentBackend {
   /** Loader brand (see `PLUGIN_AGENT_PROVIDER_BRAND`); read via `isPluginAgentProvider`. */
   readonly [PLUGIN_AGENT_PROVIDER_BRAND] = true
 
-  private readonly backendName = 'fork'
+  private readonly backendName = 'spawn'
 
   constructor(
     private readonly agentDefinition: AgentDefinition,
-    private readonly resolve: (name: string) => SubagentBackend | undefined,
+    private readonly subagents: SubagentsSeam,
     private readonly resolveModel?: ResolveModel,
     private readonly registeredName?: string,
     private readonly gatePatterns?: () => readonly string[],
@@ -92,19 +105,19 @@ export class AgentProvider implements SubagentBackend {
     return this.agentDefinition
   }
 
-  /** The start-time features this agent's definition requires. */
-  get capabilities(): { outputSchema: boolean; depthLimit: boolean; toolFilter: boolean; persona: boolean } {
+  /** The start-time features this agent forwards (rc.5 capability vocabulary: toolFilter/persona are gone; the composition seam owns them). */
+  get capabilities(): { agentOptions: boolean; agentPreset: boolean; outputSchema: boolean; depthLimit: boolean } {
     return {
+      agentOptions: true,
+      agentPreset: false,
       outputSchema: false,
       depthLimit: false,
-      toolFilter: this.agentDefinition.toolRestriction !== undefined,
-      persona: this.agentDefinition.permissionMode !== undefined || this.agentDefinition.isolation !== undefined,
     }
   }
 
-  /** Whether the child sees the parent's completed-turn prefix. */
+  /** Whether the child sees the parent's completed-turn prefix (spawn: fresh child). */
   get inheritsParentContext(): boolean {
-    return true
+    return false
   }
 
   /**
@@ -115,8 +128,10 @@ export class AgentProvider implements SubagentBackend {
    * @throws when no backend is resolvable (execution depends on the host).
    */
   async start(request: unknown): Promise<unknown> {
-    const backend = this.resolve(this.backendName)
-    if (backend === undefined) {
+    // rc.5: the fork backend's `start` is gone; plugin agents execute through
+    // the spawn provider's activation (delivery 'caller'). The refusal stays
+    // when no spawn backend is resolvable.
+    if (this.subagents.getProvider(this.backendName) === undefined) {
       throw new Error(`cc-plugin-loader: no "${this.backendName}" subagent backend is registered to run agent "${this.agentDefinition.agentType}"`)
     }
     const delegation = request as Record<string, unknown>
@@ -131,14 +146,27 @@ export class AgentProvider implements SubagentBackend {
       gateCandidates(this.agentDefinition.model, modelOverride),
       this.gatePatterns?.() ?? DEFAULT_ACTOR_CONTRACT_MODELS,
     )
-    return backend.start({
-      ...delegation,
-      prompt: gatedPrompt,
-      ...modelOverride !== undefined
-        ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
-        : {},
-      ...this.agentDefinition.toolRestriction !== undefined ? { toolFilter: this.agentDefinition.toolRestriction } : {},
+    // label/signal live at the activation-spec level; toolFilter/persona are
+    // gone from the request (the composition seam applies them).
+    const { label, signal, ...rest } = delegation
+    const activation = await this.subagents.startActivation({
+      provider: this.backendName,
+      label: typeof label === 'string' ? label : this.name,
+      request: {
+        ...rest,
+        prompt: [{ type: 'text', text: gatedPrompt }],
+        ...(modelOverride !== undefined
+          ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
+          : {}),
+      },
+      signal: signal as AbortSignal,
+      delivery: 'caller',
     })
+    return {
+      id: activation.childId,
+      result: activation.result,
+      dispose: () => activation.dispose(),
+    }
   }
 
   /**
@@ -240,7 +268,7 @@ export async function mountAgents(options: MountAgentsOptions): Promise<{ dispos
       }
       const provider = new AgentProvider(
         definition,
-        name => subagents.getProvider(name) as SubagentBackend | undefined,
+        subagents,
         options.resolveModel,
         ...prefix !== undefined ? [scopedName] : [],
         options.gatePatterns,

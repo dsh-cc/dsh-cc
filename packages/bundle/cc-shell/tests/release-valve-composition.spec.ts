@@ -8,7 +8,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -16,7 +16,7 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
@@ -39,7 +39,7 @@ afterEach(() => {
 /** Compose task + command-agents over one root (preset row order). */
 async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []) {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'cc-shell-release-valve-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -66,6 +66,8 @@ async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []
   applyCommandAgents(ctx)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
+  // rc.5: the working-directory service ensures the parent cwd on spawn — it must exist.
+  mkdirSync(join(root, 'workspace'), { recursive: true })
   const parent = await ctx.agentLoop.create(
     SessionId('parent'),
     { provider: 'mock', model: 'mock' },

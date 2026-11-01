@@ -433,7 +433,9 @@ describe('S1 — PreToolUse additionalContext is injected', () => {
     // The context landed as a durable plugin-sourced message AFTER the tool result.
     const log = events(agent)
     const resultIdx = log.findIndex(e => e.type === 'tool/result')
-    const ctxIdx = log.findIndex(e => e.type === 'user/message' && e.data.source.kind !== 'user')
+    // rc.5: the working-directory runtime-context message also qualifies as
+    // non-user; locate the hook-injected one by its exact source kind.
+    const ctxIdx = log.findIndex(e => e.type === 'user/message' && e.data.source.kind === 'hooks-claude-code')
     expect(ctxIdx).toBeGreaterThan(resultIdx)
     expect(log[ctxIdx]?.type === 'user/message' && log[ctxIdx].data.content.some(b => b.type === 'text' && b.text.includes('pre-tool guidance'))).toBe(true)
   })

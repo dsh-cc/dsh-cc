@@ -1,39 +1,42 @@
 /**
- * Dispatch regression for the dream lane (§5.3): a fake SubagentService.start
- * that simulates the harness `tools.restrict()` contract drives
- * `startMemoryJob` end-to-end. Post-fix MEMORY_TOOL_FILTER is already the
- * reduced list, so the first test forces the drift (first attempt throws the
- * exact production message) to exercise the helper's warn+retry path; the
- * second asserts that a retry that still fails propagates to the dream-side
- * dispatch-throw catch after exactly one retry.
+ * Dispatch contract for the dream lane at rc.5: `startMemoryJob` drives
+ * `subagents.startActivation` (provider 'fork', delivery 'caller', the
+ * outputSchema contract) end-to-end. The pre-rc.5 restrict-resilience helper
+ * (warn + reduced-filter retry) was removed with the rc.5 migration — its
+ * only trigger (a `tools.restrict()` throw on a toolFilter passed through
+ * `subagents.start`) cannot occur once nothing passes toolFilter through the
+ * start request — so these tests pin what replaced it: result collection,
+ * the one-shot dispose policy, and job-abort semantics.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { FileSystem } from '@dsh-cc/memory'
 import { startMemoryJob } from '../src/memory-job.ts'
-import { resetRestrictWarnState } from '@dsh-cc/memory'
 
-const PROD_MESSAGE = 'tools.restrict() names unknown global tool "structured_output"; known global tools: read, grep, glob, read_image'
+interface ActivationSpec {
+  provider: string
+  label: string
+  request: Record<string, unknown>
+  signal: AbortSignal
+  delivery: string
+}
 
-/** The host restrict contract: allow-listed non-global names throw exactly like the harness. */
-const GLOBAL_TOOLS = ['read', 'read_image', 'grep', 'glob']
-function restrictAwareSubagents(firstAttemptThrows: boolean) {
-  const calls: Array<{ toolFilter?: { allow?: readonly string[] } }> = []
+/** Activation-shaped fake seam: records specs, returns caller-controlled result; counts disposals. */
+function activationSubagents(result: Promise<unknown>) {
+  const calls: ActivationSpec[] = []
+  let disposed = 0
   return {
     calls,
-    async start(_name: string, request: { toolFilter?: { allow?: readonly string[] } }) {
-      const attempt = calls.length
-      calls.push(request)
-      // First attempt simulates the drift the helper exists for (post-fix the
-      // shipped filter is already reduced; the fake forces the throw so the
-      // retry path stays covered end-to-end).
-      if (firstAttemptThrows && attempt === 0) throw new Error(PROD_MESSAGE)
-      const unknown = (request.toolFilter?.allow ?? []).filter(n => !GLOBAL_TOOLS.includes(n))
-      if (unknown.length > 0) {
-        throw new Error(`tools.restrict() names unknown global tool "${unknown[0]}"; known global tools: ${GLOBAL_TOOLS.join(', ')}`)
+    get disposed() { return disposed },
+    async startActivation(spec: ActivationSpec) {
+      calls.push(spec)
+      return {
+        childId: 'job-child',
+        messageId: 'job-m',
+        result,
+        dispose: () => { disposed++; return Promise.resolve() },
       }
-      return { result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }
     },
   }
 }
@@ -69,14 +72,10 @@ function makeFsMock() {
 
 const agent = fakeAgent()
 
-beforeEach(() => {
-  resetRestrictWarnState()
-})
-
-describe('startMemoryJob dispatch resilience (dream lane)', () => {
-  it('dispatches after one reduced-filter retry and reaches write-back', async () => {
+describe('startMemoryJob dispatch (rc.5 activation contract)', () => {
+  it('dispatches provider/label/schema through startActivation and reaches write-back, then disposes the one-shot fork', async () => {
     const ctx = new Context()
-    const subagents = restrictAwareSubagents(true)
+    const subagents = activationSubagents(Promise.resolve({ structured: { writes: [{ path: 'topic-a.md', content: 'fact\n' }] }, stopReason: 'completed' }))
     const fs = makeFsMock()
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, fs as never)
@@ -85,26 +84,50 @@ describe('startMemoryJob dispatch resilience (dream lane)', () => {
     const outcome = await job.done
     expect(outcome).toEqual({ status: 'completed' })
     expect(await job.settled).toBe(true)
-    // Exactly one retry, carrying the reduced (host-restrictable) filter.
-    expect(subagents.calls).toHaveLength(2)
-    expect(subagents.calls[1]!.toolFilter?.allow).toEqual(['read', 'read_image', 'grep', 'glob'])
-    expect(subagents.calls[1]!.toolFilter?.allow).not.toContain('structured_output')
+    expect(subagents.calls).toHaveLength(1)
+    const spec = subagents.calls[0]!
+    expect(spec.provider).toBe('fork')
+    expect(spec.label).toBe('dream')
+    expect(spec.delivery).toBe('caller')
+    expect(spec.request['maxDepth']).toBe(1)
+    expect(spec.request['outputSchema']).toBeDefined()
+    // rc.5: no toolFilter on the start request (composition seam applies it).
+    expect(spec.request['toolFilter']).toBeUndefined()
+    // One-shot dispose policy: the settled fork must not stay resident.
+    expect(subagents.disposed).toBe(1)
   })
 
-  it('propagates to the dispatch-throw catch after a single retry when the retry also fails', async () => {
+  it('propagates a startActivation throw unchanged (the dream-side catch turns it into dispatch-throw)', async () => {
     const ctx = new Context()
-    const subagents = restrictAwareSubagents(false)
-    // This deployment restricts even the reduced filter: every attempt throws.
-    subagents.start = async (_name: string, request: { toolFilter?: { allow?: readonly string[] } }) => {
-      subagents.calls.push(request)
-      throw new Error(PROD_MESSAGE.replace('structured_output', 'read'))
+    const subagents = {
+      calls: [] as ActivationSpec[],
+      async startActivation(spec: ActivationSpec) {
+        this.calls.push(spec)
+        throw new Error('boom')
+      },
     }
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, makeFsMock() as never)
 
-    // The rejection ESCAPES startMemoryJob (this is the input the dream-side
-    // catch turns into phase `dispatch-throw`), after exactly one retry.
-    await expect(startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt')).rejects.toThrow('tools.restrict()')
-    expect(subagents.calls).toHaveLength(2)
+    await expect(startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt')).rejects.toThrow('boom')
+    expect(subagents.calls).toHaveLength(1)
+  })
+
+  it('abort() kills the running fork through dispose and resolves killed', async () => {
+    const ctx = new Context()
+    const pending = Promise.withResolvers<never>()
+    const subagents = activationSubagents(pending.promise)
+    ctx.provide('subagents' as never, subagents as never)
+    ctx.provide('fs' as never, makeFsMock() as never)
+
+    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt')
+    expect(subagents.disposed).toBe(0)
+    job.abort('test kill')
+    // The activation signal covers pre-publication only at rc.5; the execution
+    // abort goes through dispose — and the pre-publication signal still fires.
+    expect(subagents.disposed).toBe(1)
+    expect(subagents.calls[0]!.signal.aborted).toBe(true)
+    pending.reject(new Error('cancelled'))
+    await expect(job.done).resolves.toEqual({ status: 'killed' })
   })
 })

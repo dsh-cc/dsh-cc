@@ -54,21 +54,23 @@ async function mount() {
     ;(ctx as unknown as { emit(event: string, info: unknown): void }).emit(event, info)
   }
   ctx.provide('subagents', {
-    async start(name: string, request: Record<string, unknown>) {
-      starts.push({ provider: name, ...request })
-      return provider.start()
-    },
-    async startContinuable(spec: Record<string, unknown>) {
+    async startActivation(spec: Record<string, unknown>) {
       const childId = (spec['childId'] as string | undefined) ?? `child-${starts.length + 1}`
       const runId = `run-${starts.length + 1}`
       const providerName = spec['provider'] as string
+      const request = (spec['request'] ?? {}) as Record<string, unknown>
       emit('subagent/start', { runId, provider: providerName, id: childId, local: true })
-      starts.push(spec)
+      starts.push({ provider: providerName, request, delivery: spec['delivery'] })
       void (async () => {
         const settled = await (await provider.start()).result
         emit('subagent/end', { runId, provider: providerName, id: childId, local: true, stopReason: settled.stopReason, lastAssistantMessage: settled.output })
       })()
-      return { childId, messageId: 'm-1' }
+      return {
+        childId,
+        messageId: 'm-1',
+        result: Promise.resolve(COMPLETED).then(() => COMPLETED),
+        dispose: () => Promise.resolve(),
+      }
     },
     getProvider: (name: string) => (name === 'spawn' || name === 'fork' ? { name, ...provider } : undefined),
     list: () => ['spawn', 'fork'],

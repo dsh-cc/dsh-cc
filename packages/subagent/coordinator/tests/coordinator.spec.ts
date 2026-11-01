@@ -7,7 +7,7 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
@@ -25,7 +25,7 @@ afterEach(() => {
 
 async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -281,7 +281,7 @@ describe('dsh-coordinator completion notification (reused subagent-settled proto
     // settlement notice wakes. Mirrors the dsh-subagent continuation settlement
     // suite that owns this protocol.
     const ctx = new Context()
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-notify-'))
     roots.push(root)
     await ctx.plugin(JsonlSessionPersistence, { root })

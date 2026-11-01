@@ -1,7 +1,7 @@
 /**
  * Shared release operation: the single source of truth for evicting a direct
  * continuable child's resident activation via the harness
- * `drainContinuableChildren` seam (plan
+ * `drainChildren` seam (plan
  * docs/plans/2026-09-30-subagent-release-valve.md §4 D1). Consumed by the
  * model-facing `release_agent` tool and the human-facing
  * `/agents release <id>` command, so both surfaces render ONE copy set (§5)
@@ -12,8 +12,8 @@
  * Residency derivation cross-reference: this module's registry reads derive
  * residency exactly like the sibling sites `snapshot.ts residencyOf` (live
  * `status === 'running'` → running, live-not-running → idle, absent →
- * settled/ready) and `background-start.ts assertLiveCapacity` (a slot is held
- * only while the registry reports `status === 'running'`).
+ * settled/ready). The capacity pool itself counts RESIDENT activations
+ * tree-wide (rc.5) — this derivation only feeds user-facing status.
  * @module @dsh-cc/command-agents/release
  */
 
@@ -24,7 +24,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 export interface ReleaseSubagentsLike {
   listChildren?(parentSessionId: SessionId, signal?: AbortSignal):
     Promise<readonly { id: string; mode?: string }[]>
-  drainContinuableChildren?(parent: Agent, ids: SessionId[]): Promise<void>
+  drainChildren?(parent: Agent, ids: SessionId[]): Promise<void>
 }
 
 /** The duck-typed live-agents registry slice release reads. */
@@ -166,7 +166,7 @@ function failureMessage(
     case 'not-continuable':
       return `Agent ${id} is not a continuable child (mode: ${detail ?? 'unknown'}); release only covers continuable children.`
     case 'no-drain-seam':
-      return `Cannot release ${id}: this composition's subagents seam exposes no drainContinuableChildren; free capacity by letting children settle or by restarting the session.`
+      return `Cannot release ${id}: this composition's subagents seam exposes no drainChildren; free capacity by letting children settle or by restarting the session.`
     case 'catalog-unreadable':
       return catalogUnreadableCopy(id, detail ?? '')
     case 'not-direct-child':
@@ -220,7 +220,7 @@ export async function runRelease(deps: {
   const signal = deps.signal ?? new AbortController().signal
 
   // Step 0: seam gates before any marking or drain.
-  if (subagents === undefined || typeof subagents.drainContinuableChildren !== 'function') {
+  if (subagents === undefined || typeof subagents.drainChildren !== 'function') {
     throw new ReleaseFailure('no-drain-seam', failureMessage('no-drain-seam', id, undefined))
   }
   signal.throwIfAborted()
@@ -285,7 +285,7 @@ export async function runRelease(deps: {
   // on an unissued drain).
   signal.throwIfAborted()
   markReleasing(id)
-  const drain = subagents.drainContinuableChildren!(parent, [SessionId(id)])
+  const drain = subagents.drainChildren!(parent, [SessionId(id)])
 
   const withCause = (): { cause?: string } =>
     catalogNote === 'catalog-unreadable' && catalogCause !== undefined

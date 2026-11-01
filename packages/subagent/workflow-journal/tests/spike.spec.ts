@@ -31,6 +31,9 @@ import FileSystem from '@deepseek-ai/dsh-fs-local'
 import Subprocess from '@deepseek-ai/dsh-subprocess-local'
 import { mountCcWorkflowRunRegistry, parseJournal } from '@dsh-cc/tool-workflow'
 import { CcWorkflowJournalProvider } from '../src/provider.ts'
+import AgentRegistryService from '@deepseek-ai/dsh-agent'
+import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 
 // Real worker-thread startup on contended runners (the harness idiom).
 vi.setConfig({ testTimeout: 60_000 })
@@ -53,10 +56,9 @@ class FakeSpawnProvider implements SubagentProvider {
   readonly name = 'spawn'
   readonly capabilities: SubagentCapabilities = {
     agentOptions: true,
+    agentPreset: false,
     outputSchema: false,
     depthLimit: true,
-    toolFilter: true,
-    persona: false,
   }
   readonly inheritsParentContext = false
   /** Arrival-ordered prompts across ALL runs (arrival index = position + 1). */
@@ -74,7 +76,6 @@ class FakeSpawnProvider implements SubagentProvider {
     }
     const run: SubagentRun = {
       id: `spawn-child-${index}` as never,
-      localAgent: undefined,
       result: new Promise<SubagentResult>(resolve => setTimeout(() => resolve(result), 5)),
       dispose: () => Promise.resolve(),
     }
@@ -99,6 +100,14 @@ async function setup() {
   // integer` (the upstream workflow-ptc tests/setup.ts fakeParent idiom).
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SessionStore)
+  // rc.5: SubagentRuntime injects `workingDirectory` (which itself injects
+  // fs/sessionProjections/systemPrompt — all must activate first), and
+  // startActivation requires the parent to be the exact LIVE agent in the
+  // agents registry — both mounted/registered below.
+  await ctx.plugin(FileSystem)
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(AgentRegistryService)
+  await ctx.plugin(WorkingDirectory)
   await ctx.plugin(SubagentRuntime)
   const spawnProvider = new FakeSpawnProvider()
   ctx.subagents.registerProvider(spawnProvider)
@@ -113,15 +122,43 @@ async function setup() {
   // the upstream tests/setup.ts idiom: fs/subprocess/sandbox must exist
   // BEFORE NodePtcRuntime, whose inject list parks the fiber when they are
   // missing (cordis does not throw — the plugin just never activates).
-  await ctx.plugin(FileSystem)
+  // (fs already mounted above for the working-directory inject.)
   await ctx.plugin(Subprocess)
   await ctx.plugin(Sandbox)
   await ctx.plugin(SandboxPolicy, { mode: 'danger-full-access', workspaceRoot: scratch })
   await ctx.plugin(NodePtcRuntime, { graceMs: 50 })
   await ctx.plugin(PtcWorkflowEngine, { provider: 'cc-workflow-journal', maxConcurrentAgents: 8 })
-  // Real parent session + agent through the store (upstream fakeParent idiom).
+  // Real parent session + agent through the store, REGISTERED in the agents
+  // registry (rc.5 exact-live-parent requirement; the upstream
+  // externalTestParent idiom, with an inlined in-memory inbox stub).
   const session = ctx.sessions.create(undefined, { meta: { cwd: scratch } })
-  const parent = { id: session.id, session, options: {} } as unknown as Agent
+  const inbox = {
+    nextTurn: [] as unknown[],
+    nextStep: [] as unknown[],
+    clear() { this.nextStep.splice(0); this.nextTurn.splice(0) },
+    append(target: 'next-turn' | 'next-step', message: unknown) { (target === 'next-turn' ? this.nextTurn : this.nextStep).push(message) },
+    prepend(target: 'next-turn' | 'next-step', message: unknown) { (target === 'next-turn' ? this.nextTurn : this.nextStep).unshift(message) },
+    replace: () => false,
+    remove: () => false,
+    splice: (target: 'next-turn' | 'next-step', start: number, deleteCount: number, ...inserted: unknown[]) =>
+      (target === 'next-turn' ? inbox.nextTurn : inbox.nextStep).splice(start, deleteCount, ...inserted),
+  }
+  const parent = {
+    id: session.id,
+    session,
+    ctx,
+    options: {},
+    status: 'idle',
+    inbox,
+    send: (message: unknown, target: 'next-turn' | 'next-step') => inbox.append(target, message),
+    followup: (message: unknown) => inbox.append('next-turn', message),
+    steer: (message: unknown) => inbox.append('next-step', message),
+    inject: (message: unknown) => inbox.append('next-step', message),
+    cancel: (_cause: unknown, options?: { keepInbox?: boolean }) => { if (options?.keepInbox !== true) inbox.clear() },
+    whenIdle: () => Promise.resolve(),
+    runMaintenance: (task: (signal: AbortSignal) => unknown) => task(new AbortController().signal),
+  } as unknown as Agent
+  ctx.agents.register(parent)
   // Records-capture seam (2 lines): side-band capture of the real session's
   // durable appends — the same stream the run registry writes its rows to.
   const append = session.append.bind(session) as (t: string, d: Record<string, unknown>) => unknown
@@ -197,6 +234,7 @@ describe('workflow resume journal spike (real worker-thread engine)', () => {
       // --- Run 1: parallel(4) + pipeline(3 x 2 stages) -----------------
       const first = launch(fixture)
       const result1: WorkflowResult = await first.run.result
+      expect(result1.error).toBeUndefined()
       expect(result1.stopReason).toBe('completed')
       expect(result1.agentsStarted).toBe(TOTAL)
 
