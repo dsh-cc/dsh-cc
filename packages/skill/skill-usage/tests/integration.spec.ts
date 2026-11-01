@@ -22,6 +22,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -52,6 +53,8 @@ async function setup(): Promise<{ home: string; agent: Agent; adapter: MockAdapt
   roots.push(root)
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  // rc.5: the loop's tool surface resolves the working-directory service.
+  await ctx.plugin(WorkingDirectory)
   // Real JSONL persistence: the reopen tripwire (§3.6) is only meaningful
   // against the storage layer that hard-refuses unknown event types.
   await ctx.plugin(JsonlSessionPersistence, { root })
@@ -118,6 +121,7 @@ describe('cc-skill-usage integration (real loop + real JsonlSessionPersistence)'
     // skill-usage/* rows either way.
     const reopenCtx = new Context()
     await mountAgentLoopTestDependencies(reopenCtx)
+    await reopenCtx.plugin(WorkingDirectory)
     await reopenCtx.plugin(JsonlSessionPersistence, { root })
     await reopenCtx.plugin(AgentLoop, { agents: [] })
     const reopened = await reopenCtx.agentLoop.create(SessionId('skill-usage-int'), { provider: 'mock', model: 'mock' })

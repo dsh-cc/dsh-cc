@@ -767,6 +767,9 @@ importers:
       '@deepseek-ai/dsh-compaction':
         specifier: link:../../../../deepseek-harness/packages/compaction/compaction
         version: link:../../../../deepseek-harness/packages/compaction/compaction
+      '@deepseek-ai/dsh-fs-local':
+        specifier: link:../../../../deepseek-harness/packages/fs/fs-local
+        version: link:../../../../deepseek-harness/packages/fs/fs-local
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
@@ -794,6 +797,9 @@ importers:
       '@deepseek-ai/dsh-util-values':
         specifier: link:../../../../deepseek-harness/packages/util/values
         version: link:../../../../deepseek-harness/packages/util/values
+      '@deepseek-ai/dsh-working-directory':
+        specifier: link:../../../../deepseek-harness/packages/session/working-directory
+        version: link:../../../../deepseek-harness/packages/session/working-directory
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -3259,6 +3265,9 @@ importers:
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
         version: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-working-directory':
+        specifier: link:../../../../deepseek-harness/packages/session/working-directory
+        version: link:../../../../deepseek-harness/packages/session/working-directory
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -4485,6 +4494,7 @@ packages:
   '@smithy/core@3.34.1':
     resolution: {integrity: sha512-dLcOUxz8YCv1RZUMKq6GbyUf95pLbrqh34bPvpCZ1+CByFF31BEAFewZjsGCnVsZTKdThNENfGyAgk2TJqVwSw==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
