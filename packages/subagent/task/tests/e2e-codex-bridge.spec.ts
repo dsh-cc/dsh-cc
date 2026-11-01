@@ -588,7 +588,7 @@ describe('e2e — codex-rescue-bridge PreToolUse allow hook through the real plu
     world.inflight.push(forkPromise)
     const result = await awaitBounded(forkPromise, env.remaining(), 'fork: subagent_fork')
     env.phase('fork-resolved')
-    expect(result.isError).toBe(false)
+    expect(result.isError, text(result)).toBe(false)
     // The bridge DISPATCHED the child's bash call to the plugin hook — the
     // probe payload carries the CC caller-identity field (agent_id), which is
     // what ties this traversal row to the child rather than the parent.
