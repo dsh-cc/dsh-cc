@@ -278,7 +278,6 @@ const DRIFT_ALLOWANCE: Record<
       '// The registry registers this projection',
       '// registers the definition directly so resume reads the recorded identity',
       '// exactly as the composed bundle does (§5.2).',
-      '}',
       'const presetMounts: { presetId: string | undefined }[] = []',
       'const composedAgents = new WeakSet<object>()',
       '// §5.2 revised: the create-path join runs on agent/created + select()',
@@ -301,7 +300,6 @@ const DRIFT_ALLOWANCE: Record<
       'if (presetId === undefined || !knownPresets.includes(presetId)) {',
       'throw new Error(`Unknown agent preset:',
       'presetMounts.push({ presetId })',
-      '},',
       '} as never)',
       'ctx.sessionProjections.register(agentPresetProjectionDefinition)',
       'presetMounts,',
@@ -335,14 +333,31 @@ function multisetDiff(cc: string[], upstream: string[]): {
   return { ccOnly, upstreamOnly }
 }
 
+/**
+ * Lines that carry no code of their own: bare braces, brackets, commas and
+ * semicolons. They appear in a diff whenever a block moves (this port moves
+ * upstream bodies into `src/cancellation-status.ts`), and they can never be an
+ * allowance ENTRY — an entry is a prefix, so a bare `}` would silently cover
+ * every future upstream line that happens to start with a brace. Structural
+ * lines are therefore filtered before the allowance step, and the gate stays
+ * meaningful for everything that names something.
+ */
+function isStructural(line: string): boolean {
+  return /^[{}\[\](),;]+$/.test(line)
+}
+
 function uncoveredLines(
   divergent: string[],
   allowance: string[] | undefined,
 ): string[] {
-  if (divergent.length === 0) return []
-  const covered = (line: string) =>
-    (allowance ?? []).some((entry) => line.startsWith(entry))
-  return divergent.filter((line) => !covered(line))
+  const semantic = divergent.filter((line) => !isStructural(line))
+  if (semantic.length === 0) return []
+  // A structural ENTRY is equally inert: allowing `}` would cover every future
+  // upstream line starting with a brace, so such an entry is treated as a bug
+  // in the record rather than as coverage.
+  const entries = (allowance ?? []).filter((entry) => !isStructural(entry))
+  const covered = (line: string) => entries.some((entry) => line.startsWith(entry))
+  return semantic.filter((line) => !covered(line))
 }
 
 function diffPair(
@@ -441,6 +456,14 @@ describe('upstream drift gate (vendored @dsh-cc/acp vs deepseek-harness)', () =>
       )
       expect(upstreamOnly).toEqual(['const a = 2'])
       expect(ccOnly).toEqual(['const a = 1'])
+    })
+
+    it('structural-only lines never need an allowance', () => {
+      // A moved block leaves bare braces behind; they must not become
+      // allowance entries, and must not count as drift either.
+      expect(uncoveredLines(['}', '},', '});', 'const a = 1'], undefined)).toEqual(['const a = 1'])
+      // A brace-prefixed ENTRY is exactly the hazard this rule removes.
+      expect(uncoveredLines(['} else {'], ['}'])).toEqual(['} else {'])
     })
 
     it('an allowance entry covers only matching prefixes', () => {
