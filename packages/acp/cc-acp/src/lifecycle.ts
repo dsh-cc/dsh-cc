@@ -8,12 +8,12 @@
  * @module @dsh-cc/acp/lifecycle
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
 
 /** The handler surface one owned session record exposes. */
 export interface AgentLifecycleHandlers {
   onAgentError(error: unknown): void
-  onAgentStatus(status: string): void
+  onAgentStatus(status: AgentStatus): void
 }
 
 /**

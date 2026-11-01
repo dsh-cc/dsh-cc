@@ -240,8 +240,6 @@ export async function makeBridgeHarness(options: {
   const ownsPersistenceRoot = options.persistenceRoot === undefined
   const persistenceRoot = options.persistenceRoot ?? await mkdtemp(join(tmpdir(), 'dsh-acp-test-'))
   await mountAgentLoopTestDependencies(ctx, { systemPrompt: { personaPrefix: options.persona ?? '' } })
-  // rc.5: strict prompt variables — the upstream persona.spec idiom.
-  ctx.systemPrompt.variable('cwd', context => context.agent?.session.header.cwd)
   await ctx.plugin(JsonlSessionPersistence, { root: persistenceRoot, compression: 'none' })
   await ctx.plugin(TokenMeter)
   if (options.attachments !== false) await ctx.plugin(MemoryAttachmentStore)
@@ -285,6 +283,10 @@ export async function makeBridgeHarness(options: {
       return presetId
     },
     composedPreset: () => undefined,
+    // The real SubagentRuntime unconditionally inherits a parent preset via
+    // composeFrom (upstream child-agent.ts:200); the spy composes nothing,
+    // so delegation-test children run preset-free.
+    composeFrom: () => undefined,
   } as never)
   // The registry registers this projection in production; the spy rig
   // registers the definition directly so resume reads the recorded identity

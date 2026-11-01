@@ -101,6 +101,9 @@ importers:
       '@deepseek-ai/dsh-session-projection':
         specifier: link:../../../../deepseek-harness/packages/session/session-projection
         version: link:../../../../deepseek-harness/packages/session/session-projection
+      '@deepseek-ai/dsh-subagent':
+        specifier: link:../../../../deepseek-harness/packages/subagent/subagent
+        version: link:../../../../deepseek-harness/packages/subagent/subagent
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter

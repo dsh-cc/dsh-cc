@@ -1,9 +1,17 @@
 # DIVERGENCE.md — @dsh-cc/acp vs upstream @deepseek-ai/dsh-acp
 
 Vendored verbatim in S1 from `packages/acp/acp` (deepseek-harness, source ref
-`c1b47e41fcd54d20a0f061df28683bfc29ee24e5`). Each intentional divergence from
-upstream behavior is listed here with its design reference
-(`docs/plans/2026-10-09-acp-m2-own-plugin.md`, slice S2 = §5.2/§5.3 + PR-B 1–3).
+`c1b47e41fcd54d20a0f061df28683bfc29ee24e5`), **re-vendored in full** onto
+`31cfe2aafead959a4dbd9d8cfaae258eb28a19fd` (@deepseek-ai/dsh-acp 0.2.1-rc.5):
+every source and test file is the upstream file with the deltas below re-applied,
+and the drift gate compares them line by line. Two upstream bodies live in
+`src/cancellation-status.ts` (agent error/status handling, prompt cancellation and
+the quiescence loop) and the two lifecycle listener registrations live in
+`src/lifecycle.ts`, because upstream `session.ts` (566 lines) exceeds this
+package's size budget once the deltas are applied; both are verbatim moves.
+
+Each intentional divergence from upstream behavior is listed here with its design
+reference (`docs/plans/2026-10-09-acp-m2-own-plugin.md`, slice S2 = §5.2/§5.3 + PR-B 1–3).
 
 ## S2 divergences
 

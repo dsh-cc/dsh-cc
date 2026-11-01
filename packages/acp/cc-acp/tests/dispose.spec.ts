@@ -140,7 +140,7 @@ describe('ACP connection ownership', () => {
     await harness.acpFiber.dispose()
 
     // A stuck descendant must not strand the bridge's own teardown.
-    expect(warnings.some(warning => warning.includes('continuable subagent teardown failed'))).toBe(true)
+    expect(warnings.some(warning => warning.includes('subagent teardown failed'))).toBe(true)
     expect(harness.ctx.agents.get(SessionId(sessionId))).toBeUndefined()
   })
 
