@@ -459,7 +459,7 @@ capabilities:
         in-repo file to anchor a positive claim against, so per the evidence
         backfill rule the claim is downgraded until an in-repo seam exists.
 
-  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:packages/interaction/post-edit-verify/src/settings.ts#L119-L127〕
+  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:packages/interaction/post-edit-verify/README.md#L26-L26〕
   engine.edit-recovery-hint:
     title: Edit recovery hint (not-found recovery advice)
     category: engine
@@ -1151,7 +1151,7 @@ capabilities:
       kind: non-goal
       summary: Anthropic-internal or vendor-bound features; no design asset and out of parity scope.
 
-  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:packages/interaction/retry-attendant/src/settings.ts#L35-L52〕
+  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:docs/plans/2026-10-09-verify-before-retry.md#L495-L495〕
   engine.verify-before-retry:
     title: Verify-before-retry attendant (ambiguity-aware retry confirmation)
     category: engine
@@ -1588,8 +1588,19 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: hooks-claude-code" }
       - { type: test, path: packages/hooks/hooks-claude-code/tests/events.spec.ts }
+      - { type: test, path: packages/hooks/hooks-claude-code/tests/late-inject.spec.ts, anchor: "claimed its first input; dropped" }
+      - { type: test, path: packages/subagent/task/tests/e2e-codex-bridge.spec.ts, anchor: "M7: a detached SessionStart context resolving after the child" }
     deviation:
-      kind: none
+      kind: divergent
+      summary: >-
+        additionalContext is queued as next-step context (never blocking), so a slow
+        hook can miss the first request. For a live subagent child the delivery
+        window is claim-bounded: context resolving after that child's first inbox
+        claim is dropped with a warn (it can no longer precede the work, and
+        delivery would re-open the running turn), withdrawing the earlier
+        deliver-into-a-later-step behavior. The same cut suppresses hook
+        systemMessage notices for such a child (notices ride the same reopen
+        window). Evidence: the M7 e2e row and the late-inject unit spec. 〔src:ws:packages/hooks/hooks-claude-code/README.md#L117-L117〕
 
   hooks.setup:
     title: Setup hook
@@ -1649,11 +1660,16 @@ capabilities:
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: hooks-claude-code" }
       - { type: test, path: packages/hooks/hooks-claude-code/tests/background-subagent-start.spec.ts }
+      - { type: test, path: packages/hooks/hooks-claude-code/tests/late-inject.spec.ts, anchor: "claimed its first input; dropped" }
     deviation:
       kind: divergent
       summary: >-
         Reports a constant agent_type 'general-purpose' where CC's kind-specific matchers
         would see the real type, and a child-scoped session_id where CC reports the parent session.
+        Start context is claim-bounded: context (and the hook's systemMessage notice)
+        resolving after the child's first inbox claim is dropped with a warn rather than
+        delivered into a later step of the running child, which would re-open the turn.
+        〔src:ws:packages/hooks/hooks-claude-code/README.md#L117-L117〕
 
   hooks.subagent-stop:
     title: SubagentStop hook
@@ -2556,7 +2572,7 @@ capabilities:
         and clears the persisted binding, which needs the upstream
         `resume({ meta })` cwd-override seam (plan §11.3).
 
-  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:packages/context/progress-rebuild/src/settings.ts#L28-L48〕
+  # Default ON since 2026-10-16 (was ship-dark). 〔src:ws:docs/plans/2026-10-09-structured-progress-and-post-compact-rebuild.md#L328-L328〕
   sessions.progress-rebuild:
     title: Structured progress state + post-compact context rebuild
     category: sessions

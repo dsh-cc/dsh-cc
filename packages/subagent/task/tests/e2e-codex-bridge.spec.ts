@@ -25,6 +25,7 @@
  */
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -273,6 +274,53 @@ function toolResults(request: { messages?: readonly unknown[] } | undefined): Ar
   return out
 }
 
+/** All text blocks across a request's serialized messages. */
+function requestTexts(request: { messages?: readonly unknown[] } | undefined): string[] {
+  const out: string[] = []
+  for (const message of request?.messages ?? []) {
+    const content = (message as { content?: unknown }).content
+    if (!Array.isArray(content)) continue
+    for (const block of content as Array<Record<string, unknown>>) {
+      if (block?.type === 'text' && typeof block.text === 'string') out.push(block.text)
+    }
+  }
+  return out
+}
+
+/** The armed-lane marker the bridge's SessionStart context hook injects. */
+const ARMED_MARKER = 'Codex rescue lane is ARMED'
+
+/**
+ * MockAdapter fork (M7 scaffolding): delegates to the shared script FIFO, and
+ * adds (a) a per-chunk delay on the FINAL scripted entry so its stream stays
+ * open long enough for a detached hook to resolve mid-step, and (b) an
+ * `onRequest(n)` callback counting child-session requests only (the parent is
+ * parked in this row), used to release the SessionStart gate at a chosen
+ * request.
+ */
+class SlowMockAdapter extends MockAdapter {
+  private childRequests = 0
+  constructor(
+    script: ConstructorParameters<typeof MockAdapter>[0],
+    private readonly opts: { chunkDelayMs: number; slowRequest: number; onRequest?: (n: number) => void },
+  ) {
+    super(script)
+  }
+  override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const child = String(options.sessionId) !== 'parent'
+    if (child) this.childRequests += 1
+    const n = this.childRequests
+    if (child) this.opts.onRequest?.(n)
+    for await (const chunk of super.stream(options)) {
+      if (options.signal?.aborted) throw new Error('aborted')
+      yield chunk
+      if (child && n === this.opts.slowRequest && this.opts.chunkDelayMs > 0) {
+        await new Promise(r => setTimeout(r, this.opts.chunkDelayMs))
+      }
+    }
+  }
+}
+
 let calls = 0
 // The mounted cc-codex-bridge plugin (commands seam + hook surface), set by setup.
 let bridgeMount: Awaited<ReturnType<typeof mountCcPlugin>> | undefined
@@ -294,7 +342,14 @@ const executedCommands: string[] = []
  * mounted; only the model adapter is scripted. The parent is NOT parked for
  * the main-thread rows (they drive a real parent turn); child rows park it.
  */
-async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts: { agentsDir?: boolean; parkParent?: boolean } = {}) {
+async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts: {
+  agentsDir?: boolean
+  parkParent?: boolean
+  /** Opt-in SessionStart gate (M7 only): the config's SessionStart command hook polls for this sentinel file before the plugin's appended hooks run. */
+  sessionStartGate?: { releaseFile: string }
+  /** Opt-in adapter construction (M7 only): the shared script FIFO is passed through. */
+  adapter?: (script: ConstructorParameters<typeof MockAdapter>[0]) => MockAdapter
+} = {}) {
   executedCommands.length = 0
   bridgeMount = undefined
   const dir = mkdtempSync(join(tmpdir(), 'codex-bridge-e2e-'))
@@ -335,9 +390,21 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
   const ssTouch = join(dir, 'session-start.sh')
   writeFileSync(ssTouch, `#!/usr/bin/env bash\ntouch "${sessionStartRan}"\n`)
   chmodSync(ssTouch, 0o755)
+  // M7's opt-in gate: listed FIRST so the plugin's SessionStart hook group
+  // (appended by the hooks seam, index.ts mergePluginHooks) waits behind it
+  // and cannot deliver additionalContext before the test releases the
+  // sentinel. Handler groups run serially, so the gate holds the dispatch.
+  const sessionStartGroups: Array<{ hooks: Array<{ type: 'command'; command: string }> }> = []
+  if (opts.sessionStartGate !== undefined) {
+    const gate = join(dir, 'session-start-gate.sh')
+    writeFileSync(gate, `#!/usr/bin/env bash\ncat >/dev/null\nfor i in $(seq 1 750); do [ -f "${opts.sessionStartGate.releaseFile}" ] && exit 0; sleep 0.02; done\nexit 0\n`)
+    chmodSync(gate, 0o755)
+    sessionStartGroups.push({ hooks: [{ type: 'command', command: gate }] })
+  }
+  sessionStartGroups.push({ hooks: [{ type: 'command', command: ssTouch }] })
   writeFileSync(join(dir, 'hooks.json'), JSON.stringify({ hooks: {
     PreToolUse: [{ hooks: [{ type: 'command', command: pre }] }],
-    SessionStart: [{ hooks: [{ type: 'command', command: ssTouch }] }],
+    SessionStart: sessionStartGroups,
   } }))
   await ctx.plugin(HooksClaude, { configPath: join(dir, 'hooks.json') })
   const tools = ctx.get('tools') as { reserve?(name: string): () => void }
@@ -410,7 +477,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], opts:
   } as never)
   await mountCcPlugin(ctx, { root: BRIDGE_PLUGIN_DIR }).then(m => { bridgeMount = m })
 
-  const adapter = new MockAdapter(script)
+  const adapter = opts.adapter === undefined ? new MockAdapter(script) : opts.adapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
   const parent = await ctx.agentLoop.create(
     SessionId('parent'),
@@ -648,22 +715,59 @@ describe('e2e — codex-rescue-bridge PreToolUse allow hook through the real plu
     expect(executedCommands).not.toContain('echo hello')
     await waitNoActivation(ctx, SessionId(String(childRequest!.sessionId)), env.remaining())
   }), 120_000) // envelope 90_000 < outer 120_000: strict 30s headroom, setup inside the envelope
+
+  it('M7: a detached SessionStart context resolving after the child\'s first claim is dropped (no third request)', () => withEnvelope(120_000, 'M7', async env => {
+    // Issue #318 regression row. The gate releases the SessionStart dispatch
+    // once the CHILD's second (final) request has started AND that stream is
+    // slowed (~60ms/chunk), so the detached pipeline resolves mid-final-step —
+    // the pre-fix regime that queued the block into `inbox.nextStep` and made
+    // the loop open a third request the script cannot serve.
+    const gateDir = mkdtempSync(join(tmpdir(), 'codex-bridge-m7-'))
+    dirs.push(gateDir)
+    const sentinel = join(gateDir, 'release-session-start')
+    const childRequestsSeen: number[] = []
+    const { ctx, parent, adapter, world } = await setup([
+      toolCallResponse('c1', 'bash', { command: CANONICAL }),
+      textResponse('child done'),
+    ], {
+      agentsDir: true,
+      sessionStartGate: { releaseFile: sentinel },
+      adapter: script => new SlowMockAdapter(script, {
+        chunkDelayMs: 60,
+        slowRequest: 2,
+        onRequest: (n) => { childRequestsSeen.push(n); if (n === 2) writeFileSync(sentinel, 'go') },
+      }),
+    })
+    env.phase('setup-done')
+    envDump = dumpState(adapter)
+    env.phase('fork-dispatched')
+    const forkPromise = callTool(ctx, 'subagent_fork', {
+      description: 'child rescue',
+      prompt: 'run the rescue',
+      subagent_type: 'researcher',
+    }, parent)
+    world.inflight.push(forkPromise)
+    try {
+      const result = await awaitBounded(forkPromise, env.remaining(), 'fork: subagent_fork')
+      env.phase('fork-resolved')
+      const childRequests = adapter.requests.filter(r => String(r.sessionId) !== 'parent')
+      // Failure text + request trace are the only surviving evidence in CI.
+      expect(result.isError, `${text(result)} | state=${envDump()}`).toBe(false)
+      expect(childRequests.length, `child request trace: ${envDump()} seen=${JSON.stringify(childRequestsSeen)}`).toBe(2)
+      // Distinguishes a drop from a delivered-into-a-later-step pass.
+      expect(
+        childRequests.filter(r => requestTexts(r).some(t => t.includes(ARMED_MARKER))).length,
+        `armed child request: ${envDump()}`,
+      ).toBe(0)
+      await waitNoActivation(ctx, SessionId(String(childRequests[0]!.sessionId)), env.remaining())
+    } finally {
+      // Teardown release: never leave the SessionStart gate polling.
+      writeFileSync(sentinel, 'go')
+    }
+  }), 120_000) // envelope 90_000 < outer 120_000: strict 30s headroom, setup inside the envelope
 })
 
 describe('e2e — codex-rescue-bridge entry surface (PR-3): SessionStart context + rescue command', () => {
-  /** All text blocks across a request's serialized messages. */
-  function requestTexts(request: { messages?: readonly unknown[] } | undefined): string[] {
-    const out: string[] = []
-    for (const message of request?.messages ?? []) {
-      const content = (message as { content?: unknown }).content
-      if (!Array.isArray(content)) continue
-      for (const block of content as Array<Record<string, unknown>>) {
-        if (block?.type === 'text' && typeof block.text === 'string') out.push(block.text)
-      }
-    }
-    return out
-  }
-
   it('S1: the SessionStart context hook lands the armed canonical block in the parent\'s messages', () => withEnvelope(90_000, 'S1', async env => {
     const { parent, adapter, sessionStartRan } = await setup([
       textResponse('acknowledged'),
