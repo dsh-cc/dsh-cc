@@ -6,7 +6,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProjectStore } from '../src/store.ts'
@@ -251,6 +251,80 @@ describe('recovery (§14.2)', () => {
     expect(existsSync(orphan)).toBe(false)
     expect(existsSync(fresh)).toBe(true)
     expect(made.store.readHead().ok).toBe(true)
+  })
+})
+
+describe('init under the write lock (issue #311)', () => {
+  it('init reports LOCK_BUSY while a live foreign holder owns the write lock (issue #311)', () => {
+    const made = makeWorkspace()
+    // init has not run yet, so the locks dir has to be created by hand.
+    const lockDir = join(made.root, '.dsh', 'vwa', made.projectId, 'locks')
+    mkdirSync(lockDir, { recursive: true })
+    const holder = spawn('node', ['-e', 'setTimeout(() => {}, 5000)'], { stdio: 'ignore' })
+    writeFileSync(join(lockDir, 'write.lock'),
+      JSON.stringify({ pid: holder.pid, startedAt: new Date().toISOString(), nonce: 'foreign' }))
+    expectFail(made.store.init(CONTRACT), 'LOCK_BUSY')
+    expect(existsSync(join(made.root, '.dsh', 'vwa', made.projectId, 'HEAD.json'))).toBe(false)
+    holder.kill()
+    rmSync(join(lockDir, 'write.lock'), { force: true })
+    const retried = made.store.init(CONTRACT)
+    expect(retried.ok).toBe(true)
+    expect(made.store.readHead().ok).toBe(true)
+  })
+
+  it('two processes racing init: one creates, the other loses cleanly (issue #311)', async () => {
+    const made = makeWorkspace()
+    const fixture = join(import.meta.dirname, 'fixtures', 'init-race-child.ts')
+    interface ChildResult {
+      ok: boolean
+      code: string | null
+      message: string | null
+      workspaceIdentity: string | null
+    }
+    const runChild = () => new Promise<ChildResult>((resolve, reject) => {
+      // `--import=tsx` (single arg) keeps check:spec-deps from reading the flag as an import.
+      const child = spawn(process.execPath, ['--import=tsx', fixture, made.root, made.projectId], { stdio: ['ignore', 'pipe', 'pipe'] })
+      let out = ''
+      let err = ''
+      child.stdout.on('data', (chunk: Buffer) => { out += chunk })
+      child.stderr.on('data', (chunk: Buffer) => { err += chunk })
+      child.on('error', reject)
+      child.on('close', (code) => {
+        try {
+          resolve(JSON.parse(out.trim().split('\n').pop() ?? '') as ChildResult)
+        } catch {
+          reject(new Error(`child exited ${String(code)} without a result: ${err}`))
+        }
+      })
+    })
+    const results = await Promise.all([runChild(), runChild()])
+    const winners = results.filter((result) => result.ok)
+    const losers = results.filter((result) => !result.ok)
+    expect(winners).toHaveLength(1)
+    expect(losers).toHaveLength(1)
+    expect(['SCHEMA_INVALID', 'LOCK_BUSY']).toContain(losers[0].code)
+    if (losers[0].code === 'SCHEMA_INVALID') expect(losers[0].message).toContain('already exists')
+    // The winner's returned identity is the one persisted in workspace.json.
+    expect(made.store.workspaceIdentity()).toBe(winners[0].workspaceIdentity)
+    const revisions = readdirSync(join(made.root, '.dsh', 'vwa', made.projectId, 'revisions'))
+      .filter((file) => /^1-.*\.json$/.test(file))
+    expect(revisions).toHaveLength(1)
+    expect(made.store.readHead().ok).toBe(true)
+  })
+
+  it('a crash mid-init releases the lock for the same-process retry (issue #311)', () => {
+    // crashAfter 1 = the workspace.json rename, 2 = the revision-file rename.
+    // Retrying 2 leaves the orphaned divergent first revision file behind: that
+    // is pre-existing crash-injection behavior (an uncommitted revision file),
+    // so the retry only has to reach a verifiable HEAD.
+    for (const crashAfter of [1, 2]) {
+      const made = makeWorkspace()
+      const crashing = new ProjectStore(made.root, made.projectId, { crashAfter })
+      expect(() => crashing.init(CONTRACT)).toThrow(/simulated crash/)
+      const fresh = new ProjectStore(made.root, made.projectId)
+      expect(fresh.init(CONTRACT).ok).toBe(true)
+      expect(fresh.readHead().ok).toBe(true)
+    }
   })
 })
 

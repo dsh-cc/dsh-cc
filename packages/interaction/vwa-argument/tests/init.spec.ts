@@ -1,7 +1,7 @@
 /**
  * Feature 1 (§2) `argument.init` specs: durable idempotency windows
  * (pre/post reservation, post-init recovery, concurrent `wx` conflict),
- * payload mismatch, pointer semantics, and the issue-#312 workspaceIdentity
+ * payload mismatch, pointer semantics, and the issue-#311 workspaceIdentity
  * divergence guard.
  */
 
@@ -182,7 +182,7 @@ describe('argument.init pointer and lock semantics (§2.2/§2.3)', () => {
     expect(existsSync(pointerPath(root))).toBe(false)
   })
 
-  it('two adopters of one reservation never write diverging workspaceIdentity (issue #312)', async () => {
+  it('two adopters of one reservation never write diverging workspaceIdentity (issue #311)', async () => {
     const { root, call } = mount()
     const requestId = uuid()
     const input = {}

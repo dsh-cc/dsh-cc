@@ -7,7 +7,7 @@
  * write + fsync) BEFORE `ProjectStore.init`; every retry — crash between
  * reservation and init, or a concurrent caller that lost the `wx` race —
  * adopts the reserved projectId and continues the init under the project
- * write lock (issue #312: two adopters must not write diverging
+ * write lock (issue #311: two adopters must not write diverging
  * workspaceIdentity values). Nothing ever rewrites the reservation.
  *
  * @module @dsh-cc/vwa-argument/init-tool
@@ -18,7 +18,6 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, wr
 import { join } from 'node:path'
 import { defaultContract } from './command-host.ts'
 import { writePointer } from './commands.ts'
-import { acquireLock, releaseLock } from './lock.ts'
 import { freezeReviewSettings, type FrozenReviewSettings } from './review-config.ts'
 import { applyReviewSettingsPatch, type PatchReviewSettings } from './review-settings-revision.ts'
 import { isUuidV4, sha256Hex, stableJson } from './schema.ts'
@@ -231,22 +230,19 @@ export function initReservedProject(
 ): Result<{ workspaceIdentity: string }> {
   const projectId = reservation.projectId
   const store = new ProjectStore(root, projectId)
-  // The HEAD-exists check alone is not a create transaction (issue #312):
-  // the lock serializes creator and adopters so workspaceIdentity never diverges.
-  const lockFailure = acquireLock(store.dir)
-  if (lockFailure !== undefined) return lockFailure
-  try {
-    if (existsSync(join(store.dir, 'HEAD.json'))) return recover(root, projectId)
-    const contract = { ...defaultContract('(set the project question with argument.update: contract)'), mode: input.mode }
-    const created = store.init(contract, reviewSettings)
-    if (created.ok) return created
-    // Concurrent creator finished between the check and init: recovery path.
-    if (created.code === 'SCHEMA_INVALID' && created.message.includes('already exists'))
-      return recover(root, projectId)
-    return created
-  } finally {
-    releaseLock(store.dir)
-  }
+  // store.init takes the project write lock itself (issue #311), so creator
+  // and adopters serialize without an outer lock (a same-process re-acquire
+  // would report LOCK_BUSY instantly).
+  if (existsSync(join(store.dir, 'HEAD.json'))) return recover(root, projectId)
+  const contract = { ...defaultContract('(set the project question with argument.update: contract)'), mode: input.mode }
+  const created = store.init(contract, reviewSettings)
+  if (created.ok) return created
+  // Concurrent creator won the init lock and finished first: recovery path.
+  // Safe outside the lock — HEAD.json is the last write of init, so a visible
+  // HEAD means workspace.json and the revision are already committed.
+  if (created.code === 'SCHEMA_INVALID' && created.message.includes('already exists'))
+    return recover(root, projectId)
+  return created
 }
 
 /** The `argument.init` tool (§2.1/§2.2). */

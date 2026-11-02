@@ -23,11 +23,11 @@ import { freezeReviewSettings, type FrozenReviewSettings } from './review-config
 import { randomUUID } from 'node:crypto'
 import {
   closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync,
-  renameSync, rmSync, statSync, unlinkSync, writeSync,
+  renameSync, rmSync, statSync, writeSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { sha256Hex, stableJson, type JsonValue } from './schema.ts'
-import { acquireLock as acquireProjectLock } from './lock.ts'
+import { acquireLock as acquireProjectLock, releaseLock } from './lock.ts'
 import type { ProjectSnapshot } from './types.ts'
 
 /** Uniform failed result (§10.8 stable codes). */
@@ -129,8 +129,6 @@ export interface StoreOptions {
   io?: DurabilityIo
 }
 
-/\*\* §14.2 lock rules live in lock.ts (split for the file-size cap). \*/
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -201,22 +199,28 @@ export class ProjectStore {
     contract: ProjectSnapshot['contract'],
     reviewSettings: FrozenReviewSettings = freezeReviewSettings(),
   ): Result<{ workspaceIdentity: string }> {
-    if (existsSync(join(this.dir, 'HEAD.json'))) {
-      return fail('SCHEMA_INVALID', `project ${this.projectId} already exists`)
+    const lockFailure = this.acquireLock()
+    if (lockFailure !== undefined) return lockFailure
+    try {
+      if (existsSync(join(this.dir, 'HEAD.json'))) {
+        return fail('SCHEMA_INVALID', `project ${this.projectId} already exists`)
+      }
+      mkdirSync(this.revisionsDir(), { recursive: true })
+      mkdirSync(join(this.dir, 'operations'), { recursive: true })
+      mkdirSync(join(this.dir, 'locks'), { recursive: true })
+      mkdirSync(this.snapshotDir, { recursive: true })
+      const workspaceIdentity = sha256Hex(stableJson({ root: this.root, nonce: randomUUID() }))
+      this.writeAtomic(join(this.dir, 'workspace.json'), { schemaVersion: 1, projectId: this.projectId, workspaceIdentity })
+      const snapshot: ProjectSnapshot = {
+        schemaVersion: 1, projectId: this.projectId, revision: 1, workspaceIdentity,
+        contract: { ...contract, reviewSettings }, sources: [], evidence: [], claims: [], groups: [], arguments: [],
+        issues: [], searches: [], artifacts: [],
+      }
+      this.writeCommittedRevision(snapshot, '', 'init')
+      return { ok: true, projectId: this.projectId, revision: 1, data: { workspaceIdentity } }
+    } finally {
+      releaseLock(this.dir)
     }
-    mkdirSync(this.revisionsDir(), { recursive: true })
-    mkdirSync(join(this.dir, 'operations'), { recursive: true })
-    mkdirSync(join(this.dir, 'locks'), { recursive: true })
-    mkdirSync(this.snapshotDir, { recursive: true })
-    const workspaceIdentity = sha256Hex(stableJson({ root: this.root, nonce: randomUUID() }))
-    this.writeAtomic(join(this.dir, 'workspace.json'), { schemaVersion: 1, projectId: this.projectId, workspaceIdentity })
-    const snapshot: ProjectSnapshot = {
-      schemaVersion: 1, projectId: this.projectId, revision: 1, workspaceIdentity,
-      contract: { ...contract, reviewSettings }, sources: [], evidence: [], claims: [], groups: [], arguments: [],
-      issues: [], searches: [], artifacts: [],
-    }
-    this.writeCommittedRevision(snapshot, '', 'init')
-    return { ok: true, projectId: this.projectId, revision: 1, data: { workspaceIdentity } }
   }
 
   /** Persist envelope + HEAD for an already-decided revision (init/repair path). */
@@ -423,9 +427,7 @@ export class ProjectStore {
     try {
       return this.runTransaction(input)
     } finally {
-      try {
-        unlinkSync(join(this.dir, 'locks', 'write.lock'))
-      } catch { /* best-effort release */ }
+      releaseLock(this.dir)
     }
   }
 
