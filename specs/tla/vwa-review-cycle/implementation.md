@@ -36,7 +36,6 @@ only remaining unmodeled dsh-cc module that hits all four triggers.
 | case | coverage | outcome | statistics |
 |---|---|---|---|
 | convention 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L34-L45〕 | core | **verified** | 53,081,226 generated / 9,221,350 distinct / 0 queue, 259 s |
-| strict-torn-lock 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L46-L55〕 | expansion | counterexample (expected, probe) | 199 / 106 / 81, 0.7 s |
 | strict-reserved-spend 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L46-L55〕 | expansion | counterexample (expected, probe) | 5,293 / 1,687 / 1,080, 0.8 s |
 
 Aggregate = counterexample **because of the two designed probes**; this
@@ -45,9 +44,6 @@ core case is verified with no invariant violation.
 
 ### Probe traces (persisted under `.formal-design/runs/vwa-review-cycle/<runId>/`) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
 
-- strict-torn-lock: `Initial → Prepare(p,q,h,m) → LockCreate(p) → 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-  CrashTorn(p)`; `lockHolder = "torn"` afterwards, no action ever 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-  clears it (only dead-pid holders are reclaimable, lock.ts:79-84) 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕.
 - strict-reserved-spend: `Initial → Prepare → LockCreate → 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
   AdmissionBody → StartRun → ReserveCall → Crash`; the durable reserved 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
   row (reserved=1) outlives the killed attempt (settled=0, no in-flight 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
@@ -58,9 +54,9 @@ core case is verified with no invariant violation.
 Bulk read delegated to shunt-reader and spot-verified by the main
 dialog against the actual files (read-back of exact ranges):
 
-- lock.ts:25-102 — LOCK_WAIT_MS=2000, exclusive-create, dead-pid 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕
-  reclaim, same-process self-deadlock, torn file never reclaimed,
-  best-effort release.
+- lock.ts (as read for the #307 true-up) — LOCK_WAIT_MS=2000, staged-link 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕
+  acquisition (full-buffer write → fsync → `linkSync` promote), staging
+  reap, dead-pid reclaim, same-process self-deadlock, best-effort release.
 - review-cycle.ts:140-274 — per-pid tmp sidecar write, prior-cycleId 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L163〕
   idempotent reservation, REVISION_CONFLICT inside the lock, cycleUsage 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L133-L163〕
   excludes nothing for the calling cycle, reserveCycleCall check+reserve 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L163〕
@@ -94,7 +90,7 @@ dialog against the actual files (read-back of exact ranges):
    load observations recorded only for dead-owner loads; the second
    payload only preparable on replay (its only purpose); convention
    core bound MaxCalls=1 (exhaustion and retry-refusal paths still 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-   reachable), probes MaxCalls=2. Convention case: 53.0M generated / 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L46-L55〕
+   reachable) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕, probes MaxCalls=2. Convention case: 53.0M generated / 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L46-L55〕
    9.2M distinct in 259 s after these cuts (previous formulation did 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
    not finish in 300 s) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕.
 
@@ -104,9 +100,11 @@ See design.md "Exclusions" E-1..E-7 (store transaction internals, audit 〔src:w
 merge lattice, project-store lock duplication, audit reuse, two-file
 terminal write, PID reuse, fixed `.tmp` path). Regression-test gaps 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
 recorded in design.md "Planned code/test mapping": no existing test was 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-found for the dead-owner cycle-usage inclusion (crash-after-reserve) or
-the torn-lock LOCK_BUSY path; the five listed scenarios are candidate 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L101-L110〕
-test additions but no production code was touched this round.
+found for the dead-owner cycle-usage inclusion (crash-after-reserve); the 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L101-L110〕
+listed scenarios are candidate test additions but no production code was
+touched this round. (The torn-lock LOCK_BUSY gap listed here is closed by the 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
+#307 fix below: acquisition can no longer publish a torn lock, and
+`tests/lock.spec.ts` pins the reclaim of pre-fix leftovers.)
 
 ## Review / handoff state
 
@@ -135,30 +133,77 @@ test additions but no production code was touched this round.
   citation markers to design.md lines the evidence gate still counted as
   unmarked (wrapped continuation sentences); per-case statistics are
   identical across all four runs (convention 53,081,226 / 9,221,350 / 0; 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-  strict-torn-lock 199 / 106 / 81; strict-reserved-spend 5,293 / 1,687 / 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
-  1,080), confirming no model, property, bound or cfg semantics changed 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕.
+  strict-reserved-spend 5,293 / 1,687 / 1,080), confirming no model, 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
+  property, bound or cfg semantics changed 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕.
 
-## Run lineage — project-budget extension (2026-10-29)
+## Run lineage — project-budget extension (2026-10-29) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
 
 - R5 `20261029T013958Z-e49315a1`: first run of the extension. convention
   verified at 53,081,226/9,221,350 — **identical to R4**, exposing a coverage
-  gap: with MaxCalls=1 and ProjectBudget=2 the new guards were never reached,
-  so ProjectBudgetSound was vacuously true. Not accepted as coverage.
-- R6 `20261029T014608Z-a34465e5`: convention tightened to ProjectBudget=1
+  gap: with MaxCalls=1 and ProjectBudget=2 the new guards were never reached, 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
+  so ProjectBudgetSound was vacuously true 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕. Not accepted as coverage. 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
+- R6 `20261029T014608Z-a34465e5`: convention tightened to ProjectBudget=1 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
   (31,256,810/5,308,454 — the admission guard now refuses a second fresh
-  cycle) and a new expansion case `project-per-call` (MaxCalls=2,
-  ProjectBudget=1, RetryAllowance=0, 7,853,332/1,301,451 verified) exercises
+  cycle) and a new expansion case `project-per-call` (MaxCalls=2, 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
+  ProjectBudget=1, RetryAllowance=0, 7,853,332/1,301,451 verified) exercises 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
   the per-call project projection while the cycle budget would still allow
-  the call. Probes: strict-torn-lock / strict-reserved-spend unchanged red,
-  new strict-admission-only (EnforcePerCall=FALSE) red as designed.
+  the call. Probes: strict-reserved-spend unchanged red, new
+  strict-admission-only (EnforcePerCall=FALSE) red as designed 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕.
   check-evidence: valid/fresh, verification=counterexample (aggregate; the
   core case verified and the red cases are the documented probes).
 
-## Final run (r2/r3 residue fixes, 2026-10-29)
+## Final run (r2/r3 residue fixes, 2026-10-29) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
 
 - `20261029T062214Z-84e4bf0c-0c8f-456e-823d-97237d02871b`: branch guard scoped to grant-path approvals (model C) /
-  MaxHeadRev wording + E-9 provenance exclusion (model A) / cl durability
+  MaxHeadRev wording + E-9 provenance exclusion (model A) / cl durability 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
   wording (model B design) / the design doc gained the explicit
   init-under-write-lock requirement. Convention verified; all probes red on
   their intended invariants; check-evidence valid/fresh. Three-lane review
   final verdicts: critic GO (r2), codex GO (r3), grok GO (r3).
+
+## Model true-up: torn lock eliminated (issue #307, 2026-11-02) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕
+
+The approved design `docs/plans/2026-11-02-vwa-torn-lock-recovery.md` (v3,
+digested) removes the torn-lock state the model used to expose, so the model
+was trued up by hand (§6 edit set; no auto-regeneration):
+
+- `lock.ts` `acquireLock` now writes the body to a per-attempt staging file
+  (`write.lock.<pid>.<processNonce>.<uuid>.tmp`) with a full-buffer write loop,
+  fsyncs it, and publishes with `linkSync(staging, write.lock)` — atomic AND
+  exclusive (EEXIST iff the target exists). A crash before the link leaves only
+  inert staging (reaped per call); a crash after it leaves a complete body. An
+  unparseable leftover from a pre-fix binary is reclaimed after one grace
+  re-read, carrying the pre-existing non-atomic-reclaim TOCTOU (E-8, #311).
+- Model edits: `CrashTorn` deleted (subsumed by `Crash`); `AdmissionBusy`
+  deleted (dead once `lockHolder` cannot be `"torn"`); `"torn"` dropped from
+  the `lockHolder` domain in `TypeOK` and from every related comment; the dead
+  `lockBody` variable deleted from `VARIABLES`, `vars`, `Init`, every
+  `UNCHANGED` list and `TypeOK`; the `LockNeverTorn` probe deleted; the
+  `strict-torn-lock` case removed from `checks.json` and from `cases/`.
+- Retained unchanged: the atomic-reclaim abstraction (E-8/#311),
+  `ReservedSettledAccounting`, `ProjectBudgetSound` and every other invariant,
+  constant and bound.
+- design.md R-9 retired (torn lock unreachable, cross-ref #307) and R-7 no
+  longer lists torn-lock LOCK_BUSY 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L70〕; the code-anchors record
+  was re-anchored to the staged-link acquisition (`lock.ts` line numbers moved).
+- Code tests added with the fix: `tests/lock.spec.ts` (the twelve §5 cases,
+  including the torn/empty reclaim and the two-process admission race) plus a
+  `withBudgetLock` budget-lock reclaim pin in `tests/review-cycle.spec.ts`.
+
+**Model-check rerun (orchestrator, 2026-11-02)** — fresh runId
+`20261102T074914Z-79190e32-43da-461c-a245-83e13b75a73d` 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕, input digest
+`2c988a99e69d327341f72f54b754bf0b0be438db1cb868a079cd899ff03d3ed3`, toolchain 1.7.4:
+
+| Case | Status | Statistics (generated / distinct) |
+|---|---|---|
+| convention (core) | verified | 27,029,189 / 5,045,592 |
+| project-per-call | verified | 6,746,887 / 1,208,600 |
+| project-retry-earn | verified | 28,109,599 / 5,167,280 |
+| strict-reserved-spend | counterexample (expected red) | 4,995 / 1,656 |
+| strict-admission-only | counterexample (expected red) | 1,113,547 / 293,379 |
+
+The two remaining red cases are the documented probes untouched by this fix
+(conservative reserved-row accounting and the disabled per-call switch); the
+retired `strict-torn-lock` case is absent by design. No property, constant or
+bound was weakened to accommodate this edit.
+
