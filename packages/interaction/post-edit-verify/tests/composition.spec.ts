@@ -11,7 +11,7 @@
  * a bare-accept downstream composes onto result.content; a disabled setting
  * leaves the observation byte-untouched.
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -26,16 +26,28 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { defineContentToolFixture, type PostToolDecision } from '@dsh-cc/tools'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
-import { setSessionCwd } from '@dsh-cc/session-cwd'
 import * as PostEditVerify from '../src/index.ts'
 
 const dirs: string[] = []
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 
 interface Built {
+  ctx: Context
   agent: Agent
   home: string
   proj: string
+}
+
+/**
+ * Move the session's live cwd through the REAL harness `workingDirectory`
+ * service — the same read path the runner uses (`getSessionCwd(exec.agent)`).
+ */
+async function setCwd(ctx: Context, agent: Agent, path: string): Promise<void> {
+  const service = ctx.get('workingDirectory') as
+    | { set(agent: Agent, path: string): Promise<void> }
+    | undefined
+  if (service === undefined) throw new Error('workingDirectory service not mounted')
+  await service.set(agent, path)
 }
 
 async function build(
@@ -43,7 +55,9 @@ async function build(
   opts: { settings?: Record<string, unknown>; proj?: string } = {},
 ): Promise<Built> {
   const home = mkdtempSync(join(tmpdir(), 'pev-comp-home-'))
-  const proj = opts.proj ?? mkdtempSync(join(tmpdir(), 'pev-comp-proj-'))
+  // Canonical (realpath) spelling: the harness service commits the canonical
+  // path on `set`, so the file path and the session cwd must agree on it.
+  const proj = opts.proj ?? realpathSync(mkdtempSync(join(tmpdir(), 'pev-comp-proj-')))
   dirs.push(home, ...(opts.proj ? [] : [proj]))
   writeFileSync(join(home, 'settings.json'), JSON.stringify({
     'cc-post-edit-verify': opts.settings ?? {
@@ -55,7 +69,7 @@ async function build(
     },
   }))
   const ctx = new Context()
-  await mountAgentLoopTestDependencies(ctx)
+  await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
@@ -74,8 +88,8 @@ async function build(
   ctx.llm.registerAdapter(['mock'], adapter)
   const agent = await ctx.agentLoop.create(SessionId('pev-comp'), { provider: 'mock', model: 'mock' })
   // Real session-cwd seam: the runner uses it as the verify command's workdir.
-  setSessionCwd(agent, proj)
-  return { agent, home, proj }
+  await setCwd(ctx, agent, proj)
+  return { ctx, agent, home, proj }
 }
 
 async function run(agent: Agent, prompt = 'edit the file'): Promise<void> {
@@ -103,7 +117,7 @@ function resultTexts(agent: Agent): string[] {
 
 describe('post-edit-verify composition (real boot, real shell)', () => {
   it('ROUND TRIP: an accepted edit with a failing rule yields ONE observation carrying both the edit result and the [auto-verify] failure tail', async () => {
-    const proj = mkdtempSync(join(tmpdir(), 'pev-comp-proj-'))
+    const proj = realpathSync(mkdtempSync(join(tmpdir(), 'pev-comp-proj-')))
     dirs.push(proj)
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'edit', { file_path: join(proj, 'a.ts') }),
@@ -122,13 +136,13 @@ describe('post-edit-verify composition (real boot, real shell)', () => {
       textResponse('done'),
     ])
     const home = mkdtempSync(join(tmpdir(), 'pev-comp-home-'))
-    const proj = mkdtempSync(join(tmpdir(), 'pev-comp-proj-'))
+    const proj = realpathSync(mkdtempSync(join(tmpdir(), 'pev-comp-proj-')))
     dirs.push(home, proj)
     writeFileSync(join(home, 'settings.json'), JSON.stringify({
       'cc-post-edit-verify': { enabled: true, rules: [{ glob: '**/*.ts', command: `echo spawned >> ${marker}` }] },
     }))
     const ctx = new Context()
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(LocalSubprocessRuntime)
     await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
@@ -149,13 +163,13 @@ describe('post-edit-verify composition (real boot, real shell)', () => {
     }))
     ctx.llm.registerAdapter(['mock'], adapter)
     const agent = await ctx.agentLoop.create(SessionId('pev-block'), { provider: 'mock', model: 'mock' })
-    setSessionCwd(agent, proj)
+    await setCwd(ctx, agent, proj)
     await run(agent)
     expect(() => readFileSync(marker)).toThrow()
   })
 
   it('BARE-ACCEPT downstream: the verify block is appended on top of the tool result content', async () => {
-    const proj = mkdtempSync(join(tmpdir(), 'pev-comp-proj-'))
+    const proj = realpathSync(mkdtempSync(join(tmpdir(), 'pev-comp-proj-')))
     dirs.push(proj)
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'edit', { file_path: join(proj, 'a.ts') }),
@@ -167,7 +181,7 @@ describe('post-edit-verify composition (real boot, real shell)', () => {
       'cc-post-edit-verify': { enabled: true, rules: [{ glob: '**/*.ts', command: 'node -e "process.exit(7)"' }] },
     }))
     const ctx = new Context()
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(LocalSubprocessRuntime)
     await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
@@ -191,7 +205,7 @@ describe('post-edit-verify composition (real boot, real shell)', () => {
     }))
     ctx.llm.registerAdapter(['mock'], adapter)
     const agent = await ctx.agentLoop.create(SessionId('pev-bare'), { provider: 'mock', model: 'mock' })
-    setSessionCwd(agent, proj)
+    await setCwd(ctx, agent, proj)
     await run(agent)
     const texts = resultTexts(agent)
     expect(texts.some((t) => t.includes('edit ok:') && t.includes('[auto-verify]') && t.includes('exit 7'))).toBe(true)

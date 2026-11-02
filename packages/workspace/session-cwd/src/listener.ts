@@ -10,18 +10,17 @@
  * @module @dsh-cc/session-cwd/listener
  */
 
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { realpathSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision, ToolExecution } from '@dsh-cc/tools'
-import { sessionCwdStore, type SessionCwdStore } from './state.ts'
+import { resolveSessionCwd } from './api.ts'
 
 /** Listener configuration. */
 export interface BoundaryListenerConfig {
   /** Tool names treated as filesystem operations; defaults to {@link DEFAULT_FS_TOOLS}. */
   fsTools?: readonly string[]
-  /** The store the listener resolves the session cwd from; defaults to the shared one. */
-  store?: SessionCwdStore
 }
 
 /** The standard fs/edit tool set, matched case-insensitively. */
@@ -63,20 +62,47 @@ export function targetPathOf(exec: ToolExecution): string | undefined {
 }
 
 /**
- * Whether a target path lies inside the workspace root (boundary is
- * workspace-scoped, not path-scoped). Both sides are resolved, so `..`
- * segments and relative targets cannot slip past.
- * @param target - the raw target path.
- * @param root - the workspace root (the session cwd).
- * @returns true when the target is the root or inside it.
+ * Resolve a spelling to its real path, canonicalizing the deepest existing
+ * ancestor and re-appending the rest: a target that does not exist yet (a new
+ * file being written) still matches a canonical root. Falls back to the raw
+ * spelling when nothing can be resolved.
  */
-export function isInsideWorkspace(target: string, root: string): boolean {
-  // Relative targets resolve against the workspace root, not the process cwd.
-  const targetPath = isAbsolute(target) ? resolve(target) : resolve(root, target)
-  const rootPath = resolve(root)
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    const parent = dirname(path)
+    if (parent === path) return path
+    const canonicalParent = canonicalPath(parent)
+    return canonicalParent === parent ? path : join(canonicalParent, basename(path))
+  }
+}
+
+/** Whether `targetPath` is `rootPath` or lies below it. */
+function contains(rootPath: string, targetPath: string): boolean {
   if (targetPath === rootPath) return true
   const rel = relative(rootPath, targetPath)
   return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
+}
+
+/**
+ * Whether a target path lies inside the workspace root (boundary is
+ * workspace-scoped, not path-scoped). Relative targets resolve against the
+ * workspace root, not the process cwd, so `..` segments cannot slip past.
+ *
+ * Both sides are canonicalized (realpath, raw on failure): a target arriving
+ * in the pre-symlink spelling the user/model sees must match a root the service
+ * already committed in canonical form, and vice versa.
+ * @param target - the raw target path.
+ * @param root - the workspace root (the session cwd).
+ * @param canonicalRoot - the root resolved through realpath, when already known.
+ * @returns true when the target is the root or inside it under either spelling.
+ */
+export function isInsideWorkspace(target: string, root: string, canonicalRoot?: string): boolean {
+  const targetPath = isAbsolute(target) ? resolve(target) : resolve(root, target)
+  const canonicalTarget = canonicalPath(targetPath)
+  const roots = canonicalRoot === undefined ? [resolve(root)] : [resolve(root), canonicalRoot]
+  return roots.some(candidate => contains(candidate, targetPath) || contains(candidate, canonicalTarget))
 }
 
 /**
@@ -113,14 +139,15 @@ export function boundaryDecision(
   if (target === undefined) return undefined
   const agent = exec.agent
   if (agent === undefined) return undefined
-  const store = config.store ?? sessionCwdStore
-  const root = store.resolve(String(agent.session.id), agent.session.snapshotEvents()) ?? agent.session.header.cwd
+  const root = resolveSessionCwd(agent)
   if (root === undefined) return undefined
-  if (isInsideWorkspace(target, root)) return undefined
+  const canonicalRoot = canonicalPath(root)
+  const targetPath = isAbsolute(target) ? resolve(target) : resolve(root, target)
+  if (isInsideWorkspace(targetPath, root, canonicalRoot)) return undefined
   if (readPermissionMode(agent.session.snapshotEvents()) === 'bypassPermissions') return { kind: 'allow' }
   return {
     kind: 'ask',
-    reason: `Operation targets path outside session workspace: ${resolve(target)} (workspace: ${resolve(root)})`,
+    reason: `Operation targets path outside session workspace: ${targetPath} (workspace: ${root})`,
   }
 }
 

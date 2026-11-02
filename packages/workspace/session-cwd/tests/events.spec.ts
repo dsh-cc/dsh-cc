@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { KNOWN_SESSION_EVENT_TYPES, Session, SessionId } from '@deepseek-ai/dsh-session'
-import { WORKTREE_ENTERED_EVENT, appendWorktreeEntered, foldSessionCwd } from '../src/events.ts'
-import { EMPTY_SESSION_CWD_STATE, foldSessionCwdState, reduceSessionCwdState } from '../src/state.ts'
+import { WORKTREE_ENTERED_EVENT, foldSessionCwd } from '../src/events.ts'
 
 function session(): Session {
   return Session.create(SessionId(`cwd-${Math.random()}`))
+}
+
+/** Append a legacy cwd event through the widened wire face (no writer API). */
+function appendEntered(sess: Session, path: string): void {
+  ;(sess.append as unknown as (type: string, payload: { path: string }) => unknown)(WORKTREE_ENTERED_EVENT, { path })
 }
 
 describe('worktree/entered event registration', () => {
@@ -19,28 +23,27 @@ describe('worktree/entered event registration', () => {
 
 describe('worktree/entered folding', () => {
   it('folds undefined from an empty log', () => {
-    const sess = session()
-    expect(foldSessionCwd(sess.snapshotEvents())).toBeUndefined()
+    expect(foldSessionCwd(session().snapshotEvents())).toBeUndefined()
   })
 
   it('folds the last-entered path (last-wins)', () => {
     const sess = session()
-    appendWorktreeEntered(sess, '/tmp/first')
-    appendWorktreeEntered(sess, '/tmp/second')
+    appendEntered(sess, '/tmp/first')
+    appendEntered(sess, '/tmp/second')
     expect(foldSessionCwd(sess.snapshotEvents())).toBe('/tmp/second')
   })
 
   it('folds through unrelated interleaved events', () => {
     const sess = session()
     sess.append('turn/start', { turn: 1 })
-    appendWorktreeEntered(sess, '/tmp/worktree')
+    appendEntered(sess, '/tmp/worktree')
     sess.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     expect(foldSessionCwd(sess.snapshotEvents())).toBe('/tmp/worktree')
   })
 
-  it('appends {path} payloads readable from the log', () => {
+  it('reads {path} payloads from the log', () => {
     const sess = session()
-    appendWorktreeEntered(sess, '/tmp/worktree')
+    appendEntered(sess, '/tmp/worktree')
     const event = sess.eventAt(sess.seq - 1)!
     expect(event.type).toBe('worktree/entered')
     expect(event.data).toEqual({ path: '/tmp/worktree' })
@@ -49,30 +52,7 @@ describe('worktree/entered folding', () => {
   it('ignores malformed entered events during the fold', () => {
     const sess = session()
     ;(sess.append as unknown as (type: string, payload: unknown) => void)('worktree/entered', {})
-    appendWorktreeEntered(sess, '/tmp/valid')
+    appendEntered(sess, '/tmp/valid')
     expect(foldSessionCwd(sess.snapshotEvents())).toBe('/tmp/valid')
-  })
-})
-
-describe('foldable cwd state', () => {
-  it('reduces only worktree/entered events', () => {
-    const state = reduceSessionCwdState(EMPTY_SESSION_CWD_STATE, { type: 'turn/start', data: {} } as never)
-    expect(state).toBe(EMPTY_SESSION_CWD_STATE)
-  })
-
-  it('reduces an entered event into the cwd', () => {
-    const state = reduceSessionCwdState(EMPTY_SESSION_CWD_STATE, { type: 'worktree/entered', data: { path: '/tmp/wt' } } as never)
-    expect(state).toEqual({ cwd: '/tmp/wt' })
-  })
-
-  it('folds a whole log into the final state', () => {
-    const sess = session()
-    appendWorktreeEntered(sess, '/tmp/a')
-    appendWorktreeEntered(sess, '/tmp/b')
-    expect(foldSessionCwdState(sess.snapshotEvents())).toEqual({ cwd: '/tmp/b' })
-  })
-
-  it('folds an empty log to the empty state', () => {
-    expect(foldSessionCwdState([])).toEqual(EMPTY_SESSION_CWD_STATE)
   })
 })

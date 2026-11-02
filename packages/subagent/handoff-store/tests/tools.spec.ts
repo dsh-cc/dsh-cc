@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -87,5 +87,23 @@ describe('handoff tools', () => {
   it('the tool description carries the advisory-threshold contract', () => {
     const { put } = setup()
     expect(String((put as any).description)).toContain(THRESHOLD_NOTE)
+  })
+
+  it('parent (raw symlink spelling) and child (canonical) of ONE directory share a key', async () => {
+    const { put, get } = setup()
+    const base = mkdtempSync(join(tmpdir(), 'handoff-symlink-'))
+    dirs.push(base)
+    const real = join(base, 'real')
+    mkdirSync(real)
+    const link = join(base, 'link')
+    symlinkSync(real, link)
+    const parent = { agent: { session: { id: 'p', snapshotEvents: () => [], header: { cwd: link } } } } as never
+    const child = { agent: { session: { id: 'c', snapshotEvents: () => [], header: { cwd: realpathSync(link) } } } } as never
+    // The manager commits the canonical path while the parent keeps raw spelling.
+    expect(cwdProjectKey((child as any).agent)).toBe(cwdProjectKey((parent as any).agent))
+
+    const res = await put.execute({ content: 'cross-child payload' }, parent)
+    const id = (res.message.match(/handoff:\/\/([0-9a-f]{20})/) as RegExpMatchArray)[1]
+    expect((await get.execute({ id }, child)).text).toBe('cross-child payload')
   })
 })

@@ -69,6 +69,8 @@ export interface SubagentsLike {
       parent: Agent
       agentOptions?: Record<string, string>
       maxDepth?: number
+      /** Child working directory; the harness manager resolves and applies it. */
+      cwd?: string
     }
     signal: AbortSignal
     delivery: 'parent' | 'caller'
@@ -117,6 +119,12 @@ export type BackgroundRequest = {
    * the pin can be written before the child exists (plan §4.5 step 1).
    */
   childId?: string
+  /**
+   * Child working directory (absolute or parent-relative): forwarded to the
+   * seam, whose manager canonicalizes and commits it before the child's first
+   * step. A writer here would be too early — the child does not exist yet.
+   */
+  cwd?: string
   /** Capture-only metadata (never forwarded to the seam): definition. */
   captureDefinition?: AgentDefinition
   /** Capture-only metadata: the atomic model-selector resolution. */
@@ -278,7 +286,7 @@ export async function collectForeground(
         parentRoute: parent.options,
         ...(rest.captureToolFilter !== undefined ? { toolFilter: rest.captureToolFilter } : {}),
         ...(rest.composition?.persona !== undefined ? { persona: rest.composition.persona } : {}),
-        cwd: cwdOf(parent),
+        cwd: request.cwd ?? cwdOf(parent),
         dispatchTier: 'foreground',
         ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
       })
@@ -330,6 +338,7 @@ export async function collectForeground(
                 parent,
                 ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
                 ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
+                ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
               },
               signal,
               delivery: 'parent',
@@ -427,7 +436,7 @@ export async function startBackground(
         parentRoute: parent.options,
         ...(rest.captureToolFilter !== undefined ? { toolFilter: rest.captureToolFilter } : {}),
         ...(rest.composition?.persona !== undefined ? { persona: rest.composition.persona } : {}),
-        cwd: cwdOf(parent),
+        cwd: request.cwd ?? cwdOf(parent),
         dispatchTier: 'background',
         ...(request.autoReleaseMs !== undefined ? { autoReleaseMs: request.autoReleaseMs } : {}),
       })
@@ -446,6 +455,7 @@ export async function startBackground(
           parent,
           ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
           ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
+          ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
         },
         signal,
         delivery: 'parent',

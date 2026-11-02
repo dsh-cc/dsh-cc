@@ -1,93 +1,75 @@
 /**
- * Session cwd APIs. `getSessionCwd` resolves the authoritative session
- * working directory (live overlay → durable `worktree/entered` fold →
- * session header → fallback); `setSessionCwd` records the change durably by
- * appending a `worktree/entered` event and updating the live overlay.
+ * Session cwd facade. The harness `workingDirectory` service owns the session
+ * directory; these resolvers read it synchronously through the agent's own
+ * context and fall back to the legacy `worktree/entered` fold only when the
+ * service is absent in the realm.
  *
  * @module @dsh-cc/session-cwd/api
  */
 
-import { isAbsolute, resolve } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
-import { appendWorktreeEntered } from './events.ts'
-import { writeThroughWorkingDirectory } from './service-holder.ts'
-import { sessionCwdStore, type SessionCwdStore } from './state.ts'
+import { foldSessionCwd } from './events.ts'
 
-/** Options accepted by the cwd APIs; default to the shared process store. */
+/** Structural face of the upstream `sessionProjections` registry. */
+interface SessionProjectionsLike {
+  /** Sync, undefined-able cold read of one projection unit. */
+  stateOf(session: Session, key: 'workingDirectory'): unknown
+}
+
+/** Options accepted by the cwd facade. */
 export interface SessionCwdOptions {
-  /** The store to read/write; defaults to the process-wide singleton. */
-  store?: SessionCwdStore
-  /** Final fallback when neither the log nor the header records a cwd. */
+  /** Final fallback when neither the service nor the legacy log records a cwd. */
   fallback?: string
 }
 
 /**
- * Shared resolution body for the session-cwd resolvers: live store overlay →
- * durable `worktree/entered` fold → session header cwd → caller fallback →
- * `undefined`. Contains the resolution body's grandfathered
- * `session.snapshotEvents()` call (upstream deprecation: new calls prohibited).
+ * Legacy read path: the durable `worktree/entered` fold, then the session
+ * header cwd. Contains the facade's grandfathered `session.snapshotEvents()`
+ * call (upstream deprecation: new call sites are prohibited).
  * @param session - the session whose cwd is being resolved.
- * @param options - store and fallback overrides.
- * @returns the absolute session cwd, or `undefined` when nothing records one.
+ * @returns the folded or header cwd, or `undefined` when nothing records one.
  */
-function resolveSessionCwd(
-  session: Pick<Agent['session'], 'id' | 'header' | 'snapshotEvents'>,
-  options: SessionCwdOptions = {},
-): string | undefined {
-  const { store = sessionCwdStore, fallback } = options
-  const sessionId = String(session.id)
-  return store.resolve(sessionId, session.snapshotEvents())
-    ?? session.header.cwd
-    ?? fallback
+function legacySessionCwd(session: Session): string | undefined {
+  return foldSessionCwd(session.snapshotEvents()) ?? session.header.cwd
 }
 
 /**
- * Read the authoritative session working directory for a session directly.
- * Resolution order: the live store overlay, the durable `worktree/entered`
- * fold, the session header cwd, then the caller's fallback — no
- * `process.cwd()` fallback, so "unresolvable" stays observable (`undefined`).
- * @param session - the session whose cwd is being read.
- * @param options - store and fallback overrides.
- * @returns the absolute session cwd, or `undefined` when unresolvable.
+ * Resolve the authoritative session working directory without coalescing:
+ * service-backed state when the harness service is present in the realm, else
+ * the legacy `worktree/entered` fold, else the session header cwd.
+ *
+ * Never throws: every cordis access is guarded, so a bare or TUI-style agent
+ * fixture degrades to the legacy fold instead of failing the caller.
+ * @param agent - the live agent whose session cwd is being read.
+ * @returns the session cwd, or `undefined` when unresolvable.
  */
-export function getSessionCwdForSession(
-  session: Session,
-  options: SessionCwdOptions = {},
-): string | undefined {
-  return resolveSessionCwd(session, options)
+export function resolveSessionCwd(agent: Agent): string | undefined {
+  try {
+    const service = agent.ctx.get('workingDirectory')
+    if (service !== undefined) {
+      const projections = agent.ctx.get('sessionProjections') as SessionProjectionsLike | undefined
+      const value = projections?.stateOf(agent.session, 'workingDirectory')
+      // A registered projection whose state is `null` means "no header cwd and
+      // no events" — authoritative absence, so the legacy fold must not
+      // supersede it. `undefined` means the key is unregistered in this realm:
+      // only then does the facade fall through to the legacy fold.
+      if (value !== undefined) return typeof value === 'string' ? value : undefined
+    }
+  } catch {
+    // Un-injected service access throws; degrade to the legacy fold.
+  }
+  return legacySessionCwd(agent.session)
 }
 
 /**
  * Read the authoritative session working directory. Resolution order: the
- * live store overlay, the durable `worktree/entered` fold, the session
- * header cwd, then the caller's fallback (defaulting to the process cwd).
+ * harness service, the legacy fold, the session header cwd, the caller
+ * fallback, then the process cwd.
  * @param agent - the live agent whose session cwd is being read.
- * @param options - store and fallback overrides.
- * @returns the absolute session cwd.
+ * @param options - caller fallback override.
+ * @returns the absolute session cwd (total).
  */
 export function getSessionCwd(agent: Agent, options: SessionCwdOptions = {}): string {
-  return resolveSessionCwd(agent.session, options)
-    ?? process.cwd()
-}
-
-/**
- * Change the session's working directory: append a durable `worktree/entered`
- * event (last-wins fold) and update the live overlay. The path must be
- * absolute and is normalized before writing.
- * @param agent - the live agent whose session cwd is changing.
- * @param path - the new absolute working directory.
- * @param options - store override.
- */
-export function setSessionCwd(agent: Agent, path: string, options: SessionCwdOptions = {}): void {
-  if (!isAbsolute(path)) {
-    throw new TypeError(`session cwd must be an absolute path: "${path}"`)
-  }
-  const { store = sessionCwdStore } = options
-  const normalized = resolve(path)
-  appendWorktreeEntered(agent.session, normalized)
-  store.set(String(agent.session.id), normalized)
-  // Single-owner migration (S10): execution resolves the harness
-  // `workingDirectory` service, so mirror the change there best-effort.
-  if (store === sessionCwdStore) writeThroughWorkingDirectory(agent, normalized)
+  return resolveSessionCwd(agent) ?? options.fallback ?? process.cwd()
 }

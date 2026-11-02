@@ -4861,7 +4861,7 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "The child's session-cwd overlay moves to the worktree (permission-rules workspace, boundary guard, context buckets follow), but the child's header.cwd, the harness sandbox root, and the bash default workdir stay the parent's (needs a SubagentStartRequest.cwd seam, upstream §11.2). Containment is therefore strongest when the parent runs at the repo root; a parent cwd that cannot contain <repoRoot>/.claude/worktrees refuses the dispatch. Delegated children cannot answer approval prompts, so sandbox-denied writes hard-fail — the absolute-path contract is injected into the persona and the first prompt line. Serena (user-mounted) pins one project root per session and does not follow the child."
+        "summary": "The child's session working directory moves to the worktree (permission-rules workspace, boundary guard, context buckets follow), but the child's header.cwd, the harness sandbox root, and the bash default workdir stay the parent's (needs a SubagentStartRequest.cwd seam, upstream §11.2). Containment is therefore strongest when the parent runs at the repo root; a parent cwd that cannot contain <repoRoot>/.claude/worktrees refuses the dispatch. Delegated children cannot answer approval prompts, so sandbox-denied writes hard-fail — the absolute-path contract is injected into the persona and the first prompt line. Serena (user-mounted) pins one project root per session and does not follow the child."
       }
     },
     "subagents.release-tool": {

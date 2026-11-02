@@ -1,6 +1,6 @@
 {
   "name": "@dsh-cc/session-cwd",
-  "description": "Session-scoped working directory state for DeepSeek Harness CC: durable worktree/entered session events, foldable cwd state, getSessionCwd/setSessionCwd APIs, and a pre-execute workspace boundary guard",
+  "description": "Session working-directory facade for DeepSeek Harness CC: the harness workingDirectory service owns the session cwd (legacy worktree/entered log hydration), with the getSessionCwd/resolveSessionCwd APIs and a pre-execute workspace boundary guard",
   "version": "0.9.3-rc.4",
   "repository": {
     "type": "git",
@@ -31,8 +31,11 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
+    "@deepseek-ai/dsh-working-directory": "link:../../../../deepseek-harness/packages/session/working-directory",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/tools": "link:../../core/tools"
   },

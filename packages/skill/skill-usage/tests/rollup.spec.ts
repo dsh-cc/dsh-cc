@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -51,7 +51,7 @@ interface Rig {
   setCatalog: (list: unknown) => void
 }
 
-function rig(home = tempHome()): Rig {
+function rig(home = tempHome(), getService: (name: string) => unknown = () => undefined): Rig {
   const registrations: Array<[string, (...args: never[]) => unknown]> = []
   let catalog: unknown
   const ctx = {
@@ -59,7 +59,7 @@ function rig(home = tempHome()): Rig {
     on: vi.fn((event: string, listener: (...args: never[]) => unknown) => {
       registrations.push([event, listener])
     }),
-    get: (name: string) => (name === 'skills' ? catalog : undefined),
+    get: (name: string) => (name === 'skills' ? catalog : getService(name)),
     dshHomePath: () => home,
   }
   apply(ctx as never)
@@ -114,6 +114,23 @@ function seedMarker(home: string, key: string, ageDays: number | null): void {
 // A freshly published report (current watermark, current mtime) — "fresh".
 
 describe('skill-usage utility rollup', () => {
+  it('service-mounted: the report is keyed off the workingDirectory projection, not the header cwd', async () => {
+    const home = tempHome()
+    const ws = mkdtempSync(join(tmpdir(), 'skill-usage-rollup-ws-'))
+    dirs.push(ws)
+    const cwd = realpathSync(ws)
+    const { onSessionCreated } = rig(home, (name) => {
+      if (name === 'workingDirectory') return {}
+      if (name === 'sessionProjections') return { stateOf: () => cwd }
+      return undefined
+    })
+    seedLedger(home, cwd, [{ v: 1, ts: Date.now(), sessionId: 'a', skill: 'used', via: 'tool' }])
+    onSessionCreated(sessionAt('/stale-header-cwd'))
+    await flush()
+    expect(existsSync(reportFile(home, projectKeyOf(cwd)))).toBe(true)
+    expect(existsSync(reportFile(home, projectKeyOf('/stale-header-cwd')))).toBe(false)
+  })
+
   it('zero-load workspace at session/created: marker created, report written with honest empty sections, no leftover temp files', async () => {
     const { onSessionCreated, home } = rig()
     onSessionCreated(sessionAt(home))

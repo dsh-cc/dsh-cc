@@ -2,8 +2,8 @@
  * WS-3 unit coverage: `isolation: worktree` dispatch over the REAL Task tool
  * with a scripted fake shell (docs/plans/2026-09-14-cc-worktree-parity.md §6
  * flow 1–4, §8 WS-3 row). Pins the creation argv (filter neutralization),
- * the persona/prompt contract, `setSessionCwd` on the child only, the
- * dispatch-time sandbox refusal, old-git lock tolerance, and the
+ * the persona/prompt contract, the child cwd forwarded on the start request,
+ * the dispatch-time sandbox refusal, old-git lock tolerance, and the
  * clean→remove vs dirty→keep end cleanup (with the remove-notify line).
  */
 import { afterEach, describe, expect, it } from 'vitest'
@@ -21,7 +21,6 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
 import { AgentRegistry } from '../src/registry.ts'
 import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
-import { sessionCwdStore } from '@dsh-cc/session-cwd'
 import { mountActorContractGate, ActorContractGate } from '../src/actor-contract-gate.ts'
 
 const signal = new AbortController().signal
@@ -117,7 +116,6 @@ interface Mount {
 const tmpRoots: string[] = []
 afterEach(() => {
   for (const dir of tmpRoots.splice(0)) rmSync(dir, { recursive: true, force: true })
-  sessionCwdStore.clear()
 })
 
 async function mount(opts: { parentCwdInSubdir?: boolean; definitionBody?: string } = {}): Promise<Mount> {
@@ -232,10 +230,12 @@ describe('WS-3 subagent isolation: worktree (fake shell)', () => {
     expect(prompt[0]!.text).toContain('parent checkout off-limits')
     expect(prompt[0]!.text).toContain('\ntask body')
 
-    // Adopt: setSessionCwd targeted the CHILD (durable event on its log only).
-    const entered = m.childAgent.appended.filter(e => e.type === 'worktree/entered')
-    expect(entered).toHaveLength(1)
-    expect((entered[0]!.data as { path: string }).path).toMatch(/\.claude\/worktrees\/subagent-/)
+    // F-1: the isolated worktree path rides the start request, so the harness
+    // manager commits the child's cwd before its first step. Nothing is
+    // appended to the child log by this package.
+    const addPath = /worktree add -B '[^']+' '([^']+)' HEAD/.exec(add!.command)![1]!
+    expect(m.continuableStarts()[0]!['cwd']).toBe(addPath)
+    expect(addPath).toMatch(/\.claude\/worktrees\/subagent-/)
     // The parent's header cwd is untouched.
     expect((m.agent as { session: { header: { cwd: string } } }).session.header.cwd).not.toContain('.claude/worktrees')
   })

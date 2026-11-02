@@ -189,7 +189,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           const adoptedBranch = await branchOfAdopted(ctx, adopted, exec.signal)
           const adoptedHead = await headOfAdopted(ctx, adopted, exec.signal)
           setActiveWorktreeSession({ originalCwd: cwd, repoRoot, worktreePath: adopted, worktreeBranch: adoptedBranch, originalHead: adoptedHead })
-          updateSessionCwd(exec, adopted)
+          await updateSessionCwd(exec, adopted)
           return {
             worktreePath: adopted,
             worktreeBranch: adoptedBranch,
@@ -255,7 +255,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           const hookHead = await headOfAdopted(ctx, hookOutcome.path, exec.signal)
           const hookBranch = (await branchOfAdopted(ctx, hookOutcome.path, exec.signal)) || branch
           setActiveWorktreeSession({ originalCwd: cwd, repoRoot, worktreePath: hookOutcome.path, worktreeBranch: hookBranch, originalHead: hookHead })
-          updateSessionCwd(exec, hookOutcome.path)
+          await updateSessionCwd(exec, hookOutcome.path)
           await copyIncludedFiles(repoRoot, hookOutcome.path, includeGitRunner(ctx, exec.signal))
           return {
             worktreePath: hookOutcome.path,
@@ -305,7 +305,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         await copyIncludedFiles(repoRoot, worktreePath, includeGitRunner(ctx, exec.signal))
 
         setActiveWorktreeSession({ originalCwd: cwd, repoRoot, worktreePath, worktreeBranch: branch, originalHead })
-        updateSessionCwd(exec, worktreePath)
+        await updateSessionCwd(exec, worktreePath)
 
         return {
           worktreePath,
@@ -373,7 +373,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         if (args.action === 'keep') {
           await releaseLock(ctx, session, exec.signal)
           clearActiveWorktreeSession()
-          updateSessionCwd(exec, session.originalCwd)
+          await updateSessionCwd(exec, session.originalCwd)
           return {
             action: 'keep' as const,
             originalCwd: session.originalCwd,
@@ -435,7 +435,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
 
         clearActiveWorktreeSession()
-        updateSessionCwd(exec, session.originalCwd)
+        await updateSessionCwd(exec, session.originalCwd)
         const discardParts: string[] = []
         if (commits > 0) discardParts.push(`${commits} ${commits === 1 ? 'commit' : 'commits'}`)
         if (changedFiles > 0) discardParts.push(`${changedFiles} uncommitted ${changedFiles === 1 ? 'file' : 'files'}`)

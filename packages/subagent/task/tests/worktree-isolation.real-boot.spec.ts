@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { execSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -157,5 +157,28 @@ describe('isolation: worktree through real cordis plugin loading', () => {
     const listing = execSync('git worktree list --porcelain', { cwd: ws }).toString()
     expect(listing).not.toContain('worktree-subagent-')
     expect(existsSync(worktreePath!)).toBe(false)
+  }, 30_000)
+
+  it('background child: its first tool runs in the committed worktree cwd', async () => {
+    const { ctx, parent, ws } = await setup([
+      toolCallResponse('t1', 'dirty-write', {}),
+      textResponse('child done'),
+    ])
+    const result = await callTask(ctx, 'subagent_fork', {
+      subagent_type: 'isolated',
+      description: 'background isolated work',
+      prompt: 'do the isolated thing in the background',
+      run_in_background: true,
+    }, parent)
+    expect(result.isError).toBe(false)
+    const worktreePath = /isolated worktree: (\S+)/.exec(text(result))?.[1]
+    expect(worktreePath).toBeDefined()
+    // F-1 (background dispatch): the manager commits the child cwd — canonical
+    // — before the child's first step, so the tool's file lands under the
+    // realpath of the worktree, never under the parent.
+    await vi.waitFor(() => {
+      expect(existsSync(join(realpathSync(worktreePath!), 'dirty.txt'))).toBe(true)
+    }, { timeout: 15_000 })
+    expect(existsSync(join(ws, 'dirty.txt'))).toBe(false)
   }, 30_000)
 })

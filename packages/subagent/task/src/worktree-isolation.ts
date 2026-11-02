@@ -1,10 +1,11 @@
 /**
  * WS-3 subagent `isolation: worktree` (docs/plans/2026-09-14-cc-worktree-parity.md
  * §6): per-dispatch worktree creation for Task children whose agent definition
- * pins `isolation: 'worktree'`, the lifecycle listeners that adopt the child
- * into the worktree (`setSessionCwd` on the CHILD only) and clean it up after
- * a clean end, and the dispatch entry that wires creation → persona contract →
- * start.
+ * pins `isolation: 'worktree'`, the lifecycle listener that cleans the tree up
+ * after a clean end, and the dispatch entry that wires creation → persona
+ * contract → start. The child's working directory travels on the start request
+ * (`cwd`), which the harness manager canonicalizes and commits before the
+ * child's first step — no post-creation adopt hook is needed.
  *
  * Creation deliberately reuses the WS-1-hardened command constructors from
  * `@dsh-cc/tool-git-worktree` (common-dir root pin, local-config scan,
@@ -25,7 +26,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import type { DetailedRoute, ModelRoutes } from '@dsh-cc/model-aliases'
-import { setSessionCwd } from '@dsh-cc/session-cwd'
 import {
   runWorktreeCreateHook,
   runWorktreeRemoveHook,
@@ -288,24 +288,13 @@ export async function settleIsolationWorktree(
   return 'removed'
 }
 
-/** The context face the lifecycle listeners need. */
-export interface WorktreeIsolationDeps {
-  /** Live agent registry (`ctx.agents`) for the `subagent/start` adopt probe. */
-  agents?: { get?(id: string): Agent | undefined } | undefined
-}
-
 /**
  * The per-child registry shared by the dispatch path and the lifecycle
- * listeners. One instance per Task plugin mount; entries are keyed by the
+ * listener. One instance per Task plugin mount; entries are keyed by the
  * preallocated durable child id.
  */
 export class SubagentWorktreeRegistry {
   readonly entries = new Map<string, IsolationEntry>()
-  readonly deps: WorktreeIsolationDeps
-
-  constructor(deps: WorktreeIsolationDeps = {}) {
-    this.deps = deps
-  }
 
   record(childId: string, record: WorktreeIsolationRecord): void {
     this.entries.set(childId, record)
@@ -334,34 +323,22 @@ export class SubagentWorktreeRegistry {
 }
 
 /**
- * Mount the WS-3 lifecycle listeners (flow 2 + 3) on the bus:
- * - `subagent/start`: adopt — `setSessionCwd` on the CHILD agent (never the
- *   parent; the fold is last-wins per session).
+ * Mount the WS-3 lifecycle listener (flow 3) on the bus:
  * - `subagent/end`: settle — clean probe → remove + delete branch; dirty →
  *   leave on disk (continuable children re-fire per epoch, and a dirty tree
  *   must survive to the next one). Removal only ever fires on a clean probe.
+ *
+ * No `subagent/start` adopt hook remains: the dispatch forwards `cwd` on the
+ * start request, and the harness manager commits it (awaited) before the
+ * child's first step.
  * @returns the disposer.
  */
 export function mountWorktreeIsolation(ctx: Context, registry: SubagentWorktreeRegistry): () => void {
-  const agents = registry.deps.agents ?? (ctx.get('agents') as WorktreeIsolationDeps['agents'] | undefined)
-  const offStart = ctx.on('subagent/start', info => {
-    const childId = String(info.id)
-    const entry = registry.get(childId)
-    if (entry === undefined) return
-    const child = agents?.get?.(childId)
-    if (child === undefined) return
-    try {
-      setSessionCwd(child, entry.worktreePath)
-    } catch (error) {
-      ctx.logger?.warn?.(`could not adopt worktree cwd for subagent ${childId}: ${(error as Error).message}`)
-    }
-  })
   const offEnd = ctx.on('subagent/end', info => {
     const outcome = registry.settle(String(info.id), ctx)
     if (outcome !== undefined) void outcome.catch(() => undefined)
   })
   return () => {
-    offStart?.()
     offEnd?.()
   }
 }
@@ -411,6 +388,9 @@ export async function dispatchWorktreeIsolation(
     maxDepth: parts.maxDepth,
     ...(parts.agentOptions !== undefined ? { agentOptions: parts.agentOptions } : {}),
     childId,
+    // F-1: the isolated worktree IS the child's working directory. It travels
+    // on the request so the harness manager commits it before the first step.
+    cwd: record.worktreePath,
     captureDefinition: definition,
     captureSelector: (routes !== undefined
       ? routes.resolveDetailed(definition.model)

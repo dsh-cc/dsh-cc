@@ -178,8 +178,9 @@ git worktree instead of the parent tree (WS-3 of `docs/plans/2026-09-14-cc-workt
    then locked with `git worktree lock --reason="dsh-cc subagent <id>"` (pre-2.15 git's
    "unknown option" failure is tolerated as a no-op). Any creation failure refuses the
    dispatch — it never silently falls back to the parent tree.
-2. **Adopt** — on the child's first `subagent/start`, `setSessionCwd` moves the CHILD's
-   session cwd to the worktree (parent log untouched); the permission-rules workspace, the
+2. **Adopt** — the worktree path travels as `cwd` on the start request; the harness
+   subagent manager canonicalizes it and commits it on the `workingDirectory` service
+   (awaited) before the child's first step, so the permission-rules workspace, the
    session-cwd boundary guard, and the context buckets follow. The contract paragraph
    ("your working directory is `<path>`; pass absolute paths inside it to every tool and
    shell `workdir`; the parent checkout is off-limits") is appended to the child persona
@@ -195,7 +196,7 @@ git worktree instead of the parent tree (WS-3 of `docs/plans/2026-09-14-cc-workt
 
 Deviations (manifest `subagents.isolation`, `behavioral: partial` / `ux: partial`): the
 child's `header.cwd`, the harness sandbox root, and the bash default workdir remain the
-parent's (needs a `SubagentStartRequest.cwd` seam). Delegated children cannot answer
+parent's (the session cwd — not the bound workspace — is what the `cwd` seam moves). Delegated children cannot answer
 approval prompts, so a sandbox-denied write hard-fails — the absolute-path contract above
 is what keeps the child functional. Serena (user-mounted) pins one project root per
 session and does not follow the child.
