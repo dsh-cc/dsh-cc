@@ -1,10 +1,11 @@
 /**
  * Session-scoped working directory for DeepSeek Harness CC (WS1 + WS2).
  * Registers the `worktree/entered` session event type at load (required for
- * persistence compatibility), maintains foldable session cwd state, exposes
- * `getSessionCwd` / `setSessionCwd`, and installs the `tools/pre-execute`
- * workspace boundary guard (prepend, ahead of permission-rules) that routes
- * out-of-workspace fs targets to an approval ask.
+ * persistence compatibility), exposes the service-backed `getSessionCwd` /
+ * `resolveSessionCwd` facade, hydrates the harness `workingDirectory` service
+ * from legacy logs, and installs the `tools/pre-execute` workspace boundary
+ * guard (prepend, ahead of permission-rules) that routes out-of-workspace fs
+ * targets to an approval ask.
  *
  * @module @dsh-cc/session-cwd
  */
@@ -20,19 +21,12 @@ import {
   registerSessionCwdBoundary,
   type BoundaryListenerConfig,
 } from './listener.ts'
-import { sessionCwdStore, type SessionCwdStore } from './state.ts'
-import { getSessionCwd, getSessionCwdForSession, setSessionCwd, type SessionCwdOptions } from './api.ts'
-import { installWorkingDirectoryBridge } from './working-directory-bridge.ts'
+import { getSessionCwd } from './api.ts'
+import { installLegacyCwdHydration } from './hydration.ts'
 
-export { WORKTREE_ENTERED_EVENT, foldSessionCwd, appendWorktreeEntered, type WorktreeEnteredEventData } from './events.ts'
-export { SessionCwdStore, sessionCwdStore, foldSessionCwdState, reduceSessionCwdState, EMPTY_SESSION_CWD_STATE, type SessionCwdState } from './state.ts'
-export { getSessionCwd, getSessionCwdForSession, setSessionCwd, type SessionCwdOptions } from './api.ts'
-export { installWorkingDirectoryBridge, hydrateWorkingDirectory } from './working-directory-bridge.ts'
-export {
-  workingDirectoryService,
-  writeThroughWorkingDirectory,
-  type WorkingDirectoryLike,
-} from './service-holder.ts'
+export { WORKTREE_ENTERED_EVENT, foldSessionCwd, type WorktreeEnteredEventData } from './events.ts'
+export { getSessionCwd, resolveSessionCwd, type SessionCwdOptions } from './api.ts'
+export { installLegacyCwdHydration } from './hydration.ts'
 export {
   registerSessionCwdBoundary,
   boundaryDecision,
@@ -61,22 +55,18 @@ export const Config: z<Config> = z.object({
 /** The plugin module face consumed by the Cordis loader. */
 export const inject: readonly string[] = []
 
-/**
- * Plugin entry point: install the workspace boundary guard. The event-type
- * registration happens at module load (the `./events.ts` side-effect import
- * above), so even API-only consumers register the type.
- * @param ctx - the Cordis context.
- * @param config - runtime configuration.
- */
 /** Contexts already granted the `cwd` prompt variable (duplicate registration throws in the prompt registry). */
 const cwdVariableRegistered = new WeakSet<Context>()
 
+/**
+ * Plugin entry point: install legacy hydration and the workspace boundary
+ * guard. The event-type registration happens at module load (the `./events.ts`
+ * side-effect import above), so even API-only consumers register the type.
+ * @param ctx - the Cordis context.
+ * @param config - runtime configuration.
+ */
 export function apply(ctx: Context, config: Config = {}): void {
-  // Single-owner cwd migration: bridge to the harness workingDirectory service
-  // (mirror its changes, hydrate it from the overlay, allow write-through).
-  // The service may become available later in composition, so retry then.
-  installWorkingDirectoryBridge(ctx)
-  ctx.inject(['workingDirectory'], (child: Context) => { installWorkingDirectoryBridge(child) })
+  void installLegacyCwdHydration(ctx)
   // rc.5: the strict prompt-variable set only knows provider/model; the cc
   // personas (agent.cordis.yml / agent.vwa.cordis.yml) interpolate {{cwd}}.
   // session-cwd is its owner, so it also registers the variable.
@@ -94,22 +84,6 @@ export function apply(ctx: Context, config: Config = {}): void {
     }
     registerSessionCwdBoundary(ctx, listenerConfig)
   }
-}
-
-/** Convenience face for host code that does not import the pure APIs directly. */
-export const sessionCwd = {
-  /** Read the authoritative session working directory. */
-  get(agent: Agent, options?: SessionCwdOptions): string {
-    return getSessionCwd(agent, options)
-  },
-  /** Read the session cwd directly from a session, without the `process.cwd()` fallback. */
-  getForSession: getSessionCwdForSession,
-  /** Change the session working directory (durable `worktree/entered` event). */
-  set(agent: Agent, path: string, options?: SessionCwdOptions): void {
-    setSessionCwd(agent, path, options)
-  },
-  /** The process-wide cwd overlay. */
-  store: sessionCwdStore as SessionCwdStore,
 }
 
 // No default export: cordis-plugin-loader unwrapExports prefers `.default`, so

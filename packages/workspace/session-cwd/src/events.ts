@@ -6,17 +6,15 @@
  * `ReadonlySet` but is a live `Set` — same cross-repo registration pattern as
  * `permission/mode` in `@dsh-cc/permission-rules`.
  *
- * The event payload is a local wire face (`WorktreeEnteredWire`) rather than
- * `SessionEventMap['worktree/entered']` so both the CI pin (type absent from
- * the typed map) and a newer local harness typecheck: `Session.append` is
- * compiler-validated against the upstream event map, so appends go through a
- * widened function face.
+ * The event payload is read through a local wire face (`WorktreeEnteredWire`)
+ * rather than `SessionEventMap['worktree/entered']`, which the typed map does
+ * not carry: legacy logs stay readable, but nothing new is written here.
  *
  * @module @dsh-cc/session-cwd/events
  */
 
 import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 /** The session event type carrying a session cwd change. */
 export const WORKTREE_ENTERED_EVENT = 'worktree/entered'
@@ -58,15 +56,4 @@ export function foldSessionCwd(events: readonly SessionEvent[]): string | undefi
     }
   }
   return undefined
-}
-
-/**
- * Append one durable `worktree/entered` event. `path` must be absolute; it is
- * written verbatim (callers normalize before calling).
- * @param session - the session the cwd change belongs to.
- * @param path - the new absolute session working directory.
- */
-export function appendWorktreeEntered(session: Session, path: string): void {
-  const data: WorktreeEnteredEventData = { path }
-  ;(session.append as unknown as (type: string, payload: WorktreeEnteredEventData) => unknown)(WORKTREE_ENTERED_EVENT, data)
 }

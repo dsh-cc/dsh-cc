@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -12,7 +15,12 @@ import {
   registerSessionCwdBoundary,
   targetPathOf,
 } from '../src/listener.ts'
-import { appendWorktreeEntered } from '../src/events.ts'
+import { WORKTREE_ENTERED_EVENT } from '../src/events.ts'
+
+const roots: string[] = []
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+})
 
 let counter = 0
 
@@ -26,7 +34,9 @@ function exec(options: {
 }): ToolExecution {
   counter += 1
   const session = Session.create(SessionId(`listener-${counter}`))
-  if (options.entered !== undefined) appendWorktreeEntered(session, options.entered)
+  if (options.entered !== undefined) {
+    ;(session.append as unknown as (type: string, payload: { path: string }) => void)(WORKTREE_ENTERED_EVENT, { path: options.entered })
+  }
   if (options.mode !== undefined) {
     ;(session.append as unknown as (type: string, payload: unknown) => void)('permission/mode', { mode: options.mode })
   }
@@ -47,6 +57,17 @@ function exec(options: {
     signal: new AbortController().signal,
     agent,
   } as unknown as ToolExecution
+}
+
+/** A tmpdir pair where `link` is a symlink to `real`, so the spellings differ. */
+function symlinked(): { real: string, link: string } {
+  const base = mkdtempSync(join(tmpdir(), 'session-cwd-guard-'))
+  roots.push(base)
+  const real = join(base, 'real')
+  mkdirSync(real, { recursive: true })
+  const link = join(base, 'link')
+  symlinkSync(real, link)
+  return { real, link }
 }
 
 describe('isFsTool', () => {
@@ -93,6 +114,13 @@ describe('isInsideWorkspace', () => {
     expect(isInsideWorkspace('/tmp/wt-other', '/tmp/wt')).toBe(false)
     expect(isInsideWorkspace('/etc/passwd', '/tmp/wt')).toBe(false)
   })
+
+  it('accepts either spelling when the target is under a symlinked root', () => {
+    const { real, link } = symlinked()
+    expect(isInsideWorkspace(join(link, 'a.ts'), real, realpathSync(real))).toBe(true)
+    expect(isInsideWorkspace(join(real, 'a.ts'), link, realpathSync(link))).toBe(true)
+    expect(isInsideWorkspace(join(link, '..', 'outside.ts'), real, realpathSync(real))).toBe(false)
+  })
 })
 
 describe('readPermissionMode', () => {
@@ -106,7 +134,7 @@ describe('readPermissionMode', () => {
   })
 })
 
-describe('boundaryDecision', () => {
+describe('boundaryDecision: pass-throughs', () => {
   it('passes through non-fs tools', () => {
     expect(boundaryDecision(exec({ name: 'Bash', args: { file_path: '/etc/passwd' }, cwd: '/tmp/wt' }))).toBeUndefined()
   })
@@ -128,14 +156,28 @@ describe('boundaryDecision', () => {
   it('passes through in-workspace targets', () => {
     expect(boundaryDecision(exec({ name: 'Write', args: { file_path: '/tmp/wt/src/a.ts' }, entered: '/tmp/wt' }))).toBeUndefined()
   })
+
+  it('passes through a symlink-spelled target inside the canonical root', () => {
+    const { real, link } = symlinked()
+    const root = realpathSync(real)
+    expect(boundaryDecision(exec({ name: 'Write', args: { file_path: join(link, 'a.ts') }, entered: root }))).toBeUndefined()
+  })
 })
 
 describe('boundaryDecision: out-of-workspace targets', () => {
-  it('asks with a workspace-referencing reason under the default mode', () => {
+  it('asks with a workspace-referencing reason naming the target and root', () => {
     const decision = boundaryDecision(exec({ name: 'Write', args: { file_path: '/etc/passwd' }, entered: '/tmp/wt' }))
     expect(decision).toMatchObject({ kind: 'ask' })
-    expect((decision as { reason: string }).reason).toContain('outside session workspace')
-    expect((decision as { reason: string }).reason).toContain('/tmp/wt')
+    const reason = (decision as { reason: string }).reason
+    expect(reason).toContain('outside session workspace')
+    expect(reason).toContain('/etc/passwd')
+    expect(reason).toContain('/tmp/wt')
+  })
+
+  it('asks for a target outside both the raw and canonical root spellings', () => {
+    const { real, link } = symlinked()
+    const decision = boundaryDecision(exec({ name: 'Write', args: { file_path: join(link, '..', 'outside.ts') }, entered: realpathSync(real) }))
+    expect(decision?.kind).toBe('ask')
   })
 
   it('allows under bypassPermissions', () => {
