@@ -18,7 +18,7 @@ Disposing the plugin fiber reverses every registration in one pass, so disabling
 
 The scheduling tools are thin adapters over the subagent service, so residency, cold resume, and delivery authority remain the service's:
 
-- `spawn_worker(name, prompt)` calls `ctx.subagents.startContinuable()` and records the durable child id under the given name.
+- `spawn_worker(name, prompt)` calls `ctx.subagents.startActivation()` with `delivery: 'parent'` and records the durable child id under the given name.
 - `send_to_worker(worker, message)` resolves a name (or durable id) and steers or wakes that worker through `ctx.subagents.sendMessage()` — a running worker takes the message at its next step boundary, an idle or parked one is woken (or cold-resumed). Sender attribution is derived from the live coordinator Agent.
 - `worker_broadcast(message)` sends the same content to every registered worker (steer + wake semantics as above).
 - `worker_tasks()` lists registered workers with a live status from the Agent registry.

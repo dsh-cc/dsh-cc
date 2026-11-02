@@ -11,7 +11,7 @@ Human-facing `/help` command that lists every registered slash command, or shows
 | `/help` | List every registered command as `/name — description`, sorted by name. |
 | `/help <cmd>` | Show one command's detail (name, description, and input hint when declared). An unknown command yields a friendly notice. |
 
-Command details come from the command registry itself; only commands registered in the current composition are shown.
+Command details come from the command registry itself; only commands registered in the current composition are shown. Commands exposed by the optional `ccPlugins` service are merged into the list with a `[plugin: <name>]` marker; colon-form plugin names resolve against that table.
 
 ## Composition
 

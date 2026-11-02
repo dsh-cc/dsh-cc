@@ -3,7 +3,8 @@
 Verifiable Workspace Agent (VWA) lane-2 argumentation (design:
 `docs/plans/2026-10-16-vwa-evidence-argument.md`). The package provides contracts, store/graph, review pipeline, author and report tools, the `/vwa` command, v2 receipts, and the report renderer. Semantic quality remains experimental until the human gold set and live-model acceptance are completed; deterministic integration tests do not establish semantic accuracy. Semantic review stays
 **default-off** (`vwa-argument.semantic-enabled: false`, §13); when it is
-disabled the tools are not registered and the feature is inert.
+disabled the semantic tools are not registered (the `/vwa` command still
+mounts) and semantic review is inert.
 
 - **Contracts** (`src/contracts/`, JSON Schema Draft 2020-12):
   - `author.schema.json` — the author-side argument graph (`ProjectSnapshot`:

@@ -55,6 +55,7 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
 | `oauth` | http | 否 | OAuth 流程选项（见下文） |
 | `toolCallTimeoutMs` | 两者 | 否 | 每次 `callTool` 调用的超时（默认 60000） |
 | `failOnStartupError` | 两者 | 否 | 初始连接或工具同步失败时拒绝插件激活（默认 `false`） |
+| `deferStartupConnect` | 两者 | 否 | 激活时不等初始连接与工具同步完成，改为后台连接（默认 `false`）；与 `failOnStartupError: true` 同用时无效 |
 | `reconnect.enabled` | 两者 | 否 | 连接丢失后自动重新连接（默认 `true`） |
 | `reconnect.initialDelayMs` | 两者 | 否 | 首次重连延迟（毫秒）；每次连续失败尝试翻倍（默认 500） |
 | `reconnect.maxDelayMs` | 两者 | 否 | 退避上限（毫秒）；同时也是重置尝试预算所需的正常运行时长（默认 30000） |
@@ -100,6 +101,10 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
 
 supervisor 在中断期间保持每个能力的注册存活（保留最后一个正常世代），并在放弃或 dispose 时移除，全部经由一条串行化的交换链。
 
+
+## 提供的服务
+
+- `mcpConnections` —— 运行时级注册表，当 scope 内不存在时由本插件提供（已存在则复用共享实例），使同一 scope 下的每个 `mcp-client` 都汇报到同一处。它跟踪每个服务器的连接状态与错误、即时／延迟工具数量，并提供 `entries()`、`onDidChange`、`callTool(name, rawName, args)`、`disconnect(name)` 与 `reconnect(name)`。没有消费者时不会改变行为：每个实例照常连接并注册自己的工具。
 
 ## 模型体验
 

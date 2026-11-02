@@ -14,14 +14,13 @@
 
 ## 配置
 
-```yaml
-- id: config-snapshot
-  name: '@dsh-cc/config-snapshot'
-  config:
-    config-snapshot.enabled: true   # 默认；面向最小足迹消费方的总开关
+`enabled` 是 settings namespace 的键（`config-snapshot`），不是 cordis 行配置；请写在 settings 文件里：
+
+```json
+{"config-snapshot": {"enabled": false}}
 ```
 
-读取发生在异步写器内部，fail-open 为 `true`——坏掉的 settings 层既不会停用采集，也不会阻塞会话创建。
+默认值为 `true`；读取发生在异步写器内部，fail-open 为 `true`——坏掉的 settings 层既不会停用采集，也不会阻塞会话创建。
 
 ## 组合
 

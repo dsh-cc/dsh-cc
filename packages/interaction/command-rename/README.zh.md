@@ -24,7 +24,7 @@
 
 ## 模型体验
 
-斜杠输入与直接输出都不会进入模型请求，也不消耗模型 token。重命名本身是宿主侧日志事件（source 为 `user` 的 `session/title`），从不进入模型面。
+斜杠输入与直接输出都不会进入模型请求，也不消耗模型 token。重命名本身是宿主侧日志事件（source 为 `user` 的 `session/title`），从不进入模型面。该命令还会把接受的标题写入磁盘上的标题 sidecar（经 `@dsh-cc/memory` 的 `writeTitleSidecar`）。
 
 ## 已知限制与暂缓事项
 

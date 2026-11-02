@@ -18,7 +18,7 @@
 
 调度工具是 subagent 服务之上的薄适配层，因此驻留、冷恢复和投递权限仍归服务所有：
 
-- `spawn_worker(name, prompt)` 调用 `ctx.subagents.startContinuable()`，并把持久子 id 记录在给定名称之下。
+- `spawn_worker(name, prompt)` 调用 `ctx.subagents.startActivation()`（`delivery: 'parent'`），并把持久子 id 记录在给定名称之下。
 - `send_to_worker(worker, message)` 解析名称（或持久 id），并通过 `ctx.subagents.sendMessage()` 对该 worker 执行 steer/wake —— 运行中的 worker 在下一个 step 边界接收消息，空闲或已停靠的 worker 被唤醒（或冷恢复）。发送方归属由存活的协调者 Agent 推导。
 - `worker_broadcast(message)` 把相同内容发送给每个已注册 worker。
 - `worker_tasks()` 列出已注册 worker，并附带来自 Agent 注册表的实时状态。

@@ -29,6 +29,7 @@ Roots are discovered in this precedence order (lower rank wins name conflicts):
 | 200 | project | `<projectRoot>/.claude/skills` |
 | 300 | user | `<dshHome>/skills` |
 | 400 | additional | each `config.additionalDirs` |
+| 500 | learned | `$DSH_HOME/learned-skills/` |
 
 The project root is the nearest ancestor containing `.git`; without one, the current cwd is used. Skills are directory bundles `<name>/SKILL.md`; legacy `.claude/commands/*.md` files are also loaded and marked `deprecated` in their metadata. Discovery deduplicates by the real path, so a symlinked or overlapping file is served once.
 
@@ -59,7 +60,7 @@ This is `registerPathActivator` wired onto the provider's live per-project condi
 
 ## Bundled skills
 
-The provider ships a portable subset of Claude Code's own bundled skills as in-package `SKILL.md` documents, served directly (no disk extraction). Current subset: `debug`, `simplify`, `batch`. They are provided with `source: 'bundled'`, `rank = BUNDLED_SKILL_RANK` (600), and bodies available via `get()`. Because 600 is the highest rank in this package's range, any managed (100), project (200), user (300), or additional (400) skill of the same name wins the name conflict — matching Claude Code's precedence where local skills override built-ins.
+The provider ships a portable subset of Claude Code's own bundled skills as in-package `SKILL.md` documents, served directly (no disk extraction). Current subset: `debug`, `simplify`, `batch`. They are provided with `source: 'bundled'`, `rank = BUNDLED_SKILL_RANK` (600), and bodies available via `get()`. Because 600 is the highest rank in this package's range, any managed (100), project (200), user (300), additional (400), or learned (500) skill of the same name wins the name conflict — matching Claude Code's precedence where local skills override built-ins.
 
 CC's `verify` and `stuck` bundled skills are **not** ported: both are `USER_TYPE === 'ant'`-only, and `verify`'s companion body/examples are absent from the Claude Code build surface, so they cannot be reproduced faithfully.
 

@@ -12,8 +12,8 @@ export function systemoneDecide(opts: {
   baseURL: string
   model: string
   state: unknown
-  questions: SystemOneQuestion[]
-  timeoutMs?: number
+  questions: Record<string, SystemOneQuestion>
+  timeoutMs: number
   signal?: AbortSignal
   // ... fetch/clock/sleep/jitter injected for tests
 }): Promise<SystemOneResult>
@@ -37,6 +37,6 @@ export const MIN_STATE_TOKENS: number
 import { systemoneDecide, estimateSystemOneTokens, capMiddleToTokenBudget } from '@dsh-cc/systemone'
 
 const state = capMiddleToTokenBudget(JSON.stringify(bigState), 2048)
-const result = await systemoneDecide({ baseURL, model: 'laya-rl-agent', state, questions })
+const result = await systemoneDecide({ baseURL, model: 'systemone-model', state, questions, timeoutMs: 5000 })
 if (!result.ok) return /* degrade: 'timeout' | 'error' */
 ```

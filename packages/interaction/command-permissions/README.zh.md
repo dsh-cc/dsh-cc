@@ -22,6 +22,11 @@ applyClient(ctx) // 浏览器 bundle：裸调用的 popupSelect 装饰
 
 - `/permissions` —— 不带参数时，渲染只读报告：按来源统计 `allow`/`deny`/`ask` 规则数量并给出合计；权限规则引擎未挂载时返回友好提示。
 - `/permissions <mode>` —— 通过引擎的 `setMode` 做持久化模式切换：`default`、`acceptEdits`、`plan`、`auto`、`bypassPermissions`。切到 `plan` 会派发 `/plan`（plan-mode 的命令通道是唯一的跨平面接缝）；从激活的 plan 切走时会先派发 `/plan off`。
+- `/permissions grant <descriptorPath> [--confirm]` —— 两阶段创建任务授权：首次运行推导并渲染提案的每个字段，只有再次带上 `--confirm` 运行时才会真正创建授权 〔src:ws:packages/interaction/command-permissions/src/index.ts#L173-L200〕。
+- `/permissions grants` —— 列出本会话中处于活跃状态的任务授权 〔src:ws:packages/interaction/command-permissions/src/permissions.ts#L129-L139〕。
+- `/permissions revoke <grantId>` —— 撤销一项任务授权 〔src:ws:packages/interaction/command-permissions/src/index.ts#L212-L218〕。
+- `/permissions lint [--apply]` —— 对权限规则做卫生检查；`--apply` 会移除失效条目 〔src:ws:packages/interaction/command-permissions/src/lint.ts#L172-L226〕。
+- 当 `engine.grants` 接缝缺席时，任务授权子命令（`grant`/`grants`/`revoke`）会回复 `Task grants are not available in this composition.` 〔src:ws:packages/interaction/command-permissions/src/index.ts#L179-L180〕。
 - 浏览器客户端（`./client` 导出，由 `tsdown` 打包为 ModuleLoader 工厂）为裸 `/permissions` 调用装饰一个基于共享 `PERMISSION_MODE_OPTIONS` 的模式选择器；选中一项即提交 `/permissions <id>`，因此弹出层与带参路径共用同一条写入路径。`bypassPermissions` 选项附带显式的风险确认。
 - 共享的模式列表、标签和 bypass 确认文案集中在 `src/modes.ts`，宿主命令、弹出层和 TUI 浮层读取同一份，避免漂移。
 

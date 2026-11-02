@@ -25,4 +25,3 @@ ctx.plugin(commandCompact) // injects `commands` and `compaction`
 
 - The hint is cleared in a `finally` block, so a failed or no-op compaction never leaves a stale hint parked for a later turn.
 - Already-started handler promises quiesce on teardown (yielded drain before unregister), so no invocation is left in flight during composite teardown.
-- Subcommand `@dsh-cc/command-compact/invariant` registers the package's invariant companion; it installs no runtime invariant because the command is a thin adapter over the upstream-verified compaction seam.

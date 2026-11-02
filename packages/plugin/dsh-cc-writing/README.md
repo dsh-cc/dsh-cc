@@ -32,9 +32,6 @@ Use a Claude-compatible client with plugin installation commands.
 Restart dsh to load the plugin. Use `/skills` to find `article-writing`,
 `article-review`, and `language-editing`.
 
-Installation does not add the plugin to your enabled plugins by default. Install
-it when you want the writing workflow.
-
 ## Update
 
 Update the marketplace first. Then update the installed plugin cache.

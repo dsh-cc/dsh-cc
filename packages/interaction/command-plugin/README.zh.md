@@ -9,9 +9,12 @@
 | 输入 | 结果 |
 |---|---|
 | `/plugin` | 列出每个已挂载插件的清单名称、插件根目录与各组件计数（`commands: N`、`agents: N`、`skills: N`……），并标注非零的 skipped/failed 组件。 |
+| `/plugin list [--enabled\|--disabled]` | 从管理器列出已安装插件，可按启用或禁用过滤。 |
+| `/plugin install\|uninstall\|enable\|disable\|update <plugin[@mkt]> [--scope user\|project\|local]` | 管理已安装插件；`--scope` 选择变更生效的位置。 |
+| `/plugin marketplace list\|add\|remove\|update` | 管理 marketplace（`add <source>`、`remove <name>`、`update [name]`，适用处均接受 `--scope`）。 |
 | `/reload-plugins` | 按逆序释放所有已跟踪的挂载，重新运行发现并重挂载；报告最新挂载列表并附带各个根目录的失败信息。 |
 
-两者读取由 cc-shell-glue 挂载的可选 `ccPlugins` 服务。未含 glue 的组合会优雅地报告缺少该衔接服务，而不是报错。两个命令都不消耗模型 token。
+裸 `/plugin` 视图与 `/reload-plugins` 读取由 cc-shell-glue 挂载的可选 `ccPlugins` 服务；管理动词还会驱动可选的 `ccPluginManager`。未含 glue 的组合会优雅地报告缺少该衔接服务，而不是报错。所有命令都不消耗模型 token。
 
 ## 组合
 

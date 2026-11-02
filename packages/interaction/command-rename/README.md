@@ -24,7 +24,7 @@ The producer injects `commands`. Mount it wherever the session-title service is 
 
 ## Model Experience
 
-The slash input and the direct output are absent from model requests and consume no model tokens. The rename itself is a host-side log event (`session/title` with source `user`) that never reaches the model surface.
+The slash input and the direct output are absent from model requests and consume no model tokens. The rename itself is a host-side log event (`session/title` with source `user`) that never reaches the model surface. The command also writes the accepted title to the on-disk title sidecar (via `@dsh-cc/memory`'s `writeTitleSidecar`).
 
 ## Known Limitations and Deferred Work
 

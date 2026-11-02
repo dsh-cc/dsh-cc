@@ -22,6 +22,11 @@ applyClient(ctx) // browser bundle: bare-invocation popupSelect decoration
 
 - `/permissions` — with no arguments, renders a read-only report of rule counts per source (`allow`/`deny`/`ask`) plus a total; reports a friendly message when the permission-rules engine is not mounted.
 - `/permissions <mode>` — durable mode switch through the engine's `setMode`: `default`, `acceptEdits`, `plan`, `auto`, `bypassPermissions`. Switching to `plan` dispatches `/plan` (plan-mode's command channel is the only cross-plane seam); switching away from an active plan first dispatches `/plan off`.
+- `/permissions grant <descriptorPath> [--confirm]` — two-phase task-grant creation: the first run derives and renders every field of the proposal; the grant is created only on a re-run with `--confirm` 〔src:ws:packages/interaction/command-permissions/src/index.ts#L173-L200〕.
+- `/permissions grants` — list the session's active task grants 〔src:ws:packages/interaction/command-permissions/src/permissions.ts#L129-L139〕.
+- `/permissions revoke <grantId>` — revoke a task grant 〔src:ws:packages/interaction/command-permissions/src/index.ts#L212-L218〕.
+- `/permissions lint [--apply]` — hygiene lint of the permission rules; `--apply` removes dead entries 〔src:ws:packages/interaction/command-permissions/src/lint.ts#L172-L226〕.
+- Task-grant subcommands (`grant`/`grants`/`revoke`) reply `Task grants are not available in this composition.` when the `engine.grants` seam is absent 〔src:ws:packages/interaction/command-permissions/src/index.ts#L179-L180〕.
 - The browser client (`./client` export, bundled by `tsdown` as a ModuleLoader factory) decorates the bare `/permissions` invocation with a mode picker built from the shared `PERMISSION_MODE_OPTIONS`; a pick submits `/permissions <id>`, so the popup and the argued path share one write path. The `bypassPermissions` row carries an explicit risk confirmation.
 - The shared mode list, labels, and bypass confirmation text live in `src/modes.ts`, read by the host command, the popup, and the TUI overlay so they cannot drift.
 

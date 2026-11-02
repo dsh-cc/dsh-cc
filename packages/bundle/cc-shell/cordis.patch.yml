@@ -1,7 +1,7 @@
 # CC shell host-plane infra swap: the tools registry (deferred-name support)
 # plus settings migrations. Everything agent-facing (tool-search, skill-loader,
 # glue-driven hooks/commands, memory, coordinator, worktree/sleep/notebook/
-# structured-output tools, 19 slash commands, the hook bridge) moved to
+# structured-output tools, 25 slash commands, the hook bridge) moved to
 # packages/preset/cc. Rationale: globally registered tools/commands/system-prompt/
 # skills mounted here leak into every agent preset; preset-izing them is what
 # isolates each surface. glue plugin code still lives here but is mounted by the

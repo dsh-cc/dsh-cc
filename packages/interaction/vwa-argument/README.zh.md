@@ -3,7 +3,7 @@
 可验证工作区智能体（VWA）lane-2 论证包（设计：
 `docs/plans/2026-10-16-vwa-evidence-argument.md`）。本包提供契约、存储/论证图、评审流水线、作者与报告工具、`/vwa` 命令、v2 回执与报告渲染器。人工金标集和真实模型验收完成前，语义质量仍属实验性；确定性集成测试通过不等于语义准确率已达标。
 语义评审保持**默认关闭**（`vwa-argument.semantic-enabled: false`，§13）；
-关闭时工具不注册，功能保持惰性。
+关闭时语义工具不注册（`/vwa` 命令仍会挂载），语义评审保持惰性。
 
 - **契约**（`src/contracts/`，JSON Schema Draft 2020-12）：
   - `author.schema.json` —— 作者侧论证图（`ProjectSnapshot`：来源、证据、

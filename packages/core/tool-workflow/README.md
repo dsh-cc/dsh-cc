@@ -38,9 +38,6 @@ try, and the consolidated result arrives as exactly one completion delivery.
   `tool-workflow/run-start` (extended with a `source` field: `inline` |
   `project-saved` | `user-saved` | `scriptPath`), `agent-start`, `agent-end`,
   `run-end` — projected top-level only, with the try/catch-drop append guard.
-- **Invariant companion.** `@dsh-cc/tool-workflow/invariant` exports the
-  workflow-record fold for profiles that opt into invariant rows; the cc
-  preset mounts none.
 
 ## Deviations from CC (recorded)
 

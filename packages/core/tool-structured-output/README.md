@@ -59,7 +59,7 @@ ctx.tools.register(tool)
 
 ## Build order
 
-`tool-structured-output` depends only on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/schemastery`, `@deepseek-ai/dsh-invariants`). It builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
+`tool-structured-output` depends only on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/schemastery`). It builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
 
 ## Known limitations
 

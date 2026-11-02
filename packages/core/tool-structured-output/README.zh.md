@@ -59,7 +59,7 @@ ctx.tools.register(tool)
 
 ## 构建顺序
 
-`tool-structured-output` 仅依赖工作区 `@dsh-cc/tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-invariants`）。只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
+`tool-structured-output` 仅依赖工作区 `@dsh-cc/tools` 包与 harness 基础包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/schemastery`）。只要 `core/tools` 构建完成即可构建；`tsc -b` 会自动解析引用顺序。
 
 ## 已知限制
 

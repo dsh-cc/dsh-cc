@@ -100,7 +100,7 @@ harness 的 `agent-instructions` 插件会在**每个**会话（包括 Task chil
 
 ## 已知限制
 
-- **冷恢复丢弃其余 `agentOptions`。** 后台（continuable）派发已存在——`run_in_background: true` 或定义钉 `background: true`——但冷恢复只还原 `persona`/`toolFilter`/模型路由，丢弃其余全部 `agentOptions` 字段（别名标记的 `reasoningEffort`、`maxTokens`）。完整后台契约（父退出 drain、无 `outputFile`、fork + 后台被拒）见 parity matrix。
+- **冷恢复丢弃其余 `agentOptions`（未挂 resume pins 时）。** 后台（continuable）派发已存在——`run_in_background: true` 或定义钉 `background: true`——但普通的冷恢复只还原 `persona`/`toolFilter`/模型路由，丢弃其余全部 `agentOptions` 字段（别名标记的 `reasoningEffort`、`maxTokens`）。cc preset 会挂载 `@dsh-cc/subagent-resume-pins`，它在恢复的轮次上钉存并重新应用 `{provider, model, reasoningEffort, maxTokens}`；只有未挂该插件的宿主与组合才会遇到这一丢弃。完整后台契约（父退出 drain、无 `outputFile`、fork + 后台被拒）见 parity matrix。
 - **进程级发现缓存。** 注册表按工作区 root 缓存整个进程生命周期，不监听文件系统。编辑 `.claude/agents` 定义：对缓存条目尚未创建的工作区在下次会话生效，否则在进程重启后生效。基于 mtime 的失效刷为 follow-up。
 - **保留类型名。** `general-purpose` 与 `fork` 是哨兵，不是文件类型。工作区文件 `.claude/agents/fork.md` 不可达；`subagent_type: "fork"` 永远表示继承父已完成轮次。
 - **指令文件仍会被扫描。** 剥离发生在 harness `agent-instructions` 插件已从磁盘读取工作区 CLAUDE.md / AGENTS.md 并注入之后；本监听器只把它们挡在 child 的模型可见批次之外，不改 harness 就无法阻止磁盘扫描。fork child 的父 seed 从不改写，seed 中已有的 CLAUDE.md 会被继承。

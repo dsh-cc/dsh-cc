@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-CC 宿主面 first-prompt 会话标题提供方：镜像原生 `session-title-first-prompt-llm` 插件，但在调用共享的 `generateSessionTitleWithLlm` 之前，从 CC 模型别名廉价通道（`resolve('haiku')`）解析并盖印辅助模型路由。
+CC 宿主面 first-prompt 会话标题提供方：镜像原生 `session-title-first-prompt-llm` 插件，但在调用共享的 `executeSessionTitleLlm` 之前，从 CC 模型别名廉价通道（`resolve('haiku')`）解析并盖印辅助模型路由。
 
 ## 路由解析
 

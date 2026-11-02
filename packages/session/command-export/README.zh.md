@@ -2,17 +2,17 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/export` 命令，通过 `ctx.fs` 把当前会话 transcript 写入文件，格式为 markdown（默认）或无损 JSON。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
+面向用户的 `/export` 命令，通过 `ctx.fs` 把当前会话 transcript 写入文件，格式为 markdown（默认）或 JSON，两种格式都会对密钥做脱敏。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。
 
 ## 命令约定
 
 | 输入 | 结果 |
 |---|---|
 | `/export` | 将会话的 markdown transcript 写入 `<defaultDir>/transcript-<sessionId>.md`，并报告写入路径与字节数。 |
-| `/export json` | 改为写入无损 JSON transcript（原始事件日志）。 |
+| `/export json` | 改为写入脱敏后的 JSON transcript。 |
 | `/export [json] <path>` | 写入 `<path>`（结尾 `/` 或裸文件名会解析到默认目录；识别 `.md`／`.json` 后缀，否则自动追加）。 |
 
-markdown transcript 会把每个对模型可见的事件（用户、助手、工具结果）渲染为一个小节；没有任何会话事件的会话会导出一个声明性的文档。JSON transcript 是原始持久事件日志，因此命令生命周期（及其他）记录会与对话事件一起按原样出现。
+markdown transcript 会把每个对模型可见的事件（用户、助手、工具结果）渲染为一个小节；没有任何会话事件的会话会导出一个声明性的文档。两种格式在渲染时都会做单向密钥脱敏——采用 cc-secrets 的 pattern 加上实时生效的 `extraPatterns`——不存在未脱敏模式。
 
 ## 配置
 
@@ -47,4 +47,4 @@ markdown transcript 会把每个对模型可见的事件（用户、助手、工
 ## 已知限制与暂缓事项
 
 - **不创建归档目录**：目标目录必须已存在；文件系统接缝不做 mkdir。
-- **仅纯文本输出**：HTML、PDF 或脱敏后的精简 transcript 仍属于未来工作。
+- **仅纯文本输出**：HTML 与 PDF 导出仍属于未来工作。

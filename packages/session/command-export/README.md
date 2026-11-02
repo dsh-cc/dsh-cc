@@ -2,17 +2,17 @@
 
 English | [中文](README.zh.md)
 
-Human-facing `/export` command that writes the current session transcript to a file through `ctx.fs` as markdown (default) or lossless JSON. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
+Human-facing `/export` command that writes the current session transcript to a file through `ctx.fs` as markdown (default) or JSON, with secrets redacted in both formats. The plugin registers one global command through `ctx.commands`, so every composed command adapter discovers and executes it without a model turn.
 
 ## Command contract
 
 | Input | Result |
 |---|---|
 | `/export` | Write a markdown transcript of the session to `<defaultDir>/transcript-<sessionId>.md` and report the written path and byte count. |
-| `/export json` | Write a lossless JSON transcript (the raw event log) instead. |
+| `/export json` | Write a redacted JSON transcript instead. |
 | `/export [json] <path>` | Write to `<path>` (a trailing `/` or a bare name resolves against the default directory; a `.md`/`.json` extension is honored, otherwise appended). |
 
-The markdown transcript renders each model-visible event (user, assistant, tool result) as a section; a session with no conversation events exports a document that says so. The JSON transcript is the raw durable event log, so command lifecycle (and any) records appear verbatim alongside conversation events.
+The markdown transcript renders each model-visible event (user, assistant, tool result) as a section; a session with no conversation events exports a document that says so. Both formats apply one-way secret redaction as they render — the cc-secrets patterns plus the live `extraPatterns` — and there is no unredacted mode.
 
 ## Configuration
 
@@ -47,4 +47,4 @@ The slash input, the file write, and the direct success/error output are absent 
 ## Known Limitations and Deferred Work
 
 - **No archive directory creation** — the target directory must exist; the filesystem seam does not mkdir.
-- **Plain-text-only output** — HTML, PDF, or sanitized redacted transcripts remain future work.
+- **Plain-text-only output** — HTML and PDF exports remain future work.

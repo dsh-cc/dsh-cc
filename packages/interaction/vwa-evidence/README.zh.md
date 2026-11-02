@@ -42,8 +42,9 @@ markdown 交付物转成机器可查证证据回执的纯函数模块。
   （post-edit-verify 的 EDITING_TOOLS 集合未导出——本地副本附出处注释）
   → realpath 去重 → 白名单 ∩ 工作区内。闸门 C 经 harness ShellExecutor
   执行（`ctx.shell`，在 `inject` 中声明）。
-- **Nudge**（同步注入，`source.kind = 'vwa-evidence'`）：overall ≠ pass 或
-  覆盖率低于阈值。限额：每交付物每轮 ≤ 1、每轮 ≤ 2、每会话
+- **Nudge**（同步注入，`source.kind = 'vwa-evidence'`）：在 `overall: 'fail'`
+  时触发，或在 `pass` 但覆盖率低于 `coverage-threshold` 时触发；
+  `abstained` 从不触发。限额：每交付物每轮 ≤ 1、每轮 ≤ 2、每会话
   `nudge-budget`（默认 4，热读）。自修复后的重评由同轮续跑自然产生
   （nudge 消息不是真实用户消息，窗口锚仍停在真实用户消息上）；仍不过的
   重评落地 fail/abstained 回执，文内弃权说明保留——v1 不阻断交付。

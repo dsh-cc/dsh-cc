@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-重试前置校验随从（verify-before-retry attendant）：一个 post-execute 监听器，针对结果含糊的**变更类工具调用**（超时、沙箱拒绝、部分写入、git/包管理变更失败）。做两件事（设计文档 [docs/plans/2026-10-09-verify-before-retry.md](../../../docs/plans/2026-10-09-verify-before-retry.md)）：
+重试前置校验随从（verify-before-retry attendant）：一个 post-execute 监听器，针对结果含糊的**变更类工具调用**（超时、沙箱拒绝、部分写入、git/包管理/MCP 变更失败）。做两件事（设计文档 [docs/plans/2026-10-09-verify-before-retry.md](../../../docs/plans/2026-10-09-verify-before-retry.md)）：
 
 - **M1 — 含糊结果指引**：命中分类时，以 `additionalContexts` 条目（source kind `retry-attendant`）追加一行按类别的建议：“重跑之前先核实预期后置条件”。
 - **M2 — 相同重试升级**：按会话记录调用效果的摘要；`expire-minutes` 内相同效果的重试（忽略改写过的 `description`/`timeoutMs`）被升级为权限**询问**而非直接放行。

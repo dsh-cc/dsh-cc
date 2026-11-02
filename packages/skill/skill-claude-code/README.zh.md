@@ -29,6 +29,7 @@
 | 200 | project | `<projectRoot>/.claude/skills` |
 | 300 | user | `<dshHome>/skills` |
 | 400 | additional | 每个 `config.additionalDirs` |
+| 500 | learned | `$DSH_HOME/learned-skills/` |
 
 project 根是最近包含 `.git` 的祖先；若无则使用当前 cwd。skill 是目录包 `<name>/SKILL.md`；旧的 `.claude/commands/*.md` 文件也会被加载，并在元数据中标记为 `deprecated`。发现按真实路径去重，因此通过符号链接或重叠路径指向的同一文件只会被提供一次。
 
@@ -59,7 +60,7 @@ frontmatter 声明了 `paths` 的 skill 是*条件* skill，与 Claude Code 语�
 
 ## Bundled skill
 
-Provider 随包提供一个 Claude Code 自带 bundled skills 的可移植子集，作为包内 `SKILL.md` 文档，直接提供（无需落盘）。当前子集：`debug`、`simplify`、`batch`。它们以 `source: 'bundled'`、`rank = BUNDLED_SKILL_RANK`（600）提供，正文可通过 `get()` 获取。由于 600 是本包范围内最大的 rank，任何同名 managed（100）、project（200）、user（300）或 additional（400）skill 都会在同名冲突中胜出 —— 与 Claude Code 本地 skill 覆盖内置内容的优先级一致。
+Provider 随包提供一个 Claude Code 自带 bundled skills 的可移植子集，作为包内 `SKILL.md` 文档，直接提供（无需落盘）。当前子集：`debug`、`simplify`、`batch`。它们以 `source: 'bundled'`、`rank = BUNDLED_SKILL_RANK`（600）提供，正文可通过 `get()` 获取。由于 600 是本包范围内最大的 rank，任何同名 managed（100）、project（200）、user（300）、additional（400）或 learned（500）skill 都会在同名冲突中胜出 —— 与 Claude Code 本地 skill 覆盖内置内容的优先级一致。
 
 CC 的 `verify` 与 `stuck` bundled skill **未移植**：两者都仅限 `USER_TYPE === 'ant'`，且 `verify` 的伴随正文/示例在 Claude Code 构建面中缺失，无法忠实复现。
 

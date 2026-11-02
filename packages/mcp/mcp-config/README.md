@@ -97,7 +97,7 @@ Malformed configuration throws at load — a non-object body, a missing or non-m
 
 - `parseMcpServers(body)` — validate the `mcpServers` map and return it; throws on malformed input.
 - `dedupServers(map)` — normalize a parsed map into a stable `McpServerSpec[]`; throws on a duplicated name.
-- `normalizeServerEntry(entry)` — one raw entry → an mcp-client `Config` (no env expansion), validating required fields.
+- `normalizeServerEntry(entry)` — one raw entry → its transport half (`McpTransport`: transport fields only; no `serverName`, no env expansion), validating required fields. `serverName` is added later by `buildRegistrations`.
 - `applyEnv(config, env?)` — expand `${...}` substitutions in one normalized config.
 - `expandEnv(value, env)` — expand one string's substitutions.
 - `buildRegistrations(body, { env?, policy? })` — full pipeline to mcp-client registrations.

@@ -22,4 +22,4 @@ Like every command wrapped with `@dsh-cc/command-usage`'s `helpable`, `/release-
 ## Notes
 
 - The changelog is seeded at author time from the repository's tracked history and README; update the bundled `CHANGELOG` constant when cutting a new version.
-- For programmatic use, `./release-notes` exports `CHANGELOG` and `renderReleaseNotes(markdown?, maxLines?)`.
+- For programmatic use, `@dsh-cc/command-release-notes/src/release-notes.ts` exports `CHANGELOG` and `renderReleaseNotes(markdown?, maxLines?)`.

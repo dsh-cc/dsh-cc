@@ -97,7 +97,7 @@ for (const config of registrations) {
 
 - `parseMcpServers(body)` —— 校验 `mcpServers` 映射并返回；畸形输入抛错。
 - `dedupServers(map)` —— 将解析后的映射规范化为稳定的 `McpServerSpec[]`；重复服务名抛错。
-- `normalizeServerEntry(entry)` —— 单个原始条目 → mcp-client `Config`（不展开环境变量），校验必填字段。
+- `normalizeServerEntry(entry)` —— 单个原始条目 → 其传输部分（`McpTransport`：仅传输字段，不含 `serverName`，不展开环境变量），校验必填字段；`serverName` 稍后由 `buildRegistrations` 添加。
 - `applyEnv(config, env?)` —— 在一个规范化配置中展开 `${...}` 替换。
 - `expandEnv(value, env)` —— 展开单个字符串的替换。
 - `buildRegistrations(body, { env?, policy? })` —— 到 mcp-client 注册项的完整流水线。

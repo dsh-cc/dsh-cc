@@ -6,7 +6,7 @@
 
 ## 它做什么
 
-- **扫描器**（`scan.ts`）：遍历 `<DSH_HOME>/sessions/<projectKey>/<sessionId>/session.jsonl.zstd`，读取会话头（`origin`、`delegationDepth`、`parentSession`），并将 `tool/call` + `tool/result` 事件归一化为记录。`tool/call` 的 arguments 以 JSON 编码字符串到达，解析时容忍解析失败。截断的实时尾行被忽略；损坏的中间行被跳过并计数 —— 绝不抛异常。`days` 新近度过滤优先使用目录 mtime，仅在 mtime 缺失或不合理时回退到头时间戳；窗口内的会话只解压一次。
+- **扫描器**（`scan.ts`）：遍历 `<DSH_HOME>/sessions/<projectKey>/<sessionId>/session.v4.jsonl.zstd`，找不到时回退到 `session.v3.jsonl.zstd`，再回退到旧版 `session.jsonl.zstd`，读取会话头（`origin`、`delegationDepth`、`parentSession`），并将 `tool/call` + `tool/result` 事件归一化为记录。`tool/call` 的 arguments 以 JSON 编码字符串到达，解析时容忍解析失败。截断的实时尾行被忽略；损坏的中间行被跳过并计数 —— 绝不抛异常。`days` 新近度过滤优先使用目录 mtime，仅在 mtime 缺失或不合理时回退到头时间戳；窗口内的会话只解压一次。
 - **审批配对**：`approval/asked` 事件按 `data.id` 与 `approval/decided` 配对；`approval/policy` 事件（如 `policy: "never"`）标记被排除在拒绝分析之外的会话。
 - **分析器**（`analyze/`），全部确定性 —— v1 无 LLM：
   1. `path-correlation` —— 同工具失败（路径形态错误门：ENOENT / "No such file" / "not found"）与行序上首个后继成功共享同名文件但目录不同——按此相关；bash 对要求相同首 token 且 ≥1 个不同的路径形态 token。
@@ -14,6 +14,7 @@
   3. `search-scope` —— 窄根 grep 失败后紧跟相似 pattern 的更宽根 grep 成功。
   4. `permission-denials` —— 只计 `rejected` 审批结果（`cancelled` 与 `unavailable` 不算拒绝）；`approval/policy: never` 的会话排除在分母之外。
   5. `large-files` —— 超过大小阈值的读取结果 → "对 X 始终使用 offset/limit"。
+  6. `error-retry` —— 会话中的 API 错误连续段；重试本身由 harness 负责。
 - **聚合**（`runForensics`）：findings 按 `(kind, title)` 合并，按出现次数排序，并过 `minOccurrences` 门（默认 2）。每个 finding 携带 `session:<id>#turn=<n>` 证据锚点。
 
 ## 组合

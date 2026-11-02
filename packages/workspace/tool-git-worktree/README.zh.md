@@ -16,7 +16,7 @@
 |---|---|---|
 | `name` | string | worktree slug。每个以 `/` 分隔的段只允许字母、数字、`.`、`_`、`-`；最长 64 字符。省略时自动生成 `形容词-名词-后缀` 随机 slug。 |
 
-工具以钉住 git 公共目录的方式定位仓库根（`git rev-parse --git-common-dir`），因此在 linked worktree 内进入时，新 worktree 落在**主检出**的 `.claude/worktrees/` 下，而不会嵌套。创建过程做了加固：`git worktree add` 之前会停用仓库本地的 filter driver（后果：LFS 跟踪的内容以指针文件形式到达，需在 worktree 内运行 `git lfs pull` 恢复）；`.claude`、`.claude/worktrees` 与目标路径不允许是符号链接；已存在的目标目录仅当其 `.git` 条目解析回本仓库的 `.git/worktrees/` 注册时才被接纳。不在 git 工作树内时返回结构化错误而不做任何更改。由于本 harness 中会话工作目录在创建时即固定，cwd 切换以两种不改动这一固定值的方式声明：工具结果与 `tool:worktree:cwd` systemPrompt 运行时上下文都会声明新的工作目录，并告知模型后续 shell/fs 调用需传入与返回的 `worktreePath` 相同的 `workdir`。
+工具以钉住 git 公共目录的方式定位仓库根（`git rev-parse --git-common-dir`），因此在 linked worktree 内进入时，新 worktree 落在**主检出**的 `.claude/worktrees/` 下，而不会嵌套。创建过程做了加固：`git worktree add` 之前会停用仓库本地的 filter driver（后果：LFS 跟踪的内容以指针文件形式到达，需在 worktree 内运行 `git lfs pull` 恢复）；`.claude`、`.claude/worktrees` 与目标路径不允许是符号链接；已存在的目标目录仅当其 `.git` 条目解析回本仓库的 `.git/worktrees/` 注册时才被接纳。不在 git 工作树内时返回结构化错误而不做任何更改。两个工具都会通过 awaited 的 harness `workingDirectory.set` 调用提交会话 cwd（`set` 被拒绝会向上传播），因此切换是真实的而非仅声明。同时，`tool:worktree:cwd` systemPrompt 运行时上下文作为次要的、面向模型的渠道声明新的工作目录，并告知模型后续 shell/fs 调用需传入与返回的 `worktreePath` 相同的 `workdir`。
 
 ### `ExitWorktree`
 
@@ -53,5 +53,5 @@ fetch 刷新），`head` 使用字面 `HEAD`。任何探测失败都会退回本
 
 ## 已知限制
 
-- 会话 cwd 不可变，因此 worktree 切换通过声明的 cwd 与 systemPrompt 运行时上下文表达，而非真正的按会话 cwd 修改；后续 shell/fs 调用必须传入 `workdir`。
+- cwd 切换依赖 harness 的 `workingDirectory.set` seam：`set` 被拒绝会让 enter/exit 调用失败，而不会退回声明式 cwd；`tool:worktree:cwd` 运行时上下文只是次要提示；后续 shell/fs 调用仍必须传入 `workdir`。
 - 活跃 worktree 会话是进程级单例（对应 claude-code 参考实现），因此一个进程任一时刻最多只有一个活跃 worktree。

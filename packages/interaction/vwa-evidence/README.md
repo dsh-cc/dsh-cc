@@ -51,8 +51,9 @@ inside vwa). The `agent/turn-stopping` listener:
   local copy with provenance comment) → realpath-dedup → whitelist ∩
   inside-workspace. Gate C executes through the harness ShellExecutor
   (`ctx.shell`, declared in `inject`).
-- **Nudge** (sync inject, `source.kind = 'vwa-evidence'`): overall ≠ pass or
-  coverage below threshold. Budgets: per artifact per turn ≤ 1, per turn
+- **Nudge** (sync inject, `source.kind = 'vwa-evidence'`): fires on
+  `overall: 'fail'`, or on `pass` with coverage below `coverage-threshold`;
+  `abstained` never nudges. Budgets: per artifact per turn ≤ 1, per turn
   ≤ 2, per session `nudge-budget` (default 4, hot-read). The self-repair
   re-evaluation arises from the same-turn continuation (the nudge message is
   not a genuine user message, so the window anchor stays on the real user's

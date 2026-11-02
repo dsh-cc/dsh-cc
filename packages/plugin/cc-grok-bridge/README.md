@@ -109,12 +109,13 @@ re-run on grok updates.
 
 Install from the dsh-cc marketplace, plugin name `cc-grok-bridge`:
 
-```sh
-claude plugin install cc-grok-bridge@dsh-cc
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install cc-grok-bridge@dsh-cc
 ```
 
 Uninstalling (or disabling) the plugin removes the lane entirely:
 
-```sh
-claude plugin uninstall cc-grok-bridge@dsh-cc
+```text
+/plugin uninstall cc-grok-bridge@dsh-cc
 ```

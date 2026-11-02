@@ -32,8 +32,6 @@ CC 对齐的动态 `workflow` 工具。它替换 cc 预设中的 harness 薄适�
   `tool-workflow/run-start`（扩展 `source` 字段：`inline` | `project-saved` |
   `user-saved` | `scriptPath`）、`agent-start`、`agent-end`、`run-end`——
   仅顶层投递，带 try/catch 丢弃式追加保护。
-- **不变量伴随插件。** `@dsh-cc/tool-workflow/invariant` 导出工作流记录折叠
-  供选择挂载不变量行的 profile 使用；cc 预设不挂载。
 
 ## 与 CC 的偏差（已记录）
 

@@ -10,6 +10,7 @@ User-facing `/learn` command: distills recurring failure→success corrections f
 |---|---|
 | `/learn` | Dry-run: scan the session store (current project by default, last 14 days), render the ranked findings and the proposed managed memory block. Writes nothing. |
 | `/learn apply` | Write the `session-learnings` memory topic file and upsert the `MEMORY.md` pointer through the real `@dsh-cc/memory` writeback helpers. Empty findings leave existing memory untouched. |
+| `/learn promote=<kebab-name>` | Implies `apply`; promotes exactly one finding into a learned skill with the given kebab-case name. Refuses when more than one finding is present. |
 | `/learn all` | Scan every project's sessions instead of the current project only. |
 | `/learn days=N` | Override the recency window for this run. |
 | `/learn help` | Usage text via the shared `helpable()` helper. |

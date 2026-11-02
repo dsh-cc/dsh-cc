@@ -49,7 +49,7 @@ CC preset（`@dsh-cc/preset-cc`）默认内置了一张覆盖常见 DeepSeek、G
   name: '@dsh-cc/command-cost'
 ```
 
-没有 `modelTable` 时，所有模型都会被报告为未定价——仍会显示 token 用量，但不做成本估算。使用 CC preset 的起始表时，表内模型按官方牌价计价，其余模型仍为未定价。
+`modelTable` 是 schema 必填字段；显式空表（`modelTable: []`）不为任何模型定价，所有模型都会被报告为未定价——仍会显示 token 用量，但不做成本估算。使用 CC preset 的起始表时，表内模型按官方牌价计价，其余模型仍为未定价。
 
 ## 模型体验
 

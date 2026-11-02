@@ -49,7 +49,7 @@ The producer injects `commands`. A custom app mounts their owners plus this plug
   name: '@dsh-cc/command-cost'
 ```
 
-Without a `modelTable`, every model is reported as unpriced — token usage still shows, but no cost estimate does. With the CC preset's starter table, models it covers are priced at official list prices; anything else stays unpriced.
+`modelTable` is required by the schema; an explicit empty table (`modelTable: []`) prices nothing and reports every model as unpriced — token usage still shows, but no cost estimate does. With the CC preset's starter table, models it covers are priced at official list prices; anything else stays unpriced.
 
 ## Model Experience
 
