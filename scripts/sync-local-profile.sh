@@ -23,6 +23,15 @@
 #
 # Re-run after every `pnpm run build` and restart dsh to pick up code changes.
 # (Only patch layers are hot-reloaded; plugin code is read at boot.)
+#
+# Staleness gate: the pool stamp records the sync-time git commit, so a pool
+# synced from a checkout that was pulled but NOT rebuilt would carry old lib/
+# code labeled as the new commit — a silent break for every booted session
+# (real incident, 2026-11-02: a pre-0.2.1-migration session-cwd lost the
+# {{cwd}} prompt-variable registration and every main-conversation turn failed
+# at system-prompt assembly). `pnpm run build` records a per-package source
+# fingerprint in lib/.dsh-cc-build-fingerprint; the gate compares it against
+# the live sources and refuses to sync before copying anything.
 set -euo pipefail
 
 profile="${1:-web}"
@@ -37,6 +46,52 @@ if [ ! -d "$profile_dir" ]; then
 fi
 
 mkdir -p "$dest"
+
+# Staleness gate (see the header): every built package's recorded fingerprint
+# must match its live sources. Refuse before copying anything.
+stale_pkgs=()
+for pkg_dir in "$repo_root"/packages/*/*/; do
+  manifest="$pkg_dir/package.json"
+  [ -f "$manifest" ] || continue
+  name="$(node -p "require('$manifest').name")"
+  case "$name" in @dsh-cc/*) ;; *) continue ;; esac
+  if [ -f "$pkg_dir/lib/.dsh-cc-build-fingerprint" ] && node -e "
+    const fs = require('fs'), path = require('path')
+    const { createHash } = require('crypto')
+    const pkgDir = '$pkg_dir'
+    const files = []
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === 'node_modules' || e.name === 'lib') continue
+        const full = path.join(dir, e.name)
+        if (e.isDirectory()) walk(full)
+        else files.push(full)
+      }
+    }
+    walk(path.join(pkgDir, 'src'))
+    files.push(path.join(pkgDir, 'package.json'))
+    files.sort()
+    const hash = createHash('sha256')
+    for (const file of files) {
+      hash.update(path.relative(pkgDir, file))
+      hash.update('\0')
+      hash.update(createHash('sha256').update(fs.readFileSync(file)).digest('hex'))
+      hash.update('\0')
+    }
+    const recorded = fs.readFileSync(path.join(pkgDir, 'lib', '.dsh-cc-build-fingerprint'), 'utf8').trim()
+    process.exit(recorded === hash.digest('hex') ? 1 : 0)
+  "; then
+    stale_pkgs+=("$name")
+  fi
+done
+if [ "${#stale_pkgs[@]}" -gt 0 ]; then
+  echo "sync-local-profile: refusing to sync — lib/ does not match the current sources for:" >&2
+  for s in "${stale_pkgs[@]}"; do echo "  $s" >&2; done
+  echo "The pool stamp would record the current commit while shipping an older build." >&2
+  echo "Rebuild first: pnpm run build (from the repo root), then re-run this script." >&2
+  exit 1
+fi
+
 synced=()
 missing_lib=0
 for pkg_dir in "$repo_root"/packages/*/*/; do
