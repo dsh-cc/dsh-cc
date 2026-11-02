@@ -38,15 +38,15 @@ cancelled | budget-exhausted`; per-record status 〔src:ws:specs/tla/vwa-review-
 | R-4 one run per requestId 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L163〕 | same requestId never re-calls the model; different payload is a conflict | S-4 `OneRunPerRequest` | `OneRunPerRequest` | convention (2 requests, 2 payloads) | replay after completion; conflicting payload replay | A-5 | `reserveCycleRequest` prior-wins identity (review-cycle.ts:189-190) + `review-request.ts:7-37` IDEMPOTENCY_CONFLICT | replay a completed requestId; replay with a mutated payload | partial-batch replay semantics (records returned) are not modeled |
 | R-5 restart rule 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕 | a persisted queued/running run with a dead owner is never observed as live | S-5 `DeadOwnerLoadIncomplete` | `DeadOwnerLoadIncomplete` | convention | crash mid-run then a fresh process loads the run | A-6 | `loadRequest` read-time coercion (review-run-store.ts:124-157); nothing written back, continuation requires a new requestId | kill the process mid-run, re-open the project, assert the run reads incomplete | PID reuse misclassifying a dead owner as alive is out of scope (documented code behavior, see E-6) |
 | R-6 continuation reuse soundness 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L265-L285〕 | a reused target's record existed, was completed, was not a disagreement copy, and reuse happens only in continue mode | S-6 `ContinuationSound`, S-7 `DefaultModeNoReuse` | `ContinuationSound`, `DefaultModeNoReuse` | convention | continue run resumes after a crashed partial run; disagreement copy on the same target | A-7, A-8 | `reusableRecord` (review-continue.ts:190-207) + `applyReuse` zero-token copy (review-runner.ts:323-336, continue mode only) | crash a run at 50%, continue, assert reused targets match cache keys | non-continue same-requestId reuse is unreachable (same requestId never re-runs, §10.6); audit reuse is E-4 |
-| R-7 admission refusals 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕 | stale budget snapshot (REVISION_CONFLICT), all-reusable continue (NOTHING_TO_CONTINUE) and torn-lock LOCK_BUSY are fail-stop, never silently mis-admitted | structural: refusal branches create no run and change no mapping (S-4 remains) | `AdmissionBody`/`AdmissionBusy` branches | convention | graph commit between readHead and reservation; torn lock crash then admission | A-2, A-9 | revision check inside the lock (review-cycle.ts:204-212), `continueHasWork` (review-continue.ts:159-179), torn-lock LOCK_BUSY (lock.ts:72-91) | commit a graph revision concurrently with admission | refusal codes are not state: the model asserts only that a refusal never admits a run; refusal texts are out of scope |
+| R-7 admission refusals 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕 | stale budget snapshot (REVISION_CONFLICT), all-reusable continue (NOTHING_TO_CONTINUE) and live-holder LOCK_BUSY are fail-stop, never silently mis-admitted | structural: refusal branches create no run and change no mapping (S-4 remains) | `AdmissionBody` branches | convention | graph commit between readHead and reservation; live holder then admission | A-2, A-9 | revision check inside the lock (review-cycle.ts:204-212), `continueHasWork` (review-continue.ts:159-179), live-holder LOCK_BUSY 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L70〕 (lock.ts acquireLock contention path 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L70〕) | commit a graph revision concurrently with admission | refusal codes are not state: the model asserts only that a refusal never admits a run; refusal texts are out of scope |
 | R-8 no ghost dispatch 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L276-L285〕 | a process only dispatches on a run it owns while that run is running | S-8 `NoGhostDispatch` | `NoGhostDispatch` | convention | crash clears in-flight state | A-6 | `pend` process-local state cleared on crash; runner rebuild gated by re-reservation (review-runner.ts:86-101) | — | — |
-| R-9 (probe) torn lock is permanent 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕 | documents that a torn lock file blocks admission until manual removal | probe `LockNeverTorn` (expected counterexample) | `LockNeverTorn` | strict-torn-lock (trace: Prepare→LockCreate→CrashTorn) | crash between `openSync('wx')` and `writeSync` (lock.ts:58-62) | — | unreclaimable by design: only a dead-holder pid reclaims (lock.ts:79-84) | — | documented behavior, not a defect fix request |
+| R-9 (retired) torn lock is unreachable 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕 | retired: a torn `write.lock` can no longer be published, so the old "blocks admission until manual removal" probe has no reachable trace | — (retired probe) | — | — | — | — | staged-link acquisition publishes a complete body 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L70〕 (`linkSync` of an fsynced staging file, lock.ts acquireLock; issue #307, the approved torn-lock recovery plan 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L70〕) — a crash leaves only inert staging, subsumed by `Crash` | — | the `LockNeverTorn` probe and `strict-torn-lock` case were deleted in the #307 true-up; the non-atomic reclaim TOCTOU stays out of the model (E-8, issue #311) |
 | R-10 (probe) reserved-spend overcounts 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L84-L163〕 | documents that a crash between the durable reserved row and the settled attempt still charges the cycle | probe `ReservedSettledAccounting` (expected counterexample) | `ReservedSettledAccounting` | strict-reserved-spend (trace: Prepare→LockCreate→AdmissionBody→StartRun→ReserveCall→Crash) | crash after `reserve()` append, before the attempt settles | — | durable row append inside the lock precedes dispatch (review-call.ts:129-147 then :172-183); `dispatched` in the model counts settled attempts (ok / retryable failure / abort), an in-flight call carried by a live process is not an overcount | — | conservative accounting by design (review-cycle.ts:247-256) |
 
 Model bounds (all three cases): 2 processes, 2 runs, 2 targets, 2 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L34-L45〕
 requestIds, 2 payloads, RetryAllowance=1, MaxHeadRev=1; the convention 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L286-L293〕
 core case uses MaxCalls=1 (budget exhaustion and the retry-refusal path 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L214-L264〕
-remain reachable), the probes use MaxCalls=2. State-space abstractions 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
+remain reachable), the probes use MaxCalls=2 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕. State-space abstractions 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
 recorded for review: admission-refusal outcomes are not state (no
 variable; the safety claim is only that a refusal never admits a run);
 load observations are recorded only for dead-owner loads (the restart
@@ -112,8 +112,9 @@ synchronous lock discipline (R-1) and is not separately modeled 〔src:ws:specs/
 
 ## Faults / adverse orders modeled
 
-- F-1 crash of the admission process inside the lock create window 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
-  (torn lock, `CrashTorn`) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕.
+- F-1 crash of the admission process while it holds or is acquiring the 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
+  budget lock (`Crash`; the staged-link create window leaves only inert
+  staging, so no torn lock exists — issue #307) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕.
 - F-2 crash of a run owner at any in-flight point (reserved rows and 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L34-L45〕
   records survive; `Crash`) 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕.
 - F-3 graph commit between budget snapshot and reservation 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
@@ -145,8 +146,8 @@ Regression assertions (all against the existing package,
 3. Idempotent replay: two admissions with the same requestId and payload 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L286-L293〕
    return the same run; different payload ⇒ IDEMPOTENCY_CONFLICT 〔src:ws:specs/tla/vwa-review-cycle/design.md#L134-L152〕
    (review-request.ts:7-37) 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L286-L293〕.
-4. Torn lock: write a non-JSON `write.lock`; assert admission fails 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
-   LOCK_BUSY (lock.ts:72-91) 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕.
+4. Torn lock reclaim: plant a non-JSON `write.lock` file; assert admission 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
+   proceeds through the §3.2b reclaim path instead of LOCK_BUSY 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L83〕
 5. Retry refund: charge then abort during backoff; assert the pool unit is 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L214-L264〕
    restored (review-call.ts:104-109,238-246) 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L214-L264〕.
 
@@ -182,9 +183,10 @@ Regression assertions (all against the existing package,
 ## Counterexample dispositions (final run)
 
 - convention: **verified** — no violation of the eight checked invariants.
-- strict-torn-lock: one counterexample (Prepare → LockCreate → CrashTorn; 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
-  the lock becomes `torn` and stays unreclaimable) — documented behavior, 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
-  no code change requested.
+- strict-torn-lock: **retired** — the case and the `LockNeverTorn` probe were
+  deleted in the #307 true-up (acquisition now publishes a complete body via a
+  staged `linkSync`, so no torn lock is reachable); see
+  `docs/plans/2026-11-02-vwa-torn-lock-recovery.md` and issue #307 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕.
 - strict-reserved-spend: one counterexample (Prepare → LockCreate → 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L45〕
   AdmissionBody → StartRun → ReserveCall → Crash; the durable reserved row 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L34-L45〕
   outlives the killed attempt) — documented conservative accounting, no

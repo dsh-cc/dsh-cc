@@ -1,7 +1,7 @@
 /** Review-cycle accounting must survive tied clocks and overlapping requests. */
 import { fork } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -140,6 +140,22 @@ describe('review-cycle budget regressions', () => {
       expect(cycleUsage(root, projectId)).toEqual({ calls: 2, inputTokens: 20, outputTokens: 40 })
     } finally { children.forEach((child) => child.kill()) }
   }, 15_000)
+
+  it('reclaims a torn budget lock so admission proceeds (#307)', () => {
+    const root = workspace(), projectId = 'project'
+    const locks = join(root, '.dsh', 'vwa', projectId, 'review-budget', 'locks')
+    mkdirSync(locks, { recursive: true })
+    // A pre-#307 binary crashed mid-write: unparseable body in the budget lock.
+    writeFileSync(join(locks, 'write.lock'), '{"pid": 4242, "startedAt": "tor')
+    const started = Date.now()
+    const reserved = reserveCycleRequest(root, projectId, 'fresh', {
+      schemaVersion: 1, requestId: 'fresh', runId: 'fresh', stage: 'claims', targetClaimIds: [],
+      status: 'completed', calls: 0, inputTokens: 0, outputTokens: 0, startedAt: '2026-10-19T00:00:00.000Z',
+    })
+    expect('ok' in reserved).toBe(false)              // the action ran
+    expect(Date.now() - started).toBeLessThan(1900)   // via reclaim, not the 2 s wait
+    expect(existsSync(join(locks, 'write.lock'))).toBe(false) // released afterwards
+  })
 
   it('preserves queued legacy membership and the admission timestamp after a new cycle opens', () => {
     const root = workspace(), projectId = 'project'

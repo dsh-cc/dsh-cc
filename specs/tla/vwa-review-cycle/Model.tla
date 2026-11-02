@@ -58,10 +58,10 @@ PendType ==
   , run:     {"none"} \cup Runs
   , target:  {"none"} \cup Targets ]
 
-VARIABLES alive, lockHolder, lockBody, headRev, runs, reqMap,
+VARIABLES alive, lockHolder, headRev, runs, reqMap,
           latestCycle, pend, loadStatus
 
-vars == <<alive, lockHolder, lockBody, headRev, runs, reqMap,
+vars == <<alive, lockHolder, headRev, runs, reqMap,
           latestCycle, pend, loadStatus>>
 
 EmptyRun == [req |-> "none", payload |-> "h1", status |-> "none", cycle |-> "none",
@@ -75,7 +75,6 @@ PendNone == [kind |-> "none", req |-> "none", payload |-> "h1", mode |-> "fresh"
 Init ==
   /\ alive = [p \in Procs |-> TRUE]
   /\ lockHolder = "none"
-  /\ lockBody = FALSE
   /\ headRev = 0
   /\ runs = [r \in Runs |-> EmptyRun]
   /\ reqMap = [q \in Reqs |-> "none"]
@@ -117,13 +116,14 @@ OutstandingCharge(r) ==
 CommitHead ==
   /\ headRev < MaxHeadRev
   /\ headRev' = headRev + 1
-  /\ UNCHANGED <<alive, lockHolder, lockBody, runs, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, runs, reqMap, latestCycle,
                  pend, loadStatus>>
 
 (***************************************************************************)
-(* Admission: prepare (snapshot) -> lock create -> lock body -> release.   *)
-(* The lock create/write window is exposed so a crash can leave a torn     *)
-(* lock file (lock.ts openSync 'wx' then writeSync).                       *)
+(* Admission: prepare (snapshot) -> lock acquire -> body -> release.       *)
+(* Publication is a staged link of a complete body (lock.ts acquireLock,   *)
+(* issue #307): a crash in the create window leaves only inert staging,    *)
+(* so lockHolder is unchanged and the existing Crash action covers it.     *)
 (***************************************************************************)
 
 Prepare(p, q, h, m) ==
@@ -133,27 +133,18 @@ Prepare(p, q, h, m) ==
   /\ pend' = [pend EXCEPT ![p] =
       [kind |-> "prep", req |-> q, payload |-> h, mode |-> m,
        snap |-> headRev, run |-> "none", target |-> "none"]]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, runs, reqMap,
+  /\ UNCHANGED <<alive, lockHolder, headRev, runs, reqMap,
                  latestCycle, loadStatus>>
 
 (* Acquire: free, or reclaim the file of a confirmed-dead holder          *)
-(* (lock.ts:79-84). A torn file is NOT reclaimable: LOCK_BUSY.            *)
+(* (lock.ts acquireLock dead-holder reclaim).                              *)
 LockCreate(p) ==
   /\ alive[p]
   /\ pend[p].kind = "prep"
   /\ lockHolder \in ({"none"} \cup {d \in Procs : ~alive[d]})
   /\ lockHolder' = p
-  /\ lockBody' = FALSE
   /\ UNCHANGED <<alive, headRev, runs, reqMap, latestCycle, pend,
                  loadStatus>>
-
-AdmissionBusy(p) ==
-  /\ alive[p]
-  /\ pend[p].kind = "prep"
-  /\ lockHolder = "torn"
-  /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, runs, reqMap,
-                 latestCycle, loadStatus>>
 
 (* Admission body under the budget lock; always releases (review-cycle.ts *)
 (* reserveCycleRequest). prior.cycleId wins on replay of the same runId   *)
@@ -165,7 +156,6 @@ AdmissionBody(p, k) ==
   /\ lockHolder = p
   /\ runs[k].status = "none"
   /\ lockHolder' = "none"
-  /\ lockBody' = FALSE
   /\ pend' = [pend EXCEPT ![p] = PendNone]
   /\ UNCHANGED <<alive, headRev, loadStatus>>
   /\ IF reqMap[pend[p].req] /= "none"
@@ -254,7 +244,7 @@ StartRun(p, k) ==
   /\ runs' = [runs EXCEPT ![k] =
       [runs[k] EXCEPT !.status = "running", !.owner = p]]
   /\ pend' = [pend EXCEPT ![p] = [kind |-> "run", req |-> "none", payload |-> "h1", mode |-> "fresh", snap |-> 0, run |-> k, target |-> "none"]]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (***************************************************************************)
@@ -282,7 +272,7 @@ ReserveCall(p, t) ==
            [runs[pend[p].run] EXCEPT
              !.reserved = runs[pend[p].run].reserved + 1]]
        /\ pend' = [pend EXCEPT ![p] = [kind |-> "call", req |-> "none", payload |-> "h1", mode |-> "fresh", snap |-> 0, run |-> pend[p].run, target |-> t]]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (* A charged retry earns its unit only when it reserves and dispatches    *)
@@ -305,7 +295,7 @@ RetryReserve(p) ==
              !.reserved = runs[pend[p].run].reserved + 1,
              !.retryEarned = runs[pend[p].run].retryEarned + 1]]
        /\ pend' = [pend EXCEPT ![p] = [kind |-> "call", req |-> "none", payload |-> "h1", mode |-> "fresh", snap |-> 0, run |-> pend[p].run, target |-> pend[p].target]]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (* Dispatch outcome: a completed record persists immediately              *)
@@ -328,7 +318,7 @@ DispatchOk(p, isDis) ==
      /\ pend' = [pend EXCEPT ![p] =
          IF runs'[k].status = "completed" THEN PendNone
          ELSE [kind |-> "run", req |-> "none", payload |-> "h1", mode |-> "fresh", snap |-> 0, run |-> k, target |-> "none"]]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (* Retryable failure: charge the shared pool unit; pool empty means        *)
@@ -351,7 +341,7 @@ DispatchRetryFail(p) ==
                mode |-> "fresh", snap |-> 0, run |-> k,
                target |-> pend[p].target]
          ELSE PendNone]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (* Abort during backoff refunds the charged unit (review-call.ts:111,238). *)
@@ -363,7 +353,7 @@ RetryAbandon(p) ==
         !.pool = runs[pend[p].run].pool + 1,
         !.status = "cancelled"]]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 DispatchAbort(p) ==
@@ -374,7 +364,7 @@ DispatchAbort(p) ==
         !.status = "cancelled",
         !.dispatched = runs[pend[p].run].dispatched + 1]]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (* Wall clock / post-run drift: terminal incomplete, partial results       *)
@@ -386,7 +376,7 @@ FinishIncomplete(p) ==
   /\ runs' = [runs EXCEPT ![pend[p].run] =
       [runs[pend[p].run] EXCEPT !.status = "incomplete"]]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (* Continuation reuse: a reusable record for the target is copied under    *)
@@ -409,7 +399,7 @@ ApplyReuse(p, t) ==
   /\ pend' = [pend EXCEPT ![p] =
       IF runs'[pend[p].run].status = "completed" THEN PendNone
       ELSE [kind |-> "run", req |-> "none", payload |-> "h1", mode |-> "fresh", snap |-> 0, run |-> pend[p].run, target |-> "none"]]
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, reqMap, latestCycle,
+  /\ UNCHANGED <<alive, lockHolder, headRev, reqMap, latestCycle,
                  loadStatus>>
 
 (* Read-time restart rule: a persisted queued/running run whose owner is   *)
@@ -426,29 +416,18 @@ LoadRequest(p, k) ==
      IN
      /\ ~ownerAlive
      /\ loadStatus' = obs
-  /\ UNCHANGED <<alive, lockHolder, lockBody, headRev, runs, reqMap,
+  /\ UNCHANGED <<alive, lockHolder, headRev, runs, reqMap,
                  latestCycle, pend>>
 
 (* Crash: in-memory state is lost; every persisted file (request, records, *)
-(* reserved usage rows) survives; a held lock stays held by the dead      *)
-(* holder (reclaimable) -- unless the crash landed in the create window,   *)
-(* which leaves a torn, unreclaimable lock file.                           *)
+(* reserved usage rows) survives; a held lock stays held by the dead       *)
+(* holder (reclaimable). A crash inside the staged-create window leaves    *)
+(* only inert staging, so that case is this same action (issue #307).      *)
 Crash(p) ==
   /\ alive[p]
   /\ alive' = [alive EXCEPT ![p] = FALSE]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<lockHolder, lockBody, headRev, runs, reqMap, latestCycle,
-                 loadStatus>>
-
-CrashTorn(p) ==
-  /\ alive[p]
-  /\ lockHolder = p
-  /\ ~lockBody
-  /\ pend[p].kind = "prep"
-  /\ alive' = [alive EXCEPT ![p] = FALSE]
-  /\ lockHolder' = "torn"
-  /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<lockBody, headRev, runs, reqMap, latestCycle,
+  /\ UNCHANGED <<lockHolder, headRev, runs, reqMap, latestCycle,
                  loadStatus>>
 
 Idle == UNCHANGED vars
@@ -458,7 +437,6 @@ Next ==
   \/ \E p \in Procs :
        \/ \E q \in Reqs, h \in Payloads, m \in Modes : Prepare(p, q, h, m)
        \/ LockCreate(p)
-       \/ AdmissionBusy(p)
        \/ \E k \in Runs : AdmissionBody(p, k)
        \/ \E k \in Runs : StartRun(p, k)
        \/ \E t \in Targets : ReserveCall(p, t)
@@ -471,7 +449,6 @@ Next ==
        \/ FinishIncomplete(p)
        \/ \E k \in Runs : LoadRequest(p, k)
        \/ Crash(p)
-       \/ CrashTorn(p)
   \/ Idle
 
 Spec == Init /\ [][Next]_vars
@@ -495,8 +472,7 @@ ProjectBudgetSound ==
 
 TypeOK ==
   /\ alive \in [Procs -> BOOLEAN]
-  /\ lockHolder \in (({"none"} \cup Procs) \cup {"torn"})
-  /\ lockBody \in BOOLEAN
+  /\ lockHolder \in ({"none"} \cup Procs)
   /\ headRev \in 0..MaxHeadRev
   /\ runs \in [Runs -> RunType]
   /\ reqMap \in [Reqs -> ({"none"} \cup Runs)]
@@ -566,10 +542,6 @@ NoGhostDispatch ==
 (***************************************************************************)
 (* Strict probes (expected counterexamples, documented behavior).          *)
 (***************************************************************************)
-
-(* Probe: a crash in the lock create window leaves a torn file that no    *)
-(* acquirer reclaims (lock.ts:72-91) -- LOCK_BUSY until manual removal.   *)
-LockNeverTorn == lockHolder /= "torn"
 
 (* Probe: a crash between the durable reserved row and the settled        *)
 (* attempt leaves the cycle charged for a call that never happened         *)

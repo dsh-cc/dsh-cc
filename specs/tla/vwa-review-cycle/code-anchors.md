@@ -2,11 +2,12 @@
 
 Verbatim excerpts from `packages/interaction/vwa-argument/src/` at worktree commit c0224886 (base b2979b1e), captured by the read-back protocol recorded in the implementation record 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L36-L48〕. Line numbers below refer to the excerpt blocks in this file 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L1-L5〕.
 
-## lock.ts — exclusive-create lock, dead-pid reclaim, torn file 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L70〕
+## lock.ts — staged-link acquisition, dead-pid reclaim 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L7-L70〕
 
 ```ts
-// lock.ts:25-38
+// lock.ts:36-51
 const LOCK_WAIT_MS = 2000
+const LOCK_FILE = 'write.lock'
 
 /** One nonce per process stands in for the bootId (§14.2). */
 const processNonce = randomUUID()
@@ -23,46 +24,59 @@ function pidAlive(pid: number): boolean {
 ```
 
 ```ts
-// lock.ts:52-95 (abridged: create window, dead-holder reclaim, torn file)
+// lock.ts:63-78 (full-buffer write: no short write can publish a torn body)
+function writeAllSync(fd: number, bytes: Buffer): void {
+  let written = 0
+  while (written < bytes.length) {
+    const count = fs.writeSync(fd, bytes, written)
+    if (count <= 0) throw new Error(`short write: ${count} of ${bytes.length} bytes at offset ${written}`)
+    written += count
+  }
+}
+```
+
+```ts
+// lock.ts:186-230 (abridged: write staging -> fsync -> atomic exclusive link)
 export function acquireLock(dir: string): Fail | undefined {
-  const lockPath = join(dir, 'locks', 'write.lock')
-  mkdirSync(dirname(lockPath), { recursive: true })
+  const lockDir = join(dir, 'locks')
+  const lockPath = join(lockDir, LOCK_FILE)
+  fs.mkdirSync(lockDir, { recursive: true })
   const deadline = Date.now() + LOCK_WAIT_MS
+  reapStaleStaging(lockDir)
   for (;;) {
+    const staging = stagingPath(lockDir)
+    let fd: number
     try {
-      const fd = openSync(lockPath, 'wx')
-      try {
-        const body: LockBody = { pid: process.pid, startedAt: new Date().toISOString(), nonce: processNonce }
-        writeSync(fd, stableJson(body))
-        fsyncSync(fd)
-      } finally {
-        closeSync(fd)
-      }
-      return undefined
+      fd = fs.openSync(staging, 'wx')
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        return fail('STORE_IO_FAILED', `lock create failed: ${String(error)}`, true)
-      }
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue
+      return fail('STORE_IO_FAILED', `lock create failed: ${String(error)}`, true)
     }
-    let existing: LockBody | undefined
     try {
-      existing = JSON.parse(readFileSync(lockPath, 'utf8')) as LockBody
-    } catch {
-      existing = undefined
+      const body: LockBody = { pid: process.pid, startedAt: new Date().toISOString(), nonce: processNonce }
+      writeAllSync(fd, Buffer.from(stableJson(body), 'utf8'))
+      fs.fsyncSync(fd)
+    } catch (error: unknown) {
+      bestEffortUnlink(staging)
+      return fail('STORE_IO_FAILED', `lock publish failed: ${String(error)}`, true)
+    } finally {
+      fs.closeSync(fd)
     }
-    // Dead holder → reclaim (never by timeout alone, §14.2).
-    if (existing !== undefined && !pidAlive(existing.pid)) {
-      try { unlinkSync(lockPath) } catch { /* raced; retry */ }
+    try {
+      // Atomic exclusive promote: EEXIST iff the lock already exists.
+      fs.linkSync(staging, lockPath)
+    } catch (error: unknown) {
+      bestEffortUnlink(staging)
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        return fail('STORE_IO_FAILED', `lock promote failed: ${String(error)}`, true)
+      }
+      const refused = inspectContention(lockPath, deadline)
+      if (refused !== undefined) return refused
       continue
     }
-    // Same-process holder (own nonce) → immediate self-deadlock report.
-    if (existing !== undefined && existing.pid === process.pid && existing.nonce === processNonce) {
-      return fail('LOCK_BUSY', 'another transaction in this process holds the write lock', true)
-    }
-    if (Date.now() >= deadline) {
-      return fail('LOCK_BUSY', 'project write lock held', true)
-    }
-    // bounded spin then loop
+    // The lock survives as its own hard link; the staging name is now extra.
+    bestEffortUnlink(staging)
+    return undefined
   }
 }
 ```
@@ -70,12 +84,10 @@ export function acquireLock(dir: string): Fail | undefined {
 ## lock.ts — best-effort release 〔src:ws:specs/tla/vwa-review-cycle/code-anchors.md#L72-L82〕
 
 ```ts
-// lock.ts:97-102
+// lock.ts:231-234
 /** Best-effort release (unlink the lock file). */
 export function releaseLock(dir: string): void {
-  try {
-    unlinkSync(join(dir, 'locks', 'write.lock'))
-  } catch { /* already gone */ }
+  bestEffortUnlink(join(dir, 'locks', LOCK_FILE))
 }
 ```
 
