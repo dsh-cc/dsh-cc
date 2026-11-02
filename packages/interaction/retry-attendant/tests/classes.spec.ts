@@ -128,6 +128,22 @@ describe('write-partial', () => {
     expect(classify('edit', { old_string: 'a' }, fail('stale', { code: 'FS_STALE_VERSION' }))).toBeUndefined()
   })
 
+  it('every pre-write FsError code → excluded (observation guard, content and shape checks run before the write)', () => {
+    // Found live in production sessions: the read-before-edit guard rejects
+    // with FS_NOT_OBSERVED, which used to fall through to write-partial and
+    // turned every identical retry into an escalation ask.
+    for (const code of ['FS_EDIT_NOT_FOUND', 'FS_NOT_OBSERVED', 'FS_NOT_TEXT', 'FS_TOO_LARGE', 'FS_NOT_DIRECTORY', 'FS_NOT_REGULAR_FILE']) {
+      expect(classify('edit', { old_string: 'a' }, fail('rejected before writing', { code })), code).toBeUndefined()
+    }
+  })
+
+  it('mid-write codes stay classified (a genuine partial is possible)', () => {
+    for (const code of ['FS_IO_ERROR', 'FS_PERMISSION_DENIED', 'FS_ABORTED', 'FS_NOT_FOUND']) {
+      expect(classify('write', { file_path: '/p/a.ts', content: 'x' }, fail('failed mid-write', { code })), code)
+        .toMatchObject({ class: 'write-partial' })
+    }
+  })
+
   it('ordinary write failure (EACCES, no code) → NOT excluded', () => {
     expect(classify('write', { file_path: '/p/a.ts', content: 'x' }, fail('Error: EACCES: permission denied')))
       .toMatchObject({ class: 'write-partial' })
