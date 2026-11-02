@@ -101,12 +101,12 @@ axiom set (`propext`, `Classical.choice`, `Quot.sound`). Conformance runs the
 Lean reference and the project implementation over a committed finite corpus.
 Limits: a deterministic pure function with JSON boundaries, bounded file and
 corpus sizes, no Mathlib, no Lake or third-party packages, and no
-TypeScript-to-Lean translation〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L51-L55〕.
+TypeScript-to-Lean translation.
 
 A Lean result means the listed propositions were kernel-checked under the
 recorded definitions, assumptions and allowed axioms, and the implementation
 matched the reference on the recorded corpus. It does not prove arbitrary
-TypeScript code equivalent to the model, nor whole-program or deployment〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L903-L911〕
+TypeScript code equivalent to the model, nor whole-program or deployment
 correctness. See the [Lean modeling guide](skills/formal-design/references/lean-modeling-guide.md),
 [conformance guide](skills/formal-design/references/lean-conformance.md) and
 [combined models](skills/formal-design/references/combined-models.md).

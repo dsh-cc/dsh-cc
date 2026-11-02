@@ -3,33 +3,29 @@
 Official dsh-cc plugin: an **approval-free Codex rescue lane**. Installing it lets a
 dsh-cc session run exactly one canonical, locked-down Codex rescue invocation —
 `node <launcher> [--last] <prompt>` — with no human permission checkpoint, by
-auto-allowing that single command form through a PreToolUse hook〔src:ws:packages/plugin/cc-codex-bridge/hooks/hooks.json#L1-L27〕.
+auto-allowing that single command form through a PreToolUse hook.
 
 The core trade is **state relocation, not sandbox widening**: Codex runs with its
 internal sandbox off (nested sandboxes cannot stack), while the dsh outer sandbox
-remains the single write boundary — workspace plus temp areas only〔src:ws:packages/plugin/cc-codex-bridge/scripts/codex-rescue-run.mjs#L5-L10〕.
+remains the single write boundary — workspace plus temp areas only.
 
 ## How it works
 
 - One canonical invocation form, pinned byte-for-byte: the interpreter and launcher
   paths must be expansion-free literal tokens equal to the plugin's canonical
   anchors — no PATH lookup, no symlink trampoline, no `~`/glob/`$VAR` expansion,
-  no compound commands, no command substitution outside single quotes
-  〔src:ws:packages/plugin/cc-codex-bridge/scripts/lib/canonical.mjs#L1-L18〕.
+  no compound commands, no command substitution outside single quotes.
 - A PreToolUse hook downgrades the permission verdict for exactly that form; every
-  other shape fails closed into the unchanged, approval-requiring flow
-  〔src:ws:packages/plugin/cc-codex-bridge/hooks/codex-rescue-allow.mjs#L1-L20〕.
+  other shape fails closed into the unchanged, approval-requiring flow.
 - Codex credentials are synced into a `0700` temp-dir home per run; the Codex CLI
-  itself resolves to a validated absolute path at spawn
-  〔src:ws:packages/plugin/cc-codex-bridge/scripts/lib/home.mjs#L1-L6〕.
+  itself resolves to a validated absolute path at spawn.
 
 ## Usage
 
 1. **Status at session start.** A SessionStart hook fires on every session
    (startup and resume alike) and injects a `cc-codex-bridge:` block stating
    whether the lane is **ARMED** — including the exact canonical invocation to
-   type — or **NOT armed** with the machine reason in plain words
-   〔src:ws:packages/plugin/cc-codex-bridge/hooks/codex-rescue-context.mjs#L1-L16〕.
+   type — or **NOT armed** with the machine reason in plain words.
 2. **Invoke the rescue** with the plugin command:
 
    ```sh
@@ -41,8 +37,7 @@ remains the single write boundary — workspace plus temp areas only〔src:ws:pa
    always-present SessionStart canonical block keep the lane usable regardless.
 3. **Multi-line prompts** go through `--prompt-file`: write the prompt text to
    a file inside the workspace (or the canonical tmpdir) and use the
-   `--prompt-file <path>` form from the SessionStart block
-   〔src:ws:packages/plugin/cc-codex-bridge/scripts/codex-rescue-run.mjs#L74-L74〕.
+   `--prompt-file <path>` form from the SessionStart block.
 4. **`--last` only on explicit continue**: the resume flag is used only when
    the user explicitly asks to continue the previous rescue.
 5. **Fail closed.** If the SessionStart block is absent or reports NOT armed,
@@ -53,8 +48,7 @@ remains the single write boundary — workspace plus temp areas only〔src:ws:pa
 
 In dsh-cc's own repo dev sessions the launcher anchor sits inside the session
 workspace, so arming is refused (`anchor-under-writable-root`) and the lane
-degrades to the normal approval path. Expected and documented
-〔src:ws:packages/plugin/cc-codex-bridge/scripts/lib/canonical.mjs#L1-L18〕.
+degrades to the normal approval path. Expected and documented.
 
 ## Security model (capability tunnel, stated plainly)
 
@@ -94,5 +88,5 @@ Uninstalling (or disabling) the plugin removes the lane entirely:
   so the bridge refuses to arm and degrades to the manual flow (expected,
   documented).
 - A non-empty ambient `BASH_ENV` or `ENV` disarms the lane (shell-function
-  takeover defense)〔src:ws:packages/plugin/cc-codex-bridge/hooks/codex-rescue-allow.mjs#L1-L20〕.
-- Resume support in v1 is `--last` only〔src:ws:packages/plugin/cc-codex-bridge/scripts/codex-rescue-run.mjs#L155-L158〕.
+  takeover defense).
+- Resume support in v1 is `--last` only.

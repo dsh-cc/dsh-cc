@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm check:readme --write
 README.md: 2f80262ff27467f7ff12ac670d4404da047b2a42
-README.zh.md: 76c106ab20f90560b5f53863317e0c93147659bf
+README.zh.md: 2378b46379055f9c5dd8035abcddcc7370da3f2e
