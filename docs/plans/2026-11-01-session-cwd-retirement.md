@@ -1,7 +1,8 @@
 # PR-B Design: Retiring the session-cwd overlay and re-wiring the WS2 guard / handoff keys
 
-Status: **Designed — three-seat blind review converged all-GO (2026-11-01);
-implementation authorized by the user in the originating instruction.**
+Status: **Implemented — PR #319 (open, pending merge).** Three-seat blind
+review converged all-GO (2026-11-01); implementation authorized by the user
+in the originating instruction.
 Baseline: dsh-cc @ `59e3b3cd`, harness sibling @ `31cfe2aafe` (0.2.1-rc.5).
 
 ## 1. Goal and non-goals
