@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { execSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -172,6 +172,11 @@ describe('WS-3 isolation: worktree (real git)', () => {
     expect(text(result)).toContain('LEFT on disk')
     await waitNoActivation(ctx, childIds()[0]!)
     expect(existsSync(worktreePath!)).toBe(true)
+    // F-1 (foreground dispatch): the child's FIRST tool ran with the worktree
+    // as its committed session cwd — the file it wrote sits under the
+    // canonical (realpath) spelling of the worktree, not under the parent.
+    expect(existsSync(join(realpathSync(worktreePath!), 'dirty.txt'))).toBe(true)
+    expect(existsSync(join(ws, 'dirty.txt'))).toBe(false)
     const listing = execSync('git worktree list --porcelain', { cwd: ws }).toString()
     expect(listing).toContain('worktree-subagent-')
     expect(listing).toContain('locked')

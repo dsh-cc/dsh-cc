@@ -79,11 +79,11 @@ To delegate to one, pass its name as the `subagent_type` argument of the Task to
 frontmatter 钉了 `isolation: worktree` 的定义会被派发到 per-child 的 git worktree，而不是父工作树（`docs/plans/2026-09-14-cc-worktree-parity.md` WS-3）：
 
 1. **创建** —— 在 `<主仓库根>/.claude/worktrees/subagent-<childId>` 建 worktree，分支 `worktree-subagent-<childId>`，走与 `EnterWorktree` 相同的加固路径（common-dir 根锚定、local-config 扫描、filter 驱动中和），随后 `git worktree lock --reason="dsh-cc subagent <id>"`（老版本 git 的 "unknown option" 失败按 no-op 容忍）。创建失败一律拒绝派发——绝不静默回落到父工作树。
-2. **收养** —— child 首次 `subagent/start` 时，`setSessionCwd` 把 **child** 的会话 cwd 切到 worktree（父日志不动）；permission-rules 工作区、session-cwd 边界守卫、context bucket 随之生效。契约段落（"你的工作目录是 `<path>`；所有工具都传其中的绝对路径，shell 传 `workdir`；父 checkout 禁入"）追加进 child persona,prompt 首行加一条提示。actor-contract 门控先作用于定义正文，再追加契约段落。
+2. **收养** —— worktree 路径作为 `cwd` 随 start 请求发出；harness 的 subagent manager 会先 canonicalize，然后在 child 首个 step 之前于 `workingDirectory` 服务上（awaited）提交，permission-rules 工作区、session-cwd 边界守卫、context bucket 随之生效。契约段落（"你的工作目录是 `<path>`；所有工具都传其中的绝对路径，shell 传 `workdir`；父 checkout 禁入"）追加进 child persona,prompt 首行加一条提示。actor-contract 门控先作用于定义正文，再追加契约段落。
 3. **清理** —— `subagent/end` 时（continuable child 每个 epoch 重触发）：探测 `git status --porcelain` 与相对基线 HEAD 的领先提交；干净且无提交 → unlock + `worktree remove --force` + 删分支；否则工作树留在磁盘上，并在最终文本中说明（"LEFT on disk"）。
 4. **拒绝** —— 当计算出的 worktree 路径落在父会话沙箱根（其 cwd 祖先——即父 cwd 是仓库根的子目录）之外时，以具名错误拒绝派发。
 
-偏差（manifest `subagents.isolation`，`behavioral: partial` / `ux: partial`）：child 的 `header.cwd`、harness 沙箱根、bash 默认 workdir 仍是父的（需要 `SubagentStartRequest.cwd` seam）。被委派的 child 无法应答审批，沙箱拒绝的写入会硬失败——上面的绝对路径契约正是 child 保持可用性的前提。Serena（用户挂载）每会话固定一个项目根，不会跟随 child。
+偏差（manifest `subagents.isolation`，`behavioral: partial` / `ux: partial`）：child 的 `header.cwd`、harness 沙箱根、bash 默认 workdir 仍是父的（`cwd` seam 移动的是会话 cwd，不是绑定工作区）。被委派的 child 无法应答审批，沙箱拒绝的写入会硬失败——上面的绝对路径契约正是 child 保持可用性的前提。Serena（用户挂载）每会话固定一个项目根，不会跟随 child。
 
 ## Task child 上的工作区指令
 

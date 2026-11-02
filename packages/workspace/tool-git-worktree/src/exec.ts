@@ -7,11 +7,11 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { relative, sep } from 'node:path'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import { TOOL_ABORTED } from '@dsh-cc/tools'
 import type { ToolRunContext } from '@dsh-cc/tools'
-import { setSessionCwd } from '@dsh-cc/session-cwd'
 import type { ShellExecRequest, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { repoRootFromCommonDir } from './harden.ts'
 import type { IncludeGit } from './include.ts'
@@ -22,30 +22,39 @@ import type { GitCmd, WorktreeSession } from './worktree.ts'
 /** A structured, model-visible failure (maps to an isError tool result). */
 class WorktreeError extends Error {}
 
+/** Structural face of the upstream `workingDirectory` service. */
+interface WorkingDirectoryLike {
+  /** Commit a directory for a live agent; rejects when it cannot. */
+  set(agent: Agent, path: string, signal?: AbortSignal): Promise<string>
+}
+
 export function sessionCwd(exec: ToolRunContext): string | undefined {
+  // WS-1 pinned root: the bound workspace (`header.cwd`) deliberately stays
+  // the base the worktree tools resolve against; the live session cwd is not
+  // consulted here.
   return exec.agent?.session.header.cwd
 }
 
 /**
- * Propagate a cwd change into the session-cwd plugin (WS1): a durable
- * `worktree/entered` event plus the live overlay. Tolerant of test fakes and
- * headless contexts whose session face lacks the append seam — the tool must
- * not fail because a non-persistent session cannot record the move.
+ * Propagate a cwd change into the harness `workingDirectory` service (the
+ * single owner of the session directory). A service unresolvable in this realm
+ * (test fakes, headless contexts) is skipped silently; a rejected `set` is
+ * propagated so tool success can never diverge from the session state.
  * @param exec - the running tool call.
  * @param path - the new absolute session working directory.
  */
-export function updateSessionCwd(exec: ToolRunContext, path: string): void {
+export async function updateSessionCwd(exec: ToolRunContext, path: string): Promise<void> {
   const agent = exec.agent
   if (agent === undefined) return
-  const session = agent.session as unknown as { append?: unknown } | undefined
-  if (session === undefined || typeof session.append !== 'function') return
-  // Fail-soft: a session that cannot persist the event still completes the
-  // worktree operation; the worktree session singleton remains authoritative.
+  let service: WorkingDirectoryLike | undefined
   try {
-    setSessionCwd(agent, path)
+    service = agent.ctx.get('workingDirectory') as WorkingDirectoryLike | undefined
   } catch {
-    // cwd bookkeeping is best-effort here.
+    // Un-injected service access throws; nothing to propagate into.
+    return
   }
+  if (service === undefined) return
+  await service.set(agent, path, exec.signal)
 }
 
 /**
