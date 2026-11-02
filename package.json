@@ -9,7 +9,7 @@
     "node": "^22.19 || >=24"
   },
   "scripts": {
-    "build": "tsc -b tsconfig.packages.json && pnpm run bundle:client",
+    "build": "tsc -b tsconfig.packages.json && pnpm run bundle:client && node scripts/write-build-fingerprints.mjs",
     "prepare": "husky",
     "bundle:client": "pnpm --filter @dsh-cc/command-permissions run bundle",
     "typecheck": "tsc -b tsconfig.packages.json",
