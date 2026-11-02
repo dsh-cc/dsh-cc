@@ -588,7 +588,11 @@ describe('e2e — codex-rescue-bridge PreToolUse allow hook through the real plu
     world.inflight.push(forkPromise)
     const result = await awaitBounded(forkPromise, env.remaining(), 'fork: subagent_fork')
     env.phase('fork-resolved')
-    expect(result.isError, text(result)).toBe(false)
+    // Diagnostic message: the failure is CI-only and nondeterministic, so the
+    // assertion message is the only place the evidence survives — surface the
+    // child's failure text AND the full adapter request trace (which session
+    // consumed which script entry).
+    expect(result.isError, `${text(result)} | state=${envDump()}`).toBe(false)
     // The bridge DISPATCHED the child's bash call to the plugin hook — the
     // probe payload carries the CC caller-identity field (agent_id), which is
     // what ties this traversal row to the child rather than the parent.
@@ -630,7 +634,9 @@ describe('e2e — codex-rescue-bridge PreToolUse allow hook through the real plu
     world.inflight.push(forkPromise)
     const result = await awaitBounded(forkPromise, env.remaining(), 'fork: subagent_fork')
     env.phase('fork-resolved')
-    expect(result.isError).toBe(false)
+    // Diagnostic message (see the M5 control): the failure is CI-only and
+    // nondeterministic — surface the child failure text and the adapter trace.
+    expect(result.isError, `${text(result)} | state=${envDump()}`).toBe(false)
     await waitFor(
       () => adapter.requests.some(r => String(r.sessionId) !== 'parent' && toolResults(r).some(b => b.isError)),
       env.remaining(),

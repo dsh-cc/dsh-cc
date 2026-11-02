@@ -106,14 +106,34 @@ function outcomeMatches(row: ClassRow, result: ToolExecutionResult): boolean {
 }
 
 /**
+ * FsError codes a `write`/`edit` rejects with BEFORE any bytes are written —
+ * the read-before-edit observation guard, content validation, and shape
+ * checks all run ahead of the write, so these outcomes provably wrote nothing.
+ */
+const PRE_WRITE_FS_CODES: readonly string[] = [
+  'FS_AMBIGUOUS_EDIT',
+  'FS_STALE_VERSION',
+  'FS_EDIT_NOT_FOUND',
+  'FS_NOT_OBSERVED',
+  'FS_NOT_TEXT',
+  'FS_TOO_LARGE',
+  'FS_NOT_DIRECTORY',
+  'FS_NOT_REGULAR_FILE',
+]
+
+/**
  * write-partial exclusion — the deliberate UNION (broader than
- * isRecoveryCandidate): recovery candidates, both no-write FS error codes,
- * and the single-line not-found anchor all wrote nothing.
+ * isRecoveryCandidate): recovery candidates, every no-write FS error code (the
+ * pre-write set above), and the single-line not-found anchor all wrote nothing.
+ *
+ * Deliberately NOT excluded, because each can fire mid-write (a genuine
+ * partial): `FS_IO_ERROR`, `FS_PERMISSION_DENIED`, `FS_ABORTED`, and
+ * `FS_NOT_FOUND` (upstream reuses the latter for "write failed and temp
+ * cleanup failed" AFTER the write began).
  */
 function writeExcluded(args: Record<string, unknown>, result: ToolExecutionResult, text: string): boolean {
   return isRecoveryCandidate(args, text)
-    || result.error?.info?.code === 'FS_AMBIGUOUS_EDIT'
-    || result.error?.info?.code === 'FS_STALE_VERSION'
+    || PRE_WRITE_FS_CODES.includes(result.error?.info?.code as never)
     || text.includes(NOT_FOUND_ANCHOR)
 }
 

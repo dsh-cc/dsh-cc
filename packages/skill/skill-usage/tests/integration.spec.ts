@@ -98,9 +98,16 @@ describe('cc-skill-usage integration (real loop + real JsonlSessionPersistence)'
     const projectKey = cwdProjectKey(agent)
     expect(projectKey).toBeDefined()
     const ledgerPath = join(home, 'skill-usage', `loads-${projectKey}.jsonl`)
-    // The ledger append is awaited-then-detached (best-effort telemetry), so
-    // poll for the flush instead of assuming it landed synchronously.
-    await waitFor(() => existsSync(ledgerPath))
+    // The ledger append is awaited-then-detached (best-effort telemetry): the
+    // file is CREATED before the row is flushed, so poll for the ROW —
+    // waiting on existence alone read an empty file under CI load.
+    await waitFor(() => {
+      try {
+        return readFileSync(ledgerPath, 'utf8').split('\n').some((line) => line.trim() !== '')
+      } catch {
+        return false
+      }
+    })
     expect(statSync(ledgerPath).isFile()).toBe(true)
     const lines = readFileSync(ledgerPath, 'utf8').split('\n').filter((line) => line.trim() !== '')
     // Exactly ONE ledger row for the one committed load.
