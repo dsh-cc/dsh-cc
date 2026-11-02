@@ -649,7 +649,9 @@ describe('e2e — grok-review-bridge PreToolUse allow hook through the real plug
     world.inflight.push(forkPromise)
     const result = await awaitBounded(forkPromise, env.remaining(), 'fork: subagent_fork')
     env.phase('fork-resolved')
-    expect(result.isError).toBe(false)
+    // Diagnostic message (see the M5 control): the failure is CI-only and
+    // nondeterministic — surface the child failure text and the adapter trace.
+    expect(result.isError, `${text(result)} | state=${envDump()}`).toBe(false)
     await waitFor(
       () => adapter.requests.some(r => String(r.sessionId) !== 'parent' && toolResults(r).some(b => b.isError)),
       env.remaining(),
