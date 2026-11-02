@@ -311,6 +311,27 @@ describe('createDriver custom statusLine wiring', () => {
     expect(spec.env!.LINES).toBeDefined()
   })
 
+  it('mid-worktree: the payload carries the LIVE session cwd while the command still runs under header.cwd', async () => {
+    const worktree = '/w/proj/.claude/worktrees/feat-x'
+    const { executor } = await bootActiveDriver(undefined, undefined, {
+      createSession: {
+        id: 's-a',
+        provider: 'p',
+        model: 'm1',
+        cwd: '/w/proj',
+        events: [{ type: 'worktree/entered', data: { path: worktree } }],
+      },
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const spec = executor.specs[0]!
+    const payload = JSON.parse(spec.stdin!) as Record<string, unknown>
+    expect(payload.cwd).toBe(worktree)
+    expect((payload.workspace as Record<string, unknown>).current_dir).toBe(worktree)
+    // Bound-project identity is deliberate: the command EXECUTES under the header cwd.
+    expect(spec.workdir).toBe('/w/proj')
+  })
+
   it('unconfigured sessions keep the built-in HUD byte-identical and create zero timers', async () => {
     const setIntervalSpy = vi.spyOn(global, 'setInterval')
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout')

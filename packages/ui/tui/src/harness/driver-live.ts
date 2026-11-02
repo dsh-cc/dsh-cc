@@ -1,8 +1,9 @@
 /**
  * Live session folds shared by the driver factory and its sections: the
  * effective permission mode (plan overlay, else the durable override) and the
- * LIVE session working directory (the session-cwd plugin's durable
- * `worktree/entered` fold, then the boot-time header cwd).
+ * LIVE session working directory (the harness `workingDirectory` service,
+ * then the legacy `worktree/entered` fold / header cwd, then the caller
+ * fallback).
  *
  * @module @dsh-cc/tui/harness/driver-live
  */
@@ -10,7 +11,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { foldPlanMode } from '@dsh-cc/permission-rules'
 import { foldPermissionMode } from '@dsh-cc/permission-rules'
-import { foldSessionCwd } from '@dsh-cc/session-cwd'
+import { resolveSessionCwd } from '@dsh-cc/session-cwd'
 
 export function liveMode(agent: Agent, fallback: string): string {
   if (foldPlanMode(agent.session.snapshotEvents())) return 'plan'
@@ -44,10 +45,11 @@ export function liveModeWithDefault(
 }
 
 /**
- * The LIVE session working directory: the session-cwd plugin's durable
- * `worktree/entered` fold first (authoritative across EnterWorktree/
- * ExitWorktree moves), then the boot-time header cwd.
+ * The LIVE session working directory: the harness `workingDirectory` service
+ * first (authoritative across EnterWorktree/ExitWorktree moves), else the
+ * legacy `worktree/entered` fold / header cwd, then the caller fallback. Never
+ * throws — bare and TUI-style agent fixtures have no resolvable service.
  */
 export function liveSessionCwd(agent: Agent, fallback: string): string {
-  return foldSessionCwd(agent.session.snapshotEvents()) ?? agent.session.header.cwd ?? fallback
+  return resolveSessionCwd(agent) ?? fallback
 }

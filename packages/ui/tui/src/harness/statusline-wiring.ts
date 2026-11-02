@@ -22,6 +22,7 @@ import {
   type ShellExecutorLike,
   type TokenUsageStateLike,
 } from '../state/driver-types.ts'
+import { liveSessionCwd } from './driver-live.ts'
 import { lastBucketsOf, tokensOf } from './usage-view.ts'
 import { createStatusLineCommand, type StatusLineCommand } from './statusline-command.ts'
 import { buildStatusLinePayload } from './statusline-payload.ts'
@@ -156,7 +157,9 @@ export function createStatusLineWiring(
     const tokenUsage = projections?.stateOf(session, 'tokenUsage') as TokenUsageStateLike | undefined
     const tokens = tokensOf(tokenUsage)
     const currentUsage = lastBucketsOf(tokenUsage)
-    const sessionCwd = header.cwd ?? cwd
+    // Live session cwd (service-first): mid-worktree the payload reports the
+    // worktree, while the command itself still EXECUTES under header.cwd.
+    const sessionCwd = liveSessionCwd(current.agent, cwd)
     // transcript_path is advertised only while the CC-shape mirror is ready
     // (an unreadable/empty file would yield all-zeros that shadow the stdin
     // fallbacks above — ccstatusline's `??` chain passes zeros through).

@@ -14,6 +14,7 @@
  * @module @dsh-cc/handoff-store/tools
  */
 
+import { realpathSync } from 'node:fs'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@dsh-cc/tools'
 import { getSessionCwd } from '@dsh-cc/session-cwd'
@@ -40,14 +41,28 @@ export interface HandoffDeps {
   sessionIdOf(agent?: Agent): string
 }
 
-/** sha256(session cwd), 16 hex — or undefined when the cwd is unavailable. */
+/**
+ * Canonicalize a cwd for keying: `realpathSync` when it resolves, the raw
+ * spelling otherwise (a path may legitimately not exist yet).
+ */
+function canonicalize(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
+}
+
+/**
+ * sha256(canonical session cwd), 16 hex — `undefined` ONLY for a missing
+ * agent: the facade is total and never throws. Canonicalizing keeps a parent
+ * (raw spelling, e.g. `/var/...`) and a child (realpath-canonical, because the
+ * harness manager canonicalizes what it commits) of the SAME physical
+ * directory in one bucket.
+ */
 export function cwdProjectKey(agent: Agent | undefined): string | undefined {
   if (agent === undefined) return undefined
-  try {
-    return projectKeyOf(getSessionCwd(agent))
-  } catch {
-    return undefined
-  }
+  return projectKeyOf(canonicalize(getSessionCwd(agent)))
 }
 
 /** Head-truncate with a trailing note when `maxChars` cuts the text. */

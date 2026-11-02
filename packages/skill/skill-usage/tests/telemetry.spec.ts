@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -17,19 +17,22 @@ const dirs: string[] = []
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 
 function tempHome(): string {
-  const home = mkdtempSync(join(tmpdir(), 'skill-usage-home-'))
+  // Canonical spelling: the tool form keys through `cwdProjectKey`, which
+  // realpaths the cwd (macOS tmpdir is a /var → /private/var symlink), so the
+  // expectation helpers must hash the same spelling.
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'skill-usage-home-')))
   dirs.push(home)
   return home
 }
 
 interface Rig {
-  ctx: { logger: { debug: ReturnType<typeof vi.fn> } }
+  ctx: { logger: { debug: ReturnType<typeof vi.fn> }; get(name: string): unknown }
   onToolResult: (exec: unknown, result: unknown) => void
   onSessionEvent: (session: unknown, event: unknown) => void
   home: string
 }
 
-function rig(): Rig {
+function rig(getService: (name: string) => unknown = () => undefined): Rig {
   const home = tempHome()
   const registrations: Array<[string, (...args: never[]) => unknown]> = []
   const ctx = {
@@ -37,7 +40,7 @@ function rig(): Rig {
     on: vi.fn((event: string, listener: (...args: never[]) => unknown) => {
       registrations.push([event, listener])
     }),
-    get: () => undefined,
+    get: (name: string) => getService(name),
     dshHomePath: () => home,
   }
   apply(ctx as never)
@@ -168,6 +171,32 @@ describe('skill-usage telemetry listeners', () => {
     expect(row.sessionId).toBe('session-1')
   })
 
+  it('service-mounted after apply: tool and slash rows share the workingDirectory key (per-call resolution)', async () => {
+    const ws = mkdtempSync(join(tmpdir(), 'skill-usage-ws-'))
+    dirs.push(ws)
+    const cwd = realpathSync(ws)
+    let mounted = false
+    const { ctx, onToolResult, onSessionEvent, home } = rig((name) => {
+      if (!mounted) return undefined
+      if (name === 'workingDirectory') return {}
+      if (name === 'sessionProjections') return { stateOf: () => cwd }
+      return undefined
+    })
+    // The service mounts AFTER apply: capture-at-apply-time would miss it.
+    mounted = true
+    enable(home, true)
+    const session = sessionWith('/stale-header-cwd')
+    const agent = { id: 'agent-1', session, ctx }
+    onToolResult(toolExec('skill', { name: 'tool-skill' }, agent), okSkillResult({ name: 'tool-skill' }))
+    onSessionEvent(session, slashEvent('slash-skill'))
+    await flush()
+    const key = projectKeyOf(cwd)
+    const rows = readFileSync(join(home, 'skill-usage', `loads-${key}.jsonl`), 'utf8')
+      .split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Record<string, unknown>)
+    expect(rows.map((row) => row.via).sort()).toEqual(['slash', 'tool'])
+    expect(existsSync(join(home, 'skill-usage', `loads-${projectKeyOf('/stale-header-cwd')}.jsonl`))).toBe(false)
+  })
+
   it('non-matching events are ignored (failed result, wrong tool, wrong source kind)', async () => {
     const { onToolResult, onSessionEvent, home } = rig()
     enable(home, true)
@@ -230,5 +259,30 @@ describe('skill-usage telemetry listeners', () => {
     await flush()
     expect(existsSync(join(home, 'skill-usage', `loads-${projectKeyOf(home)}.jsonl`))).toBe(false)
     expect(markerText(home, home)).toBe('222')
+  })
+
+  it('slash form: the workingDirectory projection wins over header.cwd and is resolved PER CALL', async () => {
+    const home = tempHome()
+    enable(home, true)
+    // The service is mounted only AFTER `apply` — an apply-time capture would
+    // keep reading header.cwd (the trap this resolution avoids).
+    let serviceCwd: string | undefined
+    const registrations: Array<[string, (...args: never[]) => unknown]> = []
+    const ctx = {
+      logger: { debug: vi.fn() },
+      on: vi.fn((event: string, listener: (...args: never[]) => unknown) => { registrations.push([event, listener]) }),
+      get: (name: string) => name === 'workingDirectory'
+        ? (serviceCwd === undefined ? undefined : {})
+        : name === 'sessionProjections'
+          ? { stateOf: () => serviceCwd }
+          : undefined,
+      dshHomePath: () => home,
+    }
+    apply(ctx as never)
+    const onSessionEvent = registrations.find(([name]) => name === 'session/event')![1] as unknown as Rig['onSessionEvent']
+    serviceCwd = join(home, 'worktree')
+    onSessionEvent(sessionWith('/stale/header'), slashEvent('svc-skill'))
+    await flush()
+    expect(ledgerRow(home, join(home, 'worktree')).skill).toBe('svc-skill')
   })
 })

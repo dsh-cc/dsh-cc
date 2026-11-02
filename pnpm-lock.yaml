@@ -3803,12 +3803,21 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: link:../../../../deepseek-harness/packages/core/agent
         version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-fs-local':
+        specifier: link:../../../../deepseek-harness/packages/fs/fs-local
+        version: link:../../../../deepseek-harness/packages/fs/fs-local
       '@deepseek-ai/dsh-llm':
         specifier: link:../../../../deepseek-harness/packages/llm/llm
         version: link:../../../../deepseek-harness/packages/llm/llm
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
+      '@deepseek-ai/dsh-working-directory':
+        specifier: link:../../../../deepseek-harness/packages/session/working-directory
+        version: link:../../../../deepseek-harness/packages/session/working-directory
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery

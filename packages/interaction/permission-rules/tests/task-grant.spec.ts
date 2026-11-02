@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { KNOWN_SESSION_EVENT_TYPES, Session, SessionId } from '@deepseek-ai/dsh-session'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ToolExecution } from '@dsh-cc/tools'
+import { TaskGrants } from '../src/task-grant-service.ts'
 import {
   TASK_GRANT_EVENT,
   TaskGrantStore,
@@ -135,5 +141,40 @@ describe('task grant storage + lifecycle (§3.2/§3.3)', () => {
     appendTaskGrantEvent(sess, { cleared: built.grantId, reason: 'manual', timestamp: 2 })
     appendTaskGrantEvent(sess, { cleared: built.grantId, reason: 'manual', timestamp: 3 })
     expect(foldTaskGrants(sess.snapshotEvents())).toHaveLength(0)
+  })
+
+  /**
+   * F-11: grants persist a canonical root (hostFacts normalizes at creation),
+   * so a resumed session re-folding its log still matches when `workspaceOf`
+   * returns a canonicalized path while the session header carries the raw
+   * spelling (macOS `/var` vs `/private/var`).
+   */
+  it('a resumed grant matches a canonicalized workspace over a raw header spelling', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'grant-resume-'))
+    try {
+      const canonical = realpathSync(dir)
+      const sess = Session.create(SessionId('grant-resume'), undefined, {
+        version: 4, isSeeded: false, id: SessionId('grant-resume'), cwd: dir, createdAt: Date.now(),
+      })
+      const persisted = grant({ root: canonical })
+      appendTaskGrantEvent(sess, { grant: persisted, timestamp: Date.now() })
+      // A fresh instance: nothing carried in memory, the log is the only source.
+      const grants = new TaskGrants({
+        bashToolName: 'Bash',
+        fileEditTools: new Set(),
+        workspaceOf: () => dir,
+        activeGoalIdOfSession: () => null,
+      })
+      const agent = { id: 'agent', session: sess } as unknown as Agent
+      const exec = {
+        token: Symbol(), name: 'Bash', callId: 'c', agent,
+        signal: new AbortController().signal,
+        arguments: { command: 'git add a.md' },
+      } as unknown as ToolExecution
+      const decided = { decision: { kind: 'passthrough' }, risk: { level: 'LOW', reasons: [] }, mode: 'auto', isReadOnly: false } as const
+      expect(grants.match(decided, exec)?.grantId).toBe(persisted.grantId)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

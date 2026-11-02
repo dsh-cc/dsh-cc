@@ -26,10 +26,10 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { LEARNED_SKILLS_DIRNAME } from '@dsh-cc/skill-loader'
-import { getSessionCwdForSession } from '@dsh-cc/session-cwd'
 import { readJsonl } from '@dsh-cc/sidecar-io'
 import { dshHomeFn, projectKeyOf } from '@dsh-cc/sidecar-io'
 import { createMarkerIfAbsent, debug, ledgerPath, markerPath, type SkillLoadRow } from './ledger.ts'
+import { sessionCwdOf } from './session-cwd.ts'
 import { DEFAULT_SKILL_USAGE_SETTINGS, readUserSettingsSync, type SkillUsageSettings } from './settings.ts'
 
 /** Rollup report path for one workspace. */
@@ -113,9 +113,10 @@ async function runRollup(
     debug(ctx, 'skill-usage: no dshHomePath — rollup is a no-op')
     return
   }
-  // Resolve the cwd FIRST: projectKeyOf takes a string, so the undefined
-  // guard must precede the call.
-  const cwd = getSessionCwdForSession(session)
+  // Resolve the cwd FIRST (service-first, per call — never captured at apply
+  // time): projectKeyOf takes a string, so the undefined guard must precede
+  // the call.
+  const cwd = sessionCwdOf(ctx, session)
   if (typeof cwd !== 'string') {
     debug(ctx, 'skill-usage: rollup without a resolvable session cwd — skipped')
     return

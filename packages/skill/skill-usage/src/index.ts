@@ -17,9 +17,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { cwdProjectKey } from '@dsh-cc/handoff-store'
-import { getSessionCwdForSession } from '@dsh-cc/session-cwd'
 import { dshHomeFn, projectKeyOf } from '@dsh-cc/sidecar-io'
 import { commitLoad, debug } from './ledger.ts'
+import { sessionCwdOf } from './session-cwd.ts'
 import { registerRollup } from './rollup.ts'
 import { registerSettings } from './settings.ts'
 
@@ -122,9 +122,10 @@ export function registerListeners(ctx: Context): void {
         debug(ctx, 'skill-usage: skill-invocation event without a string name — row skipped')
         return
       }
-      // Resolve the cwd FIRST: projectKeyOf takes a string, so the undefined
-      // guard must precede the call. Unresolvable ⇒ skip (D-J).
-      const cwd = getSessionCwdForSession(session)
+      // Resolve the cwd FIRST (service-first, per call — never captured at
+      // apply time): projectKeyOf takes a string, so the undefined guard must
+      // precede the call. Unresolvable ⇒ skip (D-J).
+      const cwd = sessionCwdOf(ctx, session)
       if (typeof cwd !== 'string') {
         debug(ctx, 'skill-usage: slash-form load without a resolvable session cwd — row skipped')
         return

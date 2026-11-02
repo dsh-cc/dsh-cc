@@ -9,7 +9,7 @@
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolExecution } from '@dsh-cc/tools'
-import { foldSessionCwd } from '@dsh-cc/session-cwd'
+import { resolveSessionCwd } from '@dsh-cc/session-cwd'
 import { subjectOf } from './matchers.ts'
 import { SessionAllowlist, foldSessionAllows } from './session-allowlist.ts'
 
@@ -49,12 +49,13 @@ export class SessionAllows {
   }
 
   /**
-   * The session's workspace root: the durable `worktree/entered` fold
-   * (session-cwd, WS1), falling back to the session header cwd. Undefined
-   * when the session never recorded a cwd — the sandbox listener then cannot
-   * verify an escalation is in-scope and falls through to the normal ask.
+   * The session's workspace root: the harness `workingDirectory` service's
+   * live value, else the legacy `worktree/entered` fold, else the session
+   * header cwd (session-cwd facade). Undefined when the session never recorded
+   * a cwd — the sandbox listener then cannot verify an escalation is in-scope
+   * and falls through to the normal ask.
    */
   workspaceOf(agent: Agent): string | undefined {
-    return foldSessionCwd(agent.session.snapshotEvents()) ?? agent.session.header?.cwd
+    return resolveSessionCwd(agent)
   }
 }

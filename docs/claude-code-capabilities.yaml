@@ -2795,7 +2795,7 @@ capabilities:
     deviation:
       kind: downgrade
       summary: >-
-        The child's session-cwd overlay moves to the worktree (permission-rules
+        The child's session working directory moves to the worktree (permission-rules
         workspace, boundary guard, context buckets follow), but the child's
         header.cwd, the harness sandbox root, and the bash default workdir stay
         the parent's (needs a SubagentStartRequest.cwd seam, upstream §11.2).
