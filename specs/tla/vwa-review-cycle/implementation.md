@@ -173,14 +173,14 @@ was trued up by hand (§6 edit set; no auto-regeneration):
   exclusive (EEXIST iff the target exists). A crash before the link leaves only
   inert staging (reaped per call); a crash after it leaves a complete body. An
   unparseable leftover from a pre-fix binary is reclaimed after one grace
-  re-read, carrying the pre-existing non-atomic-reclaim TOCTOU (E-8, #311).
+  re-read, carrying the pre-existing non-atomic-reclaim TOCTOU (E-8, #326).
 - Model edits: `CrashTorn` deleted (subsumed by `Crash`); `AdmissionBusy`
   deleted (dead once `lockHolder` cannot be `"torn"`); `"torn"` dropped from
   the `lockHolder` domain in `TypeOK` and from every related comment; the dead
   `lockBody` variable deleted from `VARIABLES`, `vars`, `Init`, every
   `UNCHANGED` list and `TypeOK`; the `LockNeverTorn` probe deleted; the
   `strict-torn-lock` case removed from `checks.json` and from `cases/`.
-- Retained unchanged: the atomic-reclaim abstraction (E-8/#311),
+- Retained unchanged: the atomic-reclaim abstraction (E-8/#326),
   `ReservedSettledAccounting`, `ProjectBudgetSound` and every other invariant,
   constant and bound.
 - design.md R-9 retired (torn lock unreachable, cross-ref #307) and R-7 no
@@ -191,8 +191,8 @@ was trued up by hand (§6 edit set; no auto-regeneration):
   `withBudgetLock` budget-lock reclaim pin in `tests/review-cycle.spec.ts`.
 
 **Model-check rerun (orchestrator, 2026-11-02)** — fresh runId
-`20261102T074914Z-79190e32-43da-461c-a245-83e13b75a73d` 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕, input digest
-`2c988a99e69d327341f72f54b754bf0b0be438db1cb868a079cd899ff03d3ed3`, toolchain 1.7.4:
+`20261102T084703Z-94165612-cd86-48a2-90ae-2526845bfdb1` 〔src:ws:specs/tla/vwa-review-cycle/implementation.md#L20-L33〕, input digest
+`7783d99b1be46dd9af41b7e66274e9ca88034a8ad86d9b4da3485026339b39df`, toolchain 1.7.4:
 
 | Case | Status | Statistics (generated / distinct) |
 |---|---|---|

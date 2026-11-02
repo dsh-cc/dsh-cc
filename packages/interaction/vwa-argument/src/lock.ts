@@ -14,7 +14,7 @@
  * complete, fsynced body. No reachable state has a torn `write.lock`.
  * Unparseable leftovers from pre-#307 binaries are reclaimed after one grace
  * re-read (§3.2b) — that reclaim carries the known non-atomic-reclaim TOCTOU
- * tracked as issue #311, unchanged in kind from the dead-holder reclaim.
+ * tracked as issue #326, unchanged in kind from the dead-holder reclaim.
  *
  * Split out of store.ts for the repo file-size cap.
  *
@@ -139,7 +139,7 @@ function classify(body: LockBody, lockPath: string, deadline: number): Fail | un
   if (body === null || typeof body !== 'object' || !pidAlive(body.pid)) {
     // Dead-holder reclaim, unchanged (never by timeout alone). Known defect
     // carried: this read→decide→unlink is not atomic (reclaim TOCTOU), tracked
-    // as issue #311 and modeled-atomic as E-8 in specs/tla/vwa-review-cycle.
+    // as issue #326 and modeled-atomic as E-8 in specs/tla/vwa-review-cycle.
     bestEffortUnlink(lockPath)
     return undefined
   }

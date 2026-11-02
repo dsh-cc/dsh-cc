@@ -36,7 +36,7 @@ in one file. The `wx` create is atomic, but the body write is not, so the
 
 **Staged `link()` acquisition — the torn state becomes structurally
 unreachable in same-version deployments; legacy torn files are reclaimed as
-unowned, with that reclaim classified as carrying the known #311
+unowned, with that reclaim classified as carrying the known #326
 reclaim-TOCTOU race.**
 
 Why not `renameSync` over `write.lock` (issue's option 1, literal reading)?
@@ -122,7 +122,7 @@ evidence and unlinks a live holder's lock):
       — the existing dead-holder reclaim, unchanged. **Known defect carried:
       the read→decide→unlink sequence is not atomic (TOCTOU); two reclaimers
       can end up dual-holding. This is the pre-existing defect already
-      tracked as issue #311 and modeled-atomic as E-8
+      tracked as issue #326 and modeled-atomic as E-8
       (`specs/tla/vwa-review-cycle/design.md:230`); this PR does not widen or
       fix that window — see §8.**
    b. **pid is ours and nonce is ours** → immediate `LOCK_BUSY` self-deadlock
@@ -164,16 +164,16 @@ exclusion in two ways, both **safety-class**:
   replacement lock) — dual ownership.
 
 Both are instances of the same non-atomic reclaim TOCTOU as the dead-holder
-path, which the repo already tracks as **issue #311** and models as atomic
+path, which the repo already tracks as **issue #326** and models as atomic
 (E-8). Same-version deployments have no such window: new code never publishes
 a torn `write.lock`, so §3.2b only fires on pre-fix leftovers — a one-time
 migration event whose writer is, in the overwhelmingly common case, dead (it
 crashed). The residual exposure (a *live* old binary racing a new binary
 during an upgrade window) is real but bounded to the upgrade moment, and the
 re-read grace in step 1 narrows it. **Decision: accept and document, cross-ref
-#311; the structural fix for non-atomic reclaim belongs to #311 and is out of
+#326; the structural fix for non-atomic reclaim belongs to #326 and is out of
 scope for this PR.** (No portable userland primitive — `renameat2`
-`RENAME_EXCHANGE` is Linux-only — provides an inode-CAS; folding a #311 fix
+`RENAME_EXCHANGE` is Linux-only — provides an inode-CAS; folding a #326 fix
 here would couple two defect classes into one PR.)
 
 `lockHeld` and `releaseLock` are unchanged (reporting + best-effort unlink of
@@ -253,8 +253,8 @@ write.lock`, `review-cycle.ts:88-90`): garbage `write.lock` there → the
 
 Not deterministically testable, documented instead (§3.2b): the
 two-reclaimer and mixed-version dual-ownership traces — interleavings belong
-to the #311 TOCTOU class; deterministic coverage of those races is coupled to
-the #311 fix, not this PR.
+to the #326 TOCTOU class; deterministic coverage of those races is coupled to
+the #326 fix, not this PR.
 
 ## 6. TLA+ model true-up (`specs/tla/vwa-review-cycle`)
 
@@ -280,7 +280,7 @@ design) — review folds expanded this list:
 - Re-run the model check scoped to `specs/tla/vwa-review-cycle` via the
   existing formal-design pipeline and record the runId in `implementation.md`.
 
-The atomic-reclaim abstraction (E-8/#311) is retained unchanged — the model's
+The atomic-reclaim abstraction (E-8/#326) is retained unchanged — the model's
 green does not claim the real reclaim is atomic; `design.md` says so already.
 
 ## 7. Delivery
@@ -296,9 +296,9 @@ green does not claim the real reclaim is atomic; `design.md` says so already.
 ## 8. Out of scope
 
 - **Non-atomic reclaim TOCTOU (dual ownership via dead-holder or torn-body
-  reclaim), tracked as issue #311** — pre-existing, modeled as atomic (E-8),
+  reclaim), tracked as issue #326** — pre-existing, modeled as atomic (E-8),
   structural fix (e.g. inode-CAS via `renameat2`) is not portably available in
-  Node and belongs to #311. This PR does not widen the same-version window
+  Node and belongs to #326. This PR does not widen the same-version window
   (new code never creates the torn files the recovery path reclaims) but does
   add a reclaim trigger for pre-fix leftovers; the §3.2b grace narrows the
   live-old-writer subcase.
@@ -318,7 +318,7 @@ cross-feeding):
   requirement, read/parse split, mixed-version reclassification, staging-name
   collision, test/model-edit-set gaps.
 - **Lane B (external reviewer B)**: NO-GO with 4 P1 — competing-reclaimer
-  dual ownership (cross-referenced #311), mixed-version mutex violation,
+  dual ownership (cross-referenced #326), mixed-version mutex violation,
   short-write torn publication, read-failure conflation; reproduced traces
   with real filesystem primitives.
 - **Lane C (internal critic)**: GO-conditional with 2 P1 / 3 P2 — mixed-version
