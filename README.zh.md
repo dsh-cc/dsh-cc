@@ -23,7 +23,7 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-启动器要求 `dsh >= 0.2.0-rc.2`。如果版本更旧，启动器会停止并提示升级。
+启动器要求 `dsh >= 0.2.1-rc.5`。如果版本更旧，启动器会停止并提示升级。
 
 如果已经安装所需版本的 dsh，只需安装启动器。
 
@@ -220,7 +220,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
 | Engine subsystems | 11 | 26 | 4 | 2 |
-| Hook events | 10 | 7 | 4 | 0 |
+| Hook events | 9 | 8 | 4 | 0 |
 | Command surface | 22 | 10 | 1 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
@@ -477,6 +477,7 @@ packages/
   plugin/         first-party plugins of the in-repo marketplace
   test-support/   shared test fixtures and eval harnesses (not published)
   bundle/         installable profile bundles
+  acp/            Agent Client Protocol driver for the cc-acp profile
   ui/             terminal UI and the vendored pi-tui renderer
   launcher/       the dsh-cc executable
 ```

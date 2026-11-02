@@ -11,9 +11,10 @@
 | `/mcp` | 列出每个已注册服务器的名称、连接状态、工具数量（若已知）与 OAuth 鉴权要求。 |
 | `/mcp reconnect <name>` | 断开并为命名服务器建立全新连接。 |
 | `/mcp disconnect <name>` | 为该命名服务器停止连接并注销其工具。 |
+| `/mcp migrate` | 将 Claude Code 的 MCP 配置导入 dsh 原生配置，并报告迁移了哪些内容。 |
 | `/mcp <其他内容>` | 打印用法文本。 |
 
-所有形式都读取/驱动可选的 `mcpConnections` 衔接服务。未含 mcp-client 的组合会优雅地报告缺少该服务。任何形式都不消耗模型 token。
+除 `migrate` 外，所有形式都读取/驱动可选的 `mcpConnections` 衔接服务；`migrate` 是纯文件 I/O，在查找衔接服务之前运行。未含 mcp-client 的组合会优雅地报告缺少该服务。任何形式都不消耗模型 token。
 
 ## 组合
 

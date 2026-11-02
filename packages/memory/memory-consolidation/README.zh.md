@@ -8,9 +8,9 @@
 ## 本包提供的能力
 
 - **extractMemories** —— `agent/turn-stopping` 监听器启动一个后台 fork 的
-  subagent（通过 `ctx.jobs` + `ctx.subagents`，仅持有读/搜索工具），从当前轮
-  抽取持久事实并以结构化输出上报；插件校验该批次后在 host 侧写入匹配的主题
-  文件。
+  subagent（仅通过 `ctx.subagents` 启动并在内部跟踪，不走 `ctx.jobs` seam；仅持有
+  读/搜索工具），从当前轮抽取持久事实并以结构化输出上报；插件校验该批次后在 host
+  侧写入匹配的主题文件。
 - **Dream 整合** —— 三道可配置的门，全部通过后才会用只读的 fork subagent 回顾
   过往会话，并以同样方式上报重写后的 `MEMORY.md` 与主题文件集：
   1. **时间门** —— 自上次整合起至少 `minHours`（默认 24）小时。
@@ -91,8 +91,8 @@ await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 
 - `ctx.fs` 缝不暴露 mtime，因此锁将持有者 PID 与上次整合时间戳存入锁文件正文而非
   文件 mtime；崩溃恢复依赖过期窗口而非进程存活。
-- 会话门当前通过 `ctx.sessions` 统计存活会话并将其视为新会话；带时钟的 transcript
-  查询已延期。
+- 会话门改为扫描持久化会话存储（只读取 header 前缀）；无法读取的目录会单独计入，
+  而不是被静默当作空目录。
 - 没有删除通道：dream 会把过期记忆从 `MEMORY.md` 移除，但失去引用的主题文件仍留在
   盘上，直到被覆写。主题文件删除已延期（fork 的 allow-list 本来也没有 remove 工具）。
 - 并行会话的抽取并写时为 last-writer-wins;dream 锁只串行化整合。

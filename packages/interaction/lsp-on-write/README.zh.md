@@ -1,6 +1,6 @@
 # @dsh-cc/lsp-on-write
 
-English | [中文](README.zh.md)
+[English](README.md) | 中文
 
 （中文说明，与英文版实质等价。）
 

@@ -15,6 +15,10 @@ DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`mi
 
 这些行此前位于全局 `cc-shell` patch(`packages/bundle/cc-shell/cordis.patch.yml`)，会泄漏进每个 agent preset；把它们 scope 到本 preset 正是隔离各行为面的手段。
 
+## VWA 模式
+
+本包还发行并声明了 `vwa` 预设（`agent.vwa.cordis.yml`，order 6）：同一份共享行体，另加一个面向可验证工作区产物的 VWA persona——技术文档与研究制品，其断言引证工作区文件。它增加 `/vwa` 命令（init/status/import/sign/adjudicate/repair——面向用户的表面，无论语义门是否开启都挂载），并**仅在此预设**挂载 `@dsh-cc/vwa-evidence`（第一通道证据门）与 `@dsh-cc/vwa-argument`（论证通道）；两者都停在各关闭阀 `vwa-evidence.enabled` 与 `vwa-argument.semantic-enabled`（默认关闭）之后。
+
 ## 安装
 
 无需安装步骤：`tui` profile 的 bundle patch（`packages/bundle/cc-tui/cordis.patch.yml`）会挂载 harness 的 agent-preset registry（`default: cc`），并以 file-backed include 行声明 `cc` 预设（order 5，指向本包内的 `agent.cordis.yml`）与 `vwa` 预设（order 6，指向 `agent.vwa.cordis.yml`）；该包随 bundle 一起装入 profile 的 `node_modules`。插件代码与 preset 文件在启动时读取，因此更新包后需**重启 dsh**。

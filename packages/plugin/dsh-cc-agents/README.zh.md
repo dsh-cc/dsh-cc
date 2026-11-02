@@ -87,10 +87,10 @@ Lean 命令为 `lean-preflight.mjs`、`lean-check.mjs`、`lean-check-conformance
 审计两个后端。证明会校验声明种类、命题完全一致以及公理集合在
 `propext`、`Classical.choice`、`Quot.sound` 之内。一致性校验让 Lean 参考实现和项目
 实现在固定的有限语料上运行。限制：面向 JSON 边界的确定性纯函数、有界的文件与语料
-大小、不支持 Mathlib、Lake 或第三方包，也不做 TypeScript 到 Lean 的翻译〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L51-L55〕。
+大小、不支持 Mathlib、Lake 或第三方包，也不做 TypeScript 到 Lean 的翻译。
 
 Lean 结果表示所列命题在记录的定义、假设和允许公理下通过了内核检查，且实现与参考
-在记录语料上一致；它不证明任意 TypeScript 代码与模型等价，也不证明整个程序或部署正确〔src:ws:docs/plans/2026-10-26-formal-design-lean-verification.md#L903-L911〕。
+在记录语料上一致；它不证明任意 TypeScript 代码与模型等价，也不证明整个程序或部署正确。
 详见 [Lean 建模指南](skills/formal-design/references/lean-modeling-guide.md)、
 [一致性指南](skills/formal-design/references/lean-conformance.md)和
 [组合模型](skills/formal-design/references/combined-models.md)。

@@ -58,14 +58,15 @@ PR-3 补齐入口表面：SessionStart 状态/规范块钩子与最终的 `/cc-c
 
 从 dsh-cc marketplace 安装，插件名 `cc-codex-bridge`：
 
-```sh
-claude plugin install cc-codex-bridge@dsh-cc
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install cc-codex-bridge@dsh-cc
 ```
 
 卸载（或禁用）插件即彻底移除该通道：
 
-```sh
-claude plugin uninstall cc-codex-bridge@dsh-cc
+```text
+/plugin uninstall cc-codex-bridge@dsh-cc
 ```
 
 ## 已知限制

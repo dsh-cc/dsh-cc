@@ -44,8 +44,8 @@ await ctx.plugin(PermissionRules, {
     bypassImmune: ['Edit(~/.bashrc)', 'Edit(~/.zshrc)'],
   },
   bashToolName: 'Bash',           // default
-  fileEditTools: ['edit'],        // auto-allowed under acceptEdits
-  readOnlyTools: ['read'],        // auto-allowed under plan
+  fileEditTools: ['edit', 'write', 'multi_edit', 'notebook_edit', 'str_replace_editor'], // 默认; acceptEdits 下自动放行
+  readOnlyTools: ['read', 'glob', 'grep', 'search', 'web_fetch', 'web_search', 'structured_output'], // 默认; plan 下自动放行
   exemptSandboxedBashFromToolAsk: false,
   defaultMode: 'default',
   classifierEnabled: true,        // 风险分类器升级阶段
@@ -56,17 +56,21 @@ await ctx.plugin(PermissionRules, {
 
 ## settings 与热更新
 
-当 `ctx.settings` 挂载时，插件注册 `permissions` 命名空间（`permissions.allow` / `permissions.deny` / `permissions.ask` / `permissions.defaultMode`，另加供风险分类器使用的 `additionalDirectories` / `protectedFiles` / `dangerousPatterns` / `mediumPatterns`（`mediumPatterns` 替换精选 MEDIUM 层，与 `dangerousPatterns` 同为替换语义），以及可选的 `autoMode` 小节——`autoMode.soft_deny` 文字规则（支持 `$defaults` 展开）、`autoMode.classifyAllShell`（在 auto 模式下挂起所有 bash/PowerShell allow 规则）与 `autoMode.classifier`（`enabled` / `route` / `timeoutMs` / `cacheMaxEntries` / `ambiguityAsk`——最后一项在 gauge 通道的 System One 调用上附加一个欠规格检测问题，默认关闭；当针对任务文本（取自人类用户消息折叠而成）判定目标/范围为 `underspecified` 时，将 allow 升级为 ask）共同驱动 `auto` 模式下可选择性开启的 LLM 风险分类器阶段；`autoMode` 键缺席即保持缺席，该阶段保持解除武装）。settings 规则携带 `settingsSource` 标签（默认 `userSettings`），并按来源优先级与 Config `rules` 合并——settings 规则优先。存储变更会立即重跑合并并重注册 guard（热更新）；畸形 settings 规则在 settings 边界 fail loud。当 `ctx.settings` 缺席时，仅 Config `rules` 生效（分类器使用其精选默认值）。
+当 `ctx.settings` 挂载时，插件注册 `permissions` 命名空间（`permissions.allow` / `permissions.deny` / `permissions.ask` / `permissions.criticalDeny`（只追加的 deny 规则，allow 授权无法覆盖）/ `permissions.defaultMode`，另加供风险分类器使用的 `additionalDirectories` / `protectedFiles` / `dangerousPatterns` / `mediumPatterns`（`mediumPatterns` 替换精选 MEDIUM 层，与 `dangerousPatterns` 同为替换语义），以及可选的 `autoMode` 小节——`autoMode.soft_deny` 文字规则（支持 `$defaults` 展开）、`autoMode.hard_deny` / `autoMode.allow` / `autoMode.environment` / `autoMode.gaugeContextWindow` / `autoMode.probe`（`enabled` / `route` / `backend` / `timeoutMs` / `toolPatterns`）、`autoMode.classifyAllShell`（在 auto 模式下挂起所有 bash/PowerShell allow 规则）与 `autoMode.classifier`（`enabled` / `route` / `timeoutMs` / `cacheMaxEntries` / `ambiguityAsk`——最后一项在 gauge 通道的 System One 调用上附加一个欠规格检测问题，默认关闭；当针对任务文本（取自人类用户消息折叠而成）判定目标/范围为 `underspecified` 时，将 allow 升级为 ask）共同驱动 `auto` 模式下可选择性开启的 LLM 风险分类器阶段；`autoMode` 键缺席即保持缺席，该阶段保持解除武装）。settings 规则携带 `settingsSource` 标签（默认 `userSettings`），并按来源优先级与 Config `rules` 合并——settings 规则优先。存储变更会立即重跑合并并重注册 guard（热更新）；畸形 settings 规则在 settings 边界 fail loud。当 `ctx.settings` 缺席时，仅 Config `rules` 生效（分类器使用其精选默认值）。
 
 ## 来源与模式
 
-每条规则携带 `PermissionRuleSource`（`session` > `cliArg` > `policySettings` > `flagSettings` > `localSettings` > `projectSettings` > `userSettings` > `config`），用于内容规则的优先级。引擎在调用时解析生效模式：plan 激活（来自 `@deepseek-ai/dsh-plan-mode`）最先覆盖，然后是会话记录的 `permission/mode` 覆盖（`foldPermissionMode`），否则回退到 `defaultMode`。
+每条规则携带 `PermissionRuleSource`（`session` > `cliArg` > `policySettings` > `flagSettings` > `localSettings` > `projectSettings` > `userSettings` > `config` > `curated`），用于内容规则的优先级。`curated` 承载分类器内置规则。引擎在调用时解析生效模式：plan 激活（来自 `@deepseek-ai/dsh-plan-mode`）最先覆盖，然后是会话记录的 `permission/mode` 覆盖（`foldPermissionMode`），否则回退到 `defaultMode`。
 
 模式是**持久的**——`setMode(agent, mode)` 追加一条 last-wins 的 `permission/mode` 会话事件（插件加载时注册进 `KNOWN_SESSION_EVENT_TYPES`，持久化可恢复它）。`plan` 归 plan-mode 所有，在这里会抛错。进入 `bypassPermissions` 会把会话沙箱钉到 `danger-full-access` 并记录 `resumeSandbox`；离开时恢复记录（或回退 `workspace-write`）的约束。`auto` 模式是**严格规则**语义（设计文档 D3/D11）：旧的 LOW+ask→allow 代理已移除，命中 ask 规则即使在 LOW 风险也会提示；宽泛的 allow 规则在评估时被挂起（`filterAutoAllowRules`）——整工具 bash/PowerShell allow、实质全覆盖的 bash 内容 allow、解释器与包管理器运行前缀（`python`、`node`、`npm run`、`npx` 等）以及任何 `Task`/`Agent`/`subagent`/`subagent_fork` allow；`autoMode.classifyAllShell: true` 挂起所有 bash 与 PowerShell allow 规则。`/permissions` 以 "suspended in auto mode" 标注被挂起的规则，`effectiveRuleSet(mode)` 是所有预览消费者的唯一接缝。"本次会话允许"授权现在适用于所有非 plan 模式下的规则 ask（grant-on-ask，D2）。LLM 分类器阶段武装时，只读工具调用豁免——完全不经过模型（读流量零额外延迟）。判定解析保持严格并 fail-closed：模型输出畸形时返回常量原因 `classifier output unparseable`（模型输出永不展示；审计记录只含摘要）。按路由的连续失败熔断器（阈值 3，按 `provider/model` 键控）会为故障车道打开断路——该路由不再调用分类器，每进程一次 warn、每会话一条 `breaker` 审计事件；60 秒冷却后该路由进入半开状态并只放行一次探测调用——成功则关闭熔断，失败则重新打开并重新计时冷却；`rebuild()`（设置变更）重置熔断状态并重新武装。System One 客户端对 HTTP 429 最多重试两次（遵循 `Retry-After`，上限 2 秒，否则用带抖动的指数退避），总预算 3 秒，之后按原有路径降级。
 
 ## 切换模式
 
 `permissionRules.setMode(agent, mode)` 持久切换（见上）；`/permissions <mode>` 命令（在 `@dsh-cc/command-permissions`）为 `default | acceptEdits | plan | auto | bypassPermissions` 驱动它。每次切换都会向会话的模型转录注入一条面向人的提示。
+
+## 任务授权
+
+任务授权（task grant）是由用户通过 `/permissions grant <descriptor> --confirm` 创建、会话范围的批量授权。授权从宿主会话派生 root、branch、goal 与过期时间；绝不跨会话持久化，一旦作用域、分支或过期时间被违反即刻撤销。升级时的 `grant-escalation` 会消耗在用的授权。
 
 ## 供宿主 UI 使用的纯导出
 

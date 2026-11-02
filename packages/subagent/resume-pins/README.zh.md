@@ -23,12 +23,10 @@
   （`DEFINITION_CHANGED`）、钉存工具可用性（`PINNED_TOOL_UNAVAILABLE`）、钉存路由
   可用性（`SUBAGENT_MODEL_UNAVAILABLE`）——每次拒绝都会**在**拒绝返回**之前**持久化进
   pin（`resume.state='blocked'`）；
-- 一个在审批和 pin 策略检查之后、`tools/execute` 阶段执行的 **live 容量原子准入**：
-  续跑已结束的子代理时，如果已有 25 个运行中的子代理，就按 spawn 车道的同一份补救
-  文案拒绝（瞬态拒绝，不持久化）。与 Task spawn 共享的按父会话 FIFO 租约会一直持有到
-  消息被接受或激活失败，并在 `finally` 中释放；不会跨越审批或等待子代理整个执行轮次。
-  不再使用会过期的名额预留或按调用跟踪的 Map。每次实际执行都重新检查目标状态：同一
-  子代理的多条消息共享它的运行名额，审批期间结束的子代理需要重新准入。查询期间的
+- 一个在审批和 pin 策略检查之后、`tools/execute` 阶段执行的**原子准入**：
+  续跑由按父会话的 FIFO 租约串行化，并一直持有到消息被接受；harness 的 subagent
+  池（`maxActiveSubagents`，cc bundle 中为 25）是唯一的名额阀门——达到上限时抛出
+  `ACTIVATION_LIMIT_REACHED`，其补救文案与 spawn 车道保持逐字节一致。查询期间的
   取消会向上传播；缺少基础服务时仍按原约定放行；
 - 一个 **`agent/request` overlay**，把钉存的
   `{provider, model, reasoningEffort, maxTokens}` 元组逐字段（含缺席）应用到

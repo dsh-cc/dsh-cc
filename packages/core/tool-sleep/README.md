@@ -48,7 +48,7 @@ await ctx.plugin(ToolSleep)     // registers the Sleep tool
 
 ## Build order
 
-`tool-sleep` depends only on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-invariants`, `@deepseek-ai/schemastery`). It has no dependency on git-worktree or any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
+`tool-sleep` depends only on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/schemastery`). It has no dependency on git-worktree or any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
 
 ## Known limitations
 

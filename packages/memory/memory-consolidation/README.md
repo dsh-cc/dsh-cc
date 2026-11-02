@@ -9,10 +9,10 @@ reads.
 ## What this package provides
 
 - **extractMemories** — an `agent/turn-stopping` listener starts a background
-  forked subagent (via `ctx.jobs` + `ctx.subagents`, read/search tools only)
-  that extracts durable facts from the turn and reports them as structured
-  output; the plugin validates the batch and writes the matching topic files
-  host-side.
+  forked subagent (via `ctx.subagents` only, tracked internally — not on the
+  `ctx.jobs` seam; read/search tools only) that extracts durable facts from the
+  turn and reports them as structured output; the plugin validates the batch and
+  writes the matching topic files host-side.
 - **Dream consolidation** — three configurable gates that must all pass before
   a read-only forked subagent reviews past sessions and reports the rewritten
   `MEMORY.md` + topic file set the same way:
@@ -108,8 +108,9 @@ extraction may start a short background fork.
 - The `ctx.fs` seam exposes no mtime, so the lock stores the holder PID and
   last-consolidated epoch in the lock file's body rather than in the file
   mtime; crash recovery rests on the stale window, not process-liveness.
-- The session-count gate currently counts live sessions through `ctx.sessions`
-  and treats them as new; a clocked transcript query is deferred.
+- The session-count gate scans the durable session store with header-only prefix
+  reads; a directory it cannot read is counted separately rather than silently
+  treated as empty.
 - There is no delete channel: the dream drops outdated memories from
   `MEMORY.md`, but an orphaned topic file stays on disk until overwritten.
   Topic-file deletion is deferred (the fork allow-list never had a remove

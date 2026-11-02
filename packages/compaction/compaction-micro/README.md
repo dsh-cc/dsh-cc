@@ -18,7 +18,7 @@ The method throws synchronously when the session rejects a replacement. Replacem
 
 ## Freeze semantics
 
-The decision to collapse a tool result is made once and stays stable for the session. A placeholder always begins with the fixed `[... tool result compacted ...]` marker, and a later pass recognizes an already-collapsed result by that marker and never re-decides it. An identical re-run therefore emits a byte-identical prompt: repeated passes over unchanged history change nothing (the `stable` field is `true` and no replacement lands), preserving prompt-cache reuse.
+The decision to collapse a tool result is made once and stays stable for the session. A placeholder always begins with the fixed `[... earlier tool result compacted ...]` marker, and a later pass recognizes an already-collapsed result by that marker and never re-decides it. An identical re-run therefore emits a byte-identical prompt: repeated passes over unchanged history change nothing (the `stable` field is `true` and no replacement lands), preserving prompt-cache reuse.
 
 ## Config
 

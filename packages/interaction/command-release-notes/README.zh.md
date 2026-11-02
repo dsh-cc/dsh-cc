@@ -22,4 +22,4 @@ ctx.plugin({ name, inject: ['commands'], apply })
 ## 说明
 
 - 更新日志在编写时从仓库的已跟踪历史和 README 生成；发布新版本时请更新内置的 `CHANGELOG` 常量。
-- 如需编程式使用，`./release-notes` 导出 `CHANGELOG` 和 `renderReleaseNotes(markdown?, maxLines?)`。
+- 如需编程式使用，`@dsh-cc/command-release-notes/src/release-notes.ts` 导出 `CHANGELOG` 和 `renderReleaseNotes(markdown?, maxLines?)`。

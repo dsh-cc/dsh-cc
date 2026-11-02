@@ -14,14 +14,13 @@ Observability, never on a behavior path: the sync `session/created` listener onl
 
 ## Configuration
 
-```yaml
-- id: config-snapshot
-  name: '@dsh-cc/config-snapshot'
-  config:
-    config-snapshot.enabled: true   # default; kill switch for minimal-footprint consumers
+`enabled` is a settings-namespace key (`config-snapshot`), not cordis row config; put it in your settings file:
+
+```json
+{"config-snapshot": {"enabled": false}}
 ```
 
-Reads are fail-open `true` and happen inside the async writer only — a broken settings layer never disables capture and never blocks session creation.
+It defaults to `true`; reads are fail-open `true` and happen inside the async writer only — a broken settings layer never disables capture and never blocks session creation.
 
 ## Composition
 

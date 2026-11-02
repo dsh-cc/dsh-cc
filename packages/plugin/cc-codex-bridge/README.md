@@ -71,14 +71,15 @@ is installed.
 
 Install from the dsh-cc marketplace, plugin name `cc-codex-bridge`:
 
-```sh
-claude plugin install cc-codex-bridge@dsh-cc
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install cc-codex-bridge@dsh-cc
 ```
 
 Uninstalling (or disabling) the plugin removes the lane entirely:
 
-```sh
-claude plugin uninstall cc-codex-bridge@dsh-cc
+```text
+/plugin uninstall cc-codex-bridge@dsh-cc
 ```
 
 ## Known limits

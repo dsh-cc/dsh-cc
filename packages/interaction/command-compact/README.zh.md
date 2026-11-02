@@ -25,4 +25,3 @@ ctx.plugin(commandCompact) // 注入 `commands` 与 `compaction`
 
 - 提示在 `finally` 块中清除，因此失败或空操作的压缩绝不会留下陈旧提示影响后续轮次。
 - 已启动的 handler promise 在拆卸时静默收敛（注销前先等待排空），组合式拆卸期间不会有调用仍在飞行。
-- 子命令 `@dsh-cc/command-compact/invariant` 注册本包的 invariant 伴随插件；它不安装任何运行时 invariant，因为该命令只是上游已验证的压缩接缝之上的薄适配器。

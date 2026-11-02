@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-CC host-plane first-prompt session-title provider: mirrors the stock `session-title-first-prompt-llm` plugin, but stamps the auxiliary model route from the CC model-alias cheap lane — `resolve('haiku')` — before the shared `generateSessionTitleWithLlm` call.
+CC host-plane first-prompt session-title provider: mirrors the stock `session-title-first-prompt-llm` plugin, but stamps the auxiliary model route from the CC model-alias cheap lane — `resolve('haiku')` — before the shared `executeSessionTitleLlm` call.
 
 ## Route resolution
 

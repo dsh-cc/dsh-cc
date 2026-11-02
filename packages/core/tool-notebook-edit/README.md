@@ -56,7 +56,7 @@ await ctx.plugin(ToolNotebookEdit)        // registers the NotebookEdit tool + l
 
 ## Build order
 
-`tool-notebook-edit` depends on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-fs`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-invariants`, `@deepseek-ai/schemastery`). It has no dependency on any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
+`tool-notebook-edit` depends on the workspace `@dsh-cc/tools` package and harness base packages (`@deepseek-ai/cordis`, `@deepseek-ai/dsh-fs`, `@deepseek-ai/dsh-llm`, `@deepseek-ai/schemastery`). It has no dependency on any other workspace package, so it builds as soon as `core/tools` does; `tsc -b` resolves the reference order automatically.
 
 ## Known limitations
 

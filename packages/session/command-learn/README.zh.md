@@ -10,6 +10,7 @@
 |---|---|
 | `/learn` | 干跑：扫描会话存储（默认当前项目、最近 14 天），渲染排序后的 findings 与拟写入的记忆块。不写任何内容。 |
 | `/learn apply` | 通过真实的 `@dsh-cc/memory` writeback 辅助函数写入 `session-learnings` 记忆主题文件并 upsert `MEMORY.md` 指针。空 findings 时保持现有记忆不变。 |
+| `/learn promote=<kebab-name>` | 隐含 `apply`；把恰好一条 finding 提升为以给定 kebab-case 命名的 learned skill。存在多条 finding 时拒绝。 |
 | `/learn all` | 扫描所有项目的会话，而非仅当前项目。 |
 | `/learn days=N` | 为本次运行覆盖新近度窗口。 |
 | `/learn help` | 经共享 `helpable()` 辅助函数输出用法文本。 |

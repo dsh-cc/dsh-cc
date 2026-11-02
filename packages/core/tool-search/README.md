@@ -37,7 +37,7 @@ The design rides the repo's effect conventions:
 
 Turn one, the model sees only `ToolSearch` plus whatever is already loaded (including `alwaysLoad` tools) — or, in a session with no deferred tools at all, no `ToolSearch` either. It searches for a capability by keywords, and the result names the now-available tools. On the next turn those tools are first-class: declare them, call them. Already-loaded tools drop out of the deferred set, so a second search for them is correctly empty.
 
-An empty search result always says *why*, so the model never mistakes "nothing deferred" for "I lack the capability": an empty pool yields "every tool you can use is already in your function list; call it directly", a fully-loaded pool yields "all deferred tools available to you are already loaded", and a simple miss on a non-empty pool appends "the capability may already be available — call it directly".
+An empty search result always says *why*, so the model never mistakes "nothing deferred" for "I lack the capability": an empty pool yields "every tool you can use is already in your function list; call it directly", a fully-loaded pool yields "all deferred tools available to you are already loaded", and a simple miss on a non-empty pool returns 'No deferred tools matched "<query>". This directory lists deferred tools only; tools that registered eagerly (including eager MCP tools) never appear here — they are already in your function list, call them directly'.
 
 ## Known Limitations and Deferred Work
 

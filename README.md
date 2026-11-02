@@ -23,7 +23,7 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-The launcher must have `dsh >= 0.2.0-rc.2`. If dsh is an earlier version, the launcher stops with an upgrade message.
+The launcher must have `dsh >= 0.2.1-rc.5`. If dsh is an earlier version, the launcher stops with an upgrade message.
 
 If the necessary dsh version is installed, install only the launcher.
 
@@ -477,6 +477,7 @@ packages/
   plugin/         first-party plugins of the in-repo marketplace
   test-support/   shared test fixtures and eval harnesses (not published)
   bundle/         installable profile bundles
+  acp/            Agent Client Protocol driver for the cc-acp profile
   ui/             terminal UI and the vendored pi-tui renderer
   launcher/       the dsh-cc executable
 ```

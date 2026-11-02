@@ -55,6 +55,7 @@ The model sees `mcp__github__create_issue`, `mcp__web__search`, … — the same
 | `oauth` | http | no | OAuth flow options (see below) |
 | `toolCallTimeoutMs` | both | no | Timeout per `callTool` invocation (default 60000) |
 | `failOnStartupError` | both | no | Reject plugin activation when initial connection or tool synchronization fails (default `false`) |
+| `deferStartupConnect` | both | no | Return from activation before the initial connection and tool sync finish, connecting in the background (default `false`); has no effect with `failOnStartupError: true` |
 | `reconnect.enabled` | both | no | Reconnect automatically after a lost connection (default `true`) |
 | `reconnect.initialDelayMs` | both | no | First reconnect delay in ms; doubles per consecutive failed attempt (default 500) |
 | `reconnect.maxDelayMs` | both | no | Backoff ceiling in ms; also the uptime after which the attempt budget resets (default 30000) |
@@ -99,6 +100,10 @@ The supervisor keeps each capability's registrations live across an outage (last
 | `ctx.toolSearch` | Optional: defer over-threshold listed tools (duck-typed; never a required inject) |
 | `ctx.skills` | Optional: register MCP prompt skills |
 | `ctx.credentials` | Optional: persist OAuth tokens and related state |
+
+## Services provided
+
+- `mcpConnections` — a runtime-wide registry, provided when the scope lacks one (otherwise the shared instance is reused) so every `mcp-client` under one scope reports into one place. It tracks per-server connection state and error, eager/deferred tool counts, and exposes `entries()`, `onDidChange`, `callTool(name, rawName, args)`, `disconnect(name)`, and `reconnect(name)`. With no consumer of the registry, nothing changes: each instance still connects and registers its own tools.
 
 ## Model Experience
 

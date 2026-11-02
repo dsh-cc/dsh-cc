@@ -229,11 +229,15 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
 
 ## Known limits
 
-- **Cold resume drops extra `agentOptions`.** Background (continuable) dispatch exists —
-  `run_in_background: true` or a `background: true` definition pin — but cold resume restores
-  `persona`/`toolFilter`/model route only and drops every other `agentOptions` field
-  (alias-stamped `reasoningEffort`, `maxTokens`). See the parity matrix for the full
-  background contract (drain on parent exit, no `outputFile`, fork + background rejected).
+- **Cold resume drops extra `agentOptions` (without resume pins).** Background
+  (continuable) dispatch exists — `run_in_background: true` or a `background: true`
+  definition pin — but a plain cold resume restores `persona`/`toolFilter`/model route
+  only and drops every other `agentOptions` field (alias-stamped `reasoningEffort`,
+  `maxTokens`). The cc preset mounts `@dsh-cc/subagent-resume-pins`, which pins and
+  re-applies `{provider, model, reasoningEffort, maxTokens}` on resumed turns; the drop
+  only affects hosts and compositions without that plugin. See the parity matrix for the
+  full background contract (drain on parent exit, no `outputFile`, fork + background
+  rejected).
 - **Process-level discovery cache.** The registry caches per workspace root for the process
   lifetime and does not watch the filesystem. Editing a `.claude/agents` definition takes
   effect on the next session for a workspace whose cache entry has not yet been created, and

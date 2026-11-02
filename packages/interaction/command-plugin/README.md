@@ -9,9 +9,12 @@ Human-facing `/plugin` and `/reload-plugins` commands: list the mounted Claude C
 | Input | Result |
 |---|---|
 | `/plugin` | List each mounted plugin's manifest name, plugin root, and per-component counts (`commands: N`, `agents: N`, `skills: N`, …), annotating non-zero skipped/failed components. |
+| `/plugin list [--enabled\|--disabled]` | List installed plugins from the manager, optionally filtered to enabled or disabled ones. |
+| `/plugin install\|uninstall\|enable\|disable\|update <plugin[@mkt]> [--scope user\|project\|local]` | Manage an installed plugin; `--scope` selects where the change applies. |
+| `/plugin marketplace list\|add\|remove\|update` | Manage marketplaces (`add <source>`, `remove <name>`, `update [name]`, all accept `--scope` where applicable). |
 | `/reload-plugins` | Dispose all tracked mounts in reverse mount order, re-run discovery, and remount; report the fresh mount list plus any per-root failures. |
 
-Both read the optional `ccPlugins` service that cc-shell-glue mounts. A composition without the glue reports the seam gracefully instead of failing. Neither command consumes model tokens.
+The bare `/plugin` view and `/reload-plugins` read the optional `ccPlugins` service that cc-shell-glue mounts; the manage verbs also drive the optional `ccPluginManager`. A composition without the glue reports the seam gracefully instead of failing. None of the commands consumes model tokens.
 
 ## Composition
 

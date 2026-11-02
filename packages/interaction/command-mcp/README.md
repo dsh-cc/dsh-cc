@@ -11,9 +11,10 @@ Human-facing `/mcp` command: list the registered MCP servers and their connectio
 | `/mcp` | List each registered server's name, connection state, tool count (when known), and OAuth-auth requirement. |
 | `/mcp reconnect <name>` | Tear down and establish a fresh connection for the named server. |
 | `/mcp disconnect <name>` | Stop the connection and unregister its tools for the named server. |
+| `/mcp migrate` | Import the Claude Code MCP config into the dsh-native config and report what moved. |
 | `/mcp <anything else>` | Print usage text. |
 
-All forms read/drive the optional `mcpConnections` seam. A composition without an mcp-client reports the seam gracefully. No form consumes model tokens.
+All forms except `migrate` read/drive the optional `mcpConnections` seam. `migrate` is pure file I/O and runs before the seam lookup. A composition without an mcp-client reports the seam gracefully. No form consumes model tokens.
 
 ## Composition
 

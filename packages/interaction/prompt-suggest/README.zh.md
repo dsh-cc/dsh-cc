@@ -1,6 +1,6 @@
 # @dsh-cc/prompt-suggest
 
-English | [中文](README.md)
+[English](README.md) | 中文
 
 下一提示建议：插件在 `agent/turn-stopping` 时以 fire-and-forget 方式发起一次廉价通道 side query（`@dsh-cc/side-query`），基于最近一轮对话（用户提示 + 最终助手文本，各截断 2 KiB）预测用户接下来可能输入的消息。预测结果——纯文本、≤ 120 字符——存入以会话 id 为键、带 5 分钟 TTL 的**模块级注册表**，由交互式 TUI 的自动补全 provider 读取。**默认关闭**（`cc-prompt-suggest.enabled: false`，需主动开启）：从不启用该功能的用户不会产生任何模型调用，也看不到任何建议项。
 

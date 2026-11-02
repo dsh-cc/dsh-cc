@@ -28,8 +28,6 @@
 
 重启 dsh 以加载插件。用 `/skills` 查看 `article-writing`、`article-review` 和 `language-editing`。
 
-安装不会默认把插件加入已启用列表。需要写作流程时再安装。
-
 ## 更新
 
 先更新插件市场，再更新已安装的插件缓存。

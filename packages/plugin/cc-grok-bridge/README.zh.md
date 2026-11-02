@@ -86,12 +86,13 @@ stderr 行 `grok-review: session=… cost_usd=… turns=…`（`grok usage <sess
 
 从 dsh-cc marketplace 安装，插件名 `cc-grok-bridge`：
 
-```sh
-claude plugin install cc-grok-bridge@dsh-cc
+```text
+/plugin marketplace add dsh-cc/dsh-cc
+/plugin install cc-grok-bridge@dsh-cc
 ```
 
 卸载（或禁用）插件即彻底移除该通道：
 
-```sh
-claude plugin uninstall cc-grok-bridge@dsh-cc
+```text
+/plugin uninstall cc-grok-bridge@dsh-cc
 ```
