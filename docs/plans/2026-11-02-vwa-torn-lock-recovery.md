@@ -1,9 +1,10 @@
 # vwa-argument: eliminate the torn-lock brick (issue #307)
 
-Status: v3 — three-lane blind review converged (v1: grok GO w/ 5×P1, codex
-NO-GO w/ 4×P1, critic GO-conditional w/ 2×P1 — all folded into v2; delta
-round: codex GO, critic pending, grok GO after one NEW fold (§3.2b re-read
-read/parse split) folded here)
+Status: **Implemented** — PR #324 (open, pending merge). Three-lane blind
+review converged: v1 drew one GO (5×P1), one NO-GO (4×P1) and one
+GO-conditional (2×P1), all folded into v2; the delta round then returned GO
+from two lanes and one NEW fold (§3.2b re-read read/parse split, folded here),
+confirmed GO in a single-item micro-confirmation round. Ledger in §9.
 Date: 2026-11-02
 Issue: https://github.com/dsh-cc/dsh-cc/issues/307
 Review provenance: three blind lanes on v1 (2026-11-02); findings P1-1..P1-5
@@ -139,7 +140,7 @@ unparseable file can only come from a **pre-fix binary** that crashed (or is
 mid-write) inside its open→write window. Recovery:
 
 1. Spin one bounded wait (reuse the 50 ms spin) and **re-read — applying the
-   same §3.2 read/parse split to this re-read** (grok delta fold): read
+   same §3.2 read/parse split to this re-read** (delta-round fold): read
    error `ENOENT` → `continue` loop; read error other than `ENOENT` →
    `fail('STORE_IO_FAILED', ..., retryable)` — never unlink (a transient
    read error is not "still unparseable" evidence); parse success → fall
