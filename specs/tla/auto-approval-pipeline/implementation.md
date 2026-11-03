@@ -11,11 +11,12 @@ Model `specs/tla/auto-approval-pipeline`, safety-only, no production change.
 
 ## Final run
 
-- runId `20261103T031608Z-fe774bfe-f2ff-47bd-ab93-dbe1ba847f2c`
-- inputDigest `57c4718cad8064a9…` (the previous run `20261103T021409Z-6ef4237d` differed only in design.md text and produced identical per-case statistics)
-- `convention` **verified**: 33,259,281 states generated, 342,256 distinct,
+- runId `20261103T042039Z-014bdab5-5ba9-42ab-8e43-990be23972b2`
+- `convention` **verified**: 35,986,065 states generated, 373,360 distinct,
   0 left on queue.
 - seven expansion probes each produced their expected counterexample.
+- the previous run `20261103T031608Z-fe774bfe` differed only in design.md text
+  and produced identical per-case statistics.
 - `check-evidence`: valid, fresh, verification `counterexample` (every probe is
   red by design).
 
@@ -102,7 +103,8 @@ swallowing a legitimate ask verdict. Left as recorded limitations: the backstop'
 | `20261103T021409Z-6ef4237d` | verified (convention), seven probes red | after the r1 folds |
 | `20261103T021621Z-13749efc` | verified (convention), seven probes red | reviewed; the r2 folds followed |
 | `20261103T031443Z-a57b621f` | verified (convention), seven probes red | after the bypass-immune and stale-discard folds |
-| `20261103T031608Z-fe774bfe` | verified (convention), seven probes red | final: design.md notes only |
+| `20261103T031608Z-fe774bfe` | verified (convention), seven probes red | reviewed; the r3 folds followed |
+| `20261103T042039Z-014bdab5` | verified (convention), seven probes red | final: the r3 folds applied |
 
 ## Coverage check
 
