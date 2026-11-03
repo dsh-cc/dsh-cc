@@ -7,7 +7,7 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T021653Z-5527f53e-8f45-4530-b940-e5c14bc26a70`
+- runId: `20261103T040257Z-577158c3-9f8f-4b38-bf4b-9dda3f89251b` (freshness re-run after the evidence annotations; identical statistics per case)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
 - convention (core): **verified** — 9,196 states generated, 2,571 distinct,
