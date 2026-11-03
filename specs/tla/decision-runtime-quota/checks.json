@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "modelId": "decision-runtime-quota",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "QuotaAttempts",
+        "QuotaIn",
+        "QuotaOut",
+        "SettleAtMostOnce",
+        "DispatchAfterReserve",
+        "NotDispNoDispatch",
+        "UnsettledKeepsFull",
+        "NoFreeDispatched",
+        "TornImpliesFrozen",
+        "FrozenStopsAppends",
+        "AttemptsBound",
+        "LockOwnerAlive",
+        "FreezeSurvivesSettleFailure"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 3072
+      }
+    },
+    {
+      "id": "strict-steal-lock",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "TRUE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "QuotaIn",
+        "QuotaOut",
+        "QuotaAttempts"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-torn",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "TRUE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "TornImpliesFrozen",
+        "FrozenStopsAppends"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-refund-unpaired",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "TRUE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "UnsettledKeepsFull",
+        "NoFreeDispatched",
+        "DispatchAfterReserve"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-conflicting-settle",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "TRUE",
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SettleAtMostOnce"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-freeze-row-lost",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "TRUE",
+        "ClearWithoutFreeze": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "FreezeSurvivesSettleFailure"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "attempt-ceiling-binds",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "8",
+        "MAX_OUT": "4",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "QuotaAttempts",
+        "QuotaIn"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    }
+  ]
+}

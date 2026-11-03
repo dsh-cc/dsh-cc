@@ -1,0 +1,15 @@
+{"id":"single-not-run","input":{"verdicts":["not-run"]},"covers":["bottom-identity"]}
+{"id":"single-pass","input":{"verdicts":["pass"]},"covers":["never-improves"]}
+{"id":"single-needs-review","input":{"verdicts":["needs-review"]},"covers":["never-improves"]}
+{"id":"single-fail","input":{"verdicts":["fail"]},"covers":["fail-absorbing"]}
+{"id":"pass-then-fail","input":{"verdicts":["pass","fail"]},"covers":["fail-absorbing","commutative"]}
+{"id":"fail-then-pass","input":{"verdicts":["fail","pass"]},"covers":["fail-absorbing","commutative"]}
+{"id":"needs-review-beats-pass","input":{"verdicts":["pass","needs-review"]},"covers":["never-improves"]}
+{"id":"pass-cannot-downgrade-needs-review","input":{"verdicts":["needs-review","pass"]},"covers":["never-improves"]}
+{"id":"not-run-is-identity-left","input":{"verdicts":["not-run","needs-review"]},"covers":["bottom-identity"]}
+{"id":"not-run-is-identity-right","input":{"verdicts":["needs-review","not-run"]},"covers":["bottom-identity"]}
+{"id":"idempotent-fail","input":{"verdicts":["fail","fail"]},"covers":["idempotent"]}
+{"id":"three-chunk-associative","input":{"verdicts":["pass","fail","needs-review"]},"covers":["associative","merge-is-max"]}
+{"id":"four-chunk-associative","input":{"verdicts":["not-run","pass","needs-review","fail"]},"covers":["associative","merge-is-max"]}
+{"id":"all-not-run","input":{"verdicts":["not-run","not-run","not-run"]},"covers":["bottom-identity","idempotent"]}
+{"id":"bisected-chunk-repeat","input":{"verdicts":["needs-review","pass","pass"]},"covers":["idempotent","never-improves"]}

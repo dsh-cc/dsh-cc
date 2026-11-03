@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "backend": "lean",
+  "modelId": "audit-merge-lattice",
+  "properties": [
+    {
+      "id": "never-improves",
+      "requirementId": "REQ-1",
+      "declaration": "Formal.worst_never_improves",
+      "statement": "forall a b : Formal.Verdict, Formal.severity a <= Formal.severity (Formal.worst a b) /\\ Formal.severity b <= Formal.severity (Formal.worst a b)",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "fail-absorbing",
+      "requirementId": "REQ-1",
+      "declaration": "Formal.worst_fail_absorbing",
+      "statement": "forall a : Formal.Verdict, Formal.worst a Formal.Verdict.fail = Formal.Verdict.fail",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "bottom-identity",
+      "requirementId": "REQ-2",
+      "declaration": "Formal.worst_notRun_identity",
+      "statement": "forall a : Formal.Verdict, Formal.worst a Formal.Verdict.notRun = a /\\ Formal.worst Formal.Verdict.notRun a = a",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "idempotent",
+      "requirementId": "REQ-3",
+      "declaration": "Formal.worst_idempotent",
+      "statement": "forall a : Formal.Verdict, Formal.worst a a = a",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "associative",
+      "requirementId": "REQ-3",
+      "declaration": "Formal.worst_associative",
+      "statement": "forall a b c : Formal.Verdict, Formal.worst (Formal.worst a b) c = Formal.worst a (Formal.worst b c)",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "commutative",
+      "requirementId": "REQ-3",
+      "declaration": "Formal.worst_commutative",
+      "statement": "forall a b : Formal.Verdict, Formal.worst a b = Formal.worst b a",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "merge-is-max",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.mergeVerdicts_severity_is_max",
+      "statement": "forall l : List Formal.Verdict, Formal.severity (Formal.mergeVerdicts l) = (List.map Formal.severity l).foldr max 0",
+      "witnessDeclaration": null
+    }
+  ],
+  "limits": {
+    "proofTimeoutMs": 120000,
+    "conformanceTimeoutMs": 120000,
+    "maxHeartbeats": 2000000,
+    "maxRecDepth": 2048,
+    "maxCases": 10000
+  },
+  "conformance": {
+    "adapter": "conformance/adapter.mjs",
+    "corpus": "conformance/cases.jsonl",
+    "implementationFiles": [
+      "packages/plugin/dsh-cc-agents/tests/fixtures/formal-design-lean/systemone/audit-merge.ts"
+    ],
+    "executionFiles": [],
+    "command": [
+      "node",
+      "conformance/adapter.mjs"
+    ],
+    "comparison": "canonical-json"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "backend": "lean",
+  "modelId": "decision-quota-accounting",
+  "properties": [
+    {
+      "id": "conservation",
+      "requirementId": "REQ-1",
+      "declaration": "Formal.retainedTotal_le_reservedTotal",
+      "statement": "forall ledger : Formal.Ledger, Formal.retainedTotal ledger <= Formal.reservedTotal ledger",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "unknown-upper-bound",
+      "requirementId": "REQ-2",
+      "declaration": "Formal.retained_unknown_is_upper_bound",
+      "statement": "forall reserved : Nat, Formal.retained Formal.Term.unknown reserved = reserved",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "unsettled-upper-bound",
+      "requirementId": "REQ-2",
+      "declaration": "Formal.retained_unsettled_is_upper_bound",
+      "statement": "forall reserved : Nat, Formal.retained Formal.Term.unsettled reserved = reserved",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "not-dispatched-refunds",
+      "requirementId": "REQ-3",
+      "declaration": "Formal.retained_notDispatched_refunds",
+      "statement": "forall reserved : Nat, Formal.retained Formal.Term.notDispatched reserved = 0",
+      "witnessDeclaration": null
+    },
+    {
+      "id": "actual-bills-usage",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.retained_actual_bills_usage",
+      "statement": "forall usage reserved : Nat, usage <= reserved -> Formal.retained (Formal.Term.actual usage) reserved = usage",
+      "witnessDeclaration": "Formal.valid_actual_example"
+    },
+    {
+      "id": "settle-never-raises",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.settle_actual_never_raises",
+      "statement": "forall usage reserved : Nat, usage <= reserved -> Formal.retained (Formal.Term.actual usage) reserved <= Formal.retained Formal.Term.unsettled reserved",
+      "witnessDeclaration": "Formal.valid_actual_example"
+    }
+  ],
+  "limits": {
+    "proofTimeoutMs": 120000,
+    "conformanceTimeoutMs": 120000,
+    "maxHeartbeats": 2000000,
+    "maxRecDepth": 2048,
+    "maxCases": 10000
+  },
+  "conformance": {
+    "adapter": "conformance/adapter.mjs",
+    "corpus": "conformance/cases.jsonl",
+    "implementationFiles": [
+      "packages/plugin/dsh-cc-agents/tests/fixtures/formal-design-lean/systemone/quota-accounting.ts"
+    ],
+    "executionFiles": [],
+    "command": [
+      "node",
+      "conformance/adapter.mjs"
+    ],
+    "comparison": "canonical-json"
+  }
+}
