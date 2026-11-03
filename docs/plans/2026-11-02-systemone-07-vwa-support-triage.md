@@ -18,12 +18,14 @@
   DecisionScope identity), FD-T3 (resume reuse and recovery across
   cycle/scope identity changes); the permit face is shared with S1-08
   across run/cycle/project budgets (FD-T4).
-- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/vwa-audit-split"}`
-  for the shared S1-02/S1-07 budget-permit adapter, plus `{"tla":
-  "specs/tla/decision-runtime-quota"}` for the quota protocol it rides on.
-- rationale: the triage queue's reuse, identity and budget semantics are
-  exercised through the permit protocol shared with the S1-08 split
-  model; the S1-02 quota model covers the reserve/settle invariants.
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/vwa-support-triage"}`.
+- rationale: this model owns the triage scheduling semantics — reuse
+  before triage, the frozen order, late results billed but never applied,
+  and identity-scoped hint reuse. The reserve/settle protocol the triage
+  rides on is S1-02's model (`specs/tla/decision-runtime-quota`); this
+  design does not restate those invariants. The permit adapter shared with
+  S1-08 is the adapter described in §"VWA budget permit and unified
+  metering" and is exercised by the S1-08 model's reservation rule.
 
 ## Current behavior and problem
 

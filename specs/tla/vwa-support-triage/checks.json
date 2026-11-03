@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-support-triage",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxBatches": "2",
+        "ReorderOnLate": "FALSE",
+        "TriageReused": "FALSE",
+        "ReuseAcrossScope": "FALSE",
+        "AdoptLateAsOrder": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults",
+        "ReuseTriageDisjoint",
+        "LateNeverReorders",
+        "NoCrossScopeReuse",
+        "ReuseExcluded"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-late-reorder",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxBatches": "2",
+        "ReorderOnLate": "TRUE",
+        "TriageReused": "FALSE",
+        "ReuseAcrossScope": "FALSE",
+        "AdoptLateAsOrder": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "LateNeverReorders"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-triage-reused",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxBatches": "2",
+        "ReorderOnLate": "FALSE",
+        "TriageReused": "TRUE",
+        "ReuseAcrossScope": "FALSE",
+        "AdoptLateAsOrder": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ReuseTriageDisjoint"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cross-scope-reuse",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxBatches": "2",
+        "ReorderOnLate": "FALSE",
+        "TriageReused": "FALSE",
+        "ReuseAcrossScope": "TRUE",
+        "AdoptLateAsOrder": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoCrossScopeReuse"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-late",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxBatches": "2",
+        "ReorderOnLate": "FALSE",
+        "TriageReused": "FALSE",
+        "ReuseAcrossScope": "FALSE",
+        "AdoptLateAsOrder": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "LateNeverReorders"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
