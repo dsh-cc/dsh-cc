@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "modelId": "decision-gate-coalescing",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxReq": "1",
+        "AbortLastWaiter": "FALSE",
+        "CachePartial": "FALSE",
+        "SkipReval": "FALSE",
+        "ServeAfterCancel": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "AbortOnlyWhenAllCancelled",
+        "CacheCompleteOnly",
+        "NoConsumeAfterCancel",
+        "SettledHoldsSlot",
+        "ValidAtConsume"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-abort-last-waiter",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxReq": "1",
+        "AbortLastWaiter": "TRUE",
+        "CachePartial": "FALSE",
+        "SkipReval": "FALSE",
+        "ServeAfterCancel": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "AbortOnlyWhenAllCancelled"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cache-partial",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxReq": "1",
+        "AbortLastWaiter": "FALSE",
+        "CachePartial": "TRUE",
+        "SkipReval": "FALSE",
+        "ServeAfterCancel": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "CacheCompleteOnly"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-reval",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxReq": "1",
+        "AbortLastWaiter": "FALSE",
+        "CachePartial": "FALSE",
+        "SkipReval": "TRUE",
+        "ServeAfterCancel": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "CacheCompleteOnly"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-serve-after-cancel",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxReq": "1",
+        "AbortLastWaiter": "FALSE",
+        "CachePartial": "FALSE",
+        "SkipReval": "FALSE",
+        "ServeAfterCancel": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoConsumeAfterCancel"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
