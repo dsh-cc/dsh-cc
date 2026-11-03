@@ -32,6 +32,7 @@ applyClient(ctx) // browser bundle: bare-invocation popupSelect decoration
 
 ## Notes
 
-- The package is mounted twice: a host-plane row (which wraps `commands.list` so CC sessions hide the host `/permission` row, and non-CC sessions hide `/permissions`) and the CC preset row that registers the command. The host-plane `dsh.client` field lets `dsh-client-modules` discover the browser half.
+- The package is mounted twice: a host-plane row (which installs the `/permission` surface guard) and the CC preset row that registers the command. The host-plane `dsh.client` field lets `dsh-client-modules` discover the browser half.
+- `/permissions` is the only permission command dsh-cc advertises, in every session and whatever agent preset is selected. The guard drops the host `/permission` row from `commands.list` (so no slash menu, autocomplete, or help output offers it) and redirects a typed `/permission …` line onto `/permissions …`. The host definition stays registered, so the sandbox-preset handler is still reachable through `commands.find`; only the user surface is dsh-cc's.
 - Injects only `commands`; the `permissionRules` engine is read optionally via `ctx.get`, so the command loads and reports a friendly message even when the engine is absent.
 - Wraps the command with `@dsh-cc/command-usage` (mode ids appear as help subcommands) so `help`/`-h`/`--help` render deterministic help.
