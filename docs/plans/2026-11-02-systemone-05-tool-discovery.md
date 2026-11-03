@@ -4,6 +4,22 @@
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 **Dependencies:** [Overview](2026-11-02-systemone-00-overview.md), [Answer contract validation](2026-11-02-systemone-01-contract-validation.md), [Decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). Complete S1-01 and S1-02 before taking on this feature.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (shared cache and admission state), FD-T2 (coalesced
+  requests with independent caller cancellation; identity revalidation
+  after await).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/decision-gate-coalescing"}`.
+- rationale: this feature shares one concurrency protocol with S1-06,
+  S1-11 and S1-12 (cache-then-coalesce, only-complete-answers cached,
+  per-caller independent cancellation, post-await revalidation). One
+  model covers the shared protocol; the feature-specific differences are
+  recorded in that model's design.
+
 ## Current behavior and problems
 
 [scoreStored and tokenize](../../packages/core/tool-search/src/index.ts#L110) do substring and prefix weighting over name, hint, and description; tokens retain only ASCII letters and digits. A Chinese query can yield empty tokens, and synonymous phrasings can share no literal overlap.

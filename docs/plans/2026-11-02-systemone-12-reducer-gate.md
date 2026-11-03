@@ -4,6 +4,19 @@
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 **Dependencies:** [overview](2026-11-02-systemone-00-overview.md), [answer contract validation](2026-11-02-systemone-01-contract-validation.md), [decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). This feature does not depend on the summary gate and can be rolled back independently.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (shared cache and gate state), FD-T2 (coalesced gate
+  requests; the exec.signal merged with the effect disposal signal;
+  identity revalidation after await).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/decision-gate-coalescing"}`.
+- rationale: shares the S1-05/S1-06/S1-11 coalescing protocol model; see
+  the S1-05 entry and the shared model directory.
+
 ## Constraints of the existing reducer
 
 [ContextCrusher.crush](../../packages/context/context-crusher/src/index.ts#L170) first checks enabled, store, protected tools, retrieval tools, content shape and size, then attempts deterministic compression.

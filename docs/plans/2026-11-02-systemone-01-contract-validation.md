@@ -4,6 +4,23 @@ Status: proposal, not implemented. Feature ID: S1-01. Priority: P0.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. This design is implementable on its own and depends on no other new feature. Design set entry point: [overview](2026-11-02-systemone-00-overview.md).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **not-needed**
+- triggerIds: none — the validation is a stateless request/response
+  transformation; no protocol or state-machine behavior changes.
+- backends: `none`; no modelDirs.
+- selected scope and rationale: every rule in this document is a boundary
+  condition over one request/response pair, and the acceptance matrix
+  already enumerates them (completeness cases, Score index shapes, tie
+  cases, usage rules). A model checker or proof adds no discrimination
+  power over an enumerated boundary matrix for a pure function. If a rule
+  later gains cross-request state (retry accounting beyond the legacy
+  client, dedup across calls), that behavior returns to screening.
+
 ## Problem and current behavior
 
 [`systemoneDecide`](../../packages/llm-tuning/systemone/src/client.ts) is the native HTTP client shared by permissions, prompt-injection probing and MOA. Today `parseAnswer` only checks JavaScript types of fields; unknown types are dropped and the response succeeds as long as the remaining answers are non-empty. An answer may omit a question that was asked, or name a choice outside the candidate set. A missing usage is treated as zero.

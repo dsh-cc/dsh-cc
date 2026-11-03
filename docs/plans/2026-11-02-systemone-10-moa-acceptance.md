@@ -4,6 +4,23 @@ Status: proposal, not implemented. Feature ID: S1-10. Priority: P2.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](2026-11-02-systemone-01-contract-validation.md) and [S1-02](2026-11-02-systemone-02-decision-runtime-metering.md), can work with the existing legacy router, and does not depend on [S1-09](2026-11-02-systemone-09-moa-context-routing.md). Entry point: [overview](2026-11-02-systemone-00-overview.md).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (the inFlight placeholder and completed LRU are
+  per-Agent state shared by repeated stops), FD-T2 (a mode switch cancels
+  the old request but the old finally must never clear a later
+  placeholder; asynchronous cancellation with late settlement).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/moa-acceptance-judge"}`.
+- rationale: the placeholder token guard is its own state machine, so it
+  is modeled on its own; the escalation ladder and shadow precedence
+  stay with the existing `specs/tla/moa-cascade-routing` model (a
+  screening deviation recorded in the model's design). See the model
+  directory for the verified invariants and probe results.
+
 ## Problem and boundaries
 
 [`ACCEPT_QUESTION`](../../packages/interaction/moa/src/judge.ts) currently judges facts, correctness, sufficiency and whether the user need was resolved in one shot. That single label makes mis-escalation sources hard to explain, and makes "did not answer the request" hard to calibrate separately from "completion claim lacks evidence". The existing design already records that buggy code gets accepted on small samples; a threshold does not eliminate that class of error.

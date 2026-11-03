@@ -4,6 +4,18 @@
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 **Dependencies:** [Overview](2026-11-02-systemone-00-overview.md), [Answer contract validation](2026-11-02-systemone-01-contract-validation.md), [Decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). Recommendation does not depend on S1-05 and can ship on its own.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (shared cache state), FD-T2 (coalesced requests with
+  independent caller cancellation; identity revalidation after await).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/decision-gate-coalescing"}`.
+- rationale: shares the S1-05/S1-11/S1-12 coalescing protocol model; see
+  the S1-05 entry and the shared model directory.
+
 ## Current responsibilities are already separated
 
 [ClaudeCodeSkillProvider.list](../../packages/skill/skill-claude-code/src/index.ts#L161) discovers skills, excludes entries whose paths condition is not yet met, and outputs candidates.

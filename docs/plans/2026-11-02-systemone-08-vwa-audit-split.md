@@ -7,6 +7,23 @@
 - Prerequisites: [S1-01 return-value validation](2026-11-02-systemone-01-contract-validation.md) and [S1-02 decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md).
 - Budget fit: the [S1-07 VWA permit](2026-11-02-systemone-07-vwa-support-triage.md) is a shared base module; it can be extracted and implemented on its own without enabling support triage.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T2 (a later aggregate pass or bisected chunk meets an
+  earlier verdict; body-task retries and late results), FD-T3 (partial
+  saves and recovery decide whether the body re-runs), FD-T4 (the S1-02
+  budget permit shared with S1-07), FD-L3 (the deterministic per-rule
+  worst-verdict merge with a general correctness property).
+- backends: `["tla", "lean"]`, modelDirs: `{"tla":
+  "specs/tla/vwa-audit-split", "lean": "specs/lean/audit-merge-lattice"}`.
+- rationale: the split/recovery interleaving is checked by the TLA+ model;
+  the merge lattice (fail absorbing, regrouping invariance, merged
+  severity = maximum) is proven in Lean. See both model directories.
+
 ## Current state and where the cost comes from
 
 [executeAudit](../../packages/interaction/vwa-argument/src/audit.ts#L281) builds the align envelope after extraction.

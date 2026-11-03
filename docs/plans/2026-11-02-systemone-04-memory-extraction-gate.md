@@ -14,6 +14,22 @@
 
 Prerequisite designs: [overview](2026-11-02-systemone-00-overview.md), [answer contract validation](2026-11-02-systemone-01-contract-validation.md), [decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). This feature can be implemented on its own; it does not depend on the S1-03 selector or state.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (coordinator state shared by turn-stopping triggers,
+  dream and owner takeover), FD-T2 (a skip verdict settles against a
+  moving evidence head; no phantom retry timer), FD-T3 (a partial host
+  write must never commit the watermark; restarts at watermark -1),
+  FD-T4 (the mutation lease is single-owner resource ownership).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/extraction-watermark"}`.
+- rationale: the watermark/lease lifecycle decides whether memory can be
+  silently missed or double-extracted. See the model directory for the
+  verified invariants, the probe results and the non-vacuity check.
+
 ## The existing fork also carries the negative verdict
 
 The [turn-stopping listener](../../packages/memory/memory-consolidation/src/index.ts#L159) starts extraction when the top-level session has a new seq. [runExtraction](../../packages/memory/memory-consolidation/src/index.ts#L218) counts every visible surface event, puts the existing index into the prompt, and then starts the fork. [buildExtractionPrompt](../../packages/memory/memory-consolidation/src/prompts.ts#L26) requires an empty `writes` when there is no new durable fact.

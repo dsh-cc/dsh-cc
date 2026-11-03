@@ -4,6 +4,29 @@ Status: proposal, not implemented. Feature ID: S1-02. Priority: P0.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](2026-11-02-systemone-01-contract-validation.md), other features can be developed in parallel against test fakes of this interface. Entry point: [overview](2026-11-02-systemone-00-overview.md).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T2 (429 retries re-reserve; a permit never serves two
+  attempts), FD-T3 (crash recovery decides whether an unpaired reserve
+  keeps its full amount — dedup and persistence order in the JSONL
+  ledger), FD-T4 (the quota.lock file is cross-crash resource ownership
+  only a human clears), FD-L2 (reserve = settled + in-flight conservation
+  with unknown retained as an upper bound).
+- backends: `["tla", "lean"]`, modelDirs: `{"tla":
+  "specs/tla/decision-runtime-quota", "lean":
+  "specs/lean/decision-quota-accounting"}`.
+- rationale: the shared runtime every other feature calls; its properties
+  (single-invocation settlement, no free quota across crash, torn-tail
+  freeze, lock-guarded check-then-append) decide implementation
+  atomicity. Model results are recorded in the model directories; one
+  implementer-relevant conclusion from the TLA+ model: the transaction
+  lock must cover every ledger append (reserve, dispatch and settle rows
+  alike) and the freeze must be computed inside that lock.
+
 ## Problem
 
 Today [`systemoneDecide`](../../packages/llm-tuning/systemone/src/client.ts) returns usage but has no unified feature attribution, budget admission or lifecycle record. MOA and permissions each record their own business outcome; [`foldCost`](../../packages/session/command-cost/src/cost.ts) instead aggregates generative-model cost from request/header and assistant/message. New decision calls that follow this scattered approach cannot compute the true cost including fallbacks, failures and retries.

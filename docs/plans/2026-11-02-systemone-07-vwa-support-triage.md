@@ -7,6 +7,24 @@
 - Prerequisites: [S1-01 return-value validation](2026-11-02-systemone-01-contract-validation.md) and [S1-02 decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md).
 - Independence: does not depend on the S1-08 audit split; S1-08 may reuse the VWA budget adapter from this proposal.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (priority state shared across concurrent review
+  runs), FD-T2 (late triage results ignored; dispatch keyed by
+  DecisionScope identity), FD-T3 (resume reuse and recovery across
+  cycle/scope identity changes); the permit face is shared with S1-08
+  across run/cycle/project budgets (FD-T4).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/vwa-audit-split"}`
+  for the shared S1-02/S1-07 budget-permit adapter, plus `{"tla":
+  "specs/tla/decision-runtime-quota"}` for the quota protocol it rides on.
+- rationale: the triage queue's reuse, identity and budget semantics are
+  exercised through the permit protocol shared with the S1-08 split
+  model; the S1-02 quota model covers the reserve/settle invariants.
+
 ## Current behavior and problem
 
 The [support branch of planStage](../../packages/interaction/vwa-argument/src/review-plan.ts#L209) creates one review task per evidence group.

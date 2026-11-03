@@ -4,6 +4,22 @@ Status: proposal, not implemented. Feature ID: S1-09. Priority: P2.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](2026-11-02-systemone-01-contract-validation.md) and [S1-02](2026-11-02-systemone-02-decision-runtime-metering.md); does not depend on [S1-10](2026-11-02-systemone-10-moa-acceptance.md). Entry point: [overview](2026-11-02-systemone-00-overview.md).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **not-needed**
+- triggerIds: none — the tier selection is a pure threshold policy over
+  one distribution; no new protocol or state-machine behavior (the
+  escalation ladder is reused as-is).
+- backends: `none`; no modelDirs.
+- selected scope and rationale: the policy is validated by the pinned
+  examples and the offline evaluation set in this document; there is no
+  shared mutable state or message interleaving to check. The oversized-
+  input fallback and the fixed reason codes are data, not protocol. If
+  routing later gains cross-turn state, it returns to screening.
+
 ## Problem and scope
 
 Today [`createRequestRouter`](../../packages/interaction/moa/src/router.ts) uses the captured opening text of the turn as state and takes the argmax over a four-tier Choice. When the original request is complex, later turns such as "continue" or "do the second option" lack task background to classify against. The four-tier distribution also carries uncertainty, but argmax gives no explicit expression to under-tier risk.

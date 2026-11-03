@@ -14,6 +14,22 @@
 
 Prerequisite designs: [overview](2026-11-02-systemone-00-overview.md), [answer contract validation](2026-11-02-systemone-01-contract-validation.md), [decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). This feature does not depend on S1-04.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the
+  project rules at this revision; adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (the coordinator mutates per-Agent state shared by
+  several pre-step triggers and one in-flight task), FD-T2 (a superseded
+  generation's task settles late and its finally races the newer task).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/memory-recall-dispatch"}`.
+- rationale: the dispatch-key lifecycle (shown written only after a
+  synchronous inject, one terminal per key, stale finally confined to its
+  own generation) is the correctness-critical core; judgement quality and
+  thresholds are outside it. See the model directory for the verified
+  invariants and probe results.
+
 ## The current call really does choose files
 
 [MemorySelector.select](../../packages/memory/memory/src/recall.ts#L68) takes a query, filenames and descriptions and returns at most five filenames. [SubagentMemorySelector.select](../../packages/memory/memory/src/recall.ts#L107) creates a fork with an `outputSchema`, then filters unknown names, duplicates and surplus results.

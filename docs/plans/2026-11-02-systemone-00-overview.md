@@ -4,6 +4,29 @@ Status: Proposed — not yet implemented. Date: 2026-11-02. Source baseline: `31
 
 This document set splits the SystemOne enhancements into twelve features that can be reviewed, developed, verified, and rolled back independently. This commit contains design only; it changes no product defaults, permission policy, model configuration, or VWA delivery tier. Where a file, interface, or command is marked "new", it refers to a later implementation deliverable and does not mean it exists in this commit.
 
+## Formal design
+
+Formal-design screening (session-adopted: the project rules carry no
+formal-design screening clause at this revision; adoption snippet at
+`<skill>/references/agents-snippet.md`):
+
+| Feature | Decision | Backends | Model |
+|---|---|---|---|
+| S1-01 | not-needed | none | stateless request/response validation; the contract-boundary test matrix is the acceptance tool |
+| S1-02 | enabled (FD-T2/T3/T4, FD-L2) | tla, lean | `specs/tla/decision-runtime-quota`, `specs/lean/decision-quota-accounting` |
+| S1-03 | enabled (FD-T1/T2) | tla | `specs/tla/memory-recall-dispatch` |
+| S1-04 | enabled (FD-T1/T2/T3/T4) | tla | `specs/tla/extraction-watermark` |
+| S1-05 / S1-06 / S1-11 / S1-12 | enabled (FD-T1/T2) | tla | one shared coalescing protocol: `specs/tla/decision-gate-coalescing` |
+| S1-07 | enabled (FD-T1/T2/T3; permit face shared with S1-08) | tla | `specs/tla/vwa-audit-split` (S1-02/S1-07 permit adapter), `specs/tla/decision-runtime-quota` (quota protocol) |
+| S1-08 | enabled (FD-T2/T3/T4, FD-L3) | tla, lean | `specs/tla/vwa-audit-split`, `specs/lean/audit-merge-lattice` |
+| S1-09 | not-needed | none | a pure threshold policy function with no new state machine; pinned examples in tests are the acceptance tool |
+| S1-10 | enabled (FD-T1/T2) | tla | `specs/tla/moa-acceptance-judge` (the placeholder guard is its own state machine; the escalation ladder and shadow precedence stay with the existing moa-cascade-routing model) |
+
+not-needed is not permanent: a waiver covers only its recorded scope, and
+behavior that later changes returns to screening. Model records live in
+each model directory (design.md, implementation.md with runIds,
+counterexample classifications and unverified scope).
+
 ## Existing foundations and goals
 
 The repository already has [`@dsh-cc/systemone`](../../packages/llm-tuning/systemone/src/client.ts); the permission gauge, tool-result prompt-injection probing, and MOA routing/judging already use the native SystemOne protocol. This work does not rebuild a model provider, nor does it configure the SystemOne decision model as the main agent's chat model.
