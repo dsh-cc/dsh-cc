@@ -37,9 +37,13 @@ is carried over.
 - **REQ-2 (slot discipline)** A slot is held exactly by a resident activation: a
   settled child holds none, and a drained forest holds none. A slot leak would
   permanently shrink the pool.
-- **REQ-3 (follow-up exemption)** A `send_message` to an already-resident child
-  takes no new slot (`index.ts:185`); only a cold resume of a settled child
-  does, and it is refused at the cap.
+- **REQ-3 (follow-up exemption)** A `send_message` delivery to a still-resident
+  child takes no new slot (`index.ts:185`). Delivery is a second step because
+  the admission lease covers message acceptance, not the child's epoch, and a
+  running target may settle while the delivery waits
+  (`resume-pins/src/live-capacity.ts:44-47`): the delivery then becomes a cold
+  resume, which must take a slot and is refused at the cap (or by the registry
+  row, the tombstone gate or the release marker).
 - **REQ-4 (no resurrection)** A released child never regains a live activation.
 - **REQ-5 (tombstone soundness)** An auto-release tombstone is only set on a
   child with no live activation, and grace timers only exist for registry
@@ -49,7 +53,8 @@ is carried over.
   interleaving that can violate it, and it is the `SplitContinue` probe.
 - **REQ-7 (drain)** After session exit every child is drained and no slot
   survives.
-- **REQ-8 (promotion)** A promoted child is re-tiered to background exactly once.
+- **REQ-8 (promotion)** A promoted child is re-tiered to background exactly
+  once, and only a live activation is promotable.
 
 ## State variables
 
@@ -75,9 +80,9 @@ is taken, not at a dsh-cc-side count. `Settle`, `ReleaseFinish` and
 
 | Requirement ID | Business outcome | Property ID | TLA operator | Case IDs and bounds | Fault-or-race trace | Assumption IDs | Planned code symbol and atomicity mechanism | Regression scenario | Exclusion and justification |
 |---|---|---|---|---|---|---|---|---|---|
-| REQ-1 | never more resident activations than the pool allows | S-1 `CapOK` | `CapOK` | convention; strict-cap-overshoot (expected red) | `SpawnAtomic` past the cap under `CapIgnored` | A-1, A-2 | `startActivation` reserving a slot and throwing `ACTIVATION_LIMIT_REACHED`; `PoolHasRoom` | three concurrent spawns at `MaxLive = 2` | the pool's own atomicity is upstream (A-1) |
+| REQ-1 | never more resident activations than the pool allows | S-1 `CapOK` | `CapOK` | convention; strict-cap-overshoot (expected red) | `SpawnAtomic` past the cap under `CapIgnored` | A-1, A-2 | `startActivation` reserving a slot and throwing `ACTIVATION_LIMIT_REACHED`; `PoolHasRoom` | three concurrent spawns at `MaxLive = 2` | the pool's own atomicity is upstream (A-1); the probe shows the invariant breaks IF the pool ignored its cap, which is arithmetic over the model, not evidence about the harness |
 | REQ-2 | a slot exists exactly while a resident activation exists | S-2 `SlotIsActivation`, S-3 `DrainedNoSlot` | same | convention; strict-slot-leak (expected red) | `ReleaseFinish` / `SessionExit` keeping the slot under `SkipSlotRelease` | A-3 | `Settle` disposes, `ReleaseFinish` and `SessionExit` return slots | release a child and check the pool count | — |
-| REQ-3 | a follow-up to a resident child takes no slot | structural (`FollowUp` assigns no slot) | `FollowUp` | convention | a follow-up admitted at the cap | A-1 | `admitContinuation` short-circuits for a resident target | `send_message` at the cap | the exemption is stated in the contract copy, pinned as A5 |
+| REQ-3 | a delivery to a still-resident child takes no slot; a settle during delivery turns it into a slot-taking cold resume | S-2 `SlotIsActivation` over `FollowUpStart` / `FollowUpDeliver` / `FollowUpRefused` | same | convention | `FollowUpStart` → `Settle` → `FollowUpDeliver` takes a slot, or `FollowUpRefused` at the cap | A-1, A-9 | `admitContinuation` short-circuits for a resident target; the lease covers acceptance, not the epoch | `send_message` racing a settle | the code comment states the window; the model now represents it |
 | REQ-4 | a released child stays gone | S-4 `NoResurrect` | `NoResurrect` | convention | release then a continuation attempt | A-4 | the tombstone gate at `tools/pre-execute` | release then `send_message` | — |
 | REQ-5 | tombstones and grace timers stay sound | S-5 `TombstoneNonLive`, S-6 `GraceMemberOnly` | same | convention | grace fire on a stale timer | A-5 | `fireGraceWindow` re-checks liveness (`grace-window.ts:172-192`) | arm, then settle, then fire | — |
 | REQ-6 | no epoch after auto-release without a restart | S-7 `NoLateEpoch` | `NoLateEpoch` | convention; strict-late-continue (expected red) | a grace fire lands between the gate and the delivery | A-6 | pre-execute gate before the dispatch admission | the accepted residual | the residual is accepted by design (`release.ts:110-117`) |
@@ -100,7 +105,11 @@ is taken, not at a dsh-cc-side count. `Settle`, `ReleaseFinish` and
   admission at `tools/execute`.
 - **A-7** Session exit drains the whole forest; eviction is cooperative, so a
   cancel-resistant turn keeps its slot until it settles.
-- **A-8** Promotion's `settled || promoted` guard is the single entry.
+- **A-8** Promotion's `settled || promoted` guard is the single entry, so only
+  a live activation is promotable.
+- **A-9** A delivery that arrives after the target settled follows the same
+  gate chain as any cold resume (registry row, tombstone, release marker, pool
+  slot).
 
 ## Faults modeled (one switch per probe)
 
@@ -124,12 +133,16 @@ cap.
   grace-settled notice (`one-shot-ledger.ts`, `ephemeral-reaper.ts`): a separate
   lane that would need its own model; the shared lease and the slot discipline
   are covered here.
-- **E-3** the release outcome matrix (`release.ts:210-415`: observe timeouts,
+- **E-3** the cooperative eviction window on the `release_agent` path: the
+  contract text says a cancel-resistant turn keeps its slot until it settles,
+  and `ReleaseFinish` models the eviction as one step. The slot-held window is
+  bounded by the turn, not by the model; E-3's outcome matrix covers the rest.
+- **E-4** the release outcome matrix (`release.ts:210-415`: observe timeouts,
   `ACTIVATION_TEARDOWN_FAILED` degraded success, the bounded poll): the model
   abstracts eviction to one step, which is the property-relevant part.
-- **E-4** `autoReleaseMs = 0` (never armed) and `armGraceFromPin`: time
+- **E-5** `autoReleaseMs = 0` (never armed) and `armGraceFromPin`: time
   abstractions that change no property here.
-- **E-5** the admission queue's ordering beyond the per-parent FIFO.
+- **E-6** the admission queue's ordering beyond the per-parent FIFO.
 - **L-1** liveness (every resident child eventually settles or is released) is
   excluded: it needs fairness and a turn-loop model.
 

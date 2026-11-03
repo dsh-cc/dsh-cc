@@ -9,10 +9,10 @@ Keyed to the final run below. Not part of `inputDigest`.
 
 ## Final run
 
-- runId `20261103T030114Z-40009781-6907-4515-929e-ae8f8cef697f`
-- inputDigest `b93003a38edeb5f1…`
-- `convention` **verified**: 196,903 states generated, 23,004 distinct, 0 left
-  on queue.
+- runId `20261103T031349Z-ef27d072-cc8f-415a-89fe-3b7b67cb215b`
+- inputDigest `2e18e7600794c7ab…`
+- `convention` **verified**: 1,017,059 states generated, 122,346 distinct, 0
+  left on queue.
 - three expansion probes each produced their expected counterexample.
 
 ## Why v2 (the drift account)
@@ -54,6 +54,26 @@ drain, and the `SplitContinue` residual.
 | strict-slot-leak | `SlotIsActivation` | `ReleaseFinish` keeps the slot under `SkipSlotRelease` | pins that disposal is the only correct slot release |
 | strict-late-continue | `NoLateEpoch` | a grace fire between the pre-execute gate and the delivery | the documented accepted residual (`release.ts:110-117`) |
 
+## Review folds (cold review r1, GO-WITH-CHANGES)
+
+1. **P1 — the follow-up exemption was atomic, so it could not fail.** The code
+   holds the admission lease through message acceptance, not the child's epoch,
+   and a running target may settle while the delivery waits
+   (`resume-pins/src/live-capacity.ts:44-47`). `FollowUp` is now three actions:
+   `FollowUpStart`, `FollowUpDeliver` (no slot if the target is still idle, a
+   pool slot and a cold resume if it settled) and `FollowUpRefused` (released,
+   no slot, no registry row or the tombstone gate). REQ-3 is restated to match.
+   A cold resume without its slot would now break `SlotIsActivation`.
+2. **P2 — `Promote` accepted a settled child**, which `epoch-collector.ts:288`
+   refuses (`settled || promoted`); the guard now admits only a live
+   activation.
+3. **P2 — the coverage language overstated the probes**: `strict-cap-overshoot`
+   shows the invariant breaks if the pool ignored its cap; it is arithmetic
+   over the model, not evidence about the harness. Both the matrix row and the
+   disposition table now say so.
+4. **P2 — the cooperative eviction window** on the `release_agent` path is now
+   a declared exclusion (E-3) rather than only excused for the drain.
+
 ## Modeling defects found while drafting (fixed)
 
 1. the model deadlocked at the drained terminal because there was no explicit
@@ -66,7 +86,16 @@ drain, and the `SplitContinue` residual.
 |---|---|---|
 | `20261103T025906Z-537ab7d9` | counterexample (deadlock) | missing terminal self-loop (defect 1) |
 | `20261103T025933Z-3327ea2d` | verified (convention), three probes red | before the design.md rewrite |
-| `20261103T030114Z-40009781` | verified (convention), three probes red | final |
+| `20261103T030114Z-40009781` | verified (convention), three probes red | reviewed; the folds below followed |
+| `20261103T030853Z-139c1847` | error | `followPending` unassigned in `SpawnAtomic` |
+| `20261103T031058Z-71dc9ce0` | error | same, after the two-phase edit |
+| `20261103T031114Z` | — | intermediate runs while the follow-up actions were stabilised |
+| `20261103T031134Z-012b46eb` | counterexample (convention) | `TombstoneNonLive` — a delivery revived a tombstoned child |
+| `20261103T031154Z-780237dc` | counterexample (deadlock) | a pending delivery could not be refused |
+| `20261103T031218Z-858e2975` | counterexample (deadlock) | same, for a released child |
+| `20261103T031250Z-5e8e6a55` | verified (convention), three probes red | after the release gate |
+| `20261103T031325Z-c633df20` | verified (convention), three probes red | after tightening `Promote` |
+| `20261103T031349Z-ef27d072` | verified (convention), three probes red | final: design.md text changed, identical statistics |
 
 ## Not verified
 

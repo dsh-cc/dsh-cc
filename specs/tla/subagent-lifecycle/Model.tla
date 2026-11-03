@@ -40,11 +40,12 @@ Statuses == {"none", "running", "idle", "ready", "gone"}
 
 VARIABLES status, tier, epochOpen,
           graceMember, gracePending, tombstoned, tombstoneEver,
-          slotHolder, releasing, released, promoted, lateEpoch, drained
+          slotHolder, followPending, releasing, released, promoted, lateEpoch,
+          drained
 
 vars == <<status, tier, epochOpen, graceMember, gracePending, tombstoned,
-          tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch,
-          drained>>
+          tombstoneEver, slotHolder, followPending, releasing, released,
+          promoted, lateEpoch, drained>>
 
 TypeOK ==
   /\ status \in [Children -> Statuses]
@@ -55,6 +56,7 @@ TypeOK ==
   /\ tombstoned \subseteq Children
   /\ tombstoneEver \subseteq Children
   /\ slotHolder \subseteq Children
+  /\ followPending \subseteq Children
   /\ releasing \subseteq Children
   /\ released \subseteq Children
   /\ promoted \subseteq Children
@@ -81,6 +83,7 @@ Init ==
   /\ tombstoned = {}
   /\ tombstoneEver = {}
   /\ slotHolder = {}
+  /\ followPending = {}
   /\ releasing = {}
   /\ released = {}
   /\ promoted = {}
@@ -100,6 +103,7 @@ SpawnAtomic(c) ==
   /\ PoolHasRoom(c)
   /\ status' = [status EXCEPT ![c] = "running"]
   /\ slotHolder' = slotHolder \union {c}
+  /\ followPending' = followPending
   /\ tier' = [tier EXCEPT ![c] = "fg"]
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
   /\ graceMember' = graceMember \union {c}
@@ -114,14 +118,50 @@ SpawnAtomic(c) ==
 
 (* A follow-up to an already-resident child: it takes no slot, so it is      *)
 (* admitted even at the cap (index.ts:185).                                 *)
-FollowUp(c) ==
+FollowUpStart(c) ==
   /\ ~drained
   /\ status[c] = "idle"
   /\ c \in slotHolder
-  /\ status' = [status EXCEPT ![c] = "running"]
+  /\ c \notin followPending
+  /\ followPending' = followPending \union {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
+
+(* A follow-up to a resident child takes no slot (index.ts:185). Delivery is  *)
+(* a SECOND step on purpose: the lease covers message acceptance, not the     *)
+(* child's epoch, and a running target may settle while the delivery waits    *)
+(* (resume-pins/src/live-capacity.ts:44-47). A settled target turns this into *)
+(* a cold resume, which takes a slot or is refused at the cap.               *)
+FollowUpDeliver(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ \/ /\ status[c] = "idle"
+        /\ status' = [status EXCEPT ![c] = "running"]
+        /\ slotHolder' = slotHolder
+     \/ /\ status[c] = "ready"
+        /\ c \in graceMember
+        /\ c \notin released
+        /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
+        /\ PoolHasRoom(c)
+        /\ status' = [status EXCEPT ![c] = "running"]
+        /\ slotHolder' = slotHolder \union {c}
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
-  /\ UNCHANGED <<tier, graceMember, gracePending, tombstoned, tombstoneEver,
-                 slotHolder, releasing, released, promoted, lateEpoch, drained>>
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<tier, graceMember, gracePending, tombstoned, tombstoneEver, releasing, released, promoted, lateEpoch, drained>>
+
+(* The cold-resume branch refused at the cap: the caller sees                *)
+(* ACTIVATION_LIMIT_REACHED and the follow-up is lost.                       *)
+FollowUpRefused(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ status[c] \in {"ready", "gone"}
+  (* any reason the converted cold resume cannot be delivered: no slot, no    *)
+  (* registry row, or the tombstone gate.                                    *)
+  /\ \/ c \in released
+     \/ ~PoolHasRoom(c)
+     \/ c \notin graceMember
+     \/ (~SplitContinue /\ c \in tombstoned)
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* Epoch lifecycle                                                         *)
@@ -135,8 +175,7 @@ EpochEnd(c) ==
   /\ status' = [status EXCEPT ![c] = "idle"]
   /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
   /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
-  /\ UNCHANGED <<tier, graceMember, tombstoned, tombstoneEver, slotHolder,
-                 releasing, released, promoted, lateEpoch, drained>>
+  /\ UNCHANGED <<tier, graceMember, tombstoned, tombstoneEver, slotHolder, followPending, releasing, released, promoted, lateEpoch, drained>>
 
 (* Settle disposes the activation, so the slot goes back to the pool.       *)
 Settle(c) ==
@@ -145,8 +184,7 @@ Settle(c) ==
   /\ slotHolder' = slotHolder \ {c}
   /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
   /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
-  /\ UNCHANGED <<tier, graceMember, tombstoned, tombstoneEver, releasing,
-                 released, promoted, lateEpoch, drained>>
+  /\ UNCHANGED <<tier, graceMember, tombstoned, tombstoneEver, followPending, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* Grace-window fire (auto-release).                                       *)
@@ -161,8 +199,7 @@ GraceFire(c) ==
   /\ gracePending' = gracePending \ {c}
   /\ tombstoned' = tombstoned \union {c}
   /\ tombstoneEver' = tombstoneEver \union {c}
-  /\ UNCHANGED <<status, tier, epochOpen, graceMember, slotHolder, releasing,
-                 released, promoted, lateEpoch, drained>>
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, slotHolder, followPending, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* send_message continuation admission (tools/execute, after approval).     *)
@@ -188,8 +225,7 @@ ContinueAdmit(c) ==
   /\ lateEpoch' = lateEpoch \union (IF c \in tombstoned THEN {c} ELSE {})
   /\ tombstoned' = tombstoned \ {c}
   /\ gracePending' = gracePending \ {c}
-  /\ UNCHANGED <<tier, graceMember, tombstoneEver, releasing, released,
-                 promoted, drained>>
+  /\ UNCHANGED <<tier, graceMember, tombstoneEver, followPending, releasing, released, promoted, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* Ctrl+B promotion: a foreground child is re-tiered to background and its  *)
@@ -198,12 +234,11 @@ ContinueAdmit(c) ==
 
 Promote(c) ==
   /\ c \notin promoted
-  /\ status[c] \in {"running", "idle", "ready"}
+  /\ status[c] \in {"running", "idle"}
   /\ promoted' = promoted \union {c}
   /\ tier' = [tier EXCEPT ![c] = "bg"]
   /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
-  /\ UNCHANGED <<status, epochOpen, graceMember, tombstoned, tombstoneEver,
-                 slotHolder, releasing, released, lateEpoch, drained>>
+  /\ UNCHANGED <<status, epochOpen, graceMember, tombstoned, tombstoneEver, slotHolder, followPending, releasing, released, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* release_agent: mark, then evict. The eviction returns the slot.          *)
@@ -214,9 +249,7 @@ ReleaseStart(c) ==
   /\ c \notin releasing
   /\ status[c] \in {"running", "idle", "ready"}
   /\ releasing' = releasing \union {c}
-  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned,
-                 tombstoneEver, slotHolder, released, promoted, lateEpoch,
-                 drained>>
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, followPending, released, promoted, lateEpoch, drained>>
 
 ReleaseFinish(c) ==
   /\ c \in releasing
@@ -225,17 +258,14 @@ ReleaseFinish(c) ==
   /\ status' = [status EXCEPT ![c] = "gone"]
   /\ slotHolder' = IF SkipSlotRelease THEN slotHolder ELSE slotHolder \ {c}
   /\ gracePending' = gracePending \ {c}
-  /\ UNCHANGED <<tier, epochOpen, graceMember, tombstoned, tombstoneEver,
-                 promoted, lateEpoch, drained>>
+  /\ UNCHANGED <<tier, epochOpen, graceMember, tombstoned, tombstoneEver, followPending, promoted, lateEpoch, drained>>
 
 (* A late continuation arriving after the release marker is refused; the     *)
 (* marker is cleared only once the eviction settled.                       *)
 LateClear(c) ==
   /\ c \in releasing
   /\ releasing' = releasing \ {c}
-  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned,
-                 tombstoneEver, slotHolder, released, promoted, lateEpoch,
-                 drained>>
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, followPending, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* Session exit drains the whole forest.                                    *)
@@ -247,10 +277,10 @@ SessionExit ==
   /\ status' = [c \in Children |-> "gone"]
   /\ released' = releasing \union released \union Children
   /\ slotHolder' = IF SkipSlotRelease THEN slotHolder ELSE {}
+  /\ followPending' = {}
   /\ releasing' = {}
   /\ gracePending' = {}
-  /\ UNCHANGED <<tier, epochOpen, graceMember, tombstoned, tombstoneEver,
-                 promoted, lateEpoch>>
+  /\ UNCHANGED <<tier, epochOpen, graceMember, tombstoned, tombstoneEver, followPending, promoted, lateEpoch>>
 
 (* ----------------------------------------------------------------------- *)
 (* Invariants                                                              *)
@@ -310,7 +340,9 @@ Next ==
   \/ Idle
   \/ \E c \in Children :
        \/ SpawnAtomic(c)
-       \/ FollowUp(c)
+       \/ FollowUpStart(c)
+       \/ FollowUpDeliver(c)
+       \/ FollowUpRefused(c)
        \/ EpochEnd(c)
        \/ Settle(c)
        \/ GraceFire(c)
