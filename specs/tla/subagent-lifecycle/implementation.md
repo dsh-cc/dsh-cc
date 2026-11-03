@@ -9,8 +9,8 @@ Keyed to the final run below. Not part of `inputDigest`.
 
 ## Final run
 
-- runId `20261103T031349Z-ef27d072-cc8f-415a-89fe-3b7b67cb215b`
-- inputDigest `2e18e7600794c7ab…`
+- runId `20261103T041944Z-a4cbbf1b-0ba1-42a3-bf7e-e05a073f757b`
+- inputDigest `e15986f05cbbc502…`
 - `convention` **verified**: 1,017,059 states generated, 122,346 distinct, 0
   left on queue.
 - three expansion probes each produced their expected counterexample.
@@ -74,6 +74,19 @@ drain, and the `SplitContinue` residual.
 4. **P2 — the cooperative eviction window** on the `release_agent` path is now
    a declared exclusion (E-3) rather than only excused for the drain.
 
+## Review folds (cold review r2 delta, GO-WITH-CHANGES)
+
+1. **P1 — `FollowUpDeliver`'s settled branch did not mirror `ContinueAdmit`'s
+   bookkeeping**: a tombstoned ready child admitted via the follow-up lane kept
+   its tombstone and never recorded a late epoch, so `TombstoneNonLive` was
+   violable under `SplitContinue` through a class absent from the disposition
+   table, and `NoLateEpoch` understated the residual it exists to measure. The
+   ready branch now clears `tombstoned`, drops `gracePending` and records
+   `lateEpoch` exactly as `ContinueAdmit` does.
+2. **P2 — `FollowUpStart` accepted only an idle target**, while the code's
+   named window is a running target settling mid-delivery
+   (`resume-pins/src/live-capacity.ts:44-47`); it now accepts running or idle.
+
 ## Modeling defects found while drafting (fixed)
 
 1. the model deadlocked at the drained terminal because there was no explicit
@@ -95,7 +108,9 @@ drain, and the `SplitContinue` residual.
 | `20261103T031218Z-858e2975` | counterexample (deadlock) | same, for a released child |
 | `20261103T031250Z-5e8e6a55` | verified (convention), three probes red | after the release gate |
 | `20261103T031325Z-c633df20` | verified (convention), three probes red | after tightening `Promote` |
-| `20261103T031349Z-ef27d072` | verified (convention), three probes red | final: design.md text changed, identical statistics |
+| `20261103T031349Z-ef27d072` | verified (convention), three probes red | design.md text changed |
+| `20261103T041911Z-f1cdbf8c` | verified (convention), three probes red | after the FollowUpStart fix only |
+| `20261103T041944Z-a4cbbf1b` | verified (convention), three probes red | final: the r2-delta folds applied |
 
 ## Not verified
 

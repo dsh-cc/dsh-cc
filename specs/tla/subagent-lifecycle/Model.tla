@@ -134,19 +134,29 @@ FollowUpStart(c) ==
 FollowUpDeliver(c) ==
   /\ ~drained
   /\ c \in followPending
-  /\ \/ /\ status[c] = "idle"
+  /\ \/ /\ status[c] \in {"running", "idle"}
+        (* still resident: the delivery takes no slot *)
         /\ status' = [status EXCEPT ![c] = "running"]
         /\ slotHolder' = slotHolder
+        /\ lateEpoch' = lateEpoch
+        /\ tombstoned' = tombstoned
+        /\ gracePending' = gracePending
      \/ /\ status[c] = "ready"
+        (* settled during delivery: a cold resume, with the SAME bookkeeping *)
+        (* as ContinueAdmit (tombstone cleared, timer dropped, late epoch    *)
+        (* recorded when the tombstone gate was raced).                       *)
         /\ c \in graceMember
         /\ c \notin released
         /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
         /\ PoolHasRoom(c)
         /\ status' = [status EXCEPT ![c] = "running"]
         /\ slotHolder' = slotHolder \union {c}
+        /\ lateEpoch' = lateEpoch \union (IF c \in tombstoned THEN {c} ELSE {})
+        /\ tombstoned' = tombstoned \ {c}
+        /\ gracePending' = gracePending \ {c}
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
   /\ followPending' = followPending \ {c}
-  /\ UNCHANGED <<tier, graceMember, gracePending, tombstoned, tombstoneEver, releasing, released, promoted, lateEpoch, drained>>
+  /\ UNCHANGED <<tier, graceMember, tombstoneEver, releasing, released, promoted, drained>>
 
 (* The cold-resume branch refused at the cap: the caller sees                *)
 (* ACTIVATION_LIMIT_REACHED and the follow-up is lost.                       *)
