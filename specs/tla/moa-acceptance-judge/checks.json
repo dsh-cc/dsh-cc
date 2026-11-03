@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "modelId": "moa-acceptance-judge",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "WrongTokenFinally": "FALSE",
+        "RedispatchCompleted": "FALSE",
+        "ModeSwitchRaces": "FALSE",
+        "ToolTurnEscalates": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults",
+        "OneRequestPerStop",
+        "CompletedStaysSettled",
+        "ToolTurnNeverActed",
+        "NoRacedPlaceholder",
+        "NoStaleFinallyDelete"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-wrong-token-finally",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WrongTokenFinally": "TRUE",
+        "RedispatchCompleted": "FALSE",
+        "ModeSwitchRaces": "FALSE",
+        "ToolTurnEscalates": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoStaleFinallyDelete"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-redispatch-completed",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WrongTokenFinally": "FALSE",
+        "RedispatchCompleted": "TRUE",
+        "ModeSwitchRaces": "FALSE",
+        "ToolTurnEscalates": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "OneRequestPerStop"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-mode-switch-race",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WrongTokenFinally": "FALSE",
+        "RedispatchCompleted": "FALSE",
+        "ModeSwitchRaces": "TRUE",
+        "ToolTurnEscalates": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoRacedPlaceholder"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-tool-turn-escalates",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WrongTokenFinally": "FALSE",
+        "RedispatchCompleted": "FALSE",
+        "ModeSwitchRaces": "FALSE",
+        "ToolTurnEscalates": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ToolTurnNeverActed"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
