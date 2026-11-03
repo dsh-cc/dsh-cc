@@ -46,9 +46,10 @@ opaque allow event.
   guard on the grant action itself.
 - **REQ-8 (plan is read-only)** In plan mode the waterfall denies a mutating
   leftover ask or passthrough (`evaluate.ts:77-81`, `:227-231`).
-- **REQ-9 (bypass immunity)** A bypass-immune deny is not lifted by
-  bypassPermissions. The real enforcement is the monotonic guard layer after
-  pre-execute; the model applies its effect at the rule stage (E-1).
+- **REQ-9 (bypass immunity)** A bypass-immune deny holds in every mode,
+  including bypassPermissions. The real enforcement is the monotonic guard
+  layer after pre-execute; the model applies its effect at the rule stage
+  (E-1).
 
 ## State variables
 
@@ -143,7 +144,13 @@ is modeled as state (E-3).
   threshold.
 - **E-8** the `cd`/`ls` SAFE_SHORT_HEADS exemption (`auto-rule-filter.ts:69-83`):
   the `short` shape is suspended unconditionally, which over-suspends in the
-  conservative direction.
+  conservative direction. Relatedly, the model applies the suspension filter in
+  every non-bypass mode while the code applies it only in auto
+  (`decide.ts:150-152`); outside auto the model is therefore stricter than the
+  code.
+- **E-9** the D13 secondPass (an ask that may be reconfirmed as allow,
+  `llm-classifier.ts:437-443`, default OFF): one more monotone-allow step that
+  would need its own switch.
 - **L-1** liveness (every call eventually settles) is excluded: the model has
   no fairness assumptions and the classifier await is unbounded by design.
 

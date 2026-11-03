@@ -11,9 +11,9 @@ Model `specs/tla/auto-approval-pipeline`, safety-only, no production change.
 
 ## Final run
 
-- runId `20261103T021621Z-13749efc-f48f-4ba4-98ea-8767b2cd1e88`
-- inputDigest `640cbc715e631ddc…` (the previous run `20261103T021409Z-6ef4237d` differed only in design.md text and produced identical per-case statistics)
-- `convention` **verified**: 52,743,969 states generated, 553,696 distinct,
+- runId `20261103T031608Z-fe774bfe-f2ff-47bd-ab93-dbe1ba847f2c`
+- inputDigest `57c4718cad8064a9…` (the previous run `20261103T021409Z-6ef4237d` differed only in design.md text and produced identical per-case statistics)
+- `convention` **verified**: 33,259,281 states generated, 342,256 distinct,
   0 left on queue.
 - seven expansion probes each produced their expected counterexample.
 - `check-evidence`: valid, fresh, verification `counterexample` (every probe is
@@ -72,6 +72,20 @@ the unarmed stage (`StageUnarmed`), and the `SilentAllowFailure` fault no longer
 swallowing a legitimate ask verdict. Left as recorded limitations: the backstop's
 20-total rule (E-7) and the `cd`/`ls` exemption (E-8).
 
+## Review folds (cold review r2, GO-WITH-CHANGES)
+
+1. **P1 — the bypass-immune deny was modeled only under `bypassPermissions`.**
+   The code's guard is mode-independent (`evaluate.ts` `foldDecision` denies
+   regardless of mode, and `decide.ts:150-157` passes an empty set to the
+   waterfall), so a bypass-immune call under `default` or `plan` would execute
+   in the model but is denied in code. `EvaluateRules` now denies a
+   bypass-immune call in every mode and `BypassImmuneDeny` is gone.
+2. **P2 — a stale-mode discard left a stranded call.** It now falls through to
+   the human prompt, which is what the code does.
+3. **P2 — documentation**: the suspension filter is applied in every non-bypass
+   mode while the code applies it only in auto (E-8, conservative direction),
+   and D13 `secondPass` is declared (E-9).
+
 ## Run lineage
 
 | runId | Outcome | Note |
@@ -86,7 +100,9 @@ swallowing a legitimate ask verdict. Left as recorded limitations: the backstop'
 | `20261103T021218Z-7c9767df` | counterexample (convention) | `GrantCeiling` compared the live mode instead of the decision mode |
 | `20261103T021314Z-b2a9a55b` | counterexample (convention) | `PlanWrapSound` — the wrap missed the pure-passthrough branch |
 | `20261103T021409Z-6ef4237d` | verified (convention), seven probes red | after the r1 folds |
-| `20261103T021621Z-13749efc` | verified (convention), seven probes red | final: design.md wording only, identical statistics |
+| `20261103T021621Z-13749efc` | verified (convention), seven probes red | reviewed; the r2 folds followed |
+| `20261103T031443Z-a57b621f` | verified (convention), seven probes red | after the bypass-immune and stale-discard folds |
+| `20261103T031608Z-fe774bfe` | verified (convention), seven probes red | final: design.md notes only |
 
 ## Coverage check
 

@@ -175,19 +175,6 @@ BeginRules ==
   /\ call' = [call EXCEPT !.phase = "deciding"]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
-(* A bypass-immune rule denies even under bypassPermissions. The real guard  *)
-(* is the monotonic layer after pre-execute (decide.ts passes an EMPTY        *)
-(* bypassImmune set to the waterfall); the model applies that effect here so  *)
-(* the pipeline is not left without a successor (E-1).                      *)
-BypassImmuneDeny ==
-  /\ call.phase = "deciding"
-  /\ mode = "bypass"
-  /\ call.bypassImmune
-  /\ call' = [call EXCEPT !.phase = "done", !.verdict = "deny",
-                              !.by = "rule", !.ruleVerdict = "deny",
-                              !.denySeen = TRUE, !.ruleMode = mode]
-  /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
-
 (* bypassPermissions allow: applied after a deny rule and not against a       *)
 (* bypass-immune rule.                                                      *)
 BypassAllow ==
@@ -201,10 +188,18 @@ BypassAllow ==
 (* The rule waterfall is a single deterministic decision over the call's     *)
 (* rule facts and the live suspension filter: deny, then ask, then a         *)
 (* non-suspended allow, then passthrough.                                    *)
+(* A bypass-immune rule denies in EVERY mode, including bypassPermissions.   *)
+(* The real enforcement is the monotonic layer after pre-execute (decide.ts  *)
+(* passes an EMPTY bypassImmune set to the waterfall), so the model applies  *)
+(* its effect at the rule stage for every mode (E-1).                      *)
 EvaluateRules ==
   /\ call.phase = "deciding"
-  /\ mode # "bypass"
-  /\ IF call.denyRule
+  /\ (mode # "bypass" \/ call.bypassImmune)
+  /\ IF call.bypassImmune
+       THEN /\ call' = [call EXCEPT !.phase = "done", !.verdict = "deny",
+                                    !.by = "rule", !.ruleVerdict = "deny",
+                                    !.denySeen = TRUE, !.ruleMode = mode]
+       ELSE IF call.denyRule
        THEN /\ call' = [call EXCEPT !.phase = "done", !.verdict = "deny",
                                     !.by = "rule", !.ruleVerdict = "deny",
                                     !.denySeen = TRUE, !.ruleMode = mode]
@@ -336,7 +331,10 @@ SettleStale ==
   /\ ~ApplyStaleMode
   /\ call.phase = "classifying"
   /\ mode # call.classifyMode
-  /\ call' = [call EXCEPT !.phase = "eligible", !.cls = "none", !.clsUsed = TRUE]
+  (* a discarded verdict falls through to the post-waterfall human prompt; the *)
+  (* stage is one-shot, so the call is never re-classified                  *)
+  /\ call' = [call EXCEPT !.phase = "awaitHuman", !.cls = "none",
+                              !.verdict = "ask", !.by = "llm", !.clsUsed = TRUE]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
 SettleApply ==
@@ -438,8 +436,7 @@ Next ==
   \/ Idle
   \/ ModeChange \/ ToggleCas \/ SessionAllowAdd \/ GrantSet
   \/ BreakerTrip \/ BreakerReset
-  \/ NewCall \/ RiskHighDeny \/ BeginRules \/ BypassImmuneDeny
-  \/ BypassAllow \/ EvaluateRules
+  \/ NewCall \/ RiskHighDeny \/ BeginRules \/ BypassAllow \/ EvaluateRules
   \/ GrantFirstAllow \/ GrantAllow \/ SessionAllowOnAsk \/ SessionAllowMedium
   \/ ToEligible \/ StartClassify \/ StageUnavailable \/ StageUnarmed
   \/ ToHuman \/ SettleStale \/ SettleApply \/ HumanDecide
