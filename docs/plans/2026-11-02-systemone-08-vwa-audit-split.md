@@ -274,7 +274,7 @@ Internal parts are not ReviewRecords and do not enter grades, the receipt or the
 
 After a restart every file is verified from the manifest, and complete same-identity extraction/leaf alignment/body parts are reused; a bad file invalidates only its own part.
 No body is sent while any alignment is incomplete; once alignment changes, the previous body is invalid.
-If a body has completed but final commit was interrupted, it is verified and only re-assembled and committed, without running the full-text model again.
+A completed body part must be durable (temp write, atomic rename, read-back) before the final commit starts; the restore path reuses only parts that survive that read-back. If a body has completed but final commit was interrupted, it is verified and only re-assembled and committed, without running the full-text model again. If the crash happened before the body part became durable, no reusable part exists: the body task re-runs and each wire attempt is reserved and billed again, so the "a restart does not increase the body call count" guarantee holds only for a durable part and must not be claimed for this case.
 The same run uses a run lock so two continuations cannot generate the same body concurrently; across runs only already-completed public pairs are reused, and this iteration does not share half-finished parts across runs.
 Switching legacy/split does not reuse an old pair across strategies; the old files are kept, but current delivery may turn into needs-review and must say so explicitly.
 

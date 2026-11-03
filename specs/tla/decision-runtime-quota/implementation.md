@@ -103,5 +103,5 @@ implementers: the transaction lock must cover **every** ledger append 〔src:ws:
 (reserve, dispatch and settle rows alike), and freeze must be computed 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
 inside that lock — otherwise a settle-failure freeze can interleave with 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
 another request's passed limit check (the model's counterexample 2 trace) 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L148-L161〕.
-This is already implied by the design's single-transaction-lock wording; 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
+The design now states this normatively in its durable-quota section; 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
 the implementation tests should pin it 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕.

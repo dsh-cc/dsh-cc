@@ -58,7 +58,10 @@ All development failures were **modeling defects**, never design defects:
   full-text task, the fragments exclusion, the "dropping low-probability
   candidates is rejected" exclusion, the budget-permit sharing with S1-07,
   and the recovery test rows (restart with the body on disk does not increase
-  the body call count; an interrupted pair re-runs).
+  the body call count; an interrupted pair re-runs). The model's `lostBody`
+  freedom corresponds to the design rule added after this modeling round: a
+  completed body part must be durable before the commit phase, and a crash
+  before that durability re-runs (and re-bills) the body task.
 - Property → clause: `WorstSticky`/`NoFaults` ← worst-verdict merge;
   `OneBodyTask` ← exactly one logical body task per (runId, auditKey);
   `NoFragmentAdoption` ← fragments never aggregated; `NoCandidateDropped` ←
