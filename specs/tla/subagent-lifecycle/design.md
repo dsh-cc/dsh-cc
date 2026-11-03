@@ -83,9 +83,9 @@ is taken, not at a dsh-cc-side count. `Settle`, `ReleaseFinish` and
 | REQ-1 | never more resident activations than the pool allows | S-1 `CapOK` | `CapOK` | convention; strict-cap-overshoot (expected red) | `SpawnAtomic` past the cap under `CapIgnored` | A-1, A-2 | `startActivation` reserving a slot and throwing `ACTIVATION_LIMIT_REACHED`; `PoolHasRoom` | three concurrent spawns at `MaxLive = 2` | the pool's own atomicity is upstream (A-1); the probe shows the invariant breaks IF the pool ignored its cap, which is arithmetic over the model, not evidence about the harness |
 | REQ-2 | a slot exists exactly while a resident activation exists | S-2 `SlotIsActivation`, S-3 `DrainedNoSlot` | same | convention; strict-slot-leak (expected red) | `ReleaseFinish` / `SessionExit` keeping the slot under `SkipSlotRelease` | A-3 | `Settle` disposes, `ReleaseFinish` and `SessionExit` return slots | release a child and check the pool count | — |
 | REQ-3 | a delivery to a still-resident child takes no slot; a settle during delivery turns it into a slot-taking cold resume | S-2 `SlotIsActivation` over `FollowUpStart` / `FollowUpDeliver` / `FollowUpRefused` | same | convention | `FollowUpStart` → `Settle` → `FollowUpDeliver` takes a slot, or `FollowUpRefused` at the cap | A-1, A-9 | `admitContinuation` short-circuits for a resident target; the lease covers acceptance, not the epoch | `send_message` racing a settle | the code comment states the window; the model now represents it |
-| REQ-4 | a released child stays gone | S-4 `NoResurrect` | `NoResurrect` | convention | release then a continuation attempt | A-4 | the tombstone gate at `tools/pre-execute` | release then `send_message` | — |
+| REQ-4 | a released child stays gone | S-4 `NoResurrect` | `NoResurrect` | convention | release then a continuation attempt | A-4 | the registry-row deletion plus the admission guards (the pre-execute gate checks `isTombstoned` only) | release then `send_message` | — |
 | REQ-5 | tombstones and grace timers stay sound | S-5 `TombstoneNonLive`, S-6 `GraceMemberOnly` | same | convention | grace fire on a stale timer | A-5 | `fireGraceWindow` re-checks liveness (`grace-window.ts:172-192`) | arm, then settle, then fire | — |
-| REQ-6 | no epoch after auto-release without a restart | S-7 `NoLateEpoch` | `NoLateEpoch` | convention; strict-late-continue (expected red) | a grace fire lands between the gate and the delivery | A-6 | pre-execute gate before the dispatch admission | the accepted residual | the residual is accepted by design (`release.ts:110-117`) |
+| REQ-6 | no epoch after auto-release without a restart | S-7 `NoLateEpoch` | `NoLateEpoch` | convention; strict-late-continue (expected red) | a gate passes, a grace fire lands, the delivery proceeds with no second gate check | A-6 | the pre-execute gate (`plugin.ts:311`) runs once; delivery (`dispatch-admission.ts:18-23`) does not re-check | the accepted residual, now modeled as production behaviour on both lanes; `SplitContinue` records it as a violation so the probe can demonstrate it | the residual is accepted by design (`release.ts:110-117`) |
 | REQ-7 | the forest is drained at exit | S-8 `DrainedQuiescent`, S-3 | same | convention | exit with live children | A-7 | whole-forest teardown at session exit | exit with running and idle children | cooperative eviction may keep a slot until the turn settles (A-7) |
 | REQ-8 | promotion re-tiers once | S-9 `PromotedIsBackground` | same | convention | promote, then promote again | A-8 | `epoch-collector.ts:285-299` guard | Ctrl+B on a running child | — |
 
@@ -142,7 +142,13 @@ cap.
   abstracts eviction to one step, which is the property-relevant part.
 - **E-5** `autoReleaseMs = 0` (never armed) and `armGraceFromPin`: time
   abstractions that change no property here.
-- **E-6** the admission queue's ordering beyond the per-parent FIFO.
+- **E-6** the admission queue's ordering beyond the per-parent FIFO, and the
+  per-parent lease between the gate and the delivery: the model does not
+  serialize sibling spawns against a pending delivery, so a converted cold
+  resume can lose the last slot to a same-parent spawn the lease would queue.
+- **E-7** promotion eligibility uses live status where production uses the
+  collector-local `settled || promoted` (`epoch-collector.ts:288`);
+  `PromotedIsBackground` establishes tier preservation, not eligibility.
 - **L-1** liveness (every resident child eventually settles or is released) is
   excluded: it needs fairness and a turn-loop model.
 
@@ -164,6 +170,8 @@ cap.
 1. Should a cooperative eviction that outlives its timeout keep the slot (as the
    refusal copy says) or release it optimistically?
 2. Should the ephemeral one-shot lane get its own model (E-2)?
+3. `release.ts:447` tells users idle residents hold no slot, contradicting the
+   resident-slot contract — see the tracking issue.
 
 Counterexample dispositions and the v1→v2 drift account are in
 `implementation.md`.

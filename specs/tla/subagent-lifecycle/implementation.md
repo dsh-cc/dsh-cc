@@ -9,10 +9,10 @@ Keyed to the final run below. Not part of `inputDigest`.
 
 ## Final run
 
-- runId `20261103T041944Z-a4cbbf1b-0ba1-42a3-bf7e-e05a073f757b`
-- inputDigest `e15986f05cbbc502…`
-- `convention` **verified**: 1,017,059 states generated, 122,346 distinct, 0
-  left on queue.
+- runId `20261103T054033Z-78489973-ac95-4adf-8aa8-93d90c9778b5`
+- inputDigest `5eb434ffd9a77bc9…`
+- `convention` **verified**: 8,580,952 states generated, 703,026 distinct,
+  0 left on queue.
 - three expansion probes each produced their expected counterexample.
 
 ## Why v2 (the drift account)
@@ -87,6 +87,39 @@ drain, and the `SplitContinue` residual.
    named window is a running target settling mid-delivery
    (`resume-pins/src/live-capacity.ts:44-47`); it now accepts running or idle.
 
+## Review folds (external three-seat r1, 2026-11-03: critic GWC / grok GWC /
+codex GWC)
+
+1. **P1 (both seats) — `SessionExit` assigned `followPending' = {}` while also
+   listing it in `UNCHANGED`**, a contradictory conjunction (TLC 2143 warning);
+   mathematically the exit was disabled whenever a delivery was pending. The
+   assignment is now the only one.
+2. **P1 (both seats) — `FollowUpDeliver` re-checked the tombstone at
+   delivery**, a second gate production does not perform
+   (`dispatch-admission.ts:18-23` goes straight to delivery after admission).
+   The gate moved to `FollowUpStart` (where production checks it once,
+   `plugin.ts:311`), and the fresh-admission lane `ContinueAdmit` was split
+   the same way (`ContinueStart` / `ContinueDeliver` / `ContinueRefused`), so
+   the grace-fire race between the gate and the delivery is now the modeled
+   behaviour on BOTH lanes. A late epoch on these lanes is accepted
+   production behaviour and is recorded only under the `SplitContinue` probe,
+   whose witness is now exactly the documented race
+   (`FollowUpStart → Settle → GraceFire → ContinueDeliver`).
+3. **P2 — the previously claimed `FollowUpStart` running-target fix had never
+   landed** (the editing script failed before writing and the claim was not
+   grep-verified before committing). It is now actually applied
+   (`status[c] \in {"running", "idle"}`).
+4. **P2 — `NoResurrect`'s protection is misattributed** in the matrix: the
+   pre-execute gate checks `isTombstoned` only; the release markers are
+   enforced by the registry-row deletion plus the model's admission guards.
+   The matrix now says so.
+5. **P2 — promotion eligibility** uses live status where production uses the
+   collector-local `settled || promoted`; recorded as a stated limitation
+   (`PromotedIsBackground` establishes tier preservation, not eligibility).
+6. **P2 — a product inconsistency was found**: `release.ts:447` says idle
+   residents hold no slot and only running children count, contradicting the
+   resident-slot contract (`live-capacity.ts:21-25`). Tracked as an issue.
+
 ## Modeling defects found while drafting (fixed)
 
 1. the model deadlocked at the drained terminal because there was no explicit
@@ -110,7 +143,14 @@ drain, and the `SplitContinue` residual.
 | `20261103T031325Z-c633df20` | verified (convention), three probes red | after tightening `Promote` |
 | `20261103T031349Z-ef27d072` | verified (convention), three probes red | design.md text changed |
 | `20261103T041911Z-f1cdbf8c` | verified (convention), three probes red | after the FollowUpStart fix only |
-| `20261103T041944Z-a4cbbf1b` | verified (convention), three probes red | final: the r2-delta folds applied |
+| `20261103T041944Z-a4cbbf1b` | verified (convention), three probes red | reviewed; the r2-delta folds followed |
+| `20261103T053029Z-9ab6a4bf` | counterexample (convention) | the moved gate made the follow-up residual a convention violation |
+| `20261103T053136Z-a6335d8c` | verified (convention) | before the fresh-admission split |
+| `20261103T053714Z-1dcff645` | counterexample (convention) | a botched refusal guard mutated `released` |
+| `20261103T053815Z-5e964a8e` | error | `released` unassigned in `ContinueRefused` |
+| `20261103T053842Z-4e209c50` | verified (convention), three probes red | after the model folds |
+| `20261103T053929Z-7863cc99` | verified (convention), three probes red | after the implementation.md update |
+| `20261103T054033Z-78489973` | verified (convention), three probes red | final: identical statistics, design.md wording only |
 
 ## Not verified
 

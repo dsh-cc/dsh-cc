@@ -118,11 +118,15 @@ SpawnAtomic(c) ==
 
 (* A follow-up to an already-resident child: it takes no slot, so it is      *)
 (* admitted even at the cap (index.ts:185).                                 *)
+(* The pre-execute gate runs HERE (production checks the tombstone once, at  *)
+(* plugin.ts:311, and never re-checks at delivery). SplitContinue skips it,  *)
+(* which is the documented accepted residual (release.ts:110-117).           *)
 FollowUpStart(c) ==
   /\ ~drained
-  /\ status[c] = "idle"
+  /\ status[c] \in {"running", "idle"}
   /\ c \in slotHolder
   /\ c \notin followPending
+  /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
   /\ followPending' = followPending \union {c}
   /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
 
@@ -142,16 +146,18 @@ FollowUpDeliver(c) ==
         /\ tombstoned' = tombstoned
         /\ gracePending' = gracePending
      \/ /\ status[c] = "ready"
-        (* settled during delivery: a cold resume, with the SAME bookkeeping *)
-        (* as ContinueAdmit (tombstone cleared, timer dropped, late epoch    *)
-        (* recorded when the tombstone gate was raced).                       *)
+        (* settled during delivery: a cold resume — production performs NO    *)
+        (* second gate check here (dispatch-admission.ts:18-23 goes straight   *)
+        (* to delivery), with the SAME bookkeeping as ContinueAdmit           *)
         /\ c \in graceMember
         /\ c \notin released
-        /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
         /\ PoolHasRoom(c)
         /\ status' = [status EXCEPT ![c] = "running"]
         /\ slotHolder' = slotHolder \union {c}
-        /\ lateEpoch' = lateEpoch \union (IF c \in tombstoned THEN {c} ELSE {})
+        (* a late epoch on THIS lane is accepted production behaviour (no     *)
+        (* second gate at delivery), so it is not recorded as a violation;    *)
+        (* the SplitContinue probe covers the fresh-admission lane.            *)
+        /\ lateEpoch' = lateEpoch
         /\ tombstoned' = tombstoned \ {c}
         /\ gracePending' = gracePending \ {c}
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
@@ -222,20 +228,46 @@ GraceFire(c) ==
 (* them (the documented accepted residual, release.ts:110-117).            *)
 (* ----------------------------------------------------------------------- *)
 
-ContinueAdmit(c) ==
+(* Fresh continuation (send_message on a settled child): the gate runs at   *)
+(* pre-execute (plugin.ts:311) and the delivery at tools/execute — two      *)
+(* steps, exactly like the follow-up lane. The grace-fire race between them *)
+(* is production behaviour; SplitContinue records it as a late epoch so the *)
+(* probe can demonstrate the residual.                                     *)
+ContinueStart(c) ==
   /\ ~drained
   /\ status[c] = "ready"
   /\ c \in graceMember
   /\ c \notin released
+  /\ c \notin tombstoned
+  /\ c \notin followPending
+  /\ followPending' = followPending \union {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
+
+ContinueDeliver(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ c \in graceMember
+  /\ c \notin released
   /\ PoolHasRoom(c)
-  /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
   /\ status' = [status EXCEPT ![c] = "running"]
   /\ slotHolder' = slotHolder \union {c}
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
-  /\ lateEpoch' = lateEpoch \union (IF c \in tombstoned THEN {c} ELSE {})
+  /\ lateEpoch' = lateEpoch \union (IF SplitContinue /\ c \in tombstoned THEN {c} ELSE {})
   /\ tombstoned' = tombstoned \ {c}
   /\ gracePending' = gracePending \ {c}
-  /\ UNCHANGED <<tier, graceMember, tombstoneEver, followPending, releasing, released, promoted, drained>>
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<tier, graceMember, tombstoneEver, releasing, released, promoted, drained>>
+
+(* The delivery refused at the cap (or after a release): the caller sees the *)
+(* refusal and the message is lost.                                         *)
+ContinueRefused(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ \/ c \in released
+     \/ ~PoolHasRoom(c)
+     \/ c \notin graceMember
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* Ctrl+B promotion: a foreground child is re-tiered to background and its  *)
@@ -287,7 +319,6 @@ SessionExit ==
   /\ status' = [c \in Children |-> "gone"]
   /\ released' = releasing \union released \union Children
   /\ slotHolder' = IF SkipSlotRelease THEN slotHolder ELSE {}
-  /\ followPending' = {}
   /\ releasing' = {}
   /\ gracePending' = {}
   /\ UNCHANGED <<tier, epochOpen, graceMember, tombstoned, tombstoneEver, followPending, promoted, lateEpoch>>
@@ -356,7 +387,9 @@ Next ==
        \/ EpochEnd(c)
        \/ Settle(c)
        \/ GraceFire(c)
-       \/ ContinueAdmit(c)
+       \/ ContinueStart(c)
+       \/ ContinueDeliver(c)
+       \/ ContinueRefused(c)
        \/ Promote(c)
        \/ ReleaseStart(c)
        \/ ReleaseFinish(c)
