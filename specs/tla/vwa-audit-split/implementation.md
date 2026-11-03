@@ -7,7 +7,7 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T055839Z-4ed25178-b4da-4a0e-b55a-79a2ae416c8d` (r3 fold rerun) (review-fold rerun)
+- runId: `20261103T072143Z-f5f806a1-58df-4fc5-b4ba-3ab3510ab9f3` (freshness re-run after the restart-mid-run limitation note; identical statistics per case) (r3 fold rerun) (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
 - convention (core): **verified** — 12,165 states generated, 1,523 distinct, 0 left on queue; all 7 invariants hold.
