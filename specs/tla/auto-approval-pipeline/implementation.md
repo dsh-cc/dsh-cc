@@ -11,10 +11,11 @@ Model `specs/tla/auto-approval-pipeline`, safety-only, no production change.
 
 ## Final run
 
-- runId `20261103T020233Z-4d5a143b-31c7-4db6-b26c-958acf452f53`
-- `convention` **verified**: 16,019,337 states generated, 221,504 distinct,
-  0 left on queue, 22.6 s.
-- six expansion probes each produced their expected counterexample.
+- runId `20261103T021621Z-13749efc-f48f-4ba4-98ea-8767b2cd1e88`
+- inputDigest `640cbc715e631ddc…` (the previous run `20261103T021409Z-6ef4237d` differed only in design.md text and produced identical per-case statistics)
+- `convention` **verified**: 52,743,969 states generated, 553,696 distinct,
+  0 left on queue.
+- seven expansion probes each produced their expected counterexample.
 - `check-evidence`: valid, fresh, verification `counterexample` (every probe is
   red by design).
 
@@ -28,6 +29,7 @@ Model `specs/tla/auto-approval-pipeline`, safety-only, no production change.
 | strict-silent-allow-failure | `FailToPrompt` | `SettleApply` turns a timeout into an allow | fault demonstration of fail-to-prompt |
 | strict-grant-first | `NoExecAfterDeny` | `GrantFirstAllow` executes under a matching deny rule | fault demonstration of deny dominance |
 | strict-no-backstop-trip | `BackstopHolds` | `SettleApply` records the trip but leaves auto | fault demonstration of the backstop downgrade |
+| strict-ignore-grant-ceiling | `GrantCeiling` | `GrantAllow` executes a MEDIUM call by grant | fault demonstration of the grant risk/mode guard |
 
 All six are deliberate fault switches: unlike the memory model, these are not
 claims that the current code does the wrong thing. The code has all six guards;
@@ -50,6 +52,26 @@ the probes pin that each guard is load-bearing.
    fault was unreachable and the probe verified vacuously; the ask now routes
    to `eligible` under the fault.
 
+## Review folds (cold review r1, GO-WITH-CHANGES)
+
+Four P1 findings were folded; each is visible in the model and the design doc:
+
+1. the grant eligibility guard (risk = LOW, mode != plan) was missing — added to
+   `GrantAllow` as `GrantCeiling` with the `IgnoreGrantCeiling` probe;
+2. the plan-mode deny wrap over a leftover ask/passthrough was missing and was
+   mislabeled as an exclusion — now part of `EvaluateRules` (`PlanWrapSound`);
+3. the package-runner suspension class was missing — added as the `pkgRunner`
+   shape;
+4. a bypass-immune deny under bypassPermissions left the model without a
+   successor instead of denying — now `BypassImmuneDeny`, with E-1 recording
+   that the real enforcement is the monotonic guard layer.
+
+P2 folds: the MEDIUM-passthrough session allow (`SessionAllowMedium`), the
+classifier being one-shot (a discarded stale verdict no longer re-classifies),
+the unarmed stage (`StageUnarmed`), and the `SilentAllowFailure` fault no longer
+swallowing a legitimate ask verdict. Left as recorded limitations: the backstop's
+20-total rule (E-7) and the `cd`/`ls` exemption (E-8).
+
 ## Run lineage
 
 | runId | Outcome | Note |
@@ -59,7 +81,12 @@ the probes pin that each guard is load-bearing.
 | `20261103T015920Z-bb6584a1` | counterexample (convention) | `BackstopHolds` — manual auto re-entry (defect 4) |
 | `20261103T020023Z-516cc2f1` | counterexample (convention) | `TypeOK` — `denyStreak` overflow (defect 5) |
 | `20261103T020123Z-04fcf343` | verified (convention); `strict-arbitrate-rule-ask` verified | vacuous probe (defect 6) |
-| `20261103T020233Z-4d5a143b` | verified (convention), six probes red | final |
+| `20261103T020233Z-4d5a143b` | verified (convention), six probes red | reviewed; four P1 folds followed |
+| `20261103T021140Z-3a76d0f5` | error | a whole-record assignment mixed with a field assignment |
+| `20261103T021218Z-7c9767df` | counterexample (convention) | `GrantCeiling` compared the live mode instead of the decision mode |
+| `20261103T021314Z-b2a9a55b` | counterexample (convention) | `PlanWrapSound` — the wrap missed the pure-passthrough branch |
+| `20261103T021409Z-6ef4237d` | verified (convention), seven probes red | after the r1 folds |
+| `20261103T021621Z-13749efc` | verified (convention), seven probes red | final: design.md wording only, identical statistics |
 
 ## Coverage check
 

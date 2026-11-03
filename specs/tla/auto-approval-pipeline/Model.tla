@@ -27,7 +27,8 @@
 EXTENDS Naturals
 
 CONSTANT HonorSuspendedRule, ArbitrateRuleAsk, ApplyStaleMode,
-         SilentAllowFailure, GrantFirst, NoBackstopTrip, MaxDenies
+         SilentAllowFailure, GrantFirst, NoBackstopTrip, IgnoreGrantCeiling,
+         StageArmed, MaxDenies
 
 ASSUME /\ HonorSuspendedRule \in BOOLEAN
        /\ ArbitrateRuleAsk \in BOOLEAN
@@ -35,11 +36,13 @@ ASSUME /\ HonorSuspendedRule \in BOOLEAN
        /\ SilentAllowFailure \in BOOLEAN
        /\ GrantFirst \in BOOLEAN
        /\ NoBackstopTrip \in BOOLEAN
+       /\ IgnoreGrantCeiling \in BOOLEAN
+       /\ StageArmed \in BOOLEAN
        /\ MaxDenies \in 1..3
 
 Modes  == {"auto", "default", "plan", "bypass"}
 Risks  == {"low", "medium", "high", "readonly"}
-Shapes == {"pluginPath", "short", "interp", "whole", "subagent"}
+Shapes == {"pluginPath", "short", "interp", "pkgRunner", "whole", "subagent"}
 Phases == {"idle", "new", "deciding", "asked", "staged", "eligible",
            "classifying", "awaitHuman", "done"}
 RuleVerdicts == {"none", "pass", "ask", "allow", "deny"}
@@ -51,14 +54,16 @@ Sources      == {"none", "risk", "rule", "bypass", "grant", "llm", "session",
 Breakers     == {"closed", "open"}
 
 (* The suspension predicate of auto-rule-filter.ts:86-104: every shell allow *)
-(* whose fixed head is a short bare word, an interpreter or a whole-tool     *)
-(* rule, and every subagent allow, is suspended. classifyAllShell widens it  *)
-(* to every shell allow, including an absolute-path head that otherwise      *)
+(* whose fixed head is a short bare word, an interpreter, a package runner   *)
+(* (npm run / npx / pnpm exec / ...) or a whole-tool rule, and every         *)
+(* subagent allow, is suspended. The cd/ls SAFE_SHORT_HEADS exemption is not *)
+(* modeled, so "short" over-suspends (conservative). classifyAllShell widens *)
+(* it to every shell allow, including an absolute-path head that otherwise   *)
 (* survives. A suspended allow is not dropped from the set: it silently      *)
 (* stops matching, which is what makes it a passthrough.                     *)
 Suspended(s, cas) ==
-  \/ s \in {"short", "interp", "whole", "subagent"}
-  \/ (cas /\ s \in {"interp", "whole", "pluginPath"})
+  \/ s \in {"short", "interp", "pkgRunner", "whole", "subagent"}
+  \/ (cas /\ s \in {"interp", "pkgRunner", "whole", "pluginPath"})
 
 CallType ==
   [ phase:        Phases
@@ -70,6 +75,8 @@ CallType ==
   , ruleVerdict:  RuleVerdicts
   , ruleSuspended: BOOLEAN
   , denySeen:     BOOLEAN
+  , ruleMode:     Modes
+  , clsUsed:      BOOLEAN
   , classifyMode: Modes
   , appliedMode:  Modes
   , cls:          ClsOutcomes
@@ -80,14 +87,16 @@ CallType ==
 CallIdle ==
   [ phase |-> "idle", risk |-> "low", shape |-> "pluginPath", denyRule |-> FALSE,
     askRule |-> FALSE, bypassImmune |-> FALSE, ruleVerdict |-> "none",
-    ruleSuspended |-> FALSE, denySeen |-> FALSE, classifyMode |-> "auto",
+    ruleSuspended |-> FALSE, denySeen |-> FALSE, ruleMode |-> "auto",
+    clsUsed |-> FALSE, classifyMode |-> "auto",
     appliedMode |-> "auto", cls |-> "none", verdict |-> "none",
     by |-> "none", executed |-> FALSE ]
 
 MakeCall(rk, sh, dr, ar, bi) ==
   [ phase |-> "new", risk |-> rk, shape |-> sh, denyRule |-> dr, askRule |-> ar,
     bypassImmune |-> bi, ruleVerdict |-> "none", ruleSuspended |-> FALSE,
-    denySeen |-> FALSE, classifyMode |-> "auto", appliedMode |-> "auto",
+    denySeen |-> FALSE, ruleMode |-> "auto", clsUsed |-> FALSE,
+    classifyMode |-> "auto", appliedMode |-> "auto",
     cls |-> "none", verdict |-> "none", by |-> "none", executed |-> FALSE ]
 
 VARIABLES mode, cas, sessionAllow, grant, denyStreak, breaker, tripped, call
@@ -166,6 +175,19 @@ BeginRules ==
   /\ call' = [call EXCEPT !.phase = "deciding"]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
+(* A bypass-immune rule denies even under bypassPermissions. The real guard  *)
+(* is the monotonic layer after pre-execute (decide.ts passes an EMPTY        *)
+(* bypassImmune set to the waterfall); the model applies that effect here so  *)
+(* the pipeline is not left without a successor (E-1).                      *)
+BypassImmuneDeny ==
+  /\ call.phase = "deciding"
+  /\ mode = "bypass"
+  /\ call.bypassImmune
+  /\ call' = [call EXCEPT !.phase = "done", !.verdict = "deny",
+                              !.by = "rule", !.ruleVerdict = "deny",
+                              !.denySeen = TRUE, !.ruleMode = mode]
+  /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
+
 (* bypassPermissions allow: applied after a deny rule and not against a       *)
 (* bypass-immune rule.                                                      *)
 BypassAllow ==
@@ -185,17 +207,29 @@ EvaluateRules ==
   /\ IF call.denyRule
        THEN /\ call' = [call EXCEPT !.phase = "done", !.verdict = "deny",
                                     !.by = "rule", !.ruleVerdict = "deny",
-                                    !.denySeen = TRUE]
+                                    !.denySeen = TRUE, !.ruleMode = mode]
+       ELSE IF call.askRule /\ mode = "plan" /\ call.risk # "readonly"
+         (* evaluate.ts plan wrap: a leftover ask on a mutating call in plan   *)
+         (* mode is a deny.                                                   *)
+         THEN /\ call' = [call EXCEPT !.phase = "done", !.verdict = "deny",
+                                      !.by = "rule", !.ruleVerdict = "deny",
+                                      !.denySeen = TRUE, !.ruleMode = mode]
        ELSE IF call.askRule
          THEN /\ call' = [call EXCEPT
                   !.phase = IF ArbitrateRuleAsk THEN "eligible" ELSE "asked",
-                  !.ruleVerdict = "ask"]
+                  !.ruleVerdict = "ask", !.ruleMode = mode]
          ELSE IF ~Suspended(call.shape, cas) \/ HonorSuspendedRule
            THEN /\ call' = [call EXCEPT !.phase = "done", !.verdict = "allow",
                                         !.by = "rule", !.ruleVerdict = "allow",
                                         !.ruleSuspended = Suspended(call.shape, cas),
-                                        !.executed = TRUE]
-           ELSE /\ call' = [call EXCEPT !.phase = "staged", !.ruleVerdict = "pass"]
+                                        !.executed = TRUE, !.ruleMode = mode]
+           ELSE IF mode = "plan" /\ call.risk # "readonly"
+             (* the same wrap over a leftover passthrough.                      *)
+             THEN /\ call' = [call EXCEPT !.phase = "done", !.verdict = "deny",
+                                          !.by = "rule", !.ruleVerdict = "deny",
+                                          !.denySeen = TRUE, !.ruleMode = mode]
+             ELSE /\ call' = [call EXCEPT !.phase = "staged",
+                                          !.ruleVerdict = "pass", !.ruleMode = mode]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
 (* GrantFirst models consulting the grant before the waterfall: a grant then *)
@@ -215,13 +249,27 @@ GrantFirstAllow ==
 GrantAllow ==
   /\ grant
   /\ call.phase \in {"asked", "staged"}
+  (* task-grant-service.ts:191: never over a non-LOW risk and never in plan. *)
+  /\ \/ IgnoreGrantCeiling
+     \/ (call.risk = "low" /\ mode # "plan")
   /\ call' = [call EXCEPT !.phase = "done", !.verdict = "allow",
-                              !.by = "grant", !.executed = TRUE]
+                              !.by = "grant", !.executed = TRUE,
+                              !.appliedMode = mode]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
 (* Stage 5: a session allow covers a rule ask outside plan mode.             *)
 SessionAllowOnAsk ==
   /\ call.phase = "asked"
+  /\ sessionAllow
+  /\ mode # "plan"
+  /\ call' = [call EXCEPT !.phase = "done", !.verdict = "allow",
+                              !.by = "session", !.executed = TRUE]
+  /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
+
+(* mapPostWaterfall: a MEDIUM passthrough is covered by a session allow.     *)
+SessionAllowMedium ==
+  /\ call.phase \in {"asked", "staged"}
+  /\ call.risk = "medium"
   /\ sessionAllow
   /\ mode # "plan"
   /\ call' = [call EXCEPT !.phase = "done", !.verdict = "allow",
@@ -240,6 +288,8 @@ StartClassify ==
   /\ call.phase = "eligible"
   /\ mode = "auto"
   /\ call.risk \in {"low", "medium"}
+  /\ ~call.clsUsed
+  /\ StageArmed
   /\ breaker = "closed"
   /\ \/ call.ruleVerdict = "pass"
      \/ (/\ ArbitrateRuleAsk
@@ -259,6 +309,18 @@ StageUnavailable ==
                               !.verdict = "ask", !.by = "llm"]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
+(* The stage is composed but unarmed: an eligible call still fails to the     *)
+(* human prompt (auto-stage.ts:344-345).                                    *)
+StageUnarmed ==
+  /\ call.phase = "eligible"
+  /\ mode = "auto"
+  /\ call.risk \in {"low", "medium"}
+  /\ ~StageArmed
+  /\ ~call.clsUsed
+  /\ call' = [call EXCEPT !.phase = "awaitHuman", !.cls = "unarmed",
+                              !.verdict = "ask", !.by = "llm", !.clsUsed = TRUE]
+  /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
+
 ToHuman ==
   /\ call.phase = "eligible"
   /\ \/ mode # "auto"
@@ -274,7 +336,7 @@ SettleStale ==
   /\ ~ApplyStaleMode
   /\ call.phase = "classifying"
   /\ mode # call.classifyMode
-  /\ call' = [call EXCEPT !.phase = "eligible", !.cls = "none"]
+  /\ call' = [call EXCEPT !.phase = "eligible", !.cls = "none", !.clsUsed = TRUE]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
 SettleApply ==
@@ -292,7 +354,7 @@ SettleApply ==
               THEN [call EXCEPT !.phase = "done", !.cls = o,
                                  !.verdict = "deny", !.by = "llm",
                                  !.appliedMode = mode]
-            ELSE IF SilentAllowFailure
+            ELSE IF SilentAllowFailure /\ o # "ask"
               THEN [call EXCEPT !.phase = "done", !.cls = o,
                                  !.verdict = "allow", !.by = "llm",
                                  !.executed = TRUE, !.appliedMode = mode]
@@ -357,6 +419,15 @@ SuspendedInert ==
 (* S-6: the deny backstop leaves auto mode before the next call executes.    *)
 BackstopHolds == tripped => mode # "auto"
 
+(* S-7: a grant never executes a non-LOW risk or a plan-mode call.          *)
+GrantCeiling ==
+  Executed /\ call.by = "grant" => (call.risk = "low" /\ call.appliedMode # "plan")
+
+(* S-8: plan mode never executes a mutating call.                           *)
+PlanWrapSound ==
+  Executed /\ call.ruleMode = "plan" =>
+    (call.risk = "readonly" \/ call.ruleVerdict = "allow")
+
 (* --------------------------------------------------------------- spec *)
 
 Idle ==
@@ -367,10 +438,11 @@ Next ==
   \/ Idle
   \/ ModeChange \/ ToggleCas \/ SessionAllowAdd \/ GrantSet
   \/ BreakerTrip \/ BreakerReset
-  \/ NewCall \/ RiskHighDeny \/ BeginRules \/ BypassAllow \/ EvaluateRules
-  \/ GrantFirstAllow \/ GrantAllow \/ SessionAllowOnAsk \/ ToEligible
-  \/ StartClassify \/ StageUnavailable \/ ToHuman \/ SettleStale
-  \/ SettleApply \/ HumanDecide
+  \/ NewCall \/ RiskHighDeny \/ BeginRules \/ BypassImmuneDeny
+  \/ BypassAllow \/ EvaluateRules
+  \/ GrantFirstAllow \/ GrantAllow \/ SessionAllowOnAsk \/ SessionAllowMedium
+  \/ ToEligible \/ StartClassify \/ StageUnavailable \/ StageUnarmed
+  \/ ToHuman \/ SettleStale \/ SettleApply \/ HumanDecide
 
 Spec == Init /\ [][Next]_vars
 

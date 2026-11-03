@@ -14,7 +14,9 @@
         "SilentAllowFailure": "FALSE",
         "GrantFirst": "FALSE",
         "NoBackstopTrip": "FALSE",
-        "MaxDenies": "2"
+        "MaxDenies": "2",
+        "IgnoreGrantCeiling": "FALSE",
+        "StageArmed": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -23,7 +25,9 @@
         "RuleAskNeedsHuman",
         "StaleVerdictOnly",
         "SuspendedInert",
-        "BackstopHolds"
+        "BackstopHolds",
+        "GrantCeiling",
+        "PlanWrapSound"
       ],
       "properties": [],
       "limits": {
@@ -42,7 +46,9 @@
         "SilentAllowFailure": "FALSE",
         "GrantFirst": "FALSE",
         "NoBackstopTrip": "FALSE",
-        "MaxDenies": "2"
+        "MaxDenies": "2",
+        "IgnoreGrantCeiling": "FALSE",
+        "StageArmed": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -65,7 +71,9 @@
         "SilentAllowFailure": "FALSE",
         "GrantFirst": "FALSE",
         "NoBackstopTrip": "FALSE",
-        "MaxDenies": "2"
+        "MaxDenies": "2",
+        "IgnoreGrantCeiling": "FALSE",
+        "StageArmed": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -88,7 +96,9 @@
         "SilentAllowFailure": "FALSE",
         "GrantFirst": "FALSE",
         "NoBackstopTrip": "FALSE",
-        "MaxDenies": "2"
+        "MaxDenies": "2",
+        "IgnoreGrantCeiling": "FALSE",
+        "StageArmed": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -111,7 +121,9 @@
         "SilentAllowFailure": "TRUE",
         "GrantFirst": "FALSE",
         "NoBackstopTrip": "FALSE",
-        "MaxDenies": "2"
+        "MaxDenies": "2",
+        "IgnoreGrantCeiling": "FALSE",
+        "StageArmed": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -134,7 +146,9 @@
         "SilentAllowFailure": "FALSE",
         "GrantFirst": "TRUE",
         "NoBackstopTrip": "FALSE",
-        "MaxDenies": "2"
+        "MaxDenies": "2",
+        "IgnoreGrantCeiling": "FALSE",
+        "StageArmed": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -157,11 +171,38 @@
         "SilentAllowFailure": "FALSE",
         "GrantFirst": "FALSE",
         "NoBackstopTrip": "TRUE",
-        "MaxDenies": "2"
+        "MaxDenies": "2",
+        "IgnoreGrantCeiling": "FALSE",
+        "StageArmed": "TRUE"
       },
       "invariants": [
         "TypeOK",
         "BackstopHolds"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-ignore-grant-ceiling",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "FALSE",
+        "ArbitrateRuleAsk": "FALSE",
+        "ApplyStaleMode": "FALSE",
+        "SilentAllowFailure": "FALSE",
+        "GrantFirst": "FALSE",
+        "NoBackstopTrip": "FALSE",
+        "IgnoreGrantCeiling": "TRUE",
+        "StageArmed": "TRUE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "GrantCeiling"
       ],
       "properties": [],
       "limits": {

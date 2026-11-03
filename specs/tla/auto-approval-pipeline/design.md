@@ -41,8 +41,14 @@ opaque allow event.
 - **REQ-6 (backstop)** After the consecutive-deny backstop trips, the session
   is no longer in auto when the next call executes (`auto-stage.ts:447-469`).
 - **REQ-7 (grant ceiling)** A grant never lifts a deny, a non-LOW risk or plan
-  mode; escalation entries are one-shot. Structural here: the grant is
-  reachable only from an ask or a passthrough (see the imported grant model).
+  mode (`task-grant-service.ts:191`). The deny half is structural — a grant is
+  reachable only after an ask or a passthrough — and the risk/mode half is a
+  guard on the grant action itself.
+- **REQ-8 (plan is read-only)** In plan mode the waterfall denies a mutating
+  leftover ask or passthrough (`evaluate.ts:77-81`, `:227-231`).
+- **REQ-9 (bypass immunity)** A bypass-immune deny is not lifted by
+  bypassPermissions. The real enforcement is the monotonic guard layer after
+  pre-execute; the model applies its effect at the rule stage (E-1).
 
 ## State variables
 
@@ -71,7 +77,9 @@ change, session grant, breaker trip) is interleavable inside it.
 | REQ-4 | a stale verdict is discarded | S-4 `StaleVerdictOnly` | `StaleVerdictOnly` | convention; strict-apply-stale-mode (expected red) | mode changes during the await, verdict applied anyway | A-4 | `auto-stage.ts:402-416` re-fold and `stale-mode` audit | flip mode mid-classification | — |
 | REQ-5 | suspended rules stay inert | S-5 `SuspendedInert` | `SuspendedInert` | convention; strict-honor-suspended (expected red) | a `node …`/whole-tool/subagent allow authorizes under auto | A-5 | `auto-rule-filter.ts:86-104` predicate, applied at `decide.ts:152-157` | an "always allow" derived rule that is suspended | — |
 | REQ-6 | the backstop leaves auto | S-6 `BackstopHolds` | `BackstopHolds` | convention; strict-no-backstop-trip (expected red) | trip recorded, mode unchanged | A-6 | `auto-stage.ts:447-469` + `pauseAuto` | three consecutive deny verdicts | — |
-| REQ-7 | a grant never relaxes a deny or a non-LOW risk | structural (`GrantAllow` reachable only from ask/passthrough) | `GrantAllow` | convention | a grant over a deny — only reachable through the `GrantFirst` fault | A-1 | `task-grant-service.ts:191` eligibility gate | grant plus deny rule | imported from `task-grant-authorization` |
+| REQ-7 | a grant never executes a non-LOW or plan-mode call | S-7 `GrantCeiling` | `GrantCeiling` | convention; strict-ignore-grant-ceiling (expected red) | the grant guard dropped: a MEDIUM call executes by grant | A-1 | `task-grant-service.ts:191` eligibility gate (risk = LOW, mode != plan) | grant plus a MEDIUM call | the deny half is structural; escalation semantics live in `task-grant-authorization` |
+| REQ-8 | plan mode executes nothing mutating | S-8 `PlanWrapSound` | `PlanWrapSound` | convention | a mutating passthrough reaching the human prompt in plan mode | A-1 | `evaluate.ts:77-81` plan wrap inside the waterfall | plan mode plus a mutating ask | the plan overlay itself is E-6 |
+| REQ-9 | bypassPermissions never overrides a bypass-immune deny | S-1 (`denySeen` under bypass) | `BypassImmuneDeny` | convention | a bypass-immune call under bypassPermissions | A-7 | monotonic guard layer after `pre-execute` (`decide.ts:150-157` passes an empty set) | bypassPermissions plus a critical deny | the guard layer's mounting point is outside this package (E-1) |
 
 ## Assumptions
 
@@ -99,19 +107,23 @@ change, session grant, breaker trip) is interleavable inside it.
 | `ApplyStaleMode` | applying a verdict computed under a stale mode | strict-apply-stale-mode |
 | `HonorSuspendedRule` | a suspended allow rule still authorizing | strict-honor-suspended |
 | `NoBackstopTrip` | recording the trip without leaving auto | strict-no-backstop-trip |
+| `IgnoreGrantCeiling` | dropping the grant's risk/mode guard | strict-ignore-grant-ceiling |
 
 ## Bounds
 
-One call at a time, `MaxDenies=2`. A second concurrent call adds nothing here:
+One call at a time, `MaxDenies=2`, `StageArmed` in every case (the unarmed path
+is exercised by `StageUnarmed`, not by a probe). A second concurrent call adds nothing here:
 the two only share the classifier cache and the route breaker, and the breaker
 is modeled as state (E-3).
 
 ## Exclusions
 
-- **E-1** the sandbox-escalation approval listener and the permission-request
-  hook (`approval-listener.ts:98-144`): they resolve an `approval/request`
-  payload, not a tool-call verdict; the human approval here is the engine's own
-  ask seam.
+- **E-1** the bypass-immune monotonic guard layer: it is mounted after
+  `tools/pre-execute` (`decide.ts:150-157` passes an empty set to the
+  waterfall), so its decision is applied by the model at the rule stage
+  (`BypassImmuneDeny`) rather than reproduced. The sandbox-escalation approval
+  listener and the permission-request hook (`approval-listener.ts:98-144`)
+  resolve an `approval/request` payload, not a tool-call verdict.
 - **E-2** rule parsing and shell segment splitting (`parser.ts:18-41`,
   `splitShellCommand`): pure deterministic string logic, covered by
   `auto-rule-filter.spec.ts` and the parser tests.
@@ -123,7 +135,15 @@ is modeled as state (E-3).
   lane.
 - **E-5** the post-execute verification (PI probe, grant post-hoc commit
   verification): not part of authorization.
-- **E-6** plan-mode overlay details (`foldPlanMode`): modeled as a mode value.
+- **E-6** the plan-mode overlay computation (`foldPlanMode`): modeled as the
+  mode value; the deny wrap it produces is REQ-8 and is modeled.
+- **E-7** the backstop's second trip rule (20 total deny verdicts,
+  `classifier-audit.ts:107-108`) and its session-log seeding: only the
+  consecutive rule is modeled, with `MaxDenies` standing for the configured
+  threshold.
+- **E-8** the `cd`/`ls` SAFE_SHORT_HEADS exemption (`auto-rule-filter.ts:69-83`):
+  the `short` shape is suspended unconditionally, which over-suspends in the
+  conservative direction.
 - **L-1** liveness (every call eventually settles) is excluded: the model has
   no fairness assumptions and the classifier await is unbounded by design.
 
