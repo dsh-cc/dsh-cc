@@ -13,10 +13,10 @@ defects, outside `inputDigest` as the runner contract requires.
 
 ## Final run
 
-- runId `20261103T031750Z-864b6955-ccb5-487d-a797-917792d825ef`
-- inputDigest `c3f4f7a426d08f79…`
-- `convention` **verified**: 93,095,007 states generated, 15,819,345 distinct,
-  0 left on queue, 336 s (2048 MiB heap, `TMax=2`, `Revs=3`).
+- runId `20261103T031750Z-864b6955-ccb5-487d-a797-917792d825ef`〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
+- inputDigest `c3f4f7a426d08f79…`〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
+- `convention` **verified**: 93,095,007 states generated, 15,819,345 distinct〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
+  0 left on queue, 336 s (2048 MiB heap, `TMax=2`, `Revs=3`)〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕.
 - seven expansion probes each produced their expected counterexample.
 - `check-evidence`: status valid, fresh, verification `counterexample` — the
   aggregate is a counterexample because every probe case is red by design.
@@ -77,7 +77,7 @@ The delta review confirmed all four P1 folds and raised P2s only:
 
 ## Run lineage
 
-| runId | Outcome | Note |
+| runId | Outcome | Note |〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
 |---|---|---|
 | `20261103T012028Z-489e1442` | config-invalid | operator name clashed with the `DreamIndexFirst` constant |
 | `20261103T012157Z-3af8cdd3` | counterexample (convention) | `OneDreamer` — live-holder preemption reachable, became the `FreeTicks` probe |
@@ -91,11 +91,12 @@ The delta review confirmed all four P1 folds and raised P2s only:
 | `20261103T021918Z-5874b3b1` | counterexample (convention) | `HoldsLock` — `InCrit` matched extraction phases (defect 6) |
 | `20261103T021958Z-91db769e` | counterexample (convention) | `NoLostSave` — set-equality guard too weak (defect 7) |
 | `20261103T022146Z-c7427c90` | counterexample (convention) | same, after the protection reset was moved to the extraction snapshot |
-| `20261103T022434Z-d5dbfdd5` | incomplete (timeout) | first run of the revision-guarded model, 420 s budget |
+| `20261103T022434Z-d5dbfdd5` | incomplete (timeout) | first run of the revision-guarded model, 420 s budget〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕 |
 | `20261103T023157Z-aadc9edc` | verified (convention); `strict-live-preemption` verified | vacuous preemption probe (defect 8) |
 | `20261103T024438Z-a6f28cf0` | verified (convention), seven probes red | before the design.md update |
 | `20261103T025128Z-9222b040` | verified (convention), seven probes red | reviewed (GO); doc-level P2 folds followed |
-| `20261103T031750Z-864b6955` | verified (convention), seven probes red | final: design.md notes only, identical statistics |
+| `20261103T031750Z-864b6955` | verified (convention), seven probes red | design.md notes only |
+| `20261103T033509Z-81c9ce10` | verified (convention), seven probes red | final: evidence markers only, identical per-case statistics |
 
 ## Coverage check
 
@@ -105,6 +106,16 @@ REQ-7 by structural action guard plus deadlock checking. No property was deleted
 or weakened to reach a green convention: the five failures above were model
 defects, each fixed by making the model match the code rather than by relaxing a
 property.
+
+## Evidence markers
+
+`design.md` and this file carry 〔src:ws:〕 markers for the VWA evidence gate.
+Code claims point at `code-anchors.md` (verbatim excerpts from the current
+implementation); run-identity and per-case statistics point at this file, because
+the runner's raw evidence (`evidence.json`, `.formal-design/runs/**`) is
+gitignored by design. Backfilling markers changed `design.md`, so the check was
+re-run: the final run above has identical per-case statistics to the previous
+one, which is the proof that only references changed.
 
 ## Not verified
 

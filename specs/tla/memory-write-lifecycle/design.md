@@ -9,14 +9,14 @@ current code leaves open, one per fault switch.
 
 - mode: **auto** (session-scoped; the project rules carry no formal-design
   screening clause at this revision — session request "model the memory write
-  path" 2026-11-03, manual adoption snippet at
+  path" 2026-11-03〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕, manual adoption snippet at
   `<skill>/references/agents-snippet.md`).
-- decision: **enabled**
-- triggerIds: FD-T1 (two host processes share one memory directory and mutate
+- decision: **enabled**〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L103-163〕
+- triggerIds: FD-T1 (two host processes share one memory directory and mutate 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L243-355〕
   the same index, topic files and lock), FD-T3 (a crash mid-batch decides
   whether the index and the topic files agree; the consolidation lock survives
   a crash and is reclaimable only through the stale window).
-- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/memory-write-lifecycle"}`.
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/memory-write-lifecycle"}`〔src:ws:specs/tla/memory-write-lifecycle/design.md#L7-L20〕.
 - behavioural source: current code, not a plan document —
   `packages/memory/memory/src/save.ts:199-240`,
   `packages/memory/memory/src/writeback.ts:141-178`,
@@ -147,7 +147,7 @@ write.
 
 Two processes, three candidate names, `MaxLines=2`, `StaleTicks=2`,
 `CooldownTicks=1`, `MinTicks=1` (0 in the preemption probe, which needs the
-stale window to open inside the tick budget), `TMax=2`, `Revs=3`, 2048 MiB. Two processes are the
+stale window to open inside the tick budget), `TMax=2`, `Revs=3`, 2048 MiB〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕. Two processes are the
 minimum that exposes a cross-process write race; three names let a dream exceed
 the cap of two, and let a compaction free room for a save during a dream.
 
@@ -157,7 +157,7 @@ the cap of two, and let a compaction free room for a save during a dream.
   not bodies, so an overwrite that leaves the pointer set unchanged is
   invisible to the invariants. The revision guard rejects such a write
   structurally in the intended protocol; the model cannot observe the body.
-- **E-1b** the accepted `armPressure` re-read race (`pressure.ts:64-69`): same
+- **E-1b** the accepted `armPressure` re-read race (`pressure.ts:64-69`〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-242〕): same
   status as E-2, not modeled.
 - **E-1c** the pressure-mode zero-scan return between the stamp and the lock
   (`index.ts:320-323`) and the failed-outcome bounded retry reusing the held
