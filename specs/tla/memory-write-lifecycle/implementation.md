@@ -13,8 +13,8 @@ defects, outside `inputDigest` as the runner contract requires.
 
 ## Final run
 
-- runId `20261103T025128Z-9222b040-90f6-4f4a-9ef6-608d022c999d`
-- inputDigest `a62a72c912c5a751…`
+- runId `20261103T031750Z-864b6955-ccb5-487d-a797-917792d825ef`
+- inputDigest `c3f4f7a426d08f79…`
 - `convention` **verified**: 93,095,007 states generated, 15,819,345 distinct,
   0 left on queue, 336 s (2048 MiB heap, `TMax=2`, `Revs=3`).
 - seven expansion probes each produced their expected counterexample.
@@ -29,7 +29,7 @@ defects, outside `inputDigest` as the runner contract requires.
 | strict-dream-no-cas | `NoLostSave` | `DreamFork` → `SaveIndex` → `DreamClobber` publishes the pre-save content | product gap: the dream batch overwrites without checking the fork snapshot still holds |
 | strict-index-first | `NoDanglingPointer` | `DreamBuild` → `DreamPublishFirst` | product gap: the dream batch order is not constrained; a crash after the index write leaves a dangling pointer |
 | strict-clear-without-run | `NoLostPressure` | `SaveReject` arms → `DreamClear` tombstones without serving | product gap: `clearPressure` carries no arm identity |
-| strict-skip-cap | `CapSound` | `DreamWriteTopics` → `DreamPublish` publishes an over-cap index | product gap: the dream relies on the write-back gate + truncate fallback; a report that bypasses either publishes over-cap |
+| strict-skip-cap | `CapSound` | `DreamWriteTopics` → `DreamPublish` publishes an over-cap index | defence in depth, not a live code gap: `applyEntrypointFallback` + `validateMemoryWrites` reject an over-cap batch unconditionally (`memory-job.ts:148-158`, `writeback.ts:141-154`) |
 | strict-live-preemption | `OneDreamer` | `DreamStampPeriodic` → `DreamLock` reclaims a live holder past the stale window | documented product behaviour (`lock.ts:19`); the probe pins that this is the ONLY violation of exclusivity |
 | strict-unlocked-extract | `NoLostSave` | `ExtractRead` → `SaveIndex` → `ExtractIndex` publishes the pre-save content | product gap: the extraction fork writes the index with no lock and no verification (`index.ts:218-235`) |
 
@@ -64,6 +64,17 @@ product issue is a separate decision (see the open questions in `design.md`).
    `MinTicks=1` the stale window could no longer open inside `TMax=2`, so the
    probe now runs with `MinTicks=0`.
 
+## Review folds (cold review r2, GO)
+
+The delta review confirmed all four P1 folds and raised P2s only:
+
+- the `DreamClear` arm-identity guard makes "clear after a re-arm" unreachable
+  except through `DreamFail`; recorded as a design open question and as a
+  conservative deviation from the code's unconditional clear;
+- the cooldown stamp is the clear time in the model while the code passes the
+  dream's start epoch; the model is conservative;
+- the SkipCap disposition above was corrected to "defence in depth".
+
 ## Run lineage
 
 | runId | Outcome | Note |
@@ -83,7 +94,8 @@ product issue is a separate decision (see the open questions in `design.md`).
 | `20261103T022434Z-d5dbfdd5` | incomplete (timeout) | first run of the revision-guarded model, 420 s budget |
 | `20261103T023157Z-aadc9edc` | verified (convention); `strict-live-preemption` verified | vacuous preemption probe (defect 8) |
 | `20261103T024438Z-a6f28cf0` | verified (convention), seven probes red | before the design.md update |
-| `20261103T025128Z-9222b040` | verified (convention), seven probes red | final: identical statistics to the previous run |
+| `20261103T025128Z-9222b040` | verified (convention), seven probes red | reviewed (GO); doc-level P2 folds followed |
+| `20261103T031750Z-864b6955` | verified (convention), seven probes red | final: design.md notes only, identical statistics |
 
 ## Coverage check
 

@@ -214,5 +214,15 @@ the cap of two, and let a compaction free room for a save during a dream.
    dream may rewrite a large batch?
 5. Should the stale window be PID-aware so a live but slow dream is not
    preempted (REQ-8 / `strict-live-preemption`)?
+6. `DreamClear` carries an arm-identity guard, so once a save re-arms the
+   marker during a running dream the dream cannot clear: it must take the
+   `DreamFail` rollback instead. That is conservative (the code clears
+   unconditionally, which is exactly what `strict-clear-without-run` exposes),
+   but it means the convention case never exercises "clear after a re-arm" and
+   S-4 green partly rides on the rollback escape hatch.
+7. The model stamps the cooldown reference at the clear time; the code passes
+   the dream's start epoch to `clearPressure` (`index.ts:301,367`), so its
+   cooldown restart is slightly shorter than modeled. The model's direction is
+   conservative.
 
 Counterexample dispositions are recorded in `implementation.md`.
