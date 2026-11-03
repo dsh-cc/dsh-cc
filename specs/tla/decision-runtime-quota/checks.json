@@ -16,7 +16,8 @@
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
         "ConflictingSettle": "FALSE",
-        "FreezeRowLost": "FALSE"
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -53,7 +54,8 @@
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
         "ConflictingSettle": "FALSE",
-        "FreezeRowLost": "FALSE"
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -80,7 +82,8 @@
         "AdoptTorn": "TRUE",
         "RefundUnpaired": "FALSE",
         "ConflictingSettle": "FALSE",
-        "FreezeRowLost": "FALSE"
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -106,7 +109,8 @@
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "TRUE",
         "ConflictingSettle": "FALSE",
-        "FreezeRowLost": "FALSE"
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -133,7 +137,8 @@
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
         "ConflictingSettle": "TRUE",
-        "FreezeRowLost": "FALSE"
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -158,7 +163,8 @@
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
         "ConflictingSettle": "FALSE",
-        "FreezeRowLost": "TRUE"
+        "FreezeRowLost": "TRUE",
+        "ClearWithoutFreeze": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -176,14 +182,15 @@
       "specification": "Spec",
       "constants": {
         "MAX_IN": "8",
-        "MAX_OUT": "3",
+        "MAX_OUT": "4",
         "MAX_ATTEMPTS": "3",
         "MAX_RETRIES": "1",
         "StealLock": "FALSE",
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
         "ConflictingSettle": "FALSE",
-        "FreezeRowLost": "FALSE"
+        "FreezeRowLost": "FALSE",
+        "ClearWithoutFreeze": "FALSE"
       },
       "invariants": [
         "TypeOK",

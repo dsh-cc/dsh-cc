@@ -9,7 +9,7 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 - runId: `09a2c546-6d82-4092-9a1c-a15547f2d35f`
 - toolchain: leanprover/lean4 v4.35.0 (darwin-arm64, archive SHA-256
-  c0c6f34f...63177c2, provisioned at /private/tmp/lean-systemone), runner
+  c0c6f34f...63177c2, provisioned at the system temp directory), runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4.
 - All seven properties **verified**: never-improves, fail-absorbing,
   bottom-identity, idempotent, associative, commutative,

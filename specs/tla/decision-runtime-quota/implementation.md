@@ -9,7 +9,7 @@ scope confirmed via ask_user_question). Manual adoption snippet: 〔src:ws:docs/
 
 ## Final run
 
-- runId: `20261103T061904Z-34798ed1-838d-4ce3-a0a1-252857667c4d` (r3 fold rerun) (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
+- runId: `20261103T064405Z-edee9f4e-eba2-47fd-8e32-cbc4df4ef235` (r4 fold rerun) (r3 fold rerun) (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
   backfill of 〔src:ws:〕 evidence annotations in design.md; identical model
   bytes, identical case statistics per case — superseded run
   `20261103T020629Z-53a1d0be-b734-4395-94e4-1870d60a9264` had the same
@@ -119,4 +119,16 @@ the implementation tests should pin it 〔src:ws:docs/plans/2026-11-02-systemone
   9,810,866 states.
 - `Recover`'s torn-freeze boundary now matches `SettleFail`'s
   (`freezeSeq = seqN - 1`).
+
+## r4 fold (r3 delta review)
+
+- `StopArriveCompleted`'s twin fixed in moa-acceptance-judge (see there);
+  quota-side: `Recover`'s torn-freeze boundary aligned to `seqN - 1`
+  (the record previously claimed this; the operator now matches).
+- `HumanClearLock` durably establishes the freeze before unlocking
+  (`frozen' = frozen ∨ settleFailed` unless the `ClearWithoutFreeze`
+  probe skips it); the `strict-freeze-row-lost` case now also exercises
+  the clear-without-freeze hazard.
+- `attempt-ceiling-binds` raises `MAX_OUT` to 4 so four charged attempts
+  fit both token ceilings and only the attempt guard blocks the fourth.
 

@@ -7,7 +7,7 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T053819Z-4d003adc-ed07-4d14-afd3-b5d3181bfd29` (r3 fold rerun) (review-fold rerun)
+- runId: `20261103T064336Z-bc7ea53e-f3b3-4320-9feb-4642d483546f` (r4 fold rerun) (r3 fold rerun) (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
 - convention (core): **verified** — 5,258 states generated, 717 distinct, 0 left on queue; all 8 invariants hold (`TypeOK`, `NoFaults`, `OneRequestPerStop`,
@@ -53,9 +53,10 @@ All development failures were **modeling defects**, never design defects:
   the lifecycle paragraph (WeakMap placeholder with token guard, completed
   LRU, repeated stops issue zero requests, mode-switch cancellation, the
   finally guard) and the modes table (tool-using turns are observe-only in
-  every mode). The dimensions-shadow precedence is covered by
-  `moa-cascade-routing`'s `ShadowInert`; the escalation ladder stays in
-  that model's domain (see the deviation note in design.md).
+  every mode). The dimensions-shadow precedence is pinned in THIS model
+  (`ShadowSuppressesLegacy`, probe `strict-legacy-under-shadow`); the
+  escalation ladder stays in `moa-cascade-routing`'s domain (see the
+  deviation note in design.md).
 - Property → clause: `OneRequestPerStop` ← "a repeated stop hitting
   inFlight/completed issues zero requests"; `CompletedStaysSettled` ←
   "mark completed whether answered or unavailable, so the same stop does

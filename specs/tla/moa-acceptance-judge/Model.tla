@@ -78,10 +78,10 @@ StopArrive(k, tool) ==
   /\ (k # stop \/ tool = toolTurn)
   /\ stop' = k
   /\ toolTurn' = tool
-  /\ IF CancelResurrect
+  /\ IF CancelResurrect /\ cancelled
        THEN /\ cancelled' = FALSE
             /\ faults' = faults \cup {"cancel-resurrect"}
-       ELSE /\ cancelled' = IF pTok # 0 THEN cancelled ELSE FALSE
+       ELSE /\ cancelled' = (IF pTok # 0 THEN cancelled ELSE FALSE)
             /\ faults' = faults
   /\ legacyDispatched' = FALSE
   /\ actedThisTurn' = FALSE
@@ -103,19 +103,25 @@ StopArriveCompleted(k, tool) ==
   /\ (RedispatchCompleted => completed' = completed)
   /\ stop' = k
   /\ toolTurn' = tool
-  /\ cancelled' = FALSE
+  /\ cancelled' = IF CancelResurrect /\ cancelled
+                     THEN FALSE
+                     ELSE (IF pTok # 0 THEN cancelled ELSE FALSE)
+  /\ faults' = IF CancelResurrect /\ cancelled
+                 THEN faults \cup {"cancel-resurrect"}
+                 ELSE IF RedispatchCompleted
+                        THEN faults \cup {"late-request"}
+                        ELSE faults
   /\ legacyDispatched' = FALSE
   /\ actedThisTurn' = FALSE
   /\ IF RedispatchCompleted
        THEN /\ pTok' = 0
             /\ pStop' = k
-            /\ faults' = faults \cup {"late-request"}
             /\ reqCount' = [reqCount EXCEPT ![k] = reqCount[k] + 1]
             /\ UNCHANGED <<followCount, resultOk, dimsShadow>>
        ELSE /\ pTok' = pTok
             /\ pStop' = pStop
-            /\ UNCHANGED <<completed, reqCount, followCount, resultOk, dimsShadow,
-                            faults>>
+            /\ UNCHANGED <<completed, reqCount, followCount, resultOk,
+                            dimsShadow>>
 
 (************************************** dispatch ***************************)
 

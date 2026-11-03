@@ -12,8 +12,10 @@ CONSTANTS MAX_IN, MAX_OUT, MAX_ATTEMPTS, MAX_RETRIES,
           AdoptTorn,      (* probe: recovery keeps using a torn ledger      *)
           RefundUnpaired, (* probe: recovery deletes unpaired reserve rows *)
           ConflictingSettle, (* probe: a second, different terminal settle  *)
-          FreezeRowLost  (* probe: the freeze row is not persisted and the  *)
-                         (* lock file is not kept                            *)
+          FreezeRowLost,  (* probe: the freeze row is not persisted and the *)
+                         (* lock file is not kept                           *)
+          ClearWithoutFreeze (* probe: the human clears the lock without   *)
+                            (* durably establishing the freeze            *)
 
 PROCS == {"p1", "p2"}
 DID == 1..4
@@ -352,7 +354,7 @@ Recover ==
   /\ alive' = TRUE
   /\ IF torn /\ ~AdoptTorn /\ ~frozen
        THEN /\ frozen' = TRUE
-            /\ freezeSeq' = seqN
+            /\ freezeSeq' = seqN - 1
        ELSE /\ frozen' = frozen
             /\ freezeSeq' = freezeSeq
   /\ led' = IF RefundUnpaired
@@ -362,11 +364,15 @@ Recover ==
               ELSE led
   /\ UNCHANGED <<seqN, didN, torn, runs, lock, lockFile, plannedTerm, settleFailed>>
 
+(* Clearing the lock after a settle failure must durably establish the    *)
+(* freeze first (append the freeze row) - a bare removal would leave the   *)
+(* ledger indistinguishable from an ordinary unpaired reservation.         *)
 HumanClearLock ==
   /\ lock = "none"
   /\ lockFile
   /\ lockFile' = FALSE
-  /\ UNCHANGED <<led, seqN, didN, torn, lock, frozen, freezeSeq, runs,
+  /\ frozen' = IF ClearWithoutFreeze THEN frozen ELSE (frozen \/ settleFailed)
+  /\ UNCHANGED <<led, seqN, didN, torn, lock, freezeSeq, runs,
                   alive, plannedTerm, settleFailed>>
 
 (* Quiescent stutter after a crash, so CHECK_DEADLOCK stays meaningful.   *)

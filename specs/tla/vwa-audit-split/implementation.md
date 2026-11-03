@@ -13,8 +13,8 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 - convention (core): **verified** — 12,165 states generated, 1,523 distinct, 0 left on queue; all 7 invariants hold.
 - Probes (expansion, expected counterexample; each hit exactly its intended
   invariant):
-  - `strict-later-overwrites` → `NoFaults`: a later pass overwrites an
-    earlier `fail` (the worst-verdict merge violated).
+  - `strict-later-overwrites` → `WorstSticky`: a later pass overwrites an
+    earlier, more severe verdict (the worst-verdict merge violated).
   - `strict-body-per-chunk` → `OneBodyTask`: a second logical full-text task
     without a lost-body restart.
   - `strict-adopt-fragments` → `NoFragmentAdoption`: fragments aggregated
@@ -57,10 +57,10 @@ All development failures were **modeling defects**, never design defects:
   full-text task, the fragments exclusion, the "dropping low-probability
   candidates is rejected" exclusion, the budget-permit sharing with S1-07,
   and the recovery test rows (restart with the body on disk does not increase
-  the body call count; an interrupted pair re-runs). The model's `lostBody`
-  freedom corresponds to the design rule added after this modeling round: a
-  completed body part must be durable before the commit phase, and a crash
-  before that durability re-runs (and re-bills) the body task.
+  the body call count; a durable body part whose final commit was interrupted
+  is only re-assembled, and a crash before the body part's durable save
+  re-runs and re-bills it). The model's `lostBody` freedom is exactly the
+  second half of that rule.
 - Property → clause: `WorstSticky`/`NoFaults` ← worst-verdict merge;
   `OneBodyTask` ← exactly one logical body task per (runId, auditKey);
   `NoFragmentAdoption` ← fragments never aggregated; `NoCandidateDropped` ←
