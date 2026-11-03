@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "modelId": "auto-approval-pipeline",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "FALSE",
+        "ArbitrateRuleAsk": "FALSE",
+        "ApplyStaleMode": "FALSE",
+        "SilentAllowFailure": "FALSE",
+        "GrantFirst": "FALSE",
+        "NoBackstopTrip": "FALSE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoExecAfterDeny",
+        "FailToPrompt",
+        "RuleAskNeedsHuman",
+        "StaleVerdictOnly",
+        "SuspendedInert",
+        "BackstopHolds"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-honor-suspended",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "TRUE",
+        "ArbitrateRuleAsk": "FALSE",
+        "ApplyStaleMode": "FALSE",
+        "SilentAllowFailure": "FALSE",
+        "GrantFirst": "FALSE",
+        "NoBackstopTrip": "FALSE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "SuspendedInert"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-arbitrate-rule-ask",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "FALSE",
+        "ArbitrateRuleAsk": "TRUE",
+        "ApplyStaleMode": "FALSE",
+        "SilentAllowFailure": "FALSE",
+        "GrantFirst": "FALSE",
+        "NoBackstopTrip": "FALSE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "RuleAskNeedsHuman"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-apply-stale-mode",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "FALSE",
+        "ArbitrateRuleAsk": "FALSE",
+        "ApplyStaleMode": "TRUE",
+        "SilentAllowFailure": "FALSE",
+        "GrantFirst": "FALSE",
+        "NoBackstopTrip": "FALSE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "StaleVerdictOnly"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-silent-allow-failure",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "FALSE",
+        "ArbitrateRuleAsk": "FALSE",
+        "ApplyStaleMode": "FALSE",
+        "SilentAllowFailure": "TRUE",
+        "GrantFirst": "FALSE",
+        "NoBackstopTrip": "FALSE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "FailToPrompt"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-grant-first",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "FALSE",
+        "ArbitrateRuleAsk": "FALSE",
+        "ApplyStaleMode": "FALSE",
+        "SilentAllowFailure": "FALSE",
+        "GrantFirst": "TRUE",
+        "NoBackstopTrip": "FALSE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoExecAfterDeny"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-no-backstop-trip",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "HonorSuspendedRule": "FALSE",
+        "ArbitrateRuleAsk": "FALSE",
+        "ApplyStaleMode": "FALSE",
+        "SilentAllowFailure": "FALSE",
+        "GrantFirst": "FALSE",
+        "NoBackstopTrip": "TRUE",
+        "MaxDenies": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "BackstopHolds"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 420000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
