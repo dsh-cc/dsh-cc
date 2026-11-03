@@ -28,7 +28,7 @@ EXTENDS Naturals
 
 CONSTANT HonorSuspendedRule, ArbitrateRuleAsk, ApplyStaleMode,
          SilentAllowFailure, GrantFirst, NoBackstopTrip, IgnoreGrantCeiling,
-         StageArmed, MaxDenies
+         StageArmed, UnarmedExecutes, MaxDenies
 
 ASSUME /\ HonorSuspendedRule \in BOOLEAN
        /\ ArbitrateRuleAsk \in BOOLEAN
@@ -38,6 +38,7 @@ ASSUME /\ HonorSuspendedRule \in BOOLEAN
        /\ NoBackstopTrip \in BOOLEAN
        /\ IgnoreGrantCeiling \in BOOLEAN
        /\ StageArmed \in BOOLEAN
+       /\ UnarmedExecutes \in BOOLEAN
        /\ MaxDenies \in 1..3
 
 Modes  == {"auto", "default", "plan", "bypass"}
@@ -181,6 +182,8 @@ BypassAllow ==
   /\ call.phase = "deciding"
   /\ mode = "bypass"
   /\ ~call.bypassImmune
+  (* evaluate.ts:100-108: a whole-tool deny precedes the bypass short-circuit *)
+  /\ ~call.denyRule
   /\ call' = [call EXCEPT !.phase = "done", !.verdict = "allow",
                               !.by = "bypass", !.executed = TRUE]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
@@ -264,9 +267,14 @@ SessionAllowOnAsk ==
                               !.by = "session", !.executed = TRUE]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
-(* mapPostWaterfall: a MEDIUM passthrough is covered by a session allow.     *)
+(* mapPostWaterfall: a MEDIUM passthrough is covered by a session allow — *)
+(* but only AFTER the stage ran: production applies session permission only *)
+(* when the stage returns undefined (pre-execute.ts:351-367), so a MEDIUM    *)
+(* passthrough in auto is classified first. Either the classifier asked, or  *)
+(* the stage could not run at all.                                           *)
 SessionAllowMedium ==
-  /\ call.phase \in {"asked", "staged"}
+  /\ \/ /\ call.phase = "awaitHuman" /\ call.cls # "none"
+     \/ /\ call.phase \in {"asked", "staged"} /\ mode # "auto"
   /\ call.risk = "medium"
   /\ sessionAllow
   /\ mode # "plan"
@@ -315,8 +323,13 @@ StageUnarmed ==
   /\ call.risk \in {"low", "medium"}
   /\ ~StageArmed
   /\ ~call.clsUsed
-  /\ call' = [call EXCEPT !.phase = "awaitHuman", !.cls = "unarmed",
-                              !.verdict = "ask", !.by = "llm", !.clsUsed = TRUE]
+  /\ IF UnarmedExecutes
+       THEN /\ call' = [call EXCEPT !.phase = "done", !.cls = "unarmed",
+                                   !.verdict = "allow", !.by = "llm",
+                                   !.executed = TRUE, !.clsUsed = TRUE]
+       ELSE /\ call' = [call EXCEPT !.phase = "awaitHuman", !.cls = "unarmed",
+                                   !.verdict = "ask", !.by = "llm",
+                                   !.clsUsed = TRUE]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
 ToHuman ==
@@ -370,7 +383,7 @@ SettleApply ==
                                 ELSE denyStreak + 1
             /\ tripped' = (denyStreak + 1 >= MaxDenies)
             /\ IF tripped' /\ ~NoBackstopTrip THEN mode' = "default" ELSE mode' = mode
-       ELSE /\ denyStreak' = denyStreak
+       ELSE /\ denyStreak' = 0
             /\ tripped' = tripped
             /\ mode' = mode
   /\ UNCHANGED <<cas, sessionAllow, grant, breaker>>

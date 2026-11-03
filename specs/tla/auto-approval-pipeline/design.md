@@ -49,7 +49,8 @@ opaque allow event.
 - **REQ-9 (bypass immunity)** A bypass-immune call never executes, in any mode,
   including bypassPermissions. The real enforcement is the monotonic guard
   layer after pre-execute; the model applies its effect at the rule stage
-  (E-1), and S-9 pins it.
+  (E-1), and S-9 pins it. A whole-tool deny also precedes the bypass
+  short-circuit (`evaluate.ts:100-108`).
 
 ## State variables
 
@@ -109,11 +110,15 @@ change, session grant, breaker trip) is interleavable inside it.
 | `HonorSuspendedRule` | a suspended allow rule still authorizing | strict-honor-suspended |
 | `NoBackstopTrip` | recording the trip without leaving auto | strict-no-backstop-trip |
 | `IgnoreGrantCeiling` | dropping the grant's risk/mode guard | strict-ignore-grant-ceiling |
+| `UnarmedExecutes` | the unarmed stage executing instead of failing to prompt | strict-stage-unarmed |
 
 ## Bounds
 
-One call at a time, `MaxDenies=2`, `StageArmed` in every case (the unarmed path
-is exercised by `StageUnarmed`, not by a probe). A second concurrent call adds nothing here:
+One call at a time. `MaxDenies=3` mirrors the product's consecutive-deny
+threshold; the streak resets on a non-deny outcome, and the 20-total trip rule
+stays excluded (E-7). `StageArmed=TRUE` in every case except
+`strict-stage-unarmed`, whose `UnarmedExecutes` fault makes the unarmed path's
+fail-to-prompt observable. A second concurrent call adds nothing here:
 the two only share the classifier cache and the route breaker, and the breaker
 is modeled as state (E-3).
 
@@ -148,9 +153,16 @@ is modeled as state (E-3).
   every non-bypass mode while the code applies it only in auto
   (`decide.ts:150-152`); outside auto the model is therefore stricter than the
   code.
-- **E-10** a stale-mode discard that falls through `mapPostWaterfall` under
-  bypassPermissions: the code allows a MEDIUM passthrough there; the model
-  routes it to the human prompt (conservative direction).
+- **E-10** the stale-mode discard fallthrough: `mapPostWaterfall` uses the
+  `decided.mode` captured BEFORE the await (`decide.ts:221`), so a mid-await
+  mode change does not re-evaluate; the model's post-discard actions read the
+  live mode. The divergence is narrow (the session-allow branch reaches the
+  same outcome either way) and conservative.
+- **E-11** the stage's internal awaits (route resolution and context
+  construction, `auto-stage.ts:360,398`) contain additional mode-read windows
+  before the `modeBefore` capture at `:402`; the model treats eligibility as
+  atomic with the live mode. The classifier await remains the only MODELED
+  asynchronous window.
 - **E-9** the D13 secondPass (an ask that may be reconfirmed as allow,
   `llm-classifier.ts:437-443`, default OFF): one more monotone-allow step that
   would need its own switch.

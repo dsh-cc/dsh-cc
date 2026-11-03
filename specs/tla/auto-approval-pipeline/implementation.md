@@ -11,10 +11,11 @@ Model `specs/tla/auto-approval-pipeline`, safety-only, no production change.
 
 ## Final run
 
-- runId `20261103T042039Z-014bdab5-5ba9-42ab-8e43-990be23972b2`
-- `convention` **verified**: 35,986,065 states generated, 373,360 distinct,
+- runId `20261103T054702Z-51e74796-03a5-43cc-bdfe-963874c65551`
+- inputDigest `a35959ed16776199…`
+- `convention` **verified**: 40,284,081 states generated, 424,336 distinct,
   0 left on queue.
-- seven expansion probes each produced their expected counterexample.
+- eight expansion probes each produced their expected counterexample.
 - the previous run `20261103T031608Z-fe774bfe` differed only in design.md text
   and produced identical per-case statistics.
 - `check-evidence`: valid, fresh, verification `counterexample` (every probe is
@@ -87,6 +88,37 @@ swallowing a legitimate ask verdict. Left as recorded limitations: the backstop'
    mode while the code applies it only in auto (E-8, conservative direction),
    and D13 `secondPass` is declared (E-9).
 
+## Review folds (external three-seat r1, 2026-11-03: critic GWC / grok NO-GO /
+codex NO-GO)
+
+Both NO-GO P0s were the same finding: design.md was edited after the final
+run, so the reviewed document was not the run's input. The discipline fix is
+structural — the run below was performed AFTER the last edit.
+
+1. **P1 (both seats) — `BypassAllow` executed a whole-tool deny** in
+   bypassPermissions; production places whole-tool denies before the bypass
+   short-circuit (`evaluate.ts:100-108`). The guard `~call.denyRule` is added.
+2. **P1 (both seats) — the session allow fired before the classifier** for a
+   MEDIUM passthrough; production applies session permission only when the
+   stage returns undefined. `SessionAllowMedium` now requires the classifier to
+   have asked (`awaitHuman` with a recorded outcome) or the stage to be unable
+   to run (`mode # "auto"`).
+3. **P1 (both seats) — the backstop counted cumulative denies**, and a
+   non-deny outcome did not reset the streak. The streak is consecutive now,
+   `MaxDenies=3` mirrors the product threshold, and the 20-total rule stays
+   excluded (E-7).
+4. **P1 (codex) — the unarmed path was unreachable** in every case
+   (`StageArmed=TRUE` everywhere). The `strict-stage-unarmed` probe now runs
+   with `StageArmed=FALSE` and an `UnarmedExecutes` fault so the
+   fail-to-prompt guard is observable.
+5. **P1 (codex) — the stage's internal awaits** (route resolution, context
+   construction) contain additional mode-read windows; declared as E-11
+   rather than modeled (eligibility atomicity kept).
+6. **P2s**: the matrix no longer names the deleted `BypassImmuneDeny`
+   operator; `GrantFirstAllow` is described as a fault injection rather than
+   a pure single-guard deletion; E-10 now states that `mapPostWaterfall` uses
+   the pre-await `decided.mode`.
+
 ## Run lineage
 
 | runId | Outcome | Note |
@@ -104,7 +136,10 @@ swallowing a legitimate ask verdict. Left as recorded limitations: the backstop'
 | `20261103T021621Z-13749efc` | verified (convention), seven probes red | reviewed; the r2 folds followed |
 | `20261103T031443Z-a57b621f` | verified (convention), seven probes red | after the bypass-immune and stale-discard folds |
 | `20261103T031608Z-fe774bfe` | verified (convention), seven probes red | reviewed; the r3 folds followed |
-| `20261103T042039Z-014bdab5` | verified (convention), seven probes red | final: the r3 folds applied |
+| `20261103T042039Z-014bdab5` | verified (convention), seven probes red | reviewed; the external r1 folds followed |
+| `20261103T054307Z-15300ca9` | verified (convention); strict-stage-unarmed verified | the unarmed probe had no fault to observe |
+| `20261103T054509Z-24b0f27d` | verified (convention), eight probes red | after the model folds |
+| `20261103T054702Z-51e74796` | verified (convention), eight probes red | final: doc edits only, identical statistics |
 
 ## Coverage check
 
