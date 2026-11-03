@@ -64,6 +64,12 @@ safety-only.
 
 ## Bounds and assumptions
 
+Modeling limitation (from the final review round): `Restart` keeps a body
+task that was `running` at crash time in the running state, rather than
+modeling its re-run — the design rule covers the done-but-not-durable
+re-run, and the running-at-restart case is left permissive (no invariant
+depends on it).
+
 - Three extracted items, two batches; verdict lattice
   `not-run < pass < needs-review < fail`.
 - The generative reviewer's content is not modeled: alignment passes return
