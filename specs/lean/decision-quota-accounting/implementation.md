@@ -45,3 +45,16 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 - The TLA+ interleaving properties (crash recovery, lock, double
   settlement) — those live in `specs/tla/decision-runtime-quota` (M1).
 - Pricing, `/cost` rendering and the settings cascade.
+
+## Conformance stage (acceptance)
+
+- Status: **passed** — `lean-check-evidence --stage acceptance` reports
+  `acceptanceReady: true`. Proof `7d12244d-11f7-485d-b5c9-2d9b85d44f52` plus the conformance
+  run form the acceptance pair.
+- Corpus: `conformance/cases.jsonl` (14 cases, every case
+  declaring the properties it covers); every case matched under
+  `canonical-json` comparison.
+- Binding: `packages/observability/decision-usage` does not exist yet, so conformance binds a model-local fixture implementation in the plugin test fixtures; the adapter must be re-pointed at the production `quota.ts` projection when S1-02 lands.
+- The fixture is a reference implementation, never a second copy of a
+  production algorithm: when the production module exists the adapter is
+  re-pointed and the fixture deleted.

@@ -1,0 +1,14 @@
+{"id":"empty-ledger","input":{"ledger":[]},"covers":["conservation"]}
+{"id":"unsettled-keeps-full","input":{"ledger":[{"reserved":"10","term":"unsettled"}]},"covers":["unsettled-upper-bound","conservation"]}
+{"id":"unknown-keeps-full","input":{"ledger":[{"reserved":"10","term":"unknown"}]},"covers":["unknown-upper-bound","conservation"]}
+{"id":"not-dispatched-refunds","input":{"ledger":[{"reserved":"10","term":"not-dispatched"}]},"covers":["not-dispatched-refunds"]}
+{"id":"actual-bills-usage","input":{"ledger":[{"reserved":"10","term":{"actual":"4"}}]},"covers":["actual-bills-usage","settle-never-raises"]}
+{"id":"actual-at-reservation","input":{"ledger":[{"reserved":"10","term":{"actual":"10"}}]},"covers":["actual-bills-usage","conservation"]}
+{"id":"actual-overrun-clamped","input":{"ledger":[{"reserved":"10","term":{"actual":"14"}}]},"covers":["settle-never-raises","conservation"]}
+{"id":"zero-usage","input":{"ledger":[{"reserved":"10","term":{"actual":"0"}}]},"covers":["actual-bills-usage"]}
+{"id":"mixed-ledger","input":{"ledger":[{"reserved":"10","term":"unsettled"},{"reserved":"6","term":"unknown"},{"reserved":"8","term":{"actual":"3"}},{"reserved":"5","term":"not-dispatched"}]},"covers":["conservation","unsettled-upper-bound","unknown-upper-bound","actual-bills-usage"]}
+{"id":"retry-pair","input":{"ledger":[{"reserved":"10","term":{"actual":"10"}},{"reserved":"10","term":{"actual":"2"}}]},"covers":["conservation","actual-bills-usage"]}
+{"id":"all-refunded","input":{"ledger":[{"reserved":"10","term":"not-dispatched"},{"reserved":"10","term":"not-dispatched"}]},"covers":["not-dispatched-refunds","conservation"]}
+{"id":"large-reservation","input":{"ledger":[{"reserved":"9007199254740991","term":"unsettled"}]},"covers":["unsettled-upper-bound","conservation"]}
+{"id":"actual-tiny-against-large","input":{"ledger":[{"reserved":"9007199254740991","term":{"actual":"1"}}]},"covers":["actual-bills-usage","conservation"]}
+{"id":"three-attempts-one-decision","input":{"ledger":[{"reserved":"4","term":{"actual":"2"}},{"reserved":"4","term":"unknown"},{"reserved":"4","term":{"actual":"4"}}]},"covers":["conservation","unknown-upper-bound"]}

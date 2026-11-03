@@ -59,5 +59,18 @@
     "maxHeartbeats": 2000000,
     "maxRecDepth": 2048,
     "maxCases": 10000
+  },
+  "conformance": {
+    "adapter": "conformance/adapter.mjs",
+    "corpus": "conformance/cases.jsonl",
+    "implementationFiles": [
+      "packages/plugin/dsh-cc-agents/tests/fixtures/formal-design-lean/systemone/audit-merge.ts"
+    ],
+    "executionFiles": [],
+    "command": [
+      "node",
+      "conformance/adapter.mjs"
+    ],
+    "comparison": "canonical-json"
   }
 }

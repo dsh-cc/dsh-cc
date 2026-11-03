@@ -45,3 +45,16 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 - The payload-level tie rule (which chunk's entry object survives) and
   the findings concatenation.
 - The split/recovery/bisection interleaving — that is the M6 TLA+ face.
+
+## Conformance stage (acceptance)
+
+- Status: **passed** — `lean-check-evidence --stage acceptance` reports
+  `acceptanceReady: true`. Proof `fc236774-3f1c-4cd2-9981-cd779ba34567` plus the conformance
+  run form the acceptance pair.
+- Corpus: `conformance/cases.jsonl` (15 cases, every case
+  declaring the properties it covers); every case matched under
+  `canonical-json` comparison.
+- Binding: the shipped merge lives in `audit-align.ts` (`mergeChunkTargets`) but is not exported yet, so conformance binds a model-local fixture implementation in the plugin test fixtures; the adapter must be re-pointed at the extracted production helper when S1-08 lands.
+- The fixture is a reference implementation, never a second copy of a
+  production algorithm: when the production module exists the adapter is
+  re-pointed and the fixture deleted.
