@@ -32,6 +32,7 @@ applyClient(ctx) // 浏览器 bundle：裸调用的 popupSelect 装饰
 
 ## 备注
 
-- 本包被挂载两次：宿主平面行（包装 `commands.list`，使 CC 会话隐藏宿主 `/permission` 行、非 CC 会话隐藏 `/permissions`）以及注册命令的 CC 预设行。宿主平面的 `dsh.client` 字段供 `dsh-client-modules` 发现浏览器半边。
+- 本包被挂载两次：宿主平面行（安装 `/permission` 表面守卫）以及注册命令的 CC 预设行。宿主平面的 `dsh.client` 字段供 `dsh-client-modules` 发现浏览器半边。
+- 无论会话选中哪个 agent preset，`/permissions` 都是 dsh-cc 唯一对外提供的权限命令。守卫会把宿主 `/permission` 行从 `commands.list` 中剔除（斜杠菜单、自动补全、帮助输出都不再出现它），并把用户手打的 `/permission …` 重写到 `/permissions …` 上执行。宿主定义本身仍注册着，沙箱预设处理器依旧可以通过 `commands.find` 取到——被收回的只是用户表面。
 - 仅注入 `commands`；`permissionRules` 引擎经 `ctx.get` 可选读取，因此即使引擎缺席，命令也能加载并返回友好提示。
 - 命令经 `@dsh-cc/command-usage` 包装（模式 id 会作为帮助子命令出现），因此 `help`/`-h`/`--help` 会渲染确定性的帮助文本。

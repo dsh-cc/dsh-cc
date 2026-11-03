@@ -15,23 +15,26 @@
  * <mode>` through here.
  *
  * `/permission` (host, sandbox+approval presets) and `/permissions` (this
- * package, CC rule-engine modes) drive different knobs. A CC session's slash
- * menu should show only `/permissions`: `commands.list` drops the host
- * `/permission` row when the session's selected agent preset is `cc`, while
- * `find`/`execute` stay on the global handler so the composer chip can still
- * switch sandbox presets.
+ * package, CC rule-engine modes) drive different knobs, so dsh-cc retires the
+ * host line from the user surface: `commands.list` drops the `/permission` row
+ * in every session — the selected agent preset no longer decides which of the
+ * two is advertised — and a typed `/permission …` line is rewritten onto
+ * `/permissions …` before dispatch. The host handler stays registered, so a
+ * composition that predates this package keeps working; only the surface users
+ * see and type is ours.
  *
  * This package is mounted twice: the host-plane row (cc-permissions bundle)
  * exists so `dsh-client-modules` can discover the `dsh.client` browser half
  * (preset rows never appear in `ctx.loader.entries()`); that host apply is a
- * no-op besides the catalog wrap. The CC preset row registers the command.
+ * no-op besides the surface guard. The CC preset row registers the command.
  * @module @dsh-cc/command-permissions
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@dsh-cc/permission-rules'
-import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import type { CommandExecution, CommandInvocation, CommandResult, CommandSubmitAttachment } from '@deepseek-ai/dsh-commands'
+import { parseCommand } from '@deepseek-ai/dsh-commands'
 import { PERMISSION_COMMAND_MODES } from './modes.ts'
 import { applyUserLint, lintRuleSet, lintUserSection, renderLint } from './lint.ts'
 import { PERMISSION_SETTINGS_NAMESPACE } from '@dsh-cc/permission-rules'
@@ -250,47 +253,87 @@ async function executeLint(ctx: Context, raw: string): Promise<CommandResult> {
   return { kind: 'success', text: `${report}\n${result}` }
 }
 
-/** Whether this session selected the CC agent preset (last `agent-preset/selected` wins, else the creation header). */function isCcSession(agent: Agent): boolean {
-  const events = agent.session.snapshotEvents()
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]! as { type: string; data?: { agentPreset?: string } }
-    if (event.type === 'agent-preset/selected') {
-      return event.data?.agentPreset === 'cc'
-    }
-  }
-  const header = agent.session.header as { agentPreset?: string }
-  return header.agentPreset === 'cc'
+/** The retired host command name (sandbox+approval preset switcher). */
+const RETIRED_COMMAND = 'permission'
+
+/** The dsh-cc surface that replaces it. */
+const SURFACE_COMMAND = 'permissions'
+
+/**
+ * Rewrite a typed `/permission …` line onto `/permissions …`.
+ *
+ * The rewrite keeps the raw input verbatim, so `/permission acceptEdits`
+ * still switches the engine mode and a sandbox-preset argument such as
+ * `workspace-write` settles as the mode list's own "unknown permission mode"
+ * error. Any other line — including the `hookSpecificOutput`-style prose some
+ * tools emit — is returned unchanged.
+ * @param line - one submitted composer line.
+ * @returns the line to dispatch, `/permission` calls redirected.
+ */
+function retirePermissionLine(line: string): string {
+  const parsed = parseCommand(line.trim())
+  if (parsed === undefined || parsed.name !== RETIRED_COMMAND) return line
+  const redirected = `/${SURFACE_COMMAND}${parsed.rawInput === '' ? '' : ` ${parsed.rawInput.trim()}`}`
+  // Keep the leading indentation of the original line irrelevant: `execute`
+  // parses its own trimmed input.
+  return redirected
 }
 
 /**
- * Hide the host `/permission` row from `commands.list` for CC sessions.
- * Installed once on the host-plane mount (`ctx.agent` unset). Preset mounts
- * skip this so a session-scoped apply cannot stack wraps on the same service.
- * `find`/`execute` are not wrapped, so `/permission workspace-write` and the
- * composer chip keep driving the sandbox-preset switcher.
+ * Retire the host `/permission` command from the dsh-cc user surface.
+ *
+ * Installed once on the host-plane mount (`ctx.agent` unset); preset mounts
+ * skip this so a session-scoped apply cannot stack guards on the same service.
+ * The policy is preset-independent on purpose: `/permissions` is the one
+ * permission command dsh-cc users are meant to reach, and a `vwa` (or any
+ * other non-`cc`) session used to advertise the host line instead — leaving
+ * `/permissions` executable but invisible.
+ *
+ * - `list` drops the `permission` row, so no catalog (TUI autocomplete, web
+ *   slash menu, `/help`) advertises it.
+ * - `execute` redirects a typed `/permission …` line onto `/permissions …`,
+ *   so muscle memory and older scripts reach the supported surface instead of
+ *   the sandbox-preset handler. The redirect delegates to the registry's own
+ *   `execute`, so the real `command/run`/`command/done` lifecycle is kept.
+ *
+ * `find` is left alone: the host definition stays resolvable, which is what a
+ * surface needing the definition metadata would read.
  */
-function installCatalogWrap(ctx: Context): void {
+function installPermissionSurfaceGuard(ctx: Context): void {
   const commands = ctx.commands
   const originalList = commands.list
   const wrappedList = function list(this: typeof commands, agent: Agent): ReturnType<typeof commands.list> {
     const listed = originalList.call(this, agent)
-    const hidden = isCcSession(agent) ? 'permission' : 'permissions'
-    const filtered = listed.filter(entry => entry.name !== hidden)
+    const filtered = listed.filter(entry => entry.name !== RETIRED_COMMAND)
     return filtered.length === listed.length ? listed : Object.freeze(filtered)
   }
   commands.list = wrappedList as typeof commands.list
+
+  const originalExecute = commands.execute
+  const wrappedExecute = async function execute(
+    this: typeof commands,
+    agent: Agent,
+    line: string,
+    attachments: readonly CommandSubmitAttachment[],
+    signal: AbortSignal,
+  ): Promise<CommandExecution | undefined> {
+    return originalExecute.call(this, agent, retirePermissionLine(line), attachments, signal)
+  }
+  commands.execute = wrappedExecute as typeof commands.execute
+
   ctx.effect(() => () => {
     commands.list = originalList
-  }, 'command-permissions: hide /permission from the CC catalog')
+    commands.execute = originalExecute
+  }, 'command-permissions: retire /permission from the user surface')
 }
 
 /**
  * Register `/permissions`. The host-plane mount (`ctx.agent` unset, the
- * cc-permissions bundle row) also wraps `commands.list` so a CC session
- * hides `/permission` and a non-CC session hides `/permissions`. That host
- * fiber is what `dsh-client-modules` scans for `dsh.client`. A preset-scoped
- * mount only registers the command (so a composition without the host row
- * still works; the wrap is already on the service from the host row).
+ * cc-permissions bundle row) also installs the surface guard, which hides
+ * `/permission` from every catalog and redirects a typed `/permission` line.
+ * That host fiber is what `dsh-client-modules` scans for `dsh.client`. A
+ * preset-scoped mount only registers the command (so a composition without the
+ * host row still works; the guard is already on the service from the host row).
  * @param ctx - context carrying the command registry and permission engine.
  */
 export function apply(ctx: Context): void {
@@ -308,5 +351,5 @@ export function apply(ctx: Context): void {
       { word: 'revoke', summary: 'revoke one task grant by id' },
     ],
   }))
-  if (ctx.get('agent') === undefined) installCatalogWrap(ctx)
+  if (ctx.get('agent') === undefined) installPermissionSurfaceGuard(ctx)
 }

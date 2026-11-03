@@ -245,35 +245,61 @@ describe('/permissions human command', () => {
   })
 })
 
-describe('CC catalog hides /permission', () => {
-  it('drops /permission from a CC session list, but execute still reaches the host handler', async () => {
-    const { ctx, agent, plugin } = await harness(true)
+/** Register the host `/permission` (sandbox+approval preset switcher) on the real registry. */
+function stubHostPermission(ctx: Context): ReturnType<typeof vi.fn> {
+  const host = vi.fn(() => ({ kind: 'success' as const, text: 'preset workspace-write' }))
+  ctx.commands.register({
+    name: 'permission',
+    description: 'Switch the permission preset (sandbox mode + approval policy)',
+    input: { hint: '<preset>' },
+    handler: host,
+  })
+  return host
+}
+
+describe('/permission is retired from the user surface', () => {
+  it('drops /permission from the catalog and redirects a typed line to /permissions', async () => {
+    const { ctx, agent, calls, plugin } = await harness(true)
     agent.session.append('agent-preset/selected' as never, { agentPreset: 'cc' } as never)
-    const host = vi.fn(() => ({ kind: 'success' as const, text: 'preset workspace-write' }))
-    ctx.commands.register({
-      name: 'permission',
-      description: 'Switch the permission preset (sandbox mode + approval policy)',
-      input: { hint: '<preset>' },
-      handler: host,
-    })
+    const host = stubHostPermission(ctx)
     expect(ctx.commands.list(agent).map(entry => entry.name)).toEqual(['permissions'])
+    // The host definition stays resolvable; only the advertised surface is ours.
     expect(ctx.commands.find(agent, 'permission')).toBeDefined()
-    const execution = await ctx.commands.execute(agent, '/permission workspace-write', [], new AbortController().signal)
-    expect(host).toHaveBeenCalled()
-    expect((execution?.result as { text: string }).text).toBe('preset workspace-write')
+    const execution = await ctx.commands.execute(agent, '/permission acceptEdits', [], new AbortController().signal)
+    expect(host).not.toHaveBeenCalled()
+    expect(calls).toEqual(['setMode:acceptEdits'])
+    expect((execution?.result as { text: string }).text).toBe('Permission mode is now "acceptEdits".')
     await plugin.dispose()
     expect(ctx.commands.list(agent).map(entry => entry.name)).toEqual(['permission'])
   })
 
-  it('hides /permissions from a non-CC session list', async () => {
-    const { ctx, agent } = await harness(true)
-    ctx.commands.register({
-      name: 'permission',
-      description: 'Switch the permission preset',
-      handler: () => ({ kind: 'success', text: 'ok' }),
-    })
-    expect(ctx.commands.list(agent).map(entry => entry.name)).toEqual(['permission'])
+  it('retires the host line in a non-CC (vwa) session too — the preset no longer picks the surface', async () => {
+    const { ctx, agent, calls } = await harness(true)
+    agent.session.append('agent-preset/selected' as never, { agentPreset: 'vwa' } as never)
+    const host = stubHostPermission(ctx)
+    expect(ctx.commands.list(agent).map(entry => entry.name)).toEqual(['permissions'])
     expect(ctx.commands.find(agent, 'permissions')).toBeDefined()
+    await ctx.commands.execute(agent, '/permission', [], new AbortController().signal)
+    expect(host).not.toHaveBeenCalled()
+    expect(calls).toEqual([])
+  })
+
+  it('a sandbox-preset argument settles as the mode list error, never as a preset switch', async () => {
+    const { ctx, agent } = await harness(true)
+    const host = stubHostPermission(ctx)
+    const execution = await ctx.commands.execute(agent, '/permission workspace-write', [], new AbortController().signal)
+    expect(host).not.toHaveBeenCalled()
+    expect(execution?.result.kind).toBe('error')
+    expect((execution?.result as { text: string }).text).toContain('unknown permission mode "workspace-write"')
+  })
+
+  it('the redirect restores itself on dispose', async () => {
+    const { ctx, agent, plugin } = await harness(true)
+    const host = stubHostPermission(ctx)
+    await plugin.dispose()
+    const execution = await ctx.commands.execute(agent, '/permission workspace-write', [], new AbortController().signal)
+    expect(host).toHaveBeenCalled()
+    expect((execution?.result as { text: string }).text).toBe('preset workspace-write')
   })
 })
 
