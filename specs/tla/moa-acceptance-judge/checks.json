@@ -13,7 +13,8 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE"
+        "AbortLastWaiter": "FALSE",
+        "CancelResurrect": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -23,7 +24,8 @@
         "ToolTurnNeverActed",
         "NoRacedPlaceholder",
         "NoStaleFinallyDelete",
-        "ShadowSuppressesLegacy"
+        "ShadowSuppressesLegacy",
+        "NoCancelResurrect"
       ],
       "properties": [],
       "limits": {
@@ -41,7 +43,8 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE"
+        "AbortLastWaiter": "FALSE",
+        "CancelResurrect": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -63,7 +66,8 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE"
+        "AbortLastWaiter": "FALSE",
+        "CancelResurrect": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -85,7 +89,8 @@
         "ModeSwitchRaces": "TRUE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE"
+        "AbortLastWaiter": "FALSE",
+        "CancelResurrect": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -107,7 +112,8 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "TRUE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE"
+        "AbortLastWaiter": "FALSE",
+        "CancelResurrect": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -129,11 +135,36 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "TRUE",
-        "AbortLastWaiter": "FALSE"
+        "AbortLastWaiter": "FALSE",
+        "CancelResurrect": "FALSE"
       },
       "invariants": [
         "TypeOK",
         "ShadowSuppressesLegacy",
+        "NoFaults"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cancel-resurrect",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WrongTokenFinally": "FALSE",
+        "RedispatchCompleted": "FALSE",
+        "ModeSwitchRaces": "FALSE",
+        "ToolTurnEscalates": "FALSE",
+        "LegacyUnderShadow": "FALSE",
+        "AbortLastWaiter": "FALSE",
+        "CancelResurrect": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoCancelResurrect",
         "NoFaults"
       ],
       "properties": [],

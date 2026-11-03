@@ -26,10 +26,10 @@ CALLERS == {"c1", "c2"}
 REQS == 1..MaxReq
 
 VARIABLES cache, cachedState, inflight, waiters, cancelled, state, phase,
-          valid, consumed, faults
+          valid, capturedValid, consumed, faults
 
 vars == <<cache, cachedState, inflight, waiters, cancelled, state, phase,
-          valid, consumed, faults>>
+          valid, capturedValid, consumed, faults>>
 
 TypeOK ==
   /\ cache \in {TRUE, FALSE}
@@ -40,6 +40,7 @@ TypeOK ==
   /\ state \in {"ok", "partial", "none"}
   /\ phase \in {"idle", "dispatched", "settled"}
   /\ valid \in BOOLEAN
+  /\ capturedValid \in BOOLEAN
   /\ consumed \subseteq CALLERS
   /\ faults \subseteq {"early-abort"}
 
@@ -52,6 +53,7 @@ Init ==
   /\ state = "none"
   /\ phase = "idle"
   /\ valid = TRUE
+  /\ capturedValid = TRUE
   /\ consumed = {}
   /\ faults = {}
 
@@ -64,13 +66,14 @@ Join(p) ==
   /\ p \notin waiters
   /\ waiters' = waiters \union {p}
   /\ UNCHANGED <<cache, cachedState, inflight, cancelled, state, phase,
-                  valid, consumed, faults>>
+                  valid, capturedValid, consumed, faults>>
 
 (* No in-flight request: start one with this caller as the single waiter. *)
 Start(p) ==
   /\ inflight = 0
   /\ phase = "idle"
   /\ cache = FALSE
+  /\ valid
   /\ p \notin cancelled
   /\ inflight' = 1
   /\ waiters' = {p}
@@ -78,6 +81,7 @@ Start(p) ==
   /\ state' = "none"
   /\ cancelled' = {}
   /\ consumed' = {}
+  /\ capturedValid' = valid
   /\ UNCHANGED <<cache, cachedState, valid, faults>>
 
 (* Over-bound input or an unavailable service: no request at all.       *)
@@ -85,7 +89,7 @@ NoRequest(p) ==
   /\ inflight = 0
   /\ phase = "idle"
   /\ UNCHANGED <<cache, cachedState, inflight, waiters, cancelled, state,
-                  phase, valid, consumed, faults>>
+                  phase, valid, capturedValid, consumed, faults>>
 
 (************************************** cancellation **********************)
 
@@ -100,10 +104,10 @@ Cancel(p) ==
             /\ state' = "none"
             /\ waiters' = {}
             /\ cancelled' = {}
-            /\ UNCHANGED <<cache, cachedState, valid, consumed, faults>>
+            /\ UNCHANGED <<cache, cachedState, valid, capturedValid, consumed, faults>>
        ELSE /\ cancelled' = cancelled \union {p}
             /\ UNCHANGED <<cache, cachedState, inflight, waiters, state,
-                            phase, valid, consumed, faults>>
+                            phase, valid, capturedValid, consumed, faults>>
 
 (* Probe: the request is aborted while waiters remain.                   *)
 AbortEarly ==
@@ -116,32 +120,39 @@ AbortEarly ==
   /\ state' = "none"
   /\ waiters' = {}
   /\ faults' = faults \union {"early-abort"}
-  /\ UNCHANGED <<cache, cachedState, cancelled, valid, consumed>>
+  /\ UNCHANGED <<cache, cachedState, cancelled, valid, capturedValid,
+                  consumed>>
 
 (************************************** settlement *************************)
 
 (* The response arrives. Only a COMPLETE successful answer may be cached; *)
-(* an unavailable, cancelled or half-set result is never cached.         *)
+(* an unavailable, cancelled or half-set result is never cached. The      *)
+(* captured identity (snapshotted at Start) is                            *)
+(* compared with the current one - the post-await revalidation: a stale    *)
+(* identity still SETTLES (the request slot drains normally) but caches      *)
+(* nothing. SkipReval (the probe) skips exactly this comparison.            *)
 Respond(s) ==
   /\ inflight # 0
   /\ phase = "dispatched"
   /\ state' = s
   /\ phase' = "settled"
-  /\ cache' = (s = "ok" \/ (s = "partial" /\ CachePartial)) /\
-              (valid \/ SkipReval)
+  /\ cache' = ((capturedValid /\ valid) \/ SkipReval) /\
+              (s = "ok" \/ (s = "partial" /\ CachePartial))
   /\ cachedState' = IF cache' THEN s ELSE cachedState
   /\ valid' = valid
-  /\ UNCHANGED <<inflight, waiters, cancelled, consumed, faults>>
+  /\ UNCHANGED <<inflight, waiters, cancelled, capturedValid, consumed,
+                  faults>>
 
 (* After settlement the gate consumes: each surviving waiter reads the     *)
 (* result; a cancelled waiter must not consume it.                         *)
 Consume(p) ==
   /\ phase = "settled"
   /\ p \in waiters
+  /\ (valid \/ SkipReval)
   /\ (ServeAfterCancel \/ p \notin cancelled)
   /\ consumed' = consumed \union {p}
   /\ UNCHANGED <<cache, cachedState, inflight, waiters, cancelled, state,
-                  phase, valid, faults>>
+                  phase, valid, capturedValid, faults>>
 
 (* The final waiter leaves; the request slot closes.                      *)
 Leave(p) ==
@@ -154,26 +165,26 @@ Leave(p) ==
             /\ phase' = "idle"
             /\ state' = "none"
        ELSE /\ UNCHANGED <<inflight, phase, state>>
-  /\ UNCHANGED <<cache, cachedState, valid, faults>>
+  /\ UNCHANGED <<cache, cachedState, valid, capturedValid, faults>>
 
-(* The route identity changes (provider/model/revision drift): everything *)
-(* settled under the old identity is stale and must not be cached or       *)
-(* consumed. SkipReval (the probe) skips exactly this comparison.         *)
-(* On an identity change everything settled under the old identity is   *)
-(* stale: the cache entry is dropped and the in-flight/settled request    *)
-(* is discarded wholesale (waiters get nothing, no partial consumption).   *)
+(* The route identity changes while a request may be in flight: the       *)
+(* in-flight request is NOT discarded - it settles and drains normally      *)
+(* (Respond then discards the stale answer); only cached entries die.      *)
 IdentityChange ==
   /\ valid
   /\ valid' = FALSE
   /\ cache' = FALSE
   /\ cachedState' = "none"
-  /\ inflight' = 0
-  /\ phase' = "idle"
-  /\ state' = "none"
-  /\ waiters' = {}
-  /\ cancelled' = {}
-  /\ consumed' = {}
-  /\ UNCHANGED <<faults>>
+  /\ IF phase = "settled"
+       THEN /\ inflight' = 0
+            /\ phase' = "idle"
+            /\ state' = "none"
+            /\ waiters' = {}
+            /\ cancelled' = {}
+            /\ consumed' = {}
+       ELSE /\ UNCHANGED <<inflight, waiters, cancelled, consumed, phase,
+                            state>>
+  /\ UNCHANGED <<capturedValid, faults>>
 
 (************************************** lifecycle **************************)
 
@@ -181,12 +192,12 @@ ClearCache ==
   /\ cache
   /\ cache' = FALSE
   /\ cachedState' = "none"
-  /\ UNCHANGED <<inflight, waiters, cancelled, state, phase, valid, consumed,
-                  faults>>
+  /\ UNCHANGED <<inflight, waiters, cancelled, state, phase, valid,
+                  capturedValid, consumed, faults>>
 
 Idle == /\ inflight = 0 /\ phase = "idle" /\ waiters = {}
-        /\ UNCHANGED <<cache, cachedState, inflight, waiters, cancelled, state,
-                       phase, valid, consumed, faults>>
+        /\ UNCHANGED <<cache, cachedState, inflight, waiters, cancelled,
+                       state, phase, valid, capturedValid, consumed, faults>>
 
 Next == \/ \E p \in CALLERS : Join(p) \/ Start(p) \/ NoRequest(p) \/
                              Cancel(p) \/ Consume(p) \/ Leave(p)
@@ -213,8 +224,10 @@ NoEarlyAbort == ~"early-abort" \in faults
 (* A settled request is still holding the slot until its waiters drain.   *)
 SettledHoldsSlot == phase = "settled" => inflight # 0
 
-(* Identity is still valid at consumption time.                           *)
-ValidAtConsume == phase = "settled" => valid
+(* Consumption happens only under the still-valid identity: a request may  *)
+(* settle stale (the answer arrived after an identity change), but its      *)
+(* result is never consumed then.                                          *)
+ValidAtConsume == consumed # {} => (valid \/ SkipReval)
 
 (* Cache entries exist only under a still-valid identity and a complete   *)
 (* answer.                                                                *)

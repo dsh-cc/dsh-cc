@@ -7,7 +7,7 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T051925Z-0a36916d-8533-4db7-8b4b-72a11d9dd37e` (review-fold rerun)
+- runId: `20261103T055839Z-4ed25178-b4da-4a0e-b55a-79a2ae416c8d` (r3 fold rerun) (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
 - convention (core): **verified** — 12,165 states generated, 1,523 distinct, 0 left on queue; all 7 invariants hold.
@@ -95,4 +95,11 @@ All development failures were **modeling defects**, never design defects:
   aggregation (`mergeChunkTargets` in audit-align.ts, kept and used when
   split=off); split-v1's no-cross-chunk-merge path is the body-task single
   execution already modeled.
+
+## r3 fold (r2 delta review)
+
+- `WorstSticky` is now the exact equality `merged[i] = worstSeen[i]` (the
+  published verdict IS the worst ever observed); the
+  `strict-later-overwrites` probe checks `WorstSticky` itself, including
+  non-fail downgrades.
 

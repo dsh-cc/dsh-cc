@@ -7,10 +7,12 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T051836Z-d4c93d9d-c65e-4283-be1e-450fb5c79be1` (review-fold rerun)
+- runId: `20261103T053819Z-4d003adc-ed07-4d14-afd3-b5d3181bfd29` (r3 fold rerun) (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
-- convention (core): **verified** — 5,258 states generated, 717 distinct, 0 left on queue; all invariants hold.
+- convention (core): **verified** — 5,258 states generated, 717 distinct, 0 left on queue; all 8 invariants hold (`TypeOK`, `NoFaults`, `OneRequestPerStop`,
+  `CompletedStaysSettled`, `ToolTurnNeverActed`, `NoRacedPlaceholder`,
+  `NoStaleFinallyDelete`, `ShadowSuppressesLegacy`).
 - Probes (expansion, expected counterexample; each hit exactly its intended
   invariant):
   - `strict-wrong-token-finally` → `NoStaleFinallyDelete`: an old
@@ -21,6 +23,8 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
     starts while the cancelled old one is still in flight.
   - `strict-tool-turn-escalates` → `ToolTurnNeverActed`: a tool-using turn
     escalates.
+  - `strict-legacy-under-shadow` → `ShadowSuppressesLegacy`: the legacy judge
+    dispatches in the same round while dimensions shadow is on.
 - `check-evidence`: valid and fresh; aggregate `counterexample` is the
   expected legal form for a probe package.
 
@@ -35,8 +39,8 @@ All development failures were **modeling defects**, never design defects:
 2. The mode-switch cancel was initially modeled as synchronous (clearing
    the placeholder immediately), which made the race probe unreachable and
    the settle-after-cancel path unmodeled. Reworked: the cancel leaves the
-   placeholder in flight; the late settlement is `JudgeSettle` (which also
-   clears `cancelled`), and the race probe dispatches while the cancelled
+   placeholder in flight; the late settlement is `JudgeSettle` (which keeps
+   `cancelled` set; only a new stop with no in-flight placeholder clears it), and the race probe dispatches while the cancelled
    old placeholder is still in flight.
 3. A state-space explosion (34M distinct states, timeout) traced to
    `Escalate` being re-fireable on the same completed stop. The design
@@ -94,4 +98,11 @@ All development failures were **modeling defects**, never design defects:
 - `ToolTurnNeverActed` is now per-round (`actedThisTurn` ghost reset on
   every stop arrival) instead of conflating a key's escalation history
   across rounds.
+
+## r3 fold (r2 delta review)
+
+- `StopArrive` no longer clears `cancelled` while a placeholder is in
+  flight (`pTok # 0`): the cancellation belongs to that generation and a
+  repeated stop cannot resurrect it. The `strict-cancel-resurrect` probe
+  injects exactly that bug and hits `NoCancelResurrect`.
 

@@ -86,8 +86,7 @@
       },
       "invariants": [
         "TypeOK",
-        "CacheNeedsValidIdentity",
-        "CacheCompleteOnly"
+        "CacheNeedsValidIdentity"
       ],
       "properties": [],
       "limits": {

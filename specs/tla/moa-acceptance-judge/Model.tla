@@ -22,7 +22,9 @@ CONSTANTS WrongTokenFinally,  (* probe: an old finally deletes a newer     *)
           RedispatchCompleted, (* probe: a completed stop judged again     *)
           ModeSwitchRaces,    (* probe: a new placeholder starts before    *)
                                 (* the cancelled old one settles           *)
-          ToolTurnEscalates   (* probe: a tool-using turn escalates        *)
+          ToolTurnEscalates,  (* probe: a tool-using turn escalates        *)
+          CancelResurrect    (* probe: a repeated stop clears the          *)
+                             (* cancellation of the in-flight generation   *)
 
 STOPS == 1..2
 TOKENS == 1..2
@@ -50,7 +52,7 @@ TypeOK ==
   /\ legacyDispatched \in BOOLEAN
   /\ actedThisTurn \in BOOLEAN
   /\ faults \subseteq {"stale-finally", "late-request", "raced-placeholder",
-                       "tool-turn-acted", "legacy-under-shadow"}
+                       "tool-turn-acted", "legacy-under-shadow", "cancel-resurrect"}
 
 Init ==
   /\ stop = 0
@@ -76,18 +78,22 @@ StopArrive(k, tool) ==
   /\ (k # stop \/ tool = toolTurn)
   /\ stop' = k
   /\ toolTurn' = tool
-  /\ cancelled' = FALSE
+  /\ IF CancelResurrect
+       THEN /\ cancelled' = FALSE
+            /\ faults' = faults \cup {"cancel-resurrect"}
+       ELSE /\ cancelled' = IF pTok # 0 THEN cancelled ELSE FALSE
+            /\ faults' = faults
   /\ legacyDispatched' = FALSE
   /\ actedThisTurn' = FALSE
   /\ IF pStop = k \/ k \in completed
        THEN /\ pTok' = pTok
             /\ pStop' = pStop
             /\ UNCHANGED <<completed, reqCount, followCount, resultOk,
-                            dimsShadow, faults>>
+                            dimsShadow>>
        ELSE /\ pTok' = pTok
             /\ pStop' = pStop
             /\ UNCHANGED <<completed, reqCount, followCount, resultOk,
-                            dimsShadow, faults>>
+                            dimsShadow>>
 
 (* The repeated-stop case for an already completed key: recorded, no     *)
 (* request, no self-retry.                                                *)
@@ -291,6 +297,9 @@ NoRacedPlaceholder ==
 (* While dimensions shadow is on, the legacy judge never dispatches       *)
 (* (at most one judge per stop; the precedence rule).                     *)
 ShadowSuppressesLegacy == dimsShadow => ~legacyDispatched
+
+(* A repeated stop never resurrects a cancelled generation's result.       *)
+NoCancelResurrect == ~"cancel-resurrect" \in faults
 
 (* The finally guard: a placeholder is deleted only by its own token.    *)
 NoStaleFinallyDelete ==

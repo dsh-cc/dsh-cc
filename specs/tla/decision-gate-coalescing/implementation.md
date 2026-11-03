@@ -7,18 +7,18 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T051921Z-2fd33c39-8d92-42a8-9b62-6b519e2b4ef9` (review-fold rerun)
+- runId: `20261103T055825Z-ece70c83-fdbe-4641-a006-7735c816b317` (r3 fold rerun) (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
-- convention (core): **verified** — 316 states generated, 59 distinct, 0 left on queue; all 6 invariants hold.
+- convention (core): **verified** — 266 states generated, 52 distinct, 0 left on queue; all 8 invariants hold.
 - Probes (expansion, expected counterexample; each hit exactly its intended
   invariant):
-  - `strict-abort-last-waiter` → `AbortOnlyWhenAllCancelled`: the coalesced
+  - `strict-abort-last-waiter` → `NoEarlyAbort`: the coalesced
     request aborted while a waiter survives.
   - `strict-cache-partial` → `CacheCompleteOnly`: a partial answer cached.
-  - `strict-skip-reval` → `CacheCompleteOnly`: an identity-stale answer
+  - `strict-skip-reval` → `CacheNeedsValidIdentity`: an identity-stale answer
     treated as cacheable.
-  - `strict-serve-after-cancel` → `NoConsumeAfterCancel`: a cancelled waiter
+  - `strict-serve-after-cancel` → `CancelledNeverConsumed`: a cancelled waiter
     consumes the result.
 - `check-evidence`: valid and fresh; aggregate `counterexample` is the
   expected legal form for a probe package.
@@ -78,4 +78,14 @@ All development failures were **modeling defects**, never design defects:
   `NoEarlyAbort` invariant rejects.
 - The captured identity is snapshotted at dispatch and compared at
   settlement (the post-await revalidation the design names).
+
+## r3 fold (r2 delta review)
+
+- `capturedValid` is snapshotted at `Start` and compared at `Respond` (the
+  post-await revalidation): a stale identity still settles and drains, but
+  caches nothing; `IdentityChange` no longer discards an in-flight request,
+  and a settled request is disposed without consumption instead.
+- Consumption requires the still-valid identity (`ValidAtConsume` is the
+  consumption-time property), and `Start` never launches under an
+  already-stale identity.
 

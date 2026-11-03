@@ -68,10 +68,7 @@ spec `Spec`, safety-only.
 | `ToolTurnNeverActed` | REQ-5 | `ToolTurnEscalates` probe |
 | `NoFaults` | all | union of all fault witnesses |
 
-State-space notes (from checking): the dimensions-shadow precedence (the
-same round's legacy judge is disabled) is already covered by
-`moa-cascade-routing`'s `ShadowInert` invariant, so this model drops its
-own shadow variable; escalation is bounded to once per stop (the design's
+State-space notes (from checking): the dimensions-shadow precedence is pinned HERE: `DimsShadowOn`/`LegacyJudgeDispatch` carry `dimsShadow => ~legacyDispatched` (`ShadowSuppressesLegacy`), with the `strict-legacy-under-shadow` probe; shadow engages only at a round boundary, and moa-cascade-routing keeps only the escalation ladder. Escalation is bounded to once per stop (the design's
 "escalate to the next distinct tier only once"), which also bounds
 `followCount`. The mode-switch cancel is asynchronous — the old
 placeholder stays in flight until its own late settlement, and a new

@@ -211,9 +211,7 @@ NoFaults == faults = {}
 (* The merge is monotone toward the worst verdict: the published merged  *)
 (* verdict is never weaker than the worst verdict ever observed, and an  *)
 (* observed fail stays a fail.                                            *)
-WorstSticky == \A i \in ITEMS :
-  /\ Worst(merged[i], worstSeen[i]) = worstSeen[i]
-  /\ (worstSeen[i] = "fail" => merged[i] = "fail")
+WorstSticky == \A i \in ITEMS : merged[i] = worstSeen[i]
 
 (* At most one logical body task per run/audit pair; a further one is      *)
 (* allowed only after a restart lost a completed-but-not-durable body      *)

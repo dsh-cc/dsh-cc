@@ -16,9 +16,11 @@ Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](
   placeholder; asynchronous cancellation with late settlement).
 - backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/moa-acceptance-judge"}`.
 - rationale: the placeholder token guard is its own state machine, so it
-  is modeled on its own; the escalation ladder and shadow precedence
-  stay with the existing `specs/tla/moa-cascade-routing` model (a
-  screening deviation recorded in the model's design). See the model
+  is modeled on its own, and this model owns the placeholder guard AND the
+  shadow precedence (`ShadowSuppressesLegacy` in
+  `specs/tla/moa-acceptance-judge`); the escalation ladder stays with the
+  existing `specs/tla/moa-cascade-routing` model (a screening deviation
+  recorded in the model's design). See the model
   directory for the verified invariants and probe results.
 
 ## Problem and boundaries

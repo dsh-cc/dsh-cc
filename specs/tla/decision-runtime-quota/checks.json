@@ -15,7 +15,8 @@
         "StealLock": "FALSE",
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
-        "ConflictingSettle": "FALSE"
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -30,7 +31,8 @@
         "TornImpliesFrozen",
         "FrozenStopsAppends",
         "AttemptsBound",
-        "LockOwnerAlive"
+        "LockOwnerAlive",
+        "FreezeSurvivesSettleFailure"
       ],
       "properties": [],
       "limits": {
@@ -50,7 +52,8 @@
         "StealLock": "TRUE",
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
-        "ConflictingSettle": "FALSE"
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -76,7 +79,8 @@
         "StealLock": "FALSE",
         "AdoptTorn": "TRUE",
         "RefundUnpaired": "FALSE",
-        "ConflictingSettle": "FALSE"
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -101,7 +105,8 @@
         "StealLock": "FALSE",
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "TRUE",
-        "ConflictingSettle": "FALSE"
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -127,7 +132,8 @@
         "StealLock": "FALSE",
         "AdoptTorn": "FALSE",
         "RefundUnpaired": "FALSE",
-        "ConflictingSettle": "TRUE"
+        "ConflictingSettle": "TRUE",
+        "FreezeRowLost": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -137,6 +143,57 @@
       "limits": {
         "timeoutMs": 300000,
         "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-freeze-row-lost",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "FreezeSurvivesSettleFailure"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "attempt-ceiling-binds",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MAX_IN": "8",
+        "MAX_OUT": "3",
+        "MAX_ATTEMPTS": "3",
+        "MAX_RETRIES": "1",
+        "StealLock": "FALSE",
+        "AdoptTorn": "FALSE",
+        "RefundUnpaired": "FALSE",
+        "ConflictingSettle": "FALSE",
+        "FreezeRowLost": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "QuotaAttempts",
+        "QuotaIn"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
       }
     }
   ]

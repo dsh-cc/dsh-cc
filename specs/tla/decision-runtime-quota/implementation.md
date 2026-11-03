@@ -9,7 +9,7 @@ scope confirmed via ask_user_question). Manual adoption snippet: 〔src:ws:docs/
 
 ## Final run
 
-- runId: `20261103T051854Z-ba98581b-72e7-43a6-8a0c-615ce261b7f2` (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
+- runId: `20261103T061904Z-34798ed1-838d-4ce3-a0a1-252857667c4d` (r3 fold rerun) (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
   backfill of 〔src:ws:〕 evidence annotations in design.md; identical model
   bytes, identical case statistics per case — superseded run
   `20261103T020629Z-53a1d0be-b734-4395-94e4-1870d60a9264` had the same
@@ -107,3 +107,16 @@ inside that lock — otherwise a settle-failure freeze can interleave with 〔sr
 another request's passed limit check (the model's counterexample 2 trace) 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L148-L161〕.
 The design now states this normatively in its durable-quota section; 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
 the implementation tests should pin it 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕.
+
+## r3 fold (r2 delta review)
+
+- `settleFailed` ghost + `FreezeSurvivesSettleFailure`: a settle failure
+  always leaves a durable blocking mechanism (the persisted freeze row or
+  the kept lock file); the `strict-freeze-row-lost` probe drops both and
+  hits it.
+- `attempt-ceiling-binds` core case: with `MAX_IN=8` the attempt ceiling
+  (`QuotaAttempts`) binds before the input-token ceiling, verified
+  9,810,866 states.
+- `Recover`'s torn-freeze boundary now matches `SettleFail`'s
+  (`freezeSeq = seqN - 1`).
+

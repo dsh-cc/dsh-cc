@@ -49,7 +49,7 @@
       },
       "invariants": [
         "TypeOK",
-        "NoFaults"
+        "WorstSticky"
       ],
       "properties": [],
       "limits": {

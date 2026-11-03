@@ -91,8 +91,7 @@ defects — the design text governs): 〔src:ws:docs/plans/2026-11-02-systemone-
   legitimate bookkeeping ("stop new decisions without deleting records") 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕.
 - Every ledger append (reserve, dispatch and settle rows alike) runs inside 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
   the transaction lock, per the design's "reserve, settle and recovery all 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
-  run inside the same short transaction lock" — the model gates dispatch and 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
-  settle writes on a free lock exactly like reserves 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕.
+  run inside the same short transaction lock" — every append action (dispatch, settle, settle-fail, abort) is an acquire-append-release transaction that holds the lock while it writes — the same discipline reserves use — and the freeze is computed with the lock held 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕.
 | `AttemptsBound` | REQ-8 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕| 429 → retry → re-reserve |
 | `LockOwnerAlive` | REQ-6 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕| crash while holding the lock |
 | `TypeOK` | — 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕| — |
@@ -109,7 +108,7 @@ attempt loses its reservation / dispatch loses its reserve row), 〔src:ws:docs/
 
 - Two concurrent requests (`p1`, `p2`), at most 4 decisionIds, at most 2 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L148-L161〕
   attempts per decision (`MAX_RETRIES=1`), fixed request shape (input 2 or 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L113-L128〕
-  none, output 1), `MAX_IN=6`, `MAX_OUT=4`, `MAX_ATTEMPTS=3` 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L113-L128〕.
+  none, output 1), `MAX_IN=4`, `MAX_OUT=3`, `MAX_ATTEMPTS=3` 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L113-L128〕.
 - The HTTP layer is abstracted to four outcomes: valid usage (actual 2/1), 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕
   429, timeout, other HTTP error — the design's only billing-relevant 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕
   distinction. Answer-level malformedness is S1-01's concern and does not 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕

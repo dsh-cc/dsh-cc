@@ -10,8 +10,8 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 - runId: `a1ea28a7-0d52-48f5-87ef-1b0e4eb05711`
 - inputDigest: `78b35e8763be8c74ffa9dc3f94581a36576c3fdcc169711e6957b17d95cd851c`
 - toolchain: leanprover/lean4 v4.35.0 (darwin-arm64, archive SHA-256
-  c0c6f34f...63177c2, content digest a679a8da...482624, provisioned at
-  `/private/tmp/lean-systemone`), runner `@dsh-cc/plugin-dsh-cc-agents`
+  c0c6f34f...63177c2, content digest a679a8da...482624, provisioned under the
+  system temp directory), runner `@dsh-cc/plugin-dsh-cc-agents`
   0.9.3-rc.4.
 - All six properties **verified**: conservation
   (`retainedTotal_le_reservedTotal`), unknown/unsettled upper bounds,

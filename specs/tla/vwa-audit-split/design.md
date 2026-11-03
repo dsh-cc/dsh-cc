@@ -24,8 +24,9 @@ safety-only.
 
 ## Requirements
 
-- **REQ-1** The per-rule merge keeps the worst verdict: a later pass never
-  overwrites an earlier `fail`.
+- **REQ-1** The retained legacy aggregation keeps the worst verdict
+  (`mergeChunkTargets` in audit-align.ts, used when split=off): a later pass
+  never overwrites an earlier `fail`; split-v1 performs no cross-chunk merge.
 - **REQ-2** Exactly one logical full-text body task per `(runId, auditKey)`;
   alignment chunks never start their own.
 - **REQ-3** Fragments are never aggregated into a completed full-text audit.
@@ -34,8 +35,9 @@ safety-only.
 - **REQ-5** Every dispatched attempt is reserved through the shared permit
   first (S1-02 / S1-07 adapter).
 - **REQ-6** Delivery requires both halves of the public pair durable and
-  validated; a body that completed but whose pair is not durable re-runs on
-  restart.
+  validated; a body PART that completed but whose durable save failed re-runs
+  on restart; a durable body part whose final pair commit was interrupted is
+  only re-assembled and committed.
 
 ## State variables
 

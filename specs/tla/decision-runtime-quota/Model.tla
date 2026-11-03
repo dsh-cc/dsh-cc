@@ -11,7 +11,9 @@ CONSTANTS MAX_IN, MAX_OUT, MAX_ATTEMPTS, MAX_RETRIES,
           StealLock,      (* probe: acquire ignores mutual exclusion        *)
           AdoptTorn,      (* probe: recovery keeps using a torn ledger      *)
           RefundUnpaired, (* probe: recovery deletes unpaired reserve rows *)
-          ConflictingSettle (* probe: a second, different terminal settle   *)
+          ConflictingSettle, (* probe: a second, different terminal settle  *)
+          FreezeRowLost  (* probe: the freeze row is not persisted and the  *)
+                         (* lock file is not kept                            *)
 
 PROCS == {"p1", "p2"}
 DID == 1..4
@@ -22,10 +24,10 @@ PHASE == {"idle", "want-lock", "locked", "checked", "rejected",
           "dispatching", "awaiting", "retrywait", "settling", "done"}
 
 VARIABLES led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
-          runs, alive, plannedTerm
+          runs, alive, plannedTerm, settleFailed
 
 vars == <<led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
-          runs, alive, plannedTerm>>
+          runs, alive, plannedTerm, settleFailed>>
 
 EmptyRun == [phase |-> "idle", did |-> 0, att |-> 0, rin |-> 0, rout |-> 0,
              ain |-> 0, aout |-> 0, outcome |-> "none", last |-> "none"]
@@ -41,6 +43,7 @@ Init == /\ led = {}
         /\ runs = [p \in PROCS |-> EmptyRun]
         /\ alive = TRUE
         /\ plannedTerm = [p \in PROCS |-> "none"]
+        /\ settleFailed = FALSE
 
 (************************************** ledger projections *****************)
 
@@ -105,7 +108,7 @@ Request(p) ==
          !.phase = "want-lock", !.did = didN + 1, !.att = 1,
          !.rin = 2, !.rout = 1, !.outcome = "none", !.last = "none"]]
   /\ UNCHANGED <<led, seqN, torn, lock, lockFile, frozen, freezeSeq,
-                  alive, plannedTerm>>
+                  alive, plannedTerm, settleFailed>>
 
 Acquire(p) ==
   /\ alive
@@ -116,7 +119,7 @@ Acquire(p) ==
   /\ lockFile' = TRUE
   /\ runs' = [runs EXCEPT ![p].phase = "locked"]
   /\ UNCHANGED <<led, seqN, didN, torn, frozen, freezeSeq, alive,
-                  plannedTerm>>
+                  plannedTerm, settleFailed>>
 
 (* Check limits while holding the lock. The plan is in-memory only until   *)
 (* AppendReserve; mutual exclusion is what makes check-then-append safe.  *)
@@ -130,7 +133,7 @@ CheckReserve(p) ==
             /\ lock' = "none"
             /\ lockFile' = FALSE
             /\ UNCHANGED <<led, seqN, didN, frozen, freezeSeq, alive,
-                            plannedTerm, torn>>
+                            plannedTerm, torn, settleFailed>>
      ELSE IF RetainedIn + runs[p].rin > MAX_IN
        \/ RetainedOut + runs[p].rout > MAX_OUT
        \/ AttemptsUsed >= MAX_ATTEMPTS
@@ -139,10 +142,10 @@ CheckReserve(p) ==
             /\ lock' = "none"
             /\ lockFile' = FALSE
             /\ UNCHANGED <<led, seqN, didN, frozen, freezeSeq, alive,
-                            plannedTerm, torn>>
+                            plannedTerm, torn, settleFailed>>
      ELSE /\ runs' = [runs EXCEPT ![p].phase = "checked"]
           /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen,
-                          freezeSeq, alive, plannedTerm>>
+                          freezeSeq, alive, plannedTerm, settleFailed>>
 
 AppendReserve(p) ==
   /\ alive
@@ -156,7 +159,7 @@ AppendReserve(p) ==
   /\ lock' = "none"
   /\ lockFile' = FALSE
   /\ runs' = [runs EXCEPT ![p].phase = "dispatching"]
-  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive, plannedTerm>>
+  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive, plannedTerm, settleFailed>>
 
 (* The dispatch-record persist is its own short transaction: acquire,   *)
 (* append, release — the lock covers the append.                          *)
@@ -168,7 +171,7 @@ DispatchAcquire(p) ==
   /\ lock' = p
   /\ lockFile' = TRUE
   /\ UNCHANGED <<led, seqN, didN, torn, frozen, freezeSeq, runs, alive,
-                  plannedTerm>>
+                  plannedTerm, settleFailed>>
 
 WriteDispatchFail(p) ==
   /\ alive
@@ -184,7 +187,7 @@ WriteDispatchFail(p) ==
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "done", !.outcome = "error"]]
   /\ UNCHANGED <<didN, torn, frozen, freezeSeq,
-                  alive, plannedTerm>>
+                  alive, plannedTerm, settleFailed>>
 
 WriteDispatchOk(p) ==
   /\ alive
@@ -200,7 +203,7 @@ WriteDispatchOk(p) ==
   /\ lockFile' = FALSE
   /\ runs' = [runs EXCEPT ![p].phase = "awaiting"]
   /\ UNCHANGED <<didN, torn, frozen, freezeSeq,
-                  alive, plannedTerm>>
+                  alive, plannedTerm, settleFailed>>
 
 (* Fetch outcome: valid usage with an ok or malformed answer, a 429, a    *)
 (* timeout, or another HTTP error. Only 429 may retry.                    *)
@@ -217,7 +220,7 @@ Fetch(p) ==
         /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
                 !.phase = "settling", !.last = "four29"]]
   /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
-                  alive>>
+                  alive, settleFailed>>
 
 Retry(p) ==
   /\ alive
@@ -227,7 +230,7 @@ Retry(p) ==
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "want-lock", !.att = runs[p].att + 1, !.last = "none"]]
   /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
-                  alive, plannedTerm>>
+                  alive, plannedTerm, settleFailed>>
 
 (* The settle callback also runs inside its own short transaction.       *)
 SettleAcquire(p) ==
@@ -238,7 +241,7 @@ SettleAcquire(p) ==
   /\ lock' = p
   /\ lockFile' = TRUE
   /\ UNCHANGED <<led, seqN, didN, torn, frozen, freezeSeq, runs, alive,
-                  plannedTerm>>
+                  plannedTerm, settleFailed>>
 
 SettleWrite(p) ==
   /\ alive
@@ -262,7 +265,7 @@ SettleWrite(p) ==
   /\ lock' = "none"
   /\ lockFile' = FALSE
   /\ plannedTerm' = [plannedTerm EXCEPT ![p] = "none"]
-  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive>>
+  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive, settleFailed>>
 
 (* Probe-only: a second, conflicting terminal settle for an already        *)
 (* settled attempt (violates the single-settlement rule; convention runs    *)
@@ -281,7 +284,7 @@ ConflictingWrite(p, k) ==
              aout |-> runs[p].aout])
   /\ seqN' = seqN + 1
   /\ UNCHANGED <<didN, torn, lock, lockFile, frozen, freezeSeq, runs,
-                  alive, plannedTerm>>
+                  alive, plannedTerm, settleFailed>>
 
 (* The settle callback throws: the permit keeps its durable reserve, the  *)
 (* quota freezes, and the run ends in error.                              *)
@@ -292,10 +295,14 @@ SettleFail(p) ==
   /\ plannedTerm[p] # "none"
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "done", !.outcome = "error"]]
-  /\ frozen' = TRUE
+  /\ IF FreezeRowLost
+       THEN /\ frozen' = FALSE
+            /\ lockFile' = FALSE
+       ELSE /\ frozen' = TRUE
+            /\ lockFile' = FALSE
   /\ freezeSeq' = seqN - 1
   /\ lock' = "none"
-  /\ lockFile' = FALSE
+  /\ settleFailed' = TRUE
   /\ UNCHANGED <<led, seqN, didN, torn, alive, plannedTerm>>
 
 (* Caller abort before dispatch: refund (not-dispatched).                 *)
@@ -312,7 +319,7 @@ AbortBefore(p) ==
          !.phase = "done", !.outcome = "cancelled"]]
   /\ lock' = "none"
   /\ lockFile' = FALSE
-  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive, plannedTerm>>
+  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive, plannedTerm, settleFailed>>
 
 (* Caller abort after dispatch: no refund; the finally supplements an     *)
 (* unknown settle.                                                        *)
@@ -323,7 +330,7 @@ AbortAfter(p) ==
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "settling", !.outcome = "cancelled"]]
   /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
-                  alive>>
+                  alive, settleFailed>>
 
 (* Crash: in-memory state is lost; a crash while holding the lock leaves  *)
 (* the lock file behind; a crash mid settle-append can tear the line.     *)
@@ -335,7 +342,7 @@ Crash ==
   /\ runs' = [p \in PROCS |-> EmptyRun]
   /\ plannedTerm' = [p \in PROCS |-> "none"]
   /\ lockFile' = (lockFile \/ (lock # "none"))
-  /\ UNCHANGED <<led, seqN, didN, frozen, freezeSeq>>
+  /\ UNCHANGED <<led, seqN, didN, frozen, freezeSeq, settleFailed>>
 
 (* Restart: read the ledger. A torn tail freezes (unless the probe adopts *)
 (* it); unpaired reserves keep their full amount (unless the probe        *)
@@ -353,19 +360,19 @@ Recover ==
                      r.kind # "reserve"
                      \/ HasSettled(<<r.did, r.att>>)}
               ELSE led
-  /\ UNCHANGED <<seqN, didN, torn, runs, lock, lockFile, plannedTerm>>
+  /\ UNCHANGED <<seqN, didN, torn, runs, lock, lockFile, plannedTerm, settleFailed>>
 
 HumanClearLock ==
   /\ lock = "none"
   /\ lockFile
   /\ lockFile' = FALSE
   /\ UNCHANGED <<led, seqN, didN, torn, lock, frozen, freezeSeq, runs,
-                  alive, plannedTerm>>
+                  alive, plannedTerm, settleFailed>>
 
 (* Quiescent stutter after a crash, so CHECK_DEADLOCK stays meaningful.   *)
 Idle == /\ ~alive
         /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen,
-                       freezeSeq, runs, alive, plannedTerm>>
+                       freezeSeq, runs, alive, plannedTerm, settleFailed>>
 
 Next == \/ \E p \in PROCS :
             Request(p) \/ Acquire(p) \/ CheckReserve(p) \/
@@ -382,6 +389,7 @@ Spec == Init /\ [][Next]_vars
 (************************************** invariants *************************)
 
 TypeOK ==
+  /\ settleFailed \in BOOLEAN
   /\ IsFiniteSet(led)
   /\ seqN \in Nat
   /\ didN \in 0..4
@@ -395,6 +403,10 @@ TypeOK ==
 
 (* Attempts never exceed the configured quota.                             *)
 QuotaAttempts == AttemptsUsed <= MAX_ATTEMPTS
+
+(* A settle failure always leaves a durable blocking mechanism: either the *)
+(* persisted freeze row or the kept lock file (quota-lock-unavailable).     *)
+FreezeSurvivesSettleFailure == settleFailed => (frozen \/ lockFile)
 
 QuotaIn == RetainedIn <= MAX_IN
 QuotaOut == RetainedOut <= MAX_OUT
