@@ -123,7 +123,7 @@ Keep the client's current behavior: at most two retries on 429, a total retry wa
 | Input or event | Result |
 |---|---|
 | Any one requested answer missing | malformed as a whole; other answers are unusable |
-| HTTP 200, but JSON cannot be parsed | malformed/invalid-envelope |
+| HTTP 200, but JSON cannot be parsed | malformed/invalid-envelope (changed by this feature: the current client returns error with reason 'response parse failed') |
 | No usage | malformed/invalid-usage |
 | Probability 0, 1, or a legal tie | success |
 | NaN, Infinity, negative value, sum outside tolerance | malformed |

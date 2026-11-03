@@ -46,12 +46,13 @@ A pure executor plus a host adapter plugin. Letting the client read settings/fs 
 | New `src/{index,settings,ledger,quota,route}.ts` in that package | mount, settings, JSONL, durable quota, capability resolution respectively |
 | Modify `packages/session/command-cost/src/{index,cost}.ts` | load the decision ledger asynchronously, show its cost and unpriced/unknown usage separately |
 | Modify `packages/preset/cc` and the compose files of related bundles | mount the service; the service itself never triggers a request |
+| Modify packages/observability/sidecar-io | hoist the session-directory encodeSegment helper into sidecar-io as a new export (the S1-02 ledger path uses it; the existing copies in config-snapshot and vwa-argument remain until their own migrations) |
 
-New package runtime dependencies declare `@dsh-cc/systemone`, `@dsh-cc/model-aliases`, `@dsh-cc/settings-ns`, `@dsh-cc/settings-provider`, `@dsh-cc/sidecar-io` and the harness/cordis packages actually used, with `workspace:*` for workspace packages. Update the workspace lock, tsconfig paths/project references and published exports in sync; deep imports of sibling `src` that are not declared as dependencies are forbidden.
+New package runtime dependencies declare `@dsh-cc/systemone`, `@dsh-cc/model-aliases`, `@dsh-cc/settings-ns`, `@dsh-cc/settings-provider`, `@dsh-cc/sidecar-io` and the harness/cordis packages actually used, with `workspace:^` for workspace packages. Update the workspace lock, tsconfig paths/project references and published exports in sync; deep imports of sibling `src` that are not declared as dependencies are forbidden.
 
 ## Public interface
 
-The following is the only shared contract in this design set. New features obtain a `DecisionRunner` through the optional service; a missing service is equivalent to unavailable/unconfigured. Features use the fixed identifiers from the overview and must not contain paths or user text.
+The following is the only shared contract in this design set. New features obtain a `DecisionRunner` through the optional service; a missing service is equivalent to unavailable/unconfigured. Features use the fixed identifiers from the overview and must not contain paths or user text. The `feature` field is a closed kebab-case union for this design set: `memory-recall`, `memory-extraction`, `tool-discovery`, `skill-recommendation`, `support-triage`, `audit-shortlist`, `moa-context-routing`, `moa-acceptance`, `summary-gate`, `reducer-gate`.
 
 ```ts
 interface DecisionScope {
@@ -80,7 +81,8 @@ type DecisionRun =
       | 'cancelled' | 'malformed' | 'error'; decisionId: string };
 interface DecisionRouteIdentity {
   provider: string; model: string; revision: string;
-  perRequestTokens: number; perQuestionTokens: number; maxOutputTokens: number;
+  perRequestTokens: number; perQuestionTokens: number;
+  maxQuestions: number; maxOutputTokens: number;
 }
 interface DecisionRunner {
   identifyRoute(alias: string, scope: DecisionScope): DecisionRouteIdentity | undefined;
@@ -106,6 +108,8 @@ interface DecisionBudgetPermit {
 }
 ```
 
+`model-version-mismatch` and `accounting-overrun` are ledger reasonCodes, not DecisionRun reasons: both surface as `unavailable` with the reasonCode recorded in the row.
+
 The deps of `createDecisionRunner(deps)` are `validateScope(scope)`, `resolveRoute(alias,scope)`, `reserveGlobal` (same provider shape), `append(row)`, `now()`, `uuid()` and `fetchImpl`. All are supplied by the constructor; tests need no real settings, files or models. Any dependency exception is folded into unavailable and must not escape into the agent waterfall.
 
 The host service exposes `forAgent(agent: Agent): BoundDecisionRunner`; BoundDecisionRunner adds `scope(originSeq?: number): DecisionScope` on top of the pure interface above. Every business wrapper first obtains a binder from the real exec/invocation/capture Agent, then calls scope; when the argument is omitted it captures `Number(agent.session.seq)` synchronously and must never use the event-array length. Tests may inject a pure DecisionRunner and a fixed scope directly.
@@ -126,8 +130,10 @@ New namespace `systemone-decisions`, reading only trusted user/managed/explicit 
 | `max-input-tokens-per-session` | 1000000 | Non-negative safe integer, settled after reservation |
 | `max-output-tokens-per-session` | 100000 | Same, tokens count even if provider output is free |
 | `max-retries` | 0 | Integer 0..2, retries 429 only |
-| `capabilities` | `[]` | Exact provider/model rows with revision, actual-model-id and the three upper bounds above; actual-model-id is the only permitted response model, non-empty and at most 256 characters; duplicate matches are an invalid configuration |
+| `capabilities` | `[]` | Exact provider/model rows with revision, actual-model-id, the three upper bounds above and a maxQuestions upper bound (positive safe integer); actual-model-id is the only permitted response model, non-empty and at most 256 characters; duplicate matches are an invalid configuration |
 | `ledger-max-bytes` | 10485760 | Integer, minimum 1048576; on reaching the limit, stop new decisions without deleting records still inside the quota window |
+
+A durably not-dispatched attempt does not consume the attempt quota: it stays in the ledger but is released in full (the S1-07 released row), and max-attempts-per-session counts only attempts that reserved and were not durably refunded. Each capabilities row is `{ provider, model, revision, actual-model-id, per-request-tokens, per-question-tokens, max-output-tokens, max-questions }`, all required, kebab-case keys in raw settings.
 
 Mounting the service does not enable any business. Each feature's mode defaults to off, and off constructs no request. Changing settings does not reset quota already spent; lowering a limit below what has been consumed rejects all subsequent requests. The quota scope is `(projectKey,sessionId)`, covering every agent and feature of that session; different projects do not share, and parent/child session IDs with different values are metered separately.
 
@@ -152,9 +158,9 @@ after must run after the response body is read and before answer validation, and
 
 ## Durable quota and concurrency
 
-The directory is `<dshHome>/decision-usage/<projectKey>/<encodedSessionId>/`; projectKey comes from the host cwd and the session ID uses the harness encodeSegment — never concatenate user-input paths. The directory holds `usage.jsonl` and the short-lived transaction lock `quota.lock`.
+The directory is `<dshHome>/decision-usage/<projectKey>/<encodedSessionId>/`; projectKey comes from the host cwd and the session ID uses the encodeSegment helper hoisted into sidecar-io — never concatenate user-input paths. The directory holds `usage.jsonl` and the short-lived transaction lock `quota.lock`.
 
-reserve, settle and recovery all run inside the same short transaction lock: acquire with `open('wx',0600)`, wait at most 100ms, retrying every 20ms; failure counts as budget, with no lock stealing. The lock protects only reading the ledger, checking limits and appending records — never held across network waits. **Every** append is inside that transaction, the dispatch record at step 5 included, and the freeze state is read and computed inside the same lock: a settle failure that freezes the quota must not interleave with another request that has already passed its limit check. Splitting these into separate lock acquisitions reopens exactly that race. v1 deletes no existing lock automatically; a lock left by a crashed process only stops new calls, diagnostics show the fixed `quota-lock-unavailable`, and a human clears it after confirming no process holds the lock. This way the existing VWA torn-lock reclaim logic is not reused and no live-lock misdeletion is introduced.
+reserve, settle and recovery all run inside the same short transaction lock: acquire with `open('wx',0600)`, wait at most 100ms, retrying every 20ms; failure counts as budget and the lock wait is always bounded by the run's remaining total timeout, with no lock stealing. The lock protects only reading the ledger, checking limits and appending records — never held across network waits. **Every** append is inside that transaction, the dispatch record at step 5 included, and the freeze state is read and computed inside the same lock: a settle failure that freezes the quota must not interleave with another request that has already passed its limit check. Splitting these into separate lock acquisitions reopens exactly that race. A freeze is persisted as a ledger row (fixed reason code) inside the same transaction that computed it; recovery reads the freeze from the ledger, and if persisting the freeze row itself fails the reservation stays retained, the run returns error, and the next settle attempt re-freezes. v1 deletes no existing lock automatically; a lock left by a crashed process only stops new calls, diagnostics show the fixed `quota-lock-unavailable`, and a human clears it after confirming no process holds the lock. This way the existing VWA torn-lock reclaim logic is not reused and no live-lock misdeletion is introduced.
 
 Appending a reserve/dispatch/settle JSONL line must `fsync` successfully before the transaction completes. The reserve leaseId is decisionId+attempt; settle is idempotent — repeating the same terminal state charges nothing more, and a conflicting terminal state freezes the quota. Permit acquisition order is fixed global→business, settlement the reverse order, never holding two file locks at once.
 

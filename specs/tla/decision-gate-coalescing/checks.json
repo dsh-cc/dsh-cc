@@ -18,9 +18,11 @@
         "TypeOK",
         "AbortOnlyWhenAllCancelled",
         "CacheCompleteOnly",
-        "NoConsumeAfterCancel",
+        "CancelledNeverConsumed",
+        "NoEarlyAbort",
         "SettledHoldsSlot",
-        "ValidAtConsume"
+        "ValidAtConsume",
+        "CacheNeedsValidIdentity"
       ],
       "properties": [],
       "limits": {
@@ -41,6 +43,7 @@
       },
       "invariants": [
         "TypeOK",
+        "NoEarlyAbort",
         "AbortOnlyWhenAllCancelled"
       ],
       "properties": [],
@@ -83,6 +86,7 @@
       },
       "invariants": [
         "TypeOK",
+        "CacheNeedsValidIdentity",
         "CacheCompleteOnly"
       ],
       "properties": [],
@@ -104,7 +108,7 @@
       },
       "invariants": [
         "TypeOK",
-        "NoConsumeAfterCancel"
+        "CancelledNeverConsumed"
       ],
       "properties": [],
       "limits": {

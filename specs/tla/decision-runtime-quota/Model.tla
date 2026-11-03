@@ -82,7 +82,15 @@ RecSumOut(T) == IF T = {} THEN 0
 
 RetainedIn == RecSumIn(AttemptKeys)
 RetainedOut == RecSumOut(AttemptKeys)
-AttemptsUsed == Cardinality({r \in led : r.kind = "reserve"})
+RefundedAttempt(d, a) ==
+  \E r \in led : r.kind = "settled" /\ r.did = d /\ r.att = a /\
+                  r.term = "not-dispatched"
+
+(* Only attempts that entered fetch count (429 included); a not-dispatched  *)
+(* refund released before dispatch does not count as a call.               *)
+AttemptsUsed ==
+  Cardinality({r \in led : r.kind = "reserve" /\
+                ~RefundedAttempt(r.did, r.att)})
 
 (************************************** actions ****************************)
 
@@ -150,33 +158,48 @@ AppendReserve(p) ==
   /\ runs' = [runs EXCEPT ![p].phase = "dispatching"]
   /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive, plannedTerm>>
 
-WriteDispatchFail(p) ==
+(* The dispatch-record persist is its own short transaction: acquire,   *)
+(* append, release — the lock covers the append.                          *)
+DispatchAcquire(p) ==
   /\ alive
+  /\ runs[p].phase = "dispatching"
   /\ lock = "none"
   /\ ~lockFile
+  /\ lock' = p
+  /\ lockFile' = TRUE
+  /\ UNCHANGED <<led, seqN, didN, torn, frozen, freezeSeq, runs, alive,
+                  plannedTerm>>
+
+WriteDispatchFail(p) ==
+  /\ alive
+  /\ lock = p
   /\ runs[p].phase = "dispatching"
   /\ AddRow([seq |-> seqN, kind |-> "settled", did |-> runs[p].did,
              att |-> runs[p].att, rin |-> runs[p].rin,
              rout |-> runs[p].rout, term |-> "not-dispatched",
              ain |-> 0, aout |-> 0])
   /\ seqN' = seqN + 1
+  /\ lock' = "none"
+  /\ lockFile' = FALSE
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "done", !.outcome = "error"]]
-  /\ UNCHANGED <<didN, torn, lock, lockFile, frozen, freezeSeq,
+  /\ UNCHANGED <<didN, torn, frozen, freezeSeq,
                   alive, plannedTerm>>
 
 WriteDispatchOk(p) ==
   /\ alive
-  /\ lock = "none"
-  /\ ~lockFile
+  /\ lock = p
+  /\ ~frozen
   /\ runs[p].phase = "dispatching"
   /\ AddRow([seq |-> seqN, kind |-> "dispatch", did |-> runs[p].did,
              att |-> runs[p].att, rin |-> runs[p].rin,
              rout |-> runs[p].rout, term |-> "none",
              ain |-> 0, aout |-> 0])
   /\ seqN' = seqN + 1
+  /\ lock' = "none"
+  /\ lockFile' = FALSE
   /\ runs' = [runs EXCEPT ![p].phase = "awaiting"]
-  /\ UNCHANGED <<didN, torn, lock, lockFile, frozen, freezeSeq,
+  /\ UNCHANGED <<didN, torn, frozen, freezeSeq,
                   alive, plannedTerm>>
 
 (* Fetch outcome: valid usage with an ok or malformed answer, a 429, a    *)
@@ -190,35 +213,36 @@ Fetch(p) ==
      \/ /\ plannedTerm' = [plannedTerm EXCEPT ![p] = "unknown"]
         /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
                 !.phase = "settling", !.last = "timeout"]]
-     \/ /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
-                !.phase = "retrywait", !.last = "four29"]]
-        /\ plannedTerm' = plannedTerm
+     \/ /\ plannedTerm' = [plannedTerm EXCEPT ![p] = "unknown"]
+        /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
+                !.phase = "settling", !.last = "four29"]]
   /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
                   alive>>
 
 Retry(p) ==
   /\ alive
-  /\ runs[p].phase = "retrywait"
+  /\ runs[p].phase = "done"
+  /\ runs[p].last = "four29"
   /\ runs[p].att + 1 <= 1 + MAX_RETRIES
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "want-lock", !.att = runs[p].att + 1, !.last = "none"]]
   /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
                   alive, plannedTerm>>
 
-RetryExhausted(p) ==
+(* The settle callback also runs inside its own short transaction.       *)
+SettleAcquire(p) ==
   /\ alive
-  /\ runs[p].phase = "retrywait"
-  /\ runs[p].att + 1 > 1 + MAX_RETRIES
-  /\ plannedTerm' = [plannedTerm EXCEPT ![p] = "unknown"]
-  /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
-         !.phase = "settling", !.last = "four29"]]
-  /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, frozen, freezeSeq,
-                  alive>>
+  /\ runs[p].phase = "settling"
+  /\ lock = "none"
+  /\ ~lockFile
+  /\ lock' = p
+  /\ lockFile' = TRUE
+  /\ UNCHANGED <<led, seqN, didN, torn, frozen, freezeSeq, runs, alive,
+                  plannedTerm>>
 
 SettleWrite(p) ==
   /\ alive
-  /\ lock = "none"
-  /\ ~lockFile
+  /\ lock = p
   /\ runs[p].phase = "settling"
   /\ \/ /\ plannedTerm[p] = "actual"
         /\ AddRow([seq |-> seqN, kind |-> "settled", did |-> runs[p].did,
@@ -235,8 +259,10 @@ SettleWrite(p) ==
         /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
                 !.phase = "done", !.outcome = "unavailable"]]
   /\ seqN' = seqN + 1
+  /\ lock' = "none"
+  /\ lockFile' = FALSE
   /\ plannedTerm' = [plannedTerm EXCEPT ![p] = "none"]
-  /\ UNCHANGED <<didN, torn, lock, lockFile, frozen, freezeSeq, alive>>
+  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive>>
 
 (* Probe-only: a second, conflicting terminal settle for an already        *)
 (* settled attempt (violates the single-settlement rule; convention runs    *)
@@ -261,21 +287,21 @@ ConflictingWrite(p, k) ==
 (* quota freezes, and the run ends in error.                              *)
 SettleFail(p) ==
   /\ alive
-  /\ lock = "none"
-  /\ ~lockFile
+  /\ lock = p
   /\ runs[p].phase = "settling"
   /\ plannedTerm[p] # "none"
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "done", !.outcome = "error"]]
   /\ frozen' = TRUE
-  /\ freezeSeq' = seqN
-  /\ UNCHANGED <<led, seqN, didN, torn, lock, lockFile, alive, plannedTerm>>
+  /\ freezeSeq' = seqN - 1
+  /\ lock' = "none"
+  /\ lockFile' = FALSE
+  /\ UNCHANGED <<led, seqN, didN, torn, alive, plannedTerm>>
 
 (* Caller abort before dispatch: refund (not-dispatched).                 *)
 AbortBefore(p) ==
   /\ alive
-  /\ lock = "none"
-  /\ ~lockFile
+  /\ lock = p
   /\ runs[p].phase = "dispatching"
   /\ AddRow([seq |-> seqN, kind |-> "settled", did |-> runs[p].did,
              att |-> runs[p].att, rin |-> runs[p].rin,
@@ -284,8 +310,9 @@ AbortBefore(p) ==
   /\ seqN' = seqN + 1
   /\ runs' = [runs EXCEPT ![p] = [runs[p] EXCEPT
          !.phase = "done", !.outcome = "cancelled"]]
-  /\ UNCHANGED <<didN, torn, lock, lockFile, frozen, freezeSeq, alive,
-                  plannedTerm>>
+  /\ lock' = "none"
+  /\ lockFile' = FALSE
+  /\ UNCHANGED <<didN, torn, frozen, freezeSeq, alive, plannedTerm>>
 
 (* Caller abort after dispatch: no refund; the finally supplements an     *)
 (* unknown settle.                                                        *)
@@ -342,9 +369,10 @@ Idle == /\ ~alive
 
 Next == \/ \E p \in PROCS :
             Request(p) \/ Acquire(p) \/ CheckReserve(p) \/
-            AppendReserve(p) \/ WriteDispatchOk(p) \/
-            WriteDispatchFail(p) \/ Fetch(p) \/ Retry(p) \/
-            RetryExhausted(p) \/ SettleWrite(p) \/ SettleFail(p) \/
+            AppendReserve(p) \/ DispatchAcquire(p) \/
+            WriteDispatchOk(p) \/ WriteDispatchFail(p) \/ Fetch(p) \/
+            Retry(p) \/ SettleAcquire(p) \/
+            SettleWrite(p) \/ SettleFail(p) \/
             AbortBefore(p) \/ AbortAfter(p)
         \/ \E p \in PROCS, k \in AttemptKeys : ConflictingWrite(p, k)
         \/ Crash \/ Recover \/ HumanClearLock \/ Idle

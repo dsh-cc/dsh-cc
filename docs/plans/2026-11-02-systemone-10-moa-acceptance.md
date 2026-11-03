@@ -72,11 +72,11 @@ state is `{request,answer,toolReceipts,effectFree}`, taken from the existing syn
 interface AcceptanceReceiptView {
   complete: boolean;
   calls: Array<{ callId: string; tool: string;
-    outcome: 'ok'|'error'; commandHead?: string }>;
+    outcome: 'ok'|'error' }>;
 }
 ```
 
-callId comes from the call's host ID; a receipt must be v=1, have sessionId equal to snapshot.sessionId, and match the current turn's calls one-to-one by callId. Keep only tool, outcome and the already privacy-scrubbed head; do not pass arguments, argsDigest, raw output or file paths. Treating a tool/call event itself as a success receipt is forbidden. Dedupe by ascending seq; a conflicting callId, a dangling/missing receipt, compaction/end within the current turn, more than 20 calls, or a head over 200 UTF-8 bytes all set complete=false and skip the three dimension judgements for this round, rather than treating unknown evidence as unsupported. With no tool calls, complete=true and calls=[], so a fabricated claim of execution is still detectable.
+callId comes from the call's host ID; a receipt must be v=1, have sessionId equal to snapshot.sessionId, and match the current turn's calls one-to-one by callId. Keep only tool, outcome and callId; do not pass arguments, argsDigest, raw output or file paths. v1 omits any command text: the existing scrubbed head retains ordinary paths and arguments, which the decision model must not receive. Treating a tool/call event itself as a success receipt is forbidden. Dedupe by ascending seq; a conflicting callId, a dangling/missing receipt, compaction/end within the current turn, more than 20 calls all set complete=false and skip the three dimension judgements for this round, rather than treating unknown evidence as unsupported. With no tool calls, complete=true and calls=[], so a fabricated claim of execution is still detectable.
 
 state carries this complete object in the toolReceipts field. The adapter only reads existing events; it does not trigger completion-gate mounting or execute any tool; when using type-only imports of the structured event types, declare a direct dev/peer type dependency on completion-gate. No execution permission or secret is sent to the model.
 

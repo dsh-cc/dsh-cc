@@ -7,11 +7,10 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T031637Z-facff2da-543d-442f-b0b9-7fb1a5cf4d94`
+- runId: `20261103T051836Z-d4c93d9d-c65e-4283-be1e-450fb5c79be1` (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
-- convention (core): **verified** — 854 states generated, 133 distinct,
-  0 left on queue; all invariants hold.
+- convention (core): **verified** — 5,258 states generated, 717 distinct, 0 left on queue; all invariants hold.
 - Probes (expansion, expected counterexample; each hit exactly its intended
   invariant):
   - `strict-wrong-token-finally` → `NoStaleFinallyDelete`: an old
@@ -78,3 +77,21 @@ All development failures were **modeling defects**, never design defects:
   its 20-call/200-byte bounds.
 - Liveness: a cancelled placeholder whose settlement never arrives is a
   legal state (the real system has network timeouts out of model scope).
+
+## Review fold (three-seat impl-readiness review)
+
+- The late settlement keeps `cancelled` (only a new stop clears it), and
+  `resultOk` marks answers that were genuine verdicts of non-cancelled
+  requests: an unavailable or cancelled settlement completes the key (no
+  self-retry) but never becomes actionable — `Escalate` requires
+  `stop \in resultOk`.
+- The dimensions-shadow precedence is pinned here (critic finding: the
+  cross-model coverage claim was false): `DimsShadowOn`/`LegacyJudgeDispatch`
+  carry `dimsShadow => ~legacyDispatched` (`ShadowSuppressesLegacy`), with
+  the `strict-legacy-under-shadow` probe. Shadow engages only at a round
+  boundary (before any legacy dispatch), matching the design's per-round
+  precedence.
+- `ToolTurnNeverActed` is now per-round (`actedThisTurn` ghost reset on
+  every stop arrival) instead of conflating a key's escalation history
+  across rounds.
+

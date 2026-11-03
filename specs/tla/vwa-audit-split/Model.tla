@@ -31,17 +31,18 @@ Worst(a, b) ==
   ELSE IF a = "pass" \/ b = "pass" THEN "pass"
   ELSE "not-run"
 
-VARIABLES items, batchOf, merged, bodyState, bodyCount, runs, res,
-          partial, admitted, dropped, lostBody, faults
+VARIABLES items, batchOf, merged, worstSeen, bodyState, bodyCount,
+          runs, res, partial, admitted, dropped, lostBody, faults
 
-vars == <<items, batchOf, merged, bodyState, bodyCount, runs, res,
-          partial, admitted, dropped, lostBody, faults>>
+vars == <<items, batchOf, merged, worstSeen, bodyState, bodyCount,
+          runs, res, partial, admitted, dropped, lostBody, faults>>
 
 ItemSet == {i \in ITEMS : items[i]}
 TypeOK ==
   /\ items \in [ITEMS -> BOOLEAN]
   /\ \A i \in ITEMS : batchOf[i] \in 0..MaxBatch
   /\ merged \in [ITEMS -> VERDICT]
+  /\ worstSeen \in [ITEMS -> VERDICT]
   /\ bodyState \in {"none", "running", "done"}
   /\ bodyCount \in 0..2
   /\ runs \in 0..MaxRuns
@@ -57,6 +58,7 @@ Init ==
   /\ items = [i \in ITEMS |-> FALSE]
   /\ batchOf = [i \in ITEMS |-> 0]
   /\ merged = [i \in ITEMS |-> "not-run"]
+  /\ worstSeen = [i \in ITEMS |-> "not-run"]
   /\ bodyState = "none"
   /\ bodyCount = 0
   /\ runs = 0
@@ -83,8 +85,7 @@ Plan(i) ==
   /\ faults' = IF DropLowProb /\ (i % 2 = 0)
                  THEN faults \cup {"dropped-low-prob"}
                  ELSE faults
-  /\ UNCHANGED <<merged, bodyState, bodyCount, runs, res, partial, admitted,
-                  lostBody>>
+  /\ UNCHANGED <<merged, worstSeen, bodyState, bodyCount, runs, res, partial, admitted, lostBody>>
 
 (************************************** alignment *************************)
 
@@ -100,6 +101,7 @@ AlignPass(i, v) ==
   /\ runs' = runs + 1
   /\ merged' = [merged EXCEPT ![i] =
       IF OverwriteWithLater THEN v ELSE Worst(merged[i], v)]
+  /\ worstSeen' = [worstSeen EXCEPT ![i] = Worst(worstSeen[i], v)]
   /\ faults' = IF OverwriteWithLater /\ merged[i] = "fail" /\ v # "fail"
                  THEN faults \cup {"later-overwrites"}
                  ELSE faults
@@ -115,6 +117,7 @@ BodyStart ==
   /\ "body" \notin partial
   /\ bodyCount < 2
   /\ (bodyCount = 0 \/ lostBody)
+  /\ \A i \in ITEMS : ~items[i] \/ merged[i] # "not-run"
   /\ runs < MaxRuns
   /\ res < MaxRuns
   /\ (NoReserve \/ runs = res)
@@ -123,8 +126,7 @@ BodyStart ==
   /\ runs' = runs + 1
   /\ res' = IF NoReserve THEN res ELSE res + 1
   /\ faults' = IF NoReserve THEN faults \cup {"unreserved"} ELSE faults
-  /\ UNCHANGED <<items, batchOf, merged, partial, admitted, dropped,
-                  lostBody>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, partial, admitted, dropped, lostBody>>
 
 BodySecondStart ==
   /\ BodyPerChunk
@@ -137,15 +139,13 @@ BodySecondStart ==
   /\ res' = res + 1
   /\ bodyState' = "running"
   /\ faults' = faults \cup {"body-per-chunk"}
-  /\ UNCHANGED <<items, batchOf, merged, partial, admitted, dropped,
-                  lostBody>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, partial, admitted, dropped, lostBody>>
 
 BodyDone ==
   /\ bodyState = "running"
   /\ bodyState' = "done"
   /\ admitted' = admitted
-  /\ UNCHANGED <<items, batchOf, merged, bodyCount, runs, res, partial,
-                  dropped, lostBody, faults>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, bodyCount, runs, res, partial, dropped, lostBody, faults>>
 
 (************************************** partial save / recovery ***********)
 
@@ -155,15 +155,13 @@ BodyDone ==
 SaveAlign ==
   /\ ~"align" \in partial
   /\ partial' = partial \cup {"align"}
-  /\ UNCHANGED <<items, batchOf, merged, bodyState, bodyCount, runs, res,
-                  admitted, dropped, lostBody, faults>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, bodyState, bodyCount, runs, res, admitted, dropped, lostBody, faults>>
 
 SaveBody ==
   /\ bodyState = "done"
   /\ ~"body" \in partial
   /\ partial' = partial \cup {"body"}
-  /\ UNCHANGED <<items, batchOf, merged, bodyState, bodyCount, runs, res,
-                  admitted, dropped, lostBody, faults>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, bodyState, bodyCount, runs, res, admitted, dropped, lostBody, faults>>
 
 (* Restart: an align partial survives; a done-but-unsaved body must re-run. *)
 Restart ==
@@ -173,8 +171,7 @@ Restart ==
                     ELSE "none"
   /\ lostBody' = (lostBody \/ (bodyState = "done" /\ "body" \notin partial))
   /\ admitted' = admitted
-  /\ UNCHANGED <<items, batchOf, merged, bodyCount, runs, res, dropped,
-                  faults>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, bodyCount, runs, res, dropped, faults>>
 
 (* Fragments may never be aggregated into a completed full-text audit.    *)
 AdoptFragmentsAct ==
@@ -184,8 +181,7 @@ AdoptFragmentsAct ==
   /\ bodyState' = "done"
   /\ admitted' = TRUE
   /\ faults' = faults \cup {"fragments"}
-  /\ UNCHANGED <<items, batchOf, merged, bodyCount, runs, res, partial,
-                  dropped, lostBody>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, bodyCount, runs, res, partial, dropped, lostBody>>
 
 (************************************** delivery **************************)
 
@@ -196,8 +192,7 @@ Deliver ==
   /\ "align" \in partial
   /\ "body" \in partial
   /\ admitted' = TRUE
-  /\ UNCHANGED <<items, batchOf, merged, bodyState, bodyCount, runs, res,
-                  partial, dropped, lostBody, faults>>
+  /\ UNCHANGED <<items, batchOf, merged, worstSeen, bodyState, bodyCount, runs, res, partial, dropped, lostBody, faults>>
 
 Idle == UNCHANGED vars
 
@@ -213,10 +208,12 @@ Spec == Init /\ [][Next]_vars
 
 NoFaults == faults = {}
 
-(* The merge is monotone toward the worst verdict: an earlier fail is     *)
-(* never replaced by a weaker later verdict.                              *)
+(* The merge is monotone toward the worst verdict: the published merged  *)
+(* verdict is never weaker than the worst verdict ever observed, and an  *)
+(* observed fail stays a fail.                                            *)
 WorstSticky == \A i \in ITEMS :
-  merged[i] = "fail" => TRUE
+  /\ Worst(merged[i], worstSeen[i]) = worstSeen[i]
+  /\ (worstSeen[i] = "fail" => merged[i] = "fail")
 
 (* At most one logical body task per run/audit pair; a further one is      *)
 (* allowed only after a restart lost a completed-but-not-durable body      *)

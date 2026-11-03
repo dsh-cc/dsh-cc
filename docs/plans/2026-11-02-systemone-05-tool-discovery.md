@@ -77,7 +77,7 @@ Namespace `cc-tool-discovery`. Raw keys are kebab-case; internal types convert t
 | `cache-entries` | integer, 0–1024; zero disables | `128` |
 | `cache-ttl-ms` | integer, 0–300000 | `60000` |
 
-These thresholds are first-round evaluation parameters, not measured quality guarantees. When any setting is invalid the runner is not called, the lexical path runs, and the failure is reported once through the existing configuration-error channel.
+These thresholds are first-round evaluation parameters, not measured quality guarantees. When any setting is invalid the runner is not called, the lexical path runs, and the failure is reported once through `ctx.logger.warn` on the settings-ns error path.
 
 ## Inputs, questions, and output
 
@@ -137,7 +137,7 @@ State contains only the current query and candidate metadata — no tool callbac
 4. When the query is too long, any field of metadata is too long, the pool exceeds its cap, or the pool is empty, fall back to lexical as a whole. Keep the full text; do not truncate and then pretend the judgment completed.
 5. Group by batch-size; each group must still fit the runner's per-request and per-question windows. If the window does not fit, keep splitting into whole smaller groups, and when a single item still does not fit, fall back as a whole.
 6. Process the whole batches sequentially under a shared transaction deadline; if all batches cannot finish within the deadline, publish no partial results. A batch gets exactly one logical wire attempt: transport-level 429 retries follow the shared S1-02 `max-retries` setting, and no second model call is made after a completed response.
-7. Keep only items whose Score index meets the threshold and whose Noul meets the threshold; order by Score descending, Noul descending, lexical score descending, then name ascending.
+7. Keep only items whose Score index >= `min-relevance-index` and whose Noul meets the threshold; order by Score descending, Noul descending, lexical score descending, then name ascending.
 8. Take `min(caller max_results, max-activations)` items. If valid model judgments find nothing relevant, return an empty set; that is a valid result, and lexical hits are not force-activated.
 9. Before activation, re-read settings, scope, catalog, and admission; if any hash or the mode changed, discard the judgment and re-run the current lexical path.
 10. `shadow` records the suggestion only and executes the original lexical hits; `active` activates the suggestions; every item still goes through the existing `activate()`.

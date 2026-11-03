@@ -9,7 +9,7 @@ scope confirmed via ask_user_question). Manual adoption snippet: 〔src:ws:docs/
 
 ## Final run
 
-- runId: `20261103T020815Z-eeea3e10-a6eb-4d68-855c-2e53cc61be5c` (marker-only
+- runId: `20261103T051854Z-ba98581b-72e7-43a6-8a0c-615ce261b7f2` (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
   backfill of 〔src:ws:〕 evidence annotations in design.md; identical model
   bytes, identical case statistics per case — superseded run
   `20261103T020629Z-53a1d0be-b734-4395-94e4-1870d60a9264` had the same
@@ -59,8 +59,10 @@ over-strong invariants, not design defects**: 〔src:ws:docs/plans/2026-11-02-sy
 3. Lock-gating hole (found via counterexample 2's trace): settle/dispatch 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
    appends were initially modeled outside the transaction lock, letting a 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
    freeze interleave with another request's check→append critical section 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕.
-   The design puts **all** ledger appends inside the lock; the model now 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕
-   gates every append action on a free lock 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L130-L138〕.
+   After the review fold, every append action (dispatch, settle, settle-fail,
+   abort) is remodeled as an acquire-append-release transaction that holds
+   the lock while it writes — the same discipline the design prescribes for
+   reserve rows — and the freeze is computed with the lock held.
 
 ## Verified scope and mapping
 

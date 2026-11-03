@@ -31,14 +31,14 @@
 
 The [support branch of planStage](../../packages/interaction/vwa-argument/src/review-plan.ts#L209) creates one review task per evidence group.
 A task carries the target claim, the complete evidence group and all of its evidence IDs; the mandatory rules are fixed at EVID-02, SUP-01, SUP-02.
-[reviewContext](../../packages/interaction/vwa-argument/src/review-input.ts#L198) restores quotes and context from the saved source snapshot; the author's submitted shorthand alone is not enough.
-[executeReviewRun](../../packages/interaction/vwa-argument/src/review-runner.ts#L294) executes tasks concurrently in plan order, and each one finally calls the generative review model through [ReviewCaller.call](../../packages/interaction/vwa-argument/src/review-call.ts#L89).
+[reviewContext](../../packages/interaction/vwa-argument/src/review-input.ts#L176) restores quotes and context from the saved source snapshot; the author's submitted shorthand alone is not enough.
+[executeReviewRun](../../packages/interaction/vwa-argument/src/review-runner.ts#L67) executes tasks concurrently in plan order, and each one finally calls the generative review model through [ReviewCaller.call](../../packages/interaction/vwa-argument/src/review-call.ts#L89).
 
 Although the relation enumeration is already closed, the current response still requires per-rule rationale, per-evidence rationale and a finding explanation.
 See [SupportResponse](../../packages/interaction/vwa-argument/src/contracts/review.schema.json#L327) and [Check](../../packages/interaction/vwa-argument/src/contracts/review.schema.json#L161).
 These explanations serve human re-review and must not be filled with S1 labels, probabilities or canned phrasing.
 
-Existing completion records are already reused by semantic key: the [reuse branch in the runner](../../packages/interaction/vwa-argument/src/review-runner.ts#L306) runs before the model call.
+Existing completion records are already reused by semantic key: the [reuse branch in the runner](../../packages/interaction/vwa-argument/src/review-runner.ts#L320) runs before the model call.
 This proposal must operate after reuse, so that an already completed task does not incur decision cost a second time.
 The benefit hypothesis of this proposal is that high-risk tasks receive a full review earlier; there is no measured evidence yet that it reduces the total number of generative review calls.
 
@@ -255,23 +255,9 @@ When the existing run budget is genuinely exhausted some tasks may still be left
 
 The call shape is fixed at `decisions.run(request, { budgetPermit: permit })`.
 S1-02 owns the generic quota and the generic safety log; VWA only attaches the same attempt to the existing UsageRow and keeps no separate S1 spend ledger.
-Shared types are exported by S1-02, and VWA adapts exactly this contract:
+Shared types are exported by S1-02, and VWA adapts exactly that contract.
 
-```ts
-interface DecisionBudgetPermitProvider {
-  reserve(input: {
-    decisionId: string; scope: DecisionScope; feature: string; attempt: number
-    inputTokens: number; outputTokens: number; signal: AbortSignal
-  }): Promise<DecisionBudgetPermit | undefined>
-}
-interface DecisionBudgetPermit {
-  settle(outcome:
-    | { kind: 'actual'; usage: SystemOneUsage }
-    | { kind: 'unknown' }
-    | { kind: 'not-dispatched' }
-  ): Promise<void>
-}
-```
+The permit types are imported from S1-02 (`DecisionBudgetPermitProvider` / `DecisionBudgetPermit`); this document does not redeclare them.
 
 inputTokens/outputTokens use the full input upper bound of the resolved route and the configured output upper bound; do not under-reserve using a payload estimate.
 S1-02 requests a permit before each actual request and settles exactly once; the default is one wire attempt and this feature adds no retries.
@@ -285,7 +271,7 @@ actual rows settle with the validated usage; unknown retains the full reservatio
 `kind` gains `released`; the recovery algorithm selects the terminal state per reservationId first and then totals, and must not merely filter zero-token rows, which would revive a reserved row after release.
 A reserved row not settled at crash time keeps being billed, following the conservative recovery principle of [loadRequest](../../packages/interaction/vwa-argument/src/review-run-store.ts#L138).
 
-The minimum budget of ordinary reviewers outranks advisory triage: before each S1 reservation, protect the input counts and output caps of all unfinished first-time support reviews in this stage, plus the already frozen admission estimate of downstream stages.
+The minimum budget of ordinary reviewers outranks advisory triage: before each S1 reservation, protect the input counts and output caps and the remaining first-attempt call counts (the existing maxCallsPerRun slot budget) of all unfinished first-time support reviews in this stage, plus the already frozen admission estimate of downstream stages.
 Input counts use the already constructed complete support task message and schema; when construction fails or no downstream estimate is available, triage is skipped.
 Protected quota is only an admission floor for advisory calls and does not fabricate consumed tokens in the ledger; the check and the reservation must complete inside the same lock.
 Downstream audit estimates already carry error, so the protection floor is not a guarantee that the whole run completes, and reports must keep this limitation.

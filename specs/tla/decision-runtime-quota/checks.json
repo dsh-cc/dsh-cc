@@ -8,8 +8,8 @@
       "coverage": "core",
       "specification": "Spec",
       "constants": {
-        "MAX_IN": "6",
-        "MAX_OUT": "4",
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
         "MAX_ATTEMPTS": "3",
         "MAX_RETRIES": "1",
         "StealLock": "FALSE",
@@ -34,8 +34,8 @@
       ],
       "properties": [],
       "limits": {
-        "timeoutMs": 300000,
-        "heapMiB": 1024
+        "timeoutMs": 600000,
+        "heapMiB": 3072
       }
     },
     {
@@ -43,8 +43,8 @@
       "coverage": "expansion",
       "specification": "Spec",
       "constants": {
-        "MAX_IN": "6",
-        "MAX_OUT": "4",
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
         "MAX_ATTEMPTS": "3",
         "MAX_RETRIES": "1",
         "StealLock": "TRUE",
@@ -69,8 +69,8 @@
       "coverage": "expansion",
       "specification": "Spec",
       "constants": {
-        "MAX_IN": "6",
-        "MAX_OUT": "4",
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
         "MAX_ATTEMPTS": "3",
         "MAX_RETRIES": "1",
         "StealLock": "FALSE",
@@ -94,8 +94,8 @@
       "coverage": "expansion",
       "specification": "Spec",
       "constants": {
-        "MAX_IN": "6",
-        "MAX_OUT": "4",
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
         "MAX_ATTEMPTS": "3",
         "MAX_RETRIES": "1",
         "StealLock": "FALSE",
@@ -120,8 +120,8 @@
       "coverage": "expansion",
       "specification": "Spec",
       "constants": {
-        "MAX_IN": "6",
-        "MAX_OUT": "4",
+        "MAX_IN": "4",
+        "MAX_OUT": "3",
         "MAX_ATTEMPTS": "3",
         "MAX_RETRIES": "1",
         "StealLock": "FALSE",

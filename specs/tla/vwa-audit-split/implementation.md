@@ -7,11 +7,10 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T035626Z-837321ca-047b-4b49-b4db-74397d6d4a04`
+- runId: `20261103T051925Z-0a36916d-8533-4db7-8b4b-72a11d9dd37e` (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
-- convention (core): **verified** — 17,700 states generated, 2,132 distinct,
-  0 left on queue; all 7 invariants hold.
+- convention (core): **verified** — 12,165 states generated, 1,523 distinct, 0 left on queue; all 7 invariants hold.
 - Probes (expansion, expected counterexample; each hit exactly its intended
   invariant):
   - `strict-later-overwrites` → `NoFaults`: a later pass overwrites an
@@ -83,3 +82,17 @@ All development failures were **modeling defects**, never design defects:
 - The Lean face (the worst-verdict merge lattice's associativity and
   idempotence) planned as a separate Lean model, not built here.
 - Liveness: an audit that never completes is a legal state.
+
+## Review fold (three-seat impl-readiness review)
+
+- `WorstSticky` is a real monotonicity property over the per-item
+  `worstSeen` ghost (a tautology before); the `strict-later-overwrites`
+  probe still hits it.
+- The body task now requires alignment-ready (every planned item merged)
+  before it may start, pinning the doc's "no body while any alignment is
+  incomplete".
+- The merge/lattice semantics are labeled as the RETAINED legacy
+  aggregation (`mergeChunkTargets` in audit-align.ts, kept and used when
+  split=off); split-v1's no-cross-chunk-merge path is the body-task single
+  execution already modeled.
+

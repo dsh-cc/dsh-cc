@@ -21,6 +21,7 @@
         "TypeOK",
         "NoFaults",
         "OneBodyTask",
+        "WorstSticky",
         "DeliveryNeedsPair",
         "NoCandidateDropped",
         "ReservedBeforeDispatch",

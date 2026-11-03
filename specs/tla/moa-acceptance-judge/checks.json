@@ -11,7 +11,9 @@
         "WrongTokenFinally": "FALSE",
         "RedispatchCompleted": "FALSE",
         "ModeSwitchRaces": "FALSE",
-        "ToolTurnEscalates": "FALSE"
+        "ToolTurnEscalates": "FALSE",
+        "LegacyUnderShadow": "FALSE",
+        "AbortLastWaiter": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -20,7 +22,8 @@
         "CompletedStaysSettled",
         "ToolTurnNeverActed",
         "NoRacedPlaceholder",
-        "NoStaleFinallyDelete"
+        "NoStaleFinallyDelete",
+        "ShadowSuppressesLegacy"
       ],
       "properties": [],
       "limits": {
@@ -36,7 +39,9 @@
         "WrongTokenFinally": "TRUE",
         "RedispatchCompleted": "FALSE",
         "ModeSwitchRaces": "FALSE",
-        "ToolTurnEscalates": "FALSE"
+        "ToolTurnEscalates": "FALSE",
+        "LegacyUnderShadow": "FALSE",
+        "AbortLastWaiter": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -56,7 +61,9 @@
         "WrongTokenFinally": "FALSE",
         "RedispatchCompleted": "TRUE",
         "ModeSwitchRaces": "FALSE",
-        "ToolTurnEscalates": "FALSE"
+        "ToolTurnEscalates": "FALSE",
+        "LegacyUnderShadow": "FALSE",
+        "AbortLastWaiter": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -76,7 +83,9 @@
         "WrongTokenFinally": "FALSE",
         "RedispatchCompleted": "FALSE",
         "ModeSwitchRaces": "TRUE",
-        "ToolTurnEscalates": "FALSE"
+        "ToolTurnEscalates": "FALSE",
+        "LegacyUnderShadow": "FALSE",
+        "AbortLastWaiter": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -96,11 +105,36 @@
         "WrongTokenFinally": "FALSE",
         "RedispatchCompleted": "FALSE",
         "ModeSwitchRaces": "FALSE",
-        "ToolTurnEscalates": "TRUE"
+        "ToolTurnEscalates": "TRUE",
+        "LegacyUnderShadow": "FALSE",
+        "AbortLastWaiter": "FALSE"
       },
       "invariants": [
         "TypeOK",
         "ToolTurnNeverActed"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-legacy-under-shadow",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WrongTokenFinally": "FALSE",
+        "RedispatchCompleted": "FALSE",
+        "ModeSwitchRaces": "FALSE",
+        "ToolTurnEscalates": "FALSE",
+        "LegacyUnderShadow": "TRUE",
+        "AbortLastWaiter": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ShadowSuppressesLegacy",
+        "NoFaults"
       ],
       "properties": [],
       "limits": {

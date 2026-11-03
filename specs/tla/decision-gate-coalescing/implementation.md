@@ -7,11 +7,10 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Final run
 
-- runId: `20261103T024327Z-8b85044a-1964-4e08-a22b-89d65d233765`
+- runId: `20261103T051921Z-2fd33c39-8d92-42a8-9b62-6b519e2b4ef9` (review-fold rerun)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin.
-- convention (core): **verified** — 145 states generated, 30 distinct,
-  0 left on queue; all 6 invariants hold.
+- convention (core): **verified** — 316 states generated, 59 distinct, 0 left on queue; all 6 invariants hold.
 - Probes (expansion, expected counterexample; each hit exactly its intended
   invariant):
   - `strict-abort-last-waiter` → `AbortOnlyWhenAllCancelled`: the coalesced
@@ -69,3 +68,14 @@ All development failures were **modeling defects**, never design defects:
   (each feature's failure table).
 - Liveness: a waiter that never leaves is a legal state; the model has no
   fairness.
+
+## Review fold (three-seat impl-readiness review)
+
+- `valid` now has a real antagonist (`IdentityChange` sets it FALSE and
+  drops the cache); the `strict-skip-reval` probe hits `CacheNeedsValidIdentity`.
+- Consumption is observed in `consumed`; `CancelledNeverConsumed` is the
+  flag-free property, and `AbortEarly` injects an `early-abort` witness the
+  `NoEarlyAbort` invariant rejects.
+- The captured identity is snapshotted at dispatch and compared at
+  settlement (the post-await revalidation the design names).
+
