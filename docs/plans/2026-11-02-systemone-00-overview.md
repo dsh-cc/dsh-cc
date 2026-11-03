@@ -17,7 +17,7 @@ formal-design screening clause at this revision; adoption snippet at
 | S1-03 | enabled (FD-T1/T2) | tla | `specs/tla/memory-recall-dispatch` |
 | S1-04 | enabled (FD-T1/T2/T3/T4) | tla | `specs/tla/extraction-watermark` |
 | S1-05 / S1-06 / S1-11 / S1-12 | enabled (FD-T1/T2) | tla | one shared coalescing protocol: `specs/tla/decision-gate-coalescing` |
-| S1-07 | enabled (FD-T1/T2/T3; permit face shared with S1-08) | tla | `specs/tla/vwa-audit-split` (S1-02/S1-07 permit adapter), `specs/tla/decision-runtime-quota` (quota protocol) |
+| S1-07 | enabled (FD-T1/T2/T3; permit face shared with S1-08) | tla | `specs/tla/vwa-support-triage` (scheduling); the reserve/settle protocol it rides on is `specs/tla/decision-runtime-quota` |
 | S1-08 | enabled (FD-T2/T3/T4, FD-L3) | tla, lean | `specs/tla/vwa-audit-split`, `specs/lean/audit-merge-lattice` |
 | S1-09 | not-needed | none | a pure threshold policy function with no new state machine; pinned examples in tests are the acceptance tool |
 | S1-10 | enabled (FD-T1/T2) | tla | `specs/tla/moa-acceptance-judge` (the placeholder guard is its own state machine; the escalation ladder and shadow precedence stay with the existing moa-cascade-routing model) |
