@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-audit-split",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxItems": "2",
+        "MaxBatch": "2",
+        "OverwriteWithLater": "FALSE",
+        "BodyPerChunk": "FALSE",
+        "AdoptFragments": "FALSE",
+        "DropLowProb": "FALSE",
+        "NoReserve": "FALSE",
+        "MaxRuns": "6"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults",
+        "OneBodyTask",
+        "DeliveryNeedsPair",
+        "NoCandidateDropped",
+        "ReservedBeforeDispatch",
+        "NoFragmentAdoption"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-later-overwrites",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxItems": "2",
+        "MaxBatch": "2",
+        "OverwriteWithLater": "TRUE",
+        "BodyPerChunk": "FALSE",
+        "AdoptFragments": "FALSE",
+        "DropLowProb": "FALSE",
+        "NoReserve": "FALSE",
+        "MaxRuns": "6"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-body-per-chunk",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxItems": "2",
+        "MaxBatch": "2",
+        "OverwriteWithLater": "FALSE",
+        "BodyPerChunk": "TRUE",
+        "AdoptFragments": "FALSE",
+        "DropLowProb": "FALSE",
+        "NoReserve": "FALSE",
+        "MaxRuns": "6"
+      },
+      "invariants": [
+        "TypeOK",
+        "OneBodyTask"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-fragments",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxItems": "2",
+        "MaxBatch": "2",
+        "OverwriteWithLater": "FALSE",
+        "BodyPerChunk": "FALSE",
+        "AdoptFragments": "TRUE",
+        "DropLowProb": "FALSE",
+        "NoReserve": "FALSE",
+        "MaxRuns": "6"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFragmentAdoption"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-drop-low-prob",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxItems": "2",
+        "MaxBatch": "2",
+        "OverwriteWithLater": "FALSE",
+        "BodyPerChunk": "FALSE",
+        "AdoptFragments": "FALSE",
+        "DropLowProb": "TRUE",
+        "NoReserve": "FALSE",
+        "MaxRuns": "6"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoCandidateDropped"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-no-reserve",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxItems": "2",
+        "MaxBatch": "2",
+        "OverwriteWithLater": "FALSE",
+        "BodyPerChunk": "FALSE",
+        "AdoptFragments": "FALSE",
+        "DropLowProb": "FALSE",
+        "NoReserve": "TRUE",
+        "MaxRuns": "6"
+      },
+      "invariants": [
+        "TypeOK",
+        "ReservedBeforeDispatch"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
