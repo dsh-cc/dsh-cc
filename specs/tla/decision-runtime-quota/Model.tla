@@ -299,7 +299,7 @@ SettleFail(p) ==
          !.phase = "done", !.outcome = "error"]]
   /\ IF FreezeRowLost
        THEN /\ frozen' = FALSE
-            /\ lockFile' = FALSE
+            /\ lockFile' = TRUE
        ELSE /\ frozen' = TRUE
             /\ lockFile' = FALSE
   /\ freezeSeq' = seqN - 1

@@ -13,7 +13,6 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE",
         "CancelResurrect": "FALSE"
       },
       "invariants": [
@@ -43,7 +42,6 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE",
         "CancelResurrect": "FALSE"
       },
       "invariants": [
@@ -66,7 +64,6 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE",
         "CancelResurrect": "FALSE"
       },
       "invariants": [
@@ -89,7 +86,6 @@
         "ModeSwitchRaces": "TRUE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE",
         "CancelResurrect": "FALSE"
       },
       "invariants": [
@@ -112,7 +108,6 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "TRUE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE",
         "CancelResurrect": "FALSE"
       },
       "invariants": [
@@ -135,7 +130,6 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "TRUE",
-        "AbortLastWaiter": "FALSE",
         "CancelResurrect": "FALSE"
       },
       "invariants": [
@@ -159,7 +153,6 @@
         "ModeSwitchRaces": "FALSE",
         "ToolTurnEscalates": "FALSE",
         "LegacyUnderShadow": "FALSE",
-        "AbortLastWaiter": "FALSE",
         "CancelResurrect": "TRUE"
       },
       "invariants": [

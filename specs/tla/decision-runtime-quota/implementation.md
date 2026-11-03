@@ -9,7 +9,7 @@ scope confirmed via ask_user_question). Manual adoption snippet: 〔src:ws:docs/
 
 ## Final run
 
-- runId: `20261103T064405Z-edee9f4e-eba2-47fd-8e32-cbc4df4ef235` (r4 fold rerun) (r3 fold rerun) (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
+- runId: `20261103T065527Z-b102b079-7ade-4dfa-818d-4707feda8be4` (r5 fold rerun) (r4 fold rerun) (r3 fold rerun) (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
   backfill of 〔src:ws:〕 evidence annotations in design.md; identical model
   bytes, identical case statistics per case — superseded run
   `20261103T020629Z-53a1d0be-b734-4395-94e4-1870d60a9264` had the same
@@ -131,4 +131,13 @@ the implementation tests should pin it 〔src:ws:docs/plans/2026-11-02-systemone
   the clear-without-freeze hazard.
 - `attempt-ceiling-binds` raises `MAX_OUT` to 4 so four charged attempts
   fit both token ceilings and only the attempt guard blocks the fourth.
+
+## r5 fold (r4 delta review)
+
+- `FreezeRowLost` remodeled to the design's actual rule: when the freeze
+  row cannot be persisted the lock file is KEPT (`lockFile' = TRUE`), not
+  dropped - the kept lock IS the blocking mechanism. The
+  `strict-freeze-row-lost` counterexample now runs the full hazard chain
+  (settle failure keeps the lock, the `ClearWithoutFreeze` clear drops it
+  without establishing the freeze) instead of violating at SettleFail.
 

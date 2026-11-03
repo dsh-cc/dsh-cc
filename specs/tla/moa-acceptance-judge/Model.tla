@@ -78,22 +78,16 @@ StopArrive(k, tool) ==
   /\ (k # stop \/ tool = toolTurn)
   /\ stop' = k
   /\ toolTurn' = tool
-  /\ IF CancelResurrect /\ cancelled
+  /\ IF CancelResurrect /\ cancelled /\ pTok # 0
        THEN /\ cancelled' = FALSE
             /\ faults' = faults \cup {"cancel-resurrect"}
        ELSE /\ cancelled' = (IF pTok # 0 THEN cancelled ELSE FALSE)
             /\ faults' = faults
   /\ legacyDispatched' = FALSE
   /\ actedThisTurn' = FALSE
-  /\ IF pStop = k \/ k \in completed
-       THEN /\ pTok' = pTok
-            /\ pStop' = pStop
-            /\ UNCHANGED <<completed, reqCount, followCount, resultOk,
-                            dimsShadow>>
-       ELSE /\ pTok' = pTok
-            /\ pStop' = pStop
-            /\ UNCHANGED <<completed, reqCount, followCount, resultOk,
-                            dimsShadow>>
+  /\ pTok' = pTok
+  /\ pStop' = pStop
+  /\ UNCHANGED <<completed, reqCount, followCount, resultOk, dimsShadow>>
 
 (* The repeated-stop case for an already completed key: recorded, no     *)
 (* request, no self-retry.                                                *)
@@ -103,10 +97,10 @@ StopArriveCompleted(k, tool) ==
   /\ (RedispatchCompleted => completed' = completed)
   /\ stop' = k
   /\ toolTurn' = tool
-  /\ cancelled' = IF CancelResurrect /\ cancelled
+  /\ cancelled' = IF CancelResurrect /\ cancelled /\ pTok # 0
                      THEN FALSE
                      ELSE (IF pTok # 0 THEN cancelled ELSE FALSE)
-  /\ faults' = IF CancelResurrect /\ cancelled
+  /\ faults' = IF CancelResurrect /\ cancelled /\ pTok # 0
                  THEN faults \cup {"cancel-resurrect"}
                  ELSE IF RedispatchCompleted
                         THEN faults \cup {"late-request"}
