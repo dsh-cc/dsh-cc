@@ -1,71 +1,71 @@
-# S1-11：在工具摘要生成前判断是否值得调用生成模型
+# S1-11: Decide whether a tool summary is worth the model call before generating it
 
-**状态：拟议，尚未实现。优先级：P3。** 本设计只控制摘要生成调用，不让 Jev 生成或批准摘要正文。
-**源码基线：** `31fb29eb77148e92ca8da365adcbf4994622a31d`。
-**依赖：** [总览](2026-11-02-systemone-00-overview.md)、[答案合约校验](2026-11-02-systemone-01-contract-validation.md)、[决策运行时和计量](2026-11-02-systemone-02-decision-runtime-metering.md)。本功能不依赖 reducer gate。
+**Status: proposed, not yet implemented. Priority: P3.** This design controls only the summary-generation call; it does not let the SystemOne decision model generate or approve summary text.
+**Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
+**Dependencies:** [overview](2026-11-02-systemone-00-overview.md), [answer contract validation](2026-11-02-systemone-01-contract-validation.md), [decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). This feature does not depend on the reducer gate.
 
-## 已核实的现有顺序
+## The verified existing order
 
-[maybeSummarize](../../packages/compaction/tool-use-summary/src/index.ts#L91) 先检查 enabled、顶层会话、结果大小、排除工具、LRU 容量和 callId 去重，随后在第 131 行调用 `runSideQuery`。
-[apply 的 post-execute listener](../../packages/compaction/tool-use-summary/src/index.ts#L186) 等待 `next()` 后异步启动摘要，原始接受决策直接返回。它没有 prepend，处于 context-crusher 的外层监听器内部，因此拿到原始工具结果。
-[runSideQuery 的 signal](../../packages/compaction/tool-use-summary/src/index.ts#L138) 使用插件 effect 的 disposal signal，明确不用短命的 `exec.signal`。
-[summary.ts](../../packages/compaction/tool-use-summary/src/summary.ts#L20) 规定 ≤150 词，随后 clamp 到 800 个 code point。现有代码没有摘要事实校验器，本设计也不冒称存在一个。
-[SummaryStore](../../packages/compaction/tool-use-summary/src/store.ts#L23) 和 [SummaryRow](../../packages/compaction/tool-use-summary/src/types.ts#L6) 负责去重和结果保存；[tusFramedSummary](../../packages/compaction/tool-use-summary/src/framing.ts#L22) 为下游使用提供不可信内容包装。
+[maybeSummarize](../../packages/compaction/tool-use-summary/src/index.ts#L91) first checks enabled, top-level session, result size, excluded tools, LRU capacity and callId dedup, then calls `runSideQuery` at line 131.
+[apply's post-execute listener](../../packages/compaction/tool-use-summary/src/index.ts#L186) awaits `next()` and then starts the summary asynchronously; the original accept decision returns directly. It does not prepend, and it sits inside context-crusher's outer listener, so it sees the original tool result.
+[runSideQuery's signal](../../packages/compaction/tool-use-summary/src/index.ts#L138) uses the plugin effect's disposal signal; the short-lived `exec.signal` is deliberately not used.
+[summary.ts](../../packages/compaction/tool-use-summary/src/summary.ts#L20) specifies ≤150 words, then clamps to 800 code points. The existing code has no summary fact validator, and this design does not claim one exists.
+[SummaryStore](../../packages/compaction/tool-use-summary/src/store.ts#L23) and [SummaryRow](../../packages/compaction/tool-use-summary/src/types.ts#L6) handle dedup and result persistence; [tusFramedSummary](../../packages/compaction/tool-use-summary/src/framing.ts#L22) provides the untrusted-content wrapper for downstream use.
 
-## 目标和边界
+## Goals and boundaries
 
-对已经通过现有所有确定性 gate 的结果，识别明显低价值、重复且没有需保留细节的输出，节省一次生成调用。
-保持已有摘要模型、提示词、上限、路由、存储、保留期限、consumer 包装和 crusher locator 规则。
-工具原结果继续原样进入原有 waterfall；Jev 的任何答案都不能重写、裁剪或删除原结果。
-active 明确 skip 时，本次没有 TUS 摘要；后续 compaction 使用现有“没有成功摘要”的行为。不能承诺后续一定保留全文，也不能把缺摘要伪装成空摘要。
-错误结果、缺乏完整输入、低置信度、不可用或矛盾答案都继续旧生成流程。
+For results that have already passed every existing deterministic gate, identify obviously low-value, repetitive output that carries no details worth keeping, and save one generation call.
+Keep the existing summary model, prompts, limits, routing, storage, retention, consumer wrapping and crusher locator rules.
+The original tool result continues unchanged into the existing waterfall; no answer from the SystemOne decision model may rewrite, trim or delete the original result.
+When active explicitly skips, there is no TUS summary for this call; later compaction uses the existing "no successful summary" behaviour. It cannot promise that the full text is kept later, and it must not disguise a missing summary as an empty summary.
+Error results, incomplete input, low confidence, an unavailable service or contradictory answers all continue through the old generation flow.
 
-## 方案选择
+## Option selection
 
-增加确定性字节阈值最便宜，但不能区分相近大小的高信息结果和重复进度日志；现有 minResultBytes 继续优先执行。
-让 Jev 输出摘要不符合其类型化判断能力。让 Jev 在摘要生成后审核也省不掉生成费用。
-采用先判断、后生成的可选 gate：只有对低价值的强一致判断才能跳过，其他情况保守生成。
-费用收益必须按真实计量验收，不能仅按“少调用几次 Haiku”推断节省。
+Adding a deterministic byte threshold is cheapest, but it cannot distinguish similarly sized high-information results from repeated progress logs; the existing minResultBytes still runs first.
+Having the SystemOne decision model emit the summary does not fit its typed judgement capability. Having the SystemOne decision model review after generation saves no generation cost either.
+Adopt an optional decide-then-generate gate: only a strong, consistent judgement of low value may skip; everything else generates conservatively.
+The cost benefit must be verified by real metering, not inferred from "a few fewer small-model calls".
 
-## 文件职责
+## File responsibilities
 
-| 文件 | 变更职责 |
+| File | Change responsibility |
 | --- | --- |
-| `packages/compaction/tool-use-summary/src/summary-gate.ts` | 新增：完整输入分块、问题、聚合、缓存和生成建议 |
-| `packages/compaction/tool-use-summary/src/settings.ts` | 修改：在既有设置中新增 `decision-gate`，深层合并其默认值 |
-| `packages/compaction/tool-use-summary/src/index.ts` | 修改：去重之后、runSideQuery 之前接入 gate；继续 fire-and-forget 和 effect signal |
-| `packages/compaction/tool-use-summary/src/types.ts` | 修改：增加 `skipReason: 'decision-gate'` 和可选 `decisionId`，不改旧行的可读性 |
-| `packages/compaction/tool-use-summary/tests/summary-gate.spec.ts` | 新增：完整分块、阈值、缓存、失败表 |
-| `packages/compaction/tool-use-summary/tests/producer.spec.ts` | 修改：验证原 gate 顺序、原文、shadow 和生命周期 |
-| `packages/compaction/tool-use-summary/tests/ledger.spec.ts` | 修改：新 skipped 行可回读，旧 ok 行兼容 |
-| `packages/compaction/tool-use-summary/package.json` | 修改：声明 systemone 决策契约依赖 |
+| `packages/compaction/tool-use-summary/src/summary-gate.ts` | new: complete input chunking, questions, aggregation, cache and generation advice |
+| `packages/compaction/tool-use-summary/src/settings.ts` | modify: add `decision-gate` to the existing settings and deep-merge its defaults |
+| `packages/compaction/tool-use-summary/src/index.ts` | modify: wire the gate in after dedup and before runSideQuery; keep fire-and-forget and the effect signal |
+| `packages/compaction/tool-use-summary/src/types.ts` | modify: add `skipReason: 'decision-gate'` and optional `decisionId`, leaving old rows readable |
+| `packages/compaction/tool-use-summary/tests/summary-gate.spec.ts` | new: complete chunking, thresholds, cache, failure table |
+| `packages/compaction/tool-use-summary/tests/producer.spec.ts` | modify: verify the original gate order, original text, shadow and lifecycle |
+| `packages/compaction/tool-use-summary/tests/ledger.spec.ts` | modify: new skipped rows read back, old ok rows stay compatible |
+| `packages/compaction/tool-use-summary/package.json` | modify: declare the systemone decision contract dependency |
 
-从可选 `ctx.systemoneDecisions.forAgent(exec.agent)` 注入 BoundDecisionRunner，缺失时直接生成。先用 `runner.identifyRoute(routeAlias, scope)` 读取无密钥身份和窗口，不另写 provider resolver；身份缺失则旧生成。
-每次 await 后重读并比较完整 DecisionRouteIdentity，provider、model、revision 或窗口任一变化都丢弃整组建议，走旧生成。实际响应模型由 S1-02 对 trusted capability 的 actual-model-id 校验，不能拿网关部署别名与 answered.model 直接比较。摘要生成仍用现有 side-query；不要把它改为 System One 模型。
-S1-02 唯一负责决策计量和 hash 审计。已有 TUS ledger 只多记录本次为什么没有摘要及 decisionId，不复制答案、usage 或状态全文。
+Inject a BoundDecisionRunner from the optional `ctx.systemoneDecisions.forAgent(exec.agent)`; when it is missing, generate directly. First read the keyless identity and windows with `runner.identifyRoute(routeAlias, scope)`; do not write another provider resolver; a missing identity falls back to the old generation.
+Re-read and compare the complete DecisionRouteIdentity after every await; any change in provider, model, revision or window discards the whole set of suggestions and takes the old generation path. The actual response model is validated by S1-02's actual-model-id check on the trusted capability; the gateway deployment alias must not be compared directly with answered.model. Summary generation still uses the existing side-query; do not switch it to the System One model.
+S1-02 alone owns decision metering and hash auditing. The existing TUS ledger only additionally records why this call has no summary and the decisionId; it does not copy answers, usage or full state.
 
-## 设置
+## Settings
 
-既有 namespace `cc-tool-use-summary` 新增对象 `decision-gate`，下表是对象内的原始键。顶层 enabled 等旧默认值保持不变。
+The existing namespace `cc-tool-use-summary` gains an object `decision-gate`; the table below lists the raw keys inside that object. Existing top-level defaults such as enabled stay unchanged.
 
-| 键 | 类型、范围 | 默认值 |
+| Key | Type, range | Default |
 | --- | --- | --- |
 | `mode` | `off \| shadow \| active` | `off` |
-| `route-alias` | 非空已配置别名，禁止模型 literal | `gauge` |
-| `timeout-ms` | 整数，100–3000，所有分块共用的截止时间 | `800` |
-| `max-input-tokens` | 整数，512–16384，每请求含状态、问题和余量 | `4096` |
-| `min-source-tokens` | 整数，256–32768，低于它直接旧生成 | `2048` |
-| `max-source-tokens` | 整数，256–32768，完整输入总上限 | `8192` |
-| `max-chunks` | 整数，1–16 | `4` |
-| `max-low-value-index` | 有限数，0–4，实验阈值 | `1` |
-| `max-preserve-signal` | 有限数，0–1，实验阈值 | `0.2` |
-| `cache-entries` | 整数，0–1024；零关闭 | `128` |
-| `cache-ttl-ms` | 整数，0–300000 | `60000` |
+| `route-alias` | non-empty configured alias; model literals forbidden | `gauge` |
+| `timeout-ms` | integer, 100–3000, deadline shared by all chunks | `800` |
+| `max-input-tokens` | integer, 512–16384, per request including state, questions and margin | `4096` |
+| `min-source-tokens` | integer, 256–32768; below this, generate the old way directly | `2048` |
+| `max-source-tokens` | integer, 256–32768, total limit for the complete input | `8192` |
+| `max-chunks` | integer, 1–16 | `4` |
+| `max-low-value-index` | finite number, 0–4, experimental threshold | `1` |
+| `max-preserve-signal` | finite number, 0–1, experimental threshold | `0.2` |
+| `cache-entries` | integer, 0–1024; zero disables | `128` |
+| `cache-ttl-ms` | integer, 0–300000 | `60000` |
 
-验证 `min-source-tokens <= max-source-tokens`。设置错误时禁用本次 gate 并按旧流程生成，不把它改成 summary.enabled=false。
-mode 的含义独立于顶层 enabled：enabled=false 时现有首 gate 返回，连 shadow 判断也不运行。
+Validate `min-source-tokens <= max-source-tokens`. On a settings error, disable this invocation's gate and generate through the old flow; do not turn it into summary.enabled=false.
+mode's meaning is independent of the top-level enabled: with enabled=false the existing first gate returns and not even the shadow judgement runs.
 
-## 输入、问题和返回值
+## Input, questions and return values
 
 ```ts
 interface SummaryGateInput {
@@ -83,13 +83,13 @@ interface SummaryGateState {
 }
 ```
 
-state 示例是一段完整且连续的原始数据，不含用户对话：
+The state example is one complete, contiguous piece of raw data containing no user conversation:
 
 ```json
 {"tool":"bash","resultBytes":16384,"chunk":{"index":0,"count":2,"text":"progress 20%\nprogress 20%\nprogress 20%\n"}}
 ```
 
-每个完整分块使用以下两个独立问题；不能先把中间段丢掉再评分。
+Each complete chunk uses the following two independent questions; middle segments must not be dropped before scoring.
 
 ```ts
 const questions = {
@@ -111,79 +111,79 @@ const questions = {
 } satisfies Record<string, SystemOneQuestion>;
 ```
 
-Score 是五项索引的期望值，范围 0..4，可以为小数。S1-01 验证完整分布、期望一致性和 Noul 范围。
-runner 固定 `feature: 'summary-gate'`、`questionVersion: 'summary-gate-v1'`、`policyVersion: 'summary-gate-policy-v1'`。
-scope 在 producer 入口通过绑定 runner 的 `scope()` 捕获，由宿主校验项目、session 和 actor；originSeq 使用 `Number(agent.session.seq)` 的持久水位。已知工具触发水位时可传 `scope(originSeq)`，不得用 events.length 代替。无法绑定时直接旧生成，不以 `unknown` 发送决策。
+Score is the expected value of the five-item index, range 0..4, and may be fractional. S1-01 validates the full distribution, expectation consistency and the Noul range.
+The runner pins `feature: 'summary-gate'`, `questionVersion: 'summary-gate-v1'`, `policyVersion: 'summary-gate-policy-v1'`.
+scope is captured at the producer entry point through the bound runner's `scope()`, validated by the host for project, session and actor; originSeq uses the persistent watermark of `Number(agent.session.seq)`. When the triggering watermark is known, `scope(originSeq)` may be passed; events.length must not be substituted. When binding is impossible, generate the old way directly; never send a decision with `unknown`.
 
-## 确定性状态机和完整输入
+## Deterministic state machine and complete input
 
-1. 原有 enabled、top-level、size、excluded、LRU、dedupe gate 全部先执行；任一命中时 runner=0，旧 skipReason 不变。
-2. gate off 直接调用旧生成器。isError=true 或 text 为空时也直接旧流程，不让模型取消错误摘要。
-3. 使用 S1-02 的同一 estimator 检查总 source；低于最小值、超过最大值或缺 scope 时直接生成，runner=0。
-4. 在完整文本的 Unicode code point 边界顺序切分，要求拼接各 text 与 originalText 逐字一致。每块按真实问题和 wrapper 计算窗口，不切 JSON、不省略分块。
-5. 如果需要超过 max-chunks，或某块加问题不能满足每请求和每问题窗口，直接生成；不发送部分分块。每块两个问题，低于 256 问题上限。
-6. 全部分块共用 timeout-ms；每块一次 wire 尝试。任一不可用或非法答案，整组决定 generate=true。
-7. 只有所有块都满足 `utility.score <= maxLowValueIndex` 且 `preserve.noul <= maxPreserveSignal` 时建议不生成；任何块越界、矛盾或不确定均生成。
-8. shadow 无论建议为何都按旧流程生成。active 只在完整低价值判断后写 `status:'skipped', skipReason:'decision-gate'`，不写空 summary。
-9. 生成路径完全保留现有 TUS_SYSTEM、tusPrompt、maxTokens、alias、clampSummary、ledger 和 inheritedRoute 标记。
-10. 模式或 gate 设置在 await 中改变，丢弃建议并按当前 enabled 判断：若仍 enabled 则旧生成；若已 disabled 则停止，不补写成功摘要。
+1. The original enabled, top-level, size, excluded, LRU and dedupe gates all run first; if any hits, runner=0 and the old skipReason is unchanged.
+2. gate off calls the old generator directly. isError=true or empty text also takes the old flow directly, so the decision model must not skip summaries of error results.
+3. Check the total source with the same estimator as S1-02; below the minimum, above the maximum or without a scope, generate directly with runner=0.
+4. Split sequentially at Unicode code point boundaries of the complete text, requiring the concatenation of the chunk texts to equal originalText character for character. Compute the window per chunk from the real questions and the wrapper; do not split JSON and do not omit chunks.
+5. If more than max-chunks are needed, or one chunk plus questions cannot satisfy the per-request and per-question windows, generate directly; do not send partial chunks. Each chunk carries two questions, below the 256-question limit.
+6. All chunks share timeout-ms; each chunk gets one wire attempt. If anything is unavailable or any answer invalid, the whole set decides generate=true.
+7. Advise skipping only when every chunk satisfies `utility.score <= maxLowValueIndex` and `preserve.noul <= maxPreserveSignal`; any chunk out of range, contradictory or uncertain means generate.
+8. shadow generates through the old flow regardless of the advice. active writes `status:'skipped', skipReason:'decision-gate'` only after a complete low-value judgement, and writes no empty summary.
+9. The generation path keeps TUS_SYSTEM, tusPrompt, maxTokens, alias, clampSummary, the ledger and the inheritedRoute marker exactly as they are.
+10. If the mode or gate settings change during an await, discard the advice and decide on the current enabled: if still enabled, generate the old way; if now disabled, stop and do not backfill a successful summary.
 
-低价值例：四个块均 Score=.4、Noul=.05，active 跳过生成。
-保留例：前三块重复进度，最后一块出现 `failed at src/parser.ts:42`，即使其 Score 较低，只要 preserve 超过阈值就继续生成。
-模型低分并不证明没有信息；阈值只是节省调用的实验策略，因此需通过后述内容保留验收。
+Low-value example: four chunks all with Score=.4, Noul=.05; active skips generation.
+Preserve example: the first three chunks repeat progress and the last chunk contains `failed at src/parser.ts:42`; even if its Score is relatively low, keep generating as long as preserve exceeds the threshold.
+A low model score does not prove there is no information; the thresholds are only an experimental policy for saving calls, so they still have to pass the content-preservation acceptance below.
 
-## 生命周期、去重和费用顺序
+## Lifecycle, dedup and cost ordering
 
-复用 producer 的 effect disposal signal，绝不使用完成工具调用后就可能被取消的 exec.signal。该 signal 也传给 runner；dispose 时停止 gate 和后续生成，并沿用“取消不写行”的规则。
-每个 await 后检查 signal；即使底层忽略取消并返回，也不得写 gate skipped 行或启动新生成。
-保留原 SummaryStore 和 session/callId 去重顺序，不把新模型调用提前到去重之前。gate 缓存独立且仅内存保存，不冒充已生成摘要。
-缓存 key 包含项目、session、agent、originSeq、callId、完整原文 hash、工具、isError、identifyRoute 返回的完整身份及 revision、版本和全部 gate 参数。只缓存完整成功答案；不缓存不可用、取消或半组结果。
-缓存到期、会话插件释放、设置变化均清空相关项。相同 key 的并发 gate 可合并只读请求，等待者按 disposal signal 取消；不顺带更改旧生成器的并发去重语义。
-新 gate 预算和生成费用分别计量。runner 预算不足时走旧生成，没有“预算不足所以删摘要”的隐含逻辑。
-本地统计必须分别报告决策成本、实际摘要成本、被省掉的生成调用和后续 compaction 成本，防止把额外判断费用漏掉。
+Reuse the producer's effect disposal signal; never use exec.signal, which may be cancelled once the tool call completes. Pass that signal to the runner too; on dispose, stop the gate and the subsequent generation, and keep the "cancellation writes no row" rule.
+Check the signal after every await; even if the underlying layer ignores cancellation and returns, do not write a gate skipped row and do not start a new generation.
+Keep the original SummaryStore and the session/callId dedup order; do not move the new model call ahead of dedup. The gate cache is separate and memory-only, and does not masquerade as a generated summary.
+The cache key includes project, session, agent, originSeq, callId, the hash of the complete original text, the tool, isError, the complete identity and revision returned by identifyRoute, the versions and all gate parameters. Only complete successful answers are cached; unavailable, cancelled or half-set results are not.
+Cache expiry, session plugin release and settings changes all clear the relevant entries. Concurrent gates with the same key may coalesce into one read-only request, with waiters cancelled by the disposal signal; the old generator's concurrency-dedup semantics are not changed along the way.
+New gate budget and generation cost are metered separately. When the runner budget is insufficient, take the old generation path; there is no implicit "budget too low, so delete the summary" logic.
+Local statistics must report decision cost, actual summary cost, generation calls saved and later compaction cost separately, so the extra judgement cost is not left out.
 
-## 失败和回退表
+## Failure and fallback table
 
-| 条件 | shadow | active |
+| Condition | shadow | active |
 | --- | --- | --- |
-| 旧确定性 gate 命中 | 旧 skipped 行，无 Jev | 同左 |
-| off、无 route、无 runner、身份缺失 | 旧生成 | 旧生成 |
-| 超长度、超分块、超窗口、预算拒绝 | 旧生成 | 旧生成 |
-| 任一超时、错误、缺项、非法答案 | 旧生成 | 旧生成 |
-| 完整低价值判断 | 旧生成，仅 hash 审计建议 | skipped，无 summary |
-| 有用、矛盾或未达低价值阈值 | 旧生成 | 旧生成 |
-| effect dispose 或 session 销毁 | 无新写入，不启动生成 | 同左 |
-| 模式或配置变更 | 丢弃旧判断，按当前 enabled | 同左 |
+| an old deterministic gate hits | old skipped row, no SystemOne | same as left |
+| off, no route, no runner, missing identity | old generation | old generation |
+| over length, over chunk count, over window, budget refused | old generation | old generation |
+| any timeout, error, missing item, invalid answer | old generation | old generation |
+| complete low-value judgement | old generation, advice recorded in the hash audit only | skipped, no summary |
+| valuable, contradictory, or not meeting the low-value skip rule | old generation | old generation |
+| effect dispose or session destruction | no new write, no generation started | same as left |
+| mode or configuration change | discard the old judgement, follow the current enabled | same as left |
 
-回退只有一次现有 runSideQuery，不重新问 Jev，不让 transport 重试和 feature 重试相乘。新调用默认一次 wire 尝试，使用 S1-02 统一配额。
+Fallback is only the one existing runSideQuery: it does not ask the SystemOne service again, and transport retries and feature retries are not multiplied. New calls default to one wire attempt, using the S1-02 unified quota.
 
-## 隐私与现有 consumer
+## Privacy and existing consumers
 
-只发送单个工具结果文本和必要数值元数据，不带命令参数、用户任务、项目指令、历史消息或本地文件正文的额外读取。
-原始工具结果本身可能含敏感信息；只有用户显式启用 mode 且 route 配置允许该数据接收方时才发送。现有权限和 secrets 规则继续适用，不由模型判断授权。
-S1-02 记录输入 hash、model、usage 和 decisionId；本功能不持久化原始状态或完整答案。
-gate skipped 行不满足 consumer 的 `status==='ok'`，所以 micro/basic 不会把它当摘要替换。`tusFramedSummary` 的 untrusted 包装和 `isCrusherStub` 不变，不能用新 gate 越过 locator 保护。
+Only the text of a single tool result and the necessary numeric metadata are sent, without command arguments, the user task, project instructions, history messages or extra reads of local file content.
+The original tool result may itself contain sensitive information; it is sent only when the user explicitly enables mode and the route configuration permits that data recipient. Existing permission and secrets rules continue to apply; the model does not decide authorization.
+S1-02 records the input hash, model, usage and decisionId; this feature persists no raw state or complete answers.
+A gate skipped row does not satisfy the consumer's `status==='ok'`, so micro/basic will not treat it as a summary replacement. `tusFramedSummary`'s untrusted wrapper and `isCrusherStub` are unchanged; the new gate must not bypass locator protection.
 
-## 实施与测试
+## Implementation and tests
 
-- [ ] 新建 `summary-gate.spec.ts`，先定义全块拼接、聚合与失败表测试，再实现 `evaluateSummaryGate()` 和完整分块器。
-- [ ] 扩展 settings 类型、schema 和深层默认合并，测试老配置不包含 decision-gate 时逐字段相同。
-- [ ] 在 producer 去重之后接入，并扩展 SummaryRow；不移动 listener、不改变返回 d、不改变 effect signal。
-- [ ] 增加 ledger、consumer 和 crusher 组合测试，确认 skipped 没有 summary，旧 ok 行继续读取。
-- [ ] 新建离线语料 `packages/compaction/tool-use-summary/tests/fixtures/summary-gate-corpus.json` 和脚本 `packages/compaction/tool-use-summary/scripts/eval-summary-gate.mjs`，支持 `--mode replay`。
+- [ ] Create `summary-gate.spec.ts`, defining the whole-chunk concatenation, aggregation and failure-table tests first, then implement `evaluateSummaryGate()` and the complete chunker.
+- [ ] Extend the settings types, schema and deep default merge, with a test that an old configuration without decision-gate yields identical fields field by field.
+- [ ] Wire it in after producer dedup and extend SummaryRow; do not move the listener, change the `d` returned, or change the effect signal.
+- [ ] Add ledger, consumer and crusher combination tests, confirming skipped has no summary and old ok rows still read.
+- [ ] Create the offline corpus `packages/compaction/tool-use-summary/tests/fixtures/summary-gate-corpus.json` and the script `packages/compaction/tool-use-summary/scripts/eval-summary-gate.mjs`, supporting `--mode replay`.
 
-| 输入或驱动 | 预期结果 |
+| Input or driver | Expected result |
 | --- | --- |
-| result 4095 字节、已有去重行、excluded 工具 | 分别保持 small、duplicate、excluded，runner=0 |
-| 原文超过 4 个完整块 | runner=0，旧生成拿到完整原文 |
-| 末块有错误路径；前块均低分 | 仍生成，原工具结果逐字不变 |
-| 任何块缺 noul 或 Score 分布不一致 | 整组旧生成，不产生 decision-gate skip |
-| active 完整低价值；随后 microcompact | 没有成功摘要，consumer 沿用原无摘要路径 |
-| shadow 完整低价值 | 摘要生成次数、clamp 和 ledger 与旧流程相同 |
-| 工具 exec.signal 已 abort，effect 仍活动 | gate 和原摘要继续；effect abort 后均停止 |
-| 切换 mode off；缓存中有低价值答案 | 不读旧建议，直接旧生成 |
+| result of 4095 bytes, an existing dedup row, an excluded tool | keep small, duplicate and excluded respectively, runner=0 |
+| original text exceeding 4 complete chunks | runner=0, old generation receives the complete original text |
+| last chunk has an error path; earlier chunks all score low | still generate, the original tool result is unchanged character for character |
+| any chunk missing its noul or an inconsistent Score distribution | the whole set takes old generation, no decision-gate skip is produced |
+| active complete low-value; then microcompact | no successful summary, the consumer follows the original no-summary path |
+| shadow complete low-value | summary generation count, clamp and ledger identical to the old flow |
+| tool exec.signal already aborted, effect still active | gate and original summary continue; both stop after the effect aborts |
+| switch mode to off; the cache holds a low-value answer | do not read the old advice, generate the old way directly |
 
-未来实现时执行：
+Run at future implementation time:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -195,12 +195,12 @@ pnpm check:capabilities
 pnpm check:parity
 ```
 
-## 发布门槛和回滚
+## Release gate and rollback
 
-固定部署 checkpoint 和 capability revision，离线不少于 100 项完整结果，覆盖重复进度、成功构建、失败日志、数字、Unicode、单行超长文本和中段关键事实；由人工给出“能否跳过生成”标签。checkpoint 或 revision 改变时重新评估，旧缓存失效。
-active skip 的人工精确率要求 ≥99%，错误结果绕过和中段遗漏测试必须全部通过。对缩减摘要造成的后续任务错误容忍为零；这属于发布要求，不是可靠性声明。
-shadow 至少 200 次符合 gate 条件的结果，比较完整生成对照，计算已计量净成本。只有总付费成本下降至少 10%、可归因附加后台 p95 ≤800ms 且任务质量无回归，才推进用户主动开启 active。
-shadow 聚合计数只留在进程内，包含 would-skip 数和既有生成成功数；原文、分块和答案不进入新增持久日志。质量和反事实成本评估使用用户显式提供的脱敏 replay 语料。
-端到端必须验证工具结果立即返回、摘要后台运行、插件卸载可取消，以及 TUS 和 crusher 并存时 locator 完整。
-回滚设 `decision-gate.mode: off`，清空 gate 缓存并取消判断，后续结果按旧流程生成。过去未生成的摘要不自动补跑，不改历史 ledger 或原始会话。
-未来实现须更新 TUS 中英文 README、`README.i18n.yaml`、能力项 `engine.tool-use-summary` 及测试证据，再执行 `pnpm docs:parity`。本次文档 PR 不改 manifest。
+Pin the deployment checkpoint and capability revision, with at least 100 complete results offline covering repeated progress, successful builds, failure logs, numbers, Unicode, a single over-long line and mid-text key facts; humans label whether generation may be skipped. Re-evaluate when the checkpoint or revision changes; old caches become invalid.
+active skip must reach a human-labelled precision of ≥99%, and the error-result bypass and mid-text omission tests must all pass. Tolerance for later task errors caused by a skipped or missing summary is zero; this is a release requirement, not a reliability claim.
+shadow for at least 200 results that meet the gate condition, comparing against a complete generation control and computing the metered net cost. Advance to letting the user enable active only when the total paid cost drops by at least 10%, attributable added background p95 is ≤800ms and there is no task-quality regression.
+shadow aggregate counts stay in-process only, including the would-skip count and the existing generation-success count; original text, chunks and answers do not enter any new persistent log. Quality and counterfactual cost evaluation use a redacted replay corpus the user explicitly provides.
+End-to-end must verify that the tool result returns immediately, the summary runs in the background, plugin unload cancels in-flight gate and summary work, and the locator stays intact when TUS and crusher coexist.
+Rollback sets `decision-gate.mode: off`, clears the gate cache and cancels judgements; later results generate through the old flow. Summaries not generated in the past are not backfilled, and no historical ledger or original session is modified.
+Future implementation must update the TUS Chinese and English READMEs, `README.i18n.yaml`, the capability entry `engine.tool-use-summary` and the test evidence, then run `pnpm docs:parity`. This documentation PR does not change the manifest.

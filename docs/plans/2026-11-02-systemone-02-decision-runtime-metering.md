@@ -1,34 +1,34 @@
-# SystemOne 决策运行时、预算与计量
+# SystemOne decision runtime, budget and metering
 
-状态：提案，尚未实现。特性 ID：S1-02。优先级：P0。
+Status: proposal, not implemented. Feature ID: S1-02. Priority: P0.
 
-源码基线：`31fb29eb77148e92ca8da365adcbf4994622a31d`。依赖 [S1-01](2026-11-02-systemone-01-contract-validation.md)，其他功能可在本接口的测试替身上并行研发。入口见[总览](2026-11-02-systemone-00-overview.md)。
+Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](2026-11-02-systemone-01-contract-validation.md), other features can be developed in parallel against test fakes of this interface. Entry point: [overview](2026-11-02-systemone-00-overview.md).
 
-## 目标问题
+## Problem
 
-当前 [`systemoneDecide`](../../packages/llm-tuning/systemone/src/client.ts) 返回 usage，但没有统一的功能归因、预算准入和生命周期记录。MOA 与权限分别记录业务结果；[`foldCost`](../../packages/session/command-cost/src/cost.ts) 则从 request/header 与 assistant/message 汇总生成模型的成本。新增决策调用若沿用这种分散方式，无法计算包含回退、失败和重试的真实成本。
+Today [`systemoneDecide`](../../packages/llm-tuning/systemone/src/client.ts) returns usage but has no unified feature attribution, budget admission or lifecycle record. MOA and permissions each record their own business outcome; [`foldCost`](../../packages/session/command-cost/src/cost.ts) instead aggregates generative-model cost from request/header and assistant/message. New decision calls that follow this scattered approach cannot compute the true cost including fallbacks, failures and retries.
 
-本特性提供可注入的原生决策执行器，统一服务新功能。禁止用生成模型的 assistant/message 伪装 SystemOne 计量。第一版不迁移已有权限/MOA legacy 调用；新增的 MOA v2 模式使用此运行时。legacy 调用仍明确标为“未纳入决策账本”，不能宣称总账完整。
+This feature provides an injectable native decision executor that serves new features uniformly. SystemOne usage must never be recorded as generative assistant/message records, and assistant/message must never be passed off as the SystemOne meter. v1 does not migrate existing permission/MOA legacy calls; the new MOA v2 mode uses this runtime. Legacy calls remain explicitly labelled "not in the decision ledger", and no claim of a complete total is allowed.
 
-## 架构与文件
+## Architecture and files
 
-采用纯执行器加宿主适配插件。让客户端直接读取 settings/fs 会把纯传输模块与运行时耦合；各功能自己记账则无法统一重试和并发。
+A pure executor plus a host adapter plugin. Letting the client read settings/fs directly would couple a pure transport module to the runtime; letting each feature do its own accounting makes unified retry and concurrency impossible.
 
-| 文件 | 职责 |
+| File | Responsibility |
 |---|---|
-| 新建 `packages/llm-tuning/systemone/src/decision.ts` | 下述类型与 `createDecisionRunner(deps)`，无 Cordis/fs 依赖 |
-| 新建同目录 `decision-hash.ts` | canonical JSON、完整 SHA-256、输入估算 |
-| 修改同目录 `client.ts` | 可选 attempt observer、可选 maxRetries；缺省保留 legacy 行为 |
-| 新建 `packages/observability/decision-usage` 包 | optional `ctx.systemoneDecisions` 服务、设置、路由、账本与准入适配 |
-| 新建该包 `src/{index,settings,ledger,quota,route}.ts` | 各自负责挂载、设置、JSONL、持久配额、能力解析 |
-| 修改 `packages/session/command-cost/src/{index,cost}.ts` | 异步加载决策账本，单独显示其费用及未计价/未知用量 |
-| 修改 `packages/preset/cc` 与相关 bundle 的组合文件 | 挂载服务；服务本身不触发请求 |
+| New `packages/llm-tuning/systemone/src/decision.ts` | Types below and `createDecisionRunner(deps)`, no Cordis/fs dependency |
+| New `decision-hash.ts` in the same directory | canonical JSON, full SHA-256, input estimation |
+| Modify `client.ts` in the same directory | optional attempt observer, optional maxRetries; defaults keep legacy behaviour |
+| New `packages/observability/decision-usage` package | optional `ctx.systemoneDecisions` service, settings, routing, ledger and admission adapter |
+| New `src/{index,settings,ledger,quota,route}.ts` in that package | mount, settings, JSONL, durable quota, capability resolution respectively |
+| Modify `packages/session/command-cost/src/{index,cost}.ts` | load the decision ledger asynchronously, show its cost and unpriced/unknown usage separately |
+| Modify `packages/preset/cc` and the compose files of related bundles | mount the service; the service itself never triggers a request |
 
-新包 runtime dependencies 声明 `@dsh-cc/systemone`、`@dsh-cc/model-aliases`、`@dsh-cc/settings-ns`、`@dsh-cc/settings-provider`、`@dsh-cc/sidecar-io` 与实际使用的 harness/cordis 包，workspace 包用 `workspace:*`。同步 workspace lock、tsconfig paths/project references、发布 exports；禁止依赖未声明的 sibling src 深导入。
+New package runtime dependencies declare `@dsh-cc/systemone`, `@dsh-cc/model-aliases`, `@dsh-cc/settings-ns`, `@dsh-cc/settings-provider`, `@dsh-cc/sidecar-io` and the harness/cordis packages actually used, with `workspace:*` for workspace packages. Update the workspace lock, tsconfig paths/project references and published exports in sync; deep imports of sibling `src` that are not declared as dependencies are forbidden.
 
-## 公共接口
+## Public interface
 
-以下为本设计集唯一共享契约。新功能通过可选服务获取 `DecisionRunner`；服务缺失等价于 unavailable/unconfigured。feature 使用总览中的固定标识，不能包含路径或用户文本。
+The following is the only shared contract in this design set. New features obtain a `DecisionRunner` through the optional service; a missing service is equivalent to unavailable/unconfigured. Features use the fixed identifiers from the overview and must not contain paths or user text.
 
 ```ts
 interface DecisionScope {
@@ -83,91 +83,93 @@ interface DecisionBudgetPermit {
 }
 ```
 
-`createDecisionRunner(deps)` 的 deps 包含 `validateScope(scope)`、`resolveRoute(alias,scope)`、`reserveGlobal`（同上 provider 形状）、`append(row)`、`now()`、`uuid()`、`fetchImpl`。均由构造方提供；测试不需要真实 settings、文件或模型。任何依赖异常被收敛为 unavailable，不能逃逸到 agent waterfall。
+The deps of `createDecisionRunner(deps)` are `validateScope(scope)`, `resolveRoute(alias,scope)`, `reserveGlobal` (same provider shape), `append(row)`, `now()`, `uuid()` and `fetchImpl`. All are supplied by the constructor; tests need no real settings, files or models. Any dependency exception is folded into unavailable and must not escape into the agent waterfall.
 
-宿主服务公开 `forAgent(agent: Agent): BoundDecisionRunner`，BoundDecisionRunner 在上述纯接口上增加 `scope(originSeq?: number): DecisionScope`。所有业务 wrapper 先用真实 exec/invocation/capture 的 Agent 取得绑定器，再调用 scope；省略参数时同步捕获 `Number(agent.session.seq)`，绝不能用事件数组长度。测试可以直接注入纯 DecisionRunner 与固定 scope。
+The host service exposes `forAgent(agent: Agent): BoundDecisionRunner`; BoundDecisionRunner adds `scope(originSeq?: number): DecisionScope` on top of the pure interface above. Every business wrapper first obtains a binder from the real exec/invocation/capture Agent, then calls scope; when the argument is omitted it captures `Number(agent.session.seq)` synchronously and must never use the event-array length. Tests may inject a pure DecisionRunner and a fixed scope directly.
 
-服务以 Agent 对象 WeakMap 分配全进程 UUID agentId，projectKey 固定为 `projectKeyOf(path.resolve(agent.session.header.cwd))`，sessionId 取当前宿主 session.id。cwd 缺失或 seq 非安全非负整数时返回 unavailable/unconfigured，不能猜测 process.cwd。memory 的目录隔离根仍独立使用其现有解析器，不能用 memoryDir hash 充当配额项目键。
+The service allocates a process-wide UUID agentId per Agent object via a WeakMap, pins projectKey to `projectKeyOf(path.resolve(agent.session.header.cwd))`, and takes sessionId from the current host session.id. When cwd is missing or seq is not a safe non-negative integer, return unavailable/unconfigured; never guess `process.cwd`. Memory's directory-isolation root keeps using its own existing resolver; a memoryDir hash must not be used as the quota project key.
 
-每个绑定 runner 的 deps 新增 `validateScope(scope): boolean`，在路由解析、reserve 前以及返回 answered 前从绑定 Agent 重新核对 project/session/agent；originSeq 必须位于 `[0,Number(agent.session.seq)]`。Agent dispose 使绑定器永久失效。调用者伪造其他 projectKey/sessionId/agentId，或旧 Agent 已切换 session/cwd，均在 reserve 前拒绝；派发后变化则照常结算但不返回 answered。纯库不查全局 agent 注册表，由宿主绑定器提供此依赖。
+Each bound runner's deps add `validateScope(scope): boolean`, which re-checks project/session/agent against the bound Agent before route resolution, before reserve, and before returning answered. originSeq must lie in `[0,Number(agent.session.seq)]`. Agent dispose permanently invalidates the binder. A caller forging another projectKey/sessionId/agentId, or an old Agent whose session/cwd has switched, is rejected before reserve; if the change happens after dispatch, settle as usual but do not return answered. The pure library does not consult a global agent registry; the host binder supplies this dependency.
 
-路由解析结果为 `{provider,model,actualModelId,baseURL,apiKey?,revision,perRequestTokens,perQuestionTokens,maxOutputTokens}`。三个 token 上界均必须为正安全整数，由 trusted user/managed settings 的 provider/model 精确匹配行提供，不从未知模型名猜测。只有 protocol=systemone 的具体路由可用；不做 chat fallback。模型 alias 可解析，但必须记录返回的实际版本；上线评测必须固定部署 checkpoint，并在更换 checkpoint、actual-model-id 或能力上界时更新 capability revision。identifyRoute 只返回无密钥的同一解析结果；run 在派发前重解析，调用方须对 await 前后的 identity 做一致性比较，变化时丢弃业务结果。
+Route resolution yields `{provider,model,actualModelId,baseURL,apiKey?,revision,perRequestTokens,perQuestionTokens,maxOutputTokens}`. All three token upper bounds must be positive safe integers, supplied by an exact provider/model match row in trusted user/managed settings, never guessed from an unknown model name. Only concrete routes with protocol=systemone are usable; there is no chat fallback. A model alias may be resolved, but the actual version returned must be recorded; rollout evaluation must pin a deployed checkpoint and update the capability revision whenever the checkpoint, actual-model-id or capability upper bound changes. identifyRoute returns only the same resolution result, without secrets (no API key, baseURL, or actualModelId); run re-resolves before dispatch, and callers must compare identity consistency across the await, discarding the business result if it changed.
 
-## 设置与能力声明
+## Settings and capability declaration
 
-新 namespace `systemone-decisions`，只读取 trusted user/managed/显式 --settings 来源，忽略 project/local；应用 settings-cascade 对 auto-mode 的 trusted-source 模式。raw 字段全部 kebab-case，内部接口 camelCase。
+New namespace `systemone-decisions`, reading only trusted user/managed/explicit --settings sources and ignoring project/local; apply the settings-cascade trusted-source behaviour for auto-mode. All raw fields are kebab-case; internal interfaces are camelCase.
 
-| 字段 | 默认 | 约束与作用 |
+| Field | Default | Constraint and effect |
 |---|---|---|
-| `max-attempts-per-session` | 100 | 非负安全整数，0 拒绝全部新请求 |
-| `max-input-tokens-per-session` | 1000000 | 非负安全整数，按预留后结算 |
-| `max-output-tokens-per-session` | 100000 | 同上，即使供应商输出免费也计 token |
-| `max-retries` | 0 | 整数 0..2，只重试 429 |
-| `capabilities` | `[]` | 精确 provider/model 行，含 revision、actual-model-id 与上述三个上界；actual-model-id 是允许的唯一响应 model，非空且不超过256字符；重复匹配视为无效配置 |
-| `ledger-max-bytes` | 10485760 | 整数，最低 1048576；达到上限停止新决策，不删除尚在配额窗口内的记录 |
+| `max-attempts-per-session` | 100 | Non-negative safe integer; 0 rejects all new requests |
+| `max-input-tokens-per-session` | 1000000 | Non-negative safe integer, settled after reservation |
+| `max-output-tokens-per-session` | 100000 | Same, tokens count even if provider output is free |
+| `max-retries` | 0 | Integer 0..2, retries 429 only |
+| `capabilities` | `[]` | Exact provider/model rows with revision, actual-model-id and the three upper bounds above; actual-model-id is the only permitted response model, non-empty and at most 256 characters; duplicate matches are an invalid configuration |
+| `ledger-max-bytes` | 10485760 | Integer, minimum 1048576; on reaching the limit, stop new decisions without deleting records still inside the quota window |
 
-服务挂载不代表启用业务。各功能 mode 默认 off，off 时不构造请求。修改设置不清零已花配额；降低上限至已消费以下，随后请求全部拒绝。配额范围是 `(projectKey,sessionId)`，包含该 session 所有 agent 和 feature；不同项目不共享，父子会话 ID 不同则分别计量。
+Mounting the service does not enable any business. Each feature's mode defaults to off, and off constructs no request. Changing settings does not reset quota already spent; lowering a limit below what has been consumed rejects all subsequent requests. The quota scope is `(projectKey,sessionId)`, covering every agent and feature of that session; different projects do not share, and parent/child session IDs with different values are metered separately.
 
-能力上界是部署契约，不能拿调用方的估算预算代替。官方 Jev 当前的每请求与每问题限制不同；部署网关也可能不同。应根据实际路由声明，不能直接把所有模型配置成相同窗口。[官方上下文说明](https://docs.typesafe.ai/models)
+Capability upper bounds are a deployment contract and must not be replaced by a caller's estimated budget. The official SystemOne decision model currently has different per-request and per-question limits; a deployment gateway may differ too. Declare them per actual route; do not configure all models with the same window. [Official context note](https://docs.typesafe.ai/models)
 
-## 执行状态机与预算顺序
+## Execution state machine and budget order
 
-每次 run 生成 UUID decisionId，不复用失败请求的 ID。超时为从 run 入口起的总时限，含锁等待、permit、网络和重试等待，不在每次 attempt 重新计时。
+Every run generates a UUID decisionId and never reuses the ID of a failed request. The timeout is the total limit from the run entry point, covering lock waiting, permit, network and retry waits; it is not restarted per attempt.
 
-1. 检查 signal、请求结构、路由与能力。取消返回 cancelled；缺服务/能力返回 unconfigured；非法 payload 返回 malformed。
-2. canonical JSON 序列化完整 state/questions。用现有 estimator 估算 state+所有 questions+envelope+margin，并分别检查每个 state+question；限额为调用方 maxInputTokens 与路由相应窗口的较小值。估算超限不截断、不发请求，返回 unavailable/budget。估算是调度筛选，不是计费上界；业务需要按完整对象分批。
-3. 计算完整 inputHash：SHA-256(canonical `{provider,model,routeRevision,state,questions,questionVersion,policyVersion}`)。不把 API key 写进 hash 或记录。
-4. 每个 attempt 先向全局 provider 预留一个 attempt、perRequestTokens 输入和 maxOutputTokens 输出；随后向可选业务 provider 申请同样的 token 上界。任一拒绝：其他尚未派发的 permit 以 not-dispatched 结算，返回 budget。
-5. 在 fetch 调用前，持久写入 dispatch 记录。写入失败即不能派发，归还本次未派发 permit。之后执行一次原生请求。
-6. HTTP 返回后独立校验 usage。usage 合法则按 actual 结算，即使答案语义字段 malformed；usage 不合法、超时或网络状态未知按 unknown 结算，保留完整 token 预留。请求进入 fetch 即算 attempt，429 也算，不假设失败免费。
-7. 只有完整 S1-01 校验成功、响应 model 精确等于 trusted actual-model-id、actual usage 未超过能力上界、结算成功时才返回 answered。配置的 wire model 可为网关部署名，不能用它代替 actual-model-id；响应版本不符按实际 usage 结算后返回 error/model-version-mismatch。否则 unavailable。对已派发请求不因 caller 取消而退款。
-8. 429 可按现有延迟规则进入下一 attempt，但先重新预留；不得把同一个 permit 用于多个 attempt。成功、malformed、401/403、其他 HTTP 错误均不重试。最多 `1+max-retries` 次，重试等待仍受现有 3000ms 总等待预算与 run 总时限约束。
+1. Check signal, request structure, route and capability. Cancellation returns cancelled; missing service/capability returns unconfigured; an invalid payload returns malformed.
+2. Serialize the complete state/questions as canonical JSON. Estimate state + all questions + envelope + margin with the existing estimator, and also check each state+question individually; the limit is the smaller of the caller's maxInputTokens and the corresponding route window. An over-limit estimate is neither truncated nor sent — return unavailable/budget. Estimation is dispatch filtering, not a billing upper bound; business must batch by complete objects.
+3. Compute the full inputHash: SHA-256(canonical `{provider,model,routeRevision,state,questions,questionVersion,policyVersion}`). Never write the API key into the hash or the records.
+4. Each attempt first reserves one attempt, perRequestTokens of input and maxOutputTokens of output from the global provider; it then requests the same token upper bounds from the optional business provider. On any rejection, settle the other not-yet-dispatched permits as not-dispatched and return budget.
+5. Persist the dispatch record before the fetch call. If the write fails, dispatch must not happen and the permit for this attempt is returned as not-dispatched. Then execute one native request.
+6. After the HTTP response, validate usage independently. If usage is valid, settle as actual even when the answer's semantic fields are malformed; if usage is invalid, or on timeout or unknown network state, settle as unknown and keep the full token reservation. Entering fetch counts as an attempt, 429 included; never assume failure is free.
+7. Return answered only when full S1-01 validation succeeds, the response model exactly equals the trusted actual-model-id, actual usage does not exceed the capability upper bound, and settle succeeded. The configured wire model may be a gateway deployment name and must not substitute for actual-model-id; a mismatched response version settles at actual usage and then returns error/model-version-mismatch. Otherwise unavailable. Caller cancellation does not refund an already-dispatched request.
+8. A 429 may proceed to the next attempt under the existing delay rules, but must re-reserve first; the same permit must not serve multiple attempts. Success, malformed, 401/403 and other HTTP errors are never retried. At most `1+max-retries` attempts, and retry waits remain bounded by the existing 3000ms total wait budget and the run's total timeout.
 
-client 增加可选 `attemptObserver`，两个方法：`beforeDispatch({attempt,signal}) => Promise<boolean>` 和 `afterDispatch({attempt,usage?:SystemOneUsage}) => Promise<void>`。false/异常使请求不进入 fetch；观察器异常转换 error。runner 将 before/after 映射为上述 permit 生命周期。未派发取消由 runner finally 结算。legacy 不传 observer 时行为不变。after 需要在读完 response body 后、答案校验前执行，并在异常退出时由 finally 用未知 usage 补一次。每个 permit 分别维护 `settlementInvoked` 与 `settlementSucceeded`，在进入 settle 回调之前先置 invoked=true。某个 settle 抛错时不得在 finally 再对它调用 unknown，也不得覆盖已结算的其他 permit。未调用过的 permit 才用已知 actual 或 unknown 结算；回调失败的 provider 保留最后持久 reserve、冻结其预算并使本次返回 error。释放未派发 permit 也遵循同样的单次调用规则。测试必须分别注入 business settle 失败和 business 已成功/global settle 失败两个切点。
+The client gains an optional `attemptObserver` with two methods: `beforeDispatch({attempt,signal}) => Promise<boolean>` and `afterDispatch({attempt,usage?:SystemOneUsage}) => Promise<void>`. false/an exception keeps the request out of fetch; an observer exception converts to error. The runner maps before/after onto the above permit lifecycle. Cancellation before dispatch is settled by the runner's finally. Legacy behaviour is unchanged when no observer is passed.
 
-## 持久配额与并发
+after must run after the response body is read and before answer validation, and on an exceptional exit finally must supplement it once with unknown usage. Each permit maintains `settlementInvoked` and `settlementSucceeded` separately, setting invoked=true before entering the settle callback. When one settle throws, finally must neither call unknown on it again nor overwrite other permits already settled. Only permits never invoked are settled with the known actual or unknown; a provider whose callback fails keeps its last durable reserve, has its budget frozen, and makes this run return error. Releasing a not-dispatched permit follows the same single-invocation rule. Tests must inject both cut points separately: business settle failure, and business settled successfully while global settle fails.
 
-目录为 `<dshHome>/decision-usage/<projectKey>/<encodedSessionId>/`；projectKey 来自宿主 cwd，session ID 使用 harness encodeSegment，不能拼接用户输入路径。该目录含 `usage.jsonl` 和短期事务锁 `quota.lock`。
+## Durable quota and concurrency
 
-reserve、settle、恢复均在同一短事务锁内：`open('wx',0600)` 获取锁，最多等待 100ms，每 20ms 重试；失败视为 budget，不抢锁。锁仅保护读账本、校验上限和追加记录，不跨网络等待。v1 不自动删除任何已有锁，进程崩溃遗留锁只使新调用停止；诊断显示固定 `quota-lock-unavailable`，人工确认无使用者后清理。这样不会复用现有 VWA torn-lock 回收逻辑或引入活锁误删。
+The directory is `<dshHome>/decision-usage/<projectKey>/<encodedSessionId>/`; projectKey comes from the host cwd and the session ID uses the harness encodeSegment — never concatenate user-input paths. The directory holds `usage.jsonl` and the short-lived transaction lock `quota.lock`.
 
-追加 reserve/dispatch/settle JSONL 后必须 `fsync` 成功才完成事务。reserve 的 leaseId 为 decisionId+attempt，settle 幂等：重复相同终态不再收费，冲突终态冻结配额。全局和业务 permit 获取顺序固定为 global→business，结算相反顺序，不同时持有两个文件锁。
+reserve, settle and recovery all run inside the same short transaction lock: acquire with `open('wx',0600)`, wait at most 100ms, retrying every 20ms; failure counts as budget, with no lock stealing. The lock protects only reading the ledger, checking limits and appending records — never held across network waits. v1 deletes no existing lock automatically; a lock left by a crashed process only stops new calls, diagnostics show the fixed `quota-lock-unavailable`, and a human clears it after confirming no process holds the lock. This way the existing VWA torn-lock reclaim logic is not reused and no live-lock misdeletion is introduced.
 
-恢复时未配对 reserve 按完整额度继续占用；只有持久存在 not-dispatched 才可退款。尾部半行导致账本不完整时冻结该 session 配额并返回 budget，不能静默跳过后继续发请求。只读报表可以展示完整行并标记账本损坏。若 actual-model-id 与响应版本不匹配，不应用结果并记录固定版本错误，但不退款。若 usage 超过预留上界，记录实际值和 `accounting-overrun`，冻结该 session 后续请求，当前结果不可用于业务动作。
+Appending a reserve/dispatch/settle JSONL line must `fsync` successfully before the transaction completes. The reserve leaseId is decisionId+attempt; settle is idempotent — repeating the same terminal state charges nothing more, and a conflicting terminal state freezes the quota. Permit acquisition order is fixed global→business, settlement the reverse order, never holding two file locks at once.
 
-## 账本、隐私与报告
+On recovery, an unpaired reserve keeps occupying its full amount; only a durable not-dispatched entry may be refunded. When a torn tail line makes the ledger incomplete, freeze that session's quota and return budget; never silently skip it and continue sending requests. Read-only reports may display complete lines and mark the ledger corrupt. If actual-model-id does not match the response version, apply no result and record the fixed reason code `model-version-mismatch`, without refunding. If usage exceeds the reserved upper bound, record the actual values plus `accounting-overrun`, freeze subsequent requests for that session, and treat the current result as unusable for business actions.
 
-每条 schemaVersion=1 记录含 eventId、decisionId、attempt、phase（reserve/dispatch/settle/outcome）、时间、scope、feature、mode、provider、requestedModel、actualModel、routeRevision、questionVersion、policyVersion、inputHash、预留/实际 token、latencyMs、固定 outcome/reasonCode。attempt 尚无响应时 actualModel 为 null。禁止记录 API key、baseURL 查询串、state、questions 正文、路径、原始错误体或模型答案。
+## Ledger, privacy and reporting
 
-业务可以另存其已有权威对象 ID 和决策的固定标签，但不得重复计算 usage。账本不充当语义缓存，也不重放决策；缓存命中应由业务标为本地事件，零 attempt。跨进程不能自动共享内存缓存。
+Each schemaVersion=1 record contains eventId, decisionId, attempt, phase (reserve/dispatch/settle/outcome), time, scope, feature, mode, provider, requestedModel, actualModel, routeRevision, questionVersion, policyVersion, inputHash, reserved/actual tokens, latencyMs and fixed outcome/reasonCode. actualModel is null while an attempt has no response yet. Recording API keys, baseURL query strings, state, questions body text, paths, raw error bodies or model answers is forbidden.
 
-`/cost` 增加独立 `SystemOne decisions` 段，按 actualModel/provider 与现有 modelTable 匹配价格；输入输出分别折算，不把免费输出硬编码到全体服务。未知用量显示“预留上界，未确认”；未配置价格显示 unpriced，不当成 0 美元。生成模型原段保持原算法，合计区分 confirmed subtotal 和 incomplete，不伪造精确总费用。usage ledger 的 eventId 去重；一条决策多次 attempt 全部计入，业务 outcome 不再次计费。
+A business may store separately its own authoritative object ID and fixed decision labels, but must not double-count usage. The ledger is not a semantic cache and does not replay decisions; a cache hit should be marked by the business as a local event with zero attempts. In-memory caches cannot be shared automatically across processes.
 
-## 故障表与示例
+`/cost` gains a separate `SystemOne decisions` section, matching prices against the existing modelTable by actualModel/provider; input and output are converted separately, without hardcoding free output for all services. Unknown usage shows "reserved upper bound, unconfirmed"; a model with no configured price shows unpriced, not $0. The generative-model section keeps its original algorithm; the total distinguishes a confirmed subtotal from an incomplete one and never fabricates an exact total cost. The usage ledger dedups by eventId; all attempts of one decision count, and the business outcome is not charged again.
 
-| 情况 | 预算结果 | 业务结果 |
+## Failure table and example
+
+| Situation | Budget result | Business result |
 |---|---|---|
-| 关闭特性 | 无 run、无账本、无成本 | 原行为 |
-| provider 能力缺失 | 无 reserve | unconfigured |
-| 全局准入通过，VWA 准入失败 | global not-dispatched 退款 | budget |
-| fetch 后超时 | 两个 permit unknown，全额保留 | timeout |
-| 答案无效，但 usage 为 900/20 | actual 结算 900/20 | malformed |
-| 429 后重试预算不足 | 已派发计费，未派发不计费 | budget |
-| 账本写入失败 | 不启动新 fetch；已派发保留预留 | error |
-| caller abort | 派发前退款，派发后不退款 | cancelled |
+| Feature off | No run, no ledger, no cost | Original behaviour |
+| Provider capability missing | No reserve | unconfigured |
+| Global admission passes, VWA admission fails | global not-dispatched refunded | budget |
+| Timeout after fetch | Both permits unknown, fully retained | timeout |
+| Invalid answer, but usage is 900/20 | actual settle 900/20 | malformed |
+| Insufficient budget on retry after 429 | Dispatched charged, not-dispatched not charged | budget |
+| Ledger write fails | No new fetch started; dispatched ones keep their reservation | error |
+| Caller abort | Refunded before dispatch, not after | cancelled |
 
-例：路由输入上界 16000，输出上界 2000，全局剩余输入 20000。A/B 并发各请求一次，只能有一个成功 reserve。A 最终 actual=1000/20 后归还差额，B 的已拒绝请求不自动重启；由下一次业务触发决定是否再调用。不能在任务级无限重试。
+Example: route input bound 16000, output bound 2000, global remaining input 20000. A and B each request once concurrently, and only one can reserve. After A ends at actual=1000/20 the difference is returned; B's rejected request is not restarted automatically — the next business trigger decides whether to call again. Unlimited retries at the task level are not allowed.
 
-## 独立实现任务与测试
+## Independent implementation tasks and tests
 
-- [ ] 创建纯 runner 和 fake providers，先验证伪造 scope 零 reserve/零 fetch、返回模型版本不符已计费但不行动、两个并发请求不能超额预留、可选 provider 拒绝时无 fetch。
-- [ ] 创建支持 fsync 的持久账本/配额模块。测试 crash 在 reserve 后、dispatch 后、settle 半行三个切点；重启均不得白送额度。
-- [ ] client observer 和 maxRetries 加法兼容改造。测试 429→429→success 分别三次 reserve/settle；新 runner 默认一次，legacy 默认最多三次。
-- [ ] 挂载可选服务及 trusted settings，缺能力无请求；明确 project/local 无法提高配额或更换能力上界。
-- [ ] `/cost` 合并读账本。测试相同 eventId 重复、未计价模型、unknown 用量、0-token 合法响应和多个 actualModel。
-- [ ] VWA fake provider 测试 reserve 拒绝、settle 幂等与本地生成审查预算共享，不需要启用 S1-07/08。
+- [ ] Create the pure runner and fake providers; first verify forged scope gives zero reserve/zero fetch, a mismatched returned model version is charged but not acted on, two concurrent requests cannot over-reserve, and a rejecting optional provider yields no fetch.
+- [ ] Create the fsync-capable durable ledger/quota module. Test crash at three cut points: after reserve, after dispatch, and mid-line in settle; no restart may hand out free quota.
+- [ ] Additive, compatible change to the client observer and maxRetries. Test 429→429→success as three reserve/settle pairs; the new runner defaults to one attempt, legacy to at most three.
+- [ ] Mount the optional service and trusted settings; no capability means no request; make explicit that project/local cannot raise quota or change capability upper bounds.
+- [ ] Merge ledger reads into `/cost`. Test duplicate eventId, unpriced model, unknown usage, a valid 0-token response, and multiple actualModels.
+- [ ] VWA fake-provider tests for reserve rejection, settle idempotency and sharing the locally generated review budget, without enabling S1-07/08.
 
-创建 `systemone/tests/decision.spec.ts`、新包 `tests/{quota,ledger,service}.spec.ts`、command-cost `tests/decision-cost.spec.ts`，执行：
+Create `systemone/tests/decision.spec.ts`, the new package's `tests/{quota,ledger,service}.spec.ts`, and command-cost `tests/decision-cost.spec.ts`, then run:
 
 ```sh
 pnpm exec vitest run packages/llm-tuning/systemone/tests
@@ -178,8 +180,8 @@ pnpm check:inject
 pnpm typecheck
 ```
 
-通过标准是所有状态机测试 exit 0、无超配额派发、零重复结算、关闭模式无网络。真实部署用一次成功和一次可控超时对照账本与供应商用量；不能用模拟测试宣称真实费用准确。实现时补双语 README、能力 manifest、生成 parity 与配置快照中的插件归因。
+The acceptance bar is all state-machine tests exiting 0, no dispatch beyond quota, zero double settlement, and no network in off mode. Real deployment compares the ledger against provider usage with one success and one controlled timeout; simulated tests may not be used to claim real cost accuracy. Implementation adds the bilingual README, capability manifest, parity generation and plugin attribution in configuration snapshots.
 
-## 回退
+## Rollback
 
-先关闭所有新特性 mode，再移除服务挂载。保留只读账本和 `/cost` 解析，以便审计历史费用；回退不得删除已经消耗的配额。v1 不自动恢复损坏账本，不扩展权限 legacy 的容错策略。
+Turn off all new feature modes first, then remove the service mount. Keep the read-only ledger and `/cost` parsing so historical cost stays auditable; rollback must not delete quota already consumed. v1 does not automatically repair a corrupt ledger and does not extend the permission legacy's fault-tolerance policy.
