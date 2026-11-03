@@ -69,8 +69,15 @@ spec `Spec`, safety-only.
 | `WmWithinCaptured` | REQ-1 | commit past the captured head |
 | `PendingNeverLost` | REQ-5/6 | pending dropped while work is live |
 | `NoLeaseAfterTerminal`, `RunningSound` | REQ-3/7 | lease leaked past a terminal job |
-| `NoFaults` | REQ-1/2/4/7 | all four probes: `start-commit` (AdvanceOnStart), `skip-stale` (SkipNoReval), `timer-retry` (CooldownAutoRetry), `double-owner` (LeaseDoubleOwner) |
+| `NoFaults` | REQ-1/2/4/7 | all four probe witnesses: `start-commit` (AdvanceOnStart — the watermark moving when the job starts), `skip-stale` (SkipNoReval — a skip committed after the evidence head moved), `timer-retry` (CooldownAutoRetry — a phantom timer retrying the same failed window), `double-owner` (LeaseDoubleOwner — a second lease owner) |
 | `TypeOK` | — | — |
+
+Non-vacuity check: an explicit reachability diagnostic confirmed the
+`extracting` phase is reachable in the convention constants (an earlier
+draft accidentally made the lease-acquisition actions self-contradictory by
+listing `faults` in both the primed assignment and UNCHANGED, which TLC
+silently disables — the convention run verified vacuously until the
+contradiction was removed).
 
 ## Bounds and assumptions
 

@@ -71,8 +71,8 @@ Stop(h) ==
   /\ h > pendingHead
   /\ IF phase \in {"idle", "gating", "waiting-lease", "extracting"}
        THEN /\ pendingHead' = h
-            /\ UNCHANGED <<phase, wm, capturedHead, retryAt, gen,
-                            leaseOwner, jobDone, faults, alive>>
+            /\ UNCHANGED <<phase, wm, capturedHead, retryAt, gen, leaseOwner, jobDone, alive>>
+            /\ UNCHANGED faults
        ELSE /\ phase' = "gating"
             /\ pendingHead' = h
             /\ capturedHead' = h
@@ -92,8 +92,7 @@ TimerRetry ==
   /\ phase' = "gating"
   /\ jobDone' = "none"
   /\ faults' = faults \union {"timer-retry"}
-  /\ UNCHANGED <<wm, pendingHead, capturedHead, retryAt, gen, leaseOwner,
-                  alive>>
+  /\ UNCHANGED <<wm, pendingHead, capturedHead, retryAt, gen, leaseOwner, alive>>
 
 (************************************** gate ******************************)
 
@@ -109,8 +108,7 @@ GateSkip ==
        ELSE /\ wm' = Max(wm, capturedHead)
             /\ faults' = faults
   /\ phase' = "idle"
-  /\ UNCHANGED <<pendingHead, capturedHead, retryAt, gen, leaseOwner,
-                  jobDone, alive>>
+  /\ UNCHANGED <<pendingHead, capturedHead, retryAt, gen, leaseOwner, jobDone, alive>>
 
 GateNeedLease ==
   /\ alive
@@ -141,8 +139,7 @@ DreamTakesLease ==
                  THEN faults \union {"double-owner"}
                  ELSE faults
   /\ leaseOwner' = "dream"
-  /\ UNCHANGED <<phase, wm, pendingHead, capturedHead, retryAt, gen,
-                  jobDone, alive>>
+  /\ UNCHANGED <<phase, wm, pendingHead, capturedHead, retryAt, gen, jobDone, alive>>
 
 DreamReleases ==
   /\ leaseOwner = "dream"
