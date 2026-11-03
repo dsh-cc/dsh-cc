@@ -1,128 +1,156 @@
-# Design — subagent-lifecycle
+# Design: subagent-lifecycle v2 (resident-activation pool, after the rc.5 capacity move)
 
-Model id: `subagent-lifecycle` · Module: `Model.tla` · Created 2026-10-26 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L1-L273〕,
-worktree `tla-modeling`. Revised 2026-10-27 after PR #301 merged 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L128-L159〕: capacity
-admission is one atomic step per parent (a shared FIFO lease taken AFTER the 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L80-L127〕
-approval prompt, held across the creation/delivery call), so the model now
-describes the merged code and `convention` verifies the cap.
+Model directory: `specs/tla/subagent-lifecycle`. Module `Model`, spec `Spec`,
+safety-only. This is the v2 revision: the harness 0.2.1-rc.5 migration deleted
+the dsh-cc running-count guard, so the v1 capacity property (`CapOK` over
+running children with an "unobservable capacity" degradation) proved a property
+of code that no longer exists. Everything else in v1 — the admission lease, the
+grace-window tombstones, release markers, promotion, drain — still matches and
+is carried over.
 
-## Scope and screening
+## Formal design screening
 
-First-use screening (this session): the project `AGENTS.md` in this worktree
-is a 7-line self-forwarding stub; the effective three-seat review rules could
-not be loaded. Screening is **unconfirmed/not adopted** — modeling,
-`preflight`, `check` and `check-evidence` may proceed; formal review dispatch
-is blocked until a rule source is adoptable.
+- mode: **auto** (session-scoped; the project rules carry no formal-design
+  screening clause at this revision — session request "repair the subagent
+  lifecycle model against rc.5" 2026-11-03, manual adoption snippet at
+  `<skill>/references/agents-snippet.md`).
+- decision: **enabled**
+- triggerIds: FD-T1 (the admission lease, the pool and the release paths act on
+  one child record), FD-T4 (a slot is a lease on a resource whose ownership
+  moves asynchronously between admission, settle, release and drain).
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/subagent-lifecycle"}`.
+- behavioural source: current code at the rc.5 line —
+  `packages/subagent/task/src/live-capacity.ts:1-16,27-68`,
+  `packages/subagent/resume-pins/src/live-capacity.ts:1-16,45-64`,
+  `packages/subagent/resume-pins/src/admission.ts:1-55`,
+  `packages/subagent/resume-pins/src/dispatch-admission.ts:1-26`,
+  `packages/subagent/task/src/index.ts:184-185`,
+  `packages/subagent/task/src/grace-window.ts:150-192`,
+  `packages/interaction/command-agents/src/release.ts:78-100,110-117`.
 
-FD triggers: **FD-T1** (parent and harness both mutate child activation
-state), **FD-T2** (in-flight send_message racing a grace fire), **FD-T3**
-(process-local monotone markers surviving drain boundaries), **FD-T4**
-(capacity slots as a shared resource released by settle/release and acquired
-by admission).
+## Requirements
 
-Mode: auto → decision: **enabled**. Re-screening after PR #301 (the
-admission redesign): still **enabled** — the modeled behavior changed, so the
-model, anchors and this document were revised and the checks re-run; the
-prior run's evidence is superseded.
+- **REQ-1 (resident cap)** The number of resident activations in one activation
+  tree never exceeds `MaxLive` (25 in production). A slot is taken at
+  materialization and returned only at disposal; resident means a running child,
+  an idle parent waiting on child settlement, or a cold-resumed child.
+- **REQ-2 (slot discipline)** A slot is held exactly by a resident activation: a
+  settled child holds none, and a drained forest holds none. A slot leak would
+  permanently shrink the pool.
+- **REQ-3 (follow-up exemption)** A `send_message` to an already-resident child
+  takes no new slot (`index.ts:185`); only a cold resume of a settled child
+  does, and it is refused at the cap.
+- **REQ-4 (no resurrection)** A released child never regains a live activation.
+- **REQ-5 (tombstone soundness)** An auto-release tombstone is only set on a
+  child with no live activation, and grace timers only exist for registry
+  members.
+- **REQ-6 (no late epoch)** No child runs an epoch after auto-release without a
+  restart — the documented accepted residual (`release.ts:110-117`) is the one
+  interleaving that can violate it, and it is the `SplitContinue` probe.
+- **REQ-7 (drain)** After session exit every child is drained and no slot
+  survives.
+- **REQ-8 (promotion)** A promoted child is re-tiered to background exactly once.
 
-## What is modeled
+## State variables
 
-Per-child state 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L9-L52〕:
+| Variable | Meaning |
+|---|---|
+| `status` | per child: none / running / idle / ready / gone |
+| `slotHolder` | children currently holding a pool slot (the resident set) |
+| `tier`, `epochOpen` | foreground/background tier and whether an epoch is in flight |
+| `graceMember`, `gracePending` | registry membership and armed grace timers |
+| `tombstoned`, `tombstoneEver` | the auto-release marker and its history |
+| `releasing`, `released` | the release marker before and after the eviction |
+| `promoted`, `lateEpoch` | promotion history and the late-continuation counter |
+| `drained` | the session-exit terminal |
 
-- `status[c]`: `none → running → idle → ready → gone`, where `ready` means
-  settled-with-registry-row (cold-resumable) and `gone` means evicted.
-- `tier[c]`: foreground/background (grace-window tier + promotion re-tier).
-- `epochOpen[c]`: the foreground collect epoch window (promotability).
-- marker sets: `graceMember`, `gracePending`, `tombstoned`, `tombstoneEver`,
-  `releasing`/`released`, `promoted`, `lateEpoch`.
-- global `drained` (session-exit whole-forest teardown).
-- constant `CapacityObservable`: whether the live registry is readable (the
-  guard fails open when it is not).
+Atomicity mapping: `SpawnAtomic` is one step because the harness reserves the
+slot inside `startActivation` and the dsh-cc lane holds the admission lease
+across the creation call (`admission.ts:19-55`); `ContinueAdmit` acquires its
+slot inside that call too, so the refusal at the cap now happens after the lease
+is taken, not at a dsh-cc-side count. `Settle`, `ReleaseFinish` and
+`SessionExit` are the three disposal points that return a slot.
 
-Actions and their code correspondents:
+## Coverage matrix
 
-| Model action | Code | Atomicity mechanism in the code |
-|---|---|---|
-| `SpawnAtomic` | `acquireLiveCapacity` + `startContinuable` 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L53-L79〕 | the per-parent FIFO lease is held across the guard and the creation call; released when creation settled |
-| `ContinueAdmit` | `tools/execute` dispatch admission 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L128-L159〕 | the lease is taken AFTER approval, the guard runs under it, and it is held until the delivery settles |
-| `ContinueAdmit` (tombstone gate) | the pre-execute `[AUTO_RELEASED]` deny 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L160-L183〕 | a separate step from the dispatch admission (the accepted residual) |
-| `EpochEnd` / `Settle` | `subagent/end`, harness drop → grace armed 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L184-L211〕 | synchronous set updates; fire re-checks liveness |
-| `GraceFire` | `fireGraceWindow` 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L184-L211〕 | timer callback; live child → skip + re-arm |
-| `Release` / `LateClear` | `runRelease` mark-before-issue, refused clear 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L212-L245〕 | `markReleasing` before the drain issuance; `clearReleasing` refused while released |
-| `Promote` | `registration.promote()` 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L246-L264〕 | `if (settled \|\| promoted) return`, single-threaded |
-| `SessionExit` | whole-forest drain 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L265-L273〕 | harness exit path |
-
-## Requirements and properties
-
-| Req ID | Business outcome | Property | TLA operator | Cases | Fault-or-race trace | Assumptions | Code symbol / atomicity | Regression scenario | Exclusion / justification 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L1-L273〕 |
+| Requirement ID | Business outcome | Property ID | TLA operator | Case IDs and bounds | Fault-or-race trace | Assumption IDs | Planned code symbol and atomicity mechanism | Regression scenario | Exclusion and justification |
 |---|---|---|---|---|---|---|---|---|---|
-| R-1 | A parent never exceeds MaxLive running continuable children — spawns and continuations both check under the same per-parent lease | CapOK | `CapOK` | convention (core); strict-cap-unobservable | two admissions interleaving; unreadable capacity | single-threaded loop; the guard counts only `running` rows 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L9-L52〕 | `acquireLiveCapacity` + `admitContinuation` under `acquireAdmission` 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L53-L79〕 | `admission.spec.ts` (FIFO, abort races), `admission-mixed.spec.ts` (24 live + spawn + continuation) | unobservable capacity is a documented fail-open boundary (probe) |
-| R-2 | A released child never regains a live activation | NoResurrect | `NoResurrect` | convention | release vs late admission | process-local monotone `released` set 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L212-L233〕 | monotone set + deny gate | `release-agent.spec.ts` repeat-release convergence | none |
-| R-3 | Release markers stay consistent; a late handler cannot clobber a completed release | ReleasedDisjoint | `ReleasedDisjoint` | convention | timed-out release attempt's late handler | `clearReleasing` refused while released | set guards, single-threaded | `release-agent.spec.ts` late-continuation variants | still-resident is modeled as immediate eviction (A-2) |
-| R-4 | Auto-release tombstones only touch children with no live activation | TombstoneNonLive | `TombstoneNonLive` | convention; strict-late-continue | grace fire vs continuation re-check | fire re-checks `running/idle` → skip + re-arm 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L184-L211〕 | timer callback re-check | `grace-window.spec.ts` "fire re-checks registry…" | none |
-| R-5 | Grace timers exist only for registry members | GraceMemberOnly | `GraceMemberOnly` | convention | coordinator/ephemeral children excluded | membership gate 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L184-L211〕 | synchronous map | `grace-window.spec.ts` "a non-registry id never arms" | none |
-| R-6 | No child runs an epoch after auto-release without a legitimate restart | NoLateEpoch | `NoLateEpoch` | convention (holds); strict-late-continue (violated by design) | grace fire landing between the tombstone gate and the dispatch admission | the two guards are separate steps 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L234-L245〕 | documented accepted residual | code comment only (A8) | accepted behavior, not a defect |
-| R-7 | After session exit nothing is live or admissible | DrainedQuiescent | `DrainedQuiescent` | convention | drain vs late admission | process exit fires nothing 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L265-L273〕 | exit path | `tool.spec.ts` verbatim drain contract | cross-session cold-resume after drain unverified upstream |
-| R-8 | Promotion re-tiers to background and a FINISHED collect cannot promote | PromotedIsBackground | `PromotedIsBackground` | convention | promote vs settle | `if (settled \|\| promoted) return` 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L246-L264〕 | single-threaded guard | `tool.spec.ts` "promote-wins / settle-wins" | none |
-| L-1 | A running child eventually settles | excluded | — | — | — | — | — | — | needs fairness plus a harness turn-loop model |
-
-## Faults and races explicitly modeled
-
-1. **Unobservable capacity** (strict-cap-unobservable): a missing
-   `listChildren` seam, a throwing listing or an absent registry makes the
-   guard admit — a safety valve must not wedge admissions on its own
-   infrastructure. Expect a counterexample: the documented fail-open boundary,
-   not a defect.
-2. **Grace fire between the tombstone gate and the dispatch admission**
-   (strict-late-continue): the `[AUTO_RELEASED]` deny runs in
-   `tools/pre-execute` and the capacity admission in `tools/execute`, so a
-   fire in between admits one extra epoch for an auto-released child. Expect a
-   counterexample — the accepted residual recorded in the code
-   〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L234-L245〕.
-
-The two admission defects the earlier revisions recorded are CLOSED by PR 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L53-L159〕
-#301 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L53-L79〕: the spawn TOCTOU (F-1 — the lease serializes check + creation) and the
-continuation capacity gap (F-2 — admission runs after approval under the same
-lease). `convention` verifies `CapOK` for every interleaving in the bounds.
+| REQ-1 | never more resident activations than the pool allows | S-1 `CapOK` | `CapOK` | convention; strict-cap-overshoot (expected red) | `SpawnAtomic` past the cap under `CapIgnored` | A-1, A-2 | `startActivation` reserving a slot and throwing `ACTIVATION_LIMIT_REACHED`; `PoolHasRoom` | three concurrent spawns at `MaxLive = 2` | the pool's own atomicity is upstream (A-1) |
+| REQ-2 | a slot exists exactly while a resident activation exists | S-2 `SlotIsActivation`, S-3 `DrainedNoSlot` | same | convention; strict-slot-leak (expected red) | `ReleaseFinish` / `SessionExit` keeping the slot under `SkipSlotRelease` | A-3 | `Settle` disposes, `ReleaseFinish` and `SessionExit` return slots | release a child and check the pool count | — |
+| REQ-3 | a follow-up to a resident child takes no slot | structural (`FollowUp` assigns no slot) | `FollowUp` | convention | a follow-up admitted at the cap | A-1 | `admitContinuation` short-circuits for a resident target | `send_message` at the cap | the exemption is stated in the contract copy, pinned as A5 |
+| REQ-4 | a released child stays gone | S-4 `NoResurrect` | `NoResurrect` | convention | release then a continuation attempt | A-4 | the tombstone gate at `tools/pre-execute` | release then `send_message` | — |
+| REQ-5 | tombstones and grace timers stay sound | S-5 `TombstoneNonLive`, S-6 `GraceMemberOnly` | same | convention | grace fire on a stale timer | A-5 | `fireGraceWindow` re-checks liveness (`grace-window.ts:172-192`) | arm, then settle, then fire | — |
+| REQ-6 | no epoch after auto-release without a restart | S-7 `NoLateEpoch` | `NoLateEpoch` | convention; strict-late-continue (expected red) | a grace fire lands between the gate and the delivery | A-6 | pre-execute gate before the dispatch admission | the accepted residual | the residual is accepted by design (`release.ts:110-117`) |
+| REQ-7 | the forest is drained at exit | S-8 `DrainedQuiescent`, S-3 | same | convention | exit with live children | A-7 | whole-forest teardown at session exit | exit with running and idle children | cooperative eviction may keep a slot until the turn settles (A-7) |
+| REQ-8 | promotion re-tiers once | S-9 `PromotedIsBackground` | same | convention | promote, then promote again | A-8 | `epoch-collector.ts:285-299` guard | Ctrl+B on a running child | — |
 
 ## Assumptions
 
-- A-1: single Node process, single-threaded event loop; every synchronous
-  block is atomic; interleaving happens only at awaits.
-- A-2: cooperative release (still-resident while a cancel-resistant turn
-  holds its slot) is modeled as immediate eviction.
-- A-3: grace-window durations are abstracted; the fire is a nondeterministic
-  action while armed.
-- A-4: `childId`s are fresh UUIDs, so pin-store collisions and duplicate-id
-  re-tiering are out of scope.
-- A-5: the approval prompt is not modeled as a state; what matters is that it
-  runs BEFORE the dispatch admission (`tools/execute`) 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L128-L159〕, which the merge
-  guarantees, and the model encodes it by making the capacity check and the
-  restart one step.
-- A-6: capacity observability is a free constant; the probe carries that
-  boundary explicitly rather than assuming it away.
+- **A-1** The harness pool's slot reservation and `ACTIVATION_LIMIT_REACHED`
+  refusal are atomic with materialization; the dsh-cc side only serializes the
+  call. The pool implementation is upstream and outside this repository.
+- **A-2** A slot is counted per root activation tree and shared by local and
+  external descendants (`live-capacity.ts:20-27`).
+- **A-3** Disposal is the only slot release; a settle disposes the activation.
+- **A-4** The release marker is set before the drain and survives it
+  (`release.ts:78-100`).
+- **A-5** The grace fire re-checks registry membership and liveness before
+  tombstoning (`grace-window.ts:150-192`).
+- **A-6** The tombstone gate runs at `tools/pre-execute`, before the dispatch
+  admission at `tools/execute`.
+- **A-7** Session exit drains the whole forest; eviction is cooperative, so a
+  cancel-resistant turn keeps its slot until it settles.
+- **A-8** Promotion's `settled || promoted` guard is the single entry.
+
+## Faults modeled (one switch per probe)
+
+| Switch | Models | Probe |
+|---|---|---|
+| `CapIgnored` | the pool admitting past the cap | strict-cap-overshoot |
+| `SkipSlotRelease` | a disposal path that does not return its slot | strict-slot-leak |
+| `SplitContinue` | the accepted late-continuation residual (gate and delivery ordered apart) | strict-late-continue |
 
 ## Bounds
 
-Children = {1,2,3}; MaxLive = 2; no time. The state space is the full product
-of the per-child variables for 3 children — sufficient for every modeled race.
+Three children, `MaxLive = 2`. Two is the minimum that exposes an overshoot, and
+three children let a settled child be cold-resumed while two residents hold the
+cap.
 
-## Case plan
+## Exclusions
 
-| Case | Coverage | Constants | Invariants | Expected |
-|---|---|---|---|---|
-| convention | core | MaxLive=2, SplitContinue=FALSE, CapacityObservable=TRUE 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L53-L79〕 | all | verified |
-| strict-cap-unobservable | expansion | CapacityObservable=FALSE 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L9-L52〕 | TypeOK, CapOK | counterexample (documented fail-open boundary) |
-| strict-late-continue | expansion | SplitContinue=TRUE 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L160-L183〕 | TypeOK, NoLateEpoch, TombstoneNonLive | counterexample (accepted residual) |
+- **E-1** the harness pool's internal reservation atomicity: upstream, read
+  only, and A-1 records the obligation.
+- **E-2** the one-shot ledger, the ephemeral reaper TTL controller and the
+  grace-settled notice (`one-shot-ledger.ts`, `ephemeral-reaper.ts`): a separate
+  lane that would need its own model; the shared lease and the slot discipline
+  are covered here.
+- **E-3** the release outcome matrix (`release.ts:210-415`: observe timeouts,
+  `ACTIVATION_TEARDOWN_FAILED` degraded success, the bounded poll): the model
+  abstracts eviction to one step, which is the property-relevant part.
+- **E-4** `autoReleaseMs = 0` (never armed) and `armGraceFromPin`: time
+  abstractions that change no property here.
+- **E-5** the admission queue's ordering beyond the per-parent FIFO.
+- **L-1** liveness (every resident child eventually settles or is released) is
+  excluded: it needs fairness and a turn-loop model.
 
-## Screening / revision record
+## Code and test mapping
 
-- 2026-10-26 initial 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L1-L273〕: mode `auto`, decision `enabled` (FD-T1..T4); review
-  rules not loadable — formal review dispatch blocked.
-- 2026-10-26 revision 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L1-L273〕: PR #299 merged (continuation capacity guard).
-- 2026-10-27 revision 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L53-L159〕: PR #301 merged (`72397120`) — capacity admission is a
-  single atomic step per parent under one lease, taken after approval; the
-  reservation/TTL machinery the review rounds discussed is NOT in the merged 〔src:ws:specs/tla/subagent-lifecycle/code-anchors.md#L80-L127〕
-  design (the merge moved admission after the approval prompt instead), so
-  the model dropped it. All three runner commands re-run; prior evidence
-  superseded.
+| Property | Code mechanism | Test pinning it |
+|---|---|---|
+| S-1 | `startActivation` slot reservation + refusal mapping | `continuation-capacity.spec.ts`, `admission-atomic.spec.ts` |
+| S-2, S-3 | disposal returns the slot | `release-agent.spec.ts`, `grace-window.spec.ts` |
+| REQ-3 | resident follow-up takes no slot | `dispatch-admission.spec.ts` |
+| S-4 | tombstone gate at pre-execute | `plugin.spec.ts` (tombstone deny) |
+| S-5, S-6 | grace fire re-checks liveness | `grace-window.spec.ts` |
+| S-7 | accepted residual | `release-agent.spec.ts` |
+| S-8 | whole-forest drain | `tool.spec.ts` drain assertions |
+| S-9 | promotion guard | `epoch-collector.spec.ts` |
+
+## Open questions (not decided by this model)
+
+1. Should a cooperative eviction that outlives its timeout keep the slot (as the
+   refusal copy says) or release it optimistically?
+2. Should the ephemeral one-shot lane get its own model (E-2)?
+
+Counterexample dispositions and the v1→v2 drift account are in
+`implementation.md`.
