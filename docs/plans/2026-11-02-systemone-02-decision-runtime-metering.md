@@ -52,7 +52,15 @@ New package runtime dependencies declare `@dsh-cc/systemone`, `@dsh-cc/model-ali
 
 ## Public interface
 
-The following is the only shared contract in this design set. New features obtain a `DecisionRunner` through the optional service; a missing service is equivalent to unavailable/unconfigured. Features use the fixed identifiers from the overview and must not contain paths or user text. The `feature` field is a closed kebab-case union for this design set: `memory-recall`, `memory-extraction`, `tool-discovery`, `skill-recommendation`, `support-triage`, `audit-shortlist`, `moa-context-routing`, `moa-acceptance`, `summary-gate`, `reducer-gate`.
+The following is the only shared contract in this design set. New features obtain a `DecisionRunner` through the optional service; a missing service is equivalent to unavailable/unconfigured. Features use the fixed identifiers from the overview and must not contain paths or user text. `DecisionFeature` is the closed kebab-case union for this design set (used by both the request and the permit input):
+
+```ts
+type DecisionFeature =
+  | 'memory-recall' | 'memory-extraction' | 'tool-discovery'
+  | 'skill-recommendation' | 'support-triage' | 'audit-shortlist'
+  | 'moa-context-routing' | 'moa-acceptance' | 'summary-gate'
+  | 'reducer-gate';
+```
 
 ```ts
 interface DecisionScope {
@@ -62,7 +70,7 @@ interface DecisionScope {
   originSeq: number;
 }
 interface DecisionRequest {
-  feature: string;
+  feature: DecisionFeature;
   mode: 'shadow' | 'active';
   routeAlias: string;
   questionVersion: string;
@@ -95,7 +103,7 @@ interface BoundDecisionRunner extends DecisionRunner {
 }
 interface DecisionBudgetPermitProvider {
   reserve(input: {
-    decisionId: string; scope: DecisionScope; feature: string; attempt: number;
+    decisionId: string; scope: DecisionScope; feature: DecisionFeature; attempt: number;
     inputTokens: number; outputTokens: number; signal: AbortSignal;
   }): Promise<DecisionBudgetPermit | undefined>;
 }

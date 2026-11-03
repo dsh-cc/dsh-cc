@@ -9,17 +9,15 @@ scope confirmed via ask_user_question). Manual adoption snippet: 〔src:ws:docs/
 
 ## Final run
 
-- runId: `20261103T065527Z-b102b079-7ade-4dfa-818d-4707feda8be4` (r5 fold rerun) (r4 fold rerun) (r3 fold rerun) (review-fold rerun; the lock/freeze remodel raised the state count) (marker-only
-  backfill of 〔src:ws:〕 evidence annotations in design.md; identical model
-  bytes, identical case statistics per case — superseded run
-  `20261103T020629Z-53a1d0be-b734-4395-94e4-1870d60a9264` had the same
-  judging outcome). 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕
+- runId: `20261103T065527Z-b102b079-7ade-4dfa-818d-4707feda8be4` (r5 final). 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕
 - inputDigest: see `evidence.json` of that run (design.md was edited before 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕
   this final run; every earlier run below is superseded by it) 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕.
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.3-rc.4, darwin 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕.
-- convention (core): **verified** — 1,008,631 states generated, 453,664 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L100-L111〕
-  distinct, 0 left on queue; all 13 invariants hold 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L113-L128〕.
+- convention (core): **verified** — 746,798 states generated, 334,296
+  distinct, 0 left on queue; all 14 invariants hold (the review-fold
+  lock/freeze remodel raised the state count; earlier runs are in the
+  lineage below).
 - Probes (expansion, expected counterexample — each hits exactly its 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L113-L128〕
   intended invariant, proving the guard it removes is load-bearing): 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L113-L128〕
   - `strict-steal-lock` → `QuotaIn` violated (mutual exclusion removed ⇒ 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L113-L128〕
