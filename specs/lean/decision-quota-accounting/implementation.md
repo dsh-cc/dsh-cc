@@ -17,7 +17,8 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
   (`retainedTotal_le_reservedTotal`), unknown/unsettled upper bounds,
   not-dispatched refunds, actual bills exactly the usage, settlement never
   raises the retained amount.
-- `lean-check-evidence --stage proof`: valid and fresh. Conformance is
+- `lean-check-evidence --stage proof`: valid and fresh, proofVerdict
+  `verified` (runId and inputDigest as above). Conformance is
   **not-run** by design: S1-02 is not implemented, so there is no production
   module to bind the adapter to; `acceptanceReady` is accordingly false
   (proof-only result, never implementation acceptance).
