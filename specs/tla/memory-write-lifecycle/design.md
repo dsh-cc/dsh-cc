@@ -28,12 +28,17 @@ current code leaves open, one per fault switch.
 
 ## Requirements
 
-- **REQ-1 (no lost pointer)** A pointer a save committed after a dream's fork
-  snapshot is still in the index when that dream publishes. Both the save/save
-  lost update and the dream erasing a newer save violate this. The intended
-  mechanism is read-verify-write: the index commits only when the durable bytes
-  still equal the snapshot the writer built from — the read-back idiom
-  `lock.ts:100-106` already applies to the lock file.
+- **REQ-1 (no lost pointer)** A pointer a save committed after a writer's
+  snapshot is still in the index when that writer publishes. The save/save lost
+  update, a consolidation erasing a newer save and an extraction erasing one
+  all violate this. The intended mechanism is read-verify-write against the
+  index REVISION the writer read — the read-back idiom `lock.ts:100-106`
+  already applies to the lock file. A revision, not just a pointer set, is
+  required: a save that rewrites an existing pointer's content leaves the set
+  unchanged but still invalidates an older writer's snapshot.
+- **REQ-9 (three writers)** The extraction fork is a third writer on the same
+  index and takes no lock (`index.ts:218-235` → `memory-job.ts:150-151`), so
+  REQ-1 applies to it exactly as to the save and the dream.
 - **REQ-2 (no dangling pointer)** The index never points at a topic file that
   was not written first. The save path gets this from writing the topic file
   before the pointer; the dream batch has no such ordering rule in code.
@@ -70,7 +75,8 @@ current code leaves open, one per fault switch.
 | `stamp` | pressure marker: `armedAt`, `lastForcedAt` | survives crashes |
 | `lastArmAt` | newest arm timestamp (pressure is level-triggered) | survives crashes |
 | `lastServedAt` | newest arm a completed pressure dream served | survives crashes |
-| `savedSince` | names whose pointer a save ADDED after the current fork snapshot | survives crashes |
+| `rev` | index revision: every index write bumps it | survives crashes |
+| `savedSince` | names whose pointer a save ADDED after the current writer's snapshot | survives crashes |
 | `pend`, `alive`, `now` | in-flight action record per process, liveness, logical clock | lost on crash |
 
 Atomicity mapping: `SaveIndex` is one read-verify-write commit (the intended
@@ -84,14 +90,15 @@ write.
 
 | Requirement ID | Business outcome | Property ID | TLA operator | Case IDs and bounds | Fault-or-race trace | Assumption IDs | Planned code symbol and atomicity mechanism | Regression scenario | Exclusion and justification |
 |---|---|---|---|---|---|---|---|---|---|
-| REQ-1 | a pointer committed after a fork is never silently lost; two writers cannot overwrite each other from stale snapshots | S-1 `NoLostSave` | `NoLostSave` | convention; strict-unlocked-save (expected red); strict-dream-no-cas (expected red) | `SaveRead(p1)` → `SaveRead(p2)` → both `SaveIndex` → the second writes its stale snapshot and drops the first pointer; `DreamFork` → `SaveIndex` → `DreamClobber` writes the pre-save content | A-1, A-2, A-3 | `save.ts:200-219` read/upsert + `writeMemoryFiles`; the intended guard is read-verify-write (as `lock.ts:100-106`), absent in both writers today | two processes saving concurrently; save during an in-flight dream | — |
+| REQ-1 | a pointer committed after a snapshot is never silently lost; the three writers cannot overwrite each other from stale snapshots | S-1 `NoLostSave` | `NoLostSave` | convention; strict-unlocked-save, strict-dream-no-cas, strict-unlocked-extract (expected red) | `SaveRead(p1)` → `SaveRead(p2)` → both `SaveIndex` → the second writes its stale snapshot and drops the first pointer; `DreamFork` → `SaveIndex` → `DreamClobber` writes the pre-save content | A-1, A-2, A-3 | `save.ts:200-219` read/upsert + `writeMemoryFiles`; the intended guard is read-verify-write (as `lock.ts:100-106`), absent in both writers today | two processes saving concurrently; save during an in-flight dream | — |
 | REQ-2 | the index never references a missing topic file | S-2 `NoDanglingPointer` | `NoDanglingPointer` | convention; strict-index-first (expected red) | `DreamPublishFirst` publishes the pointer, `Crash(p)` before `DreamTopicsAfter` | A-4 | `writeback.ts:174-178` sequential writes: the save batch is topic-first by construction, the dream batch order is fork-decided | crash between the index write and the topic write | — |
-| REQ-3 | a dream never publishes an over-cap index; compaction is served by the truncate fallback | S-3 `CapSound` | `CapSound` | convention; strict-skip-cap (expected red) | a dream whose reported content exceeds `MaxLines` publishes it | A-5 | `writeback.ts:141-154` gate + `memory-job.ts:76-89` truncate fallback | dream reporting an over-limit index | fail-open save into an already over-limit index is E-3 |
+| REQ-9 | the extraction fork obeys the same index discipline | S-1 via `ExtractIndex` | `NoLostSave` | strict-unlocked-extract (expected red) | an extraction write built on a pre-save snapshot publishes | A-11 | `index.ts:218-235` → `memory-job.ts:150-151` writes through `writeMemoryFiles` with no lock | a turn-end extraction racing a save | — |
+| REQ-3 | a published index respects the cap | S-3 `CapSound` | `CapSound` | convention; strict-skip-cap (expected red) | a batch whose content exceeds `MaxLines` publishes it | A-5 | `writeback.ts:141-154` gate + `memory-job.ts:76-89` truncate fallback | dream reporting an over-limit index | fail-open save into an already over-limit index is E-3 |
 | REQ-4 | an armed marker reaches a dream; the model-visible "queued" sentence is not a lie | S-4 `NoLostPressure` | `NoLostPressure` | convention; strict-clear-without-run (expected red) | `SaveReject` arms at `t` during a running dream → `DreamClear` tombstones it without serving | A-6, A-7 | `pressure.ts:79-86` arm re-reads `lastForcedAt`; `index.ts:358` clears with no arm identity in the guard | concurrent cap rejection during a running dream | wall-clock "eventually" is L-1, excluded |
 | REQ-5 | one consolidation per memory directory | S-5 `OneDreamer`, `HoldsLock` | same | convention | two dreams race the lock; one reclaims a stale-stamped lock | A-8 | `lock.ts:71-108` acquire = write + read-back verify | two sessions dreaming at once | the accepted sub-millisecond symmetric collision is E-2 |
 | REQ-6 | the consolidation epoch never silently regresses or advances without a run | structural (`DreamFail`) | `DreamFail` | convention | dream fails after acquiring: lock rewritten with `priorAt` | A-8 | `lock.ts:120-124` `rollbackLock` | a failed dream must not consume the cooldown epoch | E-4 |
 | REQ-7 | a crashed holder blocks, then is reclaimable; no stuck live state | structural (deadlock check + reclaim guard) | `DreamLock`, `Idle` | convention | `Crash(p1)` while holding the lock, `Tick` past `StaleTicks`, `p2` reclaims | A-8, A-9 | `lock.ts:84` stale window (1h, independent of liveness) | kill a dreaming process | — |
-| REQ-8 | only the declared stale-window preemption breaks exclusivity | S-6 `OneDreamer` under `FreeTicks` | `OneDreamer` | convention (ticks quiescent); strict-live-preemption (expected red) | `DreamStampPeriodic` → `DreamLock` reclaims a live holder whose stamp passed the window | A-10 | `lock.ts:19` stale window is time-based, not PID-based | a dream longer than the window | a dream of minutes against 1h is why ticks are quiescent by default (A-10) |
+| REQ-8 | only the declared stale-window preemption breaks exclusivity | S-6 `OneDreamer` under `FreeTicks` | `OneDreamer` | convention (ticks quiescent); strict-live-preemption (expected red) | `DreamStampPeriodic` → `DreamLock` reclaims a live holder whose stamp passed the window | A-10 | `lock.ts:19` stale window is time-based, not PID-based | a dream longer than the window | a dream of minutes against 1h is why ticks are quiescent by default (A-12) |
 
 ## Assumptions
 
@@ -114,7 +121,12 @@ write.
   liveness is not consulted (`lock.ts:19`).
 - **A-9** Logical ticks stand for the 1h stale window / 60m cooldown / periodic
   time gate; the model does not claim real durations.
-- **A-10** A tick is a quiescent boundary: clock advance during a critical
+- **A-10** The index revision is a faithful stand-in for byte equality: any
+  index write changes the revision, so a writer's read-verify compares the same
+  fact a durable-byte comparison would.
+- **A-11** The extraction fork writes through the same `writeMemoryFiles` gate
+  as the dream's batch (`memory-job.ts:150-151`).
+- **A-12** A tick is a quiescent boundary: clock advance during a critical
   section is not part of the default run, because a dream of seconds against a
   one-hour window does not cross it. `FreeTicks` removes the restriction so the
   preemption stays reachable as a probe.
@@ -127,18 +139,29 @@ write.
 | `DreamNoCas` | a dream batch publishing over the index without checking it still matched | strict-dream-no-cas |
 | `DreamIndexFirst` | publishing the index before the topic files it points at | strict-index-first |
 | `ClearWithoutRun` | tombstoning the marker regardless of which arm the dream read | strict-clear-without-run |
-| `SkipCap` | dropping the dream's cap guard | strict-skip-cap |
+| `SkipCap` | dropping the batch cap guard | strict-skip-cap (defence in depth: the write-back gate and the truncate fallback also enforce the cap, so this is not a live code gap) |
+| `UnlockedExtract` | an extraction index write from its own stale snapshot | strict-unlocked-extract |
 | `FreeTicks` | the clock advancing inside a critical section (live-holder preemption) | strict-live-preemption |
 
 ## Bounds
 
 Two processes, three candidate names, `MaxLines=2`, `StaleTicks=2`,
-`CooldownTicks=1`, `MinTicks=1`, four logical ticks. Two processes are the
+`CooldownTicks=1`, `MinTicks=1` (0 in the preemption probe, which needs the
+stale window to open inside the tick budget), `TMax=2`, `Revs=3`, 2048 MiB. Two processes are the
 minimum that exposes a cross-process write race; three names let a dream exceed
 the cap of two, and let a compaction free room for a save during a dream.
 
 ## Exclusions
 
+- **E-1a** content regression of an existing memory: `topic` records presence,
+  not bodies, so an overwrite that leaves the pointer set unchanged is
+  invisible to the invariants. The revision guard rejects such a write
+  structurally in the intended protocol; the model cannot observe the body.
+- **E-1b** the accepted `armPressure` re-read race (`pressure.ts:64-69`): same
+  status as E-2, not modeled.
+- **E-1c** the pressure-mode zero-scan return between the stamp and the lock
+  (`index.ts:320-323`) and the failed-outcome bounded retry reusing the held
+  lock (`index.ts:376-396`): reachable behaviours that change no property.
 - **E-1** torn `fs.writeText` output: the fs seam exposes no rename and no
   partial-write visibility, so a torn file is not modelable at this layer
   (A-1).

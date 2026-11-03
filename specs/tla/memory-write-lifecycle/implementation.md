@@ -13,11 +13,11 @@ defects, outside `inputDigest` as the runner contract requires.
 
 ## Final run
 
-- runId `20261103T015426Z-9a2f5dd5-fe62-4143-9619-0dcd969bfd1d`
-- inputDigest `de9de01eed596fd87a3a05bdc9303190678256f9bd5ddbc4d7f7cf8d8eb2622c`
-- `convention` **verified**: 26,298,234 states generated, 5,779,369 distinct,
-  0 left on queue, 94.6 s.
-- six expansion probes each produced their expected counterexample (below).
+- runId `20261103T025128Z-9222b040-90f6-4f4a-9ef6-608d022c999d`
+- inputDigest `a62a72c912c5a751…`
+- `convention` **verified**: 93,095,007 states generated, 15,819,345 distinct,
+  0 left on queue, 336 s (2048 MiB heap, `TMax=2`, `Revs=3`).
+- seven expansion probes each produced their expected counterexample.
 - `check-evidence`: status valid, fresh, verification `counterexample` — the
   aggregate is a counterexample because every probe case is red by design.
 
@@ -31,6 +31,7 @@ defects, outside `inputDigest` as the runner contract requires.
 | strict-clear-without-run | `NoLostPressure` | `SaveReject` arms → `DreamClear` tombstones without serving | product gap: `clearPressure` carries no arm identity |
 | strict-skip-cap | `CapSound` | `DreamWriteTopics` → `DreamPublish` publishes an over-cap index | product gap: the dream relies on the write-back gate + truncate fallback; a report that bypasses either publishes over-cap |
 | strict-live-preemption | `OneDreamer` | `DreamStampPeriodic` → `DreamLock` reclaims a live holder past the stale window | documented product behaviour (`lock.ts:19`); the probe pins that this is the ONLY violation of exclusivity |
+| strict-unlocked-extract | `NoLostSave` | `ExtractRead` → `SaveIndex` → `ExtractIndex` publishes the pre-save content | product gap: the extraction fork writes the index with no lock and no verification (`index.ts:218-235`) |
 
 None of these is a design-intent claim about the memory system; each is a
 reachable interleaving the model demonstrates. Turning any of them into a
@@ -54,6 +55,14 @@ product issue is a separate decision (see the open questions in `design.md`).
 5. Two actions left a variable out of their `UNCHANGED` list, so TLC explored
    unconstrained representations (`property-evaluation-failed`). Fixed in
    `SaveReject` and `DreamClear`.
+6. After the extraction actor was added, `InCrit` matched the shared phase
+   names, so an unlocked extraction looked like a critical section.
+7. The set-equality guard was too weak once three writers existed: an overwrite
+   that left the set unchanged let an older snapshot publish. Replaced by the
+   revision guard (fold 4).
+8. The preemption probe verified vacuously once the tick budget was cut: with
+   `MinTicks=1` the stale window could no longer open inside `TMax=2`, so the
+   probe now runs with `MinTicks=0`.
 
 ## Run lineage
 
@@ -67,7 +76,14 @@ product issue is a separate decision (see the open questions in `design.md`).
 | `20261103T014540Z-53a78bc0` | error | unconstrained variables from incomplete `UNCHANGED` lists (defect 5) |
 | `20261103T014712Z-b72a701c` | counterexample (convention) | `CapSound` — cap checked at write time (defect 4) |
 | `20261103T015004Z-409fc732` | verified (convention), six probes red | design.md subsequently updated for the final shape |
-| `20261103T015426Z-9a2f5dd5` | verified (convention), six probes red | final: the one whose digest and evidence are cited above |
+| `20261103T015426Z-9a2f5dd5` | verified (convention), six probes red | reviewed; four P1 folds followed |
+| `20261103T021918Z-5874b3b1` | counterexample (convention) | `HoldsLock` — `InCrit` matched extraction phases (defect 6) |
+| `20261103T021958Z-91db769e` | counterexample (convention) | `NoLostSave` — set-equality guard too weak (defect 7) |
+| `20261103T022146Z-c7427c90` | counterexample (convention) | same, after the protection reset was moved to the extraction snapshot |
+| `20261103T022434Z-d5dbfdd5` | incomplete (timeout) | first run of the revision-guarded model, 420 s budget |
+| `20261103T023157Z-aadc9edc` | verified (convention); `strict-live-preemption` verified | vacuous preemption probe (defect 8) |
+| `20261103T024438Z-a6f28cf0` | verified (convention), seven probes red | before the design.md update |
+| `20261103T025128Z-9222b040` | verified (convention), seven probes red | final: identical statistics to the previous run |
 
 ## Coverage check
 
