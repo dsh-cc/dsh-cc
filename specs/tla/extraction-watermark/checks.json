@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "modelId": "extraction-watermark",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "AdvanceOnStart": "FALSE",
+        "SkipNoReval": "FALSE",
+        "CooldownAutoRetry": "FALSE",
+        "LeaseDoubleOwner": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "WmWithinCaptured",
+        "PendingNeverLost",
+        "NoLeaseAfterTerminal",
+        "RunningSound",
+        "NoFaults"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-advance-on-start",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdvanceOnStart": "TRUE",
+        "SkipNoReval": "FALSE",
+        "CooldownAutoRetry": "FALSE",
+        "LeaseDoubleOwner": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-no-reval",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdvanceOnStart": "FALSE",
+        "SkipNoReval": "TRUE",
+        "CooldownAutoRetry": "FALSE",
+        "LeaseDoubleOwner": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-cooldown-auto-retry",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdvanceOnStart": "FALSE",
+        "SkipNoReval": "FALSE",
+        "CooldownAutoRetry": "TRUE",
+        "LeaseDoubleOwner": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-lease-double-owner",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "AdvanceOnStart": "FALSE",
+        "SkipNoReval": "FALSE",
+        "CooldownAutoRetry": "FALSE",
+        "LeaseDoubleOwner": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
