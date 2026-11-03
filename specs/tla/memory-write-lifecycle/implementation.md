@@ -13,15 +13,15 @@ defects, outside `inputDigest` as the runner contract requires.
 
 ## Final run
 
-- runId `20261103T031750Z-864b6955-ccb5-487d-a797-917792d825ef`〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
-- inputDigest `c3f4f7a426d08f79…`〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
+- runId `20261103T033509Z-81c9ce10-e685-48ed-80b7-ae3581355587`〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
+- inputDigest `47cee0f5deee0665…`〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
 - `convention` **verified**: 93,095,007 states generated, 15,819,345 distinct〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕
-  0 left on queue, 336 s (2048 MiB heap, `TMax=2`, `Revs=3`)〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕.
+  0 left on queue, 355 s (2048 MiB heap, `TMax=2`, `Revs=3`)〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕.
 - seven expansion probes each produced their expected counterexample.
 - `check-evidence`: status valid, fresh, verification `counterexample` — the
   aggregate is a counterexample because every probe case is red by design.
 
-## Counterexample dispositions (all six probes, same run)
+## Counterexample dispositions (all seven probes, same run)
 
 | Case | Invariant | Trace that fires it | Disposition |
 |---|---|---|---|
@@ -63,6 +63,33 @@ product issue is a separate decision (see the open questions in `design.md`).
 8. The preemption probe verified vacuously once the tick budget was cut: with
    `MinTicks=1` the stale window could no longer open inside `TMax=2`, so the
    probe now runs with `MinTicks=0`.
+
+## External blind review r1 (codex seat, NO-GO — open findings)
+
+The codex seat reviewed the packaged evidence (byte-level artifact audit PASSED:
+input snapshots, digest, cfg bytes, log hashes and all per-case statistics
+verified, including 93,095,007 / 15,819,345 / 0 and the seven probe
+counterexamples). Its findings, unfixed and blocking:
+
+- **P0 (fixed below)** the Final-run section named the superseded run
+  `20261103T031750Z` while the package evidence is `20261103T033509Z`.
+- **P1** `savedSince` is globally reset at every writer snapshot, so an aborted
+  extraction can clear the protection a concurrent dream's older snapshot
+  still needs (S-1 blind spot). Fix: per-writer protection histories.
+- **P1** `ClearWithoutRun` also suppresses the service observer, admitting
+  false positives; the persisted witness is nevertheless real.
+- **P1** the pressure read→stamp is one atomic action; production reads at
+  `index.ts:300` and writes the captured arm later (`pressure.ts:104-107`), so a
+  re-arm can be overwritten by a stale stamp — a race distinct from E-1b.
+- **P1** S-2 manufactures topic bodies for every published pointer; production
+  does not validate that index targets exist (`writeback.ts:115-155`), so an
+  index-only report can dangle in code but not in the model.
+- **P1** the claimed crash-recovery coverage is unreachable in the convention
+  bounds (`MinTicks=1, StaleTicks=2, TMax=2` — reclaim needs tick ≥3).
+- **P2** a successful process can never re-acquire the lock (the model requires
+  a different holder; production's stale check ignores PID).
+- **P2** dispositions overstate: the skip-cap trace is extraction, and
+  live-preemption does not prove "ONLY violation".
 
 ## Review folds (cold review r2, GO)
 
