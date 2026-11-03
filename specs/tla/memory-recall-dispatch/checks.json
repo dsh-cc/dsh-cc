@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "modelId": "memory-recall-dispatch",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "InjectStale": "FALSE",
+        "ShownBeforeInject": "FALSE",
+        "OldClearsNew": "FALSE",
+        "CompletedTooEarly": "FALSE",
+        "IgnoreCompleted": "FALSE",
+        "AbortOnArrive": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ShownSubsetDelivered",
+        "NoReinject",
+        "NoStaleInject",
+        "CompletedNeedsDispatch",
+        "NoLateDispatch",
+        "RunningBound",
+        "GenCurrent",
+        "SlotNamesInFlight"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-inject-stale",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "InjectStale": "TRUE",
+        "ShownBeforeInject": "FALSE",
+        "OldClearsNew": "FALSE",
+        "CompletedTooEarly": "FALSE",
+        "IgnoreCompleted": "FALSE",
+        "AbortOnArrive": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoStaleInject"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-shown-before-inject",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "InjectStale": "FALSE",
+        "ShownBeforeInject": "TRUE",
+        "OldClearsNew": "FALSE",
+        "CompletedTooEarly": "FALSE",
+        "IgnoreCompleted": "FALSE",
+        "AbortOnArrive": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ShownSubsetDelivered"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-old-clears-new",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "InjectStale": "FALSE",
+        "ShownBeforeInject": "FALSE",
+        "OldClearsNew": "TRUE",
+        "CompletedTooEarly": "FALSE",
+        "IgnoreCompleted": "FALSE",
+        "AbortOnArrive": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SlotNamesInFlight",
+        "NoStaleInject"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-completed-too-early",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "InjectStale": "FALSE",
+        "ShownBeforeInject": "FALSE",
+        "OldClearsNew": "FALSE",
+        "CompletedTooEarly": "TRUE",
+        "IgnoreCompleted": "FALSE",
+        "AbortOnArrive": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "CompletedNeedsDispatch"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-ignore-completed",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "InjectStale": "FALSE",
+        "ShownBeforeInject": "FALSE",
+        "OldClearsNew": "FALSE",
+        "CompletedTooEarly": "FALSE",
+        "IgnoreCompleted": "TRUE",
+        "AbortOnArrive": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLateDispatch"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
