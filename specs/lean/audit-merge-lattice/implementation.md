@@ -37,8 +37,11 @@ snippet: `<skill>/references/agents-snippet.md`. No formal review dispatched.
 
 ## Not verified (explicitly out of scope)
 
-- Implementation conformance (adapter not wired by S1-08 yet; the corpus
-  is empty and the adapter is a documented placeholder).
+- Implementation conformance: no adapter is created and no corpus exists,
+  because S1-08 is not implemented (the production module
+  `audit-merge.ts` does not exist yet). The conformance stage stays
+  `not-run` and implementation acceptance stays pending; per the workflow a
+  proof-only result is never implementation acceptance.
 - The payload-level tie rule (which chunk's entry object survives) and
   the findings concatenation.
 - The split/recovery/bisection interleaving — that is the M6 TLA+ face.
