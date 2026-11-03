@@ -233,6 +233,9 @@ GrantFirstAllow ==
   /\ GrantFirst
   /\ grant
   /\ call.phase = "deciding"
+  (* the monotonic guard layer denies a bypass-immune call regardless of the *)
+  (* grant's position *)
+  /\ ~call.bypassImmune
   /\ call' = [call EXCEPT !.phase = "done", !.verdict = "allow",
                               !.by = "grant", !.executed = TRUE,
                               !.denySeen = call.denyRule]
@@ -331,10 +334,12 @@ SettleStale ==
   /\ ~ApplyStaleMode
   /\ call.phase = "classifying"
   /\ mode # call.classifyMode
-  (* a discarded verdict falls through to the post-waterfall human prompt; the *)
-  (* stage is one-shot, so the call is never re-classified                  *)
-  /\ call' = [call EXCEPT !.phase = "awaitHuman", !.cls = "none",
-                              !.verdict = "ask", !.by = "llm", !.clsUsed = TRUE]
+  (* a discarded verdict falls through mapPostWaterfall with the ORIGINAL    *)
+  (* rule verdict, so the session-allow coverage of a rule ask or a MEDIUM    *)
+  (* passthrough applies there too (decide.ts:214-234)                      *)
+  /\ call' = [call EXCEPT !.phase = IF call.ruleVerdict = "ask"
+                                 THEN "asked" ELSE "staged",
+                              !.cls = "none", !.clsUsed = TRUE]
   /\ UNCHANGED <<mode, cas, sessionAllow, grant, denyStreak, breaker, tripped>>
 
 SettleApply ==
@@ -425,6 +430,9 @@ GrantCeiling ==
 PlanWrapSound ==
   Executed /\ call.ruleMode = "plan" =>
     (call.risk = "readonly" \/ call.ruleVerdict = "allow")
+
+(* S-9: a bypass-immune call never executes, in ANY mode.                   *)
+BypassImmuneNeverExecuted == Executed => ~call.bypassImmune
 
 (* --------------------------------------------------------------- spec *)
 

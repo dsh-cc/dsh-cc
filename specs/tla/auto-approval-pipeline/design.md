@@ -46,10 +46,10 @@ opaque allow event.
   guard on the grant action itself.
 - **REQ-8 (plan is read-only)** In plan mode the waterfall denies a mutating
   leftover ask or passthrough (`evaluate.ts:77-81`, `:227-231`).
-- **REQ-9 (bypass immunity)** A bypass-immune deny holds in every mode,
+- **REQ-9 (bypass immunity)** A bypass-immune call never executes, in any mode,
   including bypassPermissions. The real enforcement is the monotonic guard
   layer after pre-execute; the model applies its effect at the rule stage
-  (E-1).
+  (E-1), and S-9 pins it.
 
 ## State variables
 
@@ -148,6 +148,9 @@ is modeled as state (E-3).
   every non-bypass mode while the code applies it only in auto
   (`decide.ts:150-152`); outside auto the model is therefore stricter than the
   code.
+- **E-10** a stale-mode discard that falls through `mapPostWaterfall` under
+  bypassPermissions: the code allows a MEDIUM passthrough there; the model
+  routes it to the human prompt (conservative direction).
 - **E-9** the D13 secondPass (an ask that may be reconfirmed as allow,
   `llm-classifier.ts:437-443`, default OFF): one more monotone-allow step that
   would need its own switch.

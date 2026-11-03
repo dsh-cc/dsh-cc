@@ -27,7 +27,8 @@
         "SuspendedInert",
         "BackstopHolds",
         "GrantCeiling",
-        "PlanWrapSound"
+        "PlanWrapSound",
+        "BypassImmuneNeverExecuted"
       ],
       "properties": [],
       "limits": {
