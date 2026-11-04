@@ -11,8 +11,8 @@ current code leaves open, one per fault switch.
   screening clause at this revision — session request "model the memory write
   path" 2026-11-03〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕, manual adoption snippet at
   `<skill>/references/agents-snippet.md`).
-- decision: **enabled**〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L103-163〕
-- triggerIds: FD-T1 (two host processes share one memory directory and mutate 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L243-355〕
+- decision: **enabled**〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L103-L163〕
+- triggerIds: FD-T1 (two host processes share one memory directory and mutate 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L243-L355〕
   the same index, topic files and lock), FD-T3 (a crash mid-batch decides
   whether the index and the topic files agree; the consolidation lock survives
   a crash and is reclaimable only through the stale window).
@@ -94,7 +94,7 @@ write.
 | REQ-2 | the index never references a missing topic file | S-2 `NoDanglingPointer` | `NoDanglingPointer` | convention; strict-index-first (expected red) | `DreamPublishFirst` publishes the pointer, `Crash(p)` before `DreamTopicsAfter` | A-4 | `writeback.ts:174-178` sequential writes: the save batch is topic-first by construction, the dream batch order is fork-decided | crash between the index write and the topic write | — |
 | REQ-9 | the extraction fork obeys the same index discipline | S-1 via `ExtractIndex` | `NoLostSave` | strict-unlocked-extract (expected red) | an extraction write built on a pre-save snapshot publishes | A-11 | `index.ts:218-235` → `memory-job.ts:150-151` writes through `writeMemoryFiles` with no lock | a turn-end extraction racing a save | — |
 | REQ-3 | a published index respects the cap | S-3 `CapSound` | `CapSound` | convention; strict-skip-cap (expected red) | a batch whose content exceeds `MaxLines` publishes it | A-5 | `writeback.ts:141-154` gate + `memory-job.ts:76-89` truncate fallback | dream reporting an over-limit index | fail-open save into an already over-limit index is E-3 |
-| REQ-4 | an armed marker reaches a dream; the model-visible "queued" sentence is not a lie | S-4 `NoLostPressure` | `NoLostPressure` | convention; strict-clear-without-run (expected red) | `SaveReject` arms at `t` during a running dream → `DreamClear` tombstones it without serving | A-6, A-7 | `pressure.ts:79-86` arm re-reads `lastForcedAt`; `index.ts:358` clears with no arm identity in the guard | concurrent cap rejection during a running dream | wall-clock "eventually" is L-1, excluded |
+| REQ-4 | an armed marker reaches a dream; the model-visible "queued" sentence is not a lie 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L242〕 | S-4 `NoLostPressure` | `NoLostPressure` | convention; strict-clear-without-run (expected red) | `SaveReject` arms at `t` during a running dream → `DreamClear` tombstones it without serving | A-6, A-7 | `pressure.ts:79-86` arm re-reads `lastForcedAt`; `index.ts:358` clears with no arm identity in the guard | concurrent cap rejection during a running dream | wall-clock "eventually" is L-1, excluded |
 | REQ-5 | one consolidation per memory directory | S-5 `OneDreamer`, `HoldsLock` | same | convention | two dreams race the lock; one reclaims a stale-stamped lock | A-8 | `lock.ts:71-108` acquire = write + read-back verify | two sessions dreaming at once | the accepted sub-millisecond symmetric collision is E-2 |
 | REQ-6 | the consolidation epoch never silently regresses or advances without a run | structural (`DreamFail`) | `DreamFail` | convention | dream fails after acquiring: lock rewritten with `priorAt` | A-8 | `lock.ts:120-124` `rollbackLock` | a failed dream must not consume the cooldown epoch | E-4 |
 | REQ-7 | a crashed holder blocks, then is reclaimable; no stuck live state | structural (deadlock check + reclaim guard) | `DreamLock`, `Idle` | convention | `Crash(p1)` while holding the lock, `Tick` past `StaleTicks`, `p2` reclaims | A-8, A-9 | `lock.ts:84` stale window (1h, independent of liveness) | kill a dreaming process | — |
@@ -141,13 +141,14 @@ write.
 | `ClearWithoutRun` | tombstoning the marker regardless of which arm the dream read | strict-clear-without-run |
 | `SkipCap` | dropping the batch cap guard | strict-skip-cap (defence in depth: the write-back gate and the truncate fallback also enforce the cap, so this is not a live code gap) |
 | `UnlockedExtract` | an extraction index write from its own stale snapshot | strict-unlocked-extract |
+| `MissingTopic` | a batch that omits a topic file the index still points at | strict-missing-topic |
+| `SplitStamp` | the real read-then-stamp split, whose stamp carries the captured arm | strict-split-stamp |
 | `FreeTicks` | the clock advancing inside a critical section (live-holder preemption) | strict-live-preemption |
 
 ## Bounds
 
 Two processes, three candidate names, `MaxLines=2`, `StaleTicks=2`,
-`CooldownTicks=1`, `MinTicks=1` (0 in the preemption probe, which needs the
-stale window to open inside the tick budget), `TMax=2`, `Revs=3`, 2048 MiB〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕. Two processes are the
+`CooldownTicks=1`, `MinTicks=1`, `TMax=2`, `Revs=3`, 2048 MiB — and a shortened stale window in the two lock-focused cases, so the reclaim is reachable inside the tick budget〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L14-L28〕.〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕. Two processes are the
 minimum that exposes a cross-process write race; three names let a dream exceed
 the cap of two, and let a compaction free room for a save during a dream.
 
@@ -157,8 +158,15 @@ the cap of two, and let a compaction free room for a save during a dream.
   not bodies, so an overwrite that leaves the pointer set unchanged is
   invisible to the invariants. The revision guard rejects such a write
   structurally in the intended protocol; the model cannot observe the body.
-- **E-1b** the accepted `armPressure` re-read race (`pressure.ts:64-69`〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-242〕): same
+- **E-1b** the accepted `armPressure` re-read race (`pressure.ts:64-69`〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L242〕): same
   status as E-2, not modeled.
+- **E-1d** the lost-update log is a single set, not attributable per writer: a
+  snapshot-then-abort interleaving can blind it for older in-flight writers.
+  Under the convention the revision guard is the actual protection, and each
+  fault probe still produces its counterexample on the shorter trace.
+- **E-1e** `gates.ts:29-32` opens the periodic gate immediately on a zero
+  epoch; the model delays the first periodic dream by one tick. The same-holder
+  stale reclaim IS modeled (`lock.ts:84-87` reads only the epoch).
 - **E-1c** the pressure-mode zero-scan return between the stamp and the lock
   (`index.ts:320-323`) and the failed-outcome bounded retry reusing the held
   lock (`index.ts:376-396`): reachable behaviours that change no property.

@@ -17,26 +17,44 @@
 (*   still invalidates an older writer's snapshot. UnlockedSave /           *)
 (*   DreamNoCas / UnlockedExtract drop the guard for one writer each.       *)
 (* - topic files are written before the index entries that point at them    *)
-(*   (save.ts:239); DreamIndexFirst flips the dream batch order, which is   *)
-(*   what makes a crash leave a dangling pointer.                          *)
-(* - the pressure marker is only tombstoned by a dream that serves the arm  *)
-(*   it read, and the cooldown reference advances to the clear time         *)
-(*   (pressure.ts:117-122); ClearWithoutRun drops that guard.              *)
+(*   (save.ts:239); DreamIndexFirst flips the batch order for the dream AND *)
+(*   the extraction (both share the fork-ordered writeMemoryFiles path),   *)
+(*   which is what makes a crash leave a dangling pointer. A batch may     *)
+(*   also simply omit a topic file (MissingTopic): the write-back gate      *)
+(*   (writeback.ts:99-155) never checks that index pointers have topic      *)
+(*   files in the batch.                                                    *)
+(* - the pressure marker is read and stamped separately by the code        *)
+(*   (index.ts:300 reads, :316 stamps with the CAPTURED arm, pressure.ts:   *)
+(*   107), so a concurrent re-arm between the two is clobbered. The        *)
+(*   convention models the intended atomic step; SplitStamp models the     *)
+(*   real split. A successful dream clears the marker in BOTH modes (the   *)
+(*   rebuild makes a pending arm obsolete, index.ts:355-359) and serves     *)
+(*   the current arm; ClearWithoutRun tombstones without serving.          *)
 (* - a successful dream writes NO lock: the file keeps the holder and the   *)
 (*   acquisition epoch, which is lastConsolidatedAt, so the next dream      *)
-(*   waits for the stale window (index.ts:353-359).                        *)
-(* - the index stays within its cap; SkipCap drops the dream/extraction     *)
-(*   cap guard (defence in depth: the write-back gate + truncate fallback   *)
-(*   also enforce it).                                                     *)
+(*   waits for the stale window — including the same process, because      *)
+(*   the stale check reads only the epoch (lock.ts:84-87).                  *)
+(* - the index stays within its cap; SkipCap drops the batch cap guard     *)
+(*   (defence in depth: the write-back gate and the truncate fallback also  *)
+(*   enforce the cap).                                                     *)
+(*                                                                         *)
+(* Protection bookkeeping: savedSince is the single lost-update log — the    *)
+(* pointers a save ADDED since the current writer's snapshot; a snapshot    *)
+(* resets it (the writer may legally compact anything in its own snapshot). *)
+(* Single-set limitation (E-1d in design.md): the log is NOT attributable   *)
+(* per writer, so a snapshot-then-abort interleaving can blind the log for  *)
+(* older in-flight writers; under the convention the revision guard is the  *)
+(* actual protection, and each fault probe still produces its counterexample *)
+(* on the shorter trace.                                                    *)
 (*                                                                         *)
 (* Time is a bounded logical tick; the 1h stale window, the 60m pressure    *)
-(* cooldown and the periodic time gate are abstracted to tick counts.       *)
+(* cooldown and the periodic time gate are abstracted to tick counts.        *)
 (***************************************************************************)
 EXTENDS Naturals, FiniteSets
 
 CONSTANT UnlockedSave, DreamNoCas, DreamIndexFirst, UnlockedExtract,
          ClearWithoutRun, SkipCap, FreeTicks, MaxLines, StaleTicks,
-         CooldownTicks, MinTicks, TMax, Revs
+         CooldownTicks, MinTicks, TMax, Revs, SplitStamp, MissingTopic
 
 ASSUME /\ UnlockedSave \in BOOLEAN
        /\ DreamNoCas \in BOOLEAN
@@ -50,7 +68,9 @@ ASSUME /\ UnlockedSave \in BOOLEAN
        /\ CooldownTicks \in 0..2
        /\ MinTicks \in 0..3
        /\ TMax \in 2..4
-       /\ Revs \in 2..4
+       /\ Revs \in 1..4
+       /\ SplitStamp \in BOOLEAN
+       /\ MissingTopic \in BOOLEAN
 
 (* Bounded universes. Every sentinel is a string; epochs and revisions are   *)
 (* naturals with 0 as "never" and are only ever compared with naturals.     *)
@@ -60,11 +80,11 @@ Ticks == 0..TMax
 RevsT == 0..Revs
 
 Kinds  == {"none", "save", "dream", "extract"}
-Phases == {"none", "read", "saving", "stamped", "locked", "forked", "built",
-           "topics", "indexfirst", "written"}
-(* The lock is held from acquisition through the clear/fail.               *)
-CriticalPhases == {"locked", "forked", "built", "topics", "indexfirst",
-                   "written"}
+Phases == {"none", "read", "saving", "pread", "stamped", "locked", "forked",
+           "built", "topics", "indexfirst", "written"}
+(* The lock is held from acquisition until the clear; a FAILED dream may    *)
+(* roll back only BEFORE it published, so "written" is excluded.           *)
+CritPhases == {"locked", "forked", "built", "topics", "indexfirst"}
 Bodies == {"none", "body"}
 Modes  == {"none", "pressure", "periodic"}
 
@@ -92,9 +112,7 @@ MakePend(k, m, n, sn, nx, ar, pr, ph) ==
 
 (* Durable state: the index pointer set and its revision, topic-file bodies, *)
 (* the lock file, the pressure marker, the newest arm timestamp and the      *)
-(* newest arm a dream actually served. savedSince holds names whose pointer  *)
-(* a save committed after the current writer's snapshot; that snapshot is    *)
-(* where a rewrite would destroy them.                                      *)
+(* newest arm a completed dream served.                                       *)
 VARIABLES idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, savedSince,
           pend, alive, now
 
@@ -103,7 +121,7 @@ vars == <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, savedSince,
 
 (* Only a dream is inside a critical section; the save and the extraction    *)
 (* writer run unlocked and merely share phase names.                       *)
-InCrit(p) == pend[p].kind = "dream" /\ pend[p].phase \in CriticalPhases
+InCrit(p) == pend[p].kind = "dream" /\ pend[p].phase \in CritPhases
 
 SomePend == \E p \in Procs : pend[p].kind # "none"
 
@@ -114,15 +132,22 @@ CapReached(p) ==
 
 AnyCrit == \E p \in Procs : InCrit(p)
 
+(* The topic files a batch actually writes. A consistent batch covers its   *)
+(* whole report; a faulty one may omit one file the index still points at. *)
+Covers(report) ==
+  {cover \in SUBSET report :
+     cover = report \/
+       (MissingTopic /\ Cardinality(report \ cover) = 1)}
+
 Init ==
   /\ idx = {}
   /\ rev = 0
   /\ topic = [n \in Names |-> "none"]
   /\ lock = [holder |-> "none", at |-> 0]
   /\ stamp = [armedAt |-> 0, lastForcedAt |-> 0]
+  /\ savedSince = {}
   /\ lastArmAt = 0
   /\ lastServedAt = 0
-  /\ savedSince = {}
   /\ pend = [p \in Procs |-> PendNone]
   /\ alive = [p \in Procs |-> TRUE]
   /\ now = 0
@@ -136,8 +161,7 @@ Tick ==
   /\ \/ FreeTicks
      \/ ~AnyCrit
   /\ now' = now + 1
-  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                 savedSince, pend, alive>>
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, pend, alive, savedSince>>
 
 (* ---------------------------------------------------------------- saves *)
 
@@ -153,8 +177,7 @@ SaveRead(p) ==
                        savedSince, alive, now>>
 
 (* Cap rejection: nothing is written and the forced-dream marker is armed    *)
-(* (save.ts:232-238). Arming preserves lastForcedAt. The decision uses the   *)
-(* read snapshot, as the validator does.                                    *)
+(* (save.ts:232-238). The decision uses the read snapshot.                  *)
 SaveReject(p) ==
   /\ alive[p]
   /\ pend[p].kind = "save"
@@ -163,7 +186,7 @@ SaveReject(p) ==
   /\ stamp' = [stamp EXCEPT !.armedAt = now]
   /\ lastArmAt' = now
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, lock, lastServedAt, savedSince, alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, lastServedAt, alive, now, savedSince>>
 
 (* Topic file first, then the pointer (save.ts:239).                        *)
 SaveTopics(p) ==
@@ -173,12 +196,9 @@ SaveTopics(p) ==
   /\ ~CapReached(p)
   /\ topic' = [topic EXCEPT ![pend[p].name] = "body"]
   /\ pend' = [pend EXCEPT ![p].phase = "saving"]
-  /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, savedSince,
-                 alive, now>>
+  /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* The index write: read-verify-write against the revision the save read.    *)
-(* UnlockedSave drops the verification, so a concurrent writer's pointer is  *)
-(* overwritten by the stale upsert result.                                  *)
 SaveIndex(p) ==
   /\ alive[p]
   /\ pend[p].kind = "save"
@@ -191,49 +211,45 @@ SaveIndex(p) ==
   /\ rev' = rev + 1
   (* Only an ADDED pointer is protected: overwriting a name that is already  *)
   (* indexed changes no pointer, so a later compaction dropping it is not a  *)
-  (* lost update.                                                           *)
+  (* lost update. A snapshot resets the log — see the single-set limitation  *)
+  (* recorded in design.md (E-1d).                                          *)
   /\ savedSince' = IF pend[p].name \in idx
        THEN savedSince
        ELSE savedSince \cup {pend[p].name}
   /\ pend' = [pend EXCEPT ![p] = PendNone]
   /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, alive, now>>
 
-(* A save whose guard no longer holds abandons the write: the intended       *)
-(* protocol retries or drops, it never parks the caller.                   *)
+(* A save whose guard no longer holds abandons the write.                   *)
 SaveAbort(p) ==
   /\ alive[p]
   /\ pend[p].kind = "save"
   /\ pend[p].phase \in {"read", "saving"}
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                 savedSince, alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* ---------------------------------------------------- extraction (unlocked *)
 
 (* The extraction fork writes its batch through the same writeMemoryFiles     *)
-(* path with NO lock: a third writer racing saves and dreams on the index.   *)
+(* path with NO lock: a third writer racing saves and dreams on the index. *)
 ExtractRead(p) ==
   /\ alive[p]
   /\ pend[p].kind = "none"
   /\ \E nx \in SUBSET Names :
        /\ Cardinality(nx) <= MaxLines \/ SkipCap
-       /\ pend' = [pend EXCEPT ![p] = [MakePend("extract", "none", "none", idx, nx, 0, 0, "read")
-                                     EXCEPT !.snapRev = rev]]
-       (* a snapshot: pointers saved after it are the ones this write must    *)
-       (* not destroy, so the protection baseline restarts here, as at a      *)
-       (* dream fork.                                                         *)
+       /\ pend' = [pend EXCEPT ![p] =
+            [MakePend("extract", "none", "none", idx, nx, 0, 0, "read")
+              EXCEPT !.snapRev = rev]]
        /\ savedSince' = {}
-       /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                       alive, now>>
+       /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now>>
 
 ExtractTopics(p) ==
   /\ alive[p]
   /\ pend[p].kind = "extract"
   /\ pend[p].phase = "read"
-  /\ topic' = [n \in Names |-> IF n \in pend[p].next THEN "body" ELSE topic[n]]
-  /\ pend' = [pend EXCEPT ![p].phase = "topics"]
-  /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, savedSince,
-                 alive, now>>
+  /\ \E cover \in Covers(pend[p].next) :
+       /\ topic' = [n \in Names |-> IF n \in cover THEN "body" ELSE topic[n]]
+       /\ pend' = [pend EXCEPT ![p].phase = "topics"]
+       /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 ExtractIndex(p) ==
   /\ alive[p]
@@ -245,24 +261,56 @@ ExtractIndex(p) ==
        ELSE /\ rev = pend[p].snapRev
             /\ idx' = pend[p].next
   /\ rev' = rev + 1
-  /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, savedSince, alive,
-                 now>>
+  /\ pend' = [pend EXCEPT ![p].phase = "written"]
+  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
+
+(* DreamIndexFirst also covers the extraction: both writers share the        *)
+(* fork-ordered writeMemoryFiles path, so the extraction batch may publish   *)
+(* the index before its topic files too.                                   *)
+ExtractPublishFirst(p) ==
+  /\ alive[p]
+  /\ pend[p].kind = "extract"
+  /\ pend[p].phase = "read"
+  /\ DreamIndexFirst
+  /\ rev < Revs
+  /\ IF UnlockedExtract
+       THEN idx' = pend[p].next
+       ELSE /\ rev = pend[p].snapRev
+            /\ idx' = pend[p].next
+  /\ rev' = rev + 1
+  /\ pend' = [pend EXCEPT ![p].phase = "indexfirst"]
+  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
+
+ExtractTopicsAfter(p) ==
+  /\ alive[p]
+  /\ pend[p].kind = "extract"
+  /\ pend[p].phase = "indexfirst"
+  /\ \E cover \in Covers(pend[p].next) :
+       /\ topic' = [n \in Names |-> IF n \in cover THEN "body" ELSE topic[n]]
+       /\ pend' = [pend EXCEPT ![p].phase = "written"]
+       /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 ExtractAbort(p) ==
   /\ alive[p]
   /\ pend[p].kind = "extract"
-  /\ pend[p].phase \in {"read", "topics"}
+  /\ pend[p].phase \in {"read", "topics", "indexfirst"}
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                 savedSince, alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
+
+(* The extraction writer settles from "written": its protection set was      *)
+(* already checked against the published index by the invariant.            *)
+ExtractFinish(p) ==
+  /\ alive[p]
+  /\ pend[p].kind = "extract"
+  /\ pend[p].phase = "written"
+  /\ pend' = [pend EXCEPT ![p] = PendNone]
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* --------------------------------------------------------------- dreams *)
 
-(* Pressure mode: an armed marker bypasses the time and session gates, and   *)
-(* markPressureForced runs BEFORE lock acquisition (index.ts:316 vs :339),   *)
-(* so the cooldown slot is consumed even when the lock is held elsewhere.    *)
-DreamStampPressure(p) ==
+(* Pressure mode, intended protocol: the read and the stamp are one step.    *)
+DreamPressureAtomic(p) ==
+  /\ ~SplitStamp
   /\ alive[p]
   /\ pend[p].kind = "none"
   /\ stamp.armedAt > 0
@@ -273,8 +321,39 @@ DreamStampPressure(p) ==
   /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, lastServedAt, savedSince,
                  alive, now>>
 
+(* Pressure mode under SplitStamp (the real code shape): the dream reads the *)
+(* marker and captures the arm in one step, then stamps in another.          *)
+DreamReadPressure(p) ==
+  /\ SplitStamp
+  /\ alive[p]
+  /\ pend[p].kind = "none"
+  /\ stamp.armedAt > 0
+  /\ now >= stamp.lastForcedAt + CooldownTicks
+  /\ pend' = [pend EXCEPT ![p] =
+       MakePend("dream", "pressure", "none", {}, {}, stamp.armedAt, 0, "pread")]
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
+
+(* The stamp write (index.ts:316). The intended protocol stamps atomically   *)
+(* with the read; SplitStamp models the real code shape — the write carries *)
+(* the CAPTURED arm (pressure.ts:107), so a concurrent re-arm between the   *)
+(* read and the stamp is clobbered.                                        *)
+DreamStampPressure(p) ==
+  /\ SplitStamp
+  /\ alive[p]
+  /\ pend[p].kind = "dream"
+  /\ pend[p].mode = "pressure"
+  /\ pend[p].phase = "pread"
+  /\ IF SplitStamp
+       THEN stamp' = [stamp EXCEPT !.armedAt = pend[p].armed,
+                                   !.lastForcedAt = now]
+       ELSE stamp' = [stamp EXCEPT !.lastForcedAt = now]
+  /\ pend' = [pend EXCEPT ![p] = [pend[p] EXCEPT !.phase = "stamped"]]
+  /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, lastServedAt, alive, now, savedSince>>
+
 (* Periodic mode: the time gate over the last consolidation epoch, which the *)
-(* lock file carries (gates.ts:29-32). The session-count gate is E-7.        *)
+(* lock file carries. gates.ts:29-32 opens the gate immediately on a zero    *)
+(* epoch; the model conservatively delays the very first periodic dream by   *)
+(* one tick (a declared conservative deviation, E-1e).                       *)
 DreamStampPeriodic(p) ==
   /\ alive[p]
   /\ pend[p].kind = "none"
@@ -282,21 +361,20 @@ DreamStampPeriodic(p) ==
   /\ now >= lock.at + MinTicks
   /\ pend' = [pend EXCEPT ![p] =
        MakePend("dream", "periodic", "none", {}, {}, 0, 0, "stamped")]
-  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                 savedSince, alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* Reclaim is allowed when the lock is free or its stamp passed the stale    *)
-(* window (lock.ts:84); a fresh holder blocks.                              *)
+(* window (lock.ts:84-87 reads only the epoch — the holder's identity,      *)
+(* including the same process, does not matter).                           *)
 DreamLock(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
   /\ pend[p].phase = "stamped"
   /\ \/ lock.holder = "none"
-     \/ (lock.holder # p /\ now >= lock.at + StaleTicks)
+     \/ now >= lock.at + StaleTicks
   /\ lock' = [holder |-> p, at |-> now]
   /\ pend' = [pend EXCEPT ![p] = [pend[p] EXCEPT !.prior = lock.at, !.phase = "locked"]]
-  /\ UNCHANGED <<idx, rev, topic, stamp, lastArmAt, lastServedAt, savedSince,
-                 alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* A fresh foreign holder makes the dream return without rollback; the stamp *)
 (* stays consumed (index.ts:353-397).                                       *)
@@ -308,11 +386,10 @@ DreamBlocked(p) ==
   /\ lock.holder # p
   /\ now < lock.at + StaleTicks
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                 savedSince, alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
-(* The fork reads the index. That snapshot is the baseline: pointers a save  *)
-(* commits after it are the ones a rewrite must not destroy.               *)
+(* The fork reads the index. Its snapshot displaces the lost-update log;     *)
+(* an abort restores it.                                                    *)
 DreamFork(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
@@ -320,8 +397,7 @@ DreamFork(p) ==
   /\ pend' = [pend EXCEPT ![p] = [pend[p] EXCEPT !.snap = idx, !.snapRev = rev,
                                                    !.phase = "forked"]]
   /\ savedSince' = {}
-  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive,
-                 now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now>>
 
 (* The reported batch decides the next index content: it may keep, merge or  *)
 (* drop entries. The cap guard stands unless SkipCap.                       *)
@@ -332,17 +408,16 @@ DreamBuild(p) ==
   /\ \E nx \in SUBSET Names :
        /\ Cardinality(nx) <= MaxLines \/ SkipCap
        /\ pend' = [pend EXCEPT ![p] = [pend[p] EXCEPT !.next = nx, !.phase = "built"]]
-       /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                       savedSince, alive, now>>
+       /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 DreamWriteTopics(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
   /\ pend[p].phase = "built"
-  /\ topic' = [n \in Names |-> IF n \in pend[p].next THEN "body" ELSE topic[n]]
-  /\ pend' = [pend EXCEPT ![p].phase = "topics"]
-  /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, savedSince,
-                 alive, now>>
+  /\ \E cover \in Covers(pend[p].next) :
+       /\ topic' = [n \in Names |-> IF n \in cover THEN "body" ELSE topic[n]]
+       /\ pend' = [pend EXCEPT ![p].phase = "topics"]
+       /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* Intended order: topics, then the index, verified against the revision at  *)
 (* fork time. DreamNoCas drops the verification.                            *)
@@ -356,8 +431,7 @@ DreamPublish(p) ==
   /\ idx' = pend[p].next
   /\ rev' = rev + 1
   /\ pend' = [pend EXCEPT ![p].phase = "written"]
-  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, savedSince, alive,
-                 now>>
+  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 DreamClobber(p) ==
   /\ alive[p]
@@ -368,8 +442,7 @@ DreamClobber(p) ==
   /\ idx' = pend[p].next
   /\ rev' = rev + 1
   /\ pend' = [pend EXCEPT ![p].phase = "written"]
-  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, savedSince, alive,
-                 now>>
+  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* DreamIndexFirst: the index is published before the topic files it points  *)
 (* at, so a crash between the two leaves a dangling pointer.                *)
@@ -385,53 +458,53 @@ DreamPublishFirst(p) ==
             /\ idx' = pend[p].next
   /\ rev' = rev + 1
   /\ pend' = [pend EXCEPT ![p].phase = "indexfirst"]
-  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, savedSince, alive,
-                 now>>
+  /\ UNCHANGED <<topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 DreamTopicsAfter(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
   /\ pend[p].phase = "indexfirst"
-  /\ topic' = [n \in Names |-> IF n \in pend[p].next THEN "body" ELSE topic[n]]
-  /\ pend' = [pend EXCEPT ![p].phase = "written"]
-  /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, savedSince,
-                 alive, now>>
+  /\ \E cover \in Covers(pend[p].next) :
+       /\ topic' = [n \in Names |-> IF n \in cover THEN "body" ELSE topic[n]]
+       /\ pend' = [pend EXCEPT ![p].phase = "written"]
+       /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
-(* Completion tombstones the marker, advances the cooldown reference to the  *)
-(* clear time, and writes NO lock: the file keeps the holder and the         *)
-(* acquisition epoch (lastConsolidatedAt).                                  *)
+(* Completion clears the marker in BOTH modes (a successful rebuild makes a  *)
+(* pending arm obsolete, index.ts:355-359) and serves the current arm:      *)
+(* the cooldown reference advances to the clear time (pressure.ts:117-122). *)
+(* ClearWithoutRun tombstones WITHOUT serving — the model-visible "queued"   *)
+(* sentence is then a lie.                                                  *)
 DreamClear(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
   /\ pend[p].phase = "written"
-  /\ \/ /\ ~ClearWithoutRun
-        /\ stamp.armedAt = pend[p].armed
-        /\ lastServedAt' = IF pend[p].armed > lastServedAt
-                             THEN pend[p].armed
+  /\ IF ClearWithoutRun
+       THEN UNCHANGED lastServedAt
+       ELSE lastServedAt' = IF stamp.armedAt > lastServedAt
+                             THEN stamp.armedAt
                              ELSE lastServedAt
-     \/ /\ ClearWithoutRun
-        /\ UNCHANGED lastServedAt
   /\ stamp' = [stamp EXCEPT !.armedAt = 0, !.lastForcedAt = now]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, savedSince, alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, alive, now, savedSince>>
 
 (* A failed or killed dream rolls the lock back to the epoch it captured      *)
-(* (lock.ts:120-124).                                                        *)
+(* (lock.ts:120-124) — only BEFORE it published: a completed dream never     *)
+(* touches the lock. The abort also restores the lost-update log the fork    *)
+(* displaced.                                                                *)
 DreamFail(p) ==
   /\ alive[p]
-  /\ InCrit(p)
+  /\ pend[p].kind = "dream"
+  /\ pend[p].phase \in CritPhases
   /\ lock' = [holder |-> "none", at |-> pend[p].prior]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, stamp, lastArmAt, lastServedAt, savedSince,
-                 alive, now>>
+  /\ UNCHANGED <<idx, rev, topic, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
 (* A crash loses in-process state only.                                      *)
 Crash(p) ==
   /\ alive[p]
   /\ alive' = [alive EXCEPT ![p] = FALSE]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt,
-                 savedSince, now>>
+  /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, now, savedSince>>
 
 (* ------------------------------------------------------------- safety *)
 
@@ -468,9 +541,8 @@ HoldsLock == \A p \in Procs : InCrit(p) => lock.holder = p
 
 (* --------------------------------------------------------------- spec *)
 
-(* A bounded-model terminal: every process dead, or the revision budget is   *)
-(* spent and nothing is in flight. Without the second arm the exhausted      *)
-(* revision budget would show up as a spurious deadlock.                   *)
+(* Terminal: every process dead, or the revision budget spent and nothing    *)
+(* in flight.                                                               *)
 Idle ==
   /\ \/ \A p \in Procs : ~alive[p]
      \/ (rev = Revs /\ ~SomePend)
@@ -488,7 +560,12 @@ Next ==
        \/ ExtractRead(p)
        \/ ExtractTopics(p)
        \/ ExtractIndex(p)
+       \/ ExtractPublishFirst(p)
+       \/ ExtractTopicsAfter(p)
+       \/ ExtractFinish(p)
        \/ ExtractAbort(p)
+       \/ DreamPressureAtomic(p)
+       \/ DreamReadPressure(p)
        \/ DreamStampPressure(p)
        \/ DreamStampPeriodic(p)
        \/ DreamLock(p)
