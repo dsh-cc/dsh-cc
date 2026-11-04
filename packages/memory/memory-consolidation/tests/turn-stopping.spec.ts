@@ -133,6 +133,12 @@ async function controlsOf(
   return out
 }
 
+/** The `baselineIndex` argument of every startMemoryJob call with the given label. */
+function baselinesOf(label: string): string[] {
+  const mock = startMemoryJob as unknown as ReturnType<typeof vi.fn>
+  return mock.mock.calls.filter((c) => c[4] === label).map((c) => String(c[6]))
+}
+
 /**
  * Real tmp sessions root (plan §5): each test seeds actual directories with
  * real zstd-compressed v3 header lines so the node:fs/zlib scanner reads them.
@@ -396,6 +402,30 @@ describe('dream sessions gate (scanned session store)', () => {
     expect(prompt).not.toContain('- old')
     expect(prompt).not.toContain('- sub')
     expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1)
+  })
+
+  it('captures the raw index before dispatch and reuses that baseline on the bounded retry (design §3.2)', async () => {
+    await seedFresh(tmpRoot, 5)
+    const seedIndex = '- [topic-a](topic-a.md): a\n'
+    const fs = makeFsMock({ [LOCK]: '1\n1000\n', [`/mem/projects/mem/MEMORY.md`]: seedIndex })
+    const { ctx, subagents } = mount({ memoryHome: '/mem', extractEnabled: false, fs, sessionsRoot: tmpRoot })
+    let spawn = 0
+    subagents.startActivation.mockImplementation(async () => {
+      spawn += 1
+      if (spawn === 1) {
+        return { childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ stopReason: 'error' }) }
+      }
+      // A concurrent save lands between the failed attempt and its retry. A
+      // fresh capture would fold it into the baseline and misclassify it as
+      // model-seen; the retry must keep the original snapshot.
+      fs.backing.set('/mem/projects/mem/MEMORY.md', `${seedIndex}- [late](late.md): late\n`)
+      return { childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }
+    })
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(2), { timeout: 2000 })
+
+    expect(baselinesOf('memory-consolidation')).toEqual([seedIndex, seedIndex])
   })
 
   it('an empty store blocks the dream', async () => {
@@ -697,6 +727,38 @@ describe('extract-memories index injection', () => {
     expect(prompt).toContain('topic-a.md\n  - summary of a')
   })
 
+  it('passes the exact prompt-injected index string as the job baseline (design §3.2)', async () => {
+    const seeded = '- [topic-a](topic-a.md): summary of a\n'
+    const fs = makeFsMock({ [`${WS}/MEMORY.md`]: seeded })
+    const { ctx, subagents } = mountExtract(fs)
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+
+    await stopTurn(ctx, fakeAgent(MEM))
+    await vi.waitFor(() => expect(startMemoryJob).toHaveBeenCalledTimes(1))
+
+    // One authoritative snapshot: the prompt's "Existing topics" section and
+    // the write-back baseline are the same string.
+    expect(extractionPromptOf(subagents)).toContain(seeded)
+    expect(baselinesOf('extract-memories')).toEqual([seeded])
+  })
+
+  it('uses the CAPPED injected index as the baseline, marker included (design §3.2)', async () => {
+    const big = Array.from({ length: 500 }, (_, i) => `line-${i}`).join('\n')
+    const fs = makeFsMock({ [`${WS}/MEMORY.md`]: big })
+    const { ctx, subagents } = mountExtract(fs)
+    subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
+
+    await stopTurn(ctx, fakeAgent(MEM))
+    await vi.waitFor(() => expect(startMemoryJob).toHaveBeenCalledTimes(1))
+
+    const [baseline] = baselinesOf('extract-memories')
+    // The truncated tail was never visible to the model: it must not count as
+    // model-seen content at merge time.
+    expect(baseline).toContain('line-199')
+    expect(baseline).not.toContain('line-200')
+    expect(baseline).toContain('(index truncated; rely on MEMORY.md in-dir for the rest)')
+  })
+
   it('performs the MEMORY.md read before the subagent start', async () => {
     const fs = makeFsMock({ [`${WS}/MEMORY.md`]: 'topic-a.md' })
     const { ctx, subagents } = mountExtract(fs)
@@ -815,20 +877,21 @@ describe('extract-memories index injection', () => {
 })
 
 /**
- * Design §2.4: the write-side entrypoint gate (in @dsh-cc/memory) rejects an
- * over-limit `MEMORY.md` batch. Plain rejection would fail the dream job,
- * roll back the lock, and retry every turn-end forever — so the done handler
- * applies a fallback: over-limit entrypoint content is replaced with the
- * deterministic truncation output before validation/write, and the job
- * completes. A compliant batch passes through untouched.
+ * Design §3.4/§3.5: the write-side entrypoint gate (in @dsh-cc/memory) rejects
+ * an over-limit `MEMORY.md` batch, and plain rejection would fail the job, roll
+ * back the dream lock, and retry every turn-end forever. The write-back now
+ * commits through `carveEntrypointRoom`, which drops tail lines of the model's
+ * rewrite until both caps fit (keeping any protected concurrent additions), so
+ * an over-limit report still completes with a capped index. A compliant batch
+ * passes through untouched.
  */
-describe('memory write fallback (entrypoint gate livelock, design §2.4)', () => {
+describe('memory write fallback (entrypoint gate livelock, design §3.5)', () => {
   const MEM = '/mem'
   // resolveWorkspaceMemoryDir(home, cwd): home + /projects/<slug>.
   const MEM_DIR = '/mem/projects/mem'
   const topicWrite = { path: 'topic-a.md', content: '# Topic A\n\nsome durable fact\n' }
 
-  it('an over-limit MEMORY.md batch is truncated, written, and completes the job', async () => {
+  it('an over-limit MEMORY.md batch is capped, written, and completes the job', async () => {
     const fs = makeFsMock()
     const { ctx, subagents } = mount({ memoryHome: MEM, dreamEnabled: false, fs })
     const overLimit = Array.from({ length: 500 }, (_, i) => `- [topic-${i}]: detail ${i}`).join('\n')
@@ -847,10 +910,11 @@ describe('memory write fallback (entrypoint gate livelock, design §2.4)', () =>
     await expect((await controlsOf('extract-memories'))[0].done).resolves.toEqual({ status: 'completed' })
 
     const written = fs.backing.get(`${MEM_DIR}/MEMORY.md`)
-    // 500-line index was replaced by the capped truncation output, not dropped.
+    // The 500-line rewrite was carved down to the entrypoint caps, not dropped.
     expect(written).toBeDefined()
-    expect(written!.split('\n').length).toBeLessThan(500)
-    expect(written).toContain('WARNING')
+    expect(written!.trim().split('\n')).toHaveLength(200)
+    expect(Buffer.byteLength(written!.trim(), 'utf8')).toBeLessThanOrEqual(25_000)
+    expect(written).toContain('- [topic-0]: detail 0')
     // Topic file from the same batch was preserved.
     expect(fs.backing.get(`${MEM_DIR}/topic-a.md`)).toBe(topicWrite.content)
   })

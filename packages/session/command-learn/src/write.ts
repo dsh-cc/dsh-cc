@@ -1,7 +1,7 @@
 /**
  * `/learn apply` write path: composes the topic file + MEMORY.md pointer
  * through the REAL `@dsh-cc/memory` helpers (renderTopicFile, upsertPointer,
- * validateMemoryWrites, writeMemoryFiles) — the same composition the
+ * validateMemoryWrites, commitMemoryWrites) — the same composition the
  * `memory_save` tool uses; no reimplementation here.
  * @module @dsh-cc/command-learn/write
  */
@@ -13,8 +13,7 @@ import {
   renderTopicFile,
   upsertPointer,
   validateMemoryWrites,
-  writeMemoryFiles,
-  type MemoryWrite,
+  commitMemoryWrites,
 } from '@dsh-cc/memory'
 import type { ForensicsResult } from '@dsh-cc/session-forensics'
 import { LEARNING_DESCRIPTION, TOPIC_NAME, TOPIC_TYPE, isoDate, renderBlock } from './render.ts'
@@ -55,18 +54,20 @@ export async function applyLearnings(
     description: LEARNING_DESCRIPTION,
     body: renderBlock(result, isoDate()),
   }
-  // Upsert the pointer from the CURRENT entrypoint body (empty when the
-  // index does not exist yet), then write both files in one batch.
-  let entrypoint = ''
-  try {
-    entrypoint = await fs.readText(await fs.resolve(join(dir, 'MEMORY.md')))
-  } catch {
-    // No index yet — upsert starts from an empty body.
-  }
-  const writes: MemoryWrite[] = [
-    { path: `${TOPIC_NAME}.md`, content: renderTopicFile(args) },
-    { path: 'MEMORY.md', content: upsertPointer(entrypoint, args) },
-  ]
-  await writeMemoryFiles(fs, dir, validateMemoryWrites({ writes }))
+  // Upsert the pointer onto the index read fresh by the commit loop and write
+  // both files in one batch: the same build shape as `memory_save`, so a
+  // concurrent index writer is rebased onto instead of silently erased. The
+  // upsert is re-appliable, so no baseline/merge is needed. A rejection
+  // (validation) throws out of the loop; an exhausted rebase surfaces as
+  // `MemoryIndexConflictError` to the command layer.
+  await commitMemoryWrites(fs, dir, async (fresh) => ({
+    writes: validateMemoryWrites({
+      writes: [
+        { path: `${TOPIC_NAME}.md`, content: renderTopicFile(args) },
+        { path: 'MEMORY.md', content: upsertPointer(fresh, args) },
+      ],
+    }),
+    meta: undefined,
+  }))
   return { wrote: true, findings: result.findings.length, file: join(dir, `${TOPIC_NAME}.md`) }
 }

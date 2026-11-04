@@ -19,7 +19,8 @@ import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import { defineTool } from '@dsh-cc/tools'
 import { MEMORY_TYPES } from './types.ts'
 import { ENTRYPOINT_NAME, MAX_ENTRYPOINT_BYTES, MAX_ENTRYPOINT_LINES } from './truncate.ts'
-import { validateMemoryWrites, writeMemoryFiles, memoryWritePolicy } from './writeback.ts'
+import { validateMemoryWrites, memoryWritePolicy } from './writeback.ts'
+import { commitMemoryWrites, MemoryIndexConflictError } from './index-commit.ts'
 import { armPressure } from './pressure.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 import type { MemorySection } from './section.ts'
@@ -194,49 +195,57 @@ export function registerMemorySaveTool(
         ? home
         : resolveWorkspaceMemoryDir(home, exec.agent !== undefined ? cwdOf(exec.agent) : process.cwd())
       const filename = `${args.name}.md`
-      // Read the index BEFORE validating so the gate sees the resulting
-      // entrypoint (topic file + upserted pointer validated as one batch).
-      let entrypoint = ''
-      try {
-        entrypoint = await fs.readText(await fs.resolve(join(dir, ENTRYPOINT_NAME)))
-      } catch {
-        // No index yet — the upsert starts from an empty body.
-      }
-      const trimmed = entrypoint.trim()
-      const preExistingOverLimit = trimmed.split('\n').length > MAX_ENTRYPOINT_LINES
-        || Buffer.byteLength(trimmed, 'utf8') > MAX_ENTRYPOINT_BYTES
-      // Reuse the write-back validator so tool saves and fork reports share
-      // one security boundary (filename rule + size caps + index gate). An
-      // index that was ALREADY over-limit fail-opens: the save did not cause
-      // the overflow, and rejecting would brick every save with no repair
-      // path (a consolidation run compacts it instead).
-      const validated = await (async () => {
-        try {
-          return validateMemoryWrites(
-            {
-              writes: [
-                { path: filename, content: renderTopicFile(args) },
-                { path: ENTRYPOINT_NAME, content: upsertPointer(entrypoint, args) },
-              ],
-            },
-            { allowOverLimitEntrypoint: preExistingOverLimit },
-          )
-        } catch (error) {
-          // Push-over rejection: arm the forced-dream marker. WORKSPACE scope
-          // only on purpose — the global directory has no dream coverage, so
-          // a marker there would be orphan state and the queued sentence a
-          // lie. A swallowed arm failure rethrows the original error.
-          if (
-            error instanceof Error && error.message.includes('would exceed its cap')
-            && args.scope !== 'global'
-            && await armPressure(fs, dir, Date.now(), memoryWritePolicy(dir))
-          ) {
-            throw new MemorySaveError(`${error.message}${QUEUED_SENTENCE}`)
+      // Commit the batch with verify-and-rebase. The builder re-derives the
+      // entrypoint AND its over-limit state from the exact index it will write
+      // against, so a concurrent save cannot be erased by a stale snapshot and
+      // the WARNING below describes the attempt that actually landed. The
+      // builder owns validation: a rejection (push-over) throws out of the
+      // commit loop immediately — no retry, and the pressure arm stays inside
+      // the closure so it fires exactly once per rejection.
+      const commit = await commitMemoryWrites(fs, dir, async (fresh) => {
+        const trimmed = fresh.trim()
+        const preExistingOverLimit = trimmed.split('\n').length > MAX_ENTRYPOINT_LINES
+          || Buffer.byteLength(trimmed, 'utf8') > MAX_ENTRYPOINT_BYTES
+        // Reuse the write-back validator so tool saves and fork reports share
+        // one security boundary (filename rule + size caps + index gate). An
+        // index that was ALREADY over-limit fail-opens: the save did not cause
+        // the overflow, and rejecting would brick every save with no repair
+        // path (a consolidation run compacts it instead).
+        const validated = await (async () => {
+          try {
+            return validateMemoryWrites(
+              {
+                writes: [
+                  { path: filename, content: renderTopicFile(args) },
+                  { path: ENTRYPOINT_NAME, content: upsertPointer(fresh, args) },
+                ],
+              },
+              { allowOverLimitEntrypoint: preExistingOverLimit },
+            )
+          } catch (error) {
+            // Push-over rejection: arm the forced-dream marker. WORKSPACE scope
+            // only on purpose — the global directory has no dream coverage, so
+            // a marker there would be orphan state and the queued sentence a
+            // lie. A swallowed arm failure rethrows the original error.
+            if (
+              error instanceof Error && error.message.includes('would exceed its cap')
+              && args.scope !== 'global'
+              && await armPressure(fs, dir, Date.now(), memoryWritePolicy(dir))
+            ) {
+              throw new MemorySaveError(`${error.message}${QUEUED_SENTENCE}`)
+            }
+            throw error
           }
-          throw error
+        })()
+        return { writes: validated, meta: { preExistingOverLimit } }
+      }).catch((error: unknown) => {
+        // Exhausted rebases: the model retries naturally (isError tool result).
+        if (error instanceof MemoryIndexConflictError) {
+          throw new MemorySaveError(`${error.message}; retry the save`)
         }
-      })()
-      await writeMemoryFiles(fs, dir, validated)
+        throw error
+      })
+      const { preExistingOverLimit } = commit.meta
       await section.refresh(exec.agent)
       let message = `Saved memory "${args.name}" (${args.type}) to ${filename} and updated ${ENTRYPOINT_NAME}.`
       if (preExistingOverLimit) {

@@ -72,6 +72,15 @@ export {
   writeMemoryFiles,
 } from './writeback.ts'
 export type { MemoryWrite, MemoryWritePolicy } from './writeback.ts'
+export {
+  MemoryIndexConflictError,
+  carveEntrypointRoom,
+  commitMemoryWrites,
+  mergeIndexContent,
+  pointerAdditions,
+  readIndexStrict,
+} from './index-commit.ts'
+export type { CommitResult } from './index-commit.ts'
 export { PRESSURE_FILE, readPressure, armPressure, markPressureForced, clearPressure } from './pressure.ts'
 export type { PressureState } from './pressure.ts'
 

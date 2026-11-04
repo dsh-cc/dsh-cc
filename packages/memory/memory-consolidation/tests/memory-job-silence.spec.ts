@@ -75,7 +75,7 @@ describe('no-registration pin (memory lanes never touch the jobs seam)', () => {
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, fsMock() as never)
 
-    const job = await startMemoryJob(ctx, fakeAgent(), '/mem', 'fork', 'extract-memories', 'prompt')
+    const job = await startMemoryJob(ctx, fakeAgent(), '/mem', 'fork', 'extract-memories', 'prompt', '')
     await expect(job.done).resolves.toEqual({ status: 'completed' })
     expect(await job.settled).toBe(true)
   })
@@ -103,7 +103,7 @@ describe('per-agent disposal guarantee', () => {
     ctx.provide('fs' as never, fsMock() as never)
     const { agent, disposers } = agentWithEffects()
 
-    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'extract-memories', 'prompt')
+    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'extract-memories', 'prompt', '')
     expect(disposers.length).toBe(1)
 
     // Simulate agent-fiber disposal: run the registered teardown. It aborts
@@ -126,7 +126,7 @@ describe('per-agent disposal guarantee', () => {
     ctx.provide('fs' as never, fsMock() as never)
     const { agent, disposers } = agentWithEffects()
 
-    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'extract-memories', 'prompt')
+    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'extract-memories', 'prompt', '')
     await expect(job.done).resolves.toEqual({ status: 'completed' })
     // The done chain invoked the disposer: no accumulated no-op effects.
     await expect(job.settled).resolves.toBe(true)

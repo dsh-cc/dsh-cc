@@ -172,6 +172,108 @@ describe('memory_save tool', () => {
     expect(registerMemorySaveTool(ctx, HOME, section as unknown as MemorySection)).toBeUndefined()
   })
 
+  describe('concurrent index writers', () => {
+    function fullIndex(entries: number): string {
+      return Array.from({ length: entries }, (_, i) => `- [topic-${i}](topic-${i}.md) — entry ${i}`).join('\n')
+    }
+
+    /** Wrap `writeText` so a scripted foreign writer runs after an index write. */
+    function afterIndexWrite(fs: FakeMemoryFs, hook: (indexWrites: number) => void) {
+      const original = fs.writeText.bind(fs)
+      let indexWrites = 0
+      vi.spyOn(fs, 'writeText').mockImplementation(async (target, content, expected) => {
+        const outcome = await original(target, content, expected)
+        if (String(target.targetKey).endsWith('/MEMORY.md')) {
+          indexWrites++
+          hook(indexWrites)
+        }
+        return outcome
+      })
+      return () => indexWrites
+    }
+
+    it('rebases onto a foreign pointer and keeps BOTH pointers durable', async () => {
+      const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: '- [base](base.md) — b\n' })
+      const indexWrites = afterIndexWrite(fs, (count) => {
+        if (count !== 1) return
+        const current = fs.backingText(`${WS_DIR}/MEMORY.md`) ?? ''
+        fs.seed(`${WS_DIR}/MEMORY.md`, `${current.trimEnd()}\n- [foreign](foreign.md) — f\n`)
+      })
+
+      const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+      expect(result.isError).toBeFalsy()
+      expect(indexWrites()).toBe(2)
+      const index = fs.backingText(`${WS_DIR}/MEMORY.md`) ?? ''
+      expect(index).toContain('[foreign](foreign.md)')
+      expect(index).toContain('[user-profile](user-profile.md)')
+    })
+
+    it('maps an exhausted commit to a retryable MemorySaveError', async () => {
+      const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: '- [base](base.md) — b\n' })
+      const foreign = '- [foreign](foreign.md) — f\n'
+      afterIndexWrite(fs, () => {
+        fs.seed(`${WS_DIR}/MEMORY.md`, foreign)
+      })
+
+      const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+      expect(result.isError).toBe(true)
+      expect(String((result.error as { message?: string })?.message ?? ''))
+        .toContain('memory index commit conflicted with concurrent writers after 12 attempts; retry the save')
+      expect(fs.backingText(`${WS_DIR}/MEMORY.md`)).toBe(foreign)
+    })
+
+    it('warns from the WINNING attempt when a rebase drops the over-limit state', async () => {
+      // Attempt 1 commits against an over-cap index; a foreign writer replaces
+      // it with a small one before the read-back. The retry's state is what
+      // describes what landed, so no WARNING may be emitted.
+      const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex(300) })
+      afterIndexWrite(fs, (count) => {
+        if (count !== 1) return
+        fs.seed(`${WS_DIR}/MEMORY.md`, '- [foreign](foreign.md) — f\n')
+      })
+
+      const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')
+      expect(text).not.toContain('already over its')
+      const index = fs.backingText(`${WS_DIR}/MEMORY.md`) ?? ''
+      expect(index).toContain('[foreign](foreign.md)')
+      expect(index).toContain('[user-profile](user-profile.md)')
+    })
+
+    it('arms once on a push-over rejection and never re-enters the commit loop', async () => {
+      const { ctx, fs } = await setup({ [`${WS_DIR}/MEMORY.md`]: fullIndex(200) })
+      const shrunk = '- [shrunk](shrunk.md) — s\n'
+      const original = fs.writeText.bind(fs)
+      let markerWrites = 0
+      let indexWrites = 0
+      vi.spyOn(fs, 'writeText').mockImplementation(async (target, content, expected) => {
+        const key = String(target.targetKey)
+        if (key.endsWith('/.consolidation-needed')) {
+          markerWrites++
+          // A retry would see this shrunken index and succeed; the builder
+          // throw must exit the loop instead of rebasing.
+          fs.seed(`${WS_DIR}/MEMORY.md`, shrunk)
+        }
+        if (key.endsWith('/MEMORY.md')) indexWrites++
+        return original(target, content, expected)
+      })
+
+      const result = await call(ctx, VALID, agentAt(WORKSPACE))
+
+      expect(result.isError).toBe(true)
+      expect(String((result.error as { message?: string })?.message ?? '')).toContain(
+        'A forced consolidation has been queued; the next turn-end will run it, bypassing the usual periodic gates.',
+      )
+      expect(markerWrites).toBe(1)
+      expect(indexWrites).toBe(0)
+      expect(fs.backingText(`${WS_DIR}/MEMORY.md`)).toBe(shrunk)
+    })
+  })
+
   describe('entrypoint write gate', () => {
     function fullIndex(entries = 200): string {
       return Array.from({ length: entries }, (_, i) => `- [topic-${i}](topic-${i}.md) — entry ${i}`).join('\n')

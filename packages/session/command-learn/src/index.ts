@@ -13,12 +13,12 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import z from '@deepseek-ai/schemastery'
 import { helpable } from '@dsh-cc/command-usage'
-import { projectSlug } from '@dsh-cc/memory'
+import { MemoryIndexConflictError, projectSlug } from '@dsh-cc/memory'
 import { LearnedSkillStore, sanitizeLearnedDescription } from '@dsh-cc/skill-loader'
 import type {} from '@deepseek-ai/dsh-skill'
 import { runForensics, type ForensicsResult } from '@dsh-cc/session-forensics'
 import { isoDate, renderBlock, renderFinding } from './render.ts'
-import { applyLearnings } from './write.ts'
+import { applyLearnings, type ApplyOutcome } from './write.ts'
 
 export { LEARNING_DESCRIPTION, TOPIC_NAME, TOPIC_TYPE, renderBlock } from './render.ts'
 export { applyLearnings } from './write.ts'
@@ -162,7 +162,17 @@ async function executeLearn(ctx: Context, request: LearnRequest): Promise<Comman
     const nothing = 'no findings — existing session-learnings.md left untouched'
     return { kind: 'success', text: promote === undefined ? nothing : `${nothing} — nothing to promote` }
   }
-  const outcome = await applyLearnings(ctx.fs, join(home, 'memory'), process.cwd(), result)
+  let outcome: ApplyOutcome
+  try {
+    outcome = await applyLearnings(ctx.fs, join(home, 'memory'), process.cwd(), result)
+  } catch (error) {
+    // Exhausted rebases: a concurrent memory writer kept changing the index.
+    // Surfaced through the existing error channel so the user can retry.
+    if (error instanceof MemoryIndexConflictError) {
+      return { kind: 'error', text: 'concurrent memory writes raced /learn; retry' }
+    }
+    throw error
+  }
   const memoryText = `Wrote ${outcome.findings} learning(s) to ${outcome.file} and updated MEMORY.md.`
   if (promote === undefined) return { kind: 'success', text: memoryText }
   // Promotion path: exactly one finding, promoted into a learned skill. The
