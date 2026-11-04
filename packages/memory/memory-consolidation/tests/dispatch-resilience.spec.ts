@@ -80,7 +80,7 @@ describe('startMemoryJob dispatch (rc.5 activation contract)', () => {
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, fs as never)
 
-    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt')
+    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt', '')
     const outcome = await job.done
     expect(outcome).toEqual({ status: 'completed' })
     expect(await job.settled).toBe(true)
@@ -109,7 +109,7 @@ describe('startMemoryJob dispatch (rc.5 activation contract)', () => {
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, makeFsMock() as never)
 
-    await expect(startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt')).rejects.toThrow('boom')
+    await expect(startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt', '')).rejects.toThrow('boom')
     expect(subagents.calls).toHaveLength(1)
   })
 
@@ -120,7 +120,7 @@ describe('startMemoryJob dispatch (rc.5 activation contract)', () => {
     ctx.provide('subagents' as never, subagents as never)
     ctx.provide('fs' as never, makeFsMock() as never)
 
-    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt')
+    const job = await startMemoryJob(ctx, agent, '/mem', 'fork', 'dream', 'prompt', '')
     expect(subagents.disposed).toBe(0)
     job.abort('test kill')
     // The activation signal covers pre-publication only at rc.5; the execution

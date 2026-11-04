@@ -31,6 +31,7 @@ import { recordDreamDiagnostic } from './diagnostics.ts'
 export { applyEntrypointFallback } from './memory-job.ts'
 import {
   memoryWritePolicy,
+  readIndexStrict,
   resolveWorkspaceMemoryDir,
   readPressure,
   markPressureForced,
@@ -228,8 +229,11 @@ async function runExtraction(ctx: Context, agent: Agent, home: string, provider:
   const prompt = buildExtractionPrompt(surfaceCount, dir, existingIndex)
   // Fire-and-forget: extraction failure must never fail the turn itself. The
   // job status still reflects the real outcome (the fork's structured report
-  // is validated and written host-side before `done` completes).
-  return startMemoryJob(ctx, agent, dir, provider, 'extract-memories', prompt)
+  // is validated and written host-side before `done` completes). The exact
+  // prompt-injected string is the job baseline (design §3.2): a pointer beyond
+  // the injection cap was never visible to the model, so the write-back must
+  // treat it as a concurrent addition rather than a model deletion.
+  return startMemoryJob(ctx, agent, dir, provider, 'extract-memories', prompt, existingIndex)
     .catch(() => {})
     .then(() => {})
 }
@@ -349,7 +353,13 @@ async function runDream(
   try {
     await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-started', detail: '' })
     const prompt = buildConsolidationPrompt(dir, sessionsRoot, hints)
-    const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
+    // Baseline capture (§3.2): the raw strict read immediately before dispatch,
+    // post-lock-acquire. The dream fork reads the directory itself, so this is
+    // the snapshot it was dispatched against; the bounded RETRY below reuses the
+    // SAME baseline — a fresh capture would misclassify first-run concurrent
+    // additions (visible to the fork) as model-seen deletions.
+    const baselineIndex = await readIndexStrict(fs, dir)
+    const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt, baselineIndex)
     void job.done.then(async (outcome) => {
       ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
       if (outcome.status === 'completed') {
@@ -374,7 +384,7 @@ async function runDream(
         return
       }
       try {
-        const retry = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
+        const retry = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt, baselineIndex)
         void retry.done.then(async (retryOutcome) => {
           ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
           if (retryOutcome.status === 'completed') {
