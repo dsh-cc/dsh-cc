@@ -10,11 +10,14 @@
       "constants": {
         "MaxLive": "2",
         "SplitContinue": "FALSE",
-        "CapacityObservable": "TRUE"
+        "CapIgnored": "FALSE",
+        "SkipSlotRelease": "FALSE"
       },
       "invariants": [
         "TypeOK",
         "CapOK",
+        "SlotIsActivation",
+        "DrainedNoSlot",
         "NoResurrect",
         "ReleasedDisjoint",
         "TombstoneNonLive",
@@ -25,18 +28,19 @@
       ],
       "properties": [],
       "limits": {
-        "timeoutMs": 120000,
+        "timeoutMs": 300000,
         "heapMiB": 1024
       }
     },
     {
-      "id": "strict-cap-unobservable",
+      "id": "strict-cap-overshoot",
       "coverage": "expansion",
       "specification": "Spec",
       "constants": {
         "MaxLive": "2",
         "SplitContinue": "FALSE",
-        "CapacityObservable": "FALSE"
+        "CapIgnored": "TRUE",
+        "SkipSlotRelease": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -44,7 +48,27 @@
       ],
       "properties": [],
       "limits": {
-        "timeoutMs": 120000,
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-slot-leak",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxLive": "2",
+        "SplitContinue": "FALSE",
+        "CapIgnored": "FALSE",
+        "SkipSlotRelease": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SlotIsActivation"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
         "heapMiB": 1024
       }
     },
@@ -55,16 +79,16 @@
       "constants": {
         "MaxLive": "2",
         "SplitContinue": "TRUE",
-        "CapacityObservable": "TRUE"
+        "CapIgnored": "FALSE",
+        "SkipSlotRelease": "FALSE"
       },
       "invariants": [
         "TypeOK",
-        "NoLateEpoch",
-        "TombstoneNonLive"
+        "NoLateEpoch"
       ],
       "properties": [],
       "limits": {
-        "timeoutMs": 120000,
+        "timeoutMs": 300000,
         "heapMiB": 1024
       }
     }

@@ -1,23 +1,31 @@
 --------------------------- MODULE Model ---------------------------
 (***************************************************************************)
-(* Bounded model of the dsh-cc subagent child lifecycle:                   *)
-(* capacity admission (the shared per-parent admission lease +             *)
-(* continuation slot reservations with their safety TTL and the            *)
-(* dispatch-time recheck), epoch end / settle, grace-window auto-release   *)
-(* tombstones, the send_message admission gate, manual release_agent       *)
-(* eviction, Ctrl+B promotion, and session-exit drain.                     *)
+(* Bounded model of the dsh-cc subagent child lifecycle after the rc.5      *)
+(* capacity move: the per-parent admission lease, the harness resident-     *)
+(* activation pool (maxActiveSubagents, 25), epoch end / settle, the grace  *)
+(* window auto-release tombstones, the send_message cold-resume admission,  *)
+(* manual release_agent eviction, Ctrl+B promotion and session-exit drain.  *)
 (*                                                                         *)
-(* Abstracted from packages/subagent/task (background-start.ts,            *)
-(* live-capacity.ts, grace-window.ts, epoch-collector.ts, tool.ts), the    *)
-(* shared admission in packages/subagent/resume-pins (admission.ts,        *)
-(* live-capacity.ts, dispatch-recheck.ts) and the resume-pins plugin       *)
-(* send_message gate (plugin.ts).                                          *)
+(* The capacity valve is the harness pool, not a dsh-cc-side count: a slot  *)
+(* is reserved at materialization and returned only at disposal, resident   *)
+(* activations are running children, idle parents waiting on child          *)
+(* settlement and cold-resumed children, and a send_message follow-up to an *)
+(* already-resident child takes no slot (task/src/live-capacity.ts:1-16,    *)
+(* resume-pins/src/live-capacity.ts:1-16). What dsh-cc still owns is the    *)
+(* per-parent admission lease that serializes check+creation               *)
+(* (resume-pins/src/admission.ts:19-55) and the continuation gate at        *)
+(* tools/execute (dispatch-admission.ts:10-26).                            *)
+(*                                                                         *)
 (* See code-anchors.md for verbatim source excerpts.                       *)
 (***************************************************************************)
-
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS MaxLive, SplitContinue, CapacityObservable
+CONSTANTS MaxLive, SplitContinue, CapIgnored, SkipSlotRelease
+
+ASSUME /\ MaxLive \in 1..2
+       /\ SplitContinue \in BOOLEAN
+       /\ CapIgnored \in BOOLEAN
+       /\ SkipSlotRelease \in BOOLEAN
 
 Children == 1..3
 
@@ -32,11 +40,12 @@ Statuses == {"none", "running", "idle", "ready", "gone"}
 
 VARIABLES status, tier, epochOpen,
           graceMember, gracePending, tombstoned, tombstoneEver,
-          releasing, released, promoted, lateEpoch, drained
+          slotHolder, followPending, releasing, released, promoted, lateEpoch,
+          drained
 
-vars == <<status, tier, epochOpen,
-          graceMember, gracePending, tombstoned, tombstoneEver,
-          releasing, released, promoted, lateEpoch, drained>>
+vars == <<status, tier, epochOpen, graceMember, gracePending, tombstoned,
+          tombstoneEver, slotHolder, followPending, releasing, released,
+          promoted, lateEpoch, drained>>
 
 TypeOK ==
   /\ status \in [Children -> Statuses]
@@ -46,18 +55,20 @@ TypeOK ==
   /\ gracePending \subseteq Children
   /\ tombstoned \subseteq Children
   /\ tombstoneEver \subseteq Children
+  /\ slotHolder \subseteq Children
+  /\ followPending \subseteq Children
   /\ releasing \subseteq Children
   /\ released \subseteq Children
   /\ promoted \subseteq Children
   /\ lateEpoch \subseteq Children
   /\ drained \in BOOLEAN
 
-LiveCount == Cardinality({c \in Children : status[c] = "running"})
+(* The pool contract: one slot per resident activation, and the pool refuses *)
+(* past MaxLive. A follow-up to a resident child takes no new slot; a cold   *)
+(* resume of a settled child does.                                          *)
+ResidentCount == Cardinality(slotHolder)
 
-(* The one capacity predicate every admission path uses. Unobservable      *)
-(* capacity (missing seam, throwing listing, absent registry) degrades OPEN *)
-(* - a safety valve never blocks on its own infrastructure.                *)
-RoomForOne == (CapacityObservable = FALSE) \/ (LiveCount < MaxLive)
+PoolHasRoom(c) == CapIgnored \/ (c \in slotHolder \/ ResidentCount < MaxLive)
 
 (* ----------------------------------------------------------------------- *)
 (* Init                                                                    *)
@@ -71,6 +82,8 @@ Init ==
   /\ gracePending = {}
   /\ tombstoned = {}
   /\ tombstoneEver = {}
+  /\ slotHolder = {}
+  /\ followPending = {}
   /\ releasing = {}
   /\ released = {}
   /\ promoted = {}
@@ -78,19 +91,19 @@ Init ==
   /\ drained = FALSE
 
 (* ----------------------------------------------------------------------- *)
-(* Spawn admission (all three spawn lanes + the ephemeral dispatch).       *)
-(* PR #301: the capacity check and the creation call are ONE critical      *)
-(* section under the per-parent admission lease, so two concurrent starts  *)
-(* can no longer both pass the guard and overshoot. The old split-action   *)
-(* TOCTOU probe is gone: that interleaving no longer models any code.      *)
+(* Spawn: one atomic step (harness `startActivation` reserves the slot and  *)
+(* materializes under the admission lease the dsh-cc lane holds across the  *)
+(* creation call). A refusal at the cap is ACTIVATION_LIMIT_REACHED.        *)
 (* ----------------------------------------------------------------------- *)
 
 SpawnAtomic(c) ==
   /\ ~drained
   /\ status[c] = "none"
   /\ c \notin released
-  /\ RoomForOne
+  /\ PoolHasRoom(c)
   /\ status' = [status EXCEPT ![c] = "running"]
+  /\ slotHolder' = slotHolder \union {c}
+  /\ followPending' = followPending
   /\ tier' = [tier EXCEPT ![c] = "fg"]
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
   /\ graceMember' = graceMember \union {c}
@@ -102,6 +115,69 @@ SpawnAtomic(c) ==
   /\ promoted' = promoted
   /\ lateEpoch' = lateEpoch
   /\ drained' = drained
+
+(* A follow-up to an already-resident child: it takes no slot, so it is      *)
+(* admitted even at the cap (index.ts:185).                                 *)
+(* The pre-execute gate runs HERE (production checks the tombstone once, at  *)
+(* plugin.ts:311, and never re-checks at delivery). SplitContinue skips it,  *)
+(* which is the documented accepted residual (release.ts:110-117).           *)
+FollowUpStart(c) ==
+  /\ ~drained
+  /\ status[c] \in {"running", "idle"}
+  /\ c \in slotHolder
+  /\ c \notin followPending
+  /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
+  /\ followPending' = followPending \union {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
+
+(* A follow-up to a resident child takes no slot (index.ts:185). Delivery is  *)
+(* a SECOND step on purpose: the lease covers message acceptance, not the     *)
+(* child's epoch, and a running target may settle while the delivery waits    *)
+(* (resume-pins/src/live-capacity.ts:44-47). A settled target turns this into *)
+(* a cold resume, which takes a slot or is refused at the cap.               *)
+FollowUpDeliver(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ \/ /\ status[c] \in {"running", "idle"}
+        (* still resident: the delivery takes no slot *)
+        /\ status' = [status EXCEPT ![c] = "running"]
+        /\ slotHolder' = slotHolder
+        /\ lateEpoch' = lateEpoch
+        /\ tombstoned' = tombstoned
+        /\ gracePending' = gracePending
+     \/ /\ status[c] = "ready"
+        (* settled during delivery: a cold resume — production performs NO    *)
+        (* second gate check here (dispatch-admission.ts:18-23 goes straight   *)
+        (* to delivery), with the SAME bookkeeping as ContinueAdmit           *)
+        /\ c \in graceMember
+        /\ c \notin released
+        /\ PoolHasRoom(c)
+        /\ status' = [status EXCEPT ![c] = "running"]
+        /\ slotHolder' = slotHolder \union {c}
+        (* a late epoch on THIS lane is accepted production behaviour (no     *)
+        (* second gate at delivery), so it is not recorded as a violation;    *)
+        (* the SplitContinue probe covers the fresh-admission lane.            *)
+        /\ lateEpoch' = lateEpoch
+        /\ tombstoned' = tombstoned \ {c}
+        /\ gracePending' = gracePending \ {c}
+  /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<tier, graceMember, tombstoneEver, releasing, released, promoted, drained>>
+
+(* The cold-resume branch refused at the cap: the caller sees                *)
+(* ACTIVATION_LIMIT_REACHED and the follow-up is lost.                       *)
+FollowUpRefused(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ status[c] \in {"ready", "gone"}
+  (* any reason the converted cold resume cannot be delivered: no slot, no    *)
+  (* registry row, or the tombstone gate.                                    *)
+  /\ \/ c \in released
+     \/ ~PoolHasRoom(c)
+     \/ c \notin graceMember
+     \/ (~SplitContinue /\ c \in tombstoned)
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* Epoch lifecycle                                                         *)
@@ -115,30 +191,16 @@ EpochEnd(c) ==
   /\ status' = [status EXCEPT ![c] = "idle"]
   /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
   /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
-  /\ tier' = tier
-  /\ graceMember' = graceMember
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
+  /\ UNCHANGED <<tier, graceMember, tombstoned, tombstoneEver, slotHolder, followPending, releasing, released, promoted, lateEpoch, drained>>
 
+(* Settle disposes the activation, so the slot goes back to the pool.       *)
 Settle(c) ==
   /\ status[c] \in {"running", "idle"}
   /\ status' = [status EXCEPT ![c] = "ready"]
+  /\ slotHolder' = slotHolder \ {c}
   /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
   /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
-  /\ tier' = tier
-  /\ graceMember' = graceMember
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
+  /\ UNCHANGED <<tier, graceMember, tombstoned, tombstoneEver, followPending, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
 (* Grace-window fire (auto-release).                                       *)
@@ -153,189 +215,187 @@ GraceFire(c) ==
   /\ gracePending' = gracePending \ {c}
   /\ tombstoned' = tombstoned \union {c}
   /\ tombstoneEver' = tombstoneEver \union {c}
-  /\ status' = status
-  /\ tier' = tier
-  /\ epochOpen' = epochOpen
-  /\ graceMember' = graceMember
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, slotHolder, followPending, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
-(* send_message continuation admission.                                    *)
+(* send_message continuation admission (tools/execute, after approval).     *)
+(* A cold resume of a settled child needs a pool slot: the harness throws   *)
+(* ACTIVATION_LIMIT_REACHED inside the activation, so the refusal now       *)
+(* happens after the lease is taken, not at a dsh-cc-side count.           *)
 (*                                                                         *)
-(* SplitContinue = FALSE (convention): the capacity check, the reservation *)
-(* and the restart are one atomic step under the admission lease.          *)
-(* SplitContinue = TRUE (probe): the gate check is a separate step from    *)
-(* the restart, so a grace fire can land between them (documented accepted *)
-(* residual).                                                              *)
+(* SplitContinue = FALSE (convention): the tombstone gate and the delivery *)
+(* are ordered. SplitContinue = TRUE (probe): a grace fire lands between    *)
+(* them (the documented accepted residual, release.ts:110-117).            *)
 (* ----------------------------------------------------------------------- *)
 
-ContinueAdmit(c) ==
+(* Fresh continuation (send_message on a settled child): the gate runs at   *)
+(* pre-execute (plugin.ts:311) and the delivery at tools/execute — two      *)
+(* steps, exactly like the follow-up lane. The grace-fire race between them *)
+(* is production behaviour; SplitContinue records it as a late epoch so the *)
+(* probe can demonstrate the residual.                                     *)
+ContinueStart(c) ==
   /\ ~drained
   /\ status[c] = "ready"
   /\ c \in graceMember
   /\ c \notin released
-  (* PR #301: the capacity check and the delivery are ONE critical section
-     under the per-parent admission lease (tools/execute for a continuation,
-     the creation call for a spawn), so nothing interleaves between check and
-     activation. *)
-  /\ RoomForOne
-  (* The tombstone gate runs earlier (tools/pre-execute) than capacity
-     admission (tools/execute); SplitContinue = TRUE models the accepted
-     residual where a grace fire lands between them. *)
-  /\ IF SplitContinue THEN TRUE ELSE c \notin tombstoned
+  /\ c \notin tombstoned
+  /\ c \notin followPending
+  /\ followPending' = followPending \union {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
+
+ContinueDeliver(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ c \in graceMember
+  /\ c \notin released
+  /\ PoolHasRoom(c)
   /\ status' = [status EXCEPT ![c] = "running"]
+  /\ slotHolder' = slotHolder \union {c}
   /\ epochOpen' = [epochOpen EXCEPT ![c] = TRUE]
-  /\ lateEpoch' = lateEpoch \union (IF c \in tombstoned THEN {c} ELSE {})
+  /\ lateEpoch' = lateEpoch \union (IF SplitContinue /\ c \in tombstoned THEN {c} ELSE {})
   /\ tombstoned' = tombstoned \ {c}
   /\ gracePending' = gracePending \ {c}
-  /\ tier' = tier
-  /\ graceMember' = graceMember
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ drained' = drained
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<tier, graceMember, tombstoneEver, releasing, released, promoted, drained>>
+
+(* The delivery refused at the cap (or after a release): the caller sees the *)
+(* refusal and the message is lost.                                         *)
+ContinueRefused(c) ==
+  /\ ~drained
+  /\ c \in followPending
+  /\ \/ c \in released
+     \/ ~PoolHasRoom(c)
+     \/ c \notin graceMember
+  /\ followPending' = followPending \ {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, releasing, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
-(* Ctrl+B promotion (foreground collect -> background).                   *)
+(* Ctrl+B promotion: a foreground child is re-tiered to background and its  *)
+(* grace window re-armed.                                                  *)
 (* ----------------------------------------------------------------------- *)
 
 Promote(c) ==
-  /\ ~drained
-  /\ tier[c] = "fg"
-  /\ status[c] = "running"
-  /\ epochOpen[c]
   /\ c \notin promoted
+  /\ status[c] \in {"running", "idle"}
   /\ promoted' = promoted \union {c}
   /\ tier' = [tier EXCEPT ![c] = "bg"]
-  /\ status' = status
-  /\ epochOpen' = epochOpen
-  /\ graceMember' = graceMember
-  /\ gracePending' = gracePending
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
+  /\ gracePending' = ArmGrace(c, c \in graceMember, gracePending)
+  /\ UNCHANGED <<status, epochOpen, graceMember, tombstoned, tombstoneEver, slotHolder, followPending, releasing, released, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
-(* Manual release_agent (one-way eviction).                                *)
+(* release_agent: mark, then evict. The eviction returns the slot.          *)
 (* ----------------------------------------------------------------------- *)
 
-Release(c) ==
-  /\ ~drained
+ReleaseStart(c) ==
   /\ c \notin released
+  /\ c \notin releasing
   /\ status[c] \in {"running", "idle", "ready"}
-  (* markReleasing is placed before the drain issuance (F12a); markReleased *)
-  (* moves the id releasing -> released.                                   *)
-  /\ releasing' = (releasing \union {c}) \ {c}
+  /\ releasing' = releasing \union {c}
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, followPending, released, promoted, lateEpoch, drained>>
+
+ReleaseFinish(c) ==
+  /\ c \in releasing
+  /\ releasing' = releasing \ {c}
   /\ released' = released \union {c}
   /\ status' = [status EXCEPT ![c] = "gone"]
+  /\ slotHolder' = IF SkipSlotRelease THEN slotHolder ELSE slotHolder \ {c}
   /\ gracePending' = gracePending \ {c}
-  /\ epochOpen' = [epochOpen EXCEPT ![c] = FALSE]
-  /\ tier' = tier
-  /\ graceMember' = graceMember
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
+  /\ UNCHANGED <<tier, epochOpen, graceMember, tombstoned, tombstoneEver, followPending, promoted, lateEpoch, drained>>
 
-(* Late handler of a timed-out release attempt; refused while released.    *)
-
+(* A late continuation arriving after the release marker is refused; the     *)
+(* marker is cleared only once the eviction settled.                       *)
 LateClear(c) ==
   /\ c \in releasing
-  /\ c \notin released
   /\ releasing' = releasing \ {c}
-  /\ status' = status
-  /\ tier' = tier
-  /\ epochOpen' = epochOpen
-  /\ graceMember' = graceMember
-  /\ gracePending' = gracePending
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-  /\ drained' = drained
+  /\ UNCHANGED <<status, tier, epochOpen, graceMember, gracePending, tombstoned, tombstoneEver, slotHolder, followPending, released, promoted, lateEpoch, drained>>
 
 (* ----------------------------------------------------------------------- *)
-(* Session exit: whole-forest drain.                                        *)
+(* Session exit drains the whole forest.                                    *)
 (* ----------------------------------------------------------------------- *)
 
 SessionExit ==
   /\ ~drained
   /\ drained' = TRUE
   /\ status' = [c \in Children |-> "gone"]
+  /\ released' = releasing \union released \union Children
+  /\ slotHolder' = IF SkipSlotRelease THEN slotHolder ELSE {}
+  /\ releasing' = {}
   /\ gracePending' = {}
-  /\ epochOpen' = [c \in Children |-> FALSE]
-  /\ tier' = tier
-  /\ graceMember' = graceMember
-  /\ tombstoned' = tombstoned
-  /\ tombstoneEver' = tombstoneEver
-  /\ releasing' = releasing
-  /\ released' = released
-  /\ promoted' = promoted
-  /\ lateEpoch' = lateEpoch
-
-(* Terminal self-loop: keeps deadlock checking enabled.                    *)
-
-Idle == UNCHANGED vars
-
-Next ==
-  \/ \E c \in Children : SpawnAtomic(c)
-  \/ \E c \in Children : EpochEnd(c)
-  \/ \E c \in Children : Settle(c)
-  \/ \E c \in Children : GraceFire(c)
-  \/ \E c \in Children : ContinueAdmit(c)
-  \/ \E c \in Children : Promote(c)
-  \/ \E c \in Children : Release(c)
-  \/ \E c \in Children : LateClear(c)
-  \/ SessionExit
-  \/ Idle
-
-Spec == Init /\ [][Next]_vars
+  /\ UNCHANGED <<tier, epochOpen, graceMember, tombstoned, tombstoneEver, followPending, promoted, lateEpoch>>
 
 (* ----------------------------------------------------------------------- *)
-(* Invariants                                                               *)
+(* Invariants                                                              *)
 (* ----------------------------------------------------------------------- *)
 
-(* S-1: the live-capacity contract: at most MaxLive running children.      *)
-(* Both the spawn lanes and continuation admission count live + promised    *)
-(* slots under one lease, so no interleaving can overshoot.                *)
-CapOK == LiveCount <= MaxLive
+(* S-1: the pool's resident-activation cap. A slot exists exactly while a   *)
+(* resident activation exists, so the cap is on residents, not on running   *)
+(* children only.                                                          *)
+CapOK == ResidentCount <= MaxLive
 
-(* S-2: a released child never regains a live activation.                  *)
+(* S-2: a slot is held exactly by a resident activation: running, or idle   *)
+(* waiting on settlement. A settled (ready) or evicted (gone) child holds   *)
+(* none.                                                                  *)
+SlotIsActivation == slotHolder = {c \in Children : status[c] \in {"running", "idle"}}
+
+(* S-3: an eviction returns its slot; a drained forest holds none.          *)
+DrainedNoSlot == drained => slotHolder = {}
+
+(* S-4: a released child never regains a live activation.                  *)
 NoResurrect ==
   \A c \in released : status[c] \notin {"running", "idle"}
 
-(* S-3: released and releasing marks are disjoint.                         *)
+(* S-5: released and releasing marks are disjoint.                         *)
 ReleasedDisjoint == released \intersect releasing = {}
 
-(* S-4: an auto-release tombstone is only ever set on a child with no      *)
+(* S-6: an auto-release tombstone is only ever set on a child with no      *)
 (* live activation.                                                        *)
 TombstoneNonLive ==
   \A c \in tombstoned : status[c] \in {"ready", "gone"}
 
-(* S-5: grace timers only exist for registry members.                      *)
+(* S-7: grace timers only exist for registry members.                      *)
 GraceMemberOnly == gracePending \subseteq graceMember
 
-(* S-6: no child runs an epoch after auto-release without a restart.        *)
+(* S-8: no child runs an epoch after auto-release without a restart.        *)
 NoLateEpoch == lateEpoch = {}
 
-(* S-7: after session exit every child is drained.                          *)
+(* S-9: after session exit every child is drained.                          *)
 DrainedQuiescent == drained => (\A c \in Children : status[c] = "gone")
 
-(* S-8: promotion re-tiers the child to background exactly once.            *)
+(* S-10: promotion re-tiers the child to background exactly once.            *)
 PromotedIsBackground == \A c \in promoted : tier[c] = "bg"
-
 
 (* L-1 (excluded): eventual settle needs fairness and a harness turn-loop   *)
 (* model; excluded - see design.md.                                        *)
+
+(* ----------------------------------------------------------------------- *)
+(* Spec                                                                    *)
+(* ----------------------------------------------------------------------- *)
+
+(* Terminal self-loop: once the forest is drained nothing may change, but    *)
+(* CHECK_DEADLOCK stays meaningful for every live state.                    *)
+Idle ==
+  /\ drained
+  /\ UNCHANGED vars
+
+Next ==
+  \/ Idle
+  \/ \E c \in Children :
+       \/ SpawnAtomic(c)
+       \/ FollowUpStart(c)
+       \/ FollowUpDeliver(c)
+       \/ FollowUpRefused(c)
+       \/ EpochEnd(c)
+       \/ Settle(c)
+       \/ GraceFire(c)
+       \/ ContinueStart(c)
+       \/ ContinueDeliver(c)
+       \/ ContinueRefused(c)
+       \/ Promote(c)
+       \/ ReleaseStart(c)
+       \/ ReleaseFinish(c)
+       \/ LateClear(c)
+  \/ SessionExit
+
+Spec == Init /\ [][Next]_vars
 
 =============================================================================
