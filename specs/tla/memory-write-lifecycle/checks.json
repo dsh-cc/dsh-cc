@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 1,
+  "modelId": "memory-write-lifecycle",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostSave",
+        "NoDanglingPointer",
+        "CapSound",
+        "NoLostPressure",
+        "OneDreamer",
+        "HoldsLock"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-unlocked-save",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "TRUE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostSave"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-dream-no-cas",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "TRUE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostSave"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-index-first",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "TRUE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoDanglingPointer"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-missing-topic",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoDanglingPointer"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-clear-without-run",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "TRUE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostPressure"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-split-stamp",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "TRUE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostPressure"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-skip-cap",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "TRUE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "CapSound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-live-preemption",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "TRUE",
+        "MaxLines": "2",
+        "StaleTicks": "1",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "OneDreamer"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-unlocked-extract",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "TRUE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostSave"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "crash-reclaim",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "1",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "1",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "OneDreamer",
+        "HoldsLock"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    }
+  ]
+}
