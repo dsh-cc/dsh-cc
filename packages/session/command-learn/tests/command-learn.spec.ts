@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
@@ -16,7 +16,7 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { canonicalMemoryRoot, projectSlug } from '@dsh-cc/memory'
 import * as commandLearn from '@dsh-cc/command-learn'
-import { LEARN_SETTINGS_NAMESPACE, parseLearn, renderBlock, resolveOptions, sessionsProjectKey } from '@dsh-cc/command-learn'
+import { LEARN_SETTINGS_NAMESPACE, applyLearnings, parseLearn, renderBlock, resolveOptions, sessionsProjectKey } from '@dsh-cc/command-learn'
 import type { ForensicsResult } from '@dsh-cc/session-forensics'
 
 // --- fixture helpers -------------------------------------------------------
@@ -245,6 +245,78 @@ describe('/learn apply', () => {
     expect(await run(test, ' apply')).toContain('no findings')
     const text = await run(test, ' apply all')
     expect(text).toContain('Wrote 1 learning(s)')
+  })
+})
+
+describe('/learn apply under concurrent index writers', () => {
+  const RESULT: ForensicsResult = {
+    findings: [{
+      kind: 'path-correlation',
+      title: 'prefer /b/ over /a for config.json',
+      detail: 'read /b/config.json instead',
+      occurrences: 2,
+      evidence: ['session:s1#turn=1'],
+    }],
+    stats: { sessionsScanned: 2, linesParsed: 10, corruptLinesSkipped: 0, truncatedTails: 0, sessionsNoStream: 0, sessionsUnreadable: 0, sessionsByPolicyNever: 0 },
+  }
+
+  /** The memory dir apply targets, keyed by the canonical git root slug. */
+  function memoryDir(): string {
+    return join(homeDir, 'memory', 'projects', projectSlug(canonicalMemoryRoot(process.cwd())))
+  }
+
+  async function localFs() {
+    const ctx = new Context()
+    await ctx.plugin(LocalFileSystem)
+    return ctx.fs
+  }
+
+  it('rebases onto a foreign pointer: BOTH pointers stay durable', async () => {
+    const fs = await localFs()
+    const dir = memoryDir()
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'MEMORY.md'), '- [base](base.md) — b\n')
+    const original = fs.writeText.bind(fs)
+    let indexWrites = 0
+    vi.spyOn(fs, 'writeText').mockImplementation(async (...args) => {
+      const outcome = await original(...args)
+      if (String(args[0].targetKey).endsWith('/MEMORY.md')) {
+        indexWrites++
+        if (indexWrites === 1) {
+          // A foreign writer commits between our index write and its read-back.
+          const now = readFileSync(join(dir, 'MEMORY.md'), 'utf8')
+          await original(args[0], `${now.trimEnd()}\n- [foreign](foreign.md) — f\n`, undefined, undefined, args[4])
+        }
+      }
+      return outcome
+    })
+
+    const outcome = await applyLearnings(fs, join(homeDir, 'memory'), process.cwd(), RESULT)
+
+    expect(outcome.wrote).toBe(true)
+    expect(indexWrites).toBe(2)
+    const index = readFileSync(join(dir, 'MEMORY.md'), 'utf8')
+    expect(index).toContain('[foreign](foreign.md)')
+    expect(index).toContain('[session-learnings](session-learnings.md)')
+  })
+
+  it('surfaces an exhausted commit as a retryable command error', async () => {
+    seedSession(PROJECT, 's1', findingLines())
+    seedSession(PROJECT, 's2', findingLines())
+    const test = await harness()
+    const original = test.ctx.fs.writeText.bind(test.ctx.fs)
+    vi.spyOn(test.ctx.fs, 'writeText').mockImplementation(async (...args) => {
+      const outcome = await original(...args)
+      if (String(args[0].targetKey).endsWith('/MEMORY.md')) {
+        await original(args[0], '- [foreign](foreign.md) — f\n', undefined, undefined, args[4])
+      }
+      return outcome
+    })
+
+    const outcome = await runRaw(test, ' apply')
+
+    expect(outcome.kind).toBe('error')
+    expect(outcome.text).toContain('concurrent memory writes raced /learn; retry')
   })
 })
 
