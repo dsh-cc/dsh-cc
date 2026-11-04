@@ -12,6 +12,8 @@ import type { ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
 import type { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
+// Side-effectful load: registers the Code Mode dispatch event types (events.ts).
+import './events.ts'
 import { TOOL_RUNTIME_SCHEDULER } from './scheduler.ts'
 import { ToolLayer, resolveMaxParallelSubCalls } from './tool-layer.ts'
 import type { ToolAskResolution, ToolCancellationState } from './tool-layer.ts'
