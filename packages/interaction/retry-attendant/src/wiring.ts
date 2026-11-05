@@ -15,6 +15,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { PostToolDecision, PreToolDecision, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
 import { CLASS_TABLE, classify } from './classes.ts'
+import { RETRY_ATTENDANT_EVENT } from './events.ts'
 import { digestKey } from './digest.ts'
 import { firstShellToken, secondShellToken } from './shell-words.ts'
 import { readUserSettings } from './settings.ts'
@@ -62,7 +63,7 @@ function attendantMessage(text: string): UserMessage {
 /** Session event append, try/caught (open-turn append can throw). */
 function appendEvent(agent: ToolExecution['agent'], payload: { kind: 'guidance' | 'escalation'; class: string; tool: string; digest: string; ts: number }): void {
   try {
-    agent?.session.append('retry-attendant/event', payload)
+    agent?.session.append(RETRY_ATTENDANT_EVENT, payload)
   } catch {
     // Log-only telemetry must never break a tool call.
   }

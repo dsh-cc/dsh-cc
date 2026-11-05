@@ -12,6 +12,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerRetrySettings } from './settings.ts'
 import { registerListeners } from './wiring.ts'
 import './types.ts'
+// Side-effectful module load: KNOWN_SESSION_EVENT_TYPES registration must
+// run whenever this package is loaded (sessions containing the telemetry
+// event must stay resumable regardless of the feature's enabled flag).
+import './events.ts'
+
+export { RETRY_ATTENDANT_EVENT } from './events.ts'
 
 export { CLASS_TABLE, classify, type ClassRow } from './classes.ts'
 export { digestKey, effectFields, stableJson } from './digest.ts'

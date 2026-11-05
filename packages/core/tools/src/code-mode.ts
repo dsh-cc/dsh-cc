@@ -23,6 +23,7 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { PtcBindingFunction, PtcJsonValue, PtcRunResult, PtcRunSandbox, PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import { jsonNormalizeArgs, renderValue } from './json-render.ts'
+import { CODE_DISPATCH_EVENT, CODE_DISPATCH_START_EVENT } from './events.ts'
 import { CodeRunFailedError, resolveFlavor, RUN_CODE_DESCRIPTION_PARAM_DESCRIPTION, RUN_CODE_NAME, TYPESCRIPT_FLAVOR } from './run-code-defs.ts'
 import { defineTool, parameterSchemaSpecToJsonSchema } from './schema.ts'
 import { TOOL_RUNTIME_SCHEDULER } from './scheduler.ts'
@@ -312,7 +313,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
                 // the log stays detached.
                 content: result.content,
               })
-              agent.session.append('tool/code-dispatch', {
+              agent.session.append(CODE_DISPATCH_EVENT, {
                 rootCallId: exec.rootCallId,
                 parentCallId: exec.callId,
                 subCallId,
@@ -338,7 +339,7 @@ export function createRunCodeTool(registry: ToolRuntimeCore, options: RunCodeBri
               reject(new Error(`run_code run is over (${String(runController.signal.reason)}); ${name} tool call abandoned`))
             },
             async start(): Promise<void> {
-              exec.agent?.session.append('tool/code-dispatch-start', {
+              exec.agent?.session.append(CODE_DISPATCH_START_EVENT, {
                 rootCallId: exec.rootCallId,
                 parentCallId: exec.callId,
                 subCallId,
