@@ -607,6 +607,101 @@ describe('dream pressure marker (forced consolidation)', () => {
     })
   })
 
+  it('an arm landing during a successful forced dream survives the clear, with the cooldown advanced to completion time (issue #335 Face B)', async () => {
+    await seedFresh(tmpRoot, 1)
+    const captured = Date.now() - COOLDOWN_MS - 1000
+    const marker = `${captured}\n0\n`
+    const { ctx, subagents, fs } = pressureMount(marker)
+    // Freeze the clock: dream start at t0, completion one window later, so a
+    // stale dream-start `now` at the clear would be observable.
+    const t0 = Date.now()
+    let clock = t0
+    const dateSpy = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const dreamResult = deferred<{ structured: { writes: unknown[] }, stopReason: string }>()
+    subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
+      result: dreamResult.promise,
+    }))
+
+    try {
+      await stopTurn(ctx, fakeAgent('/mem'))
+      await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1), { timeout: 2000 })
+
+      // A cap-rejected save arms the marker while the dream fork is running.
+      fs.backing.set(PRESSURE, `${captured + 5000}\n0\n`)
+      clock = t0 + COOLDOWN_MS + 1000
+      dreamResult.resolve({ structured: { writes: [] }, stopReason: 'completed' })
+
+      // The newer arm survives; lastForcedAt is the COMPLETION time, not dream start.
+      await vi.waitFor(() => {
+        expect(fs.backing.get(PRESSURE)).toBe(`${captured + 5000}\n${t0 + COOLDOWN_MS + 1000}\n`)
+      })
+    } finally {
+      dateSpy.mockRestore()
+    }
+  })
+
+  it('an arm landing during a successful PERIODIC dream survives the clear (servedArmedAt is 0 there)', async () => {
+    await seedFresh(tmpRoot, 5)
+    // No marker at the dream's read: periodic mode, so any arm during the
+    // dream is strictly newer than the captured (zero) arm.
+    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock(), sessionsRoot: tmpRoot })
+    const dreamResult = deferred<{ structured: { writes: unknown[] }, stopReason: string }>()
+    subagents.startActivation.mockImplementation(async () => ({
+      childId: 'job-child',
+      messageId: 'job-m',
+      dispose: () => Promise.resolve(),
+      result: dreamResult.promise,
+    }))
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1), { timeout: 2000 })
+
+    fs.backing.set(PRESSURE, '500\n0\n')
+    dreamResult.resolve({ structured: { writes: [] }, stopReason: 'completed' })
+
+    await vi.waitFor(() => {
+      const tomb = (fs.backing.get(PRESSURE) ?? '').trim().split('\n').map(Number)
+      expect(tomb[0]).toBe(500)
+      expect(tomb[1]).toBeGreaterThan(0)
+    })
+  })
+
+  it('a successful retry clears against the ORIGINAL captured arm, so an arm landing between attempts survives', async () => {
+    await seedFresh(tmpRoot, 1)
+    const captured = Date.now() - COOLDOWN_MS - 1000
+    const marker = `${captured}\n0\n`
+    const { ctx, subagents, fs } = pressureMount(marker)
+    const retryResult = deferred<{ structured: { writes: unknown[] }, stopReason: string }>()
+    let calls = 0
+    subagents.startActivation.mockImplementation(async () => {
+      calls += 1
+      return {
+        childId: `job-child-${calls}`,
+        messageId: `job-m-${calls}`,
+        dispose: () => Promise.resolve(),
+        result: calls === 1
+          ? Promise.resolve({ structured: undefined, stopReason: 'error' })
+          : retryResult.promise,
+      }
+    })
+
+    await stopTurn(ctx, fakeAgent('/mem'))
+    await vi.waitFor(() => expect(calls).toBe(2), { timeout: 2000 })
+
+    // The first attempt failed; a save arms the marker before the retry runs.
+    fs.backing.set(PRESSURE, `${captured + 7000}\n0\n`)
+    retryResult.resolve({ structured: { writes: [] }, stopReason: 'completed' })
+
+    await vi.waitFor(() => {
+      const tomb = (fs.backing.get(PRESSURE) ?? '').trim().split('\n').map(Number)
+      expect(tomb[0]).toBe(captured + 7000)
+      expect(tomb[1]).toBeGreaterThan(0)
+    })
+  })
+
   it('a failed forced dream keeps the marker with its fresh stamp', async () => {
     await seedFresh(tmpRoot, 1)
     const marker = `${Date.now() - COOLDOWN_MS - 1000}\n0\n`

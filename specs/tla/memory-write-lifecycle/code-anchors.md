@@ -161,17 +161,11 @@ export async function rollbackLock(fs: FileSystem, dir: string, priorAt: number,
 }
 ```
 
-## A4 — pressure: read is fail-open, arm preserves lastForcedAt, clear tombstones at the clear time 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L242〕
+## A4 — pressure: read is fail-open, the arm is monotone, the stamp preserves the newer arm, the clear is conditional (issue #335 fix) 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L237〕
 
-`packages/memory/memory/src/pressure.ts:47-95`
+`packages/memory/memory/src/pressure.ts:47-61`
 
 ```ts
-/**
- * Best-effort read of the pressure marker. Any failure (absent file,
- * unreadable, corrupt content) yields zeros — "no pressure pending".
- * @param fs - the filesystem seam.
- * @param dir - the memory directory holding the marker.
- */
 export async function readPressure(fs: FileSystem, dir: string): Promise<PressureState> {
   try {
     const { target, absent } = await pressureTarget(fs, dir)
@@ -181,66 +175,67 @@ export async function readPressure(fs: FileSystem, dir: string): Promise<Pressur
     return { armedAt: 0, lastForcedAt: 0 }
   }
 }
+```
 
-/**
- * Arm the pressure marker with `now` as `armedAt`, preserving the previous
- * `lastForcedAt` when recoverable (else 0). Re-reads the marker immediately
- * before writing so a concurrent forced launch's fresh stamp is not clobbered
- * (a residual single-iteration race is accepted and bounded). Best-effort:
- * returns whether the write landed, so callers that promise "consolidation
- * queued" in model-visible text can gate that sentence on it.
- * @param fs - the filesystem seam.
- * @param dir - the memory directory holding the marker.
- * @param now - the epoch stamped as `armedAt`.
- * @param policy - per-call sandbox policy for the marker write.
- */
+`packages/memory/memory/src/pressure.ts:63-130` (the monotone arm and the fixed writers' strict reader)
+
+```ts
 export async function armPressure(fs: FileSystem, dir: string, now: number, policy?: MemoryWritePolicy): Promise<boolean> {
   try {
     const { target, absent } = await pressureTarget(fs, dir)
     let lastForcedAt = 0
+    let previousArmedAt = 0
     if (!absent) {
       try {
-        lastForcedAt = parse(await fs.readText(target)).lastForcedAt
+        const prev = parse(await fs.readText(target))
+        lastForcedAt = prev.lastForcedAt
+        previousArmedAt = prev.armedAt
       } catch {
-        // Corrupt marker: treat as never-forced, arming still proceeds.
+        // Corrupt marker: treat as never-armed/never-forced, arming still proceeds.
       }
     }
-    await fs.writeText(target, format(now, lastForcedAt), undefined, undefined, policy)
+    const armedAt = Math.max(now, previousArmedAt + 1)
+    await fs.writeText(target, format(armedAt, lastForcedAt), undefined, undefined, policy)
     return true
   } catch {
     return false
   }
 }
 
-/**
- * Stamp `lastForcedAt = now` while keeping `armedAt` (consumes one cooldown
- * slot). Called by the consumer BEFORE lock acquisition so a held lock or a
+async function readMarkerStrict(fs: FileSystem, target: FsTarget): Promise<PressureState | null> {
+  try {
+    const match = /^(\d+)\n(\d+)\n?$/.exec(await fs.readText(target))
+    return match === null ? null : { armedAt: Number(match[1]), lastForcedAt: Number(match[2]) }
+  } catch {
+    return null
+  }
+}
 ```
 
-`packages/memory/memory/src/pressure.ts:105-122`
+`packages/memory/memory/src/pressure.ts:133-175` (the fixed stamp and the conditional clear)
 
 ```ts
+export async function markPressureForced(fs: FileSystem, dir: string, armedAt: number, now: number, policy?: MemoryWritePolicy): Promise<void> {
   const target = await fs.resolve(join(dir, PRESSURE_FILE)).catch(() => undefined)
   if (target === undefined) return
-  await fs.writeText(target, format(armedAt, now), undefined, undefined, policy).catch(() => {})
+  const current = await readMarkerStrict(fs, target)
+  const keep = current === null ? armedAt
+    : current.armedAt === 0 ? 0
+      : Math.max(armedAt, current.armedAt)
+  await fs.writeText(target, format(keep, now), undefined, undefined, policy).catch(() => {})
 }
 
-/**
- * Tombstone the marker (`armedAt = 0`, `lastForcedAt = now`) after a
- * successful consolidation; the cooldown timestamp survives so a fresh arm
- * still waits out the remainder of the window. Best-effort.
- * @param fs - the filesystem seam.
- * @param dir - the memory directory holding the marker.
- * @param now - the epoch stamped as the surviving `lastForcedAt`.
- * @param policy - per-call sandbox policy for the marker write.
- */
-export async function clearPressure(fs: FileSystem, dir: string, now: number, policy?: MemoryWritePolicy): Promise<void> {
+export async function clearPressure(fs: FileSystem, dir: string, now: number, policy?: MemoryWritePolicy, servedArmedAt?: number): Promise<void> {
   const target = await fs.resolve(join(dir, PRESSURE_FILE)).catch(() => undefined)
   if (target === undefined) return
-  await fs.writeText(target, format(0, now), undefined, undefined, policy).catch(() => {})
+  const current = await readMarkerStrict(fs, target)
+  if (current === null) return
+  const armed = servedArmedAt !== undefined && current.armedAt > servedArmedAt ? current.armedAt : 0
+  await fs.writeText(target, format(armed, now), undefined, undefined, policy).catch(() => {})
+}
 ```
 
-## A5 — dream: gates, stamp before the lock, and the job-done handler that only clears pressure 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L243-L355〕
+## A5 — dream: gates, stamp before the lock, and the job-done handler that only clears pressure 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L238-L352〕
 
 `packages/memory/memory-consolidation/src/index.ts:290-345`
 
@@ -309,9 +304,11 @@ export async function clearPressure(fs: FileSystem, dir: string, now: number, po
     void job.done.then(async (outcome) => {
       ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
       if (outcome.status === 'completed') {
-        // Success tombs the marker in BOTH modes: a successful periodic dream
-        // rebuilds the index, so a stale pending marker is obsolete by definition.
-        void clearPressure(fs, dir, now, policy)
+        // Success tombs the marker in BOTH modes -- but only the arms this
+        // dream's rebuild addressed (issue #335): the clear is conditional on
+        // the arm captured at the dream's initial read, so an arm that landed
+        // during the dream survives for the next window.
+        void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
         return
       }
       await recordDreamDiagnostic(ctx, fs, dir, policy, {
@@ -334,7 +331,7 @@ export async function clearPressure(fs: FileSystem, dir: string, now: number, po
         void retry.done.then(async (retryOutcome) => {
           ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
           if (retryOutcome.status === 'completed') {
-            void clearPressure(fs, dir, now, policy)
+            void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
             return
           }
           await recordDreamDiagnostic(ctx, fs, dir, policy, {
@@ -353,7 +350,7 @@ export async function clearPressure(fs: FileSystem, dir: string, now: number, po
     })
 ```
 
-## A6 — memory job: the truncate fallback and the validated write-back 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L356-L397〕
+## A6 — memory job: the truncate fallback and the validated write-back 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L353-L394〕
 
 `packages/memory/memory-consolidation/src/memory-job.ts:76-89`
 
@@ -395,7 +392,7 @@ export function applyEntrypointFallback(payload: unknown): unknown {
       controller.signal.aborted ? { status: 'killed' } : { status: 'failed', detail: String(err) },
 ```
 
-## A7 — gates: the periodic time gate over the last consolidation epoch 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L398-L426〕
+## A7 — gates: the periodic time gate over the last consolidation epoch 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L395-L423〕
 
 `packages/memory/memory-consolidation/src/gates.ts:24-45`
 
@@ -424,7 +421,7 @@ export function sessionGatePasses(sessionCount: number, minSessions: number): bo
 /**
 ```
 
-## A8 — the turn-end extraction fork: no lock, same write-back path 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L427-L464〕
+## A8 — the turn-end extraction fork: no lock, same write-back path 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L424-L462〕
 
 `packages/memory/memory-consolidation/src/index.ts:210-240`
 

@@ -83,8 +83,13 @@ Atomicity mapping: `SaveIndex` is one read-verify-write commit (the intended
 transaction); `DreamPublish` the same over the fork snapshot; `DreamWriteTopics`
 and `DreamPublishFirst` are the two halves of the dream batch, which is why a
 crash between them is reachable; `DreamLock` is `tryAcquireLock` including its
-read-back verify; `DreamStampPressure` is the separate pre-acquisition stamp
-write.
+read-back verify; `DreamPressureAtomic` is the convention's atomic pressure
+entry (the fixed protocol up to the atomic abstraction — a state-space budget
+device); `DreamReadPressure` + `DreamStampPressure` are the real code's two
+steps (the split is enabled by the `SplitStamp` fault or by the dedicated
+`split-stamp-fixed` case, whose stamp write carries the fixed
+no-resurrect/max semantics); `DreamClear` is the conditional clear with
+truthful service accounting in both shapes.
 
 ## Coverage matrix
 
@@ -94,7 +99,7 @@ write.
 | REQ-2 | the index never references a missing topic file | S-2 `NoDanglingPointer` | `NoDanglingPointer` | convention; strict-index-first (expected red) | `DreamPublishFirst` publishes the pointer, `Crash(p)` before `DreamTopicsAfter` | A-4 | `writeback.ts:174-178` sequential writes: the save batch is topic-first by construction, the dream batch order is fork-decided | crash between the index write and the topic write | — |
 | REQ-9 | the extraction fork obeys the same index discipline | S-1 via `ExtractIndex` | `NoLostSave` | strict-unlocked-extract (expected red) | an extraction write built on a pre-save snapshot publishes | A-11 | `index.ts:218-235` → `memory-job.ts:150-151` writes through `writeMemoryFiles` with no lock | a turn-end extraction racing a save | — |
 | REQ-3 | a published index respects the cap | S-3 `CapSound` | `CapSound` | convention; strict-skip-cap (expected red) | a batch whose content exceeds `MaxLines` publishes it | A-5 | `writeback.ts:141-154` gate + `memory-job.ts:76-89` truncate fallback | dream reporting an over-limit index | fail-open save into an already over-limit index is E-3 |
-| REQ-4 | an armed marker reaches a dream; the model-visible "queued" sentence is not a lie 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L242〕 | S-4 `NoLostPressure` | `NoLostPressure` | convention; strict-clear-without-run (expected red) | `SaveReject` arms at `t` during a running dream → `DreamClear` tombstones it without serving | A-6, A-7 | `pressure.ts:79-86` arm re-reads `lastForcedAt`; `index.ts:358` clears with no arm identity in the guard | concurrent cap rejection during a running dream | wall-clock "eventually" is L-1, excluded |
+| REQ-4 | an armed marker reaches a dream; the model-visible "queued" sentence is not a lie 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L237〕 | S-4 `NoLostPressure` | `NoLostPressure` | convention; split-stamp-fixed (the fixed split stamp, green); strict-split-stamp, strict-clear-without-run (expected red) | `SaveReject` arms at `t` during a running dream → the PRE-FIX `DreamClear` tombstones it without serving; the PRE-FIX stamp clobbers a between-read-and-stamp re-arm | A-6, A-7 | `pressure.ts` (issue #335 fix): `armPressure` monotone, `markPressureForced` re-reads and preserves the newer arm without resurrecting, `clearPressure` conditional on `servedArmedAt`; `index.ts` clears with the arm captured at the dream's initial read | concurrent cap rejection during a running dream; re-arm between the dream's read and its stamp | wall-clock "eventually" is L-1, excluded; the re-read-to-write residual windows are E-1b |
 | REQ-5 | one consolidation per memory directory | S-5 `OneDreamer`, `HoldsLock` | same | convention | two dreams race the lock; one reclaims a stale-stamped lock | A-8 | `lock.ts:71-108` acquire = write + read-back verify | two sessions dreaming at once | the accepted sub-millisecond symmetric collision is E-2 |
 | REQ-6 | the consolidation epoch never silently regresses or advances without a run | structural (`DreamFail`) | `DreamFail` | convention | dream fails after acquiring: lock rewritten with `priorAt` | A-8 | `lock.ts:120-124` `rollbackLock` | a failed dream must not consume the cooldown epoch | E-4 |
 | REQ-7 | a crashed holder blocks, then is reclaimable; no stuck live state | structural (deadlock check + reclaim guard) | `DreamLock`, `Idle` | convention | `Crash(p1)` while holding the lock, `Tick` past `StaleTicks`, `p2` reclaims | A-8, A-9 | `lock.ts:84` stale window (1h, independent of liveness) | kill a dreaming process | — |
@@ -115,8 +120,13 @@ write.
   batch content.
 - **A-6** The pressure marker is a two-field file; a failed read yields zeros
   (fail-open, `pressure.ts:56-60`), which the model reflects as "no pressure".
-- **A-7** The forced-dream consumer reads the marker before stamping and does
-  not re-read it before clearing.
+- **A-7** (issue #335 fix revision) The fixed writers re-read the marker
+  immediately before both the stamp and the clear: the stamp keeps the NEWER
+  of the captured and current arms without resurrecting a tombstone, and the
+  clear tombstones only arms the dream accounted for (`servedArmedAt`). Arms
+  are strictly increasing (the monotone arm, `armPressure`'s
+  `max(now, previous + 1)`), so same-timestamp collisions cannot alias two
+  arms; the residual re-read-to-write windows are excluded as E-1b.
 - **A-8** The lock file's stored epoch is the sole staleness signal; PID
   liveness is not consulted (`lock.ts:19`).
 - **A-9** Logical ticks stand for the 1h stale window / 60m cooldown / periodic
@@ -138,19 +148,29 @@ write.
 | `UnlockedSave` | a save index write from its own stale snapshot, no verification | strict-unlocked-save |
 | `DreamNoCas` | a dream batch publishing over the index without checking it still matched | strict-dream-no-cas |
 | `DreamIndexFirst` | publishing the index before the topic files it points at | strict-index-first |
-| `ClearWithoutRun` | tombstoning the marker regardless of which arm the dream read | strict-clear-without-run |
+| `ClearWithoutRun` | the PRE-FIX unconditional tombstone (the service accounting stays truthful, so the probe isolates the tombstone decision) | strict-clear-without-run |
 | `SkipCap` | dropping the batch cap guard | strict-skip-cap (defence in depth: the write-back gate and the truncate fallback also enforce the cap, so this is not a live code gap) |
 | `UnlockedExtract` | an extraction index write from its own stale snapshot | strict-unlocked-extract |
 | `MissingTopic` | a batch that omits a topic file the index still points at | strict-missing-topic |
-| `SplitStamp` | the real read-then-stamp split, whose stamp carries the captured arm | strict-split-stamp |
+| `SplitStamp` | the PRE-FIX stamp write: the split read-then-stamp whose write carries the CAPTURED arm (clobbering a concurrent re-arm and resurrecting tombstones) | strict-split-stamp |
+| `AtomicPressureEntry` | scheduling only: `TRUE` keeps the convention's atomic pressure entry (state-space budget); the dedicated `split-stamp-fixed` case sets it `FALSE` so the FIXED split stamp semantics are checked across the real read-to-stamp gap | split-stamp-fixed |
 | `FreeTicks` | the clock advancing inside a critical section (live-holder preemption) | strict-live-preemption |
 
 ## Bounds
 
 Two processes, three candidate names, `MaxLines=2`, `StaleTicks=2`,
-`CooldownTicks=1`, `MinTicks=1`, `TMax=2`, `Revs=3`, 2048 MiB — and a shortened stale window in the two lock-focused cases, so the reclaim is reachable inside the tick budget〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L14-L28〕.〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕. Two processes are the
+`CooldownTicks=1`, `MinTicks=1`, `TMax=2`, `Revs=3`, 2048 MiB — and a shortened stale window in the two lock-focused cases, so the reclaim is reachable inside the tick budget〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕. Two processes are the
 minimum that exposes a cross-process write race; three names let a dream exceed
 the cap of two, and let a compaction free room for a save during a dream.
+
+Issue #335 revision adjustments: the monotone-arm domain widening (E-1f) costs
+roughly 30% more convention states, so the convention's revision budget drops
+`Revs` 3→2 to stay inside the 600 s per-case budget — the revision-depth
+dimension is untouched by this fix, and its fault coverage lives in the strict
+probes, which keep `Revs=3`. The dedicated `split-stamp-fixed` case runs the
+FIXED split stamp shape at `AtomicPressureEntry=FALSE`, `Revs=2` (its role is
+the pressure semantics across the real read-to-stamp gap, not the
+revision-heavy lost-save traces the probes already cover).
 
 ## Exclusions
 
@@ -158,8 +178,25 @@ the cap of two, and let a compaction free room for a save during a dream.
   not bodies, so an overwrite that leaves the pointer set unchanged is
   invisible to the invariants. The revision guard rejects such a write
   structurally in the intended protocol; the model cannot observe the body.
-- **E-1b** the accepted `armPressure` re-read race (`pressure.ts:64-69`〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L242〕): same
-  status as E-2, not modeled.
+- **E-1b** the accepted re-read races over the two-field marker file
+  (issue #335 fix revision): `armPressure`'s own re-read-to-write window, the
+  stamp's equivalent window (an arm landing there can still be clobbered), and
+  the clear's window (an arm landing there can still be tombstoned) — all
+  single-iteration, sub-millisecond windows, the same accepted class the
+  pre-fix `armPressure` documented (`pressure.ts` header). The fix narrows
+  Face A's unbounded read-to-stamp gap to these windows and makes every
+  interleaving outside them conservative; it does not eliminate the class
+  (the fs seam offers no CAS, the stamp deliberately precedes lock
+  acquisition, and arming must never block on the dream lock).
+- **E-1f** (issue #335 fix revision) the monotone arm is bounded: the code's
+  `max(now, previous + 1)` grows without bound across same-tick arms; the
+  model caps it with `ArmMax == TMax + 1` and a `stamp.armedAt < ArmMax`
+  guard on `SaveReject` — a declared exclusion. Values up to `TMax` come
+  from arms at distinct ticks; one same-tick re-arm (the only case where the
+  `+1` is needed, because the clock cannot advance during a dream's critical
+  section) reaches `TMax + 1`. A second same-tick re-arm repeats the same
+  aliasing structure and is excluded; excluding arms only shrinks the state
+  space, and arms are the only actions that could break `NoLostPressure`.
 - **E-1d** the lost-update log is a single set, not attributable per writer: a
   snapshot-then-abort interleaving can blind it for older in-flight writers.
   Under the convention the revision guard is the actual protection, and each

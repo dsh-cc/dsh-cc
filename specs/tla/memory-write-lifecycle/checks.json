@@ -20,9 +20,10 @@
         "CooldownTicks": "1",
         "MinTicks": "1",
         "TMax": "2",
-        "Revs": "3",
+        "Revs": "2",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -58,7 +59,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -89,7 +91,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -120,7 +123,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -151,7 +155,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "TRUE"
+        "MissingTopic": "TRUE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -182,7 +187,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -213,7 +219,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "TRUE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -244,7 +251,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -275,7 +283,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -306,7 +315,8 @@
         "TMax": "2",
         "Revs": "3",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
@@ -337,10 +347,48 @@
         "TMax": "2",
         "Revs": "1",
         "SplitStamp": "FALSE",
-        "MissingTopic": "FALSE"
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE"
       },
       "invariants": [
         "TypeOK",
+        "OneDreamer",
+        "HoldsLock"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "split-stamp-fixed",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "2",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostSave",
+        "NoDanglingPointer",
+        "CapSound",
+        "NoLostPressure",
         "OneDreamer",
         "HoldsLock"
       ],
