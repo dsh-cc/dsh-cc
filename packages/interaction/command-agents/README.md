@@ -16,8 +16,8 @@ Human-facing `/agents` command for continuable background agents (plan
   (or mid-release) child refuses with an explicit "cannot be continued here"
   copy instead of the resumable wording.
 - `/agents release <id>` — evict the child's resident activation (and its
-  resident descendants') through the harness drain seam; frees its capacity
-  slot when it was running; cooperative (a cancel-resistant turn keeps its
+  resident descendants') through the harness drain seam; frees the capacity
+  slot it held; cooperative (a cancel-resistant turn keeps its
   slot and the command reports the release as in flight); one-way in this
   session (same-session continuation is unavailable — the upstream
   cold-resume-after-drain gap); the persisted session survives on disk.

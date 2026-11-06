@@ -2840,7 +2840,7 @@ capabilities:
         evicts a direct continuable child's resident activation through the
         harness drainChildren seam — cooperatively, together with
         the resident activations of any descendants — freeing the child's
-        capacity slot when it was running; the durable session survives on
+        capacity slot; the durable session survives on
         disk, and the process-local [released] marker keeps /agents honest
         for the rest of the process.
       refs: []
@@ -3000,18 +3000,22 @@ capabilities:
         exact precedence for this env var is unverified, so the argument
         precedence is declared rather than asserted as parity.
         Capacity guard: the Task tool refuses a new continuable child
-        (background OR foreground collect) when the parent already has 25
-        live children — liveness is derived from the live agents registry
-        (listChildren entries whose registry status is running; running
-        one-shot children count too and are invisible to list_agents) — with
-        the actionable error "parent has 25 live subagents; free a slot with
-        release_agent on a running child (or /agents release <id>
-        interactively), or let children settle — only running children hold
-        slots, and only list_agents-visible children are releasable"; the
-        named release path is the dsh-cc release valve (see
-        subagents.release-tool) and actually frees a running child's slot —
-        /agents stop cannot. A dsh-cc-side safety valve; Claude Code has no
-        equivalent surfaced limit.
+        (background OR foreground collect) when the parent tree already has 25
+        resident activations — every resident counts (running children, idle
+        parents waiting on child settlement, and cold-resumed children; slots
+        return only at disposal, and a send_message follow-up to an
+        already-resident child takes no new slot) — with the actionable error
+        "parent has 25 resident subagents in its activation tree (limit
+        reached): the harness counts every resident activation in the tree —
+        running children, idle parents waiting on child settlement, and
+        cold-resumed children all hold slots; send_message follow-ups to an
+        already-resident child do not. Free a slot with release_agent on a
+        listed child (or /agents release <id> interactively), dispose children
+        you no longer resume, or let running children settle"; the named
+        release path is the dsh-cc release valve (see subagents.release-tool)
+        and frees a resident child's slot (running or idle) — /agents stop
+        cannot. A dsh-cc-side safety valve; Claude Code has no equivalent
+        surfaced limit.
         Continuable cold resume: each background spawn captures a resume pin
         (resolveDetailed-selected alias plus maxTokens) into the resumePinStore
         service (preset row cc-resume-pins, isolated as resumePinStore in

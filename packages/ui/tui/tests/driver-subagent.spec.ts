@@ -490,7 +490,7 @@ describe('createDriver /agents release', () => {
     if (row?.kind === 'status') {
       expect(row.text).toBe(
         '(Note: child-1 was absent from the readable child catalog — released via the live registry only.) '
-        + 'Released agent child-1: its resident (idle) activation was evicted; it held no capacity slot (only running children count toward the 25-child guard). '
+        + 'Released agent child-1: its resident (idle) activation was evicted — the capacity slot it held is free. '
         + 'Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued '
         + '(upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.',
       )

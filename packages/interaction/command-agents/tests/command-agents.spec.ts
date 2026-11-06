@@ -395,11 +395,10 @@ describe('/agents release <id> (T20–T22)', () => {
     detachIdle.fn = await registerLive(idle.ctx, 'idle-1', 'idle')
     expect(await idle.execute('/agents release idle-1'))
       .toBe(
-        'Released agent idle-1: its resident (idle) activation was evicted; it held no capacity slot '
-        + '(only running children count toward the 25-child guard). Its resident descendants (if any) '
-        + 'were evicted with it. The persisted session survives on disk; within this session it cannot '
-        + 'be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the '
-        + 'rest of this process.',
+        'Released agent idle-1: its resident (idle) activation was evicted — the capacity slot it held '
+        + 'is free. Its resident descendants (if any) were evicted with it. The persisted session '
+        + 'survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain '
+        + 'gap); /agents marks it [released] for the rest of this process.',
       )
 
     const detachRun = { fn: () => {} }
@@ -553,8 +552,8 @@ describe('/agents release <id> (T20–T22)', () => {
     const text = await execute('/agents help')
     expect(text).toContain('release')
     expect(text).toContain(
-      "Evict an agent's resident activation (and resident descendants'), freeing its capacity slot "
-      + 'when it was running; cooperative; one-way in this session',
+      "Evict an agent's resident activation (and resident descendants'), freeing the capacity "
+      + 'slot it held; cooperative; one-way in this session',
     )
     expect(text).toContain(
       'Interrupt a running agent\'s current turn (the activation stays resident; "/agents release <id>" evicts it)',

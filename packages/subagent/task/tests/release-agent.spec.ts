@@ -47,7 +47,7 @@ const COPY = {
   releasedRunning: (id: string) =>
     `Released agent ${id}: its in-flight turn was aborted and its resident activation evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk. Within this session it cannot be continued (send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
   releasedIdle: (id: string) =>
-    `Released agent ${id}: its resident (idle) activation was evicted; it held no capacity slot (only running children count toward the 25-child guard). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
+    `Released agent ${id}: its resident (idle) activation was evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
   releasedUnknown: (id: string) =>
     `Released agent ${id}: its resident activation was evicted; any capacity slot it held is free (its running state could not be observed). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
   registryOnlyPrepend: (id: string) =>
@@ -760,10 +760,10 @@ describe('release_agent tool surface', () => {
       + 'and with it the resident activations of any descendants (a running turn is '
       + 'aborted; no separate interrupt needed). Eviction is cooperative — a turn that '
       + 'refuses cancellation keeps its slot until it settles (this tool reports that '
-      + 'as still-resident with the release still in flight instead of hanging). A '
-      + 'slot toward the 25-child capacity guard is freed only when the agent was '
-      + 'running; idle agents hold no slot but are still evicted (one-way); an '
-      + 'already-settled agent is a harmless no-op. The persisted session survives on '
+      + 'as still-resident with the release still in flight instead of hanging). '
+      + 'Evicting a resident activation frees the capacity slot it held (running or '
+      + 'idle); an already-settled agent holds nothing and is a harmless no-op. The '
+      + 'persisted session survives on '
       + 'disk. Within THIS session a released agent cannot be continued: '
       + '`send_message` resolves but runs no turn (a known upstream '
       + 'cold-resume-after-drain gap); continuation from a future session is not '
