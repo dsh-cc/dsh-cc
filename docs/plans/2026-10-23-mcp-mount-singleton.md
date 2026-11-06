@@ -1,6 +1,6 @@
 ---
 date: 2026-10-23
-status: design — blind review in progress
+status: implemented — PR #283 (merged 2026-10-24)
 ---
 
 # MCP mount singleton: collapse the per-preset standing mounts into a host-level registry
@@ -274,4 +274,4 @@ Final shape (the row, not just the key):
 
 ## Status
 
-**Implemented — PR #283 (open, pending merge).** Critic GO-WITH-CHANGES (8 findings, all folded); grok GO-WITH-CHANGES (4 blockers + 2 majors, all folded; delta round: 4 folds OK, 2 PROBLEM re-folded, 2 NEW documented). User confirmed the two architecture forks: (1) root singleton + isolate key removal for `mcpConnections`, (2) **hoist `toolSearch` to root** to preserve deferral semantics. Shipped as five commits (singleton helpers → glue wiring → preset hoist → design doc → bundle-layer tool-search move + manifest host-plane anchor); presubmit green.
+**Implemented — PR #283 (merged 2026-10-24).** Critic GO-WITH-CHANGES (8 findings, all folded); grok GO-WITH-CHANGES (4 blockers + 2 majors, all folded; delta round: 4 folds OK, 2 PROBLEM re-folded, 2 NEW documented). User confirmed the two architecture forks: (1) root singleton + isolate key removal for `mcpConnections`, (2) **hoist `toolSearch` to root** to preserve deferral semantics. Shipped as five commits (singleton helpers → glue wiring → preset hoist → design doc → bundle-layer tool-search move + manifest host-plane anchor); presubmit green.

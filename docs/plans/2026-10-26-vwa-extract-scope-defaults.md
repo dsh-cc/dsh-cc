@@ -1,7 +1,7 @@
 # VWA audit extract: close the `scope` prompt/schema/validation gap
 
 Date: 2026-10-26
-Status: Implemented (PR open)
+Status: Implemented — PR #296 (merged 2026-10-26)
 
 ## 1. Problem
 

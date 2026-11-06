@@ -1,9 +1,9 @@
 # dsh-cc ACP lane (M2): own `@dsh-cc/acp` plugin, `cc-acp` profile — design
 
-Status: reviewed — three-seat blind review converged all-GO (r1 full review,
+Status: Implemented — design PR #212 and M2-core PR #228 (both merged 2026-10-10). Reviewed — three-seat blind review converged all-GO (r1 full review,
 r2 delta round, r3 micro-confirmation; ledger §11). User decision to build
-M2 recorded in §1. Implemented — PR #228 (M2-core: own `@dsh-cc/acp` plugin,
-`cc-acp` profile bundle, launcher), merged 2026-10-10.
+M2 recorded in §1. The M2-core PR #228 delivered the own `@dsh-cc/acp` plugin,
+`cc-acp` profile bundle, and launcher.
 
 ## 1. Background and problem
 

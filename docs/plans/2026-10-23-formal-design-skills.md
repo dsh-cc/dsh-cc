@@ -1,6 +1,6 @@
 # On-demand TLA+ Design Verification Workflow for dsh-cc: Detailed Design
 
-## Status: Design — bundled-toolchain revision (2026-10-24).
+## Status: Implemented — PR #285 (merged 2026-10-25); design revised for the bundled-toolchain change (2026-10-24).
 User-approved distribution change: ship the unmodified pinned TLC JAR and
 its upstream/third-party notices as Git-tracked plugin resources, covering
 both npm and Git marketplace installs. Selection is explicit --jar, then
