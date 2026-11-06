@@ -444,7 +444,7 @@ export function renderReleaseOutcome(outcome: ReleaseOutcome): string {
         outcome.preStatus === 'running'
           ? `Released agent ${id}: its in-flight turn was aborted and its resident activation evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk. Within this session it cannot be continued (send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
           : outcome.preStatus === 'idle'
-            ? `Released agent ${id}: its resident (idle) activation was evicted; it held no capacity slot (only running children count toward the 25-child guard). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
+            ? `Released agent ${id}: its resident (idle) activation was evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
             : `Released agent ${id}: its resident activation was evicted; any capacity slot it held is free (its running state could not be observed). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
       return prepend + body
     }

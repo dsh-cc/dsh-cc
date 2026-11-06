@@ -9,7 +9,7 @@ DeepSeek Harness. It mounts:
   session workspace's `.claude/agents` definitions;
 - the `release_agent` release valve: evicts a direct continuable child's resident
   activation (and its resident descendants') through the harness drain seam, freeing the
-  child's capacity slot when it was running. Cooperative and one-way in this session
+  child's capacity slot. Cooperative and one-way in this session
   (same-session continuation of a released child is unavailable — upstream
   cold-resume-after-drain gap); the persisted session survives. Shares the operation and
   copy set with `/agents release <id>` via `@dsh-cc/command-agents/release`, so released

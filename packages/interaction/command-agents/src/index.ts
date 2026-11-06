@@ -189,7 +189,7 @@ export function apply(ctx: Context): void {
     subcommands: [
       { word: 'detail', args: '<id>', summary: 'Show one background agent by id (the bare form lists all)' },
       { word: 'stop', args: '<id>', summary: 'Interrupt a running agent\'s current turn (the activation stays resident; "/agents release <id>" evicts it)' },
-      { word: 'release', args: '<id>', summary: 'Evict an agent\'s resident activation (and resident descendants\'), freeing its capacity slot when it was running; cooperative; one-way in this session' },
+      { word: 'release', args: '<id>', summary: 'Evict an agent\'s resident activation (and resident descendants\'), freeing the capacity slot it held; cooperative; one-way in this session' },
     ],
   }))
 }

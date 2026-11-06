@@ -43,6 +43,7 @@ Residency model (`command-agents/src/snapshot.ts:111-122`; harness
 
 - F3a. `running` — live activation, status `'running'` — **holds a guard slot**.
 - F3b. `idle` — live activation, status `'idle'` — holds NO guard slot.
+  - (Superseded by the rc.5 resident pool: idle residents DO hold a guard slot — fixed per issue #337.)
 - F3c. `ready` — no live activation; the durable catalog row persists.
 
 F1. **Cap location and counting.** `assertLiveCapacity` counts
@@ -366,6 +367,8 @@ Tool description (verbatim):
 > (the durable catalog is retained); `/agents` marks it [released] for the
 > rest of this process.
 
+> (Superseded per issue #337: evicting an idle resident frees its capacity slot.)
+
 ### D3. `/agents release <id>` — host command + TUI local slash
 
 Grammar (`snapshot.ts`): `ParsedAgentsInput` gains `{ kind: 'release'; id:
@@ -396,6 +399,7 @@ Host command (`command-agents/src/index.ts`):
 - helpable: description `list, inspect, stop, or release continuable
   background agents`; new subcommand `{ word: 'release', args: '<id>',
   summary: 'Evict an agent\'s resident activation (and resident descendants\'), freeing its capacity slot when it was running; cooperative; one-way in this session' }`; stop summary `'Interrupt a running agent\'s current turn (the activation stays resident; "/agents release <id>" evicts it)'`.
+  > (Superseded per issue #337: evicting an idle resident frees its capacity slot.)
 
 TUI (`packages/ui/tui/src/harness/driver-agents.ts`):
 - Order: after parse, the release branch runs BEFORE `agentsRows()`.
@@ -499,6 +503,8 @@ released (preStatus running):
 
 released (preStatus idle):
 `Released agent <id>: its resident (idle) activation was evicted; it held no capacity slot (only running children count toward the 25-child guard). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
+
+> (Superseded per issue #337: evicting an idle resident frees its capacity slot.)
 
 released (preStatus unknown):
 `Released agent <id>: its resident activation was evicted; any capacity slot it held is free (its running state could not be observed). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`

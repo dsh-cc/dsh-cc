@@ -118,7 +118,7 @@ codex GWC)
    (`PromotedIsBackground` establishes tier preservation, not eligibility).
 6. **P2 — a product inconsistency was found**: `release.ts:447` says idle
    residents hold no slot and only running children count, contradicting the
-   resident-slot contract (`live-capacity.ts:21-25`). Tracked as an issue.
+   resident-slot contract (`live-capacity.ts:21-25`). Tracked as an issue. Resolved by the issue #337 fix (copy now states the slot is freed).
 
 ## Modeling defects found while drafting (fixed)
 
