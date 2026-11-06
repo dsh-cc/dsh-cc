@@ -5,22 +5,37 @@ safety-only. This is the first model of the memory write path. It changes no
 production code: it pins the intended protocol and exposes six windows the
 current code leaves open, one per fault switch.
 
+**Issue #336 revision** (second revision; the first was issue #335): a
+successful dream now RELEASES the lock — the holder is cleared, the
+acquisition epoch (which doubles as lastConsolidatedAt) is kept — so the next
+dream, pressure or periodic, is gated only by its own cooldown or time gate
+and never by the stale window of a successful predecessor. New fault switch
+`KeepStampOnClear` models the pre-fix retained stamp, new invariant S-7
+`HolderLegal` pins that a recorded holder is a dream in flight or a crashed
+process, and the new `success-release` case (StaleTicks=3 > TMax: the stale
+reclaim is structurally unreachable) proves a second dream acquires through
+the release alone. The success path AWAITS the release before the marker
+clear (an ordering guarantee — fire-and-forget chains interleave), and
+`rollbackLock` gains the same guarded read-verify (a review finding: an
+unguarded rollback would free a live reclaimer's lock under the post-fix
+acquire).
+
 ## Formal design screening
 
 - mode: **auto** (session-scoped; the project rules carry no formal-design
   screening clause at this revision — session request "model the memory write
   path" 2026-11-03〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕, manual adoption snippet at
   `<skill>/references/agents-snippet.md`).
-- decision: **enabled**〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L103-L163〕
-- triggerIds: FD-T1 (two host processes share one memory directory and mutate 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L243-L355〕
+- decision: **enabled**〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L103-L178〕
+- triggerIds: FD-T1 (two host processes share one memory directory and mutate 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L254-L377〕
   the same index, topic files and lock), FD-T3 (a crash mid-batch decides
   whether the index and the topic files agree; the consolidation lock survives
   a crash and is reclaimable only through the stale window).
-- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/memory-write-lifecycle"}`〔src:ws:specs/tla/memory-write-lifecycle/design.md#L7-L20〕.
+- backends: `["tla"]`, modelDirs: `{"tla": "specs/tla/memory-write-lifecycle"}`〔src:ws:specs/tla/memory-write-lifecycle/design.md#L19-L30〕.
 - behavioural source: current code, not a plan document —
   `packages/memory/memory/src/save.ts:199-240`,
   `packages/memory/memory/src/writeback.ts:141-178`,
-  `packages/memory/memory-consolidation/src/lock.ts:71-124`,
+  `packages/memory/memory-consolidation/src/lock.ts:71-160`,
   `packages/memory/memory/src/pressure.ts:47-95`,
   `packages/memory/memory-consolidation/src/gates.ts:29-32`,
   `packages/memory/memory-consolidation/src/index.ts:300-397`,
@@ -64,6 +79,11 @@ current code leaves open, one per fault switch.
   behaviour `lock.ts:19` documents ("stale past this even if it is still
   alive"). A dream starting under `FreeTicks` must reproduce exactly that and
   nothing broader.
+- **REQ-10 (release on success, issue #336)** A completed dream leaves the
+  lock free — holder cleared, epoch kept — so the next dream is refused only
+  by a concurrent live holder, its own cooldown or the periodic time gate,
+  never by the stale window of a successful predecessor. A recorded holder is
+  legal only while its dream is in flight or its process has crashed.
 
 ## State variables
 
@@ -89,7 +109,10 @@ device); `DreamReadPressure` + `DreamStampPressure` are the real code's two
 steps (the split is enabled by the `SplitStamp` fault or by the dedicated
 `split-stamp-fixed` case, whose stamp write carries the fixed
 no-resurrect/max semantics); `DreamClear` is the conditional clear with
-truthful service accounting in both shapes.
+truthful service accounting in both shapes, plus (issue #336 fix) the guarded
+lock release — holder cleared, epoch kept, skipped when a reclaimer took the
+file (`lock.holder = p`). The release and the clear are one atomic step in
+the model; their two-write crash window in the code is E-1g.
 
 ## Coverage matrix
 
@@ -99,11 +122,12 @@ truthful service accounting in both shapes.
 | REQ-2 | the index never references a missing topic file | S-2 `NoDanglingPointer` | `NoDanglingPointer` | convention; strict-index-first (expected red) | `DreamPublishFirst` publishes the pointer, `Crash(p)` before `DreamTopicsAfter` | A-4 | `writeback.ts:174-178` sequential writes: the save batch is topic-first by construction, the dream batch order is fork-decided | crash between the index write and the topic write | — |
 | REQ-9 | the extraction fork obeys the same index discipline | S-1 via `ExtractIndex` | `NoLostSave` | strict-unlocked-extract (expected red) | an extraction write built on a pre-save snapshot publishes | A-11 | `index.ts:218-235` → `memory-job.ts:150-151` writes through `writeMemoryFiles` with no lock | a turn-end extraction racing a save | — |
 | REQ-3 | a published index respects the cap | S-3 `CapSound` | `CapSound` | convention; strict-skip-cap (expected red) | a batch whose content exceeds `MaxLines` publishes it | A-5 | `writeback.ts:141-154` gate + `memory-job.ts:76-89` truncate fallback | dream reporting an over-limit index | fail-open save into an already over-limit index is E-3 |
-| REQ-4 | an armed marker reaches a dream; the model-visible "queued" sentence is not a lie 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L237〕 | S-4 `NoLostPressure` | `NoLostPressure` | convention; split-stamp-fixed (the fixed split stamp, green); strict-split-stamp, strict-clear-without-run (expected red) | `SaveReject` arms at `t` during a running dream → the PRE-FIX `DreamClear` tombstones it without serving; the PRE-FIX stamp clobbers a between-read-and-stamp re-arm | A-6, A-7 | `pressure.ts` (issue #335 fix): `armPressure` monotone, `markPressureForced` re-reads and preserves the newer arm without resurrecting, `clearPressure` conditional on `servedArmedAt`; `index.ts` clears with the arm captured at the dream's initial read | concurrent cap rejection during a running dream; re-arm between the dream's read and its stamp | wall-clock "eventually" is L-1, excluded; the re-read-to-write residual windows are E-1b |
+| REQ-4 | an armed marker reaches a dream; the model-visible "queued" sentence is not a lie 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L180-L252〕 | S-4 `NoLostPressure` | `NoLostPressure` | convention; split-stamp-fixed (the fixed split stamp, green); strict-split-stamp, strict-clear-without-run (expected red) | `SaveReject` arms at `t` during a running dream → the PRE-FIX `DreamClear` tombstones it without serving; the PRE-FIX stamp clobbers a between-read-and-stamp re-arm | A-6, A-7 | `pressure.ts` (issue #335 fix): `armPressure` monotone, `markPressureForced` re-reads and preserves the newer arm without resurrecting, `clearPressure` conditional on `servedArmedAt`; `index.ts` clears with the arm captured at the dream's initial read | concurrent cap rejection during a running dream; re-arm between the dream's read and its stamp | wall-clock "eventually" is L-1, excluded; the re-read-to-write residual windows are E-1b |
 | REQ-5 | one consolidation per memory directory | S-5 `OneDreamer`, `HoldsLock` | same | convention | two dreams race the lock; one reclaims a stale-stamped lock | A-8 | `lock.ts:71-108` acquire = write + read-back verify | two sessions dreaming at once | the accepted sub-millisecond symmetric collision is E-2 |
 | REQ-6 | the consolidation epoch never silently regresses or advances without a run | structural (`DreamFail`) | `DreamFail` | convention | dream fails after acquiring: lock rewritten with `priorAt` | A-8 | `lock.ts:120-124` `rollbackLock` | a failed dream must not consume the cooldown epoch | E-4 |
-| REQ-7 | a crashed holder blocks, then is reclaimable; no stuck live state | structural (deadlock check + reclaim guard) | `DreamLock`, `Idle` | convention | `Crash(p1)` while holding the lock, `Tick` past `StaleTicks`, `p2` reclaims | A-8, A-9 | `lock.ts:84` stale window (1h, independent of liveness) | kill a dreaming process | — |
+| REQ-7 | a crashed holder blocks, then is reclaimable; no stuck live state | structural (deadlock check + reclaim guard) | `DreamLock`, `Idle` | crash-reclaim (`StaleTicks=1`; under quiescent ticks the stale arm is unreachable in `convention` — see the bounds note) | `Crash(p1)` while holding the lock, `Tick` past `StaleTicks`, `p2` reclaims | A-8, A-9 | `lock.ts:84` stale window (1h, independent of liveness) | kill a dreaming process | — |
 | REQ-8 | only the declared stale-window preemption breaks exclusivity | S-6 `OneDreamer` under `FreeTicks` | `OneDreamer` | convention (ticks quiescent); strict-live-preemption (expected red) | `DreamStampPeriodic` → `DreamLock` reclaims a live holder whose stamp passed the window | A-10 | `lock.ts:19` stale window is time-based, not PID-based | a dream longer than the window | a dream of minutes against 1h is why ticks are quiescent by default (A-12) |
+| REQ-10 | a completed dream leaves the lock free; the next dream is gated only by its own cooldown/time gate, never by a successful predecessor's stale window | S-7 `HolderLegal` | `HolderLegal` | convention; success-release (StaleTicks=3 > TMax, so acquisition can only go through the release); strict-keep-stamp (expected red) | `DreamClear` with `KeepStampOnClear` leaves the holder stamped after completion → the next pressure dream, past its own cooldown, is `DreamBlocked` until the stale window passes | A-8, A-13 | `lock.ts` `releaseLock` (guarded read-verify rewrite, holder→0, epoch kept) called before `clearPressure` in both success branches (`index.ts`); `tryAcquireLock` treats holder 0 as free | a successful dream followed by a pressure dream past its cooldown inside the stale window | the release/clear two-write window is E-1g; a failed release write is E-1h (best-effort cleanup) |
 
 ## Assumptions
 
@@ -127,8 +151,29 @@ truthful service accounting in both shapes.
   are strictly increasing (the monotone arm, `armPressure`'s
   `max(now, previous + 1)`), so same-timestamp collisions cannot alias two
   arms; the residual re-read-to-write windows are excluded as E-1b.
-- **A-8** The lock file's stored epoch is the sole staleness signal; PID
-  liveness is not consulted (`lock.ts:19`).
+- **A-8** The lock file's stored epoch is the sole staleness signal for a
+  RECORDED holder; PID liveness is not consulted (`lock.ts:19`). A released
+  lock (holder 0) is free regardless of its epoch — the epoch doubles as
+  lastConsolidatedAt, which the periodic time gate reads. Corollary: a FAILED
+  dream no longer fences the next dream on a fresh `priorAt` (the rollback's
+  released form is free; only a foreign recorded holder blocks).
+- **A-13** (issue #336 fix revision) The success-path release is a guarded
+  read-verify-write: it rewrites the file to the released form (holder 0,
+  epoch kept) only when the content still carries exactly this holder+epoch;
+  a stale-window reclaimer that took the file mid-dream owns it and the
+  release is skipped. In the model this is the `lock.holder = p` arm of
+  `DreamClear`; the residual re-read window is the same accepted class as
+  E-1b. The rollback (`DreamFail`) carries the same guard. The content
+  equality can alias a PID-reusing process that acquired at the identical
+  epoch millisecond — the same accepted class as E-2. Abstraction
+  boundary: the model's `lock.holder = p` check stands for the code's full
+  content equality (holder AND epoch) and assumes one outstanding acquisition
+  per process; in the code the dispatch flag can reset while an earlier
+  `job.done` callback is still pending, so the same PID may re-acquire at a
+  NEW epoch while the old callback is outstanding — the epoch comparison
+  makes the old callback's release/rollback skip (the new acquisition is not
+  ours to free), which the one-acquisition model cannot represent. Pinned by
+  a same-PID-reacquire regression test.
 - **A-9** Logical ticks stand for the 1h stale window / 60m cooldown / periodic
   time gate; the model does not claim real durations.
 - **A-10** The index revision is a faithful stand-in for byte equality: any
@@ -155,6 +200,9 @@ truthful service accounting in both shapes.
 | `SplitStamp` | the PRE-FIX stamp write: the split read-then-stamp whose write carries the CAPTURED arm (clobbering a concurrent re-arm and resurrecting tombstones) | strict-split-stamp |
 | `AtomicPressureEntry` | scheduling only: `TRUE` keeps the convention's atomic pressure entry (state-space budget); the dedicated `split-stamp-fixed` case sets it `FALSE` so the FIXED split stamp semantics are checked across the real read-to-stamp gap | split-stamp-fixed |
 | `FreeTicks` | the clock advancing inside a critical section (live-holder preemption) | strict-live-preemption |
+| `KeepStampOnClear` | the PRE-FIX completion path: the dream keeps the holder and epoch stamped in the lock file, so the epoch-only stale check blocks the next dream until the window passes (issue #336). Fidelity limit: `DreamBlocked` excludes the same holder, so
+the probe pins the safety violation at `DreamClear` itself, not the
+blocked-retry shape production also shows | strict-keep-stamp |
 
 ## Bounds
 
@@ -162,6 +210,28 @@ Two processes, three candidate names, `MaxLines=2`, `StaleTicks=2`,
 `CooldownTicks=1`, `MinTicks=1`, `TMax=2`, `Revs=3`, 2048 MiB — and a shortened stale window in the two lock-focused cases, so the reclaim is reachable inside the tick budget〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L13-L24〕. Two processes are the
 minimum that exposes a cross-process write race; three names let a dream exceed
 the cap of two, and let a compaction free room for a save during a dream.
+
+Bounds note (review finding): under quiescent ticks the stale reclaim is
+dead in `convention` itself — every acquisition stamps `at = now >= 1` (the
+entry gates force at least one tick), so `now >= at + StaleTicks` with
+`StaleTicks=2` needs `now >= 3 > TMax`. `crash-reclaim` (`StaleTicks=1`) is
+therefore the ONLY case exercising the stale window, and `success-release`
+is a CONDITIONAL structural certificate (its DISTINCT-state count matches
+the convention's exactly — 10,926,712; the generated count differs by 65,634
+of ~63M, a fringe-ordering artifact of the different case orderings): it
+establishes safety under the stale arm disabled, not the reachability of a
+second acquisition — that reachability witness is the code regression (a
+completed dream, then a pressure dream past its cooldown acquiring within
+the stale window), not a TLC property.
+
+Issue #336 revision adjustments: `DreamClear` now also updates `lock` (the
+guarded release), which adds states only where `DreamClear` fires — the
+released form (holder `"none"`, fresh epoch) already existed via `DreamFail`.
+The new `strict-keep-stamp` probe runs at `Revs=3` (probe budget, like the
+other strict cases) and checks only `TypeOK` + `HolderLegal`. The new
+`success-release` case runs the convention shape at `StaleTicks=3` — above
+`TMax=2`, so `now >= lock.at + StaleTicks` is unsatisfiable and any second
+acquisition provably went through the release, not the stale reclaim.
 
 Issue #335 revision adjustments: the monotone-arm domain widening (E-1f) costs
 roughly 30% more convention states, so the convention's revision budget drops
@@ -207,6 +277,29 @@ revision-heavy lost-save traces the probes already cover).
 - **E-1c** the pressure-mode zero-scan return between the stamp and the lock
   (`index.ts:320-323`) and the failed-outcome bounded retry reusing the held
   lock (`index.ts:376-396`): reachable behaviours that change no property.
+- **E-1g** (issue #336 fix revision) the release and the clear are two
+  writes with a crash window between them. The release runs FIRST and is
+  AWAITED (a `void` fire-and-forget pair interleaves, so only an awaited
+  release enforces the order), so a crash
+  between them leaves an armed marker with a free lock — the next cooldown
+  window retries the dream, which is conservative (an extra dream, never a
+  lost arm). A crash before the release leaves the holder stamped, which the
+  stale window reclaims as before. Ordinary interleavings (no crash) are
+  excluded the same way — the model folds the release and the clear into one
+  atomic step. The real residual is the crash window above (armed marker,
+  free lock). Two further notes for honesty: a second dream entering between
+  the awaited release and the clear requires a cooldown/time gate that is
+  already open at that instant (with the default 60m/24h gates this window
+  is effectively empty), and the release's own read-then-write gap can still
+  write `format(0, at)` over a reclaimer that landed inside it — the same
+  accepted class as A-13/E-2.
+- **E-1h** (issue #336 fix revision) the release (and the guarded rollback)
+  are best-effort cleanup I/O: REQ-10 is scoped to a SUCCESSFUL release
+  write. A release write that fails (or whose read-verify throws) leaves the
+  holder stamped with the marker already cleared — the #336 delay shape,
+  bounded by the stale window and self-healing exactly like a crashed holder.
+  Pinned by a failure-injection test (a write-throwing fs seam leaves the
+  lock untouched; the dream still counts as completed).
 - **E-1** torn `fs.writeText` output: the fs seam exposes no rename and no
   partial-write visibility, so a torn file is not modelable at this layer
   (A-1).
@@ -218,9 +311,14 @@ revision-heavy lost-save traces the probes already cover).
   (`save.ts:203-222`): unreachable while every writer respects the cap, which
   the convention case pins; the behaviour itself is covered by
   `save.spec.ts:203`.
-- **E-4** the consolidation-epoch rollback is a single guarded write with no
-  interleaving of its own; modeled as `DreamFail`, pinned by
-  `dream-diagnostics.spec.ts:198`.
+- **E-4** the consolidation-epoch rollback is a single guarded write with
+  no interleaving of its own beyond the shared read-verify window (A-13);
+  modeled as `DreamFail`. The pre-#336 pin at `dream-diagnostics.spec.ts:198`
+  asserted the PRE-FIX fence (a rolled-back lock with a fresh epoch blocking
+  the next acquire) — the fix reverses that behaviour, so the pin is REPLACED
+  by: seed the acquirer's exact `format(pid, at)`, roll back, assert the file
+  became `format(0, priorAt)` and an in-window acquire returns `priorAt`;
+  plus a mismatch case that leaves a foreign holder's file untouched.
 - **E-5** truncation arithmetic (which lines the fallback keeps) is
   deterministic, covered by `truncate.spec.ts:94`.
 - **E-6** batch confinement (flat `.md` names, no path segments) is pure string
@@ -245,6 +343,7 @@ revision-heavy lost-save traces the probes already cover).
 | S-4 | `armPressure` re-read, `pressure.ts:79-86`; clear carries no arm identity | `save.spec.ts:276-327` |
 | S-5 | `tryAcquireLock` + read-back verify | `lock.spec.ts:105-148` |
 | S-6 | stale window, `lock.ts:19` | `lock.spec.ts:148` |
+| S-7 | `releaseLock` guarded rewrite + `tryAcquireLock` holder-0 free path, both success branches of `index.ts` | `lock.spec.ts` (released-lock acquisition within the stale window; released content is EXACTLY `format(0, at)` — the epoch is kept, pinning the periodic gate's `lastConsolidatedAt`; guarded release skips on content change; guarded rollback), dream outcome spec (successful dream leaves the lock released) |
 | REQ-6 | `rollbackLock` | `dream-diagnostics.spec.ts:126-231` |
 
 ## Open questions (not decided by this model)
@@ -259,15 +358,19 @@ revision-heavy lost-save traces the probes already cover).
    dream may rewrite a large batch?
 5. Should the stale window be PID-aware so a live but slow dream is not
    preempted (REQ-8 / `strict-live-preemption`)?
-6. `DreamClear` carries an arm-identity guard, so once a save re-arms the
-   marker during a running dream the dream cannot clear: it must take the
-   `DreamFail` rollback instead. That is conservative (the code clears
-   unconditionally, which is exactly what `strict-clear-without-run` exposes),
-   but it means the convention case never exercises "clear after a re-arm" and
-   S-4 green partly rides on the rollback escape hatch.
-7. The model stamps the cooldown reference at the clear time; the code passes
-   the dream's start epoch to `clearPressure` (`index.ts:301,367`), so its
-   cooldown restart is slightly shorter than modeled. The model's direction is
-   conservative.
+6. ~~`DreamClear` carries an arm-identity guard…~~ — resolved by the issue
+   #335 fix: the code now clears conditionally on the captured arm, so the
+   model and the code agree. Historical.
+7. ~~The code passes the dream's start epoch to `clearPressure`…~~ —
+   resolved by the issue #335 fix: the code now passes the completion time.
+   The model's direction remains conservative. Historical.
+8. ~~`rollbackLock` rewrites the lock unconditionally~~ — resolved in this
+   revision (review finding): under the post-fix acquire, a `format(0, priorAt)`
+   clobber of a stale reclaimer's file would FREE a lock under a live dreamer
+   (holder 0 is free by definition), a mutual-exclusion break the pre-fix
+   epoch-only acquire accidentally did not have. `rollbackLock` now carries
+   the same guarded read-verify as `releaseLock` (it rewrites only while the
+   file still holds exactly the acquirer's pid+epoch), and the model's
+   `DreamFail` carries the matching `lock.holder = p` guard.
 
 Counterexample dispositions are recorded in `implementation.md`.

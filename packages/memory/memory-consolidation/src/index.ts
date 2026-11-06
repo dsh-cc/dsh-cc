@@ -25,7 +25,7 @@ import { defaultDshHome } from '@deepseek-ai/dsh-home-paths'
 import { buildConsolidationPrompt, buildExtractionPrompt } from './prompts.ts'
 import { timeGatePasses, sessionGatePasses } from './gates.ts'
 import { gateWindow, scanSessions, type SessionScanResult } from './session-scan.ts'
-import { readLastConsolidatedAt, rollbackLock, tryAcquireLock, LOCK_STALE_MS } from './lock.ts'
+import { readLastConsolidatedAt, releaseLock, rollbackLock, tryAcquireLock, LOCK_STALE_MS } from './lock.ts'
 import { startMemoryJob } from './memory-job.ts'
 import { recordDreamDiagnostic } from './diagnostics.ts'
 export { applyEntrypointFallback } from './memory-job.ts'
@@ -38,7 +38,7 @@ import {
   clearPressure,
 } from '@dsh-cc/memory'
 
-export { LOCK_FILE, LOCK_STALE_MS, readLastConsolidatedAt, rollbackLock, tryAcquireLock } from './lock.ts'
+export { LOCK_FILE, LOCK_STALE_MS, readLastConsolidatedAt, releaseLock, rollbackLock, tryAcquireLock } from './lock.ts'
 export { gatesPass, timeGatePasses, sessionGatePasses } from './gates.ts'
 export type { ConsolidationGateInput } from './gates.ts'
 export { MEMORY_AGENT_TOOLS, MEMORY_TOOL_FILTER } from './tools.ts'
@@ -363,6 +363,16 @@ async function runDream(
     void job.done.then(async (outcome) => {
       ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
       if (outcome.status === 'completed') {
+        // Success releases the lock BEFORE clearing the marker (issue #336),
+        // and AWAITs it: void fire-and-forget chains interleave, so only an
+        // awaited release guarantees the marker clear never lands first. A
+        // crash between the two writes then leaves an armed marker with a
+        // free lock — the next cooldown window retries, which is
+        // conservative. The reverse order would leave the marker tombstoned
+        // with the lock still stamped: the exact stale-window delay this fix
+        // removes. The release is guarded (skipped when a reclaimer took the
+        // file mid-dream) and best-effort (failures are swallowed inside).
+        await releaseLock(fs, dir, process.pid, now, policy)
         // Success tombs the marker in BOTH modes — but only the arms this
         // dream's rebuild addressed (issue #335 Face B): the clear is
         // conditional on `pressure.armedAt` (captured at the dream's initial
@@ -384,7 +394,7 @@ async function runDream(
       // whole retry block gets its OWN try/catch mirroring the dispatch-throw
       // branch: a throw inside the retry must never strand the lock.
       if (outcome.status !== 'failed') {
-        void rollbackLock(fs, dir, priorAt, policy)
+        void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
         return
       }
       try {
@@ -392,6 +402,10 @@ async function runDream(
         void retry.done.then(async (retryOutcome) => {
           ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
           if (retryOutcome.status === 'completed') {
+            // Same guarded, awaited release as the first attempt: the retry
+            // reuses the ORIGINAL lock, so the same pid+epoch pair is still
+            // ours to free.
+            await releaseLock(fs, dir, process.pid, now, policy)
             // Same conditional clear as the first attempt: the retry reuses
             // the ORIGINAL captured arm (the retry's fork re-reads the
             // directory, so an arm older than a fresh capture is at worst
@@ -404,19 +418,21 @@ async function runDream(
             phase: 'outcome-failed',
             detail: `retry ${retryOutcome.status === 'failed' ? retryOutcome.detail : retryOutcome.status}`,
           })
-          void rollbackLock(fs, dir, priorAt, policy)
+          void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
         })
       } catch (err) {
         const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
         await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'outcome-failed', detail: `retry ${detail}` })
-        await rollbackLock(fs, dir, priorAt, policy)
+        await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
         ctx.logger.warn(`memory-consolidation: dream retry failed: ${detail}`)
       }
     })
   } catch (err) {
+    // The dispatch-throw branch: the same guarded rollback with the acquire
+    // identity (process.pid + the acquisition epoch `now`).
     const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
     await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-throw', detail })
-    await rollbackLock(fs, dir, priorAt, policy)
+    await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
     ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${detail}`)
   }
 }

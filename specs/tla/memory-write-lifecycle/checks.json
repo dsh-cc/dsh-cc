@@ -23,7 +23,8 @@
         "Revs": "2",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -32,7 +33,8 @@
         "CapSound",
         "NoLostPressure",
         "OneDreamer",
-        "HoldsLock"
+        "HoldsLock",
+        "HolderLegal"
       ],
       "properties": [],
       "limits": {
@@ -60,7 +62,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -92,7 +95,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -124,7 +128,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -156,7 +161,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "TRUE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -188,7 +194,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -220,7 +227,8 @@
         "Revs": "3",
         "SplitStamp": "TRUE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -252,7 +260,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -284,7 +293,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -316,7 +326,8 @@
         "Revs": "3",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -348,12 +359,14 @@
         "Revs": "1",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "TRUE"
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
         "OneDreamer",
-        "HoldsLock"
+        "HoldsLock",
+        "HolderLegal"
       ],
       "properties": [],
       "limits": {
@@ -381,7 +394,8 @@
         "Revs": "2",
         "SplitStamp": "FALSE",
         "MissingTopic": "FALSE",
-        "AtomicPressureEntry": "FALSE"
+        "AtomicPressureEntry": "FALSE",
+        "KeepStampOnClear": "FALSE"
       },
       "invariants": [
         "TypeOK",
@@ -390,7 +404,80 @@
         "CapSound",
         "NoLostPressure",
         "OneDreamer",
-        "HoldsLock"
+        "HoldsLock",
+        "HolderLegal"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "strict-keep-stamp",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "2",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "3",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "HolderLegal"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 2048
+      }
+    },
+    {
+      "id": "success-release",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "UnlockedSave": "FALSE",
+        "DreamNoCas": "FALSE",
+        "DreamIndexFirst": "FALSE",
+        "UnlockedExtract": "FALSE",
+        "ClearWithoutRun": "FALSE",
+        "SkipCap": "FALSE",
+        "FreeTicks": "FALSE",
+        "MaxLines": "2",
+        "StaleTicks": "3",
+        "CooldownTicks": "1",
+        "MinTicks": "1",
+        "TMax": "2",
+        "Revs": "2",
+        "SplitStamp": "FALSE",
+        "MissingTopic": "FALSE",
+        "AtomicPressureEntry": "TRUE",
+        "KeepStampOnClear": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostSave",
+        "NoDanglingPointer",
+        "CapSound",
+        "NoLostPressure",
+        "OneDreamer",
+        "HoldsLock",
+        "HolderLegal"
       ],
       "properties": [],
       "limits": {

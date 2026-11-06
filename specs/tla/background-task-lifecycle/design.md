@@ -2,18 +2,18 @@
 
 Formal model of the memory-consolidation dream background task: one dream
 window from lock acquisition through at most one retry to its terminal
-outcome, under cancellation, child failures and write-back faults.
+outcome, under cancellation, child failures and write-back faults. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L1-L7〕
 
 ## Formal design
 
 - mode: auto
 - decision: enabled
-- triggerIds: FD-T1, FD-T2
+- triggerIds: FD-T1, FD-T2 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L39-L108〕
 - rationale: the dream outcome-mapping handler reads the abort flag and the
   child result, then performs an async host-side write-back — independent
   actors (fork child, aborting caller) change shared state where event
-  ordering (cancel vs completion vs retry) determines the final outcome.
-- modelDir: specs/tla/background-task-lifecycle
+  ordering (cancel vs completion vs retry) determines the final outcome. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L390-L412〕
+- modelDir: specs/tla/background-task-lifecycle 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L1-L7〕
 - userDirective: "使用 formal-design，对当前后台任务的取消、完成和重试行为建立形式化模型…重点检查：取消被接受后迟到的完成消息；重试后旧 attempt 的结果；取消与完成不同顺序。不要修改生产代码；发现语义歧义先问。" (target system confirmed by the user: the memory dream task, packages/memory/memory-consolidation.)
 
 ## Requirements (restated from code and tests, not assumed)
@@ -23,129 +23,133 @@ The dream background task (`runDream` → `startMemoryJob`, at most one retry):
 - R-1 (Q1 — late completion after accepted cancel): once cancel is accepted
   while the fork result has not yet settled, the arriving completion message
   is neutralized: the attempt's outcome is `killed`, no memory write is
-  performed by that completion, and the window ends cancelled.
+  performed by that completion, and the window ends cancelled. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L415-L418〕
 - R-2 (Q2 — old attempt cannot complete the retry): the retry attempt's
   outcome is determined only by the retry's own child result and its own
   abort state; the first attempt's result cannot complete the retry, and a
   successful window attributes its durable write to the attempt that
-  performed it.
+  performed it. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L123-L126〕
 - R-3 (Q3 — order conformance): cancel-first ⇒ final `cancelled` with lock
   rolled back and no respawn; completion processed with the abort flag unset
-  ⇒ final `success` with the lock committed and the pressure marker cleared,
-  and no later abort rewrites it; a failed attempt ⇒ exactly one retry
+  ⇒ final `success` with the lock released (holder cleared, epoch kept as
+  lastConsolidatedAt) and the pressure marker cleared, and no later abort
+  rewrites it; a failed attempt ⇒ exactly one retry
   reusing the held lock; a failed retry or a retry-dispatch throw ⇒ final
   `failed` with rollback and no third attempt; a killed attempt never
-  respawns.
+  respawns. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L39-L108〕
 - R-4: attempts stay bounded: `attempt ≤ MaxAttempts`, `respawns ≤
-  MaxAttempts − 1`.
+  MaxAttempts − 1`. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L240-L242〕
 - R-1′ (candidate requirement, probed): cancel accepted at ANY time before
   the outcome commits excludes completion.
 - R-2′ (candidate requirement, probed): a cancelled window performed no
-  durable writes.
+  durable writes. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L270-L272〕
 
 R-1′/R-2′ are not claims about the current code; they are the stricter
 contracts the user asked to check. The `strict-cancel-window` and `strict-cancel-write` cases probe them and is
 expected to produce counterexamples; those counterexamples are findings to
-adjudicate, not model defects to patch away.
+adjudicate, not model defects to patch away. 〔src:ws:specs/tla/background-task-lifecycle/checks.json#L1-L62〕
 
 ## State, actions and atomicity
 
 State: `final`, `attempt`, `phase` (idle/running/mapping/writing/settled),
 `childState`, `aborted`, `abortBeforeSettle`, `readAborted`, `outcome`,
-`writesPerformed`/`writeAttempt`, `respawns`, `lock`, `markerCleared`.
+`writesPerformed`/`writeAttempt`, `respawns`, `lock`, `markerCleared`. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L37-L58〕
 
 Actions and their real transactions:
 
-- `StartDream` ↔ gates pass + `tryAcquireLock` (index.ts:339 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L26-L29〕, lock.ts:71-108 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L116-L156〕).
+- `StartDream` ↔ gates pass + `tryAcquireLock` (index.ts:343 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L27-L30〕, lock.ts:84-129 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L139-L187〕).
   The lock acquire is read+write+read-back-verify; the code itself documents
   a sub-millisecond residual TOCTOU accepted with stale-window reclaim
-  (lock.ts:93-99 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L218-L227〕). Modeled as atomic; the residual is excluded (A-6).
+  (lock.ts:114-120 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L299-L308〕). Modeled as atomic; the residual is excluded (A-6).
 - `ChildSettles` ↔ the fork's `run.result` promise settling with
   `stopReason` completed / a child-level error / an infrastructure rejection
-  (memory-job.ts:122-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L256-L295〕). One settlement per attempt (A-3).
+  (memory-job.ts:122-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L348-L387〕). One settlement per attempt (A-3).
 - `Abort` ↔ `controller.abort()` via `job.abort(reason)` or the per-agent
-  disposal effect (memory-job.ts:141 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L323-L326〕, 165-171). Targets only the current
+  disposal effect (memory-job.ts:141 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L415-L418〕, 165-171). Targets only the current
   attempt: each `startMemoryJob` call creates a fresh controller, so the
   original job handle cannot abort a retry (finding F-5 in
   implementation.md).
-- `RunHandler` ↔ the `done` outcome mapping (memory-job.ts:139-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L298-L320〕): reads
+- `RunHandler` ↔ the `done` outcome mapping (memory-job.ts:139-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L390-L412〕): reads
   `controller.signal.aborted` FIRST (synchronous), then the child result,
   then awaits validation and the write-back. **The abort read and the
   write-back are separate steps — this is the modeled non-atomicity; it is
   the real structure, not an abstraction choice.**
 - `WriteCommit`/`WriteThrow` ↔ `validateMemoryWrites` + `writeMemoryFiles`
-  (memory-job.ts:148-154 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L329-L338〕; @dsh-cc/memory writeback.ts). `writeMemoryFiles`
+  (memory-job.ts:148-154 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L421-L430〕; @dsh-cc/memory writeback.ts). `writeMemoryFiles`
   writes files in a per-file loop — non-atomic; a throw mid-loop leaves
   partial durable writes (`WriteThrow`, fault F-3).
-- `HandleOutcome` ↔ the index.ts outcome dispatch (index.ts:353-397 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L38-L85〕):
-  completed ⇒ `clearPressure` + keep the success stamp; killed ⇒
-  `rollbackLock(priorAt)`, never respawn; failed ⇒ exactly one retry spawn
-  (same prompt, same lock, fresh controller — index.ts:377 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L100-L103〕) or the retry
-  dispatch throws (F-4, index.ts:391-395 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L106-L113〕); failed at the bound ⇒ rollback.
+- `HandleOutcome` ↔ the index.ts outcome dispatch (index.ts:363-429 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L39-L108〕):
+  completed ⇒ awaited `releaseLock` + `clearPressure` (the lock is released,
+  epoch kept); killed ⇒ `rollbackLock(priorAt)`, never respawn; failed ⇒
+  exactly one retry spawn
+  (same prompt, same lock, fresh controller — index.ts:401 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L123-L126〕) or the retry
+  dispatch throws (F-4, index.ts:423-427 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L129-L136〕); failed at the bound ⇒ rollback.
 - `TerminalStutter` keeps terminal states total under CHECK_DEADLOCK TRUE.
 
 ## Properties, assumptions and faults
 
-- S-0 / TypeOK: all variables stay in their declared finite domains.
-- S-1 / AttemptBound (R-4): bounded attempts and respawns.
+- S-0 / TypeOK: all variables stay in their declared finite domains. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L226-L238〕
+- S-1 / AttemptBound (R-4): bounded attempts and respawns. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L240-L242〕
 - S-2 / LateCompleteCannotComplete (R-1): `abortBeforeSettle ⇒ outcome ≠
-  "completed"`.
+  "completed"`. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L244-L246〕
 - S-3 / KilledStable (R-3): `final = "cancelled" ⇒ lock = "rolled-back"`.
   No respawn after killed is structural (the killed branch of
   HandleOutcome never spawns) and pinned by
-  dream-diagnostics.spec.ts:294 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L403-L406〕.
-- S-4 / SuccessCommits (R-2, R-3): success ⇒ lock committed, the clear
-  step ran (the marker is tombstoned unless an arm newer than the dream's
+  dream-diagnostics.spec.ts:312 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L506-L509〕.
+- S-4 / SuccessCommits (R-2, R-3): success ⇒ lock released (holder cleared,
+  the acquisition epoch kept as lastConsolidatedAt — the model's `committed`
+  lock state), the clear step ran (the marker is tombstoned unless an arm
+  newer than the dream's
   captured `servedArmedAt` survived it — the arm-identity condition is owned
   by `specs/tla/memory-write-lifecycle`, which models the marker protocol;
   this model keeps the marker as a boolean abstraction), write performed by
-  the final attempt.
+  the final attempt. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L251-L257〕
 - S-5 / FinalWriteFromFinalAttempt (R-2): `writeAttempt ≤ attempt` (a
-  recorded write is never attributed to a future attempt).
+  recorded write is never attributed to a future attempt). 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L259-L261〕
 - S-6 / StrictNoCompleteAfterAbort (R-1′, probe): `aborted ⇒ outcome ≠
-  "completed" ∧ final ≠ "success"`.
+  "completed" ∧ final ≠ "success"`. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L264-L267〕
 - S-7 / StrictCancelledNoWrite (R-2′, probe): `final = "cancelled" ⇒
-  ¬writesPerformed`.
+  ¬writesPerformed`. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L270-L272〕
 - L-0: liveness excluded. Nothing obliges the fork to settle, the caller to
   abort, or the scheduler to run the handler; no fairness is added merely to
-  terminate a safety exploration.
+  terminate a safety exploration. 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L218-L223〕
 - A-1: MaxAttempts is a positive natural (ASSUME); both cases set it to 2 —
-  the code allows exactly one retry (index.ts:366-372 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L88-L97〕).
+  the code allows exactly one retry (index.ts:390-396 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L111-L120〕).
 - A-2: the handler's abort read is one synchronous step; the write-back is a
-  later async step. Justified by memory-job.ts:139-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L298-L320〕 (single synchronous
+  later async step. Justified by memory-job.ts:139-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L390-L412〕 (single synchronous
   read of `controller.signal.aborted`, then `await writeMemoryFiles`).
 - A-3: exactly one child settlement per attempt, and the retry spawns only
   inside `job.done.then` — causally after the first attempt's outcome
-  resolved (index.ts:353 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L32-L35〕, 377). A late second result from the old attempt is
+  resolved (index.ts:363 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L33-L36〕, 401). A late second result from the old attempt is
   structurally impossible; this assumption is the code's promise-chain
   structure, not a generosity.
 - A-4: dream admission (gates, pressure cooldown, `dreamInFlight`
   single-flight, cross-process lock contention) is environment. A
   lock-blocked start has no lifecycle to model. Note the observed subtlety:
   `dreamInFlight` resets when `runDream` returns (at spawn time, not job
-  settle — index.ts:181-183 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L18-L23〕), so concurrent windows are prevented by the
+  settle — index.ts:182-184 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L19-L24〕), so concurrent windows are prevented by the
   LOCK, not the flag; any concurrent second window blocks at
   `tryAcquireLock` and ends without a lifecycle.
 - A-5: best-effort I/O failures of `clearPressure` and `rollbackLock`
-  itself (swallowed, void) are excluded; their success is assumed.
-- A-6: the lock acquire's residual TOCTOU (lock.ts:93-99 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L218-L227〕) is excluded; a
+  itself (swallowed, void) are excluded; their success is assumed. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L311-L339〕
+- A-6: the lock acquire's residual TOCTOU (lock.ts:114-120 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L299-L308〕) is excluded; a
   stolen lock is outside this window's lifecycle.
 - F-1: cancel may be accepted at any point relative to child settlement and
-  outcome evaluation (both competing orders).
-- F-2: the child may settle as completed / error stopReason / rejection.
-- F-3: the write-back may throw mid-loop leaving partial durable writes.
-- F-4: the retry dispatch itself may throw.
+  outcome evaluation (both competing orders). 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L415-L418〕
+- F-2: the child may settle as completed / error stopReason / rejection. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L390-L412〕
+- F-3: the write-back may throw mid-loop leaving partial durable writes. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L421-L430〕
+- F-4: the retry dispatch itself may throw. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L129-L136〕
 
 ## Planned coverage and correspondence
 
 | Requirement ID | Business outcome | Property ID | TLA operator | Case IDs and bounds | Fault-or-race trace | Assumption IDs | Planned code symbol and atomicity mechanism | Regression scenario | Exclusion and justification |
 |---|---|---|---|---|---|---|---|---|---|
-| R-1 | Late completion after accepted cancel cannot complete | S-2 | LateCompleteCannotComplete | convention (core), MaxAttempts=2 | Start → Abort(running) → ChildSettles(completed) → RunHandler | A-1, A-2, A-3 | done mapping aborted-first read (memory-job.ts:141 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L323-L326〕); single sync read then branch | turn-stopping.spec.ts:284-293 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L483-L495〕 (aborted before result rejects ⇒ killed); memory-job-silence.spec.ts:96-118 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L415-L440〕 (disposal abort ⇒ killed) | External effects of the fork itself excluded — the fork holds no write tools (index.ts:8-12 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L8-L15〕); host-side write-back is the only durable effect and is modeled |
-| R-2 | Old attempt's result cannot complete the retry; success attributes its write to the final attempt | S-4, S-5 | SuccessCommits, FinalWriteFromFinalAttempt | convention (core), MaxAttempts=2 | Start → ChildSettles(error) → HandleOutcome(retry) → attempt-1 events are dead | A-1, A-3 | retry spawned inside job.done.then with fresh controller (index.ts:377 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L100-L103〕; memory-job.ts:117 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L250-L253〕); writeAttempt tagged at WriteCommit/WriteThrow | dream-diagnostics.spec.ts:233-258 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L353-L381〕 (fail + retry completes: same lock, two spawns) | File-content interleaving unmodeled: writesPerformed is a flag, not per-file state (sufficient for R-2′'s probe; see critical abstractions) |
-| R-3 | Cancel/complete orders conform to the convention | S-3, S-4 | KilledStable, SuccessCommits | convention (core), MaxAttempts=2 | cancel-first: Start → Abort → ChildSettles → killed/rollback; complete-first: Start → ChildSettles(completed) → RunHandler → WriteCommit → success; failed: Start → ChildSettles(error) → retry → (complete / fail / throw / kill) | A-1, A-2, A-4 | index.ts:353-397 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L38-L85〕 outcome dispatch; killed ⇒ rollbackLock no respawn; failed ⇒ one retry; completed ⇒ clearPressure + success stamp | dream-diagnostics.spec.ts:260-273 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L384-L400〕 (retry fails ⇒ rollback, no third), :275-292 (retry dispatch throw ⇒ rollback), :294-309 (no retry on killed); lock.spec.ts:148 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L409-L412〕 (killed leaves reclaimable lock) | clearPressure/rollbackLock I/O failures (A-5); lock-acquire TOCTOU (A-6) |
-| R-4 | Bounded attempts | S-1, S-0 | AttemptBound, TypeOK | convention (core), MaxAttempts=2 | retry at the bound → failed; counters never exceed 2 | A-1 | retry guard `attempt < MaxAttempts` maps to the code's single-retry structure (index.ts:366-372 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L88-L97〕, 377) | dream-diagnostics.spec.ts:260-273 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L384-L400〕 (exactly two spawns) | Arbitrary attempt counts excluded — the code retries at most once by construction |
+| R-1 | Late completion after accepted cancel cannot complete | S-2 | LateCompleteCannotComplete | convention (core), MaxAttempts=2 | Start → Abort(running) → ChildSettles(completed) → RunHandler | A-1, A-2, A-3 | done mapping aborted-first read (memory-job.ts:141 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L415-L418〕); single sync read then branch | turn-stopping.spec.ts:295-304 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L590-L602〕 (aborted before result rejects ⇒ killed); memory-job-silence.spec.ts:96-118 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L518-L543〕 (disposal abort ⇒ killed) | External effects of the fork itself excluded — the fork holds no write tools (index.ts:8-12 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L9-L16〕); host-side write-back is the only durable effect and is modeled |
+| R-2 | Old attempt's result cannot complete the retry; success attributes its write to the final attempt | S-4, S-5 | SuccessCommits, FinalWriteFromFinalAttempt | convention (core), MaxAttempts=2 | Start → ChildSettles(error) → HandleOutcome(retry) → attempt-1 events are dead | A-1, A-3 | retry spawned inside job.done.then with fresh controller (index.ts:401 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L123-L126〕; memory-job.ts:117 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L342-L345〕); writeAttempt tagged at WriteCommit/WriteThrow | dream-diagnostics.spec.ts:240-276 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L445-L484〕 (fail + retry completes: same lock, two spawns) | File-content interleaving unmodeled: writesPerformed is a flag, not per-file state (sufficient for R-2′'s probe; see critical abstractions) |
+| R-3 | Cancel/complete orders conform to the convention | S-3, S-4 | KilledStable, SuccessCommits | convention (core), MaxAttempts=2 | cancel-first: Start → Abort → ChildSettles → killed/rollback; complete-first: Start → ChildSettles(completed) → RunHandler → WriteCommit → success; failed: Start → ChildSettles(error) → retry → (complete / fail / throw / kill) | A-1, A-2, A-4 | index.ts:363-429 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L39-L108〕 outcome dispatch; killed ⇒ rollbackLock no respawn; failed ⇒ one retry; completed ⇒ awaited releaseLock + clearPressure (lock released, epoch kept) | dream-diagnostics.spec.ts:278-291 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L487-L503〕 (retry fails ⇒ rollback, no third), :293-310 (retry dispatch throw ⇒ rollback), :312-327 (no retry on killed); lock.spec.ts:270 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L512-L515〕 (killed leaves reclaimable lock) | clearPressure/rollbackLock I/O failures (A-5); lock-acquire TOCTOU (A-6) |
+| R-4 | Bounded attempts | S-1, S-0 | AttemptBound, TypeOK | convention (core), MaxAttempts=2 | retry at the bound → failed; counters never exceed 2 | A-1 | retry guard `attempt < MaxAttempts` maps to the code's single-retry structure (index.ts:390-396 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L111-L120〕, 401) | dream-diagnostics.spec.ts:278-291 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L487-L503〕 (exactly two spawns) | Arbitrary attempt counts excluded — the code retries at most once by construction |
 | R-1′ (candidate) | Cancel accepted at ANY time before outcome commit excludes completion | S-6 | StrictNoCompleteAfterAbort | strict-cancel-window (core), strict-cancel-write (core), MaxAttempts=2 | Start → ChildSettles(completed) → RunHandler(reads aborted=FALSE) → Abort(writing) → WriteCommit ⇒ outcome completed despite aborted=TRUE | A-1, A-2 | probed against the same done mapping; the abort read and the awaited write-back are separate steps | No existing test pins abort-during-write-back (gap; see implementation.md) | This is a probe of a candidate requirement, not a current-convention claim; counterexample expected and to be adjudicated |
-| R-2′ (candidate) | A cancelled window performed no durable writes | S-7 | StrictCancelledNoWrite | strict-cancel-window (core), strict-cancel-write (core), MaxAttempts=2 | Start → ChildSettles(completed) → WriteThrow(partial write) → HandleOutcome(retry) → Abort → ChildSettles → RunHandler(killed) ⇒ cancelled with writesPerformed=TRUE | A-1, F-3 | probed against writeMemoryFiles' per-file non-atomic loop | No existing test pins partial-write persistence across a killed retry (gap) | Same as R-1′: probe; the code's rollback is lock-only and best-effort by design (lock.ts:110-124 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L230-L247〕) |
+| R-2′ (candidate) | A cancelled window performed no durable writes | S-7 | StrictCancelledNoWrite | strict-cancel-window (core), strict-cancel-write (core), MaxAttempts=2 | Start → ChildSettles(completed) → WriteThrow(partial write) → HandleOutcome(retry) → Abort → ChildSettles → RunHandler(killed) ⇒ cancelled with writesPerformed=TRUE | A-1, F-3 | probed against writeMemoryFiles' per-file non-atomic loop | No existing test pins partial-write persistence across a killed retry (gap) | Same as R-1′: probe; the code's rollback is lock-only and best-effort by design (lock.ts:162-187 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L311-L339〕) |
 
 ## Critical abstraction challenges
 
@@ -156,26 +160,26 @@ Actions and their real transactions:
    the retry spawn concurrent with the first attempt's settlement, A-3 would
    fail silently. Adverse trace to challenge it: attempt-1 ChildSettles
    after the retry spawned — impossible today only because of the causal
-   `done.then` chain (index.ts:353 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L32-L35〕→377).
+   `done.then` chain (index.ts:363 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L33-L36〕→401).
 2. **writesPerformed as a flag, not file contents.** Challenge: two attempts
    writing different batches interleave at file granularity. The model
    cannot distinguish "partial write then full overwrite" from "mixed
    contents". For R-2/R-2′ (attribution and existence of durable effects)
    the flag suffices; a content-integrity requirement would need per-file
-   state and is explicitly out of scope.
+   state and is explicitly out of scope. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L421-L430〕
 3. **Abort after outcome resolution is a no-op.** Modeled by disabling
    Abort once `outcome ≠ "none"`. Justified: the resolved `done` promise is
    immutable and `controller.abort()` on a settled run changes nothing the
    dispatch observes. Challenge trace: abort lands between WriteCommit and
    HandleOutcome — in the code this aborts nothing observable (the write
-   already happened and the outcome dispatch ignores the controller).
+   already happened and the outcome dispatch ignores the controller). 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L102-L114〕
 4. **The original job handle cannot abort the retry.** Each
    `startMemoryJob` call owns a fresh controller; `job.abort()` from the
    first attempt has no channel into the retry (only agent disposal
-   reaches it, via the retry's own registered effect — memory-job.ts:165-171 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L341-L350〕
+   reaches it, via the retry's own registered effect — memory-job.ts:165-171 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L433-L442〕
    runs per call). Modeled as Abort targeting the current attempt only.
    This is an asymmetry to report, not to fix in the model.
-5. **dreamInFlight resets at spawn time, not settle time** (index.ts:181-183 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L18-L23〕).
+5. **dreamInFlight resets at spawn time, not settle time** (index.ts:182-184 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L19-L24〕).
    The lock, not the flag, is the real mutual exclusion; the model relies on
    A-4. Adverse trace: a second turn-end during the first dream's retry
    passes `dreamInFlight`, then blocks at `tryAcquireLock` (fresh stamp) —
@@ -193,19 +197,19 @@ Expected dispositions for the strict-cancel-window / strict-cancel-write probes:
   convert this window into the S-7 shape (files written, lock rolled back)
   and is rejected. Follow-up: pin the order with a regression test;
   eliminating the window entirely would require transactional staged-write
-  (separate future PR, not this task).
+  (separate future PR, not this task). 〔src:ws:specs/tla/background-task-lifecycle/Model.tla#L264-L267〕
 - S-7 violation (cancelled with partial writes): USER-ADJUDICATED
   (2026-10-25) as a documented design decision — rollback is lock-only and
   best-effort by design; partial writes from a failed attempt persist and
   are healed by the next dream window (time gate re-opens). A transactional
   write-back (staged write + rename) is recorded as a candidate follow-up
-  PR, not adopted now.
+  PR, not adopted now. 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L311-L339〕
 
 Both must-pass invariants of the `convention` case are expected to verify.
 The aggregate check status is expected to be `counterexample` because of the
 strict-cancel-window / strict-cancel-write probes; that is the honest encoding of "these races exist",
 kept in-package so the traces are durable evidence. Never delete S-6/S-7 to
-turn the aggregate green; adjudicate them instead.
+turn the aggregate green; adjudicate them instead. 〔src:ws:specs/tla/background-task-lifecycle/checks.json#L1-L62〕
 
 implementation.md (outside inputDigest) holds run IDs, tool metadata, code
 and test observations keyed to the checked digest.

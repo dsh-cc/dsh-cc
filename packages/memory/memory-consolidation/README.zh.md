@@ -16,8 +16,9 @@
   1. **时间门** —— 自上次整合起至少 `minHours`（默认 24）小时。
   2. **会话门** —— 至少 `minSessions`（默认 5）条新 transcript。
   3. **文件锁** —— `.consolidation-lock` 文件以存储的时间戳保证互斥；过期的持有者
-     （超过 `lockStaleMs`，默认 1 小时）可被回收，因此整合中崩溃可自动恢复。失败
-     或被 kill 的整合会回滚锁，使时间门重新打开。
+     （超过 `lockStaleMs`，默认 1 小时）可被回收，因此整合中崩溃可自动恢复。成功的
+     整合会**释放**锁（清除持有者、保留时间戳），下一次 dream 只受自身冷却或时间门
+     约束。失败或被 kill 的整合会回滚锁，使时间门重新打开。
 - **记忆写入改变模型可见上下文** —— 在上游，`dsh-memory` 会在记忆目录变更后通过
   `system-prompt/change` 重组装 `memory` 系统提示词 section。本包不为记忆文件本身
   引入新的会话事件。
@@ -76,7 +77,8 @@ await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 
 ## API
 
-- `tryAcquireLock(fs, dir, pid, now, policy?)` / `rollbackLock(fs, dir, priorAt, policy?)` /
+- `tryAcquireLock(fs, dir, pid, now, policy?)` / `releaseLock(fs, dir, pid, at, policy?)` /
+  `rollbackLock(fs, dir, pid, at, priorAt, policy?)` /
   `readLastConsolidatedAt(fs, dir)` —— 整合锁。
 - `gatesPass(input)` / `timeGatePasses(...)` / `sessionGatePasses(...)` —— 门谓词。
 - `MEMORY_TOOL_FILTER` / `MEMORY_AGENT_TOOLS` —— 记忆作用域工具集（读/搜索 +

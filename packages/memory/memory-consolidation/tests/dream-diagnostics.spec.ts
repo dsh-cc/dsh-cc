@@ -195,18 +195,25 @@ describe('dream dispatch diagnostics', () => {
     expect(base.backing.get(DIAG)).toBeUndefined()
   })
 
-  it('priorAt semantics (review Minor-5, existing quirk): after a dispatch-throw rollback with priorAt = now-5min, an immediate tryAcquireLock returns null', async () => {
+  it('issue #336 E-4: a guarded rollback of the acquirer\'s lock restores the prior epoch and frees it in-window; a mismatch leaves a foreign holder untouched', async () => {
     await seedFresh(tmpRoot, 5)
-    const fs = makeFsMock()
     const now = Date.now()
-    // Exactly what the dispatch-throw catch does when priorAt was now-5min.
-    await rollbackLock(fs as never, DIR, now - 5 * 60_000, memoryWritePolicy(DIR))
-    // The rolled-back file carries a RECENT `at` (the old consolidated epoch
-    // doubles as the holder timestamp), so the held check fences re-acquisition
-    // for the remainder of the stale window — documented quirk, pinned here.
-    expect(await tryAcquireLock(fs as never, DIR, process.pid, now)).toBeNull()
-    // And once the stale window passes, acquisition works again.
-    expect(await tryAcquireLock(fs as never, DIR, process.pid, now + 60 * 60_000 + 1000)).toBe(now - 5 * 60_000)
+    const priorAt = now - 5 * 60_000
+    const policy = memoryWritePolicy(DIR)
+    const fs = makeFsMock({ [LOCK]: `${process.pid}\n${now}\n` })
+    // Only the recorded acquire identity (pid + acquisition epoch) may roll
+    // the lock back; the restored file keeps `priorAt` as lastConsolidatedAt
+    // with the holder cleared, so the next acquire succeeds INSIDE the stale
+    // window (the pre-#336 fence this test used to pin is reversed).
+    await rollbackLock(fs as never, DIR, process.pid, now, priorAt, policy)
+    expect(fs.backing.get(LOCK)).toBe(`0\n${priorAt}\n`)
+    expect(await tryAcquireLock(fs as never, DIR, process.pid, now + 1000, policy)).toBe(priorAt)
+
+    // A stale-window reclaimer owns a different file: the old callback's
+    // rollback must not clobber it (holder 0 would free a live lock).
+    const foreign = makeFsMock({ [LOCK]: `999999\n${now}\n` })
+    await rollbackLock(foreign as never, DIR, process.pid, now, priorAt, policy)
+    expect(foreign.backing.get(LOCK)).toBe(`999999\n${now}\n`)
   })
 
   it('a never-settling fork leaves the diagnostic at dispatch-started (hang is distinguishable)', async () => {
@@ -250,7 +257,7 @@ describe('dream bounded retry (design §4.2)', () => {
 
     await stopTurn(ctx, fakeAgent('/mem'))
     await vi.waitFor(() => {
-      expect(fs.backing.get(LOCK)).toContain(String(process.pid))
+      expect(fs.backing.get(LOCK)).toMatch(/^0\n\d+\n$/)
       expect(diagnosticOf(fs).phase).toBe('outcome-failed')
     })
     // The write-back proves the retry completed the job (same lock, no re-acquire).
@@ -258,6 +265,14 @@ describe('dream bounded retry (design §4.2)', () => {
     expect(fs.backing.get(`${DIR}/topic-a.md`)).toBe('fact\n')
     expect(fs.backing.get(DIAG)).toBeDefined()
     expect(subagents.startActivation).toHaveBeenCalledTimes(2) // one dispatch window, two spawn calls (attempt + retry)
+    // Issue #336: the retry-success release keeps the acquisition epoch as
+    // lastConsolidatedAt with the holder cleared (EXACT released bytes), and
+    // an in-window acquire succeeds returning that epoch.
+    const released = fs.backing.get(LOCK) ?? ''
+    expect(released).not.toContain(String(process.pid))
+    const acquireEpoch = Number(released.split('\n')[1])
+    expect(acquireEpoch).toBeGreaterThan(0)
+    expect(await tryAcquireLock(fs as never, DIR, process.pid, acquireEpoch + 1000, memoryWritePolicy(DIR))).toBe(acquireEpoch)
   })
 
   it('retry also fails: exactly two spawns, rollback, no third attempt', async () => {
