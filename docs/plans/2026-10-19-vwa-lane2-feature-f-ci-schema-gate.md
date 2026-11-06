@@ -1,6 +1,6 @@
 # VWA lane-2 Hardening — Feature F: CI Tool Schema Regression Gate
 
-## Status: Implemented — PR pending (this branch); three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
+## Status: Implemented — PR #273 (merged 2026-10-21); three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
 
 Implementation note (adjudicated during delivery): beyond §F.2.3's fixture
 migration, one shared-subset fix was required — `$schema` was added to the

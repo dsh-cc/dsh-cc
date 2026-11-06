@@ -1,4 +1,4 @@
-## Status: Implemented — PR #281 (open, pending merge). Design converged via
+## Status: Implemented — PR #281 (merged 2026-10-23). Design converged via
 three-lane blind review (codex, grok, internal critic: r1 full review, r2
 delta, r3 micro-confirmation — all GO; ledger in §7). Fix 4 of the
 post-lane-2 batch.

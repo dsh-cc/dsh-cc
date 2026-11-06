@@ -1,7 +1,7 @@
 # Writing Harness Plugin: Argument Structure and Controlled Revision
 
 - Date: 2026-10-25
-- Status: Implemented — PR #290 (open, stacked on design PR #287; pending merge)
+- Status: Implemented — PR #290 (merged 2026-10-25), stacked on the design PR #287 (merged 2026-10-25)
 - Target: dsh-cc-writing, an optional marketplace plugin
 - Baseline: main at d278d61c90102e0855a53b8ab043fb5291dca519
 - Scope: Markdown articles in Chinese and English; technical articles, research reviews, and opinion essays

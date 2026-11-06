@@ -1,6 +1,6 @@
 # VWA lane-2 Hardening — Feature C: Budget and Graph Feasibility
 
-## Status: Implemented — PR #270 (open, pending merge). §C.2.4 was implemented per user adjudication as the capacity variant: the `/vwa init` guidance reports the frozen budget's call capacity instead of a graph-size estimate (the graph is empty at init). Original review status: three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
+## Status: Implemented — PR #270 (merged 2026-10-20). §C.2.4 was implemented per user adjudication as the capacity variant: the `/vwa init` guidance reports the frozen budget's call capacity instead of a graph-size estimate (the graph is empty at init). Original review status: three-lane blind review converged (critic + two external lanes, seven rounds, final round GO on all lanes).
 
 This document is one of six feature designs split from the combined
 lane-2 reliability hardening design. It addresses Problem 5 from the tui-40b4 session.

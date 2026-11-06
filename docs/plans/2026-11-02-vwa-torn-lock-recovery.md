@@ -1,6 +1,6 @@
 # vwa-argument: eliminate the torn-lock brick (issue #307)
 
-Status: **Implemented** — PR #324 (open, pending merge). Three-lane blind
+Status: **Implemented** — PR #324 (merged 2026-11-02). Three-lane blind
 review converged: v1 drew one GO (5×P1), one NO-GO (4×P1) and one
 GO-conditional (2×P1), all folded into v2; the delta round then returned GO
 from two lanes and one NEW fold (§3.2b re-read read/parse split, folded here),

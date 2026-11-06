@@ -1,6 +1,6 @@
 # Lean verification for the formal-design skill
 
-Status: **Implemented** — PR #304 (open, pending merge). This document
+Status: **Implemented** — PR #304 (merged 2026-10-27). This document
 adds a complete Lean
 path to the existing skill; PR #304 ships that path (runner scripts,
 inspector, driver, worked example, tests, CI, and documentation) 〔src:ws:specs/lean/budget-reservation/implementation.md#L40-L56〕.
