@@ -41,9 +41,11 @@ this file is the citable evidence target (the validator whitelist admits
     void job.done.then(async (outcome) => {
       ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
       if (outcome.status === 'completed') {
-        // Success tombs the marker in BOTH modes: a successful periodic dream
-        // rebuilds the index, so a stale pending marker is obsolete by definition.
-        void clearPressure(fs, dir, now, policy)
+        // Success tombs the marker in BOTH modes -- but only the arms this
+        // dream's rebuild addressed (issue #335): the clear is conditional on
+        // the arm captured at the dream's initial read, so an arm that landed
+        // during the dream survives for the next window.
+        void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
         return
       }
       await recordDreamDiagnostic(ctx, fs, dir, policy, {
@@ -66,7 +68,7 @@ this file is the citable evidence target (the validator whitelist admits
         void retry.done.then(async (retryOutcome) => {
           ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
           if (retryOutcome.status === 'completed') {
-            void clearPressure(fs, dir, now, policy)
+            void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
             return
           }
           await recordDreamDiagnostic(ctx, fs, dir, policy, {

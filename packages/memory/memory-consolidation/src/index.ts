@@ -363,9 +363,13 @@ async function runDream(
     void job.done.then(async (outcome) => {
       ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
       if (outcome.status === 'completed') {
-        // Success tombs the marker in BOTH modes: a successful periodic dream
-        // rebuilds the index, so a stale pending marker is obsolete by definition.
-        void clearPressure(fs, dir, now, policy)
+        // Success tombs the marker in BOTH modes — but only the arms this
+        // dream's rebuild addressed (issue #335 Face B): the clear is
+        // conditional on `pressure.armedAt` (captured at the dream's initial
+        // read, which the fork's index snapshot postdates), so an arm that
+        // landed during the dream survives for the next window. The cooldown
+        // reference advances to completion time, not dream start.
+        void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
         return
       }
       await recordDreamDiagnostic(ctx, fs, dir, policy, {
@@ -388,7 +392,11 @@ async function runDream(
         void retry.done.then(async (retryOutcome) => {
           ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
           if (retryOutcome.status === 'completed') {
-            void clearPressure(fs, dir, now, policy)
+            // Same conditional clear as the first attempt: the retry reuses
+            // the ORIGINAL captured arm (the retry's fork re-reads the
+            // directory, so an arm older than a fresh capture is at worst
+            // conservatively kept — an extra dream later, never a lost one).
+            void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
             return
           }
           await recordDreamDiagnostic(ctx, fs, dir, policy, {

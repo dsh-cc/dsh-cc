@@ -54,7 +54,8 @@ EXTENDS Naturals, FiniteSets
 
 CONSTANT UnlockedSave, DreamNoCas, DreamIndexFirst, UnlockedExtract,
          ClearWithoutRun, SkipCap, FreeTicks, MaxLines, StaleTicks,
-         CooldownTicks, MinTicks, TMax, Revs, SplitStamp, MissingTopic
+         CooldownTicks, MinTicks, TMax, Revs, SplitStamp, MissingTopic,
+         AtomicPressureEntry
 
 ASSUME /\ UnlockedSave \in BOOLEAN
        /\ DreamNoCas \in BOOLEAN
@@ -71,6 +72,7 @@ ASSUME /\ UnlockedSave \in BOOLEAN
        /\ Revs \in 1..4
        /\ SplitStamp \in BOOLEAN
        /\ MissingTopic \in BOOLEAN
+       /\ AtomicPressureEntry \in BOOLEAN
 
 (* Bounded universes. Every sentinel is a string; epochs and revisions are   *)
 (* naturals with 0 as "never" and are only ever compared with naturals.     *)
@@ -78,6 +80,17 @@ Procs == {"p1", "p2"}
 Names == {"n1", "n2", "n3"}
 Ticks == 0..TMax
 RevsT == 0..Revs
+(* Monotone arming (issue #335 fix): each arm is strictly above the marker's  *)
+(* previous value, so arms stay distinguishable even at one logical tick.    *)
+(* The code's arm is unbounded; the model bounds it with ArmMax == TMax + 1  *)
+(* (a declared exclusion): values up to TMax come from arms at distinct      *)
+(* ticks, and one same-tick re-arm (the only case where +1 is needed,      *)
+(* because the clock cannot advance during a dream's critical section)      *)
+(* reaches TMax + 1. A second same-tick re-arm repeats the same aliasing    *)
+(* structure and is excluded; excluding arms only shrinks the state space.   *)
+ArmMax == TMax + 1
+ArmTicks == 0..ArmMax
+Max(a, b) == IF a > b THEN a ELSE b
 
 Kinds  == {"none", "save", "dream", "extract"}
 Phases == {"none", "read", "saving", "pread", "stamped", "locked", "forked",
@@ -94,13 +107,13 @@ PendType ==
   , name:    {"none"} \cup Names
   , snap:    SUBSET Names
   , next:    SUBSET Names
-  , armed:   Ticks
+  , armed:   ArmTicks
   , prior:   Ticks
   , snapRev: RevsT
   , phase:   Phases ]
 
 LockType  == [holder: {"none"} \cup Procs, at: Ticks]
-StampType == [armedAt: Ticks, lastForcedAt: Ticks]
+StampType == [armedAt: ArmTicks, lastForcedAt: Ticks]
 
 PendNone ==
   [ kind |-> "none", mode |-> "none", name |-> "none", snap |-> {},
@@ -177,14 +190,17 @@ SaveRead(p) ==
                        savedSince, alive, now>>
 
 (* Cap rejection: nothing is written and the forced-dream marker is armed    *)
-(* (save.ts:232-238). The decision uses the read snapshot.                  *)
+(* (save.ts:232-238). The decision uses the read snapshot. The arm is       *)
+(* MONOTONE (issue #335 fix): strictly above the marker's previous value,   *)
+(* so same-tick arms cannot alias the arm a running dream captured.         *)
 SaveReject(p) ==
   /\ alive[p]
   /\ pend[p].kind = "save"
   /\ pend[p].phase = "read"
   /\ CapReached(p)
-  /\ stamp' = [stamp EXCEPT !.armedAt = now]
-  /\ lastArmAt' = now
+  /\ stamp.armedAt < ArmMax
+  /\ stamp' = [stamp EXCEPT !.armedAt = Max(now, stamp.armedAt + 1)]
+  /\ lastArmAt' = stamp'.armedAt
   /\ pend' = [pend EXCEPT ![p] = PendNone]
   /\ UNCHANGED <<idx, rev, topic, lock, lastServedAt, alive, now, savedSince>>
 
@@ -308,9 +324,14 @@ ExtractFinish(p) ==
 
 (* --------------------------------------------------------------- dreams *)
 
-(* Pressure mode, intended protocol: the read and the stamp are one step.    *)
+(* Pressure mode, convention entry: the read and the stamp are one atomic   *)
+(* step that preserves any concurrent arm -- the FIXED protocol up to the   *)
+(* atomic abstraction (the fixed split shape is verified by the dedicated    *)
+(* split-stamp-fixed case; keeping the convention atomic is a state-space    *)
+(* budget device, the pre-change structure).                             *)
 DreamPressureAtomic(p) ==
   /\ ~SplitStamp
+  /\ AtomicPressureEntry
   /\ alive[p]
   /\ pend[p].kind = "none"
   /\ stamp.armedAt > 0
@@ -321,10 +342,12 @@ DreamPressureAtomic(p) ==
   /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, lastServedAt, savedSince,
                  alive, now>>
 
-(* Pressure mode under SplitStamp (the real code shape): the dream reads the *)
-(* marker and captures the arm in one step, then stamps in another.          *)
+(* Pressure mode, split scheduling (the real code shape): the dream reads   *)
+(* the marker and captures the arm in one step, then stamps in another.     *)
+(* Enabled by the SplitStamp fault (pre-fix stamp write) or by the          *)
+(* dedicated split-stamp-fixed case (AtomicPressureEntry = FALSE).          *)
 DreamReadPressure(p) ==
-  /\ SplitStamp
+  /\ (SplitStamp \/ ~AtomicPressureEntry)
   /\ alive[p]
   /\ pend[p].kind = "none"
   /\ stamp.armedAt > 0
@@ -333,12 +356,14 @@ DreamReadPressure(p) ==
        MakePend("dream", "pressure", "none", {}, {}, stamp.armedAt, 0, "pread")]
   /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
-(* The stamp write (index.ts:316). The intended protocol stamps atomically   *)
-(* with the read; SplitStamp models the real code shape — the write carries *)
-(* the CAPTURED arm (pressure.ts:107), so a concurrent re-arm between the   *)
-(* read and the stamp is clobbered.                                        *)
+(* The stamp write (index.ts:320). SplitStamp models the PRE-FIX code shape  *)
+(* (pressure.ts before the #335 fix): the write carries the CAPTURED arm,    *)
+(* so a concurrent re-arm between the read and the stamp is clobbered and a *)
+(* tombstoned marker can be resurrected. The fixed shape re-reads the        *)
+(* marker: it never resurrects (a tombstoned marker stays 0) and keeps the  *)
+(* NEWER of the captured and current arms.                                  *)
 DreamStampPressure(p) ==
-  /\ SplitStamp
+  /\ (SplitStamp \/ ~AtomicPressureEntry)
   /\ alive[p]
   /\ pend[p].kind = "dream"
   /\ pend[p].mode = "pressure"
@@ -346,7 +371,11 @@ DreamStampPressure(p) ==
   /\ IF SplitStamp
        THEN stamp' = [stamp EXCEPT !.armedAt = pend[p].armed,
                                    !.lastForcedAt = now]
-       ELSE stamp' = [stamp EXCEPT !.lastForcedAt = now]
+       ELSE stamp' = [stamp EXCEPT
+                        !.armedAt = (IF stamp.armedAt = 0
+                                       THEN 0
+                                       ELSE Max(pend[p].armed, stamp.armedAt)),
+                        !.lastForcedAt = now]
   /\ pend' = [pend EXCEPT ![p] = [pend[p] EXCEPT !.phase = "stamped"]]
   /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, lastServedAt, alive, now, savedSince>>
 
@@ -469,21 +498,24 @@ DreamTopicsAfter(p) ==
        /\ pend' = [pend EXCEPT ![p].phase = "written"]
        /\ UNCHANGED <<idx, rev, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
-(* Completion clears the marker in BOTH modes (a successful rebuild makes a  *)
-(* pending arm obsolete, index.ts:355-359) and serves the current arm:      *)
-(* the cooldown reference advances to the clear time (pressure.ts:117-122). *)
-(* ClearWithoutRun tombstones WITHOUT serving — the model-visible "queued"   *)
-(* sentence is then a lie.                                                  *)
+(* Completion clears the marker in BOTH modes and serves the arms the dream  *)
+(* accounted for: `served == pend[p].armed` is the arm captured at the      *)
+(* dream's initial read (which the fork's index snapshot postdates). The    *)
+(* FIXED shape (issue #335) tombstones only when the marker's arm is not    *)
+(* newer than `served` -- an arm that landed DURING the dream survives with *)
+(* the cooldown reference advanced to the clear time. ClearWithoutRun      *)
+(* models the PRE-FIX clear: the unconditional tombstone (the service      *)
+(* accounting stays truthful in both shapes, so the probe isolates exactly  *)
+(* the tombstone decision -- the model-visible "queued" sentence is then a  *)
+(* lie).                                                                    *)
 DreamClear(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
   /\ pend[p].phase = "written"
-  /\ IF ClearWithoutRun
-       THEN UNCHANGED lastServedAt
-       ELSE lastServedAt' = IF stamp.armedAt > lastServedAt
-                             THEN stamp.armedAt
-                             ELSE lastServedAt
-  /\ stamp' = [stamp EXCEPT !.armedAt = 0, !.lastForcedAt = now]
+  /\ lastServedAt' = Max(lastServedAt, pend[p].armed)
+  /\ stamp' = IF ClearWithoutRun \/ stamp.armedAt <= pend[p].armed
+                THEN [stamp EXCEPT !.armedAt = 0, !.lastForcedAt = now]
+                ELSE [stamp EXCEPT !.lastForcedAt = now]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
   /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, alive, now, savedSince>>
 
@@ -514,8 +546,8 @@ TypeOK ==
   /\ topic \in [Names -> Bodies]
   /\ lock \in LockType
   /\ stamp \in StampType
-  /\ lastArmAt \in Ticks
-  /\ lastServedAt \in Ticks
+  /\ lastArmAt \in ArmTicks
+  /\ lastServedAt \in ArmTicks
   /\ savedSince \in SUBSET Names
   /\ pend \in [Procs -> PendType]
   /\ alive \in [Procs -> BOOLEAN]

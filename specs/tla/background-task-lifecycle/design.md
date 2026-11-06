@@ -94,8 +94,12 @@ Actions and their real transactions:
   No respawn after killed is structural (the killed branch of
   HandleOutcome never spawns) and pinned by
   dream-diagnostics.spec.ts:294 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L403-L406〕.
-- S-4 / SuccessCommits (R-2, R-3): success ⇒ lock committed, marker
-  cleared, write performed by the final attempt.
+- S-4 / SuccessCommits (R-2, R-3): success ⇒ lock committed, the clear
+  step ran (the marker is tombstoned unless an arm newer than the dream's
+  captured `servedArmedAt` survived it — the arm-identity condition is owned
+  by `specs/tla/memory-write-lifecycle`, which models the marker protocol;
+  this model keeps the marker as a boolean abstraction), write performed by
+  the final attempt.
 - S-5 / FinalWriteFromFinalAttempt (R-2): `writeAttempt ≤ attempt` (a
   recorded write is never attributed to a future attempt).
 - S-6 / StrictNoCompleteAfterAbort (R-1′, probe): `aborted ⇒ outcome ≠
