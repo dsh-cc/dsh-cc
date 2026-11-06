@@ -21,6 +21,8 @@ reads.
   3. **Lock** — a `.consolidation-lock` file whose stored timestamp enforces
      mutual exclusion; a stale holder (older than `lockStaleMs`, default 1 hour)
      is reclaimed, so a crash mid-consolidation recovers automatically. A
+     successful consolidation RELEASES the lock (holder cleared, epoch kept),
+     so the next dream waits only on its own cooldown or the time gate. A
      failed or killed consolidation rolls the lock back so the time gate
      re-opens.
 - **Memory writes change model-visible context** — upstream, `dsh-memory`
@@ -91,7 +93,7 @@ extraction may start a short background fork.
 
 ## API
 
-- `tryAcquireLock(fs, dir, pid, now, policy?)` / `rollbackLock(fs, dir, priorAt, policy?)` /
+- `tryAcquireLock(fs, dir, pid, now, policy?)` / `releaseLock(fs, dir, pid, at, policy?)` / `rollbackLock(fs, dir, pid, at, priorAt, policy?)` /
   `readLastConsolidatedAt(fs, dir)` — the consolidation lock.
 - `gatesPass(input)` / `timeGatePasses(...)` / `sessionGatePasses(...)` — the
   gate predicates.

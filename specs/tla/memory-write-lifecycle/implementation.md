@@ -2,9 +2,11 @@
 
 Model `specs/tla/memory-write-lifecycle`, safety-only. Originally a
 no-production-change advisory model (PR #330); the issue #335 revision
-accompanies the production fix for the two pressure-marker windows the model
-exposed. This file records run identities, counterexample dispositions and the
-drafting defects, outside `inputDigest` as the runner contract requires.
+accompanied the production fix for the two pressure-marker windows, and the
+issue #336 revision accompanies the production fix for the retained lock
+stamp on success (a completed dream now releases the lock). This file records
+run identities, counterexample dispositions and the drafting defects, outside
+`inputDigest` as the runner contract requires.
 
 ## Runner and toolchain
 
@@ -18,23 +20,35 @@ drafting defects, outside `inputDigest` as the runner contract requires.
 The identity claims in this section are copied from `evidence.json`; the run
 below was performed AFTER the last document edit 〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L14-L24〕.
 
-- runId `20261105T024021Z-2779f9b5-03d2-410b-a454-5d74d338ea76`〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L14-L24〕
-- `convention` **verified**: 52,748,319 states generated, 9,101,749 distinct,
-  0 left on queue (224 s; `Revs=2` after the #335 revision's budget cut,
-  2048 MiB heap)〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L14-L24〕.
-- `split-stamp-fixed` **verified**: 54,731,947 generated, 9,486,388 distinct,
-  0 left on queue (221 s) — the FIXED split stamp shape (re-read,
-  no-resurrect, keep the newer arm) holds `NoLostPressure` across the real
-  read-to-stamp gap〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L14-L24〕.
-- eight expansion probes each produced their expected counterexample, and one
-  further positive case (`crash-reclaim`: 5,797,736 generated, 988,222
-  distinct, 0 queue) verified 〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L14-L24〕.
+- runId `20261106T051148Z-5c98d5a4-7c82-46e5-9d78-317e9f2c98b0` (the #336
+  final run — the last edit of `design.md`/`code-anchors.md`/`Model.tla`/
+  `checks.json` preceded this run; the #335 final run below is history)
+- `convention` **verified**: 62,992,502 states generated, 10,926,712 distinct,
+  0 left on queue (249 s; `Revs=2`, 2048 MiB heap).
+- `success-release` **verified**: 62,926,868 generated, 10,926,712 distinct,
+  0 left on queue — the #336 release case; its state space is byte-identical
+  to the convention's because the stale arm is dead in both (the design's
+  bounds note explains the arithmetic).
+- `split-stamp-fixed` **verified**: 67,492,378 generated, 11,747,287
+  distinct, 0 left on queue — the FIXED split stamp shape holds
+  `NoLostPressure` across the real read-to-stamp gap.
+- `crash-reclaim` **verified**: 5,391,475 generated, 919,007 distinct,
+  0 left on queue.
+- ten expansion probes each produced their expected counterexample —
+  `strict-keep-stamp` (the #336 pre-fix probe) fires `HolderLegal` on the
+  trace Tick → DreamStampPeriodic → DreamLock → DreamFork → DreamBuild →
+  DreamWriteTopics → DreamPublish → DreamClear (the completed dream's holder
+  stays stamped); the other nine are the #335-era probes, unchanged.
 - `check-evidence`: status valid, fresh, verification `counterexample` — the
   aggregate is a counterexample because every probe case is red by design.
+- History (#335 final run, superseded): `20261105T024021Z-2779f9b5` —
+  convention 52.7M/9.1M/0, split-stamp-fixed 54.7M/9.5M/0, crash-reclaim
+  5.8M/0.99M/0, eight probes red.
 - Discarded intervening runs: `20261103T101012Z` (per-case timeout under
-  load), `20261104T000209Z` (input-changed: `design.md` edited mid-run), and
-  the three #335 drafting runs below (two convention timeouts, one
-  input-changed).
+  load), `20261104T000209Z` (input-changed: `design.md` edited mid-run), the
+  three #335 drafting runs below (two convention timeouts, one
+  input-changed), and the two #336 runs below (one input-changed, one
+  superseded by the review folds).
 
 ## Counterexample dispositions (all nine probes, same run)
 
@@ -192,6 +206,10 @@ convention back inside the budget. Both discarded runs are recorded below.
 | `20261105T020102Z-09266a6c` | incomplete (convention timeout; split-stamp-fixed verified 74.9M/13.0M) | #335 r3: atomic entry restored but `ArmMax == TMax + 2` still overflows; input-changed (design.md edited mid-run) |
 | `20261105T021859Z-736d8f8e` | incomplete (convention timeout; split-stamp-fixed verified 54.7M/9.5M) | #335 r4: `ArmMax == TMax + 1` alone still ~25% over (141.7M generated at the 600 s cap, 4.4M queued); input-changed (E-1f edited mid-run) |
 | `20261105T024021Z-2779f9b5` | convention + split-stamp-fixed + crash-reclaim verified, eight probes red | #335 final: convention `Revs` 3→2 budget cut; run with runner rc.4 after all doc edits |
+| `20261106T023647Z-a1c59cd1` | incomplete (input-changed: design.md/code-anchors.md edited mid-run), all 14 cases classified as designed — convention/crash-reclaim/split-stamp-fixed/success-release verified, ten probes red incl. the new `strict-keep-stamp` | #336 r1: `DreamClear` guarded release + `HolderLegal` invariant + `KeepStampOnClear` probe + `success-release` case; convention 62.9M/10.9M/0 |
+| `20261106T030855Z-ed719fcb` | convention + success-release + crash-reclaim + split-stamp-fixed verified, ten probes red (all expected) | #336 r2 after folding the internal critic seat (7 findings): `DreamFail` gains the same `lock.holder = p` guard (guarded `rollbackLock` in the code contract), `HolderLegal` adds the `kind = "dream"` conjunct, and the A3/A5 anchors pin the awaited release ordering and the guarded rollback; convention 62,992,502/10,926,712/0 and success-release byte-identical 62,926,868/10,926,712/0; superseded by the codex folds |
+| `20261106T042601Z-10ec049e` | convention + success-release + crash-reclaim + split-stamp-fixed verified, ten probes red (all expected) | #336 r3 after folding the codex seat (7 findings, doc/anchor/test-pin level only — no model change): E-1h best-effort release scope, E-1g ordinary-interleaving wording, A-13 one-outstanding-acquisition boundary, conditional-certificate bounds note, strict-keep-stamp fidelity limit, stale open questions 6/7 marked resolved, position-preserving `parse` + outer dispatch-throw rollback call site in the A3/A5 anchors; per-case statistics identical to `20261106T030855Z` (the folds touched no `.tla`/`checks.json`); runner rc.4, check-evidence valid; superseded by the grok folds |
+| `20261106T051148Z-5c98d5a4` | convention + success-release + crash-reclaim + split-stamp-fixed verified, ten probes red (all expected) | #336 final after folding the grok seat (8 findings, doc/test-pin level plus two digest touches: the stale `DreamLock` comment and `strict-keep-stamp` reclassified `core`→`expansion`); per-case statistics identical to the previous runs; runner rc.4, check-evidence valid |
 
 ## Coverage check
 
@@ -223,7 +241,56 @@ one, which is the proof that only references changed.
 - implementation conformance: this model describes existing behaviour; it does
   not prove the TypeScript matches the model 〔src:ws:specs/tla/memory-write-lifecycle/implementation.md#L150-L156〕.
 
-## Review state
+## Review state (issue #336 revision)
 
-Not yet dispatched to a formal review lane. The three-seat blind review used by
-earlier models in this repository is a user decision for this batch.
+- Internal critic seat (blind, `dsh-cc-agents:critic`): **GO-WITH-CHANGES**,
+  7 findings (2×P1: the fire-and-forget release/clear ordering was not
+  enforced — folded by awaiting the release; the unguarded `rollbackLock`
+  would free a live reclaimer's lock under the post-fix acquire — folded by
+  giving it the same read-verify guard; 3×P2 folded: `HolderLegal` kind
+  conjunct, epoch-kept test pin, bounds note; 2×NIT folded: at=0 malformed
+  epoch documentation, pid-reuse aliasing). All folded before the r2 run.
+- External codex seat (blind, cc-codex-bridge): **GO-WITH-CHANGES**, 7
+  findings (1×P1: best-effort release failure leaves the #336 delay shape —
+  scoped as E-1h with a failure-injection test; 6×P2 folded: position-
+  preserving `parse`, same-PID-reacquire abstraction boundary + test,
+  conditional-certificate bounds wording, strict-keep-stamp fidelity limit,
+  E-1g ordinary interleavings, stale cross-references and the missing outer
+  dispatch-throw rollback call site). All folded before the final run; no
+  model change was required (per-case statistics identical).
+- External grok seat (blind, cc-grok-bridge, after a user re-login): first
+  full round **GO-WITH-CHANGES**, 8 findings, all folded (1×P1: the
+  pre-fix rollback fence pinned by `dream-diagnostics.spec.ts:198` is
+  REVERSED by this fix — the pin is replaced per E-4, and the retry-success
+  test must assert the released bytes `format(0, acquireEpoch)` and an
+  in-window re-acquire; 5×P2: rollback byte assertions in `lock.spec`, the
+  stale `DreamLock` comment, the "byte-identical" overclaim with the 65,634
+  generated-count gap footnoted, E-1g residual honesty, the A3 replacement
+  scope; 1×NIT: `strict-keep-stamp` reclassified `core`→`expansion`). Folded
+  before the final run below; the two digest-touching folds (Model.tla
+  comment, checks.json coverage) forced the re-run, whose per-case
+  statistics are identical.
+
+Implementation notes for the code change (from all three seats):
+
+- Replace `parse` with the position-preserving form, rewrite
+  `tryAcquireLock`/`rollbackLock` per A3, add `releaseLock`; export
+  `releaseLock` from `index.ts` alongside the other lock symbols.
+- All FOUR `rollbackLock` call sites gain the acquire identity
+  (pid + acquisition epoch); both success branches AWAIT
+  `releaseLock(...)` before `clearPressure(...)`.
+- Tests: released-lock acquisition within the stale window (exact released
+  content `format(0, at)`); guarded release skips on content change;
+  guarded rollback (seeded `format(pid, at)` → `format(0, priorAt)`,
+  in-window acquire returns `priorAt`; mismatch leaves a foreign holder
+  untouched); the pre-#336 fence pin at `dream-diagnostics.spec.ts:198` is
+  REPLACED (it asserted the reversed behaviour); the retry-success test
+  asserts the released bytes are exactly `format(0, acquireEpoch)` (the
+  `0\n<epoch>\n` file) and an in-window re-acquire returns that epoch;
+  failure-injection
+  (a write-throwing fs seam) leaves the lock untouched; same-PID reacquire
+  at a new epoch leaves the new acquisition untouched by the old callback's
+  release/rollback; blank/whitespace holder lines with fresh epochs block;
+  a malformed epoch (`at = 0`) with a recorded holder is reclaimed at once.
+- grok confirmation rounds: r3 (8 folds, 7 OK + 1 wording residual) and the
+  r3b single-item round on that residual both closed with **GO**.

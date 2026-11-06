@@ -30,10 +30,13 @@
 (*   real split. A successful dream clears the marker in BOTH modes (the   *)
 (*   rebuild makes a pending arm obsolete, index.ts:355-359) and serves     *)
 (*   the current arm; ClearWithoutRun tombstones without serving.          *)
-(* - a successful dream writes NO lock: the file keeps the holder and the   *)
-(*   acquisition epoch, which is lastConsolidatedAt, so the next dream      *)
-(*   waits for the stale window — including the same process, because      *)
-(*   the stale check reads only the epoch (lock.ts:84-87).                  *)
+(* - a successful dream RELEASES the lock (issue #336 fix): the holder is   *)
+(*   cleared and the acquisition epoch — lastConsolidatedAt — kept, so the   *)
+(*   next dream (pressure or periodic) is gated only by its own cooldown or   *)
+(*   time gate, never by the stale window of a successful predecessor.       *)
+(*   KeepStampOnClear models the PRE-FIX shape: the file kept the holder    *)
+(*   and the epoch, and the stale check reads only the epoch (lock.ts:84-87), *)
+(*   so the next dream waited out the window — including the same process.   *)
 (* - the index stays within its cap; SkipCap drops the batch cap guard     *)
 (*   (defence in depth: the write-back gate and the truncate fallback also  *)
 (*   enforce the cap).                                                     *)
@@ -55,7 +58,7 @@ EXTENDS Naturals, FiniteSets
 CONSTANT UnlockedSave, DreamNoCas, DreamIndexFirst, UnlockedExtract,
          ClearWithoutRun, SkipCap, FreeTicks, MaxLines, StaleTicks,
          CooldownTicks, MinTicks, TMax, Revs, SplitStamp, MissingTopic,
-         AtomicPressureEntry
+         AtomicPressureEntry, KeepStampOnClear
 
 ASSUME /\ UnlockedSave \in BOOLEAN
        /\ DreamNoCas \in BOOLEAN
@@ -73,6 +76,7 @@ ASSUME /\ UnlockedSave \in BOOLEAN
        /\ SplitStamp \in BOOLEAN
        /\ MissingTopic \in BOOLEAN
        /\ AtomicPressureEntry \in BOOLEAN
+       /\ KeepStampOnClear \in BOOLEAN
 
 (* Bounded universes. Every sentinel is a string; epochs and revisions are   *)
 (* naturals with 0 as "never" and are only ever compared with naturals.     *)
@@ -392,9 +396,9 @@ DreamStampPeriodic(p) ==
        MakePend("dream", "periodic", "none", {}, {}, 0, 0, "stamped")]
   /\ UNCHANGED <<idx, rev, topic, lock, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
-(* Reclaim is allowed when the lock is free or its stamp passed the stale    *)
-(* window (lock.ts:84-87 reads only the epoch — the holder's identity,      *)
-(* including the same process, does not matter).                           *)
+(* A released lock (holder "none") is FREE at any epoch; only a RECORDED    *)
+(* holder waits out the stale window, whatever its identity (lock.ts —      *)
+(* the post-fix acquire reads the holder AND the epoch).                    *)
 DreamLock(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
@@ -517,17 +521,33 @@ DreamClear(p) ==
                 THEN [stamp EXCEPT !.armedAt = 0, !.lastForcedAt = now]
                 ELSE [stamp EXCEPT !.lastForcedAt = now]
   /\ pend' = [pend EXCEPT ![p] = PendNone]
-  /\ UNCHANGED <<idx, rev, topic, lock, lastArmAt, alive, now, savedSince>>
+  (* Issue #336 fix: a completed dream RELEASES the lock — holder cleared,
+     epoch kept — but only while it is still the recorded holder (the guarded
+     rewrite skips when a stale-window reclaimer already took the file, the
+     same read-verify-write idiom as the acquire). KeepStampOnClear models
+     the PRE-FIX shape: the file keeps the holder and the epoch, so the
+     stale check (which reads only the epoch) blocks the next dream —
+     including a pressure dream past its own cooldown — until the window
+     passes. *)
+  /\ IF KeepStampOnClear \/ lock.holder # p
+       THEN lock' = lock
+       ELSE lock' = [holder |-> "none", at |-> lock.at]
+  /\ UNCHANGED <<idx, rev, topic, lastArmAt, alive, now, savedSince>>
 
 (* A failed or killed dream rolls the lock back to the epoch it captured      *)
-(* (lock.ts:120-124) — only BEFORE it published: a completed dream never     *)
-(* touches the lock. The abort also restores the lost-update log the fork    *)
-(* displaced.                                                                *)
+(* (lock.ts rollbackLock) — only BEFORE it published, and only while it is    *)
+(* still the recorded holder: a stale-window reclaimer that took the file    *)
+(* mid-dream owns it, and a post-fix rollback that clobbered it would FREE    *)
+(* a lock under a live dreamer (holder 0 is free by definition), breaking      *)
+(* exclusivity — so the rollback carries the same read-verify guard as the   *)
+(* release. The abort also restores the lost-update log the fork displaced.   *)
 DreamFail(p) ==
   /\ alive[p]
   /\ pend[p].kind = "dream"
   /\ pend[p].phase \in CritPhases
-  /\ lock' = [holder |-> "none", at |-> pend[p].prior]
+  /\ IF lock.holder = p
+       THEN lock' = [holder |-> "none", at |-> pend[p].prior]
+       ELSE lock' = lock
   /\ pend' = [pend EXCEPT ![p] = PendNone]
   /\ UNCHANGED <<idx, rev, topic, stamp, lastArmAt, lastServedAt, alive, now, savedSince>>
 
@@ -570,6 +590,16 @@ NoLostPressure == stamp.armedAt > 0 \/ lastServedAt >= lastArmAt
 OneDreamer == \A p, q \in Procs : p # q => ~(InCrit(p) /\ InCrit(q))
 
 HoldsLock == \A p \in Procs : InCrit(p) => lock.holder = p
+
+(* S-7 (issue #336 fix): a recorded holder is a dream still in flight (its   *)
+(* critical section, including the post-publish "written" step before the    *)
+(* clear) or a process that crashed while holding. A live, idle process      *)
+(* must never remain the recorded holder — the pre-fix DreamClear left the   *)
+(* completed dream's holder and epoch stamped, so the next dream (a pressure *)
+(* dream past its own cooldown) was refused until the stale window passed.   *)
+HolderPhases == CritPhases \cup {"written"}
+HolderLegal == \A p \in Procs :
+  lock.holder = p => ((pend[p].kind = "dream" /\ pend[p].phase \in HolderPhases) \/ ~alive[p])
 
 (* --------------------------------------------------------------- spec *)
 

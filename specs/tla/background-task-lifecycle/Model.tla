@@ -26,7 +26,9 @@ ASSUME MaxAttempts \in Nat \ {0}
 (* writesPerformed / writeAttempt: a durable memory write (full or         *)
 (*   partial) happened, tagged with the attempt that performed it.         *)
 (* respawns: retry spawns so far.                                         *)
-(* lock: "free" | "held" | "committed" | "rolled-back".                    *)
+(* lock: "free" | "held" | "committed" | "rolled-back". "committed" is    *)
+(*   the RELEASED state: holder cleared, acquisition epoch kept as         *)
+(*   lastConsolidatedAt (issue #336).                                      *)
 (* markerCleared: the pressure marker was tombstoned on success.          *)
 (***************************************************************************)
 VARIABLES final, attempt, phase, childState, aborted, abortBeforeSettle, 
@@ -158,12 +160,12 @@ WriteThrow == /\ phase = "writing"
                             lock, markerCleared>>
 
 (***************************************************************************)
-(* The index.ts outcome dispatch (job.done.then): completed commits the    *)
-(* lock (success stamp doubles as lastConsolidatedAt) and tombs the        *)
-(* pressure marker; killed rolls the lock back and NEVER respawns; failed  *)
-(* gets exactly one retry reusing the held lock (fresh controller, same    *)
-(* prompt) — or the retry dispatch itself throws (F-4) and rolls back; a   *)
-(* failed retry at the bound rolls back with no third attempt.             *)
+(* The index.ts outcome dispatch (job.done.then): completed RELEASES the   *)
+(* lock (holder cleared; the kept epoch is lastConsolidatedAt) and tombs   *)
+(* the pressure marker; killed rolls the lock back and NEVER respawns;     *)
+(* failed gets exactly one retry reusing the held lock (fresh controller,  *)
+(* or the retry dispatch itself throws (F-4) and rolls back; a failed      *)
+(* retry at the bound rolls back with no third attempt.                    *)
 (***************************************************************************)
 HandleOutcome == /\ phase = "settled"
                  /\ final = "none"
@@ -246,8 +248,9 @@ LateCompleteCannotComplete == abortBeforeSettle => outcome # "completed"
 (* R-3 (Q3): a killed window is terminal — lock rolled back, no respawn.  *)
 KilledStable == (final = "cancelled") => lock = "rolled-back"
 
-(* R-2/R-3: success commits the lock and the marker, and its durable      *)
-(* write is attributed to the attempt that completed. *)
+(* R-2/R-3: success RELEASES the lock ("committed": holder cleared, the   *)
+(* epoch kept) and tombs the marker, and its durable write is attributed   *)
+(* to the attempt that completed.                                          *)
 SuccessCommits == (final = "success") => /\ lock = "committed"
                                          /\ markerCleared
                                          /\ writesPerformed

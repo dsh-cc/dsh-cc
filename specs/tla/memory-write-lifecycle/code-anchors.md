@@ -6,7 +6,7 @@ self-citation so its range is checkable in this file. The runner's raw evidence
 identities and per-case statistics are therefore recorded in
 `implementation.md`.
 
-## A1 — save: read the entrypoint, validate topic+pointer as one batch, then write topic-then-index 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L9-L57〕
+## A1 — save: read the entrypoint, validate topic+pointer as one batch, then write topic-then-index 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L9-L56〕
 
 `packages/memory/memory/src/save.ts:199-240`
 
@@ -55,7 +55,7 @@ identities and per-case statistics are therefore recorded in
       await section.refresh(exec.agent)
 ```
 
-## A2 — writeback: the shared gate and the sequential batch writer 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L58-L102〕
+## A2 — writeback: the shared gate and the sequential batch writer 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L58-L101〕
 
 `packages/memory/memory/src/writeback.ts:141-178`
 
@@ -100,11 +100,27 @@ export async function writeMemoryFiles(
   }
 ```
 
-## A3 — lock: acquire = write + read-back verify; rollback restores the prior epoch 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L103-L163〕
+## A3 — lock: acquire = write + read-back verify; a successful dream RELEASES the lock (issue #336 fix); rollback restores the prior epoch 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L103-L223〕
 
-`packages/memory/memory-consolidation/src/lock.ts:71-124`
+`packages/memory/memory-consolidation/src/lock.ts` (the fix REPLACES the
+`parse` helper — the old one's whole-content `trim()` shifted a blank holder
+line's epoch into the pid field — and `tryAcquireLock`/`rollbackLock`, ADDS
+`releaseLock`, and rewrites the module header and the `tryAcquireLock`
+docblock; `readLastConsolidatedAt` keeps using the same `parse`)
 
 ```ts
+// Position-preserving parse (issue #336 fix): a blank or whitespace holder
+// line stays on line 1 and cannot shift the epoch into the holder field the
+// way a whole-content trim() did — a blank holder is an UNKNOWN holder
+// (blocks while the epoch is fresh), and a malformed epoch (at = 0) with a
+// recorded holder is reclaimed at once.
+function parse(content: string): { pid: number | undefined; at: number } {
+  const [pidRaw, atRaw] = content.split('\n')
+  const pid = pidRaw !== undefined && pidRaw.trim() !== '' && Number.isFinite(Number(pidRaw)) ? Number(pidRaw) : undefined
+  const at = atRaw !== undefined && Number.isFinite(Number(atRaw)) ? Number(atRaw) : 0
+  return { pid, at }
+}
+
 export async function tryAcquireLock(
   fs: FileSystem,
   dir: string,
@@ -116,9 +132,17 @@ export async function tryAcquireLock(
   let priorAt = 0
   if (!absent) {
     try {
-      const { at } = parse(await fs.readText(target))
+      const { pid: holder, at } = parse(await fs.readText(target))
       priorAt = at
-      if (at > 0 && now - at < LOCK_STALE_MS) {
+      // Issue #336: a RELEASED lock (holder PID 0) is free regardless of its
+      // epoch — a completed dream keeps the epoch (it is lastConsolidatedAt,
+      // which the periodic time gate still reads) but no holder. Only a
+      // recorded holder blocks acquisition, until the stale window reclaims
+      // it (a crash or PID reuse). A malformed holder line (undefined) is
+      // treated as an unknown holder and keeps blocking while fresh; a
+      // malformed EPOCH (at = 0) with a recorded holder is reclaimed at
+      // once — the guard needs a positive epoch to block.
+      if (holder !== 0 && at > 0 && now - at < LOCK_STALE_MS) {
         // A recently stamped lock is held; the stale window reclaims crashed holders.
         return null
       }
@@ -145,23 +169,64 @@ export async function tryAcquireLock(
 }
 
 /**
+ * Release the lock after a SUCCESSFUL consolidation (issue #336): the holder
+ * PID is cleared while the acquisition epoch is kept — the epoch doubles as
+ * lastConsolidatedAt and the periodic time gate still reads it. The write is
+ * guarded by a read-verify: if the file no longer carries exactly this
+ * holder+epoch (a stale-window reclaimer took it mid-dream), the release is
+ * skipped — the current holder owns the file. Best-effort: failures are
+ * swallowed so the caller's teardown does not throw.
+ */
+export async function releaseLock(
+  fs: FileSystem,
+  dir: string,
+  pid: number,
+  at: number,
+  policy?: MemoryWritePolicy,
+): Promise<void> {
+  const target = await fs.resolve(join(dir, LOCK_FILE)).catch(() => undefined)
+  if (target === undefined) return
+  try {
+    if ((await fs.readText(target)) !== format(pid, at)) return
+  } catch {
+    return
+  }
+  await fs.writeText(target, format(0, at), undefined, undefined, policy).catch(() => {})
+}
+
+/**
  * Roll the lock back to `priorAt` after a failed or killed consolidation.
  * A `priorAt` of 0 encodes the no-file state (the next read returns 0) with
- * the holder PID cleared. Best-effort: failures are swallowed so the caller's
- * teardown does not throw.
+ * the holder PID cleared. The write carries the same guarded read-verify as
+ * `releaseLock` (issue #336): it runs only when the file still holds exactly
+ * `pid`/`at` — a stale-window reclaimer that took the lock mid-dream owns it,
+ * and a rollback that clobbered it would free a lock under a live dreamer
+ * (holder 0 is free by definition). Best-effort: failures are swallowed so
+ * the caller's teardown does not throw.
  * @param fs - the filesystem seam.
  * @param dir - the memory directory holding the lock.
+ * @param pid - the process id that acquired the lock.
+ * @param at - the acquisition epoch the lock was stamped with.
  * @param priorAt - the pre-acquire consolidated epoch to restore.
  * @param policy - per-call sandbox policy for the lock write (see tryAcquireLock).
  */
-export async function rollbackLock(fs: FileSystem, dir: string, priorAt: number, policy?: MemoryWritePolicy): Promise<void> {
+// Call sites (all four carry the acquire identity): the killed/aborted
+// outcome, the retry's non-completed outcome, the retry dispatch throw, and
+// the outer dispatch throw — plus `releaseLock` in BOTH success branches.
+// `releaseLock` is exported from `index.ts` alongside the other lock symbols.
+export async function rollbackLock(fs: FileSystem, dir: string, pid: number, at: number, priorAt: number, policy?: MemoryWritePolicy): Promise<void> {
   const target = await fs.resolve(join(dir, LOCK_FILE)).catch(() => undefined)
   if (target === undefined) return
+  try {
+    if ((await fs.readText(target)) !== format(pid, at)) return
+  } catch {
+    return
+  }
   await fs.writeText(target, format(0, priorAt), undefined, undefined, policy).catch(() => {})
 }
 ```
 
-## A4 — pressure: read is fail-open, the arm is monotone, the stamp preserves the newer arm, the clear is conditional (issue #335 fix) 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L164-L237〕
+## A4 — pressure: read is fail-open, the arm is monotone, the stamp preserves the newer arm, the clear is conditional (issue #335 fix) 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L225-L297〕
 
 `packages/memory/memory/src/pressure.ts:47-61`
 
@@ -235,7 +300,7 @@ export async function clearPressure(fs: FileSystem, dir: string, now: number, po
 }
 ```
 
-## A5 — dream: gates, stamp before the lock, and the job-done handler that only clears pressure 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L238-L352〕
+## A5 — dream: gates, stamp before the lock, and the job-done handler that releases the lock and clears pressure on success (issue #336 fix) 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L299-L445〕
 
 `packages/memory/memory-consolidation/src/index.ts:290-345`
 
@@ -298,16 +363,38 @@ export async function clearPressure(fs: FileSystem, dir: string, now: number, po
   // strand the lock (a startMemoryJob throw, an earlier silent death), so the
 ```
 
-`packages/memory/memory-consolidation/src/index.ts:353-397`
+`packages/memory/memory-consolidation/src/index.ts:352-430`
 
 ```ts
+  const sessionId = agent.session.header.id
+  try {
+    await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-started', detail: '' })
+    const prompt = buildConsolidationPrompt(dir, sessionsRoot, hints)
+    // Baseline capture (§3.2): the raw strict read immediately before dispatch,
+    // post-lock-acquire. The dream fork reads the directory itself, so this is
+    // the snapshot it was dispatched against; the bounded RETRY below reuses the
+    // SAME baseline — a fresh capture would misclassify first-run concurrent
+    // additions (visible to the fork) as model-seen deletions.
+    const baselineIndex = await readIndexStrict(fs, dir)
+    const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt, baselineIndex)
     void job.done.then(async (outcome) => {
       ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
       if (outcome.status === 'completed') {
-        // Success tombs the marker in BOTH modes -- but only the arms this
+        // Success releases the lock BEFORE clearing the marker (issue #336),
+        // and AWAITs it: void fire-and-forget chains interleave, so only an
+        // awaited release guarantees the marker clear never lands first. A
+        // crash between the two writes then leaves an armed marker with a
+        // free lock — the next cooldown window retries, which is
+        // conservative. The reverse order would leave the marker tombstoned
+        // with the lock still stamped: the exact stale-window delay this fix
+        // removes. The release is guarded (skipped when a reclaimer took the
+        // file mid-dream) and best-effort (failures are swallowed inside).
+        await releaseLock(fs, dir, process.pid, now, policy)
+        // Success tombs the marker in BOTH modes — but only the arms this
         // dream's rebuild addressed (issue #335): the clear is conditional on
-        // the arm captured at the dream's initial read, so an arm that landed
-        // during the dream survives for the next window.
+        // `pressure.armedAt` (captured at the dream's initial read, which the
+        // fork's index snapshot postdates), so an arm that landed during the
+        // dream survives for the next window.
         void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
         return
       }
@@ -319,18 +406,20 @@ export async function clearPressure(fs: FileSystem, dir: string, now: number, po
       // One bounded retry (design 2026-09-24 §4.2): only a FAILED outcome
       // respawns — `killed` is an intentional abort (session teardown /
       // controller.abort) and must never respawn. The retry reuses the held
-      // lock (no re-acquire) and does not restamp the pressure marker. The
-      // whole retry block gets its OWN try/catch mirroring the dispatch-throw
-      // branch: a throw inside the retry must never strand the lock.
+      // lock (no re-acquire) and does not restamp the pressure marker.
       if (outcome.status !== 'failed') {
-        void rollbackLock(fs, dir, priorAt, policy)
+        void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
         return
       }
       try {
-        const retry = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt)
+        const retry = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt, baselineIndex)
         void retry.done.then(async (retryOutcome) => {
           ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
           if (retryOutcome.status === 'completed') {
+            // Same guarded, awaited release as the first attempt: the retry
+            // reuses the ORIGINAL lock, so the same pid+epoch pair is still
+            // ours to free.
+            await releaseLock(fs, dir, process.pid, now, policy)
             void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
             return
           }
@@ -339,18 +428,27 @@ export async function clearPressure(fs: FileSystem, dir: string, now: number, po
             phase: 'outcome-failed',
             detail: `retry ${retryOutcome.status === 'failed' ? retryOutcome.detail : retryOutcome.status}`,
           })
-          void rollbackLock(fs, dir, priorAt, policy)
+          void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
         })
       } catch (err) {
         const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
         await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'outcome-failed', detail: `retry ${detail}` })
-        await rollbackLock(fs, dir, priorAt, policy)
+        await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
         ctx.logger.warn(`memory-consolidation: dream retry failed: ${detail}`)
       }
     })
+  } catch (err) {
+    // The dispatch-throw branch: the same guarded rollback with the acquire
+    // identity (process.pid + the acquisition epoch `now`).
+    const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
+    await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-throw', detail })
+    await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
+    ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${String(err)}`)
+  }
+}
 ```
 
-## A6 — memory job: the truncate fallback and the validated write-back 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L353-L394〕
+## A6 — memory job: the truncate fallback and the validated write-back 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L447-L487〕
 
 `packages/memory/memory-consolidation/src/memory-job.ts:76-89`
 
@@ -392,7 +490,7 @@ export function applyEntrypointFallback(payload: unknown): unknown {
       controller.signal.aborted ? { status: 'killed' } : { status: 'failed', detail: String(err) },
 ```
 
-## A7 — gates: the periodic time gate over the last consolidation epoch 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L395-L423〕
+## A7 — gates: the periodic time gate over the last consolidation epoch 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L489-L516〕
 
 `packages/memory/memory-consolidation/src/gates.ts:24-45`
 
@@ -421,7 +519,7 @@ export function sessionGatePasses(sessionCount: number, minSessions: number): bo
 /**
 ```
 
-## A8 — the turn-end extraction fork: no lock, same write-back path 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L424-L462〕
+## A8 — the turn-end extraction fork: no lock, same write-back path 〔src:ws:specs/tla/memory-write-lifecycle/code-anchors.md#L518-L554〕
 
 `packages/memory/memory-consolidation/src/index.ts:210-240`
 

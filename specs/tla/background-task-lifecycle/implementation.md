@@ -48,27 +48,27 @@ Case results (final run):
 ## Observed code anchors (read this session, worktree @ 51bc5846)
 
 - Outcome mapping (abort-first read, then result, then async write-back):
-  packages/memory/memory-consolidation/src/memory-job.ts:139-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L298-L320〕.
+  packages/memory/memory-consolidation/src/memory-job.ts:139-158 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L390-L412〕.
 - Per-attempt AbortController; disposal effect registered per
-  startMemoryJob call: memory-job.ts:117 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L250-L253〕, 165-173.
+  startMemoryJob call: memory-job.ts:117 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L342-L345〕, 165-173.
 - Non-atomic per-file write-back: @dsh-cc/memory writeback.ts
-  (writeMemoryFiles loop), reached from memory-job.ts:148-154 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L329-L338〕.
+  (writeMemoryFiles loop), reached from memory-job.ts:148-154 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L421-L430〕.
 - Retry policy (one retry, killed never respawns, lock reuse, retry-dispatch
-  throw → rollback): packages/memory/memory-consolidation/src/index.ts:353-397 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L38-L85〕.
-- Lock acquire/rollback semantics: src/lock.ts:71-124 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L159-L215〕 (read-back verify,
+  throw → rollback): packages/memory/memory-consolidation/src/index.ts:363-429 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L39-L108〕.
+- Lock acquire/rollback semantics: src/lock.ts:84-187 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L190-L296〕 (read-back verify,
   accepted sub-ms TOCTOU; best-effort rollback).
-- dreamInFlight resets at spawn time (index.ts:181-183 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L18-L23〕) — the lock is the
+- dreamInFlight resets at spawn time (index.ts:182-184 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L19-L24〕) — the lock is the
   real mutual exclusion (see design.md A-4).
 
 ## Observed regression tests pinning the modeled contract
 
-- dream-diagnostics.spec.ts:233-258 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L353-L381〕 fail→retry completes (same lock, two
-  spawns); :260-273 retry fails→rollback, no third; :275-292 retry-dispatch
-  throw→rollback; :294-309 killed→no respawn.
-- turn-stopping.spec.ts:259-293 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L443-L480〕 rejection→failed; aborted-before-reject→
+- dream-diagnostics.spec.ts:240-276 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L445-L484〕 fail→retry completes (same lock, two
+  spawns); :278-291 retry fails→rollback, no third; :293-310 retry-dispatch
+  throw→rollback; :312-327 killed→no respawn.
+- turn-stopping.spec.ts:267-305 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L546-L587〕 rejection→failed; aborted-before-reject→
   killed; completed→write-back lands host-side.
-- memory-job-silence.spec.ts:96-118 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L415-L440〕 disposal abort→killed.
-- lock.spec.ts:148 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L409-L412〕 killed consolidation leaves a reclaimable lock.
+- memory-job-silence.spec.ts:96-118 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L518-L543〕 disposal abort→killed.
+- lock.spec.ts:270 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L512-L515〕 killed consolidation leaves a reclaimable lock.
 
 ## Findings beyond the model (for user adjudication)
 
@@ -88,9 +88,9 @@ Case results (final run):
      not abort the spawned retry (pins F-5).
 - F-5 (observed while modeling, not model-checked): the original job
   handle cannot abort the retry — each startMemoryJob call creates a fresh
-  controller (memory-job.ts:117 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L250-L253〕); job.abort() after a failed first attempt
+  controller (memory-job.ts:117 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L342-L345〕); job.abort() after a failed first attempt
   has no channel into the retry. Only agent disposal reaches the retry
-  (its own registered effect, memory-job.ts:165-171 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L341-L350〕). Consequence: a
+  (its own registered effect, memory-job.ts:165-171 〔src:ws:specs/tla/background-task-lifecycle/code-anchors.md#L433-L442〕). Consequence: a
   caller that aborts "the dream" after attempt 1 failed cannot cancel the
   retry it spawned.
 - Test gap: no existing test pins abort arriving DURING the write-back
@@ -113,3 +113,5 @@ Case results (final run):
 - Formal review: not dispatched (not requested; review rules unavailable
   from the effective stub). Implementation handoff: not applicable — this
   task changed no production code.
+
+Issue #336 refresh (2026-11-06): run 20261106T060200Z-3d9af28b-19e0-40ad-ba1f-8e92d80ad82b, convention verified (distinct 104, identical statistics), both probes counterexample (unchanged verdicts). This re-run follows the lock-release fix: the success path now awaits `releaseLock` before `clearPressure` (holder cleared, epoch kept as lastConsolidatedAt), all four `rollbackLock` call sites carry the acquire identity, and the `code-anchors.md` excerpts were re-quoted to the fixed code. The four-state lock abstraction is unchanged — "committed" is now documented as the RELEASED terminal state; formulas untouched.

@@ -386,7 +386,7 @@ describe('dream sessions gate (scanned session store)', () => {
     await seedSession(tmpRoot, 'sub', NOW, { sub: true })
     await seedFresh(tmpRoot, 5, NOW)
     // lastAt = 1000: only sessions created after it qualify.
-    const { ctx, subagents } = mount({ memoryHome: '/mem', fs: makeFsMock({ [LOCK]: '1\n1000\n' }), sessionsRoot: tmpRoot })
+    const { ctx, subagents, fs } = mount({ memoryHome: '/mem', fs: makeFsMock({ [LOCK]: '1\n1000\n' }), sessionsRoot: tmpRoot })
     subagents.startActivation.mockImplementation(async () => ({ childId: 'job-child', messageId: 'job-m', dispose: () => Promise.resolve(), result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }) }))
 
     await stopTurn(ctx, fakeAgent('/mem'))
@@ -402,6 +402,13 @@ describe('dream sessions gate (scanned session store)', () => {
     expect(prompt).not.toContain('- old')
     expect(prompt).not.toContain('- sub')
     expect(startsWithLabel(subagents, 'memory-consolidation')).toBe(1)
+    // Issue #336: a completed dream RELEASES the lock — holder cleared, the
+    // acquisition epoch kept as lastConsolidatedAt (exact released bytes).
+    await expect((await controlsOf('memory-consolidation'))[0].done).resolves.toEqual({ status: 'completed' })
+    const released = fs.backing.get(LOCK) ?? ''
+    expect(released).toMatch(/^0\n\d+\n$/)
+    expect(released).not.toContain(String(process.pid))
+    expect(Number(released.split('\n')[1])).toBeGreaterThan(0)
   })
 
   it('captures the raw index before dispatch and reuses that baseline on the bounded retry (design §3.2)', async () => {
