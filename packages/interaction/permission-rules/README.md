@@ -74,13 +74,10 @@ A task grant is a session-scoped batch authorization created only by the user th
 
 ## Pure exports for host UI
 
-- `parseRuleString(rule)`, `parseRule(rule, behavior, source)`, `escapeRuleContent`/`unescapeRuleContent` — parse rules to `PermissionRule`.
-- `evaluatePermission(input)` — fold a `PermissionDecision` for a call (`allow` / `deny` / `ask` / `passthrough`) given tool, subject, rule set, mode, and exemption flags. Use it to preview what a rule hits without mounting the plugin.
-- `mergeRuleSets(...sets)` — merge rule sets by source priority.
-- `foldPermissionMode(events)`, `foldResumeSandbox(events)`, `setPermissionMode(session, mode, resumeSandbox?)` — read/write the durable `permission/mode` override. `setPermissionMode` rejects `plan` and unknown modes; other plugins can fold a session's recorded mode via `foldPermissionMode`.
-- `assessBashCommand(command, patterns?, mediumPatterns?)` — risk-classify a shell command (`LOW`/`MEDIUM`/`HIGH`).
-- `assessFilePath(filePath, opts)` — risk-classify a file write (`LOW`/`MEDIUM`/`HIGH`).
-- `PERMISSION_MODES`, `SOURCE_PRIORITY` — closed vocabularies.
+The root entry exports the parser, the vetted helpers around it, and the closed vocabularies: `parseRuleString(rule)`, `ruleString(rule)`, `contentMatches`, `parseRuleSafe`, `contentSubsumes`/`ruleSubsumes`, `PERMISSION_MODES`, `SWITCHABLE_PERMISSION_MODES`, `PLAN_READONLY_REASON`, and the bash pattern sets `DEFAULT_MEDIUM_PATTERNS`/`DEFAULT_DANGEROUS_PATTERNS`/`CRITICAL_BASH_PATTERNS`.
+
+- `foldPermissionMode(events)`, `foldResumeSandbox(events)`, `setPermissionMode(session, mode, resumeSandbox?)` — read/write the durable `permission/mode` override. Validation sits at that single write point: `setPermissionMode` throws on a mode outside `SWITCHABLE_PERMISSION_MODES` (so `plan` is rejected) and on an unknown `resumeSandbox`; other plugins can fold a session's recorded mode via `foldPermissionMode`.
+- `evaluatePermission(input)`, `mergeRuleSets(...sets)`, `assessBashCommand(command, patterns?, mediumPatterns?)`, `assessFilePath(filePath, opts)`, the low-level `parseRule`/`escapeRuleContent`/`unescapeRuleContent`, and `SOURCE_PRIORITY` are module-level rather than barrel exports; import them through the `@dsh-cc/permission-rules/src/*` subpath.
 
 Rule parsing and evaluation are browser-safe (pure string logic), so the type/parser/evaluate modules import cleanly into UI previews.
 
@@ -91,7 +88,3 @@ The classifier and PI-probe stages append durable `permission/classifier` / `per
 Setting `permissions.autoMode.classifier.auditFullText: true` also stores the **raw rendered input** (≤8192 chars) on every event — which may contain command text, including secrets the agent was about to run, or tool-result content. Audit logs grow accordingly; keep the flag off unless you are actively reviewing classifier behavior, and treat the session log as sensitive while it is on. Toggle it live — the next audited event picks the change up without a restart.
 
 Review the audit with `/auto-mode review [full]` (in `@dsh-cc/command-auto-mode`): the last 20 classifier/probe verdicts as an aligned table; `full` prints the stored inputs when `auditFullText` is on.
-
-## Invariant companion
-
-`@dsh-cc/permission-rules/invariant` validates `permission/mode` session events at the session boundary: `mode` must be switchable (never `plan`), and `resumeSandbox` — when present — must be a known sandbox mode (`read-only` | `workspace-write` | `danger-full-access`).

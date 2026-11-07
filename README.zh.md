@@ -74,7 +74,8 @@ dsh web
 
 | dsh-cc 版本 | 已验证的 dsh |
 | --- | --- |
-| v0.9.3-rc.5 及之后 | 0.2.2-rc.1 |
+| `main`（未发布，v0.9.3 之后） | 0.2.2-rc.1 |
+| v0.9.3 | 0.2.1-rc.5 |
 | v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
@@ -234,7 +235,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | Workspace | 0 | 4 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
-Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).〔src:ws:docs/cc-parity-matrix.md#L366-L366〕
+Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->
@@ -323,10 +324,8 @@ CC preset 包含以下命令。用 `/help` 查看当前安装构建中的命令�
 /learn             distill recurring corrections into workspace memory
 /mcp               manage MCP connections
 /memory            inspect memories
-/onboard           re-run the first-run setup (clears the onboarding opt-out)
 /permissions       inspect or change permission mode/rules
 /plugin            manage plugins
-/provider          manage LLM providers (list/add/remove, rotate keys, set default)
 /release-notes     show release notes
 /rename            pin an explicit title on the current session
 /resume            resume an interrupted session
@@ -339,7 +338,7 @@ CC preset 包含以下命令。用 `/help` 查看当前安装构建中的命令�
 
 共享 preset 还包含 `/preset`，VWA preset 另外提供 `/vwa` 项目命令。
 
-TUI 另有本地命令：`/model`、`/effort`、`/clear`（`/new`、`/reset`）、`/exit`（`/quit`）、`/usage`、`/export-md`、`/copy`、`/tui-help`。详见 [TUI 包](packages/ui/tui/README.zh.md#按键)。
+TUI 另有本地命令：`/model`、`/effort`、`/clear`（`/new`、`/reset`）、`/exit`（`/quit`）、`/usage`、`/export-md`、`/copy`、`/provider`、`/onboard`、`/tui-help`。详见 [TUI 包](packages/ui/tui/README.zh.md#按键)。
 
 TUI 还提供任务列表、审批、排队提示词、会话导出、用量显示和本地 shell 命令。
 
@@ -476,6 +475,7 @@ packages/
   observability/  cache-health observer, config snapshot sidecar, shared sidecar IO
   plugin/         first-party plugins of the in-repo marketplace
   test-support/   shared test fixtures and eval harnesses (not published)
+  evaluation/     VWA evaluation harness and gold set (not published)
   bundle/         installable profile bundles
   acp/            Agent Client Protocol driver for the cc-acp profile
   ui/             terminal UI and the vendored pi-tui renderer

@@ -47,7 +47,7 @@ Claude Code 的 `Task` 工具允许主代理按 `subagent_type`（如 `deep-reas
 
 ### 工具限制消毒与保留名
 
-当定义 frontmatter 收窄工具（如 `tools: Read, Task`）时，allow/deny 清单会强制经过 CC→harness 翻译，再对照工具注册表**实时**已知的名集合（`ctx.tools.view(callingAgent).restrictableNames`——已注册与已保留名的并集，在 execute 时按调用 agent 的 scope 读取，因此 standing-scope 上的 MCP 保留名可见）做校验。注册表不认识的名会被丢弃并告警；这里没有静态合法名集合，因此已挂载的 MCP 工具和未来新增的注册行都无需改代码即可通过：
+当定义 frontmatter 收窄工具（如 `tools: Read, Task`）时，allow/deny 清单会强制经过 CC→harness 翻译，再对照工具注册表**实时**已知的名集合（`ctx.tools.restrictableNames(callingAgent)`——已注册与已保留名的并集，在 execute 时按调用 agent 的 scope 读取，因此 standing-scope 上的 MCP 保留名可见）做校验。注册表不认识的名会被丢弃并告警；这里没有静态合法名集合，因此已挂载的 MCP 工具和未来新增的注册行都无需改代码即可通过：
 
 - **MCP 公开名。** 精确的 `mcp__<server>__<tool>` 原样保留——必须用该工具的公开名，包括名字被规范化截断/替换时追加的 12 位十六进制确定性 hash 后缀。
 - **server 级 MCP 通配。** `mcp__<server>` 与 `mcp__<server>__*` 都会展开为该 server 已挂载的全部工具（`mcp__<server>__` 前缀），frontmatter 因此不必逐个点名带 hash 的条目也能在 server 发布新工具后继续生效。

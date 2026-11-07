@@ -25,4 +25,3 @@ setCompactHint(agent, 'Keep the migration plan and open TODOs')
 ## Notes
 
 - Hints are held in a `WeakMap` keyed by the live agent, so they never leak across agents and die with the agent object.
-- Subcommand `@dsh-cc/compaction-basic/invariant` registers the package's invariant companion; it installs no runtime invariant because cross-agent leakage and hint reuse are impossible by construction.

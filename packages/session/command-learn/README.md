@@ -19,7 +19,7 @@ Memory writes are wholesale-regenerated per run inside a marker-delimited manage
 
 ## Composition
 
-The plugin injects `commands`, `fs`, and `settings`. A custom app mounts its owner plus this plugin:
+The plugin injects `commands`, `fs`, and `skills`; it also picks up `settings` when the host provides that service. A custom app mounts its owner plus this plugin:
 
 ```yaml
 - id: command-learn

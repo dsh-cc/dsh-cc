@@ -74,7 +74,8 @@ Each release has one dsh version for CI verification. The launcher also uses tha
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
-| v0.9.3-rc.5 onward | 0.2.2-rc.1 |
+| `main` (unreleased, after v0.9.3) | 0.2.2-rc.1 |
+| v0.9.3 | 0.2.1-rc.5 |
 | v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
 | v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
@@ -323,10 +324,8 @@ The CC preset includes these commands. Use `/help` to inspect the commands in yo
 /learn             distill recurring corrections into workspace memory
 /mcp               manage MCP connections
 /memory            inspect memories
-/onboard           re-run the first-run setup (clears the onboarding opt-out)
 /permissions       inspect or change permission mode/rules
 /plugin            manage plugins
-/provider          manage LLM providers (list/add/remove, rotate keys, set default)
 /release-notes     show release notes
 /rename            pin an explicit title on the current session
 /resume            resume an interrupted session
@@ -339,7 +338,7 @@ The CC preset includes these commands. Use `/help` to inspect the commands in yo
 
 The shared presets also include `/preset`. The VWA preset adds `/vwa` project commands.
 
-The TUI adds its own local commands: `/model`, `/effort`, `/clear` (`/new`, `/reset`), `/exit` (`/quit`), `/usage`, `/export-md`, `/copy`, and `/tui-help`. See the [TUI package](packages/ui/tui/README.md#keys).
+The TUI adds its own local commands: `/model`, `/effort`, `/clear` (`/new`, `/reset`), `/exit` (`/quit`), `/usage`, `/export-md`, `/copy`, `/provider`, `/onboard`, and `/tui-help`. See the [TUI package](packages/ui/tui/README.md#keys).
 
 The TUI also has task lists, approvals, queued prompts, transcript export, usage displays, and local shell commands.
 
@@ -476,6 +475,7 @@ packages/
   observability/  cache-health observer, config snapshot sidecar, shared sidecar IO
   plugin/         first-party plugins of the in-repo marketplace
   test-support/   shared test fixtures and eval harnesses (not published)
+  evaluation/     VWA evaluation harness and gold set (not published)
   bundle/         installable profile bundles
   acp/            Agent Client Protocol driver for the cc-acp profile
   ui/             terminal UI and the vendored pi-tui renderer

@@ -34,8 +34,10 @@ One cordis plugin (`apply`) with:
   `ACTIVATION_LIMIT_REACHED`, whose remedy copy is kept byte-identical to the
   spawn lane's. Cancellation during listing is propagated; missing
   infrastructure still degrades open;
-- an **`agent/request` overlay** applying the pinned
-  `{provider, model, reasoningEffort, maxTokens}` tuple field-by-field
+- a **pre-first-step pin application**: the pinned `{provider, model,
+  reasoningEffort}` triple is selected durably onto the child's model selection
+  at publication (spawn and cold resume, before the first step freezes), and an
+  **`agent/request` overlay** applies the pinned `maxTokens` field-by-field
   (absence included) to every resumed turn, whatever resumed it;
 - **`tools/post-execute`** notice prefixing on `send_message` and
   `[resume-pin]` state / definition-change annotations on `list_agents`;
