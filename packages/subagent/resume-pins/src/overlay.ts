@@ -88,12 +88,12 @@ export function applyPinnedMaxTokens<T extends Record<string, unknown>>(resolved
   // non-null pinned value set here equals the step's frozen selection and
   // passes the 0.2.2 model-identity guard; a junk-injected effort from an
   // inner listener is stripped before the guard compares).
-  const out = { ...resolved }
+  const out: Record<string, unknown> = { ...resolved }
   delete out['maxTokens']
   if (pin.effective.reasoningEffort !== null) {
     out['reasoningEffort'] = pin.effective.reasoningEffort
   } else {
     delete out['reasoningEffort']
   }
-  return out
+  return out as T
 }
