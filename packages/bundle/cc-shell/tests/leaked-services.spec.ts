@@ -47,7 +47,9 @@ function leakedServices(ctx: Context, mount: FiberLike): string[] {
   for (const key of Object.getOwnPropertySymbols(store)) {
     const impl = store[key]
     if (impl === undefined) continue
-    if (!withinFiber(impl.fiber, mount)) continue
+    // Harness 0.2.2-rc.1: the reflected store entry carries its context, so the
+    // owning fiber is read through it (lockstep with agent-preset-registry mount.ts).
+    if (!withinFiber(impl.ctx.fiber, mount)) continue
     if (rootIsolate[impl.name] === key) leaked.push(impl.name)
   }
   return leaked.sort((left, right) => left.localeCompare(right))

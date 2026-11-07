@@ -25,6 +25,7 @@ import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import * as VwaEvidence from '@dsh-cc/vwa-evidence'
 import * as VwaArgument from '@dsh-cc/vwa-argument'
@@ -63,7 +64,7 @@ function leakedServices(ctx: Context, mount: FiberLike): string[] {
   for (const key of Object.getOwnPropertySymbols(store)) {
     const impl = store[key]
     if (impl === undefined) continue
-    let current = impl.fiber as FiberLike
+    let current = impl.ctx.fiber as FiberLike
     let within = false
     while (true) {
       if (current === mount) {
@@ -185,6 +186,10 @@ async function host(): Promise<{ root: Context; reviewer: EnvelopeReviewer }> {
   const reviewer = new EnvelopeReviewer()
   root.llm.registerAdapter([PROVIDER], reviewer)
   await root.plugin(ToolRuntime as never)
+  // Harness 0.2.2-rc.1: a tools composition must select an executor before an
+  // agent runs (selectExecutor throws otherwise). Mount the fork executor
+  // exactly as cc-shell's tool-executor-cc row does.
+  await root.plugin(CcToolExecutor as never)
   await root.plugin(LocalJobRegistry as never, {})
   ;(root as unknown as { jobs: { attachController(name: string): () => void } }).jobs.attachController('tool-jobs')
   ;(root as unknown as { tools: { register(def: unknown): () => void } }).tools.register({
@@ -259,17 +264,22 @@ describe('agent.vwa.cordis.yml lane-2 group (semantic-enabled real boot)', () =>
       }
       const tools = (
         root as unknown as {
-          tools: { execute(e: unknown): Promise<{ isError: boolean; value?: any; error?: { message: string } }> }
+          tools: {
+            execute(batch: unknown): Promise<{
+              results: readonly { result: { isError: boolean, value?: any, error?: { message: string } } }[]
+            }>
+          }
         }
       ).tools
+      // Harness 0.2.2-rc.1: the registry delegates a BATCH to the executor
+      // (execute({ calls })); this adapter keeps the spec's single-call shape.
       const exec = async (name: string, args: unknown) => {
-        const result = await tools.execute({
-          callId: randomUUID(),
-          name,
-          arguments: args,
+        const batch = await tools.execute({
+          calls: [{ type: 'tool-call', id: randomUUID(), name, arguments: args }],
           agent,
           signal: new AbortController().signal,
         })
+        const result = batch.results[0]!.result
         if (result.isError) throw new Error(`${name}: ${result.error?.message}`)
         return result.value
       }

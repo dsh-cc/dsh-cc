@@ -913,18 +913,6 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
-  packages/core/tool-append-order:
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: link:../../../../deepseek-harness/vendor/cordis
-        version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-scope':
-        specifier: link:../../../../deepseek-harness/packages/core/scope
-        version: link:../../../../deepseek-harness/packages/core/scope
-      '@deepseek-ai/dsh-system-prompt':
-        specifier: link:../../../../deepseek-harness/packages/core/system-prompt
-        version: link:../../../../deepseek-harness/packages/core/system-prompt
-
   packages/core/tool-manage-skill:
     dependencies:
       '@dsh-cc/skill-loader':
@@ -2998,9 +2986,6 @@ importers:
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
-      '@dsh-cc/tool-append-order':
-        specifier: workspace:^
-        version: link:../../core/tool-append-order
       '@dsh-cc/tool-git-worktree':
         specifier: workspace:^
         version: link:../../workspace/tool-git-worktree
@@ -3059,6 +3044,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
       js-yaml:
         specifier: ^4.1.0
         version: 4.3.2

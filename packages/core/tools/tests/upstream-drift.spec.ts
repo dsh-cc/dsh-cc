@@ -71,6 +71,7 @@ const FORK_ONLY_FILES = [
   'py-render.ts',
   'py-sdk-doc.ts',
   'py-types.ts',
+  'test-support.ts', // D5.1 — the retired append-order helper, kept as test-support only
   'ts-types.ts',
   'types.ts', // durable tool/code-dispatch* session-event payloads + KNOWN registration
 ]

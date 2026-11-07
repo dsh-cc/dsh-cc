@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 import { apply } from '../src/index.ts'
 
 /** A ZERO-dependency MCP stdio server: newline-delimited JSON-RPC on stdio. */
@@ -114,7 +115,6 @@ function writeClaudeConfigs(names: string[]): { claudeMcpJson: string; claudeDot
 /** A fixture server whose initialize response is delayed by MCP_FIXTURE_DELAY_MS (from its config env). */
 const FIXTURE_SLOW_SERVER = `
 import { createInterface } from 'node:readline'
-import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 const respond = (id, result) => {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n')

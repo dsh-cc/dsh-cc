@@ -31,7 +31,6 @@ const harnessDir = (...parts: string[]): string | undefined =>
 
 /** Exact-match specifier → harness lib entry. Order is irrelevant (exact matches). */
 const harnessAliases: Record<string, string | undefined> = {
-  '@deepseek-ai/dsh-tool-subagent-control/list-agents': harnessDir('packages/subagent/tool-subagent-control/lib/types/list-agents.js'),
   '@deepseek-ai/dsh-tool-subagent-control': harnessDir('packages/subagent/tool-subagent-control/lib/index.js'),
   '@deepseek-ai/dsh-tool-subagent-report': harnessDir('packages/subagent/tool-subagent-report/lib/index.js'),
   '@deepseek-ai/dsh-subagent-spawn-in-process': harnessDir('packages/subagent/subagent-spawn-in-process/lib/index.js'),

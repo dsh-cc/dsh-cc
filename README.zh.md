@@ -219,7 +219,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 26 | 4 | 2 |
+| Engine subsystems | 11 | 28 | 4 | 2 |
 | Hook events | 9 | 8 | 4 | 0 |
 | Command surface | 22 | 10 | 1 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |
@@ -234,7 +234,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | Workspace | 0 | 4 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
-Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).
+Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).〔src:ws:docs/cc-parity-matrix.md#L366-L366〕
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->

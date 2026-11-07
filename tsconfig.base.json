@@ -80,6 +80,9 @@
       "@dsh-cc/tools/executor": [
         "./packages/core/tools/src/cc-executor.ts"
       ],
+      "@dsh-cc/tools/test-support": [
+        "./packages/core/tools/src/test-support.ts"
+      ],
       "@dsh-cc/subagent-resume-pins": [
         "./packages/subagent/resume-pins/src/index.ts"
       ],

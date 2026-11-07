@@ -25,6 +25,10 @@
       "types": "./lib/cc-executor.d.ts",
       "default": "./lib/cc-executor.js"
     },
+    "./test-support": {
+      "types": "./lib/test-support.d.ts",
+      "default": "./lib/test-support.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },

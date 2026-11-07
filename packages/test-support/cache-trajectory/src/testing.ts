@@ -23,6 +23,13 @@ import Microcompactor from '@dsh-cc/compaction-micro'
 export interface TrajectoryStackOptions {
   /** Deployment persona for the tree (system-prompt plugin config). */
   readonly persona: string
+  /**
+   * Deployment tool order (harness 0.2.2-rc.1 `systemPrompt.toolOrder`): listed
+   * names render in this order and `<unlisted-tools>` terminates the list, with
+   * the unlisted rest bucket re-sorted lexicographically on every assembly.
+   * Omitted ⇒ pure lexicographic order.
+   */
+  readonly toolOrder?: readonly string[]
   /** Point the DeepSeek adapter at an OpenAI-compatible mock server. */
   readonly baseURL?: string
   /** Mount the dsh-cc agent-plane plugins (token meter + passive microcompactor). */
@@ -39,8 +46,15 @@ export async function mountTrajectoryTestStack(
   options: TrajectoryStackOptions,
 ): Promise<void> {
   // Harness 0.1.5: the system-prompt persona knob is `personaPrefix` (a plain
-  // template string).
-  await mountAgentLoopTestDependencies(ctx, { systemPrompt: { personaPrefix: options.persona } })
+  // template string). Harness 0.2.2-rc.1: tool ordering is the same plugin's
+  // constructor state (`toolOrder`) — the retired append-order waterfall
+  // listener has no seam left.
+  await mountAgentLoopTestDependencies(ctx, {
+    systemPrompt: {
+      personaPrefix: options.persona,
+      ...options.toolOrder === undefined ? {} : { toolOrder: [...options.toolOrder] },
+    },
+  })
   // Harness 0.1.7: `dsh-llm-deepseek` is a plain library, not a plugin; the
   // provider route is registered directly (the `llm-deepseek-api-key` idiom,
   // minus credential resolution — mock servers accept any key).
@@ -111,6 +125,7 @@ export async function startKeylessTrajectoryStack(
   await mountTrajectoryTestStack(ctx, {
     persona: options.persona,
     baseURL: server.baseURL,
+    ...(options.toolOrder !== undefined ? { toolOrder: options.toolOrder } : {}),
     ...(options.ccPlugins !== undefined ? { ccPlugins: options.ccPlugins } : {}),
   })
   return {
