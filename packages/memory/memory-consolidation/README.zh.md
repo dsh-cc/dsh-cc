@@ -97,4 +97,6 @@ await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
   而不是被静默当作空目录。
 - 没有删除通道：dream 会把过期记忆从 `MEMORY.md` 移除，但失去引用的主题文件仍留在
   盘上，直到被覆写。主题文件删除已延期（fork 的 allow-list 本来也没有 remove 工具）。
-- 并行会话的抽取并写时为 last-writer-wins;dream 锁只串行化整合。
+- 并行会话的抽取同时写 `MEMORY.md` 索引时不再互相丢更新：每次索引写入都会对照任务
+  开始时读到的基线做校验，期间已有内容落地就在其上重新合并。主题文件正文仍是
+  last-writer-wins，dream 锁只串行化整合。

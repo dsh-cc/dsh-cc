@@ -117,5 +117,7 @@ extraction may start a short background fork.
   `MEMORY.md`, but an orphaned topic file stays on disk until overwritten.
   Topic-file deletion is deferred (the fork allow-list never had a remove
   tool either).
-- Concurrent extractions from parallel sessions write last-writer-wins; the
-  dream lock serializes only consolidations.
+- Concurrent extractions from parallel sessions no longer drop each other's `MEMORY.md`
+  pointers: an index write is checked against the baseline the job read and rebased onto
+  whatever landed meanwhile. Topic-file bodies are still last-writer-wins, and the dream
+  lock serializes only consolidations.

@@ -28,8 +28,9 @@
   池（`maxActiveSubagents`，cc bundle 中为 25）是唯一的名额阀门——达到上限时抛出
   `ACTIVATION_LIMIT_REACHED`，其补救文案与 spawn 车道保持逐字节一致。查询期间的
   取消会向上传播；缺少基础服务时仍按原约定放行；
-- 一个 **`agent/request` overlay**，把钉存的
-  `{provider, model, reasoningEffort, maxTokens}` 元组逐字段（含缺席）应用到
+- **首步之前的 pin 应用**：钉存的 `{provider, model, reasoningEffort}` 三元组在
+  child 发布时（spawn 与冷恢复，均早于第一步冻结）被持久地选进该 child 的模型选择；
+  另有一个 **`agent/request` overlay** 把钉存的 `maxTokens` 逐字段（含缺席）应用到
   每个恢复的轮次，无论由谁恢复；
 - **`tools/post-execute`** 在 `send_message` 上加通知前缀，并在 `list_agents` 上
   附注 `[resume-pin]` 状态与定义变化；

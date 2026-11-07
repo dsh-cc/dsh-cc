@@ -74,13 +74,10 @@ await ctx.plugin(PermissionRules, {
 
 ## 供宿主 UI 使用的纯导出
 
-- `parseRuleString(rule)`、`parseRule(rule, behavior, source)`、`escapeRuleContent`/`unescapeRuleContent`——解析规则为 `PermissionRule`。
-- `evaluatePermission(input)`——为一次调用收敛 `PermissionDecision`（`allow` / `deny` / `ask` / `passthrough`），给定工具、subject、规则集、模式与豁免标志。无需挂载插件即可预览某规则会命中什么。
-- `mergeRuleSets(...sets)`——按来源优先级合并规则集。
-- `foldPermissionMode(events)`、`foldResumeSandbox(events)`、`setPermissionMode(session, mode, resumeSandbox?)`——读写持久的 `permission/mode` 覆盖。`setPermissionMode` 拒绝 `plan` 与未知模式；其他插件可用 `foldPermissionMode` 折叠某会话的记录模式。
-- `assessBashCommand(command, patterns?, mediumPatterns?)`——对 shell 命令做风险分级（`LOW`/`MEDIUM`/`HIGH`；`patterns` 替换 HIGH 默认集，`mediumPatterns` 替换 MEDIUM 默认集）。
-- `assessFilePath(filePath, opts)`——对文件写入做风险分级（`LOW`/`MEDIUM`/`HIGH`）。
-- `PERMISSION_MODES`、`SOURCE_PRIORITY`——封闭词汇表。
+包根入口导出解析器、解析器周边的校验辅助函数和几个封闭词汇表：`parseRuleString(rule)`、`ruleString(rule)`、`contentMatches`、`parseRuleSafe`、`contentSubsumes`/`ruleSubsumes`、`PERMISSION_MODES`、`SWITCHABLE_PERMISSION_MODES`、`PLAN_READONLY_REASON`，以及 bash 模式集 `DEFAULT_MEDIUM_PATTERNS`/`DEFAULT_DANGEROUS_PATTERNS`/`CRITICAL_BASH_PATTERNS`。
+
+- `foldPermissionMode(events)`、`foldResumeSandbox(events)`、`setPermissionMode(session, mode, resumeSandbox?)`——读写持久的 `permission/mode` 覆盖。校验只发生在这一处写点：`setPermissionMode` 对不在 `SWITCHABLE_PERMISSION_MODES` 里的模式（`plan` 因此被拒）和未知的 `resumeSandbox` 抛错；其他插件可用 `foldPermissionMode` 折叠某会话的记录模式。
+- `evaluatePermission(input)`、`mergeRuleSets(...sets)`、`assessBashCommand(command, patterns?, mediumPatterns?)`、`assessFilePath(filePath, opts)`、底层的 `parseRule`/`escapeRuleContent`/`unescapeRuleContent` 以及 `SOURCE_PRIORITY` 属于模块级导出，不在包根导出里，通过 `@dsh-cc/permission-rules/src/*` 子路径导入。
 
 规则解析与评估是浏览器安全的（纯字符串逻辑），因此类型/解析/评估模块可干净地导入 UI 预览。
 
@@ -91,7 +88,3 @@ await ctx.plugin(PermissionRules, {
 设置 `permissions.autoMode.classifier.auditFullText: true` 后，每个事件还会存储**原始渲染输入**（≤8192 字符）——其中可能包含命令文本，包括代理即将执行的秘密，或工具结果内容。审计日志会相应增长；除非正在排查分类器行为，否则请保持该开关关闭，并在开启期间将会话日志视为敏感数据。该开关可即时切换——下一个被审计的事件即生效，无需重启。
 
 使用 `/auto-mode review [full]`（位于 `@dsh-cc/command-auto-mode`）查看审计：以对齐表格展示最近 20 条分类器/探测判定；`full` 会在 `auditFullText` 开启时打印已存储的输入。
-
-## Invariant 伴生插件
-
-`@dsh-cc/permission-rules/invariant` 在会话边界校验 `permission/mode` 会话事件：`mode` 必须是可切换的（绝不能是 `plan`），且 `resumeSandbox`——若存在——必须是已知沙箱模式（`read-only` | `workspace-write` | `danger-full-access`）。

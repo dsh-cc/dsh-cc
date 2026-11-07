@@ -95,7 +95,7 @@ as a durable continuable background agent and returns promptly with its `agentId
 
 When a definition's frontmatter narrows tools (e.g. `tools: Read, Task`), the allow/deny
 lists are forced through the CC→harness translation and then checked against the **live**
-set of names the tools registry knows (`ctx.tools.view(callingAgent).restrictableNames` —
+set of names the tools registry knows (`ctx.tools.restrictableNames(callingAgent)` —
 registered and reserved names, read at execute time against the calling agent's scope so
 standing-scope MCP reservations are visible). A name the registry does not know is dropped
 with a warning; there is no static legal-names set, so mounted MCP tools and any future

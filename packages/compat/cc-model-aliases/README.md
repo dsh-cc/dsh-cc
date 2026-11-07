@@ -99,8 +99,9 @@ non-empty string whose legal spellings belong to the **target model's adapter**
 (`max`, `xhigh`, `high`, … — not validated against any adapter catalog here).
 When present, the spawn (the Task tool and the plugin-loader's
 `AgentProvider`) stamps it onto the child's options, and the routes service's
-host `agent/request` listener applies it to **every** request of that child,
-overriding any effort restored from a forked parent header. String-form
+`subagent/start` listener selects it durably onto the child's live model
+selection before the first step freezes, overriding any effort restored from a
+forked parent header. String-form
 aliases cannot carry an effort; `inherit` / unconfigured builtins stamp
 nothing. An effort the target model does not support fails the request with
 `UNSUPPORTED_REASONING_EFFORT` — fail-loud, by design.
@@ -193,9 +194,8 @@ cc-shell (and the routes service), so in CC mode the fix is always active.
   `{ modelAliases?: Record<string, AliasTarget> }` (deployment defaults).
 - `ModelRoutes` — the value type of `ctx.get('ccModelRoutes')` (`resolve(model):
   { provider?, model?, reasoningEffort? } | undefined`).
-- `overlayStampedEffort(resolved, stamped)` / `stampedEffortOf(options)` — the
-  host-side effort overlay used by the service's `agent/request` listener;
-  exported for tests and host embeddings.
+- `stampedEffortOf(options)` — read the effort stamp back from an agent options
+  record; exported for tests and host embeddings.
 - `mergeAliasMaps(config, settings)` — entry-shallow merge with `null` deletion
   and case-insensitive key folding; returns an effective `ReadonlyMap` of only
   the configured aliases.

@@ -64,7 +64,7 @@ alias 的查找顺序：**settings overlay → config 默认 → builtin fallbac
 
 ### 对象形式 alias 的 `reasoningEffort`
 
-对象形式 alias 可声明可选的 `reasoningEffort`：一个不透明的非空字符串，其合法拼写属于**目标模型的适配器**（`max`、`xhigh`、`high`、…——此处不对任何适配器目录做校验）。存在时，spawn 侧（Task 工具与 plugin-loader 的 `AgentProvider`）把它 stamp 到 child 的 options 上，routes 服务的宿主 `agent/request` listener 会把它应用到该 child 的**每一个**请求上，覆盖任何从 fork 父 header 恢复的 effort。字符串形式 alias 无法携带 effort;`inherit` / 未配置 builtin 不 stamp 任何东西。目标模型不支持的 effort 会让请求以 `UNSUPPORTED_REASONING_EFFORT` 失败——有意 fail-loud。
+对象形式 alias 可声明可选的 `reasoningEffort`：一个不透明的非空字符串，其合法拼写属于**目标模型的适配器**（`max`、`xhigh`、`high`、…——此处不对任何适配器目录做校验）。存在时，spawn 侧（Task 工具与 plugin-loader 的 `AgentProvider`）把它 stamp 到 child 的 options 上，routes 服务的 `subagent/start` listener 会在第一步冻结选择之前，把它持久地选进 child 的模型选择，覆盖任何从 fork 父 header 恢复的 effort。字符串形式 alias 无法携带 effort;`inherit` / 未配置 builtin 不 stamp 任何东西。目标模型不支持的 effort 会让请求以 `UNSUPPORTED_REASONING_EFFORT` 失败——有意 fail-loud。
 
 ```jsonc
 // settings 命名空间 "model-aliases"
@@ -112,7 +112,7 @@ alias 的查找顺序：**settings overlay → config 默认 → builtin fallbac
 
 - `apply(ctx, config?)` / `name` — **cordis 插件入口**（插件 id `cc-model-routes`，另以 `applyRoutes` / `routesPluginName` 再导出）。挂载服务；config 形状为 `{ modelAliases?: Record<string, AliasTarget> }`（部署默认）。
 - `ModelRoutes` — `ctx.get('ccModelRoutes')` 的值类型（`resolve(model): { provider?, model?, reasoningEffort? } | undefined`）。
-- `overlayStampedEffort(resolved, stamped)` / `stampedEffortOf(options)` — 服务 `agent/request` listener 使用的宿主侧 effort overlay；为测试与宿主内嵌而导出。
+- `stampedEffortOf(options)` — 从 agent options 记录里读回 effort stamp；为测试与宿主内嵌而导出。
 - `mergeAliasMaps(config, settings)` — 带 `null` 删除与大小写不敏感 key 折叠的 entry-shallow merge；返回只含已配置 alias 的有效 `ReadonlyMap`。
 - `createModelResolver(getAliases, { warn })` — 构建 `resolveModel` 闭包。`getAliases` 是**每次调用**求值的 thunk(liveness)。可选 `warn` 替换默认的 `console.warn`（用于未配置自定义 alias 告警）。
 - `BUILTIN_ALIASES` — CC 家族（`fable`/`opus`/`sonnet`/`haiku`）加上 dsh-cc lane(`sketch`/`draft`/`blueprint`/`masterplan`/`architect`/`gauge`)。

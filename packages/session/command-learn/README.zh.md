@@ -19,7 +19,7 @@
 
 ## 组合
 
-该插件注入 `commands`、`fs` 与 `settings`。自定义应用会挂载它的拥有者与此插件：
+该插件注入 `commands`、`fs` 与 `skills`；宿主提供 `settings` 服务时会一并接入。自定义应用会挂载它的拥有者与此插件：
 
 ```yaml
 - id: command-learn

@@ -25,4 +25,3 @@ setCompactHint(agent, 'Keep the migration plan and open TODOs')
 ## 备注
 
 - 提示存放在以活跃 agent 为键的 `WeakMap` 中，因此绝不会跨 agent 泄漏，并随 agent 对象一起消亡。
-- 子命令 `@dsh-cc/compaction-basic/invariant` 注册本包的 invariant 伴随插件；它不安装任何运行时 invariant，因为跨 agent 泄漏与提示复用在构造上就不可能发生。
