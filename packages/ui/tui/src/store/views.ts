@@ -94,6 +94,20 @@ export interface QuestionOptionView {
 }
 
 /**
+ * Harness `AskUserQuestionIntent` shape (harness 0.2.2's two-member union),
+ * mirrored locally because the view layer stays harness-import-free:
+ * - `plan-review`: a plan submitted for review — `approve` names the option
+ *   label that approves it (every other option declines; `detail` carries the
+ *   plan markdown);
+ * - `approval`: a blocking permission decision over fixed actions with no
+ *   free-text answer (`approve` / `reject`, plus an optional persistent
+ *   `always` grant). See the rendering note on {@link QuestionView.intent}.
+ */
+export type QuestionIntentView =
+  | { kind: 'plan-review'; approve: string }
+  | { kind: 'approval'; approve: string; reject: string; always?: string }
+
+/**
  * Live view of an ask-user-question prompt: the full first question item
  * (text, detail markdown, option descriptions, multiSelect, intent) plus the
  * interaction state the overlay mutates as the user navigates.
@@ -107,7 +121,16 @@ export interface QuestionView {
   options: readonly QuestionOptionView[]
   /** Whether more than one option may be selected. */
   multiSelect: boolean
-  intent?: { kind: 'plan-review'; approve: string }
+  /**
+   * TODO(0.2.3): the `approval` kind currently renders through the generic
+   * option-list fallback (its `approve`/`reject`/`always` labels appear as
+   * ordinary option rows). The dedicated permission card — subjects/icons,
+   * the always-grant row, and the fixed reject/always wording upstream's own
+   * question UI owns — is deferred to the 0.2.3 UI pass. The `plan-review`
+   * kind is unaffected (see `createQuestionBox`'s plan-markdown branch and
+   * the plan-approve `resolveQuestion` echo contract).
+   */
+  intent?: QuestionIntentView
   /**
    * Focused row: an index into `options`, or `options.length` for the
    * trailing free-text ("Other") row.

@@ -83,7 +83,16 @@ export interface LedgerAgents {
 
 /** Duck-typed event bus (cordis `ctx.on`) the lifecycle events arrive on. */
 export interface LedgerEventBus {
-  on(event: string, listener: (info: Record<string, unknown>) => void): (() => void) | void
+  /**
+   * Subscribe to one event. Deliberately typed at the bottom type (harness
+   * 0.2.2 D8): cordis' `Context.on` is overloaded over concrete event maps, so
+   * a `string`/`Record<string, unknown>` shape is not assignable from it.
+   * `never` parameters plus method-shorthand bivariance admit every real bus,
+   * and the concrete payload types are governed by the receiving bus (the
+   * ledger only forwards to `subscribeLifecycle`, whose `WatchBus` narrows
+   * them back to the `subagent/*` payloads).
+   */
+  on(event: never, listener: never): (() => void) | void
 }
 
 export interface OneShotLedgerDeps {

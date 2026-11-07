@@ -1,5 +1,5 @@
 // Vendored from @deepseek-ai/dsh-acp (packages/acp/acp/tests/codec.spec.ts)
-// Source ref: c1b47e41fcd54d20a0f061df28683bfc29ee24e5 (deepseek-harness, MIT — see LICENSE-harness)
+// Source ref: 2f97f60455605e915b8176d9170cae337bfedcc6 (deepseek-harness, MIT — see LICENSE-harness)
 // Copied 2026-10-09. Structural fixes flow from upstream during harness
 // migrations; CC-specific divergences must be recorded in DIVERGENCE.md.
 import { describe, expect, it } from 'vitest'

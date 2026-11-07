@@ -8,6 +8,7 @@ import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as cacheHealth from '@dsh-cc/cache-health'
 
 /** Real preset-style composition: real session store + command runtime, a stub
@@ -19,6 +20,7 @@ async function composed() {
   ctx.dshHomePath = (...segments: string[]) => join(home, ...segments)
   await ctx.plugin(SessionStore)
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   const plugin = await ctx.plugin(cacheHealth, { enabled: true })
   const session = ctx.sessions.create(SessionId(`cache-health-${Math.random()}`), {

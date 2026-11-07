@@ -224,10 +224,20 @@ describe('workflow tool (fake engine + fake session)', () => {
           arguments: args,
           agent: fakeAgent(append, { status, cwd: root }),
         })
-        await vi.waitFor(() => { expect(engine.requests.length).toBeGreaterThanOrEqual(1) })
-        const script = engine.requests[engine.requests.length - 1]!.script
-        engine.settleRun(WorkflowRunId(`run-${engine.requests.length}`), { value: null, stopReason: 'completed', agentsStarted: 0 })
+        // 0.2.2: the engine start may land a tick after the fixture call —
+        // anchor to THIS call's arrival, not a bare >= 1 (earlier iterations
+        // already satisfy it and would capture the previous run's script).
+        // 0.2.2: executeModelToolFixture awaits the whole batch, so once the
+        // pending settles the engine start (inside the tool body) has landed —
+        // no polling needed, and the deliberate miss case simply has no request.
+        const before = engine.requests.length
         const result = await pending
+        const script = engine.requests.length > before
+          ? engine.requests[engine.requests.length - 1]!.script
+          : undefined
+        if (engine.requests.length > before) {
+          engine.settleRun(WorkflowRunId(`run-${engine.requests.length}`), { value: null, stopReason: 'completed', agentsStarted: 0 })
+        }
         return { script, result }
       }
 

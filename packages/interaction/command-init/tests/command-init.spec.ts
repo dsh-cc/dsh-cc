@@ -5,6 +5,9 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+// Harness 0.2.2: `AgentRegistry.inject` includes 'sessionProjections', so the
+// registry stays PENDING (and `ctx.agents` is undefined) without this service.
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import * as commandInit from '@dsh-cc/command-init'
 import { INIT_PROMPT, initContent } from '@dsh-cc/command-init/init'
@@ -18,6 +21,7 @@ async function harness(): Promise<{
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   const followups: UserMessage[] = []
   const session = ctx.sessions.create(SessionId(`command-init-${Math.random()}`))

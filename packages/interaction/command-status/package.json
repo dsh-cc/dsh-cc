@@ -35,6 +35,7 @@
     "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
     "@deepseek-ai/dsh-permission-presets": "link:../../../../deepseek-harness/packages/interaction/permission-presets",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis"
   },

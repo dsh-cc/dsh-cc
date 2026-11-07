@@ -267,9 +267,14 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
     }
     let restrictableNames: ReadonlySet<string> = new Set()
     try {
-      const known = (ctx.tools as unknown as { restrictableNames?: (agent: unknown) => ReadonlySet<string> })
-        .restrictableNames?.(callingAgent)
-      restrictableNames = known ?? new Set()
+      const tools = ctx.tools as unknown as {
+        restrictableNames?: (agent: unknown) => ReadonlySet<string>
+        definitions?: (agent: unknown) => readonly { name: string }[]
+      }
+      // Upstream's registry has no fork-only restrictableNames; the visible
+      // definitions' names are the closest public equivalent there.
+      restrictableNames = tools.restrictableNames?.(callingAgent)
+        ?? new Set((tools.definitions?.(callingAgent) ?? []).map(tool => tool.name))
     } catch {
       restrictableNames = new Set()
     }

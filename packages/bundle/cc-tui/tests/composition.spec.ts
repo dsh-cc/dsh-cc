@@ -15,7 +15,7 @@ const HOST_TOOL_IDS = [
   'tool-bash', 'tool-pwsh', 'tool-jobs', 'tool-fs', 'tool-fs-search',
   'tool-str-replace-editor', 'skill-filesystem', 'tool-skill', 'tool-goal',
   'plan-mode', 'compaction-basic', 'command-compact', 'tool-result-pruner',
-  'tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent',
+  'tool-subagent-control', 'tool-subagent',
   'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
   'agent-instructions', 'tool-todo', 'tool-web',
 ]

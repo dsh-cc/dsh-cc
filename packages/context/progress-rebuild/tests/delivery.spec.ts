@@ -202,30 +202,34 @@ describe('progress-rebuild delivery (real loop, §5.3)', () => {
 })
 
 describe('wiring (recovery-wiring.spec idiom, fake ctx)', () => {
-  function fakeRig(): { ctx: { on: ReturnType<typeof vi.fn>; get: (key: string) => unknown; logger: { debug: ReturnType<typeof vi.fn> } }; calls: [string, unknown][] } {
+  async function fakeRig(): Promise<{ ctx: { on: ReturnType<typeof vi.fn>; get: (key: string) => unknown; logger: { debug: ReturnType<typeof vi.fn> } }; calls: [string, unknown][] }> {
     const calls: [string, unknown][] = []
     const ctx = {
       logger: { debug: vi.fn() },
-      get: (key: string) => (key === 'sessionProjections' ? { register: () => {} } : undefined),
+      // Harness 0.2.2 D8: register() yields the awaited projection handle
+      // (apply awaits it before publishing the delivery listeners).
+      get: (key: string) => (key === 'sessionProjections'
+        ? { register: () => Promise.resolve({ stateOf: () => undefined, readerFor: () => () => undefined, dispose: async () => {} }) }
+        : undefined),
       on: vi.fn((event: string, handler: unknown) => {
         calls.push([event, handler] as unknown as [string, unknown])
         return () => {}
       }),
     }
-    Plugin.apply(ctx as never)
+    await Plugin.apply(ctx as never)
     return { ctx, calls }
   }
 
-  it('apply() registers exactly the three delivery listeners when sessionProjections is present', () => {
-    const { calls } = fakeRig()
+  it('apply() registers exactly the three delivery listeners when sessionProjections is present', async () => {
+    const { calls } = await fakeRig()
     const events = calls.map(([event]) => event)
     expect(events.filter((e) => e === 'session/event')).toHaveLength(2)
     expect(events.filter((e) => e === 'agent/pre-step')).toHaveLength(1)
     expect(events.filter((e) => e === 'session/disposed')).toHaveLength(1)
   })
 
-  it('agents registry absent → compaction/end degrades to a debug no-op (no throw)', () => {
-    const { calls } = fakeRig()
+  it('agents registry absent → compaction/end degrades to a debug no-op (no throw)', async () => {
+    const { calls } = await fakeRig()
     const listenerB = calls.find(([event, handler]) =>
       event === 'session/event' && typeof handler === 'function')![1] as
       (session: unknown, event: unknown) => void

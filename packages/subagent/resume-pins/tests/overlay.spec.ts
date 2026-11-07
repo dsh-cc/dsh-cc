@@ -72,9 +72,12 @@ describe('applyPinnedMaxTokens — the surviving request-field overlay', () => {
 
   it('REMOVES the key for a complete pin whose maxTokens is null', () => {
     const pin = makePin({ effective: { provider: 'mock', model: 'mock', reasoningEffort: null, maxTokens: null, complete: true } })
+    // 0.2.2 (D3.5): presence semantics apply to BOTH surviving fields — a
+    // complete pin with a null effort also strips an injected effort key.
     const out = applyPinnedMaxTokens({ provider: 'x', model: 'x', maxTokens: 99, reasoningEffort: 'low' }, pin)
-    expect(out).toEqual({ provider: 'x', model: 'x', reasoningEffort: 'low' })
+    expect(out).toEqual({ provider: 'x', model: 'x' })
     expect(out).not.toHaveProperty('maxTokens')
+    expect(out).not.toHaveProperty('reasoningEffort')
   })
 
   it('a degraded pin (complete:false) with a null maxTokens touches nothing', () => {

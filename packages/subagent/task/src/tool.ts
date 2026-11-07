@@ -157,6 +157,7 @@ export function registerTaskTool(
      * of the cc preset, which the unscoped view does not see.
      */
     restrictableNames?(scope?: unknown): ReadonlySet<string>
+    definitions?(scope?: unknown, toolSet?: unknown): readonly { name: string }[]
   } | undefined
   if (tools === undefined) return undefined
 
@@ -347,7 +348,8 @@ export function registerTaskTool(
         // all restrictable candidates for the child's filter. Pass the calling
         // agent: MCP tools live on the standing-scope layer, which the global
         // view (no scope) does not include.
-        const knownNames = tools.restrictableNames?.(agent) ?? new Set<string>()
+        const knownNames = tools.restrictableNames?.(agent)
+          ?? new Set((tools.definitions?.(agent) ?? []).map(tool => tool.name))
         const toolFilter = definition.toolRestriction !== undefined
           ? sanitizeToolFilter(definition.toolRestriction, message => ctx.logger.warn(message), knownNames)
           : undefined

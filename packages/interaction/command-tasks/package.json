@@ -35,6 +35,7 @@
     "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
     "@deepseek-ai/dsh-jobs": "link:../../../../deepseek-harness/packages/jobs/jobs",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis"
   },
   "publishConfig": {

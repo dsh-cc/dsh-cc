@@ -178,12 +178,20 @@ async function boot(
       },
     }
   }
+  // 0.2.2: tools.execute takes a batch ({calls: [...]}); one call per batch
+  // here, reading the single settled result.
   const exec = async (name: string, args: unknown, agent: unknown) => {
-    const result = await (
+    const batch = await (
       ctx as unknown as {
-        tools: { execute(e: unknown): Promise<{ isError: boolean; value?: unknown; error?: { message: string } }> }
+        tools: { execute(e: unknown): Promise<{ results: readonly { result: { isError: boolean; value?: unknown; error?: { message: string } } }[] }> }
       }
-    ).tools.execute({ callId: `c-${randomUUID()}`, name, arguments: args, agent, signal: new AbortController().signal })
+    ).tools.execute({
+      calls: [{ id: `c-${randomUUID()}`, name, arguments: args }],
+      agent,
+      signal: new AbortController().signal,
+    })
+    const result = batch.results[0]?.result
+    if (result === undefined) throw new Error(`${name} failed: no settled result`)
     if (result.isError) throw new Error(`${name} failed: ${result.error?.message}`)
     return result.value as Record<string, unknown>
   }

@@ -80,10 +80,20 @@ export function applyPinnedMaxTokens<T extends Record<string, unknown>>(resolved
     return { ...resolved, maxTokens: overlayMaxTokens }
   }
   if (pin.effective.maxTokens !== null) return { ...resolved, maxTokens: pin.effective.maxTokens }
-  if (pin.effective.complete) {
-    const out = { ...resolved }
-    delete out['maxTokens']
-    return out
+  if (!pin.effective.complete) return resolved
+  // Presence semantics for BOTH surviving sampling-adjacent fields: a pinned
+  // null on a complete pin REMOVES an inner-middleware-injected key. For
+  // `reasoningEffort` this is removal-back-to-the-frozen-selection (the
+  // spawn-path durable select already recorded the pinned effort, so a
+  // non-null pinned value set here equals the step's frozen selection and
+  // passes the 0.2.2 model-identity guard; a junk-injected effort from an
+  // inner listener is stripped before the guard compares).
+  const out = { ...resolved }
+  delete out['maxTokens']
+  if (pin.effective.reasoningEffort !== null) {
+    out['reasoningEffort'] = pin.effective.reasoningEffort
+  } else {
+    delete out['reasoningEffort']
   }
-  return resolved
+  return out
 }

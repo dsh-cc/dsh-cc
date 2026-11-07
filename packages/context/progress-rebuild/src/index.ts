@@ -18,7 +18,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerDelivery } from './delivery.ts'
 import { DEFAULT_PROGRESS_REBUILD_SETTINGS, registerSettings } from './settings.ts'
 import type { ProgressRebuildSettings } from './settings.ts'
-import { progressRebuildProjection } from './state.ts'
+import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
+import { progressRebuildProjection, type ProgressRebuildState } from './state.ts'
 
 export {
   SETTINGS_NAMESPACE,
@@ -93,14 +94,19 @@ export interface ProgressRebuildPluginConfig {
  * @param ctx - the plug context (declares `sessionProjections` via inject).
  * @param config - optional config seam (tests inject a settings reader).
  */
-export function apply(ctx: Context, config: ProgressRebuildPluginConfig = {}): void {
+export async function apply(ctx: Context, config: ProgressRebuildPluginConfig = {}): Promise<void> {
   const namespaceReader = registerSettings(ctx)
   // inject: ['sessionProjections'] above; throw on absence (§3.1 explicit-fail).
   const projections = ctx.get('sessionProjections') as
     | { register(def: typeof progressRebuildProjection): unknown }
     | undefined
   if (projections === undefined) throw new Error('progress-rebuild requires the sessionProjections registry')
-  projections.register(progressRebuildProjection)
+  // Harness 0.2.2 D8: `register()` returns a callable thenable, NOT a plain
+  // Promise — await it exactly once to get the ready handle and read state
+  // through it (the keyed `stateOf(session, key)` is deprecated and untyped).
+  const handle = await (projections.register(progressRebuildProjection) as Promise<
+    ProjectionHandle<ProgressRebuildState>
+  >)
   // Gate reader (§3.3 round-9): the injected test seam, else the namespace
   // reader, else defaults (no settings provider → default enabled true).
   const readSettings = config.readSettings
@@ -111,5 +117,5 @@ export function apply(ctx: Context, config: ProgressRebuildPluginConfig = {}): v
         return DEFAULT_PROGRESS_REBUILD_SETTINGS
       }
     })
-  registerDelivery(ctx, readSettings)
+  registerDelivery(ctx, readSettings, handle)
 }

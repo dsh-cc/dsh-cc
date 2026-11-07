@@ -445,6 +445,8 @@ describe('session mode overrides (durable)', () => {
     const ctx = await mount({ defaultMode: 'bypassPermissions' })
     ctx.reflect.provide('shell', { sandboxMode: 'workspace-write' } as never)
     const session = ctx.sessions.create(SessionId('pin-bypass'))
+    // 0.2.2: the pin lands one microtask after the creation announcement.
+    await new Promise(resolve => queueMicrotask(resolve))
     expect(foldPermissionMode(session.snapshotEvents())).toBe('bypassPermissions')
     expect(foldSandboxMode(session.snapshotEvents())).toBe('danger-full-access')
   })
@@ -452,6 +454,7 @@ describe('session mode overrides (durable)', () => {
   it('session/created pin: plan default seeds plan/mode active on the new session', async () => {
     const ctx = await mount({ defaultMode: 'plan' })
     const session = ctx.sessions.create(SessionId('pin-plan'))
+    await new Promise(resolve => queueMicrotask(resolve))
     expect(foldPlanMode(session.snapshotEvents())).toBe(true)
   })
 
