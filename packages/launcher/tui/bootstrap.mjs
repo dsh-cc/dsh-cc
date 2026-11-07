@@ -555,7 +555,7 @@ export function slugRetryDecision({ named, attempt, maxAttempts = 5 }) {
 // acceptable — it happens once, before the profile exists.
 
 /** Lowest harness version the published bundles are known to work with. */
-export const MIN_DSH_VERSION = '0.2.1-rc.5'
+export const MIN_DSH_VERSION = '0.2.2-rc.1'
 
 const VERSION_RE = /\d+\.\d+\.\d+(?:-[\w.+-]+)?/
 
