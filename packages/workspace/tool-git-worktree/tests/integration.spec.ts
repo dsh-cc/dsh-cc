@@ -19,6 +19,8 @@ import LocalBashExecutor from '@deepseek-ai/dsh-bash-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as ToolGitWorktree from '@dsh-cc/tool-git-worktree'
 import { clearActiveWorktreeSession } from '../src/worktree.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 // Hook-environment hermeticity. Under a git hook (or any process inheriting
 // one), git exports repo-pinning vars — GIT_INDEX_FILE relative to the
@@ -50,6 +52,9 @@ async function harness(repo: string) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { cwd: repo })
   await ctx.plugin(LocalFileSystem, { cwd: repo })
@@ -61,7 +66,7 @@ const agentAt = (repo: string): Agent =>
   ({ inject: () => undefined, session: { header: { version: 3, id: 's', createdAt: 0, cwd: repo } } }) as unknown as Agent
 
 function call(ctx: Context, name: string, args: unknown, agent: Agent) {
-  return ctx.tools.execute({ signal, callId: ToolCallId(`${name}-${Math.random().toString(36).slice(2)}`), name, arguments: args, agent })
+  return executeModelToolFixture(ctx, { signal, callId: ToolCallId(`${name}-${Math.random().toString(36).slice(2)}`), name, arguments: args, agent })
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {

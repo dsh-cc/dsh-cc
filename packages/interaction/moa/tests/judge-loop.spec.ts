@@ -15,14 +15,14 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import { createUserMessage, type LlmCallConfig, type LlmModelReasoningInfo, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type LlmModelReasoningInfo, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { installModelSelection, type Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { createRequestRouter, type ArmingValidation, type RequestRouter, type RouterDeps } from '../src/router.ts'
 import { ArmingMachine, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
 import { routes as tierRoutes, GAUGE_ROUTE } from './rig.ts'
-import { captureClaimed, getCapturedOpening as captureAt, noteClaimedTurn, resetRuntimeCore, setRuntimeCore, tierFor } from '../src/runtime-state.ts'
+import { getCapturedOpening as captureAt, resetRuntimeCore, setRuntimeCore, tierFor } from '../src/runtime-state.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -150,22 +150,18 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   ctx.llm.registerAdapter(['mock'], adapter)
   const agent = await ctx.agentLoop.create(SessionId('moa-judge'), { provider: 'mock', model: 'mock' })
 
-  // Registration mirror of apply(): moa's listeners register BEFORE the
-  // harness's `installModelSelection` (plugin-apply t0 < agent creation t1,
-  // both no prepend), so moa's assemble listener is OUTER — after
-  // `await next()` the harness has already written the selection variables —
-  // and moa's request listener applies the overlay BEFORE the harness's
-  // inner request listener would force `selection.assembled` (which the
-  // overlay must win, design §2).
-  agent.ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: Parameters<typeof captureClaimed>[1]; turn: number }) => {
-    captureClaimed(agent, message, turn)
-    noteClaimedTurn(agent, turn)
+  // Registration mirror of apply() (D3.2 form): the claimed-capture + row
+  // splice pre-step are agent-scoped; the retired seams (agent/request
+  // overlay, system-prompt/assemble classification) are GONE — routing
+  // happens at runTurn's admission call below, exactly like the driver's
+  // submit path (the judge selects its own escalation tier pre-followup and
+  // never routes through the seam).
+  agent.ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: UserMessage; turn: number }) => {
+    router.noteClaimed(agent, message, turn)
   })
   agent.ctx.on('agent/pre-step', router.preStepListener as never)
-  agent.ctx.on('agent/request', router.listener as never)
-  agent.ctx.on('system-prompt/assemble', router.assembleListener as never)
   agent.ctx.on('agent/turn-stopping', judge.listener as never)
-  installModelSelection(agent.ctx, { current: { provider: 'mock', model: 'mock' }, assembled: undefined })
+  installModelSelection(agent.ctx)
 
   return {
     core,
@@ -180,9 +176,13 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
   }
 }
 
-const runTurn = async (agent: Agent, text: string, source: Record<string, unknown> = { kind: 'user' }): Promise<void> => {
-  agent.followup(createUserMessage({ content: [{ type: 'text', text }], source } as never))
-  await agent.whenIdle()
+const runTurn = async (rig: LoopRig, text: string, source: Record<string, unknown> = { kind: 'user' }): Promise<void> => {
+  const opening = createUserMessage({ content: [{ type: 'text', text }], source } as never)
+  // Entry-point admission (D3.2): the driver/submit contract — classify
+  // BEFORE the followup, so the step's frozen selection reads the tier.
+  await rig.router.routeBeforeAdmission(rig.agent, opening)
+  rig.agent.followup(opening)
+  await rig.agent.whenIdle()
 }
 
 /** Poll until `predicate` holds (detached judge pipeline timing). */
@@ -200,7 +200,7 @@ interface DerivedRow {
 describe('moa acceptance judge — integration (real agent loop)', () => {
   it('idle-wake: verdict after the loop settles idle still produces the retry turn at the higher tier (grok r3)', async () => {
     const rig = await setupLoop([textResponse('first answer'), textResponse('retry answer')], { holdJudge: true })
-    await runTurn(rig.agent, 'write a debounce function')
+    await runTurn(rig, 'write a debounce function')
     // The loop is idle and the judge verdict is still in flight — no retry yet.
     expect(rig.adapter.requests).toHaveLength(1)
 
@@ -221,8 +221,8 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
 
   it('single row + deriveMessages continuation: the typed followup IS the escalation status row', async () => {
     const rig = await setupLoop([textResponse('first answer'), textResponse('retry answer')])
-    await runTurn(rig.agent, 'write a debounce function')
-    await runTurn(rig.agent, 'ignore-me', { kind: 'user' }) // settle any pending wake
+    await runTurn(rig, 'write a debounce function')
+    await runTurn(rig, 'ignore-me', { kind: 'user' }) // settle any pending wake
     const derived = rig.agent.session.deriveMessages() as (DerivedRow & { content?: { type: string; text?: string }[] })[]
     const escalations = derived.filter((row) => row.source?.kind === 'moa-escalation')
     expect(escalations).toHaveLength(1) // exactly ONE visible escalation row
@@ -249,7 +249,7 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
 
   it('eligibility: a turn WITH tool calls → no judge call, no retry (§3.4 gate)', async () => {
     const rig = await setupLoop([toolCallResponse('c1', 'nonexistent_probe_tool', {}), textResponse('done')])
-    await runTurn(rig.agent, 'edit the files')
+    await runTurn(rig, 'edit the files')
     expect(rig.classifyStates).toEqual(['edit the files'])
     expect(rig.acceptStates).toHaveLength(0)
     expect(rig.adapter.requests.every((r) => r.model === 'tier-draft')).toBe(true)
@@ -260,10 +260,10 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
       [textResponse('first answer'), textResponse('retry answer')],
       { maxEscalations: 1 },
     )
-    await runTurn(rig.agent, 'write a debounce function') // turn 1 → escalated
+    await runTurn(rig, 'write a debounce function') // turn 1 → escalated
     await waitFor(() => rig.acceptStates.length >= 1, 'first judge call')
     expect(rig.classifyStates).toEqual(['write a debounce function']) // no reclassification on the retry
-    await runTurn(rig.agent, 'next', { kind: 'user' }) // retry turn ran (turn 2)
+    await runTurn(rig, 'next', { kind: 'user' }) // retry turn ran (turn 2)
     await new Promise((resolve) => setTimeout(resolve, 50)) // settle the retry turn's judge gate
     expect(rig.acceptStates).toHaveLength(1)
     const escalated = (await pollJsonl<{ type: string; originSeq: number }>(rig.routingLedger, 1))[0]
@@ -275,7 +275,7 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
       [textResponse('first answer'), textResponse('second answer'), textResponse('third answer'), textResponse('fourth answer')],
       { maxEscalations: 2 },
     )
-    await runTurn(rig.agent, 'write a debounce function')
+    await runTurn(rig, 'write a debounce function')
     await waitFor(() => rig.adapter.requests.length >= 3 && rig.acceptStates.length >= 2, 'two chained escalations')
     await rig.agent.whenIdle()
     await new Promise((resolve) => setTimeout(resolve, 50)) // settle the final (non-escalatable) turn
@@ -296,7 +296,7 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
       acceptanceEnabled: false,
       shadow: true,
     })
-    await runTurn(rig.agent, 'edit the files')
+    await runTurn(rig, 'edit the files')
     expect(rig.classifyStates).toEqual(['edit the files'])
     await waitFor(() => rig.acceptStates.length >= 1, 'shadow judge call')
     const judgeRows = await pollJsonl<{ eligible: boolean; acted: boolean; shadow: boolean }>(rig.acceptanceLedger, 1)

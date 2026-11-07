@@ -1,5 +1,5 @@
 // Vendored from @deepseek-ai/dsh-acp (packages/acp/acp/src/session.ts)
-// Source ref: c1b47e41fcd54d20a0f061df28683bfc29ee24e5 (deepseek-harness, MIT — see LICENSE-harness)
+// Source ref: 2f97f60455605e915b8176d9170cae337bfedcc6 (deepseek-harness, MIT — see LICENSE-harness)
 // Copied 2026-10-09. Structural fixes flow from upstream during harness
 // migrations; CC-specific divergences must be recorded in DIVERGENCE.md.
 /** One standard ACP session's Agent, configuration, prompt, update, and teardown lifecycle. */
@@ -14,14 +14,20 @@ import {
   type SessionNotification,
   type StopReason,
 } from '@agentclientprotocol/sdk'
-import type { Agent, AgentHandle, AgentOptions, AgentStatus, ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
+// CC-only deltas (D4a/D4b): the model-control install helper (switch notice +
+// co-located notice sanitizer) and the moa pre-admission routing hook. Both are
+// side-effect-free when moa is unmounted (the sanitizer's runtime-state
+// accessors are inert, the router's admission entry is absent), so a moa-less
+// deployment is byte-equivalent.
+import { routeBeforeAdmission } from '@dsh-cc/moa'
 import { awaitQuiescence, noteAgentError, requestPromptCancellation, settleCancelledOnStatus } from './cancellation-status.ts'
 import { createUserMessage, errorChain, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { type Session, type SessionEvent, type SessionId, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { AcpContentError, admitAcpPrompt } from './content.ts'
 import { turnEndToStopReason } from './codec.ts'
 import { mountAcpMcpServers } from './mcp.ts'
-import { AcpModelControl } from './model-control.ts'
+import { AcpModelControl, installModelControl } from './model-control.ts'
 import { assistantUpdates, toolCallUpdate, toolResultUpdate } from './updates.ts'
 
 /** Subagent completion and teardown without depending on the subagent package. */
@@ -32,6 +38,15 @@ interface SubagentLifecycle {
   waitForChildren(parent: Agent): Promise<boolean>
 }
 
+/** Inputs shared by fresh and resumed ACP session construction. */
+interface AcpSessionBuildOptions {
+  cwd: string
+  mcpServers: readonly McpServer[]
+  agentOptions: AgentOptions
+  signal: AbortSignal
+  notify: (notification: SessionNotification) => Promise<void>
+}
+
 /** The preset-registry seam composed into every ACP session (§5.2). */
 export interface AcpPresetsService {
   mount(agentCtx: Context, presetId?: string): Promise<unknown>
@@ -39,17 +54,6 @@ export interface AcpPresetsService {
   select(agent: Agent, presetId: string): Promise<string>
   /** The preset a live agent already uses, if bound. */
   composedPreset(ctx: Context): string | undefined
-}
-
-/** Inputs shared by fresh and resumed ACP session construction. */
-interface AcpSessionBuildOptions {
-  cwd: string
-  mcpServers: readonly McpServer[]
-  agentOptions: AgentOptions
-  fallbackSelection: ModelSelection | undefined
-  presets: AcpPresetsService
-  signal: AbortSignal
-  notify: (notification: SessionNotification) => Promise<void>
 }
 
 /** Fresh ACP session construction inputs. */
@@ -91,29 +95,23 @@ function internalError(detail: string): RequestError {
   return RequestError.internalError(undefined, detail)
 }
 
-/** Restore the latest logged route before falling back to deployment config. */
-function selectionFor(
-  logged: {
-    config: { provider: string; model: string; reasoningEffort?: ModelSelection['reasoningEffort'] }
-    adapterDefaults?: { reasoningEffort?: boolean }
-  } | undefined,
-  fallback: ModelSelection | undefined,
-): ModelSelection | undefined {
-  return logged === undefined
-    ? fallback
-    : {
-      provider: logged.config.provider,
-      model: logged.config.model,
-      ...logged.config.reasoningEffort === undefined || logged.adapterDefaults?.reasoningEffort === true
-        ? {}
-        : { reasoningEffort: logged.config.reasoningEffort },
-    }
+/**
+ * Install switch notices and mount the requested MCP clients in the unpublished Agent scope.
+ * @param agentCtx - unpublished Agent scope.
+ * @param options - workspace and MCP servers requested for the session.
+ */
+async function composeAgent(agentCtx: Context, options: AcpSessionBuildOptions): Promise<void> {
+  // CC-only delta (D4a): the model-control install is a co-located helper —
+  // the harness switch-notice listener plus the moa notice sanitizer — so the
+  // §5.1 co-location rule lives next to the selection seam it guards.
+  installModelControl(agentCtx)
+  await mountAcpMcpServers(agentCtx, options.mcpServers, options.cwd)
 }
 
 /**
- * Per-session ACP module. It owns the unpublished Agent composition, selected
- * route, one-prompt admission slot, ordered standard updates, and memoized
- * quiescent teardown.
+ * Per-session ACP module. It owns the unpublished Agent composition, model
+ * configuration view, one-prompt admission slot, ordered standard updates,
+ * and memoized quiescent teardown.
  */
 export class AcpSession {
   /** The exact top-level Agent owned by this ACP session. */
@@ -122,16 +120,14 @@ export class AcpSession {
   private outputTail = Promise.resolve()
   private inflight: InflightPrompt | undefined
   private closing: Promise<void> | undefined
-  private readonly pendingSelections = new Map<string, ModelSelection>()
 
   private constructor(
     private readonly ctx: Context,
     handle: AgentHandle,
-    modelControl: AcpModelControl,
     private readonly notify: (notification: SessionNotification) => Promise<void>,
   ) {
     this.agent = handle.agent
-    this.modelControl = modelControl
+    this.modelControl = new AcpModelControl(ctx.llm, handle.agent.model)
     this.disposeAgent = () => handle.dispose()
   }
 
@@ -144,52 +140,33 @@ export class AcpSession {
    * @returns the fully composed per-session module.
    */
   static async create(ctx: Context, options: CreateAcpSessionOptions): Promise<AcpSession> {
-    const modelControl = new AcpModelControl(ctx.llm, options.fallbackSelection)
     const handle = await ctx.agents.create({
       sessionId: options.sessionId,
       // §5.2: the frozen create header records the composed preset identity.
       meta: { cwd: options.cwd, agentPreset: options.presetId },
       agentOptions: options.agentOptions,
       signal: options.signal,
-      setup: async (agentCtx) => {
-        // §5.2 revised 2026-10-09: the preset join runs on agent/created via
-        // select() (index.ts); setup order: model control, then MCP (last).
-        modelControl.install(agentCtx)
-        await mountAcpMcpServers(agentCtx, options.mcpServers, options.cwd)
-      },
+      setup: agentCtx => composeAgent(agentCtx, options),
     })
-    return new AcpSession(ctx, handle, modelControl, options.notify)
+    return new AcpSession(ctx, handle, options.notify)
   }
 
   /**
    * Restore a persisted Agent and compose the request's fresh MCP connections.
+   * The Session's recorded model selection survives; deployment options supply
+   * the route only when the Session records neither a selection nor a request.
    * @param ctx - ACP plugin context with Agent, LLM, and persistence services.
-   * @param options - persisted identity, workspace, fallback route, MCP, and notifier.
+   * @param options - persisted identity, workspace, initial route, MCP, and notifier.
    * @returns the restored per-session module.
    */
   static async resume(ctx: Context, options: ResumeAcpSessionOptions): Promise<AcpSession> {
-    let modelControl: AcpModelControl | undefined
     const handle = await ctx.agents.resume({
       resumeSessionId: options.sessionId,
       agentOptions: options.agentOptions,
       signal: options.signal,
-      setup: async (agentCtx, agent) => {
-        // §5.2: resume's preset join also runs on agent/created (index.ts).
-        modelControl = new AcpModelControl(
-          ctx.llm,
-          selectionFor(agent.session.requestHeader(), options.fallbackSelection),
-        )
-        modelControl.install(agentCtx)
-        await mountAcpMcpServers(agentCtx, options.mcpServers, options.cwd)
-      },
+      setup: agentCtx => composeAgent(agentCtx, options),
     })
-    /* v8 ignore start -- a fulfilled Agent resume necessarily ran setup to completion. */
-    if (modelControl === undefined) {
-      await handle.dispose()
-      throw internalError('session/resume did not compose model selection')
-    }
-    /* v8 ignore stop */
-    return new AcpSession(ctx, handle, modelControl, options.notify)
+    return new AcpSession(ctx, handle, options.notify)
   }
 
   /**
@@ -221,7 +198,7 @@ export class AcpSession {
   }
 
   /**
-   * Apply one standard configuration option to later ACP turns.
+   * Apply one standard configuration option from the next model step.
    * @param configId - advertised standard option id.
    * @param value - selected standard option value.
    * @param signal - optional request cancellation.
@@ -297,7 +274,7 @@ export class AcpSession {
     if (requestSignal?.aborted === true) onRequestAbort()
     try {
       let admissionFailure: unknown
-      const promptSelection = this.modelControl.snapshot()
+      const promptSelection = this.agent.model.current()
       try {
         if (this.ctx.agents.get(this.agent.id) !== this.agent) {
           throw internalError('prompt was not queued: the agent was disposed outside the bridge')
@@ -319,12 +296,15 @@ export class AcpSession {
         })
         inflight.messageId = message.id
         inflight.messageQueued = true
-        if (promptSelection !== undefined) this.pendingSelections.set(message.id, promptSelection)
+        // CC-only delta (D4b / D3.2): moa's pre-admission classification runs on
+        // the EXACT admitted UserMessage, before the prompt splice — an ACP turn
+        // therefore routes through the same entry-point seam the TUI uses.
+        // Inert when moa is unmounted or disarmed.
+        await routeBeforeAdmission(this.agent, message)
         try {
           this.agent.followup(message)
         } catch (error: unknown) {
           inflight.messageQueued = false
-          this.pendingSelections.delete(message.id)
           throw error
         }
       } catch (error: unknown) {
@@ -414,20 +394,16 @@ export class AcpSession {
         inflight.endReason = event.data.reason
         inflight.agentError = undefined
       }
-      if (event.type === 'turn/end') this.modelControl.releaseTurn(event.data.turn)
     }
   }
 
   /**
-   * Correlate an accepted user message with its Agent turn and pinned route.
+   * Correlate an accepted user message with its Agent turn.
    * @param message - claimed durable inbox message.
    * @param turn - allocated Agent turn.
    */
   onInboxClaimed(message: UserMessage, turn: number): void {
     if (this.inflight !== undefined && this.inflight.messageId === message.id) this.inflight.turn = turn
-    const selection = this.pendingSelections.get(message.id)
-    this.pendingSelections.delete(message.id)
-    if (selection !== undefined) this.modelControl.pinTurn(turn, selection)
   }
 
   /**
@@ -491,7 +467,6 @@ export class AcpSession {
       } catch (error: unknown) {
         failures.push(error)
       }
-      this.pendingSelections.clear()
       if (failures.length === 1) throw failures[0]
       /* v8 ignore start -- independent teardown failures can aggregate only under multiple simultaneous provider faults. */
       if (failures.length > 1) {

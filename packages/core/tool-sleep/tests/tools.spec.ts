@@ -11,18 +11,23 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED } from '@dsh-cc/tools'
 import * as ToolSleep from '@dsh-cc/tool-sleep'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 async function setup() {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(ToolSleep)
   return { ctx }
 }
 
 let callCounter = 0
 function call(ctx: Context, signal: AbortSignal, args: unknown) {
-  return ctx.tools.execute({ signal, callId: ToolCallId(`call-${++callCounter}`), name: 'Sleep', arguments: args })
+  return executeModelToolFixture(ctx, { signal, callId: ToolCallId(`call-${++callCounter}`), name: 'Sleep', arguments: args })
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -54,6 +59,9 @@ describe('Sleep registration', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     const fiber = await ctx.plugin(ToolSleep)
     expect(ctx.tools.schemas()).toHaveLength(1)
     expect(ctx.tools.get('Sleep')?.isConcurrencySafe?.({ duration: 1 })).toBe(true)

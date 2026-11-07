@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,7 +12,7 @@ import { createDriver } from '@dsh-cc/tui/harness/driver.ts'
  */
 function makeBareCtx() {
   const makeAgent = () => ({
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
     id: 'agent-s-a',
     status: 'idle',

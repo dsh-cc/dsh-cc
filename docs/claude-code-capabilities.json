@@ -936,7 +936,7 @@
       ],
       "deviation": {
         "kind": "divergent",
-        "summary": "dsh-cc extension: no CC counterpart exists. A tiered cascade router (classify-first over the four lane aliases, optional acceptance judge, effect-free +1-tier escalation retry) shipped as a dark, settings-gated preset plugin with side-car JSONL ledgers. Routing scope is main-session turns only: subagent sessions (any `origin: 'subagent'` or positive `delegationDepth` header, including fork-type children and resumed child sessions driven interactively) are never classified, overlaid, or judged — a spawned agent's model stays whatever its declaration resolved to at spawn. A co-located model-selection notice sanitizer (tui driver + acp model-control) drops the harness's phantom `[model changed: …]` notices whenever the moa overlay is active on its boot selection (otherwise pass-through, byte-identical harness behavior), and a mid-session `/model` now disarms moa under the overlay (previously silently ignored) until the selection returns to the boot pair."
+        "summary": "dsh-cc extension: no CC counterpart exists. A tiered cascade router (classify-first over the four lane aliases, optional acceptance judge, effect-free +1-tier escalation retry) shipped as a dark, settings-gated preset plugin with side-car JSONL ledgers. Classification runs at the entry-point admission seam and records the tier durably (`agent.model.select(...)`; harness 0.2.2 session-persisted selections — the request-time overlay is gone). Routing scope is main-session turns only: subagent sessions (any `origin: 'subagent'` or positive `delegationDepth` header, including fork-type children and resumed child sessions driven interactively) are never classified, selected, or judged — a spawned agent's model stays whatever its declaration resolved to at spawn. A co-located model-selection notice sanitizer (tui driver + acp model-control) publishes the frozen per-step selection and passes every notice through byte-identical: notices are truthful by construction under pre-admission routing (the phantom-drop rule is retired), and a mid-session `/model` disarms moa (explicit user precedence) until the selection returns to the boot pair. 〔src:ws:packages/interaction/moa/src/router.ts#L160-L168〕 〔src:ws:packages/interaction/moa/src/sanitizer.ts#L46-L60〕 〔src:ws:packages/interaction/moa/src/arming.ts#L96-L138〕"
       }
     },
     "engine.notebook-edit": {
@@ -1567,6 +1567,101 @@
       "deviation": {
         "kind": "divergent",
         "summary": "dsh-cc extension: the advisory-threshold contract (cc-handoff settings namespace, default 8192) is enforced only by the agents' prompt contract, not by the tool — put never rejects on size, and the cheap-lane shunt agents deliberately keep the pair out of their whitelists."
+      }
+    },
+    "engine.tool-executor": {
+      "title": "Tool executor composition",
+      "category": "engine",
+      "plane": "host",
+      "upstream": {
+        "summary": "Tool execution as a pluggable contract: the registry registers and resolves definitions, an executor owns the model-facing schema projection and the batch settlement. One executor per scope (a second registration throws); selection walks the scope chain to root.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/core/tools/src/cc-executor.ts",
+          "anchor": "export function apply"
+        },
+        {
+          "type": "source",
+          "path": "packages/bundle/cc-shell/cordis.patch.yml",
+          "anchor": "- id: tool-executor-cc"
+        },
+        {
+          "type": "test",
+          "path": "packages/core/tools/tests/executor-registration.spec.ts",
+          "anchor": "Only one tool executor may be registered in each scope"
+        },
+        {
+          "type": "test",
+          "path": "packages/core/tools/tests/code-mode.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc re-hosts its Code Mode presentation as the executor: the `native` / `code` / `both` projection (run_code transport, generated SDK section, the `code`-only rule) that CC has no counterpart for. The base `tool-executor-native` row is disabled and `tool-executor-cc` (@dsh-cc/tools/executor) registers at root; `DSH_TOOLS_MODE` still selects the mode, now through the executor row's yml expression (absent ⇒ native) because the registry's own `mode` config is gone upstream."
+      }
+    },
+    "engine.tool-ordering": {
+      "title": "Tool ordering / request-prefix stability",
+      "category": "engine",
+      "plane": "host",
+      "upstream": {
+        "summary": "The model-facing tool sequence is canonicalized before prompt assembly. A deployment may configure an explicit order; the unlisted remainder renders after it in lexicographic order. CC keeps the catalog stable so the provider prefix cache survives an activation.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "full"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/bundle/cc-shell/cordis.patch.yml",
+          "anchor": "toolOrder"
+        },
+        {
+          "type": "source",
+          "path": "packages/preset/cc/tests/fixtures/cc-tool-order.json"
+        },
+        {
+          "type": "test",
+          "path": "packages/preset/cc/tests/tool-order-catalog.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/test-support/cache-trajectory/tests/keyless-trajectory.spec.ts",
+          "anchor": "inserts an unlisted activation lexicographically into the rest bucket"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "Accepted behavior delta: newly activated unlisted tools insert LEXICOGRAPHICALLY into the rest bucket, where the retired @dsh-cc/tool-append-order plugin appended them at the tail (the harness release this migration targets deleted the assemble-waterfall `tools` array that plugin hooked). The configured static prefix — the always-registered CC catalog, frozen in packages/preset/cc/tests/fixtures/cc-tool-order.json and byte-stable across activations — is unchanged. 〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md#L107-L115〕"
       }
     },
     "engine.tool-search": {
@@ -6174,7 +6269,7 @@
         },
         {
           "type": "source",
-          "path": "packages/core/tools/src/runtime-code.ts",
+          "path": "packages/core/tools/src/pipeline.ts",
           "anchor": "serviceAsk"
         }
       ],

@@ -13,6 +13,8 @@ import ToolRuntime, { type JsonValue } from '@dsh-cc/tools'
 import DeferredToolRegistry from '@dsh-cc/tool-search'
 import { emptyToolGeneration, syncTools, type ToolBridgeOptions } from '@dsh-cc/mcp-client/src/tools.ts'
 import { Context } from '@deepseek-ai/cordis'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const testToolSignal = new AbortController().signal
 
@@ -64,6 +66,9 @@ async function mountRegistry(options: { toolSearch?: boolean } = {}): Promise<Co
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   if (options.toolSearch !== false) await ctx.plugin(DeferredToolRegistry)
   return ctx
 }
@@ -144,7 +149,7 @@ describe('deferred MCP tool disclosure', () => {
       const names = ctx.tools.schemas().map(s => s.name)
       expect(names).not.toContain('mcp__srv__greet')
       // Reserved, not visible: the restriction universe knows the name.
-      expect(ctx.tools.view().restrictableNames.has('mcp__srv__greet')).toBe(true)
+      expect(ctx.tools.restrictableNames().has('mcp__srv__greet')).toBe(true)
       // Searchable through ToolSearch.
       const hits = ctx.toolSearch.search('greet')
       expect(hits.map(h => h.name)).toContain('mcp__srv__greet')
@@ -153,7 +158,7 @@ describe('deferred MCP tool disclosure', () => {
       const activation = ctx.toolSearch.activate('mcp__srv__greet')
       expect(activation.status).toBe('loaded')
       expect(ctx.tools.get('mcp__srv__greet')).toBeDefined()
-      const result = await ctx.tools.execute({
+      const result = await executeModelToolFixture(ctx, {
         callId: ToolCallId('c1'), name: 'mcp__srv__greet', arguments: { name: 'World' }, signal: testToolSignal,
       })
       expect(result.isError).toBe(false)
@@ -238,7 +243,7 @@ describe('deferred MCP tool disclosure', () => {
       expect(hits.map(h => h.name)).toContain('mcp__srv__greet')
       expect(ctx.toolSearch.activate('mcp__srv__greet').status).toBe('loaded')
       expect(ctx.tools.get('mcp__srv__greet')).toBeDefined()
-      const result = await ctx.tools.execute({
+      const result = await executeModelToolFixture(ctx, {
         callId: ToolCallId('c1'), name: 'mcp__srv__greet', arguments: { name: 'World' }, signal: testToolSignal,
       })
       expect(result.isError).toBe(false)
@@ -271,7 +276,7 @@ describe('deferred MCP tool disclosure', () => {
       // Whole generation rolled back: no disposers kept.
       expect(generation.disposers.size).toBe(0)
       // The deferred entry for `free` was unwound with the rollback.
-      expect(ctx.tools.view().restrictableNames.has('mcp__srv__free')).toBe(false)
+      expect(ctx.tools.restrictableNames().has('mcp__srv__free')).toBe(false)
       expect(ctx.toolSearch.search('free').map(h => h.name)).not.toContain('mcp__srv__free')
       // The squatter was never touched.
       expect(ctx.tools.get('mcp__srv__taken')).toBeDefined()
@@ -288,7 +293,7 @@ describe('deferred MCP tool disclosure', () => {
       await expect(
         syncTools(client as never, ctx, defaultOpts({ deferToolThreshold: 0 }), emptyToolGeneration()),
       ).rejects.toThrow(/more than once/)
-      expect(ctx.tools.view().restrictableNames.has('mcp__srv__dup')).toBe(false)
+      expect(ctx.tools.restrictableNames().has('mcp__srv__dup')).toBe(false)
       expect(ctx.toolSearch.search('dup').map(h => h.name)).not.toContain('mcp__srv__dup')
     })
   })

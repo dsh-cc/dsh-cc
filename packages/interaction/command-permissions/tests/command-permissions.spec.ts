@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
@@ -35,6 +36,7 @@ async function harness(withService: boolean): Promise<{
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   // Shared write-order log: the plan command stub and the engine setMode
   // both append here so tests assert cross-service ordering.
@@ -72,6 +74,18 @@ async function harness(withService: boolean): Promise<{
   }
   await ctx.agents.register(agent)
   return { ctx, agent, plugin, setMode, calls }
+}
+
+/**
+ * Pin the plan-projection phase on the real registry's deprecated keyed read
+ * (harness 0.2.2: the registry is a live service here — AgentRegistry injects
+ * it — so a second `reflect.provide('sessionProjections', …)` collides).
+ * @param ctx - the booted rig.
+ * @param state - the plan unit state the plugin should read.
+ */
+function stubProjectionState(ctx: Context, state: () => unknown): void {
+  const projections = ctx.get('sessionProjections') as { stateOf: (...args: unknown[]) => unknown }
+  projections.stateOf = state
 }
 
 /**
@@ -170,9 +184,10 @@ describe('/permissions human command', () => {
 
   it('/permissions plan is a no-op when plan is already committed', async () => {
     const { ctx, agent, calls } = await harness(true)
-    ctx.reflect.provide('sessionProjections', {
-      stateOf: () => ({ active: true, wanted: null, running: null }),
-    })
+    // Harness 0.2.2: the rig mounts the REAL registry (AgentRegistry injects
+    // 'sessionProjections'), so the plan-phase double is a scoped stub on that
+    // live service rather than a second `provide` (which now collides).
+    stubProjectionState(ctx, () => ({ active: true, wanted: null, running: null }))
     const plan = stubPlan(ctx, calls)
     const execution = await ctx.commands.execute(agent, '/permissions plan', [], new AbortController().signal)
     expect((execution?.result as { text: string }).text).toBe('Permission mode is now "plan".')
@@ -197,9 +212,7 @@ describe('/permissions human command', () => {
 
   it('/permissions auto cancels a queued plan entry (projection entering) before switching', async () => {
     const { ctx, agent, calls } = await harness(true)
-    ctx.reflect.provide('sessionProjections', {
-      stateOf: () => ({ active: false, wanted: true, running: null }),
-    })
+    stubProjectionState(ctx, () => ({ active: false, wanted: true, running: null }))
     stubPlan(ctx, calls, { kind: 'success', text: 'Plan mode entry cancelled.' })
     const execution = await ctx.commands.execute(agent, '/permissions auto', [], new AbortController().signal)
     expect(calls).toEqual(['plan: off', 'setMode:auto'])
@@ -309,6 +322,7 @@ describe('/permissions trailing help request', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandPermissions)
   const session = ctx.sessions.create(SessionId(`permissions-${Math.random()}`))

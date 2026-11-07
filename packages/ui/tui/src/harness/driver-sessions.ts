@@ -310,15 +310,11 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
     // Resume reseeds the model AFTER the rebind: seedDefaultModel(true) reads
     // rt.current.agent, which is the target session only once rebound here;
     // the fresh-session path (startFreshSession) skips reseed and keeps the
-    // live /model route as agentOptions instead.
-    //
-    // Benign boot race (W4, documented — no locking): this reset seed shares
-    // no lock with the boot seed's now-async wait seam. If a switch ran
-    // during the boot seed window, a boot seed that already passed its
-    // `selection.current !== undefined` early-return could still write
-    // `selection.current` AFTER this reset intended "unset". At boot both
-    // resolve to the same value (agent options / the same deployment
-    // default), so the outcome is identical; no synchronization is added.
+    // live /model route as agentOptions instead. Under 0.2.2 the reseed is a
+    // no-op whenever the switched session already resolves a selection
+    // (durable recorded choice or creation options — the precedence rule);
+    // only a session with NO resolvable selection gains the deployment
+    // default, recorded durably by the seed.
     if (opts.reseedModel === true) await rt.seedDefaultModel(true)
 
     rt.writeResumeTarget(String(rt.current.agent.session.id))
@@ -328,7 +324,7 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
     // Bind always clears the window title; foldHistory below re-seeds it
     // when the new session's log has a session/title event.
     emit(setSessionTitle(clearRows(rt.state()), undefined))
-    const modelLabel = rt.selection.current?.model ?? 'default model'
+    const modelLabel = rt.selection.current()?.model ?? 'default model'
     for (const row of bootBannerRows(modelLabel, rt.cwd)) emit(upsertRow(rt.state(), row))
     emit(rt.foldHistory())
     emit(setPermissionMode(rt.state(), rt.liveMode(rt.current.agent)))
@@ -358,7 +354,7 @@ export function createSessionsSection(rt: DriverSessionsCtx): SessionsSection {
   const startFreshSession = async (): Promise<void> => {
     const capturedMode = rt.liveMode(rt.current.agent, rt.state().permissionMode)
     const liveCwd = liveSessionCwd(rt.current.agent, rt.cwd)
-    const route = rt.selection.current
+    const route = rt.selection.current()
 
     let newHandle: AgentHandle
     try {

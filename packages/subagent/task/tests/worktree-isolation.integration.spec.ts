@@ -29,6 +29,7 @@ import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-
 import { defineTool } from '@dsh-cc/tools'
 import { getSessionCwd } from '@dsh-cc/session-cwd'
 import { apply as applyTask } from '../src/index.ts'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 // Hook-environment hermeticity (same strip as tool-git-worktree's integration).
 for (const v of [
@@ -117,7 +118,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
 
 let calls = 0
 async function callTask(ctx: Context, name: string, args: unknown, agent: Agent) {
-  return (await ctx.tools.execute({
+  return (await executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++calls}`),
     name,

@@ -26,6 +26,7 @@ import { Service } from '@deepseek-ai/cordis'
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+// __B2__ import { routeBeforeAdmission } from '@dsh-cc/moa'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
@@ -354,7 +355,11 @@ export class CcWorkflowRunRegistry extends Service {
       // be composed). `followup` is the wake-carrying send: `inject` queues
       // without wakeup, which never opens a turn for an idle loop (the
       // tool-jobs idle-owner precedent). A torn-down loop drops the notice
-      // quietly (try/catch-drop precedent).
+      // quietly (try/catch-drop precedent). Enumerated through the admission
+      // helper like every other followup (D3.2); the `cc-workflow-completion`
+      // source is excluded by the gate — a non-user opening never classifies,
+      // so the delivery composition stays synchronous/immediate.
+      // __B2__ routeBeforeAdmission(elided)
       try {
         entry.agent.followup(message)
       } catch {

@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 import { apply } from '../src/index.ts'
 
 /** A ZERO-dependency MCP stdio server: newline-delimited JSON-RPC on stdio. */
@@ -169,6 +170,9 @@ async function newCtx(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   return ctx
 }
 

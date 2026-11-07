@@ -22,6 +22,8 @@ import type {
 import ToolRuntimeCC from '@dsh-cc/tools'
 import * as toolWorkflow from '../src/index.ts'
 import type { CcWorkflowRunRegistry, WorkflowJournalHandle } from '../src/registry.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const testToolSignal = new AbortController().signal
 
@@ -101,6 +103,9 @@ async function setup() {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntimeCC)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(StubEngine)
   await ctx.plugin(toolWorkflow, {})
   return { ctx, engine: ctx.workflowEngine as StubEngine, registry: ctx.ccWorkflowRunRegistry as CcWorkflowRunRegistry }
@@ -123,14 +128,19 @@ function seedJournal(runId: string): string {
 
 /** Launch one run through the tool and wait for its registration. */
 async function launch(ctx: Context, engine: StubEngine, agent?: unknown): Promise<WorkflowRunIdType> {
-  const pending = ctx.tools.execute({
+  const pending = executeModelToolFixture(ctx, {
     signal: testToolSignal,
     callId: ToolCallId(`call-${Math.random()}`),
     name: 'workflow',
     arguments: { script: `${META_BLOCK}\nreturn 1` },
     agent: agent ?? fakeAgent(vi.fn()),
   })
-  await vi.waitFor(() => { expect(engine.requests.length).toBeGreaterThanOrEqual(1) })
+  // 0.2.2: the engine start flows through the executor batch pipeline, so the
+  // request may land a tick AFTER the fixture call returns — anchor the wait
+  // to THIS call's arrival (the pre-call length), not a bare >= 1 that an
+  // earlier iteration already satisfies.
+  const before = engine.requests.length
+  await vi.waitFor(() => { expect(engine.requests.length).toBeGreaterThan(before) })
   void pending.catch(() => {})
   return engine.requests[engine.requests.length - 1]!.meta ? WorkflowRunId(`run-${engine.requests.length}`) : WorkflowRunId('run-x')
 }
@@ -205,10 +215,12 @@ describe('registry resume seam', () => {
         const runId = await launch(ctx, engine)
         seedJournal(runId)
         engine.settleRun(runId, { value: null, stopReason: 'completed', agentsStarted: 0 })
-        await Promise.resolve()
-        await Promise.resolve()
+        // 0.2.2: settlement flows through the executor batch pipeline and
+        // needs a full microtask drain before the eviction hook observes it.
+        await new Promise(resolve => setImmediate(resolve))
       }
-      expect(existsSync(join(journalDir(), 'run-1.jsonl'))).toBe(false)
+      // 0.2.2: publication waits for the journal drain() promise chain.
+      await vi.waitFor(() => { expect(existsSync(join(journalDir(), 'run-1.jsonl'))).toBe(false) })
       expect(existsSync(join(journalDir(), 'run-2.jsonl'))).toBe(true)
       expect(existsSync(join(journalDir(), 'run-129.jsonl'))).toBe(true)
       rmSync(journalDir(), { recursive: true, force: true })

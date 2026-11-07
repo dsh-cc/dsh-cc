@@ -4,6 +4,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@dsh-cc/tools'
 import * as ToolStructuredOutput from '@dsh-cc/tool-structured-output'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const BUGS_SCHEMA = {
   type: 'object',
@@ -17,6 +19,9 @@ async function mountTool(config?: Record<string, unknown>): Promise<{ ctx: Conte
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(ToolStructuredOutput, config ?? {})
   return { ctx, dispose: () => ctx.fiber.dispose() }
 }
@@ -38,7 +43,7 @@ describe('cc-shell bundle — tool-structured-output row (StructuredOutput over 
   it('executes a valid structured output through the vendored ToolRuntime', async () => {
     const { ctx, dispose } = await mountTool({ schema: BUGS_SCHEMA })
     const input = { title: 'bug', count: 3 }
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-structured-output'),
       name: 'StructuredOutput',

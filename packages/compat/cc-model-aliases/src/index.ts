@@ -15,7 +15,7 @@
 
 export { BUILTIN_ALIASES, CC_ALIASES, LANE_ALIASES, LANE_PEERS, mergeAliasMaps, createModelResolver, createModelInspector, splitLevelSuffix, type ModelResolver } from './resolver.ts'
 export { toAgentOptions, toOneShotRoute, resolveSpawnEffort, type OneShotParentRoute } from './agentOptions.ts'
-export { overlayStampedEffort, stampedEffortOf } from './effort.ts'
+export { stampedEffortOf } from './effort.ts'
 export {
   ConfigAliasSchema,
   ConfigAliasesSchema,

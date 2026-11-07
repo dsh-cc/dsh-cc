@@ -49,11 +49,15 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({ SSEClientTransport: 
 
 import { startConnection, resolveReconnectPolicy } from '@dsh-cc/mcp-client/src/connection.ts'
 import type { Config } from '@dsh-cc/mcp-client'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 async function mountRegistry(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(SkillRegistry)
   return ctx
 }

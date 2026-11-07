@@ -16,10 +16,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import type { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
+import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import { renderBrief } from './brief.ts'
 import { appendProgressRebuildInjected, type ProgressRebuildInjectedEventData } from './events.ts'
 import type { ProgressRebuildSettings } from './settings.ts'
+import type { ProgressRebuildState } from './state.ts'
 
 /** Delivery path recorded at splice/inject time, looked up by the ACK observer. */
 export type DeliveryPath = 'pre-step' | 'inject'
@@ -42,12 +43,16 @@ function debug(ctx: Context, message: string): void {
 /**
  * Register the delivery listeners. Plain listeners — never throw into a
  * waterfall or an observer callback.
- * @param ctx - the plug context (needs `agents`, `sessionProjections`, `logger`).
+ * @param ctx - the plug context (needs `agents`, `logger`).
  * @param readSettings - live settings reader (gate for B, C, and measurement).
+ * @param handle - the AWAITED `progress-rebuild` registration (harness 0.2.2
+ *   D8): typed reads go through `handle.stateOf(session)`; the deprecated
+ *   keyed `registry.stateOf(session, key)` returns `unknown` and warns.
  */
 export function registerDelivery(
   ctx: Context,
   readSettings: () => ProgressRebuildSettings,
+  handle: ProjectionHandle<ProgressRebuildState>,
 ): void {
   /** In-turn path: one pending brief per session id, cleared on splice (in-memory only, §3.3). */
   const pendingBrief = new Set<string>()
@@ -75,9 +80,7 @@ export function registerDelivery(
   /** Build the brief message from the CURRENT projection state. */
   const buildBriefMessage = (session: Session): { message: UserMessage; sections: number } | undefined => {
     try {
-      const projections = ctx.get('sessionProjections') as SessionProjectionRegistry | undefined
-      if (projections === undefined) return undefined
-      const state = projections.stateOf(session, 'progress-rebuild')
+      const state = handle.stateOf(session)
       if (state === undefined) return undefined
       const settings = readSettings()
       const brief = renderBrief(state, { maxLines: settings.maxLines, includeVerified: settings.includeVerified })

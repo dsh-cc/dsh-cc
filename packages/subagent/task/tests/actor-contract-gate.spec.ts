@@ -25,6 +25,8 @@ import {
 import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
 import { AgentRegistry } from '../src/registry.ts'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const COMPLETED = { stopReason: 'completed', output: [{ type: 'text', text: 'done' }] } as const
 
@@ -74,6 +76,9 @@ async function mount(opts: {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   const emit = (event: string, info: Record<string, unknown>): void => {
     ;(ctx as unknown as { emit(event: string, info: unknown): void }).emit(event, info)
   }
@@ -105,7 +110,7 @@ async function mount(opts: {
 
 let callCounter = 0
 async function call(ctx: Context, args: Record<string, unknown>, agent: Agent) {
-  return (await ctx.tools.execute({
+  return (await executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: `call-${++callCounter}` as never,
     name: TASK_TOOL,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -47,6 +48,7 @@ describe('/branch human command', () => {
     expect(commandBranch.inject).toEqual(['commands'])
     const ctx = new Context()
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandBranch)
     const session = Session.create(SessionId(`command-branch-reg-${Math.random()}`))
@@ -58,6 +60,7 @@ describe('/branch human command', () => {
   it('degrades gracefully when no session store is mounted', async () => {
     const ctx = new Context()
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandBranch)
     const agent = fakeAgent(Session.create(SessionId(`command-branch-nostore-${Math.random()}`)))
@@ -71,6 +74,7 @@ describe('/branch human command', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandBranch)
     const parent = ctx.sessions.create(SessionId(`command-branch-${Math.random()}`))
@@ -92,6 +96,7 @@ describe('/branch human command', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandBranch)
     const parent = ctx.sessions.create(SessionId(`command-branch-${Math.random()}`))
@@ -105,6 +110,7 @@ describe('/branch human command', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandBranch)
     // A session object that is not the store's live instance → SESSION_NOT_LIVE.
@@ -121,6 +127,7 @@ describe('/branch help interception', () => {
   it('answers a trailing help argument with formatted help text', async () => {
     const ctx = new Context()
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandBranch)
     const agent = fakeAgent(Session.create(SessionId(`command-branch-help-${Math.random()}`)))

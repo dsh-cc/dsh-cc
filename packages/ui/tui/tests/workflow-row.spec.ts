@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Context, Events } from '@deepseek-ai/cordis'
 import { WorkflowRunId } from '@deepseek-ai/dsh-workflow'
@@ -53,7 +54,7 @@ function makeCtx() {
     agents: {
       create: async () => ({
         agent: {
-          options: {},
+          options: {}, model: fakeAgentModel({}),
           session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
           id: 'a-1',
           status: 'idle',

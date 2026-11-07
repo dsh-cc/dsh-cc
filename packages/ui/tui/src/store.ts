@@ -17,6 +17,7 @@ export type {
   PermissionPickerView,
   ProviderPanelView,
   QuestionOptionView,
+  QuestionIntentView,
   QuestionView,
   SessionEntryView,
   SessionSwitcherView,

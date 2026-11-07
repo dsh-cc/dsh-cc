@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -34,7 +35,7 @@ function makeCtx(opts: {
   resumeSessions?: Record<string, FakeSession>
 }): { ctx: Record<string, unknown> } {
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: { id: s.id, header: { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',

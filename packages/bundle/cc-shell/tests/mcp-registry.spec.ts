@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 import { apply, Config as GlueConfig } from '../src/index.ts'
 import * as GlueModule from '../src/index.ts'
 
@@ -92,6 +93,9 @@ describe('cc-shell glue MCP registry ownership', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
 
     await apply(ctx, { pluginDirs: [], mcpConfigFiles: [mcpJsonPath] })
 
@@ -125,6 +129,9 @@ describe('cc-shell glue MCP registry ownership', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
 
     const savedDshHome = process.env.DSH_HOME
     try {

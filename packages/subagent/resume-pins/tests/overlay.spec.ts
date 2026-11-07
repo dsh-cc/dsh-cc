@@ -1,11 +1,15 @@
 /**
- * Pure overlay-builder matrix (plan §4.8): presence semantics (a pinned
- * `null` key is REMOVED — asserted absent, not null), degraded pins set only
- * explicitly-present fields, the gate-evaluated `resume.overlay` tuple wins,
- * and blocked pins throw.
+ * Pure pin-application matrix (harness-0.2.2 D3.5-form): `pinnedSelectionOf`
+ * computes the provider/model/effort triple the spawn/resume path selects
+ * DURABLY at child publication (presence semantics; the gate-evaluated
+ * `resume.overlay` tuple wins; blocked pins yield undefined). The request
+ * waterfall keeps ONLY `maxTokens` (`applyPinnedMaxTokens`), still with
+ * presence semantics (a pinned `null` is REMOVED — asserted absent, not
+ * null) and never throwing (the fail-closed duty moved to the pre-spawn
+ * gate).
  */
 import { describe, expect, it } from 'vitest'
-import { PinBlockedError, applyPinOverlay } from '../src/overlay.ts'
+import { applyPinnedMaxTokens, pinnedSelectionOf } from '../src/overlay.ts'
 import type { ResumePin } from '../src/pin.ts'
 
 function makePin(overrides: Partial<ResumePin> = {}): ResumePin {
@@ -32,59 +36,76 @@ function makePin(overrides: Partial<ResumePin> = {}): ResumePin {
   }
 }
 
-describe('applyPinOverlay — complete pins', () => {
-  it('sets every pinned non-null field on a shallow copy', () => {
-    const resolved = { provider: 'other', model: 'other', maxTokens: 1 }
-    const out = applyPinOverlay(resolved, makePin())
-    expect(out).toEqual({ provider: 'mock', model: 'mock', maxTokens: 5555, reasoningEffort: 'high' })
-    expect(resolved).toEqual({ provider: 'other', model: 'other', maxTokens: 1 })
+describe('pinnedSelectionOf — the durable spawn/resume tuple (D3.5)', () => {
+  it('a complete pin carries provider/model/effort (maxTokens is NOT a selection field)', () => {
+    expect(pinnedSelectionOf(makePin())).toEqual({ provider: 'mock', model: 'mock', reasoningEffort: 'high' })
   })
 
-  it('REMOVES the key for a pinned null (absence, not assignment)', () => {
+  it('omits the effort for a pinned null (absence follows adapter defaults)', () => {
     const pin = makePin({ effective: { provider: 'mock', model: 'mock', reasoningEffort: null, maxTokens: null, complete: true } })
-    const out = applyPinOverlay({ provider: 'x', model: 'x', maxTokens: 99, reasoningEffort: 'low' }, pin)
-    expect(out).toEqual({ provider: 'mock', model: 'mock' })
-    expect(Object.prototype.hasOwnProperty.call(out, 'maxTokens')).toBe(false)
-    expect(Object.prototype.hasOwnProperty.call(out, 'reasoningEffort')).toBe(false)
-    expect(out).not.toHaveProperty('maxTokens')
-    expect(out).not.toHaveProperty('reasoningEffort')
+    expect(pinnedSelectionOf(pin)).toEqual({ provider: 'mock', model: 'mock' })
   })
 
-  it('removes a pinned-null key that was absent from the input too', () => {
-    const pin = makePin({ effective: { provider: 'mock', model: 'mock', reasoningEffort: null, maxTokens: 42, complete: true } })
-    const out = applyPinOverlay({ provider: 'x', model: 'x' }, pin)
-    expect(out).not.toHaveProperty('reasoningEffort')
-    expect(out).toEqual({ provider: 'mock', model: 'mock', maxTokens: 42 })
-  })
-})
-
-describe('applyPinOverlay — degraded pins (complete:false)', () => {
-  it('sets only the explicitly-present pinned fields, never touching absent ones', () => {
-    const pin = makePin({ effective: { provider: 'mock', model: 'mock', reasoningEffort: 'high', maxTokens: null, complete: false } })
-    const out = applyPinOverlay({ provider: 'x', model: 'x', reasoningEffort: 'low' }, pin)
-    expect(out).toEqual({ provider: 'mock', model: 'mock', reasoningEffort: 'high' })
-    expect(out).not.toHaveProperty('maxTokens')
-  })
-})
-
-describe('applyPinOverlay — gate-evaluated route-current overlay', () => {
-  it('the resume.overlay tuple wins over the pinned effective tuple', () => {
+  it('the gate-evaluated resume.overlay tuple wins over the pinned effective tuple', () => {
     const pin = makePin({
       resume: {
         state: 'ok',
         overlay: { provider: 'mock2', model: 'mock2', reasoningEffort: null, maxTokens: 999 },
       },
     })
-    const out = applyPinOverlay({ provider: 'mock', model: 'mock', reasoningEffort: 'high', maxTokens: 5555 }, pin)
-    expect(out).toEqual({ provider: 'mock2', model: 'mock2', maxTokens: 999 })
-    expect(out).not.toHaveProperty('reasoningEffort')
+    expect(pinnedSelectionOf(pin)).toEqual({ provider: 'mock2', model: 'mock2' })
+  })
+
+  it('a blocked pin yields undefined (the pre-spawn gate owns the visible failure)', () => {
+    const pin = makePin({ resume: { state: 'blocked', reason: '[WORKSPACE_MISSING] gone' } })
+    expect(pinnedSelectionOf(pin)).toBeUndefined()
   })
 })
 
-describe('applyPinOverlay — blocked pins', () => {
-  it('throws PinBlockedError naming the stored reason (defense-in-depth)', () => {
+describe('applyPinnedMaxTokens — the surviving request-field overlay', () => {
+  it('sets a pinned maxTokens on a shallow copy (input untouched)', () => {
+    const resolved = { provider: 'other', model: 'other', maxTokens: 1 }
+    const out = applyPinnedMaxTokens(resolved, makePin())
+    expect(out).toEqual({ provider: 'other', model: 'other', maxTokens: 5555 })
+    expect(resolved).toEqual({ provider: 'other', model: 'other', maxTokens: 1 })
+  })
+
+  it('REMOVES the key for a complete pin whose maxTokens is null', () => {
+    const pin = makePin({ effective: { provider: 'mock', model: 'mock', reasoningEffort: null, maxTokens: null, complete: true } })
+    // 0.2.2 (D3.5): presence semantics apply to BOTH surviving fields — a
+    // complete pin with a null effort also strips an injected effort key.
+    const out = applyPinnedMaxTokens({ provider: 'x', model: 'x', maxTokens: 99, reasoningEffort: 'low' }, pin)
+    expect(out).toEqual({ provider: 'x', model: 'x' })
+    expect(out).not.toHaveProperty('maxTokens')
+    expect(out).not.toHaveProperty('reasoningEffort')
+  })
+
+  it('a degraded pin (complete:false) with a null maxTokens touches nothing', () => {
+    const pin = makePin({ effective: { provider: 'mock', model: 'mock', reasoningEffort: 'high', maxTokens: null, complete: false } })
+    const resolved = { provider: 'x', model: 'x', maxTokens: 42 }
+    expect(applyPinnedMaxTokens(resolved, pin)).toBe(resolved)
+  })
+
+  it('the gate-evaluated overlay maxTokens wins (null overlay REMOVES the key)', () => {
+    const pin = makePin({
+      resume: {
+        state: 'ok',
+        overlay: { provider: 'mock2', model: 'mock2', reasoningEffort: null, maxTokens: 777 },
+      },
+    })
+    expect(applyPinnedMaxTokens({ maxTokens: 1 }, pin)).toEqual({ maxTokens: 777 })
+    const nullPin = makePin({
+      resume: {
+        state: 'ok',
+        overlay: { provider: 'mock2', model: 'mock2', reasoningEffort: null, maxTokens: null },
+      },
+    })
+    expect(applyPinnedMaxTokens({ maxTokens: 1 }, nullPin)).not.toHaveProperty('maxTokens')
+  })
+
+  it('a blocked pin contributes nothing (never throws — the gate owns fail-closed)', () => {
     const pin = makePin({ resume: { state: 'blocked', reason: '[WORKSPACE_MISSING] gone' } })
-    expect(() => applyPinOverlay({ provider: 'x', model: 'x' }, pin)).toThrow(PinBlockedError)
-    expect(() => applyPinOverlay({ provider: 'x', model: 'x' }, pin)).toThrow(/WORKSPACE_MISSING/)
+    const resolved = { maxTokens: 1 }
+    expect(applyPinnedMaxTokens(resolved, pin)).toBe(resolved)
   })
 })

@@ -8,12 +8,17 @@ import ToolRuntime, { currentToolExecution, type ToolDefinition, type ToolExecut
 import { createSandboxApprovalListener } from '../src/approval-listener.ts'
 import { GrantEscalations } from '../src/grant-escalation.ts'
 import { TaskGrantStore, appendTaskGrantEvent, buildTaskGrant, validateDescriptor } from '../src/task-grant.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const reason = 'escalate sandbox to workspace-write: needs workspace'
 async function fixture() {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   const session = Session.create(SessionId(`binding-${Math.random()}`))
   const agent = { id: 'agent', session } as unknown as Agent
   const grant = buildTaskGrant({ root: '/work', branch: 'task', goalId: null, face: validateDescriptor({ rules: ['Bash(git add)'], tools: [], writePaths: ['docs/'], sandboxEscalation: true, contentScope: 'any' }) })
@@ -28,7 +33,7 @@ async function fixture() {
   const run = async (body: ToolDefinition['execute'], registerCall = true) => {
     const stop = registerCall ? ctx.on('tools/pre-execute', (exec, next) => { register(exec); return next() }) : () => {}
     const unregister = ctx.tools.register({ name: 'Bash', description: 'test', parameters: { type: 'object' }, output: { schema: { type: 'null' }, render: () => [] }, execute: body })
-    const result = await ctx.tools.execute({ name: 'Bash', callId: ToolCallId('same'), arguments: { command: 'git add docs/a.md' }, agent, signal: new AbortController().signal })
+    const result = await executeModelToolFixture(ctx, { name: 'Bash', callId: ToolCallId('same'), arguments: { command: 'git add docs/a.md' }, agent, signal: new AbortController().signal })
     unregister()
     stop()
     expect(result.isError).toBe(false)

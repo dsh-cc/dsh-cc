@@ -20,6 +20,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntimeCC from '@dsh-cc/tools'
 import * as ToolManageSkill from '@dsh-cc/tool-manage-skill'
 import { learnedSkillPath } from '@dsh-cc/skill-loader'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 let homeDir: string
 
@@ -45,6 +47,9 @@ async function setup(options: SetupOptions = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntimeCC)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   ctx.provide('skills', {
     list: async () => options.claimants ?? [],
   } as never)
@@ -61,7 +66,7 @@ async function setup(options: SetupOptions = {}) {
 
 let callCounter = 0
 function call(ctx: Context, args: unknown) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++callCounter}`),
     name: 'manage_skill',

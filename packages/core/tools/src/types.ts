@@ -1,12 +1,29 @@
 /**
  * Durable Tool event vocabulary shared with type-only consumers.
  *
+ * `cc-executor.ts` appends `tool/code-dispatch-start` / `tool/code-dispatch`
+ * rows into the session log. The jsonl persistence backend refuses to reopen
+ * any session that contains an event type outside `KNOWN_SESSION_EVENT_TYPES`
+ * (SessionFormatUnsupportedError on open(read|write)), so both types MUST be
+ * registered into the live set at module load — the same idiom as
+ * `@dsh-cc/session-cwd` / `@dsh-cc/completion-gate`. Without this, any session
+ * that ran a `run_code` program with a nested dispatch becomes permanently
+ * unresumable. The registration is an unconditional module-load side effect,
+ * and the type strings must never be renamed.
+ *
  * @module @dsh-cc/tools/types
  */
 
+import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+
+/** One sub-dispatch STARTING inside a `run_code` program. */
+export const CODE_DISPATCH_START_EVENT = 'tool/code-dispatch-start'
+
+/** One sub-dispatch SETTLING inside a `run_code` program. */
+export const CODE_DISPATCH_EVENT = 'tool/code-dispatch'
 
 /** Payload recorded when one nested Code Mode Tool dispatch starts. */
 export interface CodeDispatchStartEventData {
@@ -58,4 +75,10 @@ declare module '@deepseek-ai/dsh-session/types' {
      */
     'tool/code-dispatch': CodeDispatchEventData
   }
+}
+
+// The set is typed ReadonlySet but is a live Set — same registration idiom as
+// session-cwd; see the module doc for why this must stay unconditional.
+for (const type of [CODE_DISPATCH_START_EVENT, CODE_DISPATCH_EVENT]) {
+  ;(KNOWN_SESSION_EVENT_TYPES as Set<string>).add(type)
 }

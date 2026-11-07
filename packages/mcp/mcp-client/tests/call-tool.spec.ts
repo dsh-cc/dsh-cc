@@ -44,6 +44,7 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({ StdioClientTranspo
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({ StreamableHTTPClientTransport: vi.fn() }))
 
 import { apply } from '@dsh-cc/mcp-client/src/index.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 function listing(name: string): { tools: { name: string; inputSchema: { type: string } }[]; nextCursor: undefined } {
   return { tools: [{ name, inputSchema: { type: 'object' } }], nextCursor: undefined }
@@ -77,6 +78,9 @@ beforeEach(async () => {
   ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
 })
 
 describe('mcpConnections.callTool', () => {

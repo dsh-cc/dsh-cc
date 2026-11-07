@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import CommandRuntime, { type CommandResult } from '@deepseek-ai/dsh-commands'
@@ -73,6 +74,7 @@ async function harness(overrides: unknown): Promise<{
   await ctx.plugin(SessionStore)
   await ctx.plugin(LocalFileSystem)
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   const plugin = await ctx.plugin(commandExport, config)
   const session = ctx.sessions.create(SessionId(`command-export-${Math.random()}`))
@@ -213,6 +215,7 @@ describe('/export trailing help request', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandExport)
   const session = ctx.sessions.create(SessionId(`export-${Math.random()}`))

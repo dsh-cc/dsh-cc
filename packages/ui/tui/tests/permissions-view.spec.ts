@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -41,7 +42,7 @@ function makeApprovalCtx(events: unknown[]): {
   request(req: FakeApprovalRequest): Promise<string>
 } {
   const handlers = new Set<(req: FakeApprovalRequest, next: () => unknown) => unknown>()
-  const agent = { options: {}, session: { id: 's-appr', header: {}, events, snapshotEvents() { return this.events } }, id: 'a-appr', status: 'idle' }
+  const agent = { options: {}, model: fakeAgentModel({}), session: { id: 's-appr', header: {}, events, snapshotEvents() { return this.events } }, id: 'a-appr', status: 'idle' }
   const ctx = {
     get(key: string) {
       if (key === 'agentPresets') {

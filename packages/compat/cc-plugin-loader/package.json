@@ -26,7 +26,8 @@
   "dependencies": {
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/settings-cascade": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^"
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/moa": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
@@ -47,16 +48,16 @@
   "peerDependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
     "@dsh-cc/claude-code-agents": "workspace:^",
-    "@deepseek-ai/dsh-commands": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-commands": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
     "@dsh-cc/hook-protocol": "workspace:^",
     "@dsh-cc/mcp-client": "workspace:^",
-    "@deepseek-ai/dsh-skill": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-skill": ">=0.2.2-rc.1",
     "@dsh-cc/skill-loader": "workspace:^",
-    "@deepseek-ai/dsh-subagent": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-subagent": ">=0.2.2-rc.1",
     "@dsh-cc/tools": "workspace:^",
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-home-paths": ">=0.2.1-rc.5"
+    "@deepseek-ai/dsh-home-paths": ">=0.2.2-rc.1"
   },
   "files": [
     "lib"

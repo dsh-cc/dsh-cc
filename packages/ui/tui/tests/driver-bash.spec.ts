@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -59,7 +60,7 @@ function makeShellService(script: FakeResult[] = []) {
  */
 function makeCtx(options: { shell?: unknown; status?: string } = {}) {
   const agent = {
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: { id: 's-bash', header: {}, events: [], snapshotEvents() { return this.events } },
     id: 'agent-s-bash',
     status: options.status ?? 'idle',

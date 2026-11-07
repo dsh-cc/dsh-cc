@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -308,7 +309,7 @@ function makeApprovalCtx(
   const agent = {
     id: 'a-appr',
     session: { id: 's-appr', header: {}, events, snapshotEvents() { return this.events } },
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     status: 'idle',
   }
   const ctx: Record<string, unknown> = {

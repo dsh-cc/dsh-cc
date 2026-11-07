@@ -13,6 +13,7 @@ import { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent, Session } from '@deepseek-ai/dsh-session'
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
@@ -47,6 +48,7 @@ async function harness(settings?: Record<string, unknown>): Promise<{
   await ctx.plugin(SessionStore)
   await ctx.plugin(LocalFileSystem)
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(commandExport, { defaultDir: tempDir })
   const session = ctx.sessions.create(SessionId(`export-secrets-${Math.random()}`))

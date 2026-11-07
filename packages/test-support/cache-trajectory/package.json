@@ -13,6 +13,7 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
     "@earendil-works/pi-ai": "1.1.0"
   },
   "dependencies": {

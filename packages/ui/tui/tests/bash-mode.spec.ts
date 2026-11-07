@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -382,7 +383,7 @@ describe('`!` bash mode (root)', () => {
 
   it('runs !echo end-to-end through a real driver into the grid', async () => {
     const agent = {
-      options: {},
+      options: {}, model: fakeAgentModel({}),
       session: { id: 's-vt', header: {}, events: [], snapshotEvents() { return this.events } },
       id: 'agent-s-vt',
       status: 'idle',

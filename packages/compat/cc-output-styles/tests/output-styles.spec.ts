@@ -10,6 +10,9 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { SettingsProvider } from '@dsh-cc/settings-provider'
 import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
+// Harness 0.2.2: `AgentRegistry.inject` includes 'sessionProjections', so the
+// registry stays PENDING (and `ctx.agents` is undefined) without this service.
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as ccOutputStyles from '../src/index.ts'
 import { styleSectionText } from '../src/styles.ts'
@@ -75,6 +78,7 @@ async function harness(config: Record<string, unknown> = {}, withSettings = true
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(SystemPrompt)
   if (withSettings) await ctx.plugin(MemorySettings)

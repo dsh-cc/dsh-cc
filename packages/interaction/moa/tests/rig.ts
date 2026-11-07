@@ -1,19 +1,27 @@
 /**
- * Shared test rig for the moa routing specs: a manual MoaCore (settings/
- * arming/bookkeeping), a fake `ccModelRoutes` resolver, a canned System One
- * `fetchImpl` (the judge lane never goes through the llm adapter registry —
- * design §3.6), and a fake agent face for listener-level tests.
+ * Shared test rig for the moa routing specs (harness-0.2.2 D3.2 form): a
+ * manual MoaCore (settings/arming/bookkeeping), a fake `ccModelRoutes`
+ * resolver, a canned System One `fetchImpl` (the judge lane never goes
+ * through the llm adapter registry — design §3.6), and a fake agent face
+ * with an AgentModel work-alike (`current()`/`select()` over an in-memory
+ * recorded selection with the creation-options fallback).
+ *
+ * Specs drive the NEW seams: `admit(opening)` (the entry-point admission
+ * seam), `claim(turn, messages)` (the inbox/claimed bind + floor restore),
+ * plus the pre-step row delivery — no more assemble seam or `agent/request`
+ * overlay listener.
  * @module
  */
 
-import type { LlmCallConfig, UserMessage } from '@deepseek-ai/dsh-llm'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
-import { captureClaimed, getCapturedOpening, noteClaimedTurn, resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
-import { createRequestRouter, textOf, type ArmingValidation, type RequestPayload, type RouterDeps } from '../src/router.ts'
+import { resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
+import { createRequestRouter, textOf, type ArmingValidation, type RouterDeps } from '../src/router.ts'
 
-/** Boot-default pair the rig's fake request header reports. */
+/** Boot-default pair the rig's creation options carry. */
 export const BOOT_PAIR = { provider: 'mock', model: 'mock' }
 
 /**
@@ -34,31 +42,50 @@ export const routes = (): {
 /** Probabilities with `draft` the argmax. */
 export const DRAFT_PROBABILITIES = { sketch: 0.05, draft: 0.7, blueprint: 0.15, masterplan: 0.1 }
 
+/** An AgentModel work-alike for listener-level rigs. */
+export interface FakeAgentModel {
+  /** Every recorded durable select, in order. */
+  selections: ModelSelection[]
+  current(): ModelSelection | undefined
+  select(selection: ModelSelection): void
+}
+
+/** The rig's fake agent (structural Agent face for the router seams). */
+export interface FakeAgent {
+  options: { provider: string; model: string; reasoningEffort?: ReasoningEffortId }
+  model: FakeAgentModel
+  session: {
+    header: Record<string, unknown>
+    /** undefined = fresh session (no prior requests); a config = resumed. */
+    requestHeader(): { config: Record<string, unknown> } | undefined
+    snapshotEvents(): readonly unknown[]
+    id: string
+  }
+  followups: UserMessage[]
+  followup(message: UserMessage): void
+}
+
 export interface Rig {
   core: MoaCore
   router: ReturnType<typeof createRequestRouter>
+  agent: FakeAgent
   /** One entry per System One call: the parsed request state. */
   classifyStates: string[]
   /** One entry per System One call: the wire `model` field (gateway contract). */
   classifyModels: string[]
   fetchError: Error | undefined
-  /** Texts of every injected notice row, in order. */
-  injected: { text: string; source: unknown }[]
   warnings: string[]
   ledger: string
-  /** Seed the capture for a turn (emit the claimed batch per message, §5.3). */
-  seedCapture: (turn: number, messages: UserMessage[]) => Promise<void>
-  /**
-   * Drive the assemble seam (effective-model-truth §5.3): the harness's
-   * assembled prompt with `variables` (defaults to the fake header pair —
-   * the harness writes the live selection there). Classifies once per turn,
-   * writes the persona variables, queues the status row.
-   */
-  assemble: (turn?: number, variables?: Record<string, unknown>) => Promise<{ variables?: Record<string, unknown> } | undefined>
-  /** Build an agent/request payload for the rig's fake agent. */
-  payload: (turn: number, step: number, headerPair?: { provider: string; model: string }) => RequestPayload
-  next: () => Promise<LlmCallConfig>
-  setHeaderPair: (pair: { provider: string; model: string }) => void
+  /** The entry-point admission seam on the rig's agent (D3.2). */
+  admit: (opening: UserMessage) => Promise<void>
+  /** The claimed-listener drive (bind + floor restore + capture). */
+  claim: (turn: number, messages: UserMessage[]) => Promise<void>
+  /** Drive the pre-step row delivery; returns the decision messages. */
+  deliverRows: (messages?: UserMessage[]) => Promise<UserMessage[]>
+  /** Set the creation-options effort (the pre-route live effort). */
+  setOptionsEffort: (effort: string | undefined) => void
+  /** Mark the session RESUMED (a prior request header exists / not). */
+  setResumed: (resumed: boolean, pair?: { provider: string; model: string }) => void
   setResolveEfforts: (resolve: NonNullable<RouterDeps['resolveEfforts']>) => void
   settings: MoaSettings
 }
@@ -72,11 +99,15 @@ export interface RigOptions {
   failFetch?: Error
   /** Returned usage.input_tokens (truncation sentinel tests). */
   inputTokens?: number
+  /** Creation-options route; defaults to BOOT_PAIR. */
+  bootPair?: { provider: string; model: string }
+  /** Creation-options effort. */
+  effort?: string
 }
 
 export function makeRig(options: RigOptions = {}): Rig {
-  // The capture map, claimed-turn, sticky-tier, and pending-row slots are
-  // process-global runtime state — start each rig clean.
+  // The capture map, claimed-turn, sticky-tier, pending-row, admission entry,
+  // and tripwire slots are process-global runtime state — start clean.
   resetRuntimeCore()
   const settings: MoaSettings = { ...DEFAULT_MOA_SETTINGS, enabled: options.enabled ?? true }
   const core: MoaCore = {
@@ -90,12 +121,12 @@ export function makeRig(options: RigOptions = {}): Rig {
   setRuntimeCore({ arming: core.arming, validation: options.validation ?? { ok: true } })
   const classifyStates: string[] = []
   const classifyModels: string[] = []
-  const injected: { text: string; source: unknown }[] = []
   const warnings: string[] = []
   let fetchError = options.failFetch
-  let headerPair = { ...BOOT_PAIR }
   let ledger = options.ledger ?? ''
   let resolveEfforts: NonNullable<RouterDeps['resolveEfforts']> | undefined
+  let resumed = false
+  let resumedPair = options.bootPair ?? { ...BOOT_PAIR }
 
   const fetchImpl: typeof fetch = async (_url, init) => {
     if (fetchError !== undefined) throw fetchError
@@ -119,7 +150,6 @@ export function makeRig(options: RigOptions = {}): Rig {
     fetchImpl,
     ledgerPath: () => (ledger === '' ? undefined : ledger),
     logger: { warn: (message) => warnings.push(message) },
-    ...(resolveEfforts === undefined ? {} : { resolveEfforts }),
   }
   // Late-bound seam: setResolveEfforts swaps the resolver after construction.
   Object.defineProperty(deps, 'resolveEfforts', {
@@ -128,16 +158,44 @@ export function makeRig(options: RigOptions = {}): Rig {
   })
   const router = createRequestRouter(core, { validation: options.validation ?? { ok: true }, deps })
 
-  const fakeAgent = {
-    session: { requestHeader: () => ({ config: { ...headerPair } }) },
-    inject: (message: UserMessage) => {
-      injected.push({ text: textOf(message), source: message.source })
+  const selections: ModelSelection[] = []
+  const agent: FakeAgent = {
+    options: {
+      ...(options.bootPair ?? { ...BOOT_PAIR }),
+      ...(options.effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(options.effort) }),
+    },
+    model: {
+      selections,
+      current(): ModelSelection | undefined {
+        const recorded = selections.at(-1)
+        if (recorded !== undefined) return { ...recorded }
+        const { provider, model, reasoningEffort } = agent.options
+        return provider.length > 0 && model.length > 0
+          ? { provider, model, ...(reasoningEffort === undefined ? {} : { reasoningEffort }) }
+          : undefined
+      },
+      select(selection: ModelSelection): void {
+        selections.push({ provider: selection.provider, model: selection.model, ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }) })
+      },
+    },
+    session: {
+      header: {},
+      requestHeader() {
+        return resumed ? { config: { ...resumedPair } } : undefined
+      },
+      snapshotEvents: () => [],
+      id: 'rig-agent',
+    },
+    followups: [],
+    followup(message: UserMessage): void {
+      this.followups.push(message)
     },
   }
 
   return {
     core,
     router,
+    agent,
     classifyStates,
     classifyModels,
     get fetchError() {
@@ -146,7 +204,6 @@ export function makeRig(options: RigOptions = {}): Rig {
     set fetchError(error: Error | undefined) {
       fetchError = error
     },
-    injected,
     warnings,
     get ledger() {
       return ledger
@@ -154,41 +211,26 @@ export function makeRig(options: RigOptions = {}): Rig {
     set ledger(path: string) {
       ledger = path
     },
-    seedCapture: async (turn, messages) => {
-      // The claimed emit is per-message; the LAST claimed message of the
-      // turn is the opening (the claim batch claims pending next-step items
-      // first, then the next-turn message — §5.3).
-      for (const message of messages) captureClaimed(undefined, message, turn)
-      noteClaimedTurn(undefined, turn)
+    admit: (opening) => router.routeBeforeAdmission(agent as never, opening),
+    claim: async (turn, messages) => {
+      // The claimed emit is per-message; the router's noteClaimed owns
+      // capture + bind + escalation-floor restore (D3.2). Await the bind's
+      // ledger writes so specs can assert the sidecar synchronously after.
+      const writes: (Promise<void> | void)[] = []
+      for (const message of messages) writes.push(router.noteClaimed(agent as never, message, turn))
+      await Promise.all(writes)
     },
-    assemble: async (turn, variables) => {
-      // The harness's assemble listener has already written the live
-      // selection into variables (defaults to the fake header pair); moa's
-      // OUTER listener reads it after `await next()`.
-      const assembled = { variables: { ...(variables ?? { provider: headerPair.provider, model: headerPair.model }) } }
-      const context = {
-        agent: fakeAgent,
-        signal: new AbortController().signal,
-        ...((turn === undefined ? {} : { turn }) as object),
-      }
-      return (await router.assembleListener(assembled, context, async () => assembled)) as {
-        variables?: Record<string, unknown>
-      }
+    deliverRows: async (messages = []) => {
+      const decision = await router.preStepListener({ agent } as never, async () => ({ kind: 'enter', messages }) as never)
+      return (decision as { messages: UserMessage[] }).messages
     },
-    payload: (turn, step, pair) => ({
-      agent: fakeAgent as never,
-      turn,
-      step,
-      signal: new AbortController().signal,
-      ...((pair === undefined ? {} : { headerPairOverride: pair }) as never),
-    }),
-    // Fake "resolved config": the pre-overlay selection, i.e. the header pair
-    // (matches the real harness, where the resolved config carries the
-    // selection until moa's withTier overrides AFTER the observe).
-    next: async () =>
-      ({ provider: headerPair.provider, model: headerPair.model, messages: [], reasoningEffort: 'max' }) as unknown as LlmCallConfig,
-    setHeaderPair: (pair) => {
-      headerPair = pair
+    setOptionsEffort: (effort) => {
+      if (effort === undefined) delete agent.options.reasoningEffort
+      else agent.options.reasoningEffort = ReasoningEffortId(effort)
+    },
+    setResumed: (next, pair) => {
+      resumed = next
+      if (pair !== undefined) resumedPair = pair
     },
     setResolveEfforts: (resolve) => {
       resolveEfforts = resolve
@@ -217,3 +259,5 @@ export function escalationOpening(text: string, originSeq: number, fromTier: num
     source: { kind: 'moa-escalation', originSeq, fromTier, toTier },
   })
 }
+
+export { textOf }

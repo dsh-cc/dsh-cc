@@ -107,6 +107,9 @@ importers:
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
@@ -299,6 +302,9 @@ importers:
       '@deepseek-ai/dsh-tool-subagent-control':
         specifier: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
         version: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-tool-web':
         specifier: link:../../../../deepseek-harness/packages/web/tool-web
         version: link:../../../../deepseek-harness/packages/web/tool-web
@@ -442,6 +448,9 @@ importers:
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -613,6 +622,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
@@ -625,6 +637,9 @@ importers:
 
   packages/compat/cc-plugin-loader:
     dependencies:
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../../interaction/moa
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../cc-model-aliases
@@ -794,6 +809,9 @@ importers:
       '@deepseek-ai/dsh-tool-bash':
         specifier: link:../../../../deepseek-harness/packages/shell/tool-bash
         version: link:../../../../deepseek-harness/packages/shell/tool-bash
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
@@ -882,6 +900,9 @@ importers:
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -897,18 +918,6 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
-
-  packages/core/tool-append-order:
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: link:../../../../deepseek-harness/vendor/cordis
-        version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/dsh-scope':
-        specifier: link:../../../../deepseek-harness/packages/core/scope
-        version: link:../../../../deepseek-harness/packages/core/scope
-      '@deepseek-ai/dsh-system-prompt':
-        specifier: link:../../../../deepseek-harness/packages/core/system-prompt
-        version: link:../../../../deepseek-harness/packages/core/system-prompt
 
   packages/core/tool-manage-skill:
     dependencies:
@@ -934,6 +943,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
 
   packages/core/tool-notebook-edit:
     devDependencies:
@@ -952,6 +964,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -979,6 +994,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
@@ -994,6 +1012,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -1012,6 +1033,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -1030,6 +1054,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-tool-web':
         specifier: link:../../../../deepseek-harness/packages/web/tool-web
         version: link:../../../../deepseek-harness/packages/web/tool-web
@@ -1075,6 +1102,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-workflow':
         specifier: link:../../../../deepseek-harness/packages/workflow/workflow
         version: link:../../../../deepseek-harness/packages/workflow/workflow
@@ -1090,6 +1120,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../../interaction/command-usage
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../../interaction/moa
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
@@ -1114,9 +1147,18 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-executor-ptc':
+        specifier: link:../../../../deepseek-harness/packages/core/tool-executor-ptc
+        version: link:../../../../deepseek-harness/packages/core/tool-executor-ptc
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
@@ -1248,6 +1290,9 @@ importers:
       '@deepseek-ai/dsh-subprocess-local':
         specifier: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
         version: link:../../../../deepseek-harness/packages/subprocess/subprocess-local
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-user-approval':
         specifier: link:../../../../deepseek-harness/packages/interaction/user-approval
         version: link:../../../../deepseek-harness/packages/interaction/user-approval
@@ -1337,6 +1382,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../../subagent/resume-pins
@@ -1393,6 +1441,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-commit-split:
     dependencies:
@@ -1483,6 +1534,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -1514,6 +1568,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-shell':
         specifier: link:../../../../deepseek-harness/packages/shell/shell
         version: link:../../../../deepseek-harness/packages/shell/shell
@@ -1545,6 +1602,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@dsh-cc/hook-protocol':
         specifier: workspace:^
         version: link:../../hooks/hook-protocol
@@ -1570,12 +1630,18 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-init:
     dependencies:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../moa
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -1595,6 +1661,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-mcp:
     dependencies:
@@ -1620,6 +1689,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-memory:
     dependencies:
@@ -1657,6 +1729,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-permissions:
     dependencies:
@@ -1734,6 +1809,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-preset:
     dependencies:
@@ -1787,6 +1865,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-rename:
     dependencies:
@@ -1812,6 +1893,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-session-title':
         specifier: link:../../../../deepseek-harness/packages/session/session-title
         version: link:../../../../deepseek-harness/packages/session/session-title
@@ -1837,6 +1921,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-session-query':
         specifier: link:../../../../deepseek-harness/packages/session-query/session-query
         version: link:../../../../deepseek-harness/packages/session-query/session-query
@@ -1871,6 +1958,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-skill':
         specifier: link:../../../../deepseek-harness/packages/skill/skill
         version: link:../../../../deepseek-harness/packages/skill/skill
@@ -1899,6 +1989,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-shell':
         specifier: link:../../../../deepseek-harness/packages/shell/shell
         version: link:../../../../deepseek-harness/packages/shell/shell
@@ -1927,6 +2020,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/command-usage:
     devDependencies:
@@ -1955,6 +2051,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/interaction/completion-gate:
     dependencies:
@@ -2117,12 +2216,18 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-shell':
         specifier: link:../../../../deepseek-harness/packages/shell/shell
         version: link:../../../../deepseek-harness/packages/shell/shell
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-user-approval':
         specifier: link:../../../../deepseek-harness/packages/interaction/user-approval
         version: link:../../../../deepseek-harness/packages/interaction/user-approval
@@ -2187,6 +2292,9 @@ importers:
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2314,6 +2422,9 @@ importers:
       '@deepseek-ai/dsh-token-meter':
         specifier: link:../../../../deepseek-harness/packages/llm/token-meter
         version: link:../../../../deepseek-harness/packages/llm/token-meter
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2533,6 +2644,9 @@ importers:
       '@deepseek-ai/dsh-timeout':
         specifier: link:../../../../deepseek-harness/packages/util/timeout
         version: link:../../../../deepseek-harness/packages/util/timeout
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2616,6 +2730,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2699,6 +2816,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -2932,9 +3052,6 @@ importers:
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
-      '@dsh-cc/tool-append-order':
-        specifier: workspace:^
-        version: link:../../core/tool-append-order
       '@dsh-cc/tool-git-worktree':
         specifier: workspace:^
         version: link:../../workspace/tool-git-worktree
@@ -2993,6 +3110,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
+      '@dsh-cc/tools':
+        specifier: workspace:^
+        version: link:../../core/tools
       js-yaml:
         specifier: ^4.1.0
         version: 4.3.2
@@ -3037,6 +3157,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -3074,6 +3197,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
@@ -3120,6 +3246,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-skill':
         specifier: link:../../../../deepseek-harness/packages/skill/skill
         version: link:../../../../deepseek-harness/packages/skill/skill
@@ -3154,6 +3283,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../../../../deepseek-harness/packages/core/session
         version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../../../../deepseek-harness/packages/session/session-projection
+        version: link:../../../../deepseek-harness/packages/session/session-projection
 
   packages/session/session-forensics: {}
 
@@ -3268,6 +3400,9 @@ importers:
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
         version: link:../../../../deepseek-harness/packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-working-directory':
         specifier: link:../../../../deepseek-harness/packages/session/working-directory
         version: link:../../../../deepseek-harness/packages/session/working-directory
@@ -3328,6 +3463,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
@@ -3393,6 +3531,9 @@ importers:
       '@deepseek-ai/dsh-session-persistence':
         specifier: link:../../../../deepseek-harness/packages/session/session-persistence
         version: link:../../../../deepseek-harness/packages/session/session-persistence
+      '@deepseek-ai/dsh-subagent':
+        specifier: link:../../../../deepseek-harness/packages/subagent/subagent
+        version: link:../../../../deepseek-harness/packages/subagent/subagent
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools
@@ -3490,6 +3631,9 @@ importers:
       '@deepseek-ai/dsh-tool-subagent-control':
         specifier: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
         version: link:../../../../deepseek-harness/packages/subagent/tool-subagent-control
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-working-directory':
         specifier: link:../../../../deepseek-harness/packages/session/working-directory
         version: link:../../../../deepseek-harness/packages/session/working-directory
@@ -3620,6 +3764,9 @@ importers:
         specifier: ^4.4.3
         version: 4.5.4
     devDependencies:
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@earendil-works/pi-ai':
         specifier: 1.1.0
         version: 1.1.0(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.30.0(zod@4.5.4))(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.5.4)
@@ -3675,6 +3822,9 @@ importers:
         specifier: ^4.4.3
         version: 4.5.4
     devDependencies:
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -3860,6 +4010,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../../../../deepseek-harness/packages/core/system-prompt
         version: link:../../../../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-testkit':
+        specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+        version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
       '@deepseek-ai/dsh-user-approval':
         specifier: link:../../../../deepseek-harness/packages/interaction/user-approval
         version: link:../../../../deepseek-harness/packages/interaction/user-approval
@@ -4506,7 +4659,9 @@ packages:
   '@smithy/core@3.34.1':
     resolution: {integrity: sha512-dLcOUxz8YCv1RZUMKq6GbyUf95pLbrqh34bPvpCZ1+CByFF31BEAFewZjsGCnVsZTKdThNENfGyAgk2TJqVwSw==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}

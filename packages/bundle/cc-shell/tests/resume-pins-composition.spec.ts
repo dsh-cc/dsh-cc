@@ -20,13 +20,13 @@ import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-j
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
-import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
 import { PinStore, applyResumePinsPlugin } from '@dsh-cc/subagent-resume-pins'
 import { apply as applyTask } from '@dsh-cc/subagent-task'
 import { apply as applyModelRoutes, type ModelRoutes } from '@dsh-cc/model-aliases'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const roots: string[] = []
 afterEach(() => {
@@ -43,8 +43,9 @@ async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
+  // list_agents/send_message/interrupt_agent all come from the control plugin
+  // itself (harness 0.2.2-rc.1 folded the separate `list-agents` subpath in).
   await ctx.plugin(ControlTools)
-  await ctx.plugin(ListAgents)
   // A deployment tool surface + the name-reservation shim, as integration.spec.ts.
   ctx.tools.register(defineTool({
     name: 'read',
@@ -111,7 +112,7 @@ describe('cc-shell resume-pins composition (§4.10)', () => {
 
   it('arms capture from the service store: a background Task spawn writes a pin under the composed pinsRoot', async () => {
     const { ctx, parent, pinsRoot } = await compose([textResponse('working')])
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'subagent_fork',

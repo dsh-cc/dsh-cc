@@ -18,6 +18,8 @@ import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import ToolRuntimeCC from '@dsh-cc/tools'
 import * as ToolWebFetch from '@dsh-cc/tool-web-fetch'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const FETCH_RESULT = {
   url: 'https://example.com/x',
@@ -42,6 +44,9 @@ async function setup(options: SetupOptions = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntimeCC)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   const fetchMock = vi.fn(options.fetch ?? (async () => ({ ...FETCH_RESULT })))
   ctx.provide('web', { fetch: fetchMock } as never)
   const streams: GenerateOptions[] = []
@@ -58,7 +63,7 @@ async function setup(options: SetupOptions = {}) {
 
 let callCounter = 0
 function call(ctx: Context, args: unknown, agent?: unknown) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++callCounter}`),
     name: 'web_fetch',
@@ -260,6 +265,9 @@ describe('replacement of stock dsh-tool-web web_fetch', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntimeCC)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(WebRuntime)
     ctx.provide('llm', { stream: async function * (): AsyncIterable<StreamChunk> {} } as never)
     await ctx.plugin(ToolWeb, { search: true, fetch: false })

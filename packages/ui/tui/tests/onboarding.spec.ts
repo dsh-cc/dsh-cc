@@ -1,3 +1,4 @@
+import { fakeDriverSelection } from './fake-model.ts'
 import { describe, expect, it, vi } from 'vitest'
 import { wireOnboarding, type OnboardingGate } from '@dsh-cc/tui/harness/onboarding.ts'
 import { createInitialState, upsertRow, type TuiState } from '@dsh-cc/tui/store.ts'
@@ -45,7 +46,7 @@ function makeRt(opts: {
       return states.at(-1) ?? createInitialState()
     },
     ctx,
-    selection: { current: undefined as { provider: string; model: string } | undefined },
+    selection: fakeDriverSelection(),
     listeners,
     providerRuntime: { openProviderPanel },
     modelMissing: () => gate.modelMissing,
@@ -63,7 +64,7 @@ const statusTexts = (state: TuiState): string[] =>
 describe('wireOnboarding', () => {
   it('never fires when a model was seeded before settle', () => {
     const { rt, openProviderPanel, fire } = makeRt({ modelMissing: false })
-    rt.selection.current = { provider: 'p', model: 'm' }
+    rt.selection.selectUser({ provider: 'p', model: 'm' })
     wireOnboarding(rt)
     fire()
     expect(statusTexts(rt.state()).some(t => t.startsWith('Welcome!'))).toBe(false)
@@ -95,7 +96,7 @@ describe('wireOnboarding', () => {
     expect(openProviderPanel).toHaveBeenCalledTimes(1)
     // The wizard write lands: selection transitions undefined → defined.
     rt.emit(upsertRow(rt.state(), { kind: 'status', text: 'Provider m added.' }))
-    rt.selection.current = { provider: 'p', model: 'm' }
+    rt.selection.selectUser({ provider: 'p', model: 'm' })
     fire()
     expect(statusTexts(rt.state())).toContain("Setup complete — you're ready to go.")
     // Deactivated: a replayed boot hook never re-opens the panel.

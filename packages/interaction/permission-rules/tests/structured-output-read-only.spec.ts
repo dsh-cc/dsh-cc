@@ -12,7 +12,8 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import ToolRuntime, { type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, foldClassifiers, DEFAULT_READ_ONLY_TOOLS, type Config } from '@dsh-cc/permission-rules'
@@ -20,6 +21,8 @@ import { decideCallVerbose, type DecideDeps } from '../src/decide.ts'
 import { EMPTY_RULE_SET, parseRule } from '../src/parser.ts'
 import type { ToolExecution } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 /** The production extraction payload shape (design §5.2): a {writes:[...]} report. */
 const WRITES_PAYLOAD = {
@@ -103,6 +106,12 @@ async function mount(config: Config = {}) {
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
+  // ApprovalService injects `sessionProjections`; without it the plugin does not
+  // activate and every ask degrades to the no-seam deny.
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(MemorySettings)
   await ctx.plugin(FakeRoutes)
@@ -180,7 +189,7 @@ describe('pipeline: structured_output in auto mode (design §5.2)', () => {
     const agent = agentOf('so-auto')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('structured_output', WRITES_PAYLOAD, agent))
+    const result = await executeModelToolFixture(ctx, exec('structured_output', WRITES_PAYLOAD, agent))
     expect(result.isError).toBe(false)
     expect(asked).toHaveLength(0)
     expect(classifierCalls(llm)).toHaveLength(0)
@@ -200,13 +209,13 @@ describe('pipeline: structured_output in auto mode (design §5.2)', () => {
     ctx.permissionRules.setMode(agent, 'auto')
 
     // Control: edit is not read-only → classifier ask → deterministic reject.
-    const control = await ctx.tools.execute(exec('edit', { file_path: '/work/x.txt' }, agent))
+    const control = await executeModelToolFixture(ctx, exec('edit', { file_path: '/work/x.txt' }, agent))
     expect(control.isError).toBe(true)
     expect(asks).toEqual(['edit'])
 
     // The report channel: never reaches the classifier, never asks, runs.
     llm.calls.length = 0
-    const result = await ctx.tools.execute(exec('structured_output', WRITES_PAYLOAD, agent))
+    const result = await executeModelToolFixture(ctx, exec('structured_output', WRITES_PAYLOAD, agent))
     expect(result.isError).toBe(false)
     expect(asks).toEqual(['edit'])
     expect(classifierCalls(llm)).toHaveLength(0)

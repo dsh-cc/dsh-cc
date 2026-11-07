@@ -179,7 +179,13 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     },
     presentCall: args => presentWorkflowCall(args as WorkflowToolParams),
     presentResult: (args, result) => presentWorkflowResult(args as WorkflowToolParams, result),
-  }))
+  // Cross-vendor contracts cast (tool-manage-skill/tool-web-fetch idiom):
+  // once the program also loads the upstream-pin harness d.ts (here via the
+  // @dsh-cc/moa admission import), cordis's Context['tools'] augmentation
+  // binds the UPSTREAM ToolDefinition while @dsh-cc/tools' defineTool yields
+  // the vendored one — two identical-but-twin declarations under
+  // exactOptionalPropertyTypes.
+  }) as unknown as Parameters<typeof ctx.tools.register>[0])
 
   // Context disposal cancels in-flight runs and disarms settle delivery, and
   // unmounts the session-start `/<name>` command mounts (effect-scoped, plan §3.1).

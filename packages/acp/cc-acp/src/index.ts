@@ -1,5 +1,5 @@
 // Vendored from @deepseek-ai/dsh-acp (packages/acp/acp/src/index.ts)
-// Source ref: c1b47e41fcd54d20a0f061df28683bfc29ee24e5 (deepseek-harness, MIT — see LICENSE-harness)
+// Source ref: 2f97f60455605e915b8176d9170cae337bfedcc6 (deepseek-harness, MIT — see LICENSE-harness)
 // Copied 2026-10-09. Structural fixes flow from upstream during harness
 // migrations; CC-specific divergences must be recorded in DIVERGENCE.md.
 /**
@@ -49,7 +49,6 @@ import {
   type SessionNotification,
   type Stream,
 } from '@agentclientprotocol/sdk'
-import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 // Type-only: declaration-merges the `agentPresets` roster service this plugin
@@ -253,8 +252,9 @@ export function apply(ctx: Context, config: AcpConfig): void {
       assertOpen()
       validateWorkspaceParams(params)
       const sessionId = brandString<SessionId>(randomUUID())
-      // The preset composition itself happens inside AcpSession.create's
-      // setup — preset → model control → MCP (§5.2, TUI driver.ts order).
+      // The preset composition itself happens on the serial `agent/created`
+      // join above (§5.2); the create path only stamps the requested identity
+      // into the frozen session header.
       let record: AcpSession
       try {
         record = await AcpSession.create(ctx, {
@@ -262,9 +262,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
           cwd: params.cwd,
           mcpServers: params.mcpServers,
           agentOptions: agentOptions(config),
-          fallbackSelection: initialSelection(config),
           presetId,
-          presets,
           signal,
           notify,
         })
@@ -302,7 +300,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
       activating.add(sessionId)
       return (async (): Promise<ResumeSessionResponse> => {
         const persisted = (await persistence.stat(sessionId, { signal }))?.header
-        if (persisted === undefined || persisted.origin === 'subagent' || persisted.parentSession !== undefined) {
+        if (persisted === undefined || persisted.origin === 'subagent') {
           throw invalidParams(`session is not resumable: ${sessionId}`)
         }
         if (!await sameDirectory(persisted.cwd, params.cwd)) {
@@ -315,8 +313,6 @@ export function apply(ctx: Context, config: AcpConfig): void {
             cwd: params.cwd,
             mcpServers: params.mcpServers ?? [],
             agentOptions: agentOptions(config),
-            fallbackSelection: initialSelection(config),
-            presets,
             signal,
             notify,
           })
@@ -364,7 +360,6 @@ export function apply(ctx: Context, config: AcpConfig): void {
             || activating.has(header.id)
             || ctx.sessions.get(header.id) !== undefined
             || header.origin === 'subagent'
-            || header.parentSession !== undefined
             || header.cwd === undefined
             || !isAbsolute(header.cwd)
         ) return undefined
@@ -503,13 +498,6 @@ function agentOptions(config: AcpConfig): { provider?: string; model?: string } 
     ...config.provider !== undefined ? { provider: config.provider } : {},
     ...config.model !== undefined ? { model: config.model } : {},
   }
-}
-
-/** Initial session selection when both deployment fields are present. */
-function initialSelection(config: AcpConfig): ModelSelection | undefined {
-  return config.provider === undefined || config.model === undefined
-    ? undefined
-    : { provider: config.provider, model: config.model }
 }
 
 interface SessionListCursor {

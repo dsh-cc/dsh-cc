@@ -12,7 +12,6 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { rowsToMarkdown } from '../export-markdown.ts'
 import { defaultExportDir, exportStamp } from './shell-output.ts'
@@ -257,14 +256,14 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
     }
     if (name === 'effort') {
       // W4 await-late seam: identical to the submit path — the seed must be
-      // settled before this branch reads `selection.current`, or a boot-window
+      // settled before this branch reads `selection.current()`, or a boot-window
       // /effort would resolve against an undefined route.
       await rt.waitForModel()
       if (rawInput.length === 0) {
         await rt.openEffortPicker()
         return
       }
-      const route = rt.selection.current
+      const route = rt.selection.current()
       if (route === undefined) {
         emit(upsertRow(rt.state(), { kind: 'status', text: 'No model configured. Use /model first.' }))
         return
@@ -274,7 +273,7 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
       // validation and zero adapter calls — the provider default is always
       // legal, even when the llm service is unreachable.
       if (parseEffortChoice(rawInput, [])?.kind === 'default') {
-        rt.selection.current = { provider: route.provider, model: route.model }
+        rt.selection.selectUser({ provider: route.provider, model: route.model })
         emit(upsertRow(rt.state(), { kind: 'status', text: 'Reasoning effort reset to the provider default.' }))
         return
       }
@@ -296,12 +295,11 @@ export function createRunLocalSection(rt: DriverRunLocalCtx): RunLocalSection {
         return
       }
       const level = efforts.find(candidate => candidate.id === choice.level)!
-      // Single branding seam: view layers stay plain strings.
-      rt.selection.current = {
+      rt.selection.selectUser({
         provider: route.provider,
         model: route.model,
-        reasoningEffort: ReasoningEffortId(level.id),
-      }
+        reasoningEffort: level.id,
+      })
       // User-facing text carries the effort NAME, not the raw id.
       emit(upsertRow(rt.state(), { kind: 'status', text: `Reasoning effort is now ${level.name}.` }))
     }

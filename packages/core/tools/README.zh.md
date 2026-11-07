@@ -2,23 +2,49 @@
 
 [English](README.md) | 中文
 
-工具注册表与执行流水线。工具插件注册各自的 schema 和执行器；agent loop（智能体循环）依次让每次调用经过 `tools/pre-execute`（可扩展的允许／拒绝门禁）→ 已注册的单调守卫 → `tools/execute`（供超时／重试／指标插件使用的环绕分发包装层）→ `tools/post-execute`（检查／替换结果、附加上下文）→ 由工具定义持有的 `finalizeContent` 边界 → 仅观测的 `tools/result` 通知。注册表还决定以何种方式向模型呈现工具：`mode` 配置可以选择原生 Function Calling（函数调用）、[Code Mode](#code-mode)，或同时选择两者；单个 agent 可用 `presentAs` 为自己遮蔽该默认值。
+<!-- FORK DRIFT：本包逐字重新 vendor harness 的工具树，并重新施加一份明确列举的差异集合。
+     差异清单、门禁与理由见下方的「与上游的 fork 差异」一节。 -->
+
+仓库：<https://github.com/dsh-cc/dsh-cc>。源码：`packages/core/tools`。
+
+## 与上游的 fork 差异
+
+`@dsh-cc/tools` 是一个 fork：vendor 进来的源码取自 pinned harness 版本上的 harness `core/tools` 树，再重新施加一份明确列举的差异集合。`tests/upstream-drift.spec.ts` 对该 fork 设门禁——vendor 文件集合必须精确一致，且每一行存在差异的代码都必须被该门禁的允许清单覆盖〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。差异集合为：
+
+1. **注册表接口**——`reserve(name)` / `isAdmitted(name, scope)`（保留名称进入 known/restrictable 全集但不产生可见定义），以及公开的 `restrictableNames(scope?)` 访问器，因为上游的可见性解析器是私有的〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+2. **工具名翻译**——`cc-names` 模块从上一次 fork 逐字保留〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+3. **执行身份**——`current-execution` 模块，外加注册表注册的唯一一个 `tools/execute` 监听器：仅在委托出去的工具体分发周围进入 async-local 上下文，`prepare()` 守卫在该范围之外运行〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+4. **Code Mode 分发遥测**——`types` 模块承载 `tool/code-dispatch-start` / `tool/code-dispatch` 会话事件，并在模块加载时把两者注册进已知事件集合；`events` 模块声明实时的 `tools/code-dispatch-log` waterfall，结算事件携带分发 `meta` 写入〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+5. **程序工作目录**——`run_code` 通过 `ctx.workingDirectory` 解析工作目录〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+6. **Schema 方言容错**——接受 `$schema` 方言注解，值校验器抽取到独立模块并由 `json-schema` 重新导出〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+7. **呈现模式**——fork 的 `ToolExecutor` 插件（`cc-executor`，导出为 `@dsh-cc/tools/executor`）在共享批量流水线上实现 `native` / `code` / `both`，承载 `run_code` 传输与 SDK／协议 section；`both` 不声明「只能调用 run_code」的规则，因为它的原生调用确实会执行〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+8. **注册 tripwire**——扁平参数规格在测试模式下硬失败、在生产环境告警，即工具 schema 门禁的 CI 分支〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+9. **审批接缝拒绝文案**——`pipeline` 中的 ask 原因清洗与环境／权限指引尾句，每次 harness 版本升级都要保留〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+10. **退役的 append-order 辅助（仅测试支持）**——`test-support.ts`（导出为 `@dsh-cc/tools/test-support`）保留已删除的 `@dsh-cc/tool-append-order` 插件的 `appendStable` 算法与按作用域记忆，作为可执行的文档：它挂接的 assemble 瀑布 `tools` 数组已不存在，因此顺序改由宿主 `systemPrompt.toolOrder` 构造态决定，未列名的其余工具桶改为按字典序重排〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+
+不再重新施加（已被上游吸收）：嵌套 `presentationMeta` 支持，以及分阶段调度垫片（调度由执行器自己负责）〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
+
+
+工具注册表与执行流水线。工具插件注册各自的 schema 和执行器；agent loop（智能体循环）依次让每次调用经过 `tools/pre-execute`（可扩展的允许／拒绝门禁）→ 已注册的单调守卫 → `tools/execute`（供超时／重试／指标插件使用的环绕分发包装层）→ `tools/post-execute`（检查／替换结果、附加上下文）→ 由工具定义持有的 `finalizeContent` 边界 → 仅观测的 `tools/result` 通知。工具如何呈现给模型由**执行器插件**决定：`@dsh-cc/tools/executor` 的 `mode` 配置选择原生 Function Calling（函数调用）、[Code Mode](#code-mode)，或同时选择两者；同一进程内每个作用域各自选择自己的执行器。
 
 ## 服务：`ToolRuntime`（ctx 键：`tools`）
 
-### 配置
+### 配置与执行
+
+注册表本身不接收呈现配置。上游把执行拆分到可插拔的 `ToolExecutor` 之后：组合通过 `ctx.tools.setExecutor(executor)` 为每个作用域选择一个执行器（每个作用域只能有一个；选择时先走作用域链再回落到根作用域；缺失选择会抛出 `ToolExecutorUnavailableError`）〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。本 fork 以 `@dsh-cc/tools/executor` 交付自己的执行器插件：
 
 ```yaml
-tools:
+executor:
   mode: native   # native (default) | code | both
 ```
 
-`native` 以函数定义的形式贡献可见工具。`code` 会提供保留的 `run_code` 传输、生成的 `tools:sdk` 段，以及声明「只有 `run_code` 可被直接调用」的 `tools:code-only` 规则。执行器随后强制执行该规则：模型直接调用其他任何工具时，会在策略运行前将该调用解析为 `UNKNOWN_TOOL`；`both` 同时提供两种形式，且不声明该规则，因为其中的原生调用确实可以执行。没有单独声明呈现模式的 agent 默认采用此配置；agent preset 可通过 `dsh-agent-tool-presentation` 自行选择呈现模式。不能注册、遮蔽、限制或移除该保留传输，且无论配置何种模式，该名称都是保留的，因为任何 agent 都可能选择 code 模式。非原生模式要求所加载 `ctx.ptcRuntime` 的 `language` 有已注册的 SDK 渲染器——TypeScript 经 `@deepseek-ai/dsh-ptc-runtime-node` 交付；Python 渲染器内置，驱动任何报告 `language: 'python'` 的运行时。没有渲染器的运行时语言会导致提示词组装明确失败；如果 `systemPrompt.toolOrder` 条目指向当前模式未贡献的工具，系统会拒绝组装提示词。`system-prompt/assemble` 监听器可以替换注册表贡献；它返回的组装结果具有权威性，因此该监听器负责保留可用的 Code Mode 协议。
+`native` 以函数定义的形式描述可见工具。`code` 只描述保留的 `run_code` 传输、生成 `tools:sdk` 段，并声明「只有 `run_code` 可被直接调用」的 `tools:code-only` 规则——执行器强制执行该规则：模型直接调用其他任何工具时，会在策略运行前将其解析为 `UNKNOWN_TOOL`；`both` 描述两种形式且不声明该规则，因为其中的原生调用确实可以执行。非原生模式要求所加载 `ctx.ptcRuntime` 的 `language` 有已注册的 SDK 渲染器——TypeScript 经 `@deepseek-ai/dsh-ptc-runtime-node` 交付；Python 渲染器内置，驱动任何报告 `language: 'python'` 的运行时〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md〕。没有渲染器的运行时语言会导致提示词组装明确失败；如果 `systemPrompt.toolOrder` 条目指向当前模式未贡献的工具，系统会拒绝组装提示词。`system-prompt/assemble` 监听器可以替换执行器的各个 section；它返回的 section 具有权威性，因此该监听器负责保留可用的 Code Mode 协议。
 
 ### 公开 API
 
 - `ctx.tools.register(definition: ToolDefinition): () => void`：注册一个受信任、带类型的同进程定义，其中必须包含规范的 `output` 声明。所在层由调用上下文的作用域决定：普通插件上下文会全局注册；agent 的 `agent.ctx` 只为该 agent 注册，并在此处遮蔽同名全局工具。同一层内名称重复会抛出；非原生模式还会拒绝保留的 `run_code` 传输名称。缺失或不受支持的输出声明，以及非正数或非有限的 `timeoutMs`，都会使注册失败。可选的同步 `finalizeContent` 回调会在调用开始时纳入快照；在所有流水线结果（包括实体化其他结果字段时发现的错误）规范化之后，它只能替换最终面向模型的内容。该注册会随调用方 fiber 一同 dispose（资源释放）。
-- `ctx.tools.presentAs(mode: ToolPresentationMode): () => void`：为本 agent 选择面向模型的呈现方式，仅对该 agent 遮蔽 `mode` 配置；从普通上下文调用会抛出（进程级呈现方式是那个配置字段），同一 scope 内第二次声明也会抛出。code 类模式还会为该 agent 注册它自己的 `tools:sdk` 段。工具目录保持不变：`schemas(agent)` 仍会报告该 agent 的能力；只有组装结果中的工具列表会按所选呈现方式收束。随调用方 fiber dispose。
+- `ctx.tools.setExecutor(executor: ToolExecutor): () => void`：为调用作用域选择执行器（上游契约：每个作用域只能有一个——同一作用域内第二次注册会抛出；选择时先走作用域链再回落到根作用域，缺失选择会抛出 `ToolExecutorUnavailableError`〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕）。面向模型的呈现由执行器决定：`src/cc-executor.ts` 中的 fork 插件（导出为 `@dsh-cc/tools/executor`）基于共享批量流水线实现 `native`/`code`/`both`〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。随调用方 fiber dispose；卸载后的选择保持不可用，而不会回落到其他执行器。
+- `ctx.tools.restrictableNames(scope?: ScopeKey): ReadonlySet<string>`：作用域限制可以点名的、限制前的候选名称集合（含保留名称；这是 fork 访问器，上游的 `view()` 是私有的）。筛选器清洗会实时读取它，因此子 agent 的 tool filter 会按执行时刻挂载的全部名称校验〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
 - `ctx.tools.restrict(filter)`：对全局工具应用 agent 作用域的允许／拒绝掩码；从普通上下文调用会抛出。筛选器在注册时创建快照；多个掩码取交集，随后再合并作用域本地工具。拒绝掩码会接纳后来出现且未点名的全局工具，而允许掩码会排除后来出现的名称。未知、本地或保留名称以及空筛选器都会被拒绝。这是实时可见性组合，不是权限边界。
 - `ctx.tools.reserve(name: string): () => void`：在调用层预留一个能力**名字**而不注册可见定义。该名字进入「已知但可限制」集合——某个作用域稍后可以对其 `restrict()`，`toolOrder` 也可以列出它——但在真正 `register()` 提供定义之前，它绝不会进入模型可见的 schema。这让延迟工具注册表能预置尚可在重定义加载前被限制的名字（[`@dsh-cc/tool-search`](../tool-search/README.md)）。
 - `ctx.tools.isAdmitted(name: string, scope?: ScopeKey): boolean`：某个全局能力名字是否通过查看作用域链上的每一条作用域限制，与是否已注册无关。被某条 `allow` 列表排除、或出现在某条 `deny` 列表中的名字不被接纳；限制跨整条链取交集，与注册可见性完全一致。用于判断某个延迟能力是否可针对某个 agent 加载。
@@ -101,7 +127,7 @@ ctx.tools.register(defineTool({
 }))
 ```
 
-统一 schema DSL 使用 `ParameterSchemaSpec` 表示隐式开放参数对象，使用 `ValueSchemaSpec` 表示任意 JSON 值根。它支持 `string`、`number`、`integer`、`boolean`、`null`、`array`、`object`、仅供作者使用的 `json`，以及恰好匹配一个分支的 `oneOf`；标量 `enum`/`const` 值必须符合其声明类型。每个显式 DSL 对象都声明 `additionalProperties: true | false`，而隐式参数根和原始 JSON Schema 保持标准的开放默认值。schema 记录只接受自身可枚举字符串键，schema 数组必须是稠密普通数组。编译、验证、从注册表分离以及 schema 到 TypeScript 的呈现均使用显式工作栈，因此，对有效深层 schema 的运行时处理受内存而非调用栈限制；`InferValue` 在 16 层容器内保留精确类型，之后回退到 `JsonValue`，使 TypeScript 自身也保持栈安全。
+统一 schema DSL 使用 `ParameterSchemaSpec` 表示隐式开放参数对象，使用 `ValueSchemaSpec` 表示任意 JSON 值根。它支持 `string`、`number`、`integer`、`boolean`、`null`、`array`、`object`、仅供作者使用的 `json`，以及恰好匹配一个分支的 `oneOf`；标量 `enum`/`const` 值必须符合其声明类型。每个显式 DSL 对象都声明 `additionalProperties: true | false`，而隐式参数根和原始 JSON Schema 保持标准的开放默认值。schema 记录只接受自身可枚举字符串键，schema 数组必须是稠密普通数组。编译、验证、从注册表分离以及 schema 到 TypeScript 的呈现均使用显式工作栈，因此，对有效深层 schema 的运行时处理受内存而非调用栈限制；`InferValue` 在 16 层容器内保留精确类型，之后回退到 `JsonValue`，使 TypeScript 自身也保持栈安全〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md〕。
 
 `defineTool` 定义会在执行前验证模型参数，并把缺失必填值、基本类型错误、无效枚举成员和嵌套违规转换为 `ToolArgsError`（`INVALID_ARGS`），进入普通错误结果路径。它还会根据 `output.schema` 推断主体返回类型和纯输出投影器；注册表在呈现前快照并验证返回的无损 JSON。隐式参数根是开放的；显式对象只有在设置 `additionalProperties: true` 时才接受额外键，而没有声明属性的封闭对象只接受 `{}`。原始 JSON Schema 对象保持开放，除非显式设置 `additionalProperties: false`。系统不会应用默认值；没有 `properties` 的开放对象和没有 `items` 的数组只接受容器类型检查。通过原始方式注册的工具负责输入验证，但仍需声明输出，并由注册表强制校验输出。
 
@@ -126,14 +152,14 @@ ctx.tools.register(defineTool({
 
 ### Code Mode
 
-在 `code` 或 `both` 模式下，注册表为当前作用域公开保留的 `run_code` 传输和按所加载运行时语言生成的确定性 SDK——注册表按 `ctx.ptcRuntime.language` 选择渲染器（`typescript` → 下方的 TypeScript SDK，`python` → Python SDK）。只有程序的外层日志与返回值会重新进入模型上下文。SDK 为每个可见工具声明精确的参数与规范输出类型（TypeScript 为 `ToolArgsMap`/`ToolOutputMap`，Python 为具名 `TypedDict`），每个绑定都会解析为该工具的规范 JSON 值。每个无损 JSON 绑定调用都会在原生调度约定下重新进入完整工具流水线（并发安全的调用最多可重叠 `maxParallelSubCalls` 个；独占调用单独运行并构成排序屏障），并在日志中与外层调用建立关联。拒绝及其他失败结果会以程序实际可见的 `ToolCallError` 形式拒绝，且只携带 `toolName` 和 `message`；Native 内容和内部错误码留在 Code 约定之外。普通副作用不会回滚，子调用的 `additionalContexts` 会通过父结果延迟，以保持调用／结果相邻。运行结算会中止并排空尚未完成的绑定；运行时失败以 `CodeRunFailedError` 形式出现。
+在 `code` 或 `both` 模式下，注册表为当前作用域公开保留的 `run_code` 传输和按所加载运行时语言生成的确定性 SDK——注册表按 `ctx.ptcRuntime.language` 选择渲染器（`typescript` → 下方的 TypeScript SDK，`python` → Python SDK）〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。只有程序的外层日志与返回值会重新进入模型上下文。SDK 为每个可见工具声明精确的参数与规范输出类型（TypeScript 为 `ToolArgsMap`/`ToolOutputMap`，Python 为具名 `TypedDict`），每个绑定都会解析为该工具的规范 JSON 值〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md〕。每个无损 JSON 绑定调用都会在原生调度约定下重新进入完整工具流水线（并发安全的调用最多可重叠 `maxParallelSubCalls` 个；独占调用单独运行并构成排序屏障），并在日志中与外层调用建立关联。拒绝及其他失败结果会以程序实际可见的 `ToolCallError` 形式拒绝，且只携带 `toolName` 和 `message`；Native 内容和内部错误码留在 Code 约定之外。普通副作用不会回滚，子调用的 `additionalContexts` 会通过父结果延迟，以保持调用／结果相邻。运行结算会中止并排空尚未完成的绑定；运行时失败以 `CodeRunFailedError` 形式出现。
 
 在 `code`（而非 `both`）下，该传输同时也是模型唯一可用的入口：模型直呼其他任何可见工具名，都会在创建执行时、早于 `tools/pre-execute`、审批 `ask` 和 guards 解析为 `UNKNOWN_TOOL`，因此没有任何一方会观察或批准一个注定失败的调用。拒绝信息会给出正确路径（`only \`run_code\` is callable directly — call \`<name>\` from inside a \`run_code\` program instead`），因为同一份提示词刚刚声明过那个工具，只说 `unknown tool` 会被读成部署损坏。SDK 子分发携带外层执行的 `parent` token，不受此限制，因此程序保留 SDK 声明的全部绑定。
 
-- **SDK 段**（`tools:sdk`，顺序 150）：一个在组装时求值的提示词段，每次组装都会重新生成与所加载运行时语言相符的 SDK 文本。TypeScript 形态会生成 `JsonValue`、精确的 `ToolArgsMap` / `ToolOutputMap`、`ToolName`、`ToolCallError` 声明，以及映射调用作用域最终可见工具的 `tools` 命名空间（特殊名称使用带引号的键），并附带固定的使用说明；Python 形态（`ctx.ptcRuntime.language === 'python'`）发出等价的具名 `TypedDict` 与一个带相同用法说明的 `tools` 对象。其输出具有确定性：工具按字典序排列；工具集合不变时，文本逐字节相同（有利于前缀 cache）。两个代码生成器都已导出，且绝不会在提示词组装期间抛出：`jsonSchemaToTs` 处理统一 schema 的每种构造并将不受支持的原始构造降级为 `unknown`；`jsonSchemaToPy` 同理，降级为 `Any`（当某字段名不是合法的 `TypedDict` 属性时，或在 SDK 渲染之外被调用时——`TypedDict` 声明所需的命名上下文由该渲染提供——整个对象降级为 `dict[str, Any]`）。
+- **SDK 段**（`tools:sdk`，顺序 150）：一个在组装时求值的提示词段，每次组装都会重新生成与所加载运行时语言相符的 SDK 文本。TypeScript 形态会生成 `JsonValue`、精确的 `ToolArgsMap` / `ToolOutputMap`、`ToolName`、`ToolCallError` 声明，以及映射调用作用域最终可见工具的 `tools` 命名空间（特殊名称使用带引号的键），并附带固定的使用说明；Python 形态（`ctx.ptcRuntime.language === 'python'`）发出等价的具名 `TypedDict` 与一个带相同用法说明的 `tools` 对象〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md〕。其输出具有确定性：工具按字典序排列；工具集合不变时，文本逐字节相同（有利于前缀 cache）。两个代码生成器都已导出，且绝不会在提示词组装期间抛出：`jsonSchemaToTs` 处理统一 schema 的每种构造并将不受支持的原始构造降级为 `unknown`；`jsonSchemaToPy` 同理，降级为 `Any`（当某字段名不是合法的 `TypedDict` 属性时，或在 SDK 渲染之外被调用时——`TypedDict` 声明所需的命名上下文由该渲染提供——整个对象降级为 `dict[str, Any]`）〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md〕。
 - **分发桥接层**（`run_code` 的 execute）：每个绑定调用都会在分发前快照为无损 JSON（`undefined`、`BigInt`、循环、稀疏数组、`-0` 和特殊对象会使该次调用被拒绝），经由每次运行独有、复用原生并发约定的池调度——调用严格按提交顺序启动，连续的 `isConcurrencySafe` 调用最多可重叠经校验的 `maxParallelSubCalls` 配置个（默认 10；设为 `1` 即恢复串行分发），被分类为独占的调用先排空池、单独运行并阻挡其后的调用——以外层执行的不透明 token 作为 `parent`，并经过完整的 pre-execute → guards → execute → post-execute → result 流水线。成功会返回策略处理后的最终规范值；失败以一条消息到达 worker，并成为 `ToolCallError(toolName, message)`。每个已启动的子调用在进入流水线时记录一条 `tool/code-dispatch-start` 事件（确定性 id `<parent>:code:<n>`，按提交顺序编号），并以一条携带完整模型可见 `content`/`isError` 结果的 `tool/code-dispatch` 事件完结（采用 `tool/result` 词汇，因此 UI 会沿原生路径呈现子调用——这对事件的 `time` 字段承载每个子调用的计时）；因 run 结算而被放弃的排队调用两者都不记录。`deriveMessages()` 既不公开这两个事件，也不持久化规范值。token 关联使按提交语义工作的观察器可以延后提交内部调用的成功结果，直到最终 `run_code` 结果确定，而无需暴露进行中的外层执行；普通工具副作用不会回滚。每个子调用的 `additionalContexts` 条目都会按分发顺序通过外层 `ToolRunContext` 延迟；循环只在父级 `run_code` 结果之后追加这些上下文，从而保持相邻关系，并且即使程序后来失败，也会保留各自的来源／元数据。
 - **结算纪律**：桥接层拥有一个运行作用域的中止机制；该中止会跟随传入的外层信号，并在运行因任何原因结算时触发，因此预算耗尽会中止正在运行的子工具，而不会将其遗留。桥接层随后会在返回之前排空队列，使每个 `tool/code-dispatch` 都落在仍打开的轮次内。失败的运行会抛出 `CodeRunFailedError`（`code: 'CODE_RUN_FAILED'`，message = 失败类型 + 已捕获日志），流水线会将其转换为模型可据以自我修正的结构化 `isError`。
-- **结果大小**：中间绑定值会完整传入 worker 进程，且没有逐绑定字节上限。`run_code` 返回规范的 `{ logs: string[], result?: JsonValue }`；字符串原样呈现，其他所有存在的 JSON 根都通过栈安全的美化 JSON 遍历呈现，总缩进最多为 10 个字符（更深的子树保持紧凑），`null` 保持显式，而缺少 `result` 表示程序返回 `undefined`。worker 可配置的 `maxOutputBytes`（默认 64 MiB）只应用于组合序列化后的外层日志数组、完成值或失败消息载荷；固定的结果封装语法和呈现空白不计入该上限。无效和超限的完成会明确失败，只有这个外层结果可以按常规 spill 机制处理。
+- **结果大小**：中间绑定值会完整传入 worker 进程，且没有逐绑定字节上限。`run_code` 返回规范的 `{ logs: string[], result?: JsonValue }`；字符串原样呈现，其他所有存在的 JSON 根都通过栈安全的美化 JSON 遍历呈现，总缩进最多为 10 个字符（更深的子树保持紧凑），`null` 保持显式，而缺少 `result` 表示程序返回 `undefined`。worker 可配置的 `maxOutputBytes`（默认 64 MiB）只应用于组合序列化后的外层日志数组、完成值或失败消息载荷；固定的结果封装语法和呈现空白不计入该上限〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md〕。无效和超限的完成会明确失败，只有这个外层结果可以按常规 spill 机制处理。
 
 ### 并行执行
 
@@ -159,7 +185,7 @@ agent loop 将连续的 `parallel` 调用归入有界滚动池，并把每个 `e
 
 #### 模型看到的内容
 
-Code Mode 会公开生成的 `run_code` schema、下方 SDK 说明，以及按所加载运行时语言生成的精确 SDK 块（TypeScript 的 `declare const tools` 块，或 Python 的 `tools` 声明）。`both` 会同时公开普通 schema 与此 Code Mode API。在 `code` 下，提示词还会带上 `tools:code-only` 规则，其顺序排在逐工具指导段之前，让模型先读到「可以调用哪些工具」再读「每个工具做什么」；`both` 下它渲染为空。说明与 SDK 块随所加载运行时的语言切换；下方展示 TypeScript 版本（经 `@deepseek-ai/dsh-ptc-runtime-node`），Python 版本（用于任何报告 `language: 'python'` 的运行时）以 Python 语法提供相同操作和类型（`await tools.name(args)`、特殊名称用下标访问、`print(...)` 与顶层 `return`）。
+Code Mode 会公开生成的 `run_code` schema、下方 SDK 说明，以及按所加载运行时语言生成的精确 SDK 块（TypeScript 的 `declare const tools` 块，或 Python 的 `tools` 声明）〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。`both` 会同时公开普通 schema 与此 Code Mode API。在 `code` 下，提示词还会带上 `tools:code-only` 规则，其顺序排在逐工具指导段之前，让模型先读到「可以调用哪些工具」再读「每个工具做什么」；`both` 下它渲染为空。说明与 SDK 块随所加载运行时的语言切换；下方展示 TypeScript 版本（经 `@deepseek-ai/dsh-ptc-runtime-node`），Python 版本（用于任何报告 `language: 'python'` 的运行时）以 Python 语法提供相同操作和类型（`await tools.name(args)`、特殊名称用下标访问、`print(...)` 与顶层 `return`〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md〕）。
 
 ##### Code Mode SDK 说明
 
@@ -204,6 +230,6 @@ The available tools:
 - **`tools/pre-execute` 有意不允许改写 `exec.arguments`**：否则日志记录和呈现的参数会与实际运行内容失去同步。
 - **调用方定义的 subagent 与工作流结构化输出仍要求对象根**：这是消费方层面的守卫；共享 schema 词汇和工具输出支持任意 JSON 根。
 - **定义中的 `timeoutMs` 仅作声明之用**：注册表绝不会强制执行截止时间；要强制执行，必须使用 `@deepseek-ai/dsh-tool-call-timeout-policy` 包装层。
-- **Code Mode 的 SDK 语言由当前加载的运行时决定，且呈现方式按 agent 而非按工具**：`mode: code`/`both` 会拒绝组装提示词，除非 `ctx.ptcRuntime.language` 有已注册的 SDK 渲染器（TypeScript 或 Python）；作用域限制／遮蔽与 `presentAs` 会选择每个 agent 的可见绑定及其形态，但在同一个 agent 内不能让一个工具仅使用 Native，而另一个仅使用 Code。
+- **Code Mode 的 SDK 语言由当前加载的运行时决定，且呈现方式按 agent 而非按工具**：`mode: code`/`both` 会拒绝组装提示词，除非 `ctx.ptcRuntime.language` 有已注册的 SDK 渲染器（TypeScript 或 Python）；作用域限制／遮蔽与 `presentAs` 会选择每个 agent 的可见绑定及其形态，但在同一个 agent 内不能让一个工具仅使用 Native，而另一个仅使用 Code〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md〕。
 - **Code Mode 中间值只存在于执行局部，且没有字节上限**：这些规范的类型化值无法从会话回放重建，并可能耗尽进程或 worker 内存；只有外层 `run_code` 输出受 worker 可配置的硬上限约束。每个子调用的持久日志副本则确实有上限：`tools/code-dispatch-log` waterfall 允许 spill 策略把过大的 `tool/code-dispatch` 内容替换为预览加定位符。
 - **每次运行都会获得全新的 `run_code` 状态**：MVP 不采用持久 REPL 风格内核（跨调用状态不会出现在日志中）。

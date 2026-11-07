@@ -13,6 +13,88 @@
 - id: tools
   disabled: true
 
+# Harness 0.2.2-rc.1 split tool execution out of the registry into pluggable
+# ToolExecutors: `setExecutor` accepts exactly ONE executor per scope (a second
+# registration in the same scope throws) and `selectExecutor` walks the scope
+# chain to root. The base native executor owns the model-facing projection, so
+# it must be vacated before the CC executor inserts at root below — otherwise
+# the two collide and boot hard-fails. Same disable pattern as the `tools` row.
+- id: tool-executor-native
+  disabled: true
+
+# Cache-stable tool ordering (harness 0.2.2-rc.1): `orderTools` canonicalizes
+# the collected catalog BEFORE the assemble waterfall, so ordering is
+# constructor state on the single host `SystemPrompt` service — no plugin can
+# impose it any more (the retired @dsh-cc/tool-append-order hooked
+# `system-prompt/assemble`, whose `tools` array no longer exists). An agent
+# preset may neither mount nor replace the host service, so this is a plain
+# same-id restatement of dsh-base's `system-prompt` row at top level, carrying
+# the base row's config verbatim plus `toolOrder`.
+#
+# The list is the CC always-registered catalog in the order a live boot emits
+# today (lexicographic — the pre-migration wire order, so the request prefix is
+# unchanged), captured from a green `smoke:profile-boot` and frozen as
+# `packages/preset/cc/tests/fixtures/cc-tool-order.json` (the source of truth;
+# a preset/cc spec asserts this list equals it). `<unlisted-tools>` terminates
+# it: everything else — MCP tools, ToolSearch, conditionally admitted tools
+# such as `exit_plan_mode`, future rows — renders after it, re-sorted
+# lexicographically on every assembly. That rest bucket is the accepted D5
+# delta: a newly visible unlisted tool inserts lexicographically instead of
+# appending at the tail, while this static prefix stays byte-stable.
+#
+# Every listed name must be registered somewhere in the deployment: an unknown
+# name rejects EVERY assembly, while a known-but-hidden name may be absent.
+# MCP (`mcp__*`) names are excluded deliberately — they are a property of the
+# user's `.mcp.json`, not of this catalog.
+# WARNING: this row MUST stay top-level. Inside `- insert:` it would compose a
+# SECOND loader entry with the same id as dsh-base's and boot hard-fails on the
+# duplicate loader entry id. It must NOT carry `disabled: true` either — that
+# unloads the host SystemPrompt service (the preset's assemble path needs it).
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+  config:
+    personaPrefix: ''
+    toolOrder:
+      - EnterWorktree
+      - ExitWorktree
+      - NotebookEdit
+      - Sleep
+      - ask_user_question
+      - bash
+      - context_retrieve
+      - create_goal
+      - edit
+      - get_goal
+      - glob
+      - grep
+      - handoff_get
+      - handoff_put
+      - interrupt_agent
+      - job_kill
+      - job_list
+      - job_output
+      - list_agents
+      - manage_skill
+      - memory_save
+      - ralph
+      - read
+      - read_image
+      - release_agent
+      - schedule_create
+      - schedule_edit
+      - schedule_list
+      - schedule_view
+      - send_message
+      - skill
+      - subagent_fork
+      - todo_write
+      - update_goal
+      - web_fetch
+      - web_search
+      - workflow
+      - working_directory
+      - write
+      - <unlisted-tools>
 # CC host-plane session-title overlay: disable the stock session-title-llm row
 # and remount a CC provider below (inside the insert list) that stamps the
 # `haiku` cheap lane for first-prompt title generation.
@@ -55,9 +137,17 @@
     # Remount below (in the insert list) with fetch enabled and the fetch provider.
     - id: tools-cc
       name: '@dsh-cc/tools'
+
+    # The CC presentation executor: upstream's `native` / `code` / `both` split
+    # re-hosted over the fork's registry (the registry's own `mode` config is
+    # gone upstream — an executor owns the model-facing projection now). Mounted
+    # in the insert list so it registers in this (root) scope, the one the
+    # vacated `tool-executor-native` row above left free.
+    # `DSH_TOOLS_MODE` continuity: the env carries the mode; absent ⇒ undefined
+    # ⇒ the plugin's `native` default.
+    - id: tool-executor-cc
+      name: '@dsh-cc/tools/executor'
       config:
-        # Carry the base tools row's DSH_TOOLS_MODE toggle forward (dsh-web-app
-        # patches `tools` with it). Absent env ⇒ undefined, the established semantics.
         mode: !!js process.env.DSH_TOOLS_MODE
 
     # Host-plane first-prompt session titles on the CC cheap lane: stamps

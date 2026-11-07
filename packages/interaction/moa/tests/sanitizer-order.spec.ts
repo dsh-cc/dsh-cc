@@ -1,23 +1,21 @@
 /**
- * P-B ordering — the sanitizer's post-agent-creation `{ prepend: true }`
- * pre-step listener is OUTERMOST against the REAL harness
+ * P-B ordering + truthful notices — the sanitizer's post-agent-creation
+ * `{ prepend: true }` pre-step listener is OUTERMOST against the REAL harness
  * `installModelSelection` listeners (effective-model-truth design §6 P-B),
  * exercised on the real agent loop via the testkit (same pattern as
  * `router-probe.spec.ts`).
  *
- * Pinned at the END-TO-END RUNTIME level (not registration internals):
- * with moa armed and overlaying the boot selection (probe: every request is
- * rewritten to the draft tier, so the session header diverges from the frozen
- * `selection.assembled` — the exact live-evidence shape of §2), the harness
- * notice listener DOES append `source.kind === 'model-selection'` rows (the
- * no-sanitizer control proves it), yet the pre-step decision messages that
- * flow back through the sanitizer — i.e. what the loop admits — contain ZERO
- * such rows.
+ * Harness-0.2.2 semantics (D3.2): with moa routing at ADMISSION, moa's
+ * select IS the step's frozen selection, so the harness's `[model changed]`
+ * notice is TRUTHFUL BY CONSTRUCTION — pinned end-to-end here: a routed
+ * tier switch produces zero notices while the pair is stable, and EXACTLY
+ * one truthful notice when the frozen route changes, surviving the
+ * sanitizer byte-identical (the phantom-drop rule is retired).
  *
  * The publish-before-observe order (sanitizer's outermost pre-step publish
  * preceding moa's pre-step observe) is pinned by recording what
  * `readPublishedSelection` reports when moa's observe listener runs: defined
- * and equal to the frozen boot pair ONLY if the sanitizer already published.
+ * and equal to the frozen pair ONLY if the sanitizer already published.
  * @module
  */
 import { afterEach, describe, expect, it } from 'vitest'
@@ -29,11 +27,11 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import { createUserMessage, type LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
-import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import { createUserMessage, type LlmModelReasoningInfo, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { installModelSelectionSanitizer } from '../src/sanitizer.ts'
-import { captureClaimed, getCapturedOpening, noteClaimedTurn, observeLiveSelection, readPublishedSelection, resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
+import { observeLiveSelection, readPublishedSelection, resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
 import { createRequestRouter, type RouterDeps } from '../src/router.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore } from '../src/index.ts'
 import { GAUGE_ROUTE, routes as tierRoutes } from './rig.ts'
@@ -54,15 +52,18 @@ const REASONING = {
 type Script = ConstructorParameters<typeof MockAdapter>[0]
 
 const DRAFT_PROBABILITIES = { sketch: 0.05, draft: 0.7, blueprint: 0.15, masterplan: 0.1 }
+const BLUEPRINT_PROBABILITIES = { sketch: 0.05, draft: 0.1, blueprint: 0.7, masterplan: 0.15 }
 
 const BOOT = { provider: 'mock', model: 'mock' }
 
 /**
- * Real agent loop + REAL harness `installModelSelection` + the sanitizer,
- * with moa's production listener shape mirrored exactly as `apply` mounts it
- * (observe-published-selection pre-step listener first, then the router).
+ * Real agent loop + REAL harness `installModelSelection` (1-arg) + the
+ * sanitizer, with moa's production listener shape mirrored exactly as
+ * `apply` mounts it (observe-published-selection pre-step listener first,
+ * then the router's row splice; claimed bind at the inbox listener). The
+ * admission seam is driven by runTurn below, exactly like the driver.
  */
-async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
+async function setup(options: { script?: Script; sanitizer?: boolean } = {}) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   const root = mkdtempSync(join(tmpdir(), 'dsh-moa-sanitizer-'))
@@ -73,7 +74,6 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
   ctx.llm.registerAdapter(['mock'], adapter)
   const agent = await ctx.agentLoop.create(SessionId('moa-sanitizer'), { provider: 'mock', model: 'mock' })
 
-  const selection: ModelSelectionRef = { current: { ...BOOT }, assembled: undefined }
   const core: MoaCore = {
     arming: new ArmingMachine(() => true),
     bookkeeping: new EscalationBookkeeping(),
@@ -82,29 +82,25 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
   core.arming.arm()
   setRuntimeCore({ arming: core.arming, validation: { ok: true } })
 
-  const capture: { getCapturedOpening: (turnId: number) => unknown } = { getCapturedOpening }
   /** What the sanitizer had published when moa's pre-step observe ran. */
   const publishedAtObserve: ReturnType<typeof readPublishedSelection>[] = []
   // Mirror of apply()'s FIRST moa pre-step listener (index.ts observePreStep):
-  // read the sanitizer's published frozen selection, then feed the splice.
+  // tripwire-observe the sanitizer's published frozen selection, then feed
+  // the row splice.
   const observePreStep = async (payload: { agent?: unknown }, next: () => Promise<unknown>): Promise<unknown> => {
     publishedAtObserve.push(readPublishedSelection(payload.agent))
     const live = readPublishedSelection(payload.agent)
     if (live?.model !== undefined) observeLiveSelection(live)
     return router.preStepListener(payload as never, next)
   }
-  // Mirror of apply()'s `agent/inbox/claimed` capture listener (§5.3).
-  const claimedListener = ({ agent, message, turn }: { agent?: unknown; message: never; turn: number }): void => {
-    captureClaimed(agent, message, turn)
-    noteClaimedTurn(agent, turn)
-  }
+  let probabilities = DRAFT_PROBABILITIES
   const classifyStates: string[] = []
   const fetchImpl: typeof fetch = async (_url, init) => {
     classifyStates.push((JSON.parse(String(init?.body)) as { state: string }).state)
     return new Response(
       JSON.stringify({
         model: GAUGE_ROUTE.model,
-        answers: { route: { type: 'choice', choice: 'draft', probabilities: DRAFT_PROBABILITIES } },
+        answers: { route: { type: 'choice', choice: 'draft', probabilities } },
         usage: { input_tokens: 100, output_tokens: 5 },
       }),
       { status: 200 },
@@ -118,57 +114,80 @@ async function setup(options: { sanitizer?: boolean; script?: Script } = {}) {
   }
   const router = createRequestRouter(core, { validation: { ok: true }, deps })
 
-  // Registration order mirrors production: moa's agent/request listener is
-  // OUTER relative to the harness's request listener (apply t0 < agent
-  // creation t1); the sanitizer is installed co-located AFTER
-  // installModelSelection, later-with-prepend → outermost pre-step listener.
-  // The assemble seam follows the same rule: moa's assemble listener registers
-  // BEFORE installModelSelection → OUTER → it reads the harness-written
-  // selection variables after `await next()` (§5.3).
-  agent.ctx.on('agent/inbox/claimed', claimedListener as never)
+  // Registration order mirrors production (D3.2 form): moa's claimed bind +
+  // pre-step observe/splice listeners; the harness's installModelSelection
+  // notice listener; the sanitizer co-located AFTER it, later-with-prepend →
+  // outermost pre-step listener. The retired seams (agent/request overlay,
+  // system-prompt/assemble classification) are gone.
+  agent.ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: UserMessage; turn: number }) => {
+    router.noteClaimed(agent, message, turn)
+  })
   agent.ctx.on('agent/pre-step', observePreStep as never)
-  agent.ctx.on('agent/request', router.listener as never)
-  agent.ctx.on('system-prompt/assemble', router.assembleListener as never)
-  installModelSelection(agent.ctx, selection)
-  if (options.sanitizer !== false) installModelSelectionSanitizer(agent.ctx, selection as never)
-  return { adapter, agent, classifyStates, publishedAtObserve }
+  installModelSelection(agent.ctx)
+  if (options.sanitizer !== false) installModelSelectionSanitizer(agent.ctx)
+  return {
+    adapter,
+    agent,
+    router,
+    classifyStates,
+    publishedAtObserve,
+    /** Swap the System One argmax for the next admission. */
+    setProbabilities: (next: Record<string, number>) => {
+      probabilities = next
+    },
+  }
 }
 
-const runTurn = async (agent: Awaited<ReturnType<typeof setup>>['agent'], text: string): Promise<void> => {
-  agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
-  await agent.whenIdle()
+type Setup = Awaited<ReturnType<typeof setup>>
+
+/** The driver contract (D3.2): classify BEFORE the followup. */
+const runTurn = async (rig: Setup, text: string): Promise<void> => {
+  const opening = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
+  await rig.router.routeBeforeAdmission(rig.agent, opening)
+  rig.agent.followup(opening)
+  await rig.agent.whenIdle()
 }
 
-describe('P-B: sanitizer ordering against the real harness listeners (real agent loop)', () => {
-  it('end-to-end: under an armed overlay on the boot selection, ZERO model-selection rows survive, while the no-sanitizer control shows the harness DOES append them', async () => {
-    // Control first: identical rig WITHOUT the sanitizer — the harness notice
-    // listener fires at step 2 (header = tier-draft ≠ assembled = boot) and
-    // its phantom row reaches the transcript.
-    const control = await setup({ sanitizer: false })
-    await runTurn(control.agent, 'write a debounce function')
+describe('P-B: sanitizer ordering + truthful notices against the real harness listeners (real agent loop)', () => {
+  it('a stable routed pair produces ZERO model-selection notices; a tier change produces ONE truthful notice, dropped nowhere (sanitizer passthrough)', async () => {
+    const rig = await setup({ script: [textResponse('one'), textResponse('two')] })
+    await runTurn(rig, 'write a debounce function')
+    // Turn 1: durable tier-draft from admission onward — header == frozen on
+    // every step (no phantom exists: prior header undefined at step 1).
+    expect(rig.adapter.requests[0]).toMatchObject({ provider: 'mock', model: 'tier-draft' })
+    // Turn 2 classifies to blueprint: the frozen route CHANGES vs the last
+    // request header → the harness appends its notice — TRUTHFUL (the wire
+    // really serves blueprint from here).
+    rig.setProbabilities(BLUEPRINT_PROBABILITIES)
+    await runTurn(rig, 'redesign the module')
+    expect(rig.adapter.requests[1]).toMatchObject({ provider: 'mock', model: 'tier-blueprint' })
+    const rows = (rig.agent.session.deriveMessages() as { source?: { kind?: string } }[]).filter(
+      (m) => m.source?.kind === 'model-selection',
+    )
+    expect(rows).toHaveLength(1)
+    expect(rig.classifyStates).toHaveLength(2)
+    // The notice survived the sanitizer (passthrough-by-design): control —
+    // with the sanitizer REMOVED the count is identical, because the drop
+    // rule is retired (notices are truthful under pre-admission routing).
+    const control = await setup({ script: [textResponse('one'), textResponse('two')], sanitizer: false })
+    await runTurn(control, 'write a debounce function')
+    control.setProbabilities(BLUEPRINT_PROBABILITIES)
+    await runTurn(control, 'redesign the module')
     const controlRows = (control.agent.session.deriveMessages() as { source?: { kind?: string } }[]).filter(
       (m) => m.source?.kind === 'model-selection',
     )
-    expect(controlRows.length, 'control: harness appended phantom model-selection notices').toBeGreaterThanOrEqual(1)
-    // The overlay really was active on every step (the drop rule's premise).
-    expect(control.adapter.requests).toHaveLength(2)
-    for (const request of control.adapter.requests) expect(request).toMatchObject({ provider: 'mock', model: 'tier-draft' })
-
-    // With the sanitizer: same rig, phantom rows are gone end-to-end.
-    const { agent } = await setup()
-    await runTurn(agent, 'write a debounce function')
-    const rows = (agent.session.deriveMessages() as { source?: { kind?: string } }[]).filter(
-      (m) => m.source?.kind === 'model-selection',
-    )
-    expect(rows).toEqual([])
+    expect(controlRows).toHaveLength(rows.length)
   }, 30_000)
 
-  it('spy order: the sanitizer publish is recorded BEFORE moa’s pre-step observe (the frozen boot pair is already published when the observe listener runs)', async () => {
-    const { agent, publishedAtObserve } = await setup({ script: [textResponse('done')] })
-    await runTurn(agent, 'go')
-    // Every root pre-step saw the frozen boot pair already published — only
-    // possible if the sanitizer's outermost listener ran first.
-    expect(publishedAtObserve.length).toBeGreaterThanOrEqual(1)
-    expect(publishedAtObserve.every((p) => p !== undefined && p.model === BOOT.model && p.provider === BOOT.provider)).toBe(true)
+  it('spy order: the sanitizer publish is recorded BEFORE moa’s pre-step observe (the frozen pair is already published when the observe listener runs)', async () => {
+    const rig = await setup({ script: [textResponse('done')] })
+    await runTurn(rig, 'go')
+    // Every root pre-step saw the frozen pair already published — only
+    // possible if the sanitizer's outermost listener ran first. Turn 1's
+    // frozen pair is the ROUTED tier (admission selected it pre-step), and
+    // the tripwire accepts it as moa's own write (it matches
+    // noteMoaSelection from admission).
+    expect(rig.publishedAtObserve.length).toBeGreaterThanOrEqual(1)
+    expect(rig.publishedAtObserve.every((p) => p !== undefined && p.model === 'tier-draft' && p.provider === 'mock')).toBe(true)
   }, 30_000)
 })

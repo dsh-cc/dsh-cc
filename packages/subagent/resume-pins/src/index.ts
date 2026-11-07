@@ -43,7 +43,7 @@ export {
   type GateEnv,
   type GateResolvedConfig,
 } from './gate.ts'
-export { PinBlockedError, applyPinOverlay } from './overlay.ts'
+export { PinBlockedError, applyPinnedMaxTokens, pinnedSelectionOf } from './overlay.ts'
 export {
   RESUME_PIN_STORE,
   ResumePolicySchema,

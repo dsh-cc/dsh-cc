@@ -1,63 +1,97 @@
 # Code anchors — moa-cascade-routing
 
-Verbatim excerpts from the current worktree (head d5f7e385), read before
-modeling. Each excerpt is byte-exact; source path and line range are given
-per block.
+Verbatim excerpts from the current worktree, read before modeling. Each
+excerpt is byte-exact; source path and line range are given per block.
 
-## B1 — arming truth table (disarm / re-arm)
+Refreshed 2026-11-07 for the harness-0.2.2 S4 slice (D3.2): classification
+moved to the pre-admission seam, request-time overlays were deleted, and
+arming went provenance-signal-driven. **The TLA model itself is unchanged**;
+the anchors below track the code only. B4, B7, B8, B9 are untouched by S4.
 
-Source: `packages/interaction/moa/src/arming.ts:63-98` (excerpt)
+## B1 — arming truth table (disarm / re-arm; r3-final provenance signals)
+
+Source: `packages/interaction/moa/src/arming.ts:96-138` (excerpt)
 
 ```ts
   noteBootPair(pair: ...): void {
-    // first-wins, unconditional (even while disabled)
+    // first-wins, unconditional (even while disabled); also first-wins the
+    // userBaseSelection and resolves a deferred rehydrated switch-back check
     ...
   }
 
-  observeRequestModel(pair: ...): void {
-    ...
-    if (this.bootDefault === undefined) return
-    if (same(pair, this.bootDefault)) {
-      // user returned to no opinion (or never left): (re)arm
-      if (!this.armed) { this.armed = true; this.reason = undefined }
+  noteUserSelection(selection: ProvenanceSelection): void {
+    this.userBase = { ...selection }
+    if (this.bootDefault !== undefined && same(selection, this.bootDefault)) {
+      this.reason = undefined
+      this.armed = true
       return
     }
     this.armed = false
     this.reason = 'explicit-model-switch'
   }
 
+  noteMoaSelection(selection: ProvenanceSelection): void {
+    this.lastMoa = { ...selection } // NEVER disarms
+  }
+
   isArmed(): boolean { return this.enabled && this.armed }
 ```
 
-## B2 — the pre-overlay observe (self-feedback guard)
+Disarm is driven ONLY by the driver's explicit `/model` / `/effort` write
+signals (`noteUserSelection`) plus the resume-rehydration path
+(`rehydrateFromSidecar`, conservative unarmed-until-boot-pair); the pre-step
+observation is tripwire-only (`observeTripwire`) and never mutates arming
+beyond the first-wins boot baseline.
 
-Source: `packages/interaction/moa/src/router.ts:357-372` (excerpt)
+## B2 — the pre-step observe (frozen selection; tripwire-only)
+
+Source: `packages/interaction/moa/src/sanitizer.ts:46-56` (excerpt)
 
 ```ts
-    // S2: observe pre-overlay — always (main agent)
-    const resolved = await next()
-    observeLiveSelection(pairOf(resolved)) // pair is pre-overlay by construction
+    // 0.2.2 semantics: the frozen pair is `payload.modelSelection` of
+    // `agent/pre-step` (the loop freezes `agent.model.current()` at preStep
+    // start and stamps it on the payload)...
+    publishLiveSelection(payload.agent, pairOf(payload.modelSelection))
+```
+
+moa's observePreStep then tripwires the published pair
+(`observeLiveSelection`, report-only) — there is no longer any overlay for
+the observe to precede; truthful-by-construction replaces self-feedback
+guarding.
+
+## B3 — admission gate and durable tier select
+
+Source: `packages/interaction/moa/src/router.ts:440-482` (excerpt)
+
+```ts
+  const routeAdmission = async (agentLike: unknown, opening: UserMessage): Promise<void> => {
+    if (isSubagentAgent(agentLike)) return
+    const agent = agentLike as Agent
+    if (typeof agent.model?.current !== 'function') return
+    await rehydrateFromSidecar(agent)
+    const live = agent.model.current()
+    // first-wins boot baseline, filtered vs lastMoa (moa's own writes never
+    // become "boot")
     ...
-    // "the old header self-feedback trap is structurally impossible"
+    // The §5.3/D3.2 gate, spelled inline:
+    if (opening.source?.kind !== 'user') return
+    if (!deps.readSettings().enabled) return
+    if (!opts.validation.ok) opts.ensureArmed?.()
+    if (!opts.validation.ok || !arming.isArmed()) return
+    const { tier, row } = await classifyOnce(signal, opening)
+    if (tier === undefined) { serveUserBase(agent, live); pendingAdmission = { opening, tier: undefined, row }; return }
+    const selection = await tierSelectionFor(tier, live?.reasoningEffort, signal)
+    ...
+    agent.model.select(selection)          // durable; every following step freezes it
+    arming.noteMoaSelection(selection)
+    pendingAdmission = { opening, tier, row }  // binds the real turn at noteClaimed
+  }
 ```
 
-and the sanitizer publish (`packages/interaction/moa/src/sanitizer.ts:47-56`)
-publishes the **frozen** `selection.assembled` (not `selection.current`)
-before `next()`.
-
-## B3 — classify gate and sticky tier
-
-Source: `packages/interaction/moa/src/router.ts:321-348` (excerpt)
-
-```ts
-    // S4: sticky-tier overlay
-    if (getTurnTier()?.turn === payload.turn) { ... withTier(resolved, sticky.tier, signal) ... }
-    // S5: no decision => serve resolved (fail-open)
-    // S7 gate (all conjuncts):
-    //   readSettings().enabled && opts.validation.ok && agent !== undefined
-    //   && !isSubagentAgent(agent) && selectionVars !== undefined && boot !== undefined
-    //   && sameFields(selectionVars, boot)
-```
+Classification runs once per admitted batch at the entry point
+(`routeBeforeAdmission`, fail-open wrapped); per-step/per-request
+re-classification is impossible by construction — later steps of the turn
+read the same durable selection.
 
 ## B4 — escalation bookkeeping (floor, retries, bounds)
 
@@ -80,32 +114,42 @@ export class EscalationBookkeeping {
 with `MAX_ESCALATIONS_CEILING = 3`, default `max-escalations: 1`
 (`settings.ts:25,130`).
 
-## B5 — judge ordering: bookkeeping before followup; stale guard
+## B5 — judge ordering: bookkeeping, select-then-followup; stale guard
 
-Source: `packages/interaction/moa/src/judge.ts:310-390` (excerpt)
+Source: `packages/interaction/moa/src/judge.ts:355-382` (excerpt)
 
 ```ts
     if (rejected && !shadow && !isStale(...) && nextDistinctTier(...) !== undefined && ...) {
       bookkeeping.recordRetryUsed(...)
       release()
-      await agent.followup(moaEscalationMessage(...))   // kind: 'moa-escalation', never 'user'
-      ...
+      if (!opts.validation.ok || !arming.isArmed()) { /* mid-flight disarm vetoes entirely */ return }
+      const toSelection = deps.tierSelection?.(toTier, ...) ?? tierRouteVariables(toTier, deps.routes?.())
+      if (toSelection !== undefined) {
+        snap.agent.model.select(toSelection) // durable BEFORE the followup
+        noteMoaSelection(toSelection)
+      }
+      snap.agent.followup(createUserMessage({ ..., source: { kind: 'moa-escalation', ... } }))
     }
     // shadow => log only, acted: false, reason 'shadow: would escalate'
 ```
 
-and the stale guard `isStale` (`judge.ts:223-245`): a genuine `user/message`
-event with `seq >= watermark` → `'new genuine user message'`.
+and the stale guard `isStale` (`judge.ts:223-258`): a genuine `user/message`
+event with `seq >= watermark` → `'new genuine user message'`; a
+`request/header ... 'change'` event → `'model changed (/model)'`; and since
+0.2.2 a durable `model/selection` event (a bare `/model` write opens no
+turn) → `'model changed (/model)'`.
 
-## B6 — production floor-bookkeeping seam (fail-open on unrecorded origin)
+## B6 — production floor seam (durable escalation model; floor restore on unrecorded origin)
 
-Source: `packages/interaction/moa/src/state.ts:101-105` (excerpt)
+Source: `packages/interaction/moa/src/judge.ts:371-376` + `state.ts:101-105` (excerpts)
 
 ```ts
-    // in production the originSeq entry is created by the FIRST recordRetryUsed
-    // with tierFloor = toTier (recordFloor is test/rig-only); floorFor(originSeq)
-    // is undefined on a retry-turn whose escalation was not recorded, and
-    // tierForTurn then fails open (router.ts:333-334).
+    // The retry's MODEL is the durable selection the judge wrote BEFORE the
+    // followup (crash/resume restores it from the durable model/selection
+    // tail — F-3); the retry turn is never re-classified. floorFor(originSeq)
+    // is undefined on a retry turn whose escalation was not recorded, and
+    // the claim-side escalation branch then restores it from the durable
+    // followup provenance (B10) instead of failing open.
 ```
 
 ## B7 — degenerate-ladder and tier-skip rules
@@ -132,8 +176,8 @@ export function isSubagentAgent(agent: Agent): boolean {
 }
 ```
 
-applied at nine shared-state writer call sites (capture, observe, assemble,
-pre-step splice, judge, sanitizer publish).
+applied at the shared-state writer call sites (capture, admission seam,
+observe tripwire, pre-step splice, judge, sanitizer publish).
 
 ## B9 — event-sourced escalation floor restore (PR #301, F-3 fix)
 
@@ -187,16 +231,24 @@ escalations, monotonic (never lowers a live floor or retry count), and a
 malformed record **throws** so the caller warns and serves the live selection
 explicitly instead of silently failing open.
 
-## B10 — the restore call site (retry-turn routing) 〔src:ws:specs/tla/moa-cascade-routing/code-anchors.md#L190-L202〕
+## B10 — the restore call site (retry-turn routing, D3.2 claim-side)
 
-Source: `packages/interaction/moa/src/router.ts:327-345`
+Source: `packages/interaction/moa/src/router.ts:528-536`
 
 ```ts
-      if (!gate) return undefined
-      const floor = restoreEscalationFloor(bookkeeping, agent, opening.source as OpeningSource, warn)
-      if (floor === undefined) return undefined
+      if (!isMoaEscalationMessage(source)) return
+      if (!opts.validation.ok) opts.ensureArmed?.()
+      if (!deps.readSettings().enabled || !opts.validation.ok || !arming.isArmed()) return
+      const floor = restoreEscalationFloor(bookkeeping, agentLike, source as OpeningSource, warn)
+      if (floor === undefined) return
+      setTurnTier({ turn, tier: floor, suppressRow: true })
 ```
 
-A retry turn is never re-classified; when the in-memory entry is gone or lower
-than the durable record (crash/resume between the escalation dispatch and the
-retry round) the floor is restored from the log instead of failing open.
+A retry turn is never re-classified. The claim-side bind (the
+`agent/inbox/claimed` listener's escalation branch, D3.2) sets the sticky
+turn tier from the restored floor with NO status row (the typed followup
+itself IS the escalation row, §3.5); the retry's MODEL comes from the
+durable selection the judge selected before the followup (B5). When the
+in-memory entry is gone or lower than the durable record (crash/resume
+between the escalation dispatch and the retry round) the floor is restored
+from the log.

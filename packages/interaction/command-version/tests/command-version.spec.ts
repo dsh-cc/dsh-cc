@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
@@ -45,6 +46,7 @@ async function harness(overrides: Record<string, unknown> = {}): Promise<{
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   const plugin = await ctx.plugin(commandVersion)
   const agent = await makeAgent(ctx)
@@ -100,6 +102,7 @@ describe('/version trailing help request', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(CommandRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(commandVersion)
   const session = ctx.sessions.create(SessionId(`version-${Math.random()}`))

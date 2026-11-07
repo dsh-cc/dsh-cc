@@ -3,11 +3,14 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import ToolRuntime, { type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ApprovalService, { type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider } from '@dsh-cc/settings-provider'
 import PermissionRules, { type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 /**
  * R1 (design §7) end-to-end ask-semantics probe for the 0.1.7-rc.2 permission
@@ -56,7 +59,15 @@ async function probe(
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
-  if (withApproval) await ctx.plugin(ApprovalService, { policy: 'ask' })
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
+  if (withApproval) {
+    // ApprovalService injects `sessionProjections`; without it the plugin does
+    // not activate and every ask degrades to the no-seam deny.
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(ApprovalService, { policy: 'ask' })
+  }
   await ctx.plugin(MemorySettings)
   await ctx.plugin(PermissionRules, {
     bashToolName: 'Bash',
@@ -74,7 +85,7 @@ async function probe(
   if (withApproval) ctx.on('approval/request', async (req) => { asked.push(req); return answerer(req) })
   const agent = agentOf('probe')
   ctx.permissionRules.setMode(agent, 'default')
-  const result = await ctx.tools.execute(exec('Bash', { command: 'git push --force origin main' }, agent))
+  const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'git push --force origin main' }, agent))
   return { asked, result, ran }
 }
 

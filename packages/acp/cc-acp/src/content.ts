@@ -1,5 +1,5 @@
 // Vendored from @deepseek-ai/dsh-acp (packages/acp/acp/src/content.ts)
-// Source ref: c1b47e41fcd54d20a0f061df28683bfc29ee24e5 (deepseek-harness, MIT — see LICENSE-harness)
+// Source ref: 2f97f60455605e915b8176d9170cae337bfedcc6 (deepseek-harness, MIT — see LICENSE-harness)
 // Copied 2026-10-09. Structural fixes flow from upstream during harness
 // migrations; CC-specific divergences must be recorded in DIVERGENCE.md.
 /** ACP wire-content admission and projection owned by the ACP adapter. @module */
@@ -118,7 +118,7 @@ function resourceLinkText(block: Extract<AcpContentBlock, { type: 'resource_link
  * writing; cancellation after a successful content-addressed write may leave an
  * unreachable object but never queues a late user message.
  * @param ctx - bridge context carrying attachment and model services.
- * @param route - selection pinned to the accepted prompt.
+ * @param route - Agent model selection current at prompt admission.
  * @param prompt - untrusted ACP prompt blocks in wire order.
  * @param imageEnabled - capability result advertised during initialization.
  * @param signal - admission cancellation signal.

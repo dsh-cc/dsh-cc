@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { describe, expect, it } from 'vitest'
 import { LOCAL_SLASH } from '@dsh-cc/tui/slash.ts'
 import { localHelpFor } from '@dsh-cc/tui/slash-help.ts'
@@ -48,7 +49,7 @@ function makeModelCtx(models: FakeModel[]): Record<string, unknown> {
         const agentOpts = (opts as { agentOptions?: Record<string, unknown> })?.agentOptions ?? {}
         return {
           agent: {
-            options: agentOpts,
+            options: agentOpts, model: fakeAgentModel(agentOpts),
             session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-test',
             status: 'idle',

@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -64,7 +65,7 @@ function makeModelCtx(models: FakeModel[]): Record<string, unknown> {
         const agentOpts = (opts as { agentOptions?: Record<string, unknown> })?.agentOptions ?? {}
         return {
           agent: {
-            options: agentOpts,
+            options: agentOpts, model: fakeAgentModel(agentOpts),
             session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-test',
             status: 'idle',

@@ -11,6 +11,8 @@ import Lsp, {
   type LspQueryResult,
 } from '@deepseek-ai/dsh-lsp'
 import * as ToolLsp from '@deepseek-ai/dsh-tool-lsp'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /**
  * cc-shell bundle smoke for the LSP rows: the `@deepseek-ai/dsh-lsp` capability
@@ -57,6 +59,9 @@ async function mountLsp(): Promise<{ ctx: Context; dispose: () => Promise<void> 
       Promise.resolve(agent.session?.header?.cwd ?? workspaceRoot),
   } as never)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(Lsp)
   await ctx.plugin(ToolLsp)
   return { ctx, dispose: () => ctx.fiber.dispose() }
@@ -71,7 +76,7 @@ const okLocations: LspQueryResult = {
 }
 /** `cwd: null` means "no agent" (tests LSP_WORKSPACE_REQUIRED); a string is the session cwd. */
 function callLsp(ctx: Context, args: unknown, cwd: string | null = workspaceRoot) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: `cc-lsp-${++seq}` as never,
     name: 'lsp',
@@ -143,6 +148,9 @@ describe('cc-shell bundle — LSP rows (dsh-lsp + dsh-lsp-stdio + dsh-tool-lsp)'
       ensure: () => Promise.resolve(workspaceRoot),
     } as never)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(Lsp)
     const fiber = await ctx.plugin(ToolLsp)
     expect(ctx.tools.get('lsp')).toBeDefined()

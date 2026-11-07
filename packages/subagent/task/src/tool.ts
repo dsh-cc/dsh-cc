@@ -106,7 +106,7 @@ export {
  *
  * `subagent_fork` itself needs no reservation: `registerTaskTool` registers
  * the visible definition below, and `restrict()` accepts registered names.
- * Filter sanitization reads the live `ctx.tools.view().restrictableNames` set,
+ * Filter sanitization reads the live `ctx.tools.restrictableNames()` set,
  * so these reservations (plus every registered row and every mounted MCP tool)
  * are exactly the names a subagent toolFilter may carry.
  */
@@ -148,15 +148,16 @@ export function registerTaskTool(
     reserve(name: string): () => void
     get(name: string): unknown
     /**
-     * Duck-typed `view()`: the only API that lists reserved+registered names
-     * in one set (deferred MCP tools are reserved, not in `schemas()`).
-     * `@internal` on ToolRuntime, so it is structural here and optional —
-     * a seam without it degrades to an empty known set.
+     * The fork's public restrictable-name accessor: the only API that lists
+     * reserved+registered names in one set (deferred MCP tools are reserved,
+     * not in `schemas()`). Structural here and optional — a seam without it
+     * degrades to an empty known set.
      *
      * Pass the calling agent: MCP tools register on the standing-scope layer
-     * of the cc preset, which `view()` without a scope does not see.
+     * of the cc preset, which the unscoped view does not see.
      */
-    view?(scope?: unknown): { restrictableNames: ReadonlySet<string> }
+    restrictableNames?(scope?: unknown): ReadonlySet<string>
+    definitions?(scope?: unknown, toolSet?: unknown): readonly { name: string }[]
   } | undefined
   if (tools === undefined) return undefined
 
@@ -347,7 +348,8 @@ export function registerTaskTool(
         // all restrictable candidates for the child's filter. Pass the calling
         // agent: MCP tools live on the standing-scope layer, which the global
         // view (no scope) does not include.
-        const knownNames = tools.view?.(agent).restrictableNames ?? new Set<string>()
+        const knownNames = tools.restrictableNames?.(agent)
+          ?? new Set((tools.definitions?.(agent) ?? []).map(tool => tool.name))
         const toolFilter = definition.toolRestriction !== undefined
           ? sanitizeToolFilter(definition.toolRestriction, message => ctx.logger.warn(message), knownNames)
           : undefined

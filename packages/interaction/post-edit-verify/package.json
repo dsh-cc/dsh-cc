@@ -22,7 +22,7 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-shell": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-shell": ">=0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@dsh-cc/session-cwd": "workspace:^"
   },
@@ -39,14 +39,15 @@
     "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
-    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
     "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
     "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/agent-loop-mock": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings-provider": "workspace:^",
     "@dsh-cc/skill-loader": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "vitest": "^4.1.8"

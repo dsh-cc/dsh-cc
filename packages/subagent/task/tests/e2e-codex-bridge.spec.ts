@@ -40,7 +40,7 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
-import { defineContentToolFixture } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 import { applyRoutes } from '@dsh-cc/model-aliases'
 import { mountCcPlugin } from '@dsh-cc/plugin-loader'
@@ -325,7 +325,7 @@ let calls = 0
 // The mounted cc-codex-bridge plugin (commands seam + hook surface), set by setup.
 let bridgeMount: Awaited<ReturnType<typeof mountCcPlugin>> | undefined
 function callTool(ctx: Context, name: string, args: unknown, agent: Agent) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++calls}`),
     name,

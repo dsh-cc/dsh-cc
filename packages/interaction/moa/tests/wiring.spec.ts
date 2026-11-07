@@ -1,10 +1,12 @@
 /**
- * Wiring regression tests (2026-10-10 dogfood): five stacked bugs made moa
- * silently inert in every real TUI boot even with `moa.enabled: true` —
- * the routing ledger never appeared. The router/judge specs drive
- * `createRequestRouter`/`createAcceptanceJudge` with injected deps, so the
- * `apply(ctx)` wiring layer (and its interaction with `registerNamespaceSafe`)
- * was never exercised. These specs pin the real paths:
+ * Wiring regression tests (2026-10-10 dogfood; harness-0.2.2 D3.2 form):
+ * five stacked bugs made moa silently inert in every real TUI boot even with
+ * `moa.enabled: true` — the routing ledger never appeared. The router/judge
+ * specs drive `createRequestRouter`/`createAcceptanceJudge` with injected
+ * deps, so the `apply(ctx)` wiring layer (and its interaction with
+ * `registerNamespaceSafe`) was never exercised. These specs pin the real
+ * paths, now including the module-global `routeBeforeAdmission` admission
+ * entry the apply() registers:
  *
  * - A. `registerSettings` had a naive absent-service pre-check that bypassed
  *   settings-ns's own inject-deferral rescue → ship defaults forever.
@@ -26,9 +28,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
-import { makeRig, BOOT_PAIR, GAUGE_ROUTE } from './rig.ts'
-import { apply, resetMoaCore, getMoaCore, moaUnarmedReason, resolveSystemOneBackend, buildDeps, DEFAULT_MOA_SETTINGS } from '../src/index.ts'
+import { makeRig, BOOT_PAIR, GAUGE_ROUTE, userOpening } from './rig.ts'
+import { apply, resetMoaCore, getMoaCore, moaUnarmedReason, resolveSystemOneBackend, buildDeps, routeBeforeAdmission, DEFAULT_MOA_SETTINGS } from '../src/index.ts'
 
 /** A describe-shaped settings service double (settings-ns `DescribeFace`). */
 function fakeSettingsService(sections: Record<string, unknown>): {
@@ -89,27 +92,38 @@ const healthyRoutes = {
 /** Alias overlay not mounted yet: every lane collapses to one model. */
 const degenerateRoutes = { resolve: (): ResolvedRoute => ({ provider: 'p', model: 'same' }) }
 
-/** Fire one full PR-2 step through the apply-mounted listeners:
- * claim (capture) → assemble (classify seam) → pre-step (observe + row
- * splice) → request (overlay). */
+/** A FRESH root agent (no prior request header ⇒ no resume rehydration). */
+function freshAgent(options: { header?: Record<string, unknown> } = {}): {
+  options: { provider: string; model: string }
+  model: { current(): ModelSelection | undefined; select(s: ModelSelection): void }
+  session: { header: Record<string, unknown>; requestHeader(): undefined }
+} {
+  const selected: ModelSelection[] = []
+  return {
+    options: { ...BOOT_PAIR },
+    model: {
+      current: () => selected.at(-1) ?? { ...BOOT_PAIR },
+      select: (s) => selected.push(s),
+    },
+    session: { header: options.header ?? {}, requestHeader: () => undefined },
+  }
+}
+
+/**
+ * Fire one full D3.2 step through the apply-mounted seams:
+ * `routeBeforeAdmission` (module-global, registered by apply) → claim bind
+ * (agent/inbox/claimed listener) → pre-step (tripwire observe + row splice).
+ */
 let firedTurn = 0
-async function fireRequest(rig: ReturnType<typeof makeLateCtx>): Promise<void> {
+async function fireAdmission(rig: ReturnType<typeof makeLateCtx>, agent: unknown = freshAgent(), text = 'hi'): Promise<void> {
   const turn = ++firedTurn
-  const agent = { session: { requestHeader: () => ({ config: { ...BOOT_PAIR } }) }, inject: () => {} }
+  const opening = userOpening(text)
+  await routeBeforeAdmission(agent, opening)
   const find = (event: string) => rig.listeners.find((l) => l.event === event)?.fn as (a: unknown, b: unknown, c?: unknown) => Promise<unknown>
   const claimed = find('agent/inbox/claimed')
-  await claimed({ agent, message: { role: 'user', content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }, turn }, async () => ({}))
-  const assemble = find('system-prompt/assemble')
-  await assemble({ variables: { provider: BOOT_PAIR.provider, model: BOOT_PAIR.model } }, { agent, signal: new AbortController().signal }, async () => ({
-    variables: { provider: BOOT_PAIR.provider, model: BOOT_PAIR.model },
-  }))
+  await claimed({ agent, message: opening, turn }, async () => ({}))
   const preStep = find('agent/pre-step')
-  await preStep({ agent, turn, step: 1, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
-  const request = find('agent/request')
-  await request(
-    { agent, turn, step: 1, signal: new AbortController().signal },
-    async () => ({ provider: 'mock', model: 'mock', messages: [] }),
-  )
+  await preStep({ agent, turn, step: 1, messages: [], modelSelection: { ...BOOT_PAIR } }, async () => ({ kind: 'enter', messages: [] }))
 }
 
 describe('moa wiring (apply) — mount-order race', () => {
@@ -159,7 +173,7 @@ describe('moa wiring (apply) — mount-order race', () => {
     for (const { cb } of rig.injectCallbacks) cb()
     expect(getMoaCore().armingValidation?.reason).toMatch(/ccModelRoutes service unavailable/)
     rig.services.set('ccModelRoutes', healthyRoutes)
-    await fireRequest(rig)
+    await fireAdmission(rig)
     expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
   })
 
@@ -171,13 +185,13 @@ describe('moa wiring (apply) — mount-order race', () => {
     expect(getMoaCore().armingValidation?.ok).toBe(false)
     expect(getMoaCore().armingValidation?.reason).toMatch(/degenerate/)
     // Retries with the same reason warn only once.
-    await fireRequest(rig)
-    await fireRequest(rig)
+    await fireAdmission(rig)
+    await fireAdmission(rig)
     expect(rig.warnings.filter((w) => w.includes('not armed'))).toHaveLength(1)
     // The overlay mounts in place (no service re-provide → no inject fire):
     // the per-firing ensureArmed picks it up.
     rig.services.set('ccModelRoutes', healthyRoutes)
-    await fireRequest(rig)
+    await fireAdmission(rig)
     expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
     expect(getMoaCore().armingValidation?.ladder).toHaveLength(4) // §3.2.4 snapshot
     expect(getMoaCore().arming.isArmed()).toBe(true)
@@ -268,9 +282,7 @@ describe('resolveSystemOneBackend — real readUserSection path (D)', () => {
 describe('System One wire model field (E)', () => {
   it('wire model equals the resolved default-alias route.model verbatim', async () => {
     const rig = makeRig({ enabled: true })
-    await rig.seedCapture(1, [{ role: 'user', content: [{ type: 'text', text: 'trivial question' }], source: { kind: 'user' } } as never])
-    await rig.assemble(1)
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await rig.admit(userOpening('trivial question'))
     expect(rig.classifyModels).toHaveLength(1)
     // Default judge = the `gauge` alias; the fake resolves it to
     // { provider: 'gw', model: 'gw/judge-model' }. The wire field is exactly
@@ -282,69 +294,55 @@ describe('System One wire model field (E)', () => {
   it('wire model equals an explicit object-form route.model (bare id stays bare)', async () => {
     const rig = makeRig({ enabled: true })
     rig.settings.judgeRoute = { provider: 'gw', model: 'judge-bare' }
-    await rig.seedCapture(1, [{ role: 'user', content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } } as never])
-    await rig.assemble(1)
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await rig.admit(userOpening('hi'))
     expect(rig.classifyModels).toEqual(['judge-bare'])
   })
 
   it('sends the request to the resolved backend baseURL', async () => {
     const rig = makeRig({ enabled: true })
-    await rig.seedCapture(1, [{ role: 'user', content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } } as never])
-    await rig.assemble(1)
-    await rig.router.listener(rig.payload(1, 1), rig.next)
+    await rig.admit(userOpening('hi'))
     expect(rig.classifyStates).toHaveLength(1)
     expect(rig.warnings).toEqual([])
   })
 })
 
 describe('rig sanity', () => {
-  it('reports the boot pair the fake header carries', () => {
+  it('reports the boot pair the fake creation options carry', () => {
     expect(BOOT_PAIR).toEqual({ provider: 'mock', model: 'mock' })
   })
 })
 
 describe('moa wiring (apply) — subagent scope', () => {
-  /** Fire one mounted listener (request or pre-step) with an explicit payload. */
+  /** Fire one mounted listener (claimed or pre-step) with an explicit payload. */
   const mounted = (rig: ReturnType<typeof makeLateCtx>, event: string): ((payload: unknown, next: () => Promise<unknown>) => Promise<unknown>) =>
     rig.listeners.find((l) => l.event === event)?.fn as (payload: unknown, next: () => Promise<unknown>) => Promise<unknown>
 
-  it('a subagent request through the apply-mounted router disarms nothing and consumes no root turn', async () => {
+  it('a subagent admission through the apply-mounted router disturbs nothing, and the root still classifies', async () => {
     resetMoaCore()
     const rig = makeLateCtx()
     apply(rig.ctx as never)
     rig.arrive({ moa: { enabled: true } }, healthyRoutes)
     expect(getMoaCore().armingValidation).toMatchObject({ ok: true, reason: 'armed' })
 
-    const request = mounted(rig, 'agent/request')
-    const assemble = mounted(rig, 'system-prompt/assemble')
     const claimed = mounted(rig, 'agent/inbox/claimed')
-    const next = async (): Promise<unknown> => ({ provider: 'mock', model: 'mock', messages: [] })
-    const assembleNext = async (): Promise<unknown> => ({ variables: { provider: BOOT_PAIR.provider, model: BOOT_PAIR.model } })
-    const rootAgent = { session: { requestHeader: () => ({ config: { ...BOOT_PAIR } }) }, inject: () => {} }
-    // The child reports a FOREIGN pair — an unguarded child request would
-    // observe it and disarm the machine for the rest of the session.
-    const subAgent = {
-      session: { header: { origin: 'subagent' }, requestHeader: () => ({ config: { provider: 'foreign', model: 'child-model' } }) },
-      inject: () => {},
-    }
-    const childResolved = (await request({ agent: subAgent, turn: 1, step: 1, signal: new AbortController().signal }, next)) as {
-      model?: string
-    }
-    expect(childResolved.model).toBe('mock') // passthrough, no override
+    const rootAgent = freshAgent()
+    // The child reports a FOREIGN pair — an unguarded child admission would
+    // observe it and corrupt the machine's baseline.
+    const subAgent = freshAgent({ header: { origin: 'subagent' } })
+    subAgent.options = { provider: 'foreign', model: 'child-model' }
+    await routeBeforeAdmission(subAgent, userOpening('child prompt'))
     expect(getMoaCore().arming.isArmed()).toBe(true) // foreign pair NOT observed
+    expect(getMoaCore().arming.getBootDefaultModel()).toBeUndefined() // baseline NOT captured
     expect(rig.warnings).toEqual([]) // no classify attempt fired for the child
-    // A child's claimed message writes neither the capture map nor the
-    // last-claimed turn (subagent-guarded on write).
-    await claimed({ agent: subAgent, message: { role: 'user', content: [{ type: 'text', text: 'child' }], source: { kind: 'user' } }, turn: 1 }, async () => ({}))
+    // A child's claimed message writes neither the capture map nor a bind.
+    await claimed({ agent: subAgent, message: userOpening('child'), turn: 1 }, async () => ({}))
 
-    // The root's own turn-1 request is still a NEW turn (the child's
-    // same-numbered request did not consume it) and reaches judge-backend
-    // resolution — which, with no llm-pi-ai user section in this rig,
-    // fail-opens with the warn-once backend row.
-    await claimed({ agent: rootAgent, message: { role: 'user', content: [{ type: 'text', text: 'root prompt' }], source: { kind: 'user' } }, turn: 1 }, async () => ({}))
-    await assemble({ variables: { provider: BOOT_PAIR.provider, model: BOOT_PAIR.model } }, { agent: rootAgent, signal: new AbortController().signal }, assembleNext)
-    await request({ agent: rootAgent, turn: 1, step: 1, signal: new AbortController().signal }, next)
+    // The root's own turn-1 admission reaches judge-backend resolution —
+    // which, with no llm-pi-ai user section in this rig, fail-opens with
+    // the warn-once backend row.
+    await routeBeforeAdmission(rootAgent, userOpening('root prompt'))
     expect(rig.warnings.some((w) => w.includes('no System One backend'))).toBe(true)
+    // …and the claim never mis-binds a second turn for the child.
+    await claimed({ agent: rootAgent, message: userOpening('root prompt'), turn: 1 }, async () => ({}))
   })
 })

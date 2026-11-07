@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -50,7 +51,7 @@ function makeHudCtx(opts: {
   const createSession = opts.createSession ?? { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
 
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: {
       id: s.id,
       header: s.cwd === undefined ? {} : { cwd: s.cwd },

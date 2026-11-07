@@ -23,6 +23,35 @@ export function pinDefaultMode(
   bypassDisabled: boolean,
   sandboxModeOf: () => SandboxMode | undefined,
 ): void {
+  // Harness 0.2.2: the `session/created` emit fires while the store's creation
+  // announcement is still incomplete, and a synchronous append is rejected
+  // ("cannot append before session/created completes"). Defer the pin one
+  // microtask — the announcement completes synchronously after the listeners
+  // return, so the pin lands before any subsequent macrotask observes it.
+  queueMicrotask(() => pinNow(session, defaultMode, bypassDisabled, sandboxModeOf))
+}
+
+function pinNow(
+  session: Session,
+  defaultMode: PermissionMode,
+  bypassDisabled: boolean,
+  sandboxModeOf: () => SandboxMode | undefined,
+): void {
+  try {
+    pinNowInner(session, defaultMode, bypassDisabled, sandboxModeOf)
+  } catch {
+    // A failed pin must never surface into the session store; the session
+    // simply keeps the deployment default at runtime (non-durable).
+  }
+}
+
+function pinNowInner(
+  session: Session,
+  defaultMode: PermissionMode,
+  bypassDisabled: boolean,
+  sandboxModeOf: () => SandboxMode | undefined,
+): void {
+  // A disposed session's append throws; the catch above contains it.
   if (foldPermissionMode(session.snapshotEvents()) !== undefined) return
   if (foldPlanMode(session.snapshotEvents())) return
   if (defaultMode === 'bypassPermissions') {

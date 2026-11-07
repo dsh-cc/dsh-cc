@@ -55,6 +55,7 @@ vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
 // vi.mock is hoisted above static imports, so the module under test sees the
 // mocked SDK even through a static import.
 import { apply, name, inject, Config as ConfigSchema } from '@dsh-cc/mcp-client/src/index.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 // ---- Helpers ----
 
@@ -62,6 +63,9 @@ async function mountRegistry(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   return ctx
 }
 

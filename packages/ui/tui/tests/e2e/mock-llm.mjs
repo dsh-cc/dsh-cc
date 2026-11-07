@@ -58,11 +58,29 @@ function makeAdapter() {
     providerRetryPolicy() {
       return undefined
     },
+    // compaction-basic (upstream) price-looks these up on every model switch;
+    // missing methods abort a switched turn with
+    // MODEL_SWITCH_COMPACTION_FAILED against this adapter.
+    imageRequestPricing() {
+      return undefined
+    },
+    async resolveModelInfo(provider, model) {
+      return { provider, id: model, name: model, context: { contextWindow: 200_000 } }
+    },
     async listModels(provider) {
-      return [{ provider, id: 'e2e-1', name: 'e2e-1' }]
+      // DSH_CC_E2E_SECOND_MODEL=1 advertsises a second route so the moa
+      // probe can exercise a real /model switch (disarm signal) through the
+      // picker's direct-arg form. Default-off: the boot-contract suite's
+      // single-model catalog is unchanged.
+      const models = [{ provider, id: 'e2e-1', name: 'e2e-1' }]
+      if (process.env.DSH_CC_E2E_SECOND_MODEL === '1') models.push({ provider, id: 'e2e-2', name: 'e2e-2' })
+      return models
     },
     async resolveModel(provider, model) {
-      return { provider, id: model, name: model }
+      // compaction-basic reads context capacity from resolveModelInfo (which
+      // upstream builds over this exact-model call); missing it fails every
+      // switched turn with MODEL_SWITCH_COMPACTION_FAILED on this adapter.
+      return { provider, id: model, name: model, context: { contextWindow: 200_000 } }
     },
     async prepareCall(provider, model) {
       return {

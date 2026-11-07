@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,7 +16,7 @@ function makeCtx(opts: { resumeError?: Error; resumeId?: string }): {
   const createCalls: unknown[] = []
   const makeHandle = (id: string) => ({
     agent: {
-      options: {},
+      options: {}, model: fakeAgentModel({}),
       session: { id, header: {}, events: [], snapshotEvents() { return this.events } },
       id: `agent-${id}`,
       status: 'idle',

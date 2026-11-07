@@ -35,9 +35,6 @@
       "path": "./packages/core/tool-search"
     },
     {
-      "path": "./packages/core/tool-append-order"
-    },
-    {
       "path": "./packages/preset/claude-code-agents"
     },
     {

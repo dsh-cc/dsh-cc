@@ -22,7 +22,6 @@ import CommandRuntime from '@deepseek-ai/dsh-commands'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
-import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
@@ -30,6 +29,7 @@ import { applyResumePinsPlugin } from '@dsh-cc/subagent-resume-pins'
 import { apply as applyTask } from '@dsh-cc/subagent-task'
 import { apply as applyCommandAgents } from '@dsh-cc/command-agents'
 import { isReleased, isReleasing } from '@dsh-cc/command-agents/release'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const roots: string[] = []
 afterEach(() => {
@@ -48,8 +48,9 @@ async function compose(script: ConstructorParameters<typeof MockAdapter>[0] = []
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
+  // list_agents/send_message/interrupt_agent all come from the control plugin
+  // itself (harness 0.2.2-rc.1 folded the separate `list-agents` subpath in).
   await ctx.plugin(ControlTools)
-  await ctx.plugin(ListAgents)
   ctx.tools.register(defineTool({
     name: 'read',
     description: 'read',
@@ -85,7 +86,7 @@ describe('cc-shell release-valve composition (T25)', () => {
     const { ctx, parent } = await compose(['hang', textResponse('after release')])
 
     // A hung running child.
-    const start = await ctx.tools.execute({
+    const start = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'subagent_fork',
@@ -105,7 +106,7 @@ describe('cc-shell release-valve composition (T25)', () => {
     }, { timeout: 10_000 })
 
     // release_agent through the tools seam.
-    const release = await ctx.tools.execute({
+    const release = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-2'),
       name: 'release_agent',

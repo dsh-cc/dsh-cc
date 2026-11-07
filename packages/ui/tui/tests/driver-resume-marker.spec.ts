@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -45,6 +46,7 @@ function makeSwitchableCtx(opts: {
     options: s.provider !== undefined && s.model !== undefined
       ? { provider: s.provider, model: s.model }
       : {},
+    model: fakeAgentModel(s.provider !== undefined && s.model !== undefined ? { provider: s.provider, model: s.model } : {}),
     session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',

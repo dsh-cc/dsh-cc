@@ -1,10 +1,16 @@
 /**
- * Dual-scope wiring (design §2.3): two REAL preset scopes, each with the
- * plugin applied, and agent-scoped dispatch through production-shaped
- * carriers. The point is the wiring split (§2.2): the shared core is created
- * once, but every apply registers its own listeners on its own scope, so an
- * agent bound to the SECOND tree still reaches moa — and an agent bound to
- * a tree moa was never mounted in reaches nothing.
+ * Dual-scope wiring (design §2.3, harness-0.2.2 D3.2 form): two REAL preset
+ * scopes, each with the plugin applied, and agent-scoped dispatch through
+ * production-shaped carriers. The wiring split (§2.2) stands: the shared
+ * core is created once, and every apply registers its own LISTENERS on its
+ * own scope (claimed bind, pre-step rows, judge) — the agent bound to the
+ * tree STILL reaches exactly one registration. What changed: classification
+ * moved out of the waterfall into the entry-point admission seam, which a
+ * DRIVER calls directly (no scope dispatch — the apply()-registered entry
+ * delegates to the live router). Production composes ONE TUI tree, so the
+ * last-apply-wins admission entry is the live one; the residual cross-tree
+ * mix (treeA-parented batch claims bind nothing when treeB's router holds
+ * the pending admission) is pinned here as documented behavior.
  *
  * Real machinery on purpose: `isolate()`-only realms never call `createScope`,
  * their contexts are untagged, and an untagged listener is admitted to every
@@ -19,7 +25,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { agentEvents } from '@deepseek-ai/dsh-agent'
 import { bindScopeParent, createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
-import { apply, getMoaCore, resetMoaCore } from '../src/index.ts'
+import { apply, getMoaCore, resetMoaCore, routeBeforeAdmission } from '../src/index.ts'
 import { resetRuntimeCore } from '../src/runtime-state.ts'
 import { BOOT_PAIR, DRAFT_PROBABILITIES, GAUGE_ROUTE, routes as tierRoutes, userOpening } from './rig.ts'
 
@@ -40,8 +46,8 @@ beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'moa-dual-'))
   dirs.push(home)
   // Canned System One: `draft` is the argmax, so every routed turn logs one
-  // route row (the row COUNT is the "which registrations served this event"
-  // probe).
+  // route row at its claim bind (the row COUNT is the "which registrations
+  // served this event" probe).
   vi.stubGlobal('fetch', async () =>
     new Response(
       JSON.stringify({
@@ -78,6 +84,20 @@ function ledgerRows(): { type?: string; tier?: string }[] {
     .map((line) => JSON.parse(line) as { type?: string; tier?: string })
 }
 
+/**
+ * Poll the ledger until it holds `count` rows (the claim bind's append is
+ * fire-scheduled behind the synchronous dispatch — same race pollJsonl
+ * covers in judge-loop).
+ */
+async function pollLedgerRows(count: number): Promise<{ type?: string; tier?: string }[]> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const rows = ledgerRows()
+    if (rows.length >= count) return rows
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  return ledgerRows()
+}
+
 /** The describe-shaped settings double the seams read (llm-pi-ai backend). */
 function settingsProvider(): object {
   const section = { enabled: true }
@@ -98,63 +118,73 @@ function makeRoot(): Context {
 }
 
 /** A fake main-conversation agent (no session header ⇒ not a subagent). */
-function fakeAgent(): { session: { requestHeader: () => { config: typeof BOOT_PAIR } }; inject: () => void } {
-  return { session: { requestHeader: () => ({ config: { ...BOOT_PAIR } }) }, inject: () => {} }
+function fakeAgent(): {
+  options: { provider: string; model: string }
+  model: { current(): { provider: string; model: string } | undefined; select(s: { provider: string; model: string }): void }
+  session: { requestHeader(): undefined }
+  inject: () => void
+} {
+  const selected: { provider: string; model: string }[] = []
+  return {
+    options: { ...BOOT_PAIR },
+    model: {
+      current: () => selected.at(-1) ?? { ...BOOT_PAIR },
+      select: (s) => selected.push(s),
+    },
+    session: { requestHeader: () => undefined },
+    inject: () => {},
+  }
 }
 
-/** Drive one full routed step through a production-shaped carrier. */
+/** Drive one full D3.2 turn through a production-shaped carrier. */
 async function fireTurn(
   root: Context,
   agent: ReturnType<typeof fakeAgent>,
   turn: number,
-): Promise<{ provider?: string; model?: string }> {
+): Promise<void> {
+  const opening = userOpening('dual-scope turn')
+  // The driver contract: classify BEFORE the followup equivalent (the claim
+  // below). The admission entry is the apply()-registered one.
+  await routeBeforeAdmission(agent as never, opening)
   const dispatch = agentEvents(root, agent as never)
-  dispatch.emit('agent/inbox/claimed', { message: userOpening('dual-scope turn'), turn } as never)
-  const assembled = { variables: { provider: BOOT_PAIR.provider, model: BOOT_PAIR.model } }
+  dispatch.emit('agent/inbox/claimed', { message: opening, turn } as never)
   await dispatch.waterfall(
-    'system-prompt/assemble',
-    { ...assembled } as never,
-    { agent, signal: new AbortController().signal } as never,
-    async () => assembled,
+    'agent/pre-step',
+    { agent, turn, step: 1, messages: [], signal: new AbortController().signal } as never,
+    async () => ({ kind: 'enter', messages: [] }) as never,
   )
-  return (await dispatch.waterfall(
-    'agent/request',
-    { turn, step: 1, signal: new AbortController().signal } as never,
-    async () => ({ provider: BOOT_PAIR.provider, model: BOOT_PAIR.model, messages: [] }),
-  )) as { provider?: string; model?: string }
 }
 
-describe('moa dual-scope wiring (§2.3)', () => {
+describe('moa dual-scope wiring (§2.3, D3.2 form)', () => {
   it('serves an agent bound to the SECOND tree through exactly one registration', async () => {
     const root = makeRoot()
     const treeA = mountTree(root, 'cc')
     const coreAfterFirstApply = getMoaCore()
     const treeB = mountTree(root, 'vwa')
 
-    // §2.2: the shared core is created once, wiring is per tree.
+    // §2.2: the shared core is created once, listeners are per tree.
     expect(getMoaCore()).toBe(coreAfterFirstApply)
     expect(getMoaCore().arming.isArmed()).toBe(true)
 
-    // Per-tree probes on the same event moa wires: whichever tree's scope tag
-    // the carrier admits is the tree whose registration runs.
+    // Per-tree probes: whichever tree's scope tag the carrier admits is the
+    // tree whose registration runs.
     const hits = { cc: 0, vwa: 0 }
     treeA.scope.ctx.on('agent/inbox/claimed' as never, (() => void hits.cc++) as never)
     treeB.scope.ctx.on('agent/inbox/claimed' as never, (() => void hits.vwa++) as never)
 
-    // The main agent lives in the SECOND tree (the live regression). On the
-    // scope-blind code the second apply returned before registering anything,
-    // so this carrier reaches no listener at all: no overlay, no ledger row.
+    // The main agent lives in the SECOND tree. On the scope-blind code no
+    // listener would fire for it at all: no bind, no ledger row.
     const agent = fakeAgent()
     bindScopeParent(agent, treeB.key)
-    const resolved = await fireTurn(root, agent, 1)
+    await fireTurn(root, agent, 1)
 
     // The keyB registration ran; the keyA one did not.
     expect(hits).toEqual({ cc: 0, vwa: 1 })
 
-    expect(resolved.model).toBe('tier-draft')
-    // Exactly ONE registration served the event (two trees running it would
-    // log two rows; a first-tree-only registration would log none).
-    const rows = ledgerRows()
+    // The admission select landed (tier-draft) and exactly ONE registration
+    // bound the turn (two trees running the bind would log two rows).
+    expect(agent.model.current()).toEqual({ provider: 'mock', model: 'tier-draft' })
+    const rows = await pollLedgerRows(1)
     expect(rows).toHaveLength(1)
     expect(rows[0]?.tier).toBe('draft')
 
@@ -162,17 +192,26 @@ describe('moa dual-scope wiring (§2.3)', () => {
     await treeB.scope.dispose()
   })
 
-  it('wires BOTH trees: a keyA-parented agent is served by the first one', async () => {
+  it('an agent parented to the FIRST tree: its claimed events run the FIRST tree only (documented cross-tree residual: the single live admission entry is the last-applied router)', async () => {
     const root = makeRoot()
     const treeA = mountTree(root, 'cc')
     const treeB = mountTree(root, 'vwa')
 
+    const hits = { cc: 0, vwa: 0 }
+    treeA.scope.ctx.on('agent/inbox/claimed' as never, (() => void hits.cc++) as never)
+    treeB.scope.ctx.on('agent/inbox/claimed' as never, (() => void hits.vwa++) as never)
+
     const agent = fakeAgent()
     bindScopeParent(agent, treeA.key)
-    const resolved = await fireTurn(root, agent, 2)
+    await fireTurn(root, agent, 2)
 
-    expect(resolved.model).toBe('tier-draft')
-    expect(ledgerRows()).toHaveLength(1)
+    // Dispatch honors the scope tag: only treeA's listeners ran.
+    expect(hits).toEqual({ cc: 1, vwa: 0 })
+    // Residual (documented): the module-global admission entry delegates to
+    // the LAST applied tree's router, so treeA's claim finds no pending
+    // admission to bind — no ledger row, even though the scope-tagged
+    // listeners fired correctly. Production composes ONE TUI tree.
+    expect(await pollLedgerRows(0)).toEqual([])
 
     await treeA.scope.dispose()
     await treeB.scope.dispose()
@@ -185,12 +224,11 @@ describe('moa dual-scope wiring (§2.3)', () => {
 
     const agent = fakeAgent()
     bindScopeParent(agent, { preset: 'unmounted' })
-    const resolved = await fireTurn(root, agent, 3)
+    await fireTurn(root, agent, 3)
 
-    // No overlay, no ledger row anywhere: a root/untagged registration — the
-    // rejected alternative fix — would fail exactly here.
-    expect(resolved.model).toBe(BOOT_PAIR.model)
-    expect(ledgerRows()).toEqual([])
+    // No listener anywhere binds the turn: a root/untagged registration —
+    // the rejected alternative fix — would fail exactly here.
+    expect(await pollLedgerRows(0)).toEqual([])
 
     await treeA.scope.dispose()
     await treeB.scope.dispose()

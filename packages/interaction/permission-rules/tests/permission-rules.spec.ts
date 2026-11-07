@@ -3,12 +3,15 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import ToolRuntime, { type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import { foldPlanMode, foldPermissionMode, foldSandboxMode } from '@dsh-cc/permission-rules'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 const testToolSignal = new AbortController().signal
 
@@ -32,6 +35,12 @@ async function mount(config: Config = {}): Promise<Context> {
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
+  // ApprovalService injects `sessionProjections`; without it the plugin does not
+  // activate and every ask degrades to the no-seam deny.
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   ctx.on('approval/request', async () => 'allowed-once')
   await ctx.plugin(PermissionRules, {
@@ -101,23 +110,23 @@ function openAgentWithCwd(id: string, cwd: string): Agent {
 describe('plugin pre-execute decisions', () => {
   it('allows a call with no matching rule', async () => {
     const ctx = await mount()
-    const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }))
     expect(result.isError).toBe(false)
     expect(text(result)).toBe('ran:ls')
   })
 
   it('denies a whole-tool deny rule', async () => {
     const ctx = await mount({ rules: { deny: ['Bash'] } })
-    const result = await ctx.tools.execute(exec('Bash', { command: 'anything' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'anything' }))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/denied by permission rule Bash \[config\]/)
   })
 
   it('denies a content prefix deny rule', async () => {
     const ctx = await mount({ rules: { deny: ['Bash(rm -rf)'] } })
-    const ok = await ctx.tools.execute(exec('Bash', { command: 'echo hi' }))
+    const ok = await executeModelToolFixture(ctx, exec('Bash', { command: 'echo hi' }))
     expect(ok.isError).toBe(false)
-    const denied = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /tmp/x' }))
+    const denied = await executeModelToolFixture(ctx, exec('Bash', { command: 'rm -rf /tmp/x' }))
     expect(denied.isError).toBe(true)
     expect(text(denied)).toMatch(/Bash\(rm -rf\)/)
   })
@@ -125,7 +134,7 @@ describe('plugin pre-execute decisions', () => {
   it('routes a whole-tool ask through approval and runs on allowed-once', async () => {
     const ctx = await mount({ rules: { ask: ['Bash'] } })
     const agent = openTurnAgent('ask-agent')
-    const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }, agent))
     expect(result.isError).toBe(false)
     expect(text(result)).toBe('ran:ls')
   })
@@ -133,7 +142,7 @@ describe('plugin pre-execute decisions', () => {
   it('denies a whole-tool ask without an approval channel (fail closed)', async () => {
     const ctx = await mount({ rules: { ask: ['Bash'] } })
     // No agent in the input: the approval seam cannot route, so it denies.
-    const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }))
     expect(result.isError).toBe(true)
   })
 })
@@ -143,7 +152,7 @@ describe('bypass-immune guards', () => {
     const ctx = await mount({ rules: { bypassImmune: ['edit(.git*)'] } })
     const agent = openTurnAgent('imm')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '.git/config' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '.git/config' }, agent))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/bypass-immune/)
   })
@@ -152,13 +161,13 @@ describe('bypass-immune guards', () => {
     const ctx = await mount({ rules: { bypassImmune: ['edit(.git*)'] } })
     const agent = openTurnAgent('ok')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const result = await ctx.tools.execute(exec('edit', { file_path: 'src/main.ts' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: 'src/main.ts' }, agent))
     expect(result.isError).toBe(false)
   })
 
   it('enforces the guard even when no pre-execute rule denies', async () => {
     const ctx = await mount({ rules: { bypassImmune: ['edit(.git*)'] } })
-    const result = await ctx.tools.execute(exec('edit', { file_path: '.git/config' }))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '.git/config' }))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/bypass-immune/)
   })
@@ -168,22 +177,22 @@ describe('bypass-immune guards', () => {
     // pre-execute → ask resolution → guards), so the fixture needs a
     // whole-tool allow in default mode to reach the guard stage.
     const ctx = await mount({ rules: { bypassImmune: ['Bash(rm )'], allow: ['Bash'] } })
-    const result = await ctx.tools.execute(exec('Bash', { command: 'ls && rm -rf x' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls && rm -rf x' }))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/bypass-immune/)
   })
 
   it('opaque bash guard falls back to the raw whole-subject match (D2/PR-3)', async () => {
     const ctx = await mount({ rules: { bypassImmune: ['Bash(cat)'] } })
-    const result = await ctx.tools.execute(exec('Bash', { command: 'cat << EOF\nbody\nEOF' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'cat << EOF\nbody\nEOF' }))
     expect(result.isError).toBe(true)
   })
 
   it('non-bash guards keep whole-subject matching (WebFetch/file paths unchanged)', async () => {
     const ctx = await mount({ rules: { bypassImmune: ['edit(.git*)'] } })
-    const result = await ctx.tools.execute(exec('edit', { file_path: '.git/config' }))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '.git/config' }))
     expect(result.isError).toBe(true)
-    const clean = await ctx.tools.execute(exec('edit', { file_path: 'src/a && b.ts' }))
+    const clean = await executeModelToolFixture(ctx, exec('edit', { file_path: 'src/a && b.ts' }))
     expect(clean.isError).toBe(false)
   })
 })
@@ -193,7 +202,7 @@ describe('modes via the plugin', () => {
     const ctx = await mount()
     const agent = openTurnAgent('ae')
     ctx.permissionRules.setMode(agent, 'acceptEdits')
-    const result = await ctx.tools.execute(exec('edit', { file_path: 'a.ts' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: 'a.ts' }, agent))
     expect(result.isError).toBe(false)
   })
 
@@ -201,7 +210,7 @@ describe('modes via the plugin', () => {
     const ctx = await mount()
     const agent = openTurnAgent('plan')
     agent.session.append('plan/mode', { active: true })
-    const result = await ctx.tools.execute(exec('read', { file_path: 'a.ts' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('read', { file_path: 'a.ts' }, agent))
     expect(result.isError).toBe(false)
   })
 
@@ -209,7 +218,7 @@ describe('modes via the plugin', () => {
     const ctx = await mount({ rules: { deny: ['Bash(rm -rf)'] } })
     const agent = openTurnAgent('bypass')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const result = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /tmp/x' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'rm -rf /tmp/x' }, agent))
     expect(result.isError).toBe(false)
   })
 })
@@ -220,6 +229,9 @@ describe('settings config and hot reload', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(MemorySettings)
     // no approval service needed here — all cases are allow/deny.
     await ctx.plugin(PermissionRules, { rules: { deny: ['Bash(npm install)'] } })
@@ -235,7 +247,7 @@ describe('settings config and hot reload', () => {
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
       allow: ['Bash(npm install)'],
     })
-    const result = await ctx.tools.execute(exec('Bash', { command: 'npm install --save x' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'npm install --save x' }))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/denied by permission rule/)
   })
@@ -245,6 +257,9 @@ describe('settings config and hot reload', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(MemorySettings)
     await ctx.plugin(PermissionRules)
     ctx.tools.register(defineContentToolFixture({
@@ -253,13 +268,13 @@ describe('settings config and hot reload', () => {
       parameters: { command: { type: 'string' } },
       async execute(args) { return [{ type: 'text', text: `ran:${(args as { command: string }).command}` }] },
     }))
-    const before = await ctx.tools.execute(exec('Bash', { command: 'npm install left-pad' }))
+    const before = await executeModelToolFixture(ctx, exec('Bash', { command: 'npm install left-pad' }))
     expect(before.isError).toBe(false)
 
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
       deny: ['Bash(npm install)'],
     })
-    const after = await ctx.tools.execute(exec('Bash', { command: 'npm install left-pad' }))
+    const after = await executeModelToolFixture(ctx, exec('Bash', { command: 'npm install left-pad' }))
     expect(after.isError).toBe(true)
     expect(text(after)).toMatch(/Bash\(npm install\)/)
   })
@@ -269,6 +284,9 @@ describe('settings config and hot reload', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(MemorySettings)
     await ctx.plugin(PermissionRules)
     await expect(ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
@@ -284,10 +302,10 @@ describe('session mode overrides (durable)', () => {
     const other = openTurnAgent('two')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
     // bypassPermissions overrides the content-deny for the first session…
-    const allowed = await ctx.tools.execute(exec('edit', { file_path: '/tmp/private/x' }, agent))
+    const allowed = await executeModelToolFixture(ctx, exec('edit', { file_path: '/tmp/private/x' }, agent))
     expect(allowed.isError).toBe(false)
     // …while another session stays at the default mode and remains denied.
-    const denied = await ctx.tools.execute(exec('edit', { file_path: '/tmp/private/x' }, other))
+    const denied = await executeModelToolFixture(ctx, exec('edit', { file_path: '/tmp/private/x' }, other))
     expect(denied.isError).toBe(true)
   })
 
@@ -296,9 +314,9 @@ describe('session mode overrides (durable)', () => {
     const agent = openTurnAgent('iso-one')
     const other = openTurnAgent('iso-two')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const allowed = await ctx.tools.execute(exec('edit', { file_path: '/tmp/private/x' }, agent))
+    const allowed = await executeModelToolFixture(ctx, exec('edit', { file_path: '/tmp/private/x' }, agent))
     expect(allowed.isError).toBe(false)
-    const denied = await ctx.tools.execute(exec('edit', { file_path: '/tmp/private/x' }, other))
+    const denied = await executeModelToolFixture(ctx, exec('edit', { file_path: '/tmp/private/x' }, other))
     expect(denied.isError).toBe(true)
   })
 
@@ -308,7 +326,7 @@ describe('session mode overrides (durable)', () => {
     ctx.permissionRules.setMode(agent, 'acceptEdits')
     expect(foldPermissionMode(agent.session.snapshotEvents())).toBe('acceptEdits')
     // An edit still auto-allows under the durable acceptEdits mode.
-    const result = await ctx.tools.execute(exec('edit', { file_path: 'a.ts' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: 'a.ts' }, agent))
     expect(result.isError).toBe(false)
   })
 
@@ -346,6 +364,12 @@ describe('session mode overrides (durable)', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
+    // ApprovalService injects `sessionProjections`; without it the plugin does not
+    // activate and every ask degrades to the no-seam deny.
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(ApprovalService, { policy: 'ask' })
     const asked: unknown[] = []
     ctx.on('approval/request', async request => { asked.push(request); return 'allowed-once' })
@@ -361,7 +385,7 @@ describe('session mode overrides (durable)', () => {
     }))
     const agent = openTurnAgent('auto-low')
     ctx.permissionRules.setMode(agent, 'auto')
-    const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }, agent))
     expect(asked).toHaveLength(1)
     expect(result.isError).toBe(false)
   })
@@ -371,6 +395,12 @@ describe('session mode overrides (durable)', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
+    // ApprovalService injects `sessionProjections`; without it the plugin does not
+    // activate and every ask degrades to the no-seam deny.
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(ApprovalService, { policy: 'ask' })
     const asked: unknown[] = []
     ctx.on('approval/request', async request => { asked.push(request); return 'allowed-once' })
@@ -383,7 +413,7 @@ describe('session mode overrides (durable)', () => {
     }))
     const agent = openAgentWithCwd('auto-medium', '/work')
     ctx.permissionRules.setMode(agent, 'auto')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '/tmp/out.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '/tmp/out.txt' }, agent))
     expect(asked).toHaveLength(1)
     expect(result.isError).toBe(false)
   })
@@ -415,6 +445,8 @@ describe('session mode overrides (durable)', () => {
     const ctx = await mount({ defaultMode: 'bypassPermissions' })
     ctx.reflect.provide('shell', { sandboxMode: 'workspace-write' } as never)
     const session = ctx.sessions.create(SessionId('pin-bypass'))
+    // 0.2.2: the pin lands one microtask after the creation announcement.
+    await new Promise(resolve => queueMicrotask(resolve))
     expect(foldPermissionMode(session.snapshotEvents())).toBe('bypassPermissions')
     expect(foldSandboxMode(session.snapshotEvents())).toBe('danger-full-access')
   })
@@ -422,6 +454,7 @@ describe('session mode overrides (durable)', () => {
   it('session/created pin: plan default seeds plan/mode active on the new session', async () => {
     const ctx = await mount({ defaultMode: 'plan' })
     const session = ctx.sessions.create(SessionId('pin-plan'))
+    await new Promise(resolve => queueMicrotask(resolve))
     expect(foldPlanMode(session.snapshotEvents())).toBe(true)
   })
 
@@ -429,7 +462,7 @@ describe('session mode overrides (durable)', () => {
     const ctx = await mount()
     const agent = openTurnAgent('plan-deny')
     agent.session.append('plan/mode', { active: true })
-    const result = await ctx.tools.execute(exec('edit', { file_path: 'a.ts' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: 'a.ts' }, agent))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/exit_plan_mode/)
   })
@@ -451,9 +484,9 @@ describe('CC-vs-harness tool-name alias matching', () => {
   it('a CC-cased `Bash(npm run *)` rule matches harness exec.name `bash`', async () => {
     const ctx = await mount({ rules: { deny: ['Bash(npm run *)'] } })
     registerLowercaseBash(ctx)
-    const ok = await ctx.tools.execute(exec('bash', { command: 'echo hi' }))
+    const ok = await executeModelToolFixture(ctx, exec('bash', { command: 'echo hi' }))
     expect(ok.isError).toBe(false)
-    const denied = await ctx.tools.execute(exec('bash', { command: 'npm run build' }))
+    const denied = await executeModelToolFixture(ctx, exec('bash', { command: 'npm run build' }))
     expect(denied.isError).toBe(true)
     expect(text(denied)).toMatch(/Bash\(npm run/)
   })
@@ -461,16 +494,16 @@ describe('CC-vs-harness tool-name alias matching', () => {
   it('a lowercase-authored `bash(...)` rule also matches harness exec.name `bash`', async () => {
     const ctx = await mount({ rules: { deny: ['bash(echo hi)'] } })
     registerLowercaseBash(ctx)
-    const denied = await ctx.tools.execute(exec('bash', { command: 'echo hi' }))
+    const denied = await executeModelToolFixture(ctx, exec('bash', { command: 'echo hi' }))
     expect(denied.isError).toBe(true)
     expect(text(denied)).toMatch(/bash\(echo hi\)/)
   })
 
   it('a CC-cased `Edit(...)` rule matches harness exec.name `edit`', async () => {
     const ctx = await mount({ rules: { deny: ['Edit(a.ts)'] } })
-    const ok = await ctx.tools.execute(exec('edit', { file_path: 'b.ts' }))
+    const ok = await executeModelToolFixture(ctx, exec('edit', { file_path: 'b.ts' }))
     expect(ok.isError).toBe(false)
-    const denied = await ctx.tools.execute(exec('edit', { file_path: 'a.ts' }))
+    const denied = await executeModelToolFixture(ctx, exec('edit', { file_path: 'a.ts' }))
     expect(denied.isError).toBe(true)
     expect(text(denied)).toMatch(/Edit\(a\.ts\)/)
   })
@@ -481,7 +514,7 @@ describe('CC-vs-harness tool-name alias matching', () => {
     registerLowercaseBash(ctx)
     const agent = openTurnAgent('sbx')
     // Sandbox-confined `bash` is exempted from the whole-tool ask, so it runs.
-    const result = await ctx.tools.execute(exec('bash', { command: 'ls' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('bash', { command: 'ls' }, agent))
     expect(result.isError).toBe(false)
     expect(text(result)).toBe('ran:ls')
   })
@@ -491,7 +524,7 @@ describe('CC-vs-harness tool-name alias matching', () => {
     registerLowercaseBash(ctx)
     const agent = openTurnAgent('rc-bash')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const result = await ctx.tools.execute(exec('bash', { command: 'rm -rf /' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('bash', { command: 'rm -rf /' }, agent))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/risk classifier/)
   })
@@ -502,7 +535,7 @@ describe('risk-classifier escalation', () => {
     const ctx = await mount()
     const agent = openTurnAgent('high-bypass')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const result = await ctx.tools.execute(exec('Bash', { command: 'rm -rf /' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'rm -rf /' }, agent))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/risk classifier/)
   })
@@ -510,7 +543,7 @@ describe('risk-classifier escalation', () => {
   it('hard-denies a protected-file write', async () => {
     const ctx = await mount()
     const agent = openAgentWithCwd('high-file', '/work')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '/work/.bashrc' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '/work/.bashrc' }, agent))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/risk classifier/)
   })
@@ -520,6 +553,12 @@ describe('risk-classifier escalation', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
+    // ApprovalService injects `sessionProjections`; without it the plugin does not
+    // activate and every ask degrades to the no-seam deny.
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(ApprovalService, { policy: 'ask' })
     const asked: unknown[] = []
     ctx.on('approval/request', async request => { asked.push(request); return 'allowed-once' })
@@ -533,7 +572,7 @@ describe('risk-classifier escalation', () => {
 
     const agent = openAgentWithCwd('medium-bypass', '/work')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '/tmp/out.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '/tmp/out.txt' }, agent))
     expect(result.isError).toBe(false)
     expect(asked).toHaveLength(0)
   })
@@ -543,6 +582,12 @@ describe('risk-classifier escalation', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
+    // ApprovalService injects `sessionProjections`; without it the plugin does not
+    // activate and every ask degrades to the no-seam deny.
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(ApprovalService, { policy: 'ask' })
     const asked: unknown[] = []
     ctx.on('approval/request', async request => { asked.push(request); return 'allowed-once' })
@@ -555,7 +600,7 @@ describe('risk-classifier escalation', () => {
     }))
 
     const agent = openAgentWithCwd('medium-default', '/work')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '/tmp/out.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '/tmp/out.txt' }, agent))
     expect(asked).toHaveLength(1)
     expect(result.isError).toBe(false)
   })
@@ -567,7 +612,7 @@ describe('risk-classifier escalation', () => {
     // A catastrophic command that is NOT in the critical tier is no longer
     // hard-denied once the stage is off (`rm -rf /` itself now stays denied
     // by the curated critical tier — C3 bypass-immune denylist).
-    const result = await ctx.tools.execute(exec('Bash', { command: 'mkfs.ext4 /dev/sda' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'mkfs.ext4 /dev/sda' }, agent))
     expect(result.isError).toBe(false)
   })
 })
@@ -583,6 +628,9 @@ describe('defaultMode getter (live merged settings default)', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(MemorySettings)
     await ctx.plugin(PermissionRules, { defaultMode: 'auto' })
     expect(ctx.permissionRules.defaultMode).toBe('auto')
@@ -597,6 +645,9 @@ describe('autoSuspensionReason (D6 service notice seam)', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(MemorySettings)
     await ctx.plugin(PermissionRules, {
       fileEditTools: ['edit'],

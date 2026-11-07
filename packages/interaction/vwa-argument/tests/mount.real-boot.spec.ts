@@ -24,6 +24,7 @@ import { ProjectStore } from '../src/store.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { CONTRACT } from './helpers.ts'
 import { resolveDeliveryProvider } from '@dsh-cc/vwa-evidence'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 const PROVIDER = 'fake-provider'
 const REVIEWER_MODEL = 'reviewer-model'
@@ -121,6 +122,9 @@ async function boot(
   const reviewer = new EnvelopeReviewer()
   ctx.llm.registerAdapter([PROVIDER], reviewer)
   await ctx.plugin(ToolRuntime as never)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(LocalJobRegistry as never, {})
   ;(ctx as unknown as { jobs: { attachController(name: string): () => void } }).jobs.attachController('test-controller')
   // Host fs tools with the harness names/argument keys (`read`/`write`, file_path).
@@ -174,12 +178,20 @@ async function boot(
       },
     }
   }
+  // 0.2.2: tools.execute takes a batch ({calls: [...]}); one call per batch
+  // here, reading the single settled result.
   const exec = async (name: string, args: unknown, agent: unknown) => {
-    const result = await (
+    const batch = await (
       ctx as unknown as {
-        tools: { execute(e: unknown): Promise<{ isError: boolean; value?: unknown; error?: { message: string } }> }
+        tools: { execute(e: unknown): Promise<{ results: readonly { result: { isError: boolean; value?: unknown; error?: { message: string } } }[] }> }
       }
-    ).tools.execute({ callId: `c-${randomUUID()}`, name, arguments: args, agent, signal: new AbortController().signal })
+    ).tools.execute({
+      calls: [{ id: `c-${randomUUID()}`, name, arguments: args }],
+      agent,
+      signal: new AbortController().signal,
+    })
+    const result = batch.results[0]?.result
+    if (result === undefined) throw new Error(`${name} failed: no settled result`)
     if (result.isError) throw new Error(`${name} failed: ${result.error?.message}`)
     return result.value as Record<string, unknown>
   }

@@ -34,7 +34,6 @@ import SessionQuery from '@deepseek-ai/dsh-session-query'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as ControlTools from '@deepseek-ai/dsh-tool-subagent-control'
-import * as ListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
@@ -46,6 +45,7 @@ import {
   type ResumePolicy,
 } from '@dsh-cc/subagent-resume-pins'
 import { apply as applyTask } from '../src/index.ts'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const roots: string[] = []
 afterEach(() => {
@@ -122,7 +122,6 @@ async function boot(
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(ControlTools)
-  await ctx.plugin(ListAgents)
   if (opts.readTool !== false) {
     ctx.tools.register(defineTool({
       name: 'read',
@@ -231,7 +230,7 @@ function text(result: { content: { type: string; text?: string }[] }): string {
 
 let calls = 0
 function callTool(ctx: Context, name: string, args: unknown, agent: Agent) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++calls}`),
     name,

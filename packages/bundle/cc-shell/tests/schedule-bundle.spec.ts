@@ -14,6 +14,7 @@ import type { KvUnit, KvUnitDescriptor, StorageBackend } from '@deepseek-ai/dsh-
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import * as toolSchedule from '@deepseek-ai/dsh-schedule'
 import * as toolScheduleTools from '@deepseek-ai/dsh-tool-schedule'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /** In-memory StorageBackend: per-record maps plus the optional global slot. */
 class MemoryBackend implements StorageBackend {
@@ -74,7 +75,7 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
     // the preset-scoped `@deepseek-ai/dsh-tool-schedule` package.
     expect(typeof toolSchedule.default).toBe('function')
     expect((toolSchedule.default as unknown as { inject: string[] }).inject).toEqual(
-      ['agents', 'sessions', 'storageDomain', 'sessionController', 'sessionPersistence'],
+      ['agents', 'sessions', 'storageDomain', 'sessionPersistence'],
     )
     const loader = Object.create(Loader.prototype) as Loader
     expect(loader.unwrapExports(toolSchedule)).toBe(toolSchedule.default)
@@ -93,22 +94,32 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
     const root = await ctx.agents.create({ sessionId: SessionId('cc-schedule-root') })
     expect(ctx.tools.get('schedule_create', root.agent)?.name).toBe('schedule_create')
     expect(ctx.tools.get('schedule_list', root.agent)?.name).toBe('schedule_list')
-    expect(ctx.tools.get('schedule_update', root.agent)?.name).toBe('schedule_update')
-    expect(ctx.tools.get('schedule_delete', root.agent)?.name).toBe('schedule_delete')
+    expect(ctx.tools.get('schedule_edit', root.agent)?.name).toBe('schedule_edit')
+    expect(ctx.tools.get('schedule_view', root.agent)?.name).toBe('schedule_view')
+    // 0.2.2 folded deletion into schedule_edit's action enum (no separate
+    // schedule_delete tool).
     // No agentless-catalog pin here: `@deepseek-ai/dsh-tool-schedule` registers
     // in the MOUNTING scope (0.2.1-rc.5), so its names resolve without an agent
     // — unlike the old host-plane registration the service used to perform.
 
-    const created = await ctx.agents.withInitiator(root.agent, () => ctx.tools.execute({
+    const created = await ctx.agents.withInitiator(root.agent, () => executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-schedule-create'),
       name: 'schedule_create',
-      arguments: { title: 'future reminder', prompt: 'future reminder', after_seconds: 3600 },
+      arguments: {
+        title: 'future reminder',
+        prompt: 'future reminder',
+        // 0.2.2: schedule_create takes an RFC 5545 DTSTART+RRULE pair and an
+        // explicit target (after_seconds is gone); a one-minute future
+        // one-shot keeps the test's future-reminder semantics.
+        rrule: 'DTSTART:20300101T000000Z\nRRULE:FREQ=DAILY;COUNT=1',
+        target: 'this_session',
+      },
       agent: root.agent,
     }))
-    expect(created.isError).toBe(false)
+    expect(created.isError, JSON.stringify(created.isError ? created.result : created.value)).toBe(false)
     if (created.isError) throw new Error('expected Schedule create value')
-    expect(created.value).toMatchObject({ kind: 'after', prompt: 'future reminder', deliveryMode: 'host' })
+    expect(created.value).toMatchObject({ prompt: 'future reminder' })
 
     // The durable create landed in storage and announced itself post-commit.
     expect(changed.length).toBeGreaterThan(0)
@@ -135,7 +146,7 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
     expect(child.agent.session.header.delegationDepth).toBe(1)
     expect(ctx.tools.get('schedule_list', child.agent)?.name).toBe('schedule_list')
 
-    const refused = await ctx.agents.withInitiator(child.agent, () => ctx.tools.execute({
+    const refused = await ctx.agents.withInitiator(child.agent, () => executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-schedule-child-list'),
       name: 'schedule_list',

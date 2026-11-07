@@ -13,6 +13,8 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import ToolRuntime from '@dsh-cc/tools'
 import * as ToolNotebookEdit from '@dsh-cc/tool-notebook-edit'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /** Temp dirs for this bundle spec, cleaned up in afterEach. */
 const dirs: string[] = []
@@ -43,6 +45,9 @@ async function mountNotebookEdit(): Promise<{ ctx: Context; dir: string; dispose
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   await ctx.plugin(ToolNotebookEdit)
   return { ctx, dir, dispose: () => ctx.fiber.dispose() }
@@ -74,7 +79,7 @@ describe('cc-shell bundle — tool-notebook-edit row (NotebookEdit over the vend
     writeFileSync(path, sampleNotebook())
     await observeRead(ctx, path)
 
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-notebook-edit'),
       name: 'NotebookEdit',

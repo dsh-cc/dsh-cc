@@ -60,6 +60,8 @@ vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
 // mocked SDK even through a static import.
 import { apply } from '@dsh-cc/mcp-client/src/index.ts'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from '@dsh-cc/mcp-client/src/connection.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 // ---- Helpers ----
 
@@ -69,6 +71,9 @@ async function mountRegistry(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   return ctx
 }
 
@@ -154,7 +159,7 @@ describe('reconnect supervisor', () => {
     expect(mockConnect).toHaveBeenCalledTimes(2)
 
     // Post-recovery calls execute through the re-registered definition.
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: nextCallId(), name: 'mcp__srv__revived', arguments: {},
     })

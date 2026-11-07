@@ -11,6 +11,7 @@
 import type { TuiState, UsageView } from '../store.ts'
 import type {
   DriverConfig,
+  DriverModelSelection,
   SessionProjectionsLike,
   ShellExecutorLike,
 } from '../state/driver-types.ts'
@@ -18,7 +19,6 @@ import type {
   Agent,
   AgentHandle,
   AgentSetup,
-  ModelSelectionRef,
 } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -125,8 +125,8 @@ export interface DriverHudCtx {
   cwd: string
   /** The rebindable agent holder (switchSession replaces it in place). */
   current: { agent: Agent }
-  /** Model selection ref; statusline reads reasoningEffort/model from it. */
-  selection: ModelSelectionRef
+  /** Live selection face; the statusline reads reasoningEffort/model from it. */
+  selection: DriverModelSelection
   /** Best-effort git-branch probe for the statusline footer. */
   branchProbe: (dir: string) => Promise<string | undefined>
   /**
@@ -201,8 +201,8 @@ export interface DriverPickersCtx {
   emit(next: TuiState): void
   /** Read the current view-model value (fresh, not a snapshot). */
   state(): TuiState
-  /** Model selection ref; the section reads current and rewrites it in place. */
-  selection: ModelSelectionRef
+  /** Live selection face; the section reads current() and records user writes. */
+  selection: DriverModelSelection
   /** The rebindable agent holder (openPermissionPicker reads the live agent). */
   current: { agent: Agent }
   /** Fold the live plan/permission mode for the picker's focus row. */
@@ -246,8 +246,8 @@ export interface DriverSessionsCtx {
   cwd: string
   /** The rebindable agent holder (switchSession disposes old, binds new). */
   current: { handle: AgentHandle; agent: Agent }
-  /** Model selection ref; switchSession reseeds it after the rebind. */
-  selection: ModelSelectionRef
+  /** Live selection face; switchSession reseeds the boot default after the rebind. */
+  selection: DriverModelSelection
   /** Fold the live plan/permission mode for the new session. */
   liveMode(agent: Agent, fallback?: string): string
   /** Reset-and-reseed the model selection from the new agent's options. */
@@ -313,8 +313,8 @@ export interface DriverRunLocalCtx {
   config: DriverConfig
   /** The rebindable agent holder (exports/cost/usage read the live agent). */
   current: { handle: AgentHandle; agent: Agent }
-  /** Model selection ref; /effort and /model read and rewrite it in place. */
-  selection: ModelSelectionRef
+  /** Live selection face; /effort and /model read it and record user writes. */
+  selection: DriverModelSelection
   /** Session projections feed for /cost and /usage (may be unmounted). */
   projections: SessionProjectionsLike | undefined
   /** Apply a usage-panel patch (HUD section's live-projections update fn). */
@@ -417,8 +417,8 @@ export interface DriverAgentCtx {
   ctx: Context
   /** The rebindable agent holder (re-read live at fire time). */
   current: { handle: AgentHandle; agent: Agent }
-  /** Model selection ref; seeded by agent options / deployment default. */
-  selection: ModelSelectionRef
+  /** Live selection face; the boot seed records the deployment default there. */
+  selection: DriverModelSelection
   /** Explicit provider/model override, or undefined when unset. */
   agentOptions: { provider: string; model: string } | undefined
   /** Fold the live plan/permission mode for the agent. */
@@ -428,7 +428,7 @@ export interface DriverAgentCtx {
   /** Working directory the resume marker is keyed by. */
   cwd: string
   /**
-   * Boot hook: the default-model seed settled with `selection.current`
+   * Boot hook: the default-model seed settled with `selection.current()`
    * still undefined (exactly once per boot). The onboarding wiring reacts
    * by offering the provider wizard.
    */

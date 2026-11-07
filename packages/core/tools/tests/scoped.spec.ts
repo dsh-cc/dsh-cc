@@ -5,6 +5,7 @@ import { bindScopeParent, createScope } from '@deepseek-ai/dsh-scope'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
+import { executeToolInvocation } from './executor-fixture.ts'
 import type { PreToolDecision, ToolDefinition, ToolExecution, ToolExecutionInput, ToolExecutionToken } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
@@ -47,7 +48,7 @@ function tool(name: string, reply = `ran:${name}`): ToolDefinition {
 }
 
 async function run(ctx: Context, name: string, agent?: Agent): Promise<string> {
-  const result = await ctx.tools.execute({
+  const result = await executeToolInvocation(ctx, {
     signal: testToolSignal,
     callId: ToolCallId('c1'),
     name,
@@ -416,7 +417,7 @@ describe('scoped execution dispatch', () => {
 
     expect(await run(ctx, 'danger', key)).toBe('Error: danger denied')
     const callerArguments = { source: true }
-    const safeResult = await ctx.tools.execute({
+    const safeResult = await executeToolInvocation(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('safe-call'),
       name: 'safe',
@@ -461,7 +462,7 @@ describe('scoped execution dispatch', () => {
       if (exec.name === 'parent') parent = exec.token
       return next()
     })
-    await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('parent'), name: 'parent', arguments: {} })
+    await executeToolInvocation(ctx, { signal: testToolSignal, callId: ToolCallId('parent'), name: 'parent', arguments: {} })
     stopCapture()
     policyCalls = 0
     const signal = new AbortController().signal
@@ -476,7 +477,7 @@ describe('scoped execution dispatch', () => {
     ctx.on('tools/result', () => { globalObserved += 1 })
     const callerArguments = { invalid: () => undefined }
 
-    const scopedResult = await ctx.tools.execute({
+    const scopedResult = await executeToolInvocation(ctx, {
       callId: ToolCallId('non-cloneable'),
       name: 't',
       arguments: callerArguments,
@@ -484,7 +485,7 @@ describe('scoped execution dispatch', () => {
       parent,
       signal,
     })
-    const subjectlessResult = await ctx.tools.execute({
+    const subjectlessResult = await executeToolInvocation(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('non-cloneable-subjectless'),
       name: 't',
@@ -535,7 +536,7 @@ describe('scoped execution dispatch', () => {
       },
     } as ToolExecutionInput
 
-    const result = await ctx.tools.execute(input)
+    const result = await executeToolInvocation(ctx, input)
 
     expect(result.isError).toBe(false)
     expect(parentReads).toBe(1)
@@ -553,7 +554,7 @@ describe('scoped execution dispatch', () => {
       if (exec.name === 'parent') parent = exec.token
       return next()
     })
-    await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('parent'), name: 'parent', arguments: {} })
+    await executeToolInvocation(ctx, { signal: testToolSignal, callId: ToolCallId('parent'), name: 'parent', arguments: {} })
     stopCapture()
     const acceptedSignal = new AbortController().signal
     const driftSignal = new AbortController().signal
@@ -572,7 +573,7 @@ describe('scoped execution dispatch', () => {
     ctx.on('tools/result', (exec) => { observed = exec })
     scope.ctx.on('tools/result', () => { scopedObserved += 1 })
 
-    const result = await ctx.tools.execute(input)
+    const result = await executeToolInvocation(ctx, input)
 
     expect(result.isError).toBe(true)
     expect(reads).toEqual({ callId: 1, name: 1, arguments: 1, agent: 1, parent: 1, signal: 1 })
@@ -607,7 +608,7 @@ describe('scoped execution dispatch', () => {
       },
     } as ToolExecutionInput
 
-    const result = await ctx.tools.execute(input)
+    const result = await executeToolInvocation(ctx, input)
 
     expect(result.isError).toBe(true)
     expect(result.content).toEqual([{ type: 'text', text: 'Error: getter exploded' }])
@@ -640,7 +641,7 @@ describe('scoped execution dispatch', () => {
       expect(result.isError).toBe(true)
     })
 
-    const result = await ctx.tools.execute({
+    const result = await executeToolInvocation(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('bad-arguments'), name: 't', arguments: argumentsValue,
     })
@@ -661,7 +662,7 @@ describe('scoped execution dispatch', () => {
       get: () => ++reads === 1 ? 'safe' : new Map([['mutable', true]]),
     })
 
-    const result = await ctx.tools.execute({
+    const result = await executeToolInvocation(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('unstable-arguments'), name: 't', arguments: argumentsValue,
     })
@@ -705,7 +706,7 @@ describe('scoped execution dispatch', () => {
     ctx.on('tools/result', () => Promise.reject(new Error('async observer failure')) as never)
     ctx.on('tools/result', (_exec, result) => { seen.push(result.isError) })
 
-    const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('final'), name: 't', arguments: {}, agent: key })
+    const result = await executeToolInvocation(ctx, { signal: testToolSignal, callId: ToolCallId('final'), name: 't', arguments: {}, agent: key })
     await Promise.resolve()
     expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'outer failure' }] })
     expect(seen).toEqual([true, true])

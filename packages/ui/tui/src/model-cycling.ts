@@ -88,8 +88,8 @@ export interface ModelCyclingDeps {
   readCycleOrder(): readonly string[]
   /** Alias resolver (cc-model-aliases), live per call. */
   resolveAlias(alias: string): { readonly provider?: string | undefined; readonly model?: string | undefined } | undefined
-  /** Live selection ref; `current` is the route Ctrl+P starts from. */
-  selection: { readonly current?: { provider: string; model: string } | undefined }
+  /** Live selection face; `current()` is the route Ctrl+P starts from. */
+  selection: { current(): { provider: string; model: string } | undefined }
   applyModelSwitch(provider: string, model: string): Promise<void>
   loadCatalog(): Promise<readonly { provider: string; id: string }[]>
   emit(next: TuiState): void
@@ -128,7 +128,7 @@ export function createModelCyclingSection(rt: ModelCyclingDeps): {
         routes.set(alias, { provider: route.provider, model: route.model })
       }
     }
-    const startIndex = startIndexOf(order, rt.selection.current, (alias) => routes.get(alias))
+    const startIndex = startIndexOf(order, rt.selection.current(), (alias) => routes.get(alias))
     const catalog = await rt.loadCatalog()
     const advertised = new Set(catalog.map((entry) => `${entry.provider}/${entry.id}`))
     const pick = pickCycleTarget(order, startIndex, delta, (alias) => {

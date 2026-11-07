@@ -1,16 +1,17 @@
 // Vendored from @deepseek-ai/dsh-acp (packages/acp/acp/tests/turns.spec.ts)
-// Source ref: c1b47e41fcd54d20a0f061df28683bfc29ee24e5 (deepseek-harness, MIT — see LICENSE-harness)
+// Source ref: 2f97f60455605e915b8176d9170cae337bfedcc6 (deepseek-harness, MIT — see LICENSE-harness)
 // Copied 2026-10-09. Structural fixes flow from upstream during harness
 // migrations; CC-specific divergences must be recorded in DIVERGENCE.md.
+import { AcpSession } from '../src/session.ts'
 import { mountWorkingDirectoryFixture } from './working-directory-fixture.ts'
 import { createUserMessage, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { setImmediate } from 'node:timers/promises'
 import SubagentRuntime, { NO_START_CAPABILITIES } from '@deepseek-ai/dsh-subagent'
-import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { toolCallResponse } from './mock-adapter.ts'
 import {
   errorResponse,
@@ -474,13 +475,16 @@ describe('ACP prompt lifecycle', () => {
     expect(harness.adapter.requests).toEqual([])
   })
 
-  it('honors cancellation in the admission-to-followup handoff gap', async () => {
+  it('cancels after image storage completes before admission receives the result', async () => {
     harness = await makeBridgeHarness({ imageCapable: true, script: [] })
     const sessionId = await newSession(harness)
     const saveImages = harness.attachments!.saveImages.bind(harness.attachments!)
+    const cancel = vi.spyOn(AcpSession.prototype, 'cancel')
+    onTestFinished(() => { cancel.mockRestore() })
     vi.spyOn(harness.attachments!, 'saveImages').mockImplementationOnce(async (inputs) => {
       const refs = await saveImages(inputs)
-      queueMicrotask(() => { void harness!.client.cancel({ sessionId }) })
+      await harness!.client.cancel({ sessionId })
+      await vi.waitFor(() => { expect(cancel).toHaveBeenCalledOnce() })
       return refs
     })
 

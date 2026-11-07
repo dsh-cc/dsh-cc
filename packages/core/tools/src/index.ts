@@ -1,355 +1,245 @@
-/**
- * Tool registry, model presentation modes, and pre/guard/around/post/result
- * execution pipeline.
- * @module @dsh-cc/tools
- */
-
+/** Tool definitions and scoped dispatch to plugin-owned executors. @module */
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { ScopedLayers } from '@deepseek-ai/dsh-scope'
-import type { ScopeKey, Scoped } from '@deepseek-ai/dsh-scope'
-import type { ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
-import type { UserMessage } from '@deepseek-ai/dsh-session'
-import type { ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
-import type { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
-// Side-effectful load: registers the Code Mode dispatch event types (events.ts).
+import { AnonymousEntries, NamedEntries, ScopedLayers, scopeOf, scopeChainOf } from '@deepseek-ai/dsh-scope'
+import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
+import { ToolExecutorUnavailableError } from './executor.ts'
+import type { ToolExecutor, ToolBatchInput, ToolBatchResult } from './executor.ts'
 import './events.ts'
-import { TOOL_RUNTIME_SCHEDULER } from './scheduler.ts'
-import { ToolLayer, resolveMaxParallelSubCalls } from './tool-layer.ts'
-import type { ToolAskResolution, ToolCancellationState } from './tool-layer.ts'
-import type { CodeDispatchLog, Config, MutableToolRunContext, PostToolDecision, PreToolDecision, ScheduledToolDispatch, ScheduledToolPreparation, ToolDefinition, ToolDispatchExecution, ToolExecution, ToolExecutionInput, ToolExecutionMode, ToolExecutionResult, ToolExecutionSuccess, ToolExecutionToken, ToolGuard, ToolPresentationMode, ToolRestriction, ToolRunContext, ToolRuntimeScheduler, ToolView } from './tool-types.ts'
-import type { ToolSdkSchema } from './ts-types.ts'
-import type { ToolRuntimeCore } from './runtime-core.ts'
-import { executionMode, get, guard as registerGuard, guardReason, isAdmitted, register, reserve, resolveExecution, restrict, view } from './runtime-registry.ts'
-import { collapses, collapseSection, modeFor, presentAs, schemaOf, schemas, sdkSchemas, sdkSection, wireSchemas } from './runtime-schemas.ts'
-import { applyFinalContent, callerCancelled, cancellationResult, completeScheduledExecution, createExecution, dispatchScheduledExecution, dispatchToolBody, execute, finalizeScheduledExecution, finishScheduledExecution, prepareExecution, prepareScheduledExecution } from './runtime-execute.ts'
-import { createSuccessResult, markCanonical, materializeFinalResult, normalizeDispatchResult, notifyResult, postExecute } from './runtime-results.ts'
-import { requirePtcRuntime, requireCodeTransport, serviceAsk, shapeDispatchLog } from './runtime-code.ts'
+// FORK DRIFT: side-effectful load registers the Code Mode dispatch session
+// event types into KNOWN_SESSION_EVENT_TYPES (see types.ts).
+import './types.ts'
+import { instrumentToolExecution } from './current-execution.ts'
+import type { ToolSchema } from '@deepseek-ai/dsh-llm'
+import { projectToolSchema } from './schema.ts'
+import { assertSupportedJsonSchema } from './json-schema.ts'
+import { RUN_CODE_NAME, ToolActivationError } from './contracts.ts'
+import type {
+  ToolDefinition, ToolRestriction, ToolExecution, ToolGuard,
+  ResolvedToolSet, ToolActivationContext, ToolRegistrationOptions,
+} from './contracts.ts'
 
-export { currentToolExecution } from './current-execution.ts'
-
-export {
-  defineTool,
-  valueSchemaSpecToJsonSchema,
-  parameterSchemaSpecToJsonSchema,
-  validateArgs,
-  ToolArgsError,
-  type ValueSchemaAnnotations,
-  type StringValueSchemaSpec,
-  type NumberValueSchemaSpec,
-  type IntegerValueSchemaSpec,
-  type BooleanValueSchemaSpec,
-  type NullValueSchemaSpec,
-  type ArrayValueSchemaSpec,
-  type ObjectValueSchemaSpec,
-  type JsonValueSchemaSpec,
-  type OneOfValueSchemaSpec,
-  type ValueSchemaSpec,
-  type ParameterPropertySpec,
-  type ParameterSchemaSpec,
-  type ParameterJsonSchema,
-  type InferValue,
-  type InferArgs,
-  type DefineToolOptions,
-} from './schema.ts'
-
-export {
-  assertSupportedJsonSchema,
-  assertObjectJsonSchema,
-  validateJsonSchemaValue,
-  JsonSchemaError,
-  type JsonSchemaNode,
-  type ObjectJsonSchema,
-  type JsonSchemaType,
-  type JsonSchemaScalar,
-} from './json-schema.ts'
-
-export type { JsonValue } from '@deepseek-ai/dsh-util-values'
-export type { CodeDispatchEventData, CodeDispatchStartEventData } from './types.ts'
-
-export { CodeRunFailedError, RUN_CODE_NAME } from './code-mode.ts'
-export {
-  CC_TO_HARNESS_TOOLS,
-  KNOWN_HARNESS_TOOLS,
-  translateToolNames,
-  ccToolAliases,
-  ccCanonicalToolName,
-  type ToolNameTranslationPolicy,
-} from './cc-names.ts'
-export { jsonSchemaToTs, renderToolsSdk } from './ts-types.ts'
-export { jsonSchemaToPy, renderToolsSdkPy } from './py-types.ts'
-export { defineContentToolFixture, type ContentToolFixtureOptions } from './testing.ts'
-
-// The render-intent vocabulary a tool declares via `presentCall`/`presentResult`
-// lives in its own UI-facing module; re-export it so `@dsh-cc/tools`
-// stays the single public API for tool producers and UI adapters.
-export type {
-  ToolCallKind,
-  FileLocation,
-  FileDiff,
-  ReadFileLine,
-  ToolCallView,
-  GenericCallView,
-  TerminalCallView,
-  DiffCallView,
-  ToolResultView,
-  GenericResultView,
-  TerminalResultView,
-  DiffResultView,
-  SearchResultView,
-  SearchMatchesResultView,
-  SearchPathsResultView,
-  SearchFileMatches,
-  SearchLineMatch,
-  ReadResultView,
-  WebResultView,
-  WebSearchResultView,
-  WebFetchResultView,
-  WebSource,
-} from './presentation.ts'
-
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    tools: ToolRuntime
-  }
-
-  interface Events {
-    /**
-     * Allow, deny, or ask before dispatch. `next()` delegates to allow; missing
-     * approval support turns `ask` into denial. Async gates must observe
-     * `exec.signal`; the registry rechecks cancellation after they settle but
-     * never abandons their promise.
-     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's calls.
-     * @param exec - the pending call (name, parsed arguments, caller agent).
-     * @mode waterfall
-     */
-    'tools/pre-execute'(this: Scoped<ToolRuntime | ToolRuntimeCore>, exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision>
-    /**
-     * Around-dispatch waterfall for timeout, retry, or metrics. `next()` returns
-     * a normalized result; wrappers may change only `exec.signal`, while call
-     * identity remains immutable. The registry re-fuses the original caller
-     * signal before the body, so replacement cannot detach caller cancellation;
-     * wrappers must still restore their signal and reach quiescence.
-     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's calls.
-     * @param exec - the allowed call about to dispatch (name, parsed arguments, caller agent, signal).
-     * @mode waterfall
-     */
-    'tools/execute'(this: Scoped<ToolRuntime | ToolRuntimeCore>, exec: ToolDispatchExecution, next: () => Promise<ToolExecutionResult>): Promise<ToolExecutionResult>
-    /**
-     * Accept, replace, enrich, or block a normalized dispatch result. `next()`
-     * accepts it unchanged; thrown tools still reach this waterfall as errors. Async
-     * listeners must observe `exec.signal`; after they settle, caller
-     * cancellation replaces only a successful accepted outcome with the code
-     * selected by whether the tool body was invoked.
-     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's calls.
-     * @param exec - the call that just ran (name, parsed arguments, caller agent).
-     * @param result - the dispatch outcome a listener may accept, replace, or block.
-     * @mode waterfall
-     */
-    'tools/post-execute'(this: Scoped<ToolRuntime | ToolRuntimeCore>, exec: ToolExecution, result: Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>): Promise<PostToolDecision>
-    /**
-     * Allow a listener to replace content in the DURABLE LOG COPY of one
-     * `run_code` sub-dispatch outcome before the bridge appends its
-     * `tool/code-dispatch` event. `next()` keeps the
-     * content unchanged; a listener may return replacement blocks (e.g. the
-     * spill policy's preview + locator for an oversized text result). Only the
-     * logged copy is affected — the program already received the complete
-     * value, and the model sees neither. A throwing listener is contained:
-     * the bridge falls back to logging the original settled content.
-     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent's dispatches.
-     * @param dispatch - the parent execution, sub-call identity, and the settled content to log.
-     * @mode waterfall
-     */
-    'tools/code-dispatch-log'(this: Scoped<ToolRuntime | ToolRuntimeCore>, dispatch: CodeDispatchLog, next: () => Promise<ContentBlock[]>): Promise<ContentBlock[]>
-    /**
-     * Observe the frozen, lossless-JSON final outcome. Listener failures are contained.
-     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): keyed by `exec.agent`.
-     * @param exec - the execution object that traversed the pipeline.
-     * @param result - a deep-frozen snapshot of the final returned result.
-     * @mode emit
-     */
-    'tools/result'(this: Scoped<ToolRuntime | ToolRuntimeCore>, exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): undefined
-    /**
-     * A tool was registered or unregistered, or a scoped restriction changed
-     * (the available tool set changed — possibly for one scope only). An
-     * UNFILTERED registry-subject notification, deliberately not scope-filtered
-     * dispatch: a global change concerns every agent's next assembly, so a
-     * scoped listener subscribing here sees every change, not just its own
-     * scope's.
-     * @mode emit
-     */
-    'tools/change'(): void
+declare module '@deepseek-ai/dsh-system-prompt' {
+  interface AssembleContext {
+    /** Step-owned tool selection; absent when inspecting registered definitions. */
+    toolSet?: ResolvedToolSet
   }
 }
 
-export type {
-  CodeDispatchLog,
-  Config,
-  PostToolDecision,
-  PreToolDecision,
-  ScheduledToolDispatch,
-  ScheduledToolPreparation,
-  ToolDefinition,
-  ToolDispatchExecution,
-  ToolExecution,
-  ToolExecutionFailure,
-  ToolExecutionInput,
-  ToolExecutionMode,
-  ToolExecutionResult,
-  ToolExecutionSuccess,
-  ToolExecutionToken,
-  ToolGuard,
-  ToolOutputDefinition,
-  ToolPresentationMode,
-  ToolRestriction,
-  ToolResult,
-  ToolRunContext,
-  ToolRuntimeScheduler,
-} from './tool-types.ts'
-export type { ToolErrorInfo, ToolFailure } from './abort-utils.ts'
-export { TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH, ToolNotFoundError, ToolOutputError } from './abort-utils.ts'
-/**
- * Scheduler entry point omitted from the generated named service API.
- * The value MUST be the upstream symbol instance: the in-box agent loop reads
- * the staged scheduler off the registry through the symbol exported by
- * `@deepseek-ai/dsh-tools`, and a `Symbol()` is identity-unique — minting a
- * private one here leaves the loop reading `undefined` and crashing every
- * turn's first tool call (`undefined.prepare`). The binding is a type-erased
- * `createRequire` rather than a static import so upstream's declaration graph
- * (its own `Context` augmentation, whose vendored copy this package also
- * ships) never enters downstream type programs; the dependency stays
- * runtime-only (peer-declared). Declared in the {@link ./scheduler.ts} leaf
- * module; re-exported here to keep the public barrel surface unchanged.
- * @internal
- */
-export { TOOL_RUNTIME_SCHEDULER }
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** Tool availability changes supplied by the tool registry. */
+    'tool-registry': { kind: 'tool-registry' }
+  }
+}
 
-/**
- * Tool registry and execution pipeline. Scoped registrations shadow globals;
- * one visibility resolver feeds presentation, lookup, and dispatch.
- *
- * The implementation lives in the `runtime-*.ts` collaborator modules behind
- * the `ToolRuntimeCore` structural interface; this class is the constructed
- * facade — configuration, state fields, scheduler staging, and one-line
- * delegations.
- */
-export class ToolRuntime extends Service {
-  /** Cordis context; `Service` keeps it protected — declaration-only re-exposure for the `ToolRuntimeCore` interface. @internal */
-  declare readonly ctx: Context
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    tools: ToolsService
+  }
+}
 
+/** One restriction compiled at registration for repeated live-global lookup. */
+interface CompiledToolRestriction {
+  readonly allow?: ReadonlySet<string>
+  readonly deny?: ReadonlySet<string>
+}
+
+/** One registered definition and its step-time activation condition. */
+interface ToolRegistration {
+  readonly definition: ToolDefinition
+  readonly when: ToolRegistrationOptions['when']
+}
+
+/** One scope's complete registry view, derived in a single layer traversal. */
+interface ToolView {
+  /** Visible definitions after restrictions, scoped shadowing, and inherited restrictions. */
+  readonly visible: ReadonlyMap<string, ToolDefinition>
+  /** Registrations behind {@link visible}, keyed by the same names. */
+  readonly registrations: ReadonlyMap<string, ToolRegistration>
+  /** Pre-restriction capability names used by prompt-order validation. */
+  readonly knownNames: ReadonlySet<string>
+  /** Current global names that a scoped restriction may name. */
+  readonly restrictableNames: ReadonlySet<string>
+}
+
+/** One scope's complete tool-registry contribution. */
+class ToolLayer implements ScopeLayer {
+  readonly tools: NamedEntries<ToolRegistration>
+  /** FORK DRIFT: capability names made known without a visible definition. */
+  readonly reserved: NamedEntries<undefined>
+  readonly restrictions = new AnonymousEntries<CompiledToolRestriction>()
+
+  constructor(scope: ScopeKey | undefined) {
+    this.tools = new NamedEntries(name => new Error(scope === undefined
+      ? `tool "${name}" is already registered (for a per-agent variant, register through that agent's \`agent.ctx\` instead)`
+      : `tool "${name}" is already registered in this scope`))
+    this.reserved = new NamedEntries(name => new Error(scope === undefined
+      ? `tool name "${name}" is already reserved`
+      : `tool name "${name}" is already reserved in this scope`))
+  }
+
+  /** Whether every contribution table in this aggregate layer is empty. */
+  isEmpty(): boolean {
+    return this.tools.isEmpty() && this.reserved.isEmpty() && this.restrictions.isEmpty()
+  }
+
+  /** Whether every compiled restriction in this layer admits a global tool name. */
+  admits(name: string): boolean {
+    for (const filter of this.restrictions.values()) {
+      if ((filter.allow !== undefined && !filter.allow.has(name))
+        || (filter.deny !== undefined && filter.deny.has(name))) return false
+    }
+    return true
+  }
+
+}
+
+interface Registration {
+  executor: ToolExecutor | undefined
+}
+
+class GuardLayer {
+  readonly guards = new AnonymousEntries<ToolGuard>()
+  isEmpty(): boolean { return this.guards.isEmpty() }
+}
+
+/** Concrete tool registry and scoped executor dispatcher. */
+export class ToolsService extends Service {
   static inject = ['systemPrompt']
-
-  static Config: z<Config> = z.object({
-    mode: z.union(['native', 'code', 'both'] as const).default('native'),
-    maxParallelSubCalls: z.natural().min(1).default(10),
+  static Config = z.object({
+    mode: z.never().description('Removed. Mount a native or PTC tool executor instead.'),
+    maxParallelSubCalls: z.never().description('Moved to the PTC tool executor configuration.'),
   })
 
-  /** Internal staged view consumed by `dsh-agent-loop`'s parallel scheduler. */
-  readonly [TOOL_RUNTIME_SCHEDULER]: ToolRuntimeScheduler = {
-    prepare: exec => this.prepareScheduledExecution(exec),
-    dispatch: exec => this.dispatchScheduledExecution(exec),
-    finalize: (exec, result) => this.finalizeScheduledExecution(exec, result),
-    finish: (exec, result) => this.finishScheduledExecution(exec, result),
-  }
+  private readonly layers = new ScopedLayers(scope => new ToolLayer(scope), () => { this.ctx.emit('tools/change') })
+  private readonly scoped = new WeakMap<ScopeKey, Registration>()
+  private root: Registration | undefined
+  private readonly guards = new ScopedLayers(() => new GuardLayer(), () => {})
 
-  /** @internal Context deferred by a running tool body, keyed by its scheduler-owned execution. */
-  readonly deferredContexts = new WeakMap<ToolRunContext, UserMessage[]>()
-  /** @internal Executions whose tool body declared the current turn complete. */
-  readonly concludingExecutions = new WeakSet<ToolExecution>()
-  /** @internal Original caller cancellation, kept outside the wrapper-mutable execution object. */
-  readonly cancellationStates = new WeakMap<ToolRunContext, ToolCancellationState>()
-  /** @internal Definition-owned final content transform snapshotted before policy begins. */
-  readonly contentFinalizers = new WeakMap<ToolRunContext, ToolDefinition['finalizeContent']>()
-  /** @internal Visibility layers: registration, reservation, restriction, guards. */
-  readonly layers = new ScopedLayers(
-    scope => new ToolLayer(scope),
-    () => { this.ctx.emit('tools/change') },
-  )
-  /** @internal Presentation for scopes that declare none; {@link modeFor} shadows it per scope. */
-  readonly defaultMode: ToolPresentationMode
-  /** @internal */
-  readonly maxParallelSubCalls: number
-  /**
-   * Reserved presentation transport, kept outside the filterable registration
-   * layers. Built on first need rather than at construction: which agents run
-   * a code mode is no longer known when the service is constructed, and the
-   * transport is stateless beyond its closures over the runtime.
-   * @internal
-   */
-  codeTransport: ToolDefinition | undefined
-  /** @internal Registry-normalized results and the exact dispatch that validated each value. */
-  readonly canonicalResults = new WeakMap<object, ToolExecutionToken>()
-
-  constructor(ctx: Context, config: Config = {}) {
+  constructor(ctx: Context) {
     super(ctx, 'tools')
-    // The schema already defaulted an omitted mode; the ?? narrows the
-    // optional-input type for direct (non-Loader) construction in tests.
-    this.defaultMode = config.mode ?? 'native'
-    this.maxParallelSubCalls = resolveMaxParallelSubCalls(config.maxParallelSubCalls)
-    ctx.systemPrompt.tools(context => this.wireSchemas(context.scope))
-    if (this.defaultMode !== 'native') {
-      ctx.systemPrompt.section(this.collapseSection())
-      ctx.systemPrompt.section(this.sdkSection())
-    }
+    // FORK DRIFT: execution-identity instrumentation (current-execution.ts).
+    // Registered here, so this listener is the OUTERMOST `tools/execute`
+    // wrapper and snapshots the call identity before any plugin wrapper can
+    // touch the mutable dispatch object. It enters the async-local context
+    // around the delegated body dispatch only — the prepare() guards
+    // (tools/pre-execute, checkGuards) run outside it.
+    ctx.on('tools/execute', (exec, next) => instrumentToolExecution(exec, next))
+    ctx.systemPrompt.tools(({ scope, toolSet }) => {
+      const executor = this.selectExecutor(scope)
+      const description = executor.describe(this.definitions(scope, toolSet))
+      return { ...description, knownNames: description.knownNames ?? [...this.view(scope).knownNames] }
+    })
   }
 
-  /**
-   * Present the calling scope's tools in `mode` instead of the deployment
-   * default. Nearest scope on the chain wins, so a preset's standing
-   * declaration covers every agent joined under it.
-   *
-   * Scoped only, and one declaration per scope: this is how an agent preset
-   * composes Code Mode agents beside native ones in the same process, and a
-   * process-global override would be the `mode` config field instead.
-   * @param mode - the presentation the covered agents' models see.
-   * @returns the exact disposer that restores the deployment default.
-   */
-  presentAs(mode: ToolPresentationMode): () => void {
-    return presentAs(this, mode)
-  }
 
   /**
    * Register globally or in the calling agent scope. Scoped tools shadow
    * globals; duplicates within one layer and the reserved `run_code` name fail.
    * @param definition - tool schema, execution, and optional finalization/presentation callbacks.
+   * @param options - optional step-time activation condition.
    * @returns the exact disposer that unregisters the tool.
    */
-  register(definition: ToolDefinition): () => void {
-    return register(this, definition)
+  register(definition: ToolDefinition, options: ToolRegistrationOptions = {}): () => void {
+    const name = definition.name
+    const output = (definition as Partial<ToolDefinition>).output
+    if (output === undefined || typeof output !== 'object'
+      || typeof output.render !== 'function'
+      || (output.presentationMeta !== undefined && typeof output.presentationMeta !== 'function')) {
+      throw new TypeError(`tool "${name}" must declare output { schema, render, presentationMeta? }`)
+    }
+    assertSupportedJsonSchema(output.schema)
+    // FORK DRIFT (CI schema gate, test-mode arm): warn-only tripwire — a flat
+    // parameter spec (the repo DSL) or an external schema outside the enforced
+    // subset would otherwise degrade silently to a model-facing {}. Undefined/
+    // null is skipped: external MCP tools may omit inputSchema.
+    if (definition.parameters !== undefined && definition.parameters !== null) {
+      try {
+        assertSupportedJsonSchema(definition.parameters)
+      } catch (error) {
+        // In vitest an unsupported parameters schema must hard-fail instead of
+        // degrading silently.
+        if (process.env.VITEST !== undefined) {
+          throw new Error(
+            `tool "${name}" parameters is not a supported JSON Schema (${String(error)}); fix the schema or route the tool through defineTool`,
+          )
+        }
+        this.ctx.logger.warn(
+          `tool "${name}" parameters is not a supported JSON Schema; the model-facing schema may degrade (${String(error)})`,
+        )
+      }
+    }
+    const timeoutMs = definition.timeoutMs
+    if (timeoutMs !== undefined
+      && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+      throw new TypeError(`tool "${name}" timeoutMs must be a positive finite number`)
+    }
+    // Reserved unconditionally: any agent may select a code mode for itself,
+    // so a name free to take under the deployment default would become a
+    // collision the moment a preset mounted.
+    if (name === RUN_CODE_NAME) {
+      throw new Error(`tool name "${RUN_CODE_NAME}" is reserved for the PTC mode presentation transport and cannot be registered or shadowed`)
+    }
+    return this.layers.effect(
+      this.ctx,
+      layer => layer.tools.insert(name, { definition, when: options.when }),
+      { label: 'tools.register()' },
+    )
   }
 
   /**
-   * Reserve a capability NAME in the calling layer without registering a
-   * visible definition. A reserved name joins the known/restrictable universe
-   * — a scope may later `restrict()` it away, and `toolOrder` may list it — but
-   * it never reaches the model-facing schema until a real `register()` supplies
-   * the definition. This is how a deferred-tool registry seeds the names a
-   * composition may gate before their heavy definitions load.
+   * FORK DRIFT: reserve a capability NAME in the calling layer without
+   * registering a visible definition. A reserved name joins the
+   * known/restrictable universe — a scope may later `restrict()` it away, and
+   * `toolOrder` may list it — but it never reaches the model-facing schema
+   * until a real `register()` supplies the definition. This is how a
+   * deferred-tool registry seeds the names a composition may gate before their
+   * heavy definitions load.
    *
-   * The name stays out of {@link ToolRuntime.get} and {@link ToolRuntime.schemas}
-   * (only registered definitions are visible). Duplicate reservations within one
-   * layer fail, matching the duplicate-name rule for {@link ToolRuntime.register}.
+   * The name stays out of {@link ToolsService.get} and
+   * {@link ToolsService.schemas} (only registered definitions are visible).
+   * Duplicate reservations within one layer fail, matching the duplicate-name
+   * rule for {@link ToolsService.register}.
    * @param name - the capability name to make known without presenting.
    * @returns the exact disposer that clears the reservation.
    */
   reserve(name: string): () => void {
-    return reserve(this, name)
+    if (name === RUN_CODE_NAME) {
+      throw new Error(`tool name "${RUN_CODE_NAME}" is reserved for the Code Mode presentation transport and cannot be registered or shadowed`)
+    }
+    return this.layers.effect(
+      this.ctx,
+      layer => layer.reserved.insert(name, undefined),
+      { label: 'tools.reserve()' },
+    )
   }
 
   /**
-   * Whether a global tool name passes every scoped restriction on the viewing
-   * scope's chain. The answer ignores registration: a reserved or not-yet-loaded
-   * name is admitted if no `allow`/`deny` on the chain masks it, so a caller can
-   * gate whether a deferred capability may load for one agent. A name masked by
-   * an `allow` list it is absent from, or present in a `deny` list, is not
-   * admitted. When a name has multiple restrictions, they intersect (all must
-   * admit it), matching registration visibility.
+   * FORK DRIFT: whether a global tool name passes every scoped restriction on
+   * the viewing scope's chain. The answer ignores registration: a reserved or
+   * not-yet-loaded name is admitted if no `allow`/`deny` on the chain masks it,
+   * so a caller can gate whether a deferred capability may load for one agent.
+   * A name masked by an `allow` list it is absent from, or present in a `deny`
+   * list, is not admitted. When a name has multiple restrictions, they
+   * intersect, matching registration visibility.
    * @param name - the capability name to test.
    * @param scope - the viewing scope (the agent); omitted for the global view, which has no restrictions.
    * @returns whether the name may load for that scope.
    */
   isAdmitted(name: string, scope?: ScopeKey): boolean {
-    return isAdmitted(this, name, scope)
+    return this.layers.chainLayers(scope).every(layer => layer.admits(name))
+  }
+
+  /**
+   * FORK DRIFT: the pre-restriction global/ancestor capability names a scoped
+   * restriction may name (upstream's `view()` is private). Reserved names are
+   * included, so a caller can gate a deferred capability before it loads.
+   * @param scope - the viewing scope (the agent); omitted for the global view.
+   * @returns the restrictable capability names for that scope.
+   */
+  restrictableNames(scope?: ScopeKey): ReadonlySet<string> {
+    return this.view(scope).restrictableNames
   }
 
   /**
@@ -360,21 +250,80 @@ export class ToolRuntime extends Service {
    * @returns the exact disposer that lifts this restriction.
    */
   restrict(filter: ToolRestriction): () => void {
-    return restrict(this, filter)
+    const scope = scopeOf(this.ctx)
+    if (scope === undefined) {
+      throw new Error('tools.restrict() requires a scoped context (agent.ctx): a context-global restriction would mask every agent — deny the tool for the intended agent instead')
+    }
+    const allow = filter.allow
+    const deny = filter.deny
+    if (allow === undefined && deny === undefined) {
+      throw new Error('tools.restrict({}) is a no-op: pass `allow` and/or `deny` (an empty filter is almost always a materialized-empty-config bug)')
+    }
+    const compiled: CompiledToolRestriction = {
+      ...allow !== undefined ? { allow: new Set(allow) } : {},
+      ...deny !== undefined ? { deny: new Set(deny) } : {},
+    }
+    if ([...allow ?? [], ...deny ?? []].includes(RUN_CODE_NAME)) {
+      throw new Error(`tools.restrict() cannot name reserved PTC mode presentation transport "${RUN_CODE_NAME}"; restrict end-capability tools instead`)
+    }
+    const known = this.view(scope).restrictableNames
+    const unknown = [...allow ?? [], ...deny ?? []].filter(name => !known.has(name))
+    if (unknown.length > 0) {
+      throw new Error(`tools.restrict() names unknown global tool${unknown.length > 1 ? 's' : ''} ${unknown.map(n => `"${n}"`).join(', ')}; known global tools: ${[...known].sort().join(', ') || '(none)'}`)
+    }
+    return this.layers.effect(
+      this.ctx,
+      layer => layer.restrictions.append(compiled),
+      { label: 'tools.restrict()' },
+    )
   }
 
   /**
-   * Register a monotonic guard after the extensible `tools/pre-execute`
-   * waterfall. A plain-context guard applies globally; one registered through
-   * `agent.ctx` applies only to that agent. Any matching guard may deny by
-   * returning a reason, while no guard can force-allow a call another guard
-   * denied. The exact effect disposer is returned for ordered ownership and
-   * HMR cleanup.
-   * @param guard - synchronous check; a returned string denies the execution.
-   * @returns the exact disposer that unregisters the guard.
+   * Resolve visible tools and pre-restriction names. Restrictions across the
+   * scope chain intersect over inherited global and ancestor tools; the viewing
+   * scope's own registrations remain exempt. Nearer registrations shadow
+   * farther ones. Pre-restriction names support restriction and prompt-order validation.
+   * @param scope - the viewing scope (the agent), or undefined for the global view.
+   * @returns the complete derived view for that scope.
    */
-  guard(guard: ToolGuard): () => void {
-    return registerGuard(this, guard)
+  private view(scope?: ScopeKey): ToolView {
+    const layers = this.layers.chainLayers(scope)
+    const own = this.layers.peek(scope)
+    const inherited = new Map(this.layers.global.tools.entries())
+    for (const layer of layers) {
+      if (layer === own) continue
+      for (const [name, registration] of layer.tools.entries()) inherited.set(name, registration)
+    }
+    const visible = new Map<string, ToolDefinition>()
+    const registrations = new Map<string, ToolRegistration>()
+    const knownNames = new Set<string>()
+    const restrictableNames = new Set<string>()
+    for (const [name, registration] of inherited) {
+      knownNames.add(name)
+      restrictableNames.add(name)
+      if (layers.every(layer => layer.admits(name))) {
+        visible.set(name, registration.definition)
+        registrations.set(name, registration)
+      }
+    }
+    if (own !== undefined) {
+      for (const [name, registration] of own.tools.entries()) {
+        knownNames.add(name)
+        visible.set(name, registration.definition)
+        registrations.set(name, registration)
+      }
+    }
+    // FORK DRIFT: reserved names are known and restrictable but never visible:
+    // they enter the inherited universe (so a scope may gate them before load)
+    // without a definition to present. Chain + global, same inheritance shape
+    // as tools.
+    for (const { reserved } of [this.layers.global, ...layers]) {
+      for (const name of reserved.keys()) {
+        knownNames.add(name)
+        restrictableNames.add(name)
+      }
+    }
+    return { visible, registrations, knownNames, restrictableNames }
   }
 
   /**
@@ -384,116 +333,196 @@ export class ToolRuntime extends Service {
    * actually executed.
    * @param name - the tool name as registered.
    * @param scope - the viewing scope (the agent); omitted = the global view.
+   * @param toolSet - step admission; omit only to inspect registered definitions.
    * @returns the definition the scope resolves, or undefined when none is visible.
    */
-  get(name: string, scope?: ScopeKey): ToolDefinition | undefined {
-    return get(this, name, scope)
+  get(name: string, scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolDefinition | undefined {
+    return toolSet === undefined ? this.view(scope).visible.get(name) : toolSet.view(scope).get(name)
+  }
+
+  /**
+   * Resolve the definition a call may execute. With a step's admitted set, the
+   * set decides; without one, conditional registrations are unavailable.
+   * @param name - the tool name as registered.
+   * @param scope - the calling agent; omitted = the global view.
+   * @param toolSet - step admission, or omitted for a call outside a model step.
+   * @returns the executable definition, or undefined when the call must fail as `UNKNOWN_TOOL`.
+   */
+  executable(name: string, scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolDefinition | undefined {
+    if (toolSet !== undefined) return toolSet.view(scope).get(name)
+    const view = this.view(scope)
+    return view.registrations.get(name)?.when === undefined ? view.visible.get(name) : undefined
+  }
+
+  /**
+   * Resolve conditions once for this step without changing shared registrations.
+   * Cancellation or a rejected condition publishes no partial selection. Removed
+   * registrations cannot be restored by a late condition result.
+   * @param context - preparing agent, captured model selection, and cancellation.
+   * @returns the complete selection; the caller disposes it after its tool batch settles.
+   */
+  async resolve(context: ToolActivationContext): Promise<ResolvedToolSet> {
+    const { agent, signal } = context
+    signal.throwIfAborted()
+    const view = this.view(agent)
+    const admitted = new Map<string, ToolDefinition>()
+    for (const [name, definition] of view.visible) {
+      const registration = view.registrations.get(name)
+      let enabled: boolean
+      try {
+        enabled = registration?.when === undefined || await registration.when(context)
+      } catch (cause: unknown) {
+        signal.throwIfAborted()
+        throw new ToolActivationError(name, cause)
+      }
+      signal.throwIfAborted()
+      if (enabled) admitted.set(name, definition)
+    }
+    let closed = false
+    return Object.freeze({
+      dispose: () => { closed = true },
+      view: (scope: ScopeKey | undefined): ReadonlyMap<string, ToolDefinition> => {
+        const visible = new Map<string, ToolDefinition>()
+        if (closed || scope !== agent) return visible
+        const current = this.view(agent)
+        for (const [name, definition] of admitted) {
+          if (current.visible.get(name) === definition
+            && current.registrations.get(name) === view.registrations.get(name)) {
+            visible.set(name, definition)
+          }
+        }
+        return visible
+      },
+    })
+  }
+
+  /**
+   * Read the visible capability definitions for descriptions and program bindings.
+   * @param scope - viewing Agent or preset; omitted selects the global view.
+   * @param toolSet - step admission; omit only to inspect registered definitions.
+   * @returns definitions after scoped shadowing and restrictions, limited to the step's admission when given.
+   */
+  definitions(scope?: ScopeKey, toolSet?: ResolvedToolSet): readonly ToolDefinition[] {
+    return toolSet === undefined ? [...this.view(scope).visible.values()] : [...toolSet.view(scope).values()]
   }
 
   /**
    * Project visible definitions onto the allowlisted model-facing schema fields,
    * excluding execution and presentation callbacks.
    * @param scope - the viewing scope (the agent); omitted = the global view.
+   * @param toolSet - step admission, or omitted for registered-definition inspection.
    * @returns one deep-cloned schema per visible tool.
    */
-  schemas(scope?: ScopeKey): ToolSchema[] {
-    return schemas(this, scope)
+  schemas(scope?: ScopeKey, toolSet?: ResolvedToolSet): ToolSchema[] {
+    return this.definitions(scope, toolSet).map(definition => projectToolSchema(definition, true))
+  }
+  /**
+   * Provide the executor for the calling scope; an unscoped contribution is the deployment default.
+   * Rendering any executor-owned section requires the viewing scope's selection to remain available.
+   * @param executor - initialized provider owned by the contributing plugin.
+   * @returns the effect disposer. Unloading leaves the selection unavailable until it is replaced.
+   */
+  setExecutor(executor: ToolExecutor): () => void {
+    const scope = scopeOf(this.ctx)
+    const existing = scope === undefined ? this.root : this.scoped.get(scope)
+    if (existing?.executor !== undefined) throw new Error('Only one tool executor may be registered in each scope')
+    const record: Registration = { executor }
+    // oxlint-disable-next-line typescript/no-misused-promises -- synchronous cleanup; preserve the Cordis disposer identity
+    return this.ctx.effect(function* (this: ToolsService) {
+      for (const section of executor.sections ?? []) {
+        yield this.ctx.systemPrompt.section({
+          name: section.name,
+          order: section.order,
+          ...section.interpolate === undefined ? {} : { interpolate: section.interpolate },
+          text: ({ scope, toolSet }) => {
+            if (this.selectExecutor(scope) !== executor) return ''
+            return typeof section.text === 'function' ? section.text(this.definitions(scope, toolSet)) : section.text
+          },
+        })
+      }
+      if (scope === undefined) this.root = record
+      else this.scoped.set(scope, record)
+      yield () => {
+        // Keep an unavailable selection so a program cannot fall through to a different executor.
+        record.executor = undefined
+      }
+    }.bind(this), 'tools.setExecutor()')
   }
 
   /**
-   * Classify a pending call through the caller's visible tool definition. Only
-   * an exact `true` is parallel; unknown, hidden, undeclared, invalid, or
-   * throwing classifiers are exclusive.
-   * @param exec - call name, parsed arguments, and optional agent scope.
-   * @returns the fail-closed scheduling mode.
+   * Resolve the nearest scoped provider, or the deployment default.
+   * @param scope - Agent or preset scope; omitted selects only the root contribution.
+   * @returns the selected executor; throws when it is missing or unloaded.
    */
-  executionMode(exec: ToolExecutionInput): ToolExecutionMode {
-    return executionMode(this, exec)
+  private selectExecutor(scope?: ScopeKey): ToolExecutor {
+    let record: Registration | undefined
+    for (const key of scopeChainOf(scope)) {
+      record = this.scoped.get(key)
+      if (record !== undefined) break
+    }
+    record ??= this.root
+    const executor = record?.executor
+    if (executor === undefined) throw new ToolExecutorUnavailableError()
+    return executor
   }
 
   /**
-   * Execute through pre-policy, guards, around-dispatch, post-policy,
-   * definition-owned content finalization, and final notification. Tool and
-   * listener failures resolve as materialized error results; an invisible tool
-   * reports `UNKNOWN_TOOL`. The returned outcome is the same lossless, frozen
-   * snapshot final observers receive. Cancellation
-   * arriving after entry and before final result materialization skips a
-   * not-yet-started body with `ABORTED_BEFORE_DISPATCH` or replaces a
-   * successful started outcome with `ABORTED`; already-started work is still
-   * drained and may retain a tool-owned structured error.
-   * @param exec - the typed same-process call input. The registry assigns its
-   *   correlation token before policy begins.
-   * @returns the materialized final result.
+   * Delegate a raw call batch to its Agent's provider or the deployment default.
+   * Select at dispatch; accepted batches settle through that provider even if it unloads.
+   * @param input - original calls, optional owning Agent, and optional logging step.
+   * @returns the selected executor's settled batch; unavailable selections reject.
    */
-  async execute(exec: ToolExecutionInput): Promise<ToolExecutionResult> {
-    return execute(this, exec)
+  async execute(input: ToolBatchInput): Promise<ToolBatchResult> {
+    return this.selectExecutor(input.agent).execute(input)
   }
 
-  /** @internal */
-  guardReason(exec: ToolExecution): string | undefined { return guardReason(this, exec) }
-  /** @internal */
-  view(scope?: ScopeKey): ToolView { return view(this, scope) }
-  /** @internal */
-  resolveExecution(name: string, scope: ScopeKey | undefined, nested: boolean): ToolDefinition | undefined { return resolveExecution(this, name, scope, nested) }
-  /** @internal */
-  collapseSection(): { name: string; order: number; text: (context: { scope?: ScopeKey }) => string } { return collapseSection(this) }
-  /** @internal */
-  sdkSection(): { name: string; order: number; text: (context: { scope?: ScopeKey }) => string } { return sdkSection(this) }
-  /** @internal */
-  modeFor(scope?: ScopeKey): ToolPresentationMode { return modeFor(this, scope) }
-  /** @internal */
-  wireSchemas(scope?: ScopeKey): ToolProviderResult { return wireSchemas(this, scope) }
-  /** @internal */
-  sdkSchemas(scope?: ScopeKey): ToolSdkSchema[] { return sdkSchemas(this, scope) }
-  /** @internal */
-  schemaOf(definition: ToolDefinition, detachParameters: boolean): ToolSchema { return schemaOf(this, definition, detachParameters) }
-  /** @internal */
-  collapses(name: string, scope: ScopeKey | undefined, nested: boolean): boolean { return collapses(this, name, scope, nested) }
-  /** @internal */
-  completeScheduledExecution(prepared: ScheduledToolPreparation): Promise<ToolExecutionResult> { return completeScheduledExecution(this, prepared) }
-  /** @internal */
-  createExecution(exec: ToolExecutionInput): ScheduledToolPreparation | { kind: 'ready'; exec: MutableToolRunContext } { return createExecution(this, exec) }
-  /** @internal */
-  prepareScheduledExecution(input: ToolExecutionInput): Promise<ScheduledToolPreparation> { return prepareScheduledExecution(this, input) }
-  /** @internal */
-  prepareExecution<T>(input: ToolExecutionInput, next: (prepared: ScheduledToolPreparation) => T | PromiseLike<T>): Promise<T> {
-    return prepareExecution(this, input, next)
+  /**
+   * Register a monotonic denial in the calling scope.
+   * @param guard - evaluated after extensible pre-execute policy by the shared pipeline.
+   * @returns the effect disposer that removes this guard.
+   */
+  guard(guard: ToolGuard): () => void {
+    return this.guards.effect(this.ctx, layer => layer.guards.append(guard), { label: 'tools.guard()' })
   }
 
-  /** @internal */
-  callerCancelled(exec: ToolRunContext): boolean { return callerCancelled(this, exec) }
-  /** @internal */
-  cancellationResult(exec: ToolRunContext, prior?: ToolExecutionResult): ToolExecutionResult { return cancellationResult(this, exec, prior) }
-  /** @internal */
-  dispatchToolBody(exec: MutableToolRunContext): Promise<ToolExecutionResult> { return dispatchToolBody(this, exec) }
-  /** @internal */
-  dispatchScheduledExecution(exec: ToolRunContext): Promise<ScheduledToolDispatch> { return dispatchScheduledExecution(this, exec) }
-  /** @internal */
-  finalizeScheduledExecution(exec: ToolRunContext, result: ToolExecutionResult): Promise<ToolExecutionResult> { return finalizeScheduledExecution(this, exec, result) }
-  /** @internal */
-  finishScheduledExecution(exec: ToolRunContext, result: ToolExecutionResult): ToolExecutionResult { return finishScheduledExecution(this, exec, result) }
-  /** @internal */
-  applyFinalContent(exec: ToolRunContext, result: ToolExecutionResult): ToolExecutionResult { return applyFinalContent(this, exec, result) }
-  /** @internal */
-  notifyResult(exec: ToolExecution, result: ToolExecutionResult): void { return notifyResult(this, exec, result) }
-  /** @internal */
-  postExecute(exec: ToolExecution, result: ToolExecutionResult): Promise<ToolExecutionResult> { return postExecute(this, exec, result) }
-  /** @internal */
-  markCanonical<T extends ToolExecutionResult>(exec: ToolExecution, result: T): T { return markCanonical(this, exec, result) }
-  /** @internal */
-  createSuccessResult(exec: ToolExecution, tool: ToolDefinition, candidate: unknown): ToolExecutionSuccess { return createSuccessResult(this, exec, tool, candidate) }
-  /** @internal */
-  normalizeDispatchResult(exec: ToolExecution, result: ToolExecutionResult): ToolExecutionResult { return normalizeDispatchResult(this, exec, result) }
-  /** @internal */
-  materializeFinalResult(result: ToolExecutionResult): ToolExecutionResult { return materializeFinalResult(this, result) }
-  /** @internal */
-  requireCodeTransport(): ToolDefinition { return requireCodeTransport(this) }
-  /** @internal */
-  requirePtcRuntime(mode: ToolPresentationMode): PtcRuntime { return requirePtcRuntime(this, mode) }
-  /** @internal */
-  shapeDispatchLog(dispatch: CodeDispatchLog): Promise<ContentBlock[]> { return shapeDispatchLog(this, dispatch) }
-  /** @internal */
-  serviceAsk(exec: ToolExecution, ask: Extract<PreToolDecision, { kind: 'ask' }>): Promise<ToolAskResolution> { return serviceAsk(this, exec, ask) }
+  /**
+   * Check global and inherited guards after pre-execute policy and approval resolve.
+   * @param exec - invocation whose guards are checked before dispatch.
+   * @returns the first denial reason, or undefined when no guard denies.
+   */
+  checkGuards(exec: ToolExecution): string | undefined {
+    for (const layer of [this.guards.global, ...this.guards.chainLayers(exec.agent)]) {
+      for (const guard of layer.guards.values()) {
+        const reason = guard(exec)
+        if (reason !== undefined) return reason
+      }
+    }
+    return undefined
+  }
+
 }
 
-export default ToolRuntime
+export default ToolsService
+
+export * from './contracts.ts'
+export * from './executor.ts'
+export * from './schema.ts'
+export * from './json-schema.ts'
+export * from './presentation.ts'
+export { ToolsService as ToolRuntime }
+
+// FORK DRIFT deltas re-exported from the package barrel.
+export { currentToolExecution } from './current-execution.ts'
+export { CodeRunFailedError } from './cc-executor.ts'
+export type { ToolPresentationMode } from './cc-executor.ts'
+export { CODE_DISPATCH_EVENT, CODE_DISPATCH_START_EVENT } from './types.ts'
+export type { CodeDispatchEventData, CodeDispatchStartEventData } from './types.ts'
+export {
+  CC_TO_HARNESS_TOOLS,
+  KNOWN_HARNESS_TOOLS,
+  translateToolNames,
+  ccToolAliases,
+  ccCanonicalToolName,
+  type ToolNameTranslationPolicy,
+} from './cc-names.ts'
+export type { JsonValue } from '@deepseek-ai/dsh-util-values'

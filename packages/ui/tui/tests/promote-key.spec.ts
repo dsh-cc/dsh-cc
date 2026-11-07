@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -280,7 +281,7 @@ describe('driver promotion gate (ccCollectorRegistry + env kill switch)', () => 
       agents: {
         create: async () => ({
           agent: {
-            options: {},
+            options: {}, model: fakeAgentModel({}),
             session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-1',
             status: 'idle',

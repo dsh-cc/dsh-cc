@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -52,7 +53,7 @@ function makeSeedCtx(): {
       create: async (o: unknown) => {
         const agentOpts = (o as { agentOptions?: Record<string, unknown> })?.agentOptions ?? {}
         agentRef.current = {
-            options: agentOpts,
+            options: agentOpts, model: fakeAgentModel(agentOpts),
             session: { id: 's-boot', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-boot',
             status: 'idle',
