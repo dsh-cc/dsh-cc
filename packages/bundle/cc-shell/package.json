@@ -35,10 +35,10 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-agent": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-home-paths": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-schedule": ">=0.2.1-rc.5"
+    "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-schedule": ">=0.2.2-rc.1"
   },
   "dependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",

@@ -29,18 +29,18 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-ptc-runtime": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-scope": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-session": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-system-prompt": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-tools": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-user-approval": ">=0.2.1-rc.5",
-    "@deepseek-ai/dsh-working-directory": ">=0.2.1-rc.5",
+    "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-ptc-runtime": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-user-approval": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-working-directory": ">=0.2.2-rc.1",
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@deepseek-ai/dsh-util-values": ">=0.2.1-rc.5"
+    "@deepseek-ai/dsh-util-values": ">=0.2.2-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
