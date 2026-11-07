@@ -11,6 +11,7 @@ import SessionStore from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE } from '@dsh-cc/permission-rules'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 type Listener = (ns: string, ...rest: unknown[]) => unknown
 
@@ -73,6 +74,9 @@ async function mount(provider: unknown): Promise<Context> {
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(PermissionRules, {
     fileEditTools: ['edit'],
     readOnlyTools: ['read'],
@@ -103,6 +107,9 @@ describe('permission-rules duplicate settings-section tolerance', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(PermissionRules, {
       fileEditTools: ['edit'],
       readOnlyTools: ['read'],

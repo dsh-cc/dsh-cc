@@ -114,6 +114,7 @@ function writeClaudeConfigs(names: string[]): { claudeMcpJson: string; claudeDot
 /** A fixture server whose initialize response is delayed by MCP_FIXTURE_DELAY_MS (from its config env). */
 const FIXTURE_SLOW_SERVER = `
 import { createInterface } from 'node:readline'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 const respond = (id, result) => {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n')
@@ -169,6 +170,9 @@ async function newCtx(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   return ctx
 }
 

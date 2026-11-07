@@ -12,6 +12,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime, { JsonSchemaError } from '@dsh-cc/tools'
 import * as ToolStructuredOutput from '@dsh-cc/tool-structured-output'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const BUGS_SCHEMA = {
   type: 'object',
@@ -29,12 +31,15 @@ async function mount(): Promise<{ ctx: Context; dispose: () => Promise<void> }> 
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   return { ctx, dispose: () => ctx.fiber.dispose() }
 }
 
 function registerAndCall(ctx: Context, args: unknown) {
   ctx.tools.register(ToolStructuredOutput.createStructuredOutputTool(BUGS_SCHEMA))
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId('so-' + Math.random()),
     name: 'StructuredOutput',
@@ -109,6 +114,9 @@ describe('plugin registration paths', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(ToolStructuredOutput, { schema: BUGS_SCHEMA })
     expect(ctx.tools.schemas().map(s => s.name)).toEqual(['StructuredOutput'])
   })

@@ -62,6 +62,8 @@ vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
 // mocked SDK even through a static import.
 import { apply, Config as ConfigSchema } from '@dsh-cc/mcp-client/src/index.ts'
 import type { McpConnectionsService } from '@dsh-cc/mcp-client/src/registry.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 // ---- Helpers ----
 
@@ -69,6 +71,9 @@ async function mountRegistry(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   return ctx
 }
 
@@ -158,7 +163,7 @@ describe('deferStartupConnect: true', () => {
       expect(registryOf(ctx).entries().find(e => e.name === 'srv')).toMatchObject({ state: 'ready', toolCount: 1 })
     })
 
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: 'defer-call-1' as never,
       name: 'mcp__srv__remote',

@@ -24,7 +24,7 @@ import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-
 import CcBasicCompactionEngine from '@dsh-cc/compaction-basic'
 import CompactionCostGate, { foldCounters as foldCostGateCounters } from '@dsh-cc/compaction-cost-gate'
 import ContextCrusher, { foldCounters as foldCcrCounters } from '@dsh-cc/context-crusher'
-import { defineContentToolFixture } from '@dsh-cc/tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import type { SessionLogEvent } from '@dsh-cc/cache-trajectory'
 import type { TaskDescriptor } from './corpus.ts'
 import { foldMetricVector, type MetricVector } from './metrics.ts'

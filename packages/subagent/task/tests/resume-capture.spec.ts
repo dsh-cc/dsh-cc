@@ -36,6 +36,7 @@ import { toAgentOptions } from '@dsh-cc/model-aliases'
 import { PinStore, definitionFingerprint, personaHash } from '@dsh-cc/subagent-resume-pins'
 import { overlayRoute, probeWorkspace } from '../src/resume-capture.ts'
 import { apply as applyTask } from '../src/index.ts'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const roots: string[] = []
 afterEach(() => {
@@ -153,7 +154,7 @@ function text(result: { content: { type: string; text?: string }[] }): string {
 
 let calls = 0
 function callTool(ctx: Context, name: string, args: unknown, agent: Agent) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++calls}`),
     name,

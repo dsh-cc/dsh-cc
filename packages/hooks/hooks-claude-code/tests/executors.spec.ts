@@ -10,7 +10,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
-import { defineContentToolFixture } from '@dsh-cc/tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { contentToHookOutput, interpolatePrompt } from '@dsh-cc/hooks-claude-code'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 

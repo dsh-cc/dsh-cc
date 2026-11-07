@@ -52,6 +52,7 @@
     "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
     "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
     "@deepseek-ai/dsh-tool-bash": "link:../../../../deepseek-harness/packages/shell/tool-bash",
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
     "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
     "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",
     "@deepseek-ai/dsh-working-directory": "link:../../../../deepseek-harness/packages/session/working-directory",

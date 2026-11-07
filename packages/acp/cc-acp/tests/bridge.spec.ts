@@ -17,6 +17,7 @@ import { SessionPersistenceRevision, type SessionPersistenceSnapshot } from '@de
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import { makeBridgeHarness, textResponse, type BridgeHarness } from './harness.ts'
 import { startHttpMcpFixture } from './http-fixture.ts'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /** This package's own version, asserted against the ACP agentInfo brand (§5.3). */
 const pkgVersion = (JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version

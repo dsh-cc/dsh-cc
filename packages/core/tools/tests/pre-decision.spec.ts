@@ -7,16 +7,21 @@
  */
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { ToolCallId } from '@deepseek-ai/dsh-llm'
+import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { executeToolInvocation } from './executor-fixture.ts'
 import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import ToolRuntime, { defineTool, TOOL_ABORTED_BEFORE_DISPATCH, type PreToolDecision } from '@dsh-cc/tools'
 
 const testToolSignal = new AbortController().signal
 
 async function setup() {
   const ctx = new Context()
+  await ctx.plugin(LlmRuntime)
+  await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   return ctx
@@ -35,20 +40,11 @@ const echoTool = defineTool({
   },
 })
 
-/** Minimal Agent stand-in satisfying the approval seam's audit enclosure. */
+/** Minimal real-Session Agent stand-in satisfying the approval seam's audit enclosure. */
 function fakeAgent(): Agent {
-  const events = [{ type: 'turn/start', data: { turn: 1 } }] as never[]
-  return {
-    session: {
-      seq: events.length,
-      snapshotEvents: (): readonly unknown[] => [...events],
-      eventAt: (seq: number): unknown => events[seq],
-      append: (type: string, data: unknown) => {
-        events.push({ type, data })
-        return {}
-      },
-    },
-  } as unknown as Agent
+  const session = Session.create(SessionId('pre-decision-fake-agent'))
+  session.append('turn/start', { turn: 1 })
+  return { session } as unknown as Agent
 }
 
 describe('PreToolDecision executor contract', () => {
@@ -62,7 +58,7 @@ describe('PreToolDecision executor contract', () => {
     } as never)
     ctx.on('tools/pre-execute', async (_exec, _next): Promise<PreToolDecision> => ({ kind: 'cancel' }))
 
-    await expect(ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'probe', arguments: {} }))
+    await expect(executeToolInvocation(ctx, { signal: testToolSignal, callId: ToolCallId('c1'), name: 'probe', arguments: {} }))
       .resolves.toMatchObject({
         isError: true,
         content: [{ type: 'text', text: 'Error: tool call aborted before dispatch' }],
@@ -77,7 +73,7 @@ describe('PreToolDecision executor contract', () => {
     ctx.on('tools/pre-execute', async (_exec, _next): Promise<PreToolDecision> =>
       ({ kind: 'deny', reason: 'denied by policy', info: { name: 'PolicyError', code: 'POLICY_DENIED' } }))
 
-    await expect(ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {} }))
+    await expect(executeToolInvocation(ctx, { signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {} }))
       .resolves.toMatchObject({
         isError: true,
         content: [{ type: 'text', text: 'Error: denied by policy' }],
@@ -87,6 +83,9 @@ describe('PreToolDecision executor contract', () => {
 
   it('ask.displayReason forwards into the approval request next to the audited reason', async () => {
     const ctx = await setup()
+    // ApprovalService injects `sessionProjections`; without it the plugin does
+    // not activate and every ask degrades to the no-seam deny.
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(ApprovalService)
     ctx.tools.register(echoTool)
     const seen: ApprovalRequest[] = []
@@ -97,7 +96,7 @@ describe('PreToolDecision executor contract', () => {
     ctx.on('tools/pre-execute', async (_exec, _next): Promise<PreToolDecision> =>
       ({ kind: 'ask', reason: 'hook wants a human', displayReason: { en: 'Allow it?', zh: '允许吗？' } }))
 
-    const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {}, agent: fakeAgent() })
+    const result = await executeToolInvocation(ctx, { signal: testToolSignal, callId: ToolCallId('c1'), name: 'echo', arguments: {}, agent: fakeAgent() })
     expect(result.isError).toBe(false)
     expect(seen[0]).toMatchObject({
       reason: 'hook wants a human',

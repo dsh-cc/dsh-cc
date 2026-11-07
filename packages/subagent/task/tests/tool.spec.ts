@@ -28,6 +28,8 @@ import { BACKGROUND_SECTION_TEXT } from '../src/index.ts'
 import { collectorsForSession } from '../src/epoch-collector.ts'
 import { PLUGIN_AGENT_PROVIDER_BRAND } from '@dsh-cc/plugin-loader'
 import { sanitizeToolFilter } from '../src/sanitize-filter.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /** A faithfully-capability-checking fake subagents seam (mirrors assertCapabilities). */
 interface FakeProvider {
@@ -272,6 +274,9 @@ async function mount(opts: {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   const emit = (event: string, info: Record<string, unknown>): void => {
     ;(ctx as unknown as { emit(event: string, info: unknown): void }).emit(event, info)
   }
@@ -294,7 +299,7 @@ async function mount(opts: {
 
 let callCounter = 0
 async function call(ctx: Context, args: Record<string, unknown>, agent?: Agent, signal?: AbortSignal) {
-  const result = await ctx.tools.execute({
+  const result = await executeModelToolFixture(ctx, {
     signal: signal ?? new AbortController().signal,
     callId: `call-${++callCounter}` as never,
     name: TASK_TOOL,
@@ -1438,7 +1443,7 @@ describe('Task tool', () => {
       ctx.provide('agents', { get: (id: string) => (full.value && id === 'child-0' ? { status: 'running' } : undefined) })
       seam['listChildren'] = async (): Promise<{ id: string; mode: string }[]> => [{ id: 'child-0', mode: 'continuable' }]
       const agent = agentWithCtx(ctx)
-      const released = (await ctx.tools.execute({
+      const released = (await executeModelToolFixture(ctx, {
         signal: new AbortController().signal,
         callId: 'call-release-1' as never,
         name: RELEASE_AGENT_TOOL,

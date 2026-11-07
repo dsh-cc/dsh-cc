@@ -27,13 +27,14 @@
     "@deepseek-ai/cordis": ">=0.2.0-rc.2"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
-    "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis"
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
+    "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

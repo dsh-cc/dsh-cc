@@ -70,6 +70,7 @@
     "@deepseek-ai/dsh-subprocess-local": "link:../../../../deepseek-harness/packages/subprocess/subprocess-local",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
     "@deepseek-ai/dsh-tool-subagent-control": "link:../../../../deepseek-harness/packages/subagent/tool-subagent-control",
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
     "@deepseek-ai/dsh-working-directory": "link:../../../../deepseek-harness/packages/session/working-directory",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/agent-loop-mock": "workspace:^",

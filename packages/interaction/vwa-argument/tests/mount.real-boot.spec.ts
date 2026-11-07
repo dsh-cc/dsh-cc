@@ -24,6 +24,7 @@ import { ProjectStore } from '../src/store.ts'
 import { ReviewRunStore } from '../src/review-run-store.ts'
 import { CONTRACT } from './helpers.ts'
 import { resolveDeliveryProvider } from '@dsh-cc/vwa-evidence'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 const PROVIDER = 'fake-provider'
 const REVIEWER_MODEL = 'reviewer-model'
@@ -121,6 +122,9 @@ async function boot(
   const reviewer = new EnvelopeReviewer()
   ctx.llm.registerAdapter([PROVIDER], reviewer)
   await ctx.plugin(ToolRuntime as never)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(LocalJobRegistry as never, {})
   ;(ctx as unknown as { jobs: { attachController(name: string): () => void } }).jobs.attachController('test-controller')
   // Host fs tools with the harness names/argument keys (`read`/`write`, file_path).

@@ -17,6 +17,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool } from '@dsh-cc/tools'
 import DeferredToolRegistry, { TOOL_SEARCH_NAME } from '@dsh-cc/tool-search'
 import type { DeferredToolRegistration } from '@dsh-cc/tool-search'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const signal = new AbortController().signal
 
@@ -25,6 +27,9 @@ async function host(options: { toolSearch?: boolean } = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime, {})
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   if (options.toolSearch !== false) await ctx.plugin(DeferredToolRegistry)
   return ctx
 }
@@ -98,7 +103,7 @@ interface ToolSearchValue {
 }
 
 async function runToolSearch(host: Context, query: string, args: { max_results?: number; agent?: Agent } = {}) {
-  const result = await host.tools.execute({
+  const result = await executeModelToolFixture(host, {
     signal,
     callId: ToolCallId('search'),
     name: TOOL_SEARCH_NAME,

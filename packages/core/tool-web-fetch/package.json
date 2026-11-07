@@ -34,6 +34,7 @@
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
     "@deepseek-ai/dsh-tool-web": "link:../../../../deepseek-harness/packages/web/tool-web",
     "@deepseek-ai/dsh-web": "link:../../../../deepseek-harness/packages/web/web",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",

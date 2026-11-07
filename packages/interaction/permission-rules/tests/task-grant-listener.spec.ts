@@ -7,11 +7,14 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import ToolRuntime, { type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, foldClassifiers, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 const testToolSignal = new AbortController().signal
 
@@ -63,6 +66,12 @@ async function mount(config: Config = {}): Promise<{ ctx: Context; llm: FakeLlm 
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
+  // ApprovalService injects `sessionProjections`; without it the plugin does not
+  // activate and every ask degrades to the no-seam deny.
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(MemorySettings)
   await ctx.plugin(FakeRoutes)
@@ -131,14 +140,14 @@ describe('task grant on the pre-execute chain (§3.4 placement)', () => {
     await ctx.permissionRules.grants.propose(agent, descriptorPath)
     await ctx.permissionRules.grants.create(agent, descriptorPath)
 
-    const hit = await ctx.tools.execute(exec('Bash', { command: 'echo ok' }, agent))
+    const hit = await executeModelToolFixture(ctx, exec('Bash', { command: 'echo ok' }, agent))
     expect(hit.isError).toBe(false)
     expect(text(hit)).toBe('ran:echo ok')
     // Deterministic allow: no arbitration ran and nothing was asked.
     expect(classifierCalls(llm)).toHaveLength(0)
     expect(asked).toHaveLength(0)
 
-    const miss = await ctx.tools.execute(exec('Bash', { command: 'rm -rf build' }, agent))
+    const miss = await executeModelToolFixture(ctx, exec('Bash', { command: 'rm -rf build' }, agent))
     expect(miss.isError).toBe(false)
     expect(classifierCalls(llm).length).toBeGreaterThan(0)
     expect(foldClassifiers(agent.session.snapshotEvents())).toHaveLength(1)
@@ -157,10 +166,10 @@ describe('task grant on the pre-execute chain (§3.4 placement)', () => {
     ctx.permissionRules.setMode(agent, 'auto')
     await ctx.permissionRules.grants.propose(agent, descriptorPath)
     await ctx.permissionRules.grants.create(agent, descriptorPath)
-    const inside = await ctx.tools.execute(exec('edit', { file_path: join(root, 'docs/a.md') }, agent))
+    const inside = await executeModelToolFixture(ctx, exec('edit', { file_path: join(root, 'docs/a.md') }, agent))
     expect(inside.isError).toBe(false)
     expect(classifierCalls(llm)).toHaveLength(0)
-    const outside = await ctx.tools.execute(exec('edit', { file_path: join(root, 'src/a.ts') }, agent))
+    const outside = await executeModelToolFixture(ctx, exec('edit', { file_path: join(root, 'src/a.ts') }, agent))
     expect(outside.isError).toBe(true)
     expect(classifierCalls(llm).length).toBeGreaterThan(0)
   })
@@ -180,7 +189,7 @@ describe('task grant on the pre-execute chain (§3.4 placement)', () => {
     expect(grant.root).toBe(root)
     expect(ctx.permissionRules.grants.of(agent).map(entry => entry.grantId)).toEqual([grant.grantId])
 
-    const before = await ctx.tools.execute(exec('Bash', { command: 'echo ok' }, agent))
+    const before = await executeModelToolFixture(ctx, exec('Bash', { command: 'echo ok' }, agent))
     expect(before.isError).toBe(false)
     expect(classifierCalls(llm)).toHaveLength(0)
 
@@ -188,7 +197,7 @@ describe('task grant on the pre-execute chain (§3.4 placement)', () => {
     expect(ctx.permissionRules.grants.revoke(agent, grant.grantId)).toBe(true)
     expect(ctx.permissionRules.grants.of(agent)).toHaveLength(0)
     // A revoked grant no longer admits anything: the call now reaches arbitration.
-    const after = await ctx.tools.execute(exec('Bash', { command: 'echo ok' }, agent))
+    const after = await executeModelToolFixture(ctx, exec('Bash', { command: 'echo ok' }, agent))
     expect(after.isError).toBe(true)
     expect(classifierCalls(llm).length).toBeGreaterThan(0)
   })

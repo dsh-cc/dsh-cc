@@ -13,6 +13,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
 import { apply } from '@dsh-cc/mcp-client/src/index.ts'
 import type { Config } from '@dsh-cc/mcp-client'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 function crashConfig(): Config {
   return {
@@ -54,6 +55,9 @@ describe('supervisor warn carries the stdio stderr tail (real child)', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     const { warns } = captureWarns(ctx)
 
     await apply(ctx, crashConfig())

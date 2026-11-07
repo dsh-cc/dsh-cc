@@ -22,6 +22,8 @@ import type {
 import ToolRuntimeCC from '@dsh-cc/tools'
 import * as toolWorkflow from '../src/index.ts'
 import type { CcWorkflowRunRegistry, WorkflowJournalHandle } from '../src/registry.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const testToolSignal = new AbortController().signal
 
@@ -101,6 +103,9 @@ async function setup() {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntimeCC)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(StubEngine)
   await ctx.plugin(toolWorkflow, {})
   return { ctx, engine: ctx.workflowEngine as StubEngine, registry: ctx.ccWorkflowRunRegistry as CcWorkflowRunRegistry }
@@ -123,7 +128,7 @@ function seedJournal(runId: string): string {
 
 /** Launch one run through the tool and wait for its registration. */
 async function launch(ctx: Context, engine: StubEngine, agent?: unknown): Promise<WorkflowRunIdType> {
-  const pending = ctx.tools.execute({
+  const pending = executeModelToolFixture(ctx, {
     signal: testToolSignal,
     callId: ToolCallId(`call-${Math.random()}`),
     name: 'workflow',

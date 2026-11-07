@@ -24,6 +24,8 @@ import {
   type ReleaseSubagentsLike,
 } from '@dsh-cc/command-agents/release'
 import { RELEASE_AGENT_TOOL, registerReleaseAgentTool } from '../src/release-agent.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 function renderCopy(outcome: Awaited<ReturnType<typeof runRelease>>): string {
   return renderReleaseOutcome(outcome)
@@ -723,11 +725,14 @@ describe('release_agent tool surface', () => {
     ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
   })
 
   it('T12: exec.agent undefined → the guard error', async () => {
     registerReleaseAgentTool(ctx)
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: 'call-t12' as never,
       name: RELEASE_AGENT_TOOL,
@@ -771,7 +776,7 @@ describe('release_agent tool surface', () => {
       + '(the durable catalog is retained); `/agents` marks it [released] for the '
       + 'rest of this process.',
     )
-    const pending = ctx.tools.execute({
+    const pending = executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: 'call-t14' as never,
       name: RELEASE_AGENT_TOOL,

@@ -266,9 +266,9 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
     }
     let restrictableNames: ReadonlySet<string> = new Set()
     try {
-      const view = (ctx.tools as unknown as { view?: (agent: unknown) => { restrictableNames?: ReadonlySet<string> } | undefined })
-        .view?.(callingAgent)
-      restrictableNames = view?.restrictableNames ?? new Set()
+      const known = (ctx.tools as unknown as { restrictableNames?: (agent: unknown) => ReadonlySet<string> })
+        .restrictableNames?.(callingAgent)
+      restrictableNames = known ?? new Set()
     } catch {
       restrictableNames = new Set()
     }

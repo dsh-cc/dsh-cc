@@ -27,6 +27,7 @@ import { defineTool } from '@dsh-cc/tools'
 import { PinStore, applyResumePinsPlugin } from '@dsh-cc/subagent-resume-pins'
 import { apply as applyTask } from '@dsh-cc/subagent-task'
 import { apply as applyModelRoutes, type ModelRoutes } from '@dsh-cc/model-aliases'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const roots: string[] = []
 afterEach(() => {
@@ -111,7 +112,7 @@ describe('cc-shell resume-pins composition (§4.10)', () => {
 
   it('arms capture from the service store: a background Task spawn writes a pin under the composed pinsRoot', async () => {
     const { ctx, parent, pinsRoot } = await compose([textResponse('working')])
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'subagent_fork',

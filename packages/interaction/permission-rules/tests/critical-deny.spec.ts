@@ -11,11 +11,13 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import ToolRuntime, { type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { SettingsProvider } from '@dsh-cc/settings-provider'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, CRITICAL_BASH_PATTERNS, type Config } from '@dsh-cc/permission-rules'
 import type { PermissionMode } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 const testToolSignal = new AbortController().signal
 
@@ -39,6 +41,9 @@ async function mount(config: Config = {}, settings: Record<string, unknown> = {}
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(MemorySettings)
   await ctx.plugin(PermissionRules, {
     bashToolName: 'Bash',
@@ -113,7 +118,7 @@ describe('critical deny matrix: patterns × modes × sandbox grants', () => {
           } else if (mode !== 'default') {
             ctx.permissionRules.setMode(agent, mode)
           }
-          const result = await ctx.tools.execute(exec('Bash', { command }, agent))
+          const result = await executeModelToolFixture(ctx, exec('Bash', { command }, agent))
           expect(result.isError).toBe(true)
           // Plan mode's pre-existing read-only wrap denies mutating calls
           // before the guard layer; every other mode shows the guard reason.
@@ -131,13 +136,13 @@ describe('critical deny matrix: patterns × modes × sandbox grants', () => {
 describe('non-critical behavior is unchanged', () => {
   it('with the classifier off and dangerousPatterns replaced, sudo runs (not reclassified)', async () => {
     const ctx = await mount({}, { dangerousPatterns: ['\\bnevermatches\\b'] })
-    const result = await ctx.tools.execute(exec('Bash', { command: 'sudo ls' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'sudo ls' }))
     expect(result.isError).toBe(false)
   })
 
   it('with the classifier on (default config), a HIGH command still hard-denies via the classifier', async () => {
     const ctx = await mount({ classifierEnabled: true })
-    const result = await ctx.tools.execute(exec('Bash', { command: 'sudo ls' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'sudo ls' }))
     expect(result.isError).toBe(true)
     expect(text(result)).not.toMatch(GUARD_REASON)
   })
@@ -147,14 +152,14 @@ describe('settings criticalDeny (append-only, hot reload)', () => {
   it('appends a settings pattern AFTER the built-ins and denies with [curated]', async () => {
     const ctx = await mount()
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { criticalDeny: ['\\bshutdown\\b'] })
-    const result = await ctx.tools.execute(exec('Bash', { command: 'shutdown now' }))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'shutdown now' }))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(GUARD_REASON)
     // Built-ins still deny alongside the appended entry.
-    expect((await ctx.tools.execute(exec('Bash', { command: 'rm -rf /' }))).isError).toBe(true)
+    expect((await executeModelToolFixture(ctx, exec('Bash', { command: 'rm -rf /' }))).isError).toBe(true)
     // Removal on reload drops only the appended entry.
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, { criticalDeny: [] })
-    const restored = await ctx.tools.execute(exec('Bash', { command: 'shutdown now' }))
+    const restored = await executeModelToolFixture(ctx, exec('Bash', { command: 'shutdown now' }))
     expect(restored.isError).toBe(false)
   })
 
@@ -164,9 +169,9 @@ describe('settings criticalDeny (append-only, hot reload)', () => {
     await ctx.settings.update(PERMISSION_SETTINGS_NAMESPACE, {
       criticalDeny: ['([unclosed', '\\bshutdown\\b'],
     })
-    const bad = await ctx.tools.execute(exec('Bash', { command: 'ls (x' }))
+    const bad = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls (x' }))
     expect(bad.isError).toBe(false)
-    const good = await ctx.tools.execute(exec('Bash', { command: 'shutdown now' }))
+    const good = await executeModelToolFixture(ctx, exec('Bash', { command: 'shutdown now' }))
     expect(good.isError).toBe(true)
     expect(text(good)).toMatch(GUARD_REASON)
   })
@@ -177,7 +182,7 @@ describe('bypass-immune DSL regression guard', () => {
     const ctx = await mount({ rules: { bypassImmune: ['edit(.git*)'] } })
     const agent = agentWithSandbox('dsl-reg')
     ctx.permissionRules.setMode(agent, 'bypassPermissions')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '.git/config' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '.git/config' }, agent))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/bypass-immune/)
   })

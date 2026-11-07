@@ -16,6 +16,8 @@ import ToolRuntime, { defineTool } from '@dsh-cc/tools'
 import DeferredToolRegistry from '@dsh-cc/tool-search'
 import { AgentRegistry } from '../src/registry.ts'
 import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const DEFERRED_MCP = 'mcp__github__create_issue'
 
@@ -88,6 +90,9 @@ async function mount(opts: { toolSearch?: unknown; order?: string[] } = {}): Pro
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   const emit = (event: string, info: Record<string, unknown>): void => {
     ;(ctx as unknown as { emit(event: string, info: unknown): void }).emit(event, info)
   }
@@ -133,7 +138,7 @@ async function mount(opts: { toolSearch?: unknown; order?: string[] } = {}): Pro
 
 let callCounter = 0
 async function call(ctx: Context, args: Record<string, unknown>, agent?: Agent) {
-  const result = await ctx.tools.execute({
+  const result = await executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: `call-${++callCounter}` as never,
     name: TASK_TOOL,
@@ -283,6 +288,9 @@ describe('integration: real DeferredToolRegistry preload', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(DeferredToolRegistry)
     ctx.toolSearch.registerDeferred({
       name: 'mcp__fakesrv__heavy_tool',

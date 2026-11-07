@@ -25,6 +25,7 @@ import type { CommandsSeamLike, SavedWorkflowCommandDefinition, WorkflowCommands
 import { savedWorkflowDirs } from '../src/launch.ts'
 import * as toolWorkflow from '../src/index.ts'
 import { WorkflowEngine } from '@deepseek-ai/dsh-workflow'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 /** Placeholder engine so the tool plugin's `workflowEngine` inject resolves (cordis lazily defers an unsatisfied plugin). */
 class DummyEngine extends WorkflowEngine {
@@ -313,6 +314,9 @@ describe('apply wiring (index.ts)', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntimeCC)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(DummyEngine)
     await ctx.plugin(toolWorkflow, {})
     expect(ctx.tools).toBeDefined()
@@ -324,6 +328,9 @@ describe('apply wiring (index.ts)', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntimeCC)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(DummyEngine)
     await ctx.plugin(toolWorkflow, {})
     expect(ctx.tools).toBeDefined()

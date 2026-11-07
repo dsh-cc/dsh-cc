@@ -17,6 +17,8 @@ import PermissionRules, {
   type Config,
 } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const testToolSignal = new AbortController().signal
 
@@ -117,6 +119,9 @@ async function mount(opts: { agents?: boolean } = {}): Promise<{ ctx: Context; l
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(MemorySettings)
   await ctx.plugin(FakeRoutes)
@@ -203,7 +208,7 @@ describe('S6/D9 return checks (listener integration)', () => {
     const agent = agentOf('parent-deny')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'repo sweep' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'repo sweep' }, agent))
     expect(result.isError).toBe(false)
     const contexts = contextsOf(result)
     expect(contexts.some(text => text.includes('subagent') && text.includes('repo sweep') && text.includes('denied'))).toBe(true)
@@ -216,7 +221,7 @@ describe('S6/D9 return checks (listener integration)', () => {
     const agent = agentOf('parent-clean')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
     expect(result.isError).toBe(false)
     expect(contextsOf(result)).toEqual([])
     expect(foldClassifiers(agent.session.snapshotEvents())).toHaveLength(0)
@@ -229,11 +234,11 @@ describe('S6/D9 return checks (listener integration)', () => {
     const agent = agentOf('parent-storm')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const contexts = contextsOf(await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent)))
+    const contexts = contextsOf(await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent)))
     expect(contexts.some(text => text.includes('5') && text.includes('escalat'))).toBe(true)
 
     agents!.children.set('child-2', childOf('child-2', 'tripProbeBreaker'))
-    const result2 = await ctx.tools.execute(exec('subagent_fork', { prompt: 's2', description: 'second' }, agent))
+    const result2 = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 's2', description: 'second' }, agent))
     expect(contextsOf(result2).some(text => text.includes('second'))).toBe(true)
   })
 
@@ -246,14 +251,14 @@ describe('S6/D9 return checks (listener integration)', () => {
     ctx.permissionRules.setMode(agent, 'auto')
 
     // No resolvable child: unresolvable, no warning, no debug noise.
-    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
     expect(contextsOf(result)).toEqual([])
     expect(debug).not.toHaveBeenCalled()
 
     // Resolver throws: debug note, never a fabricated warning.
     const throwing = vi.spyOn(agents as unknown as { get: (id: string) => unknown }, 'get')
       .mockImplementation(() => { throw new Error('registry exploded') })
-    const result2 = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep2', description: 's2' }, agent))
+    const result2 = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep2', description: 's2' }, agent))
     expect(contextsOf(result2)).toEqual([])
     expect(debug.mock.calls.some(args => args.join(' ').includes('registry exploded'))).toBe(true)
     throwing.mockRestore()
@@ -267,7 +272,7 @@ describe('S6/D9 return checks (listener integration)', () => {
     const agent = agentOf('parent-flag')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
     expect(result.isError).toBe(false)
     const contexts = contextsOf(result)
     expect(contexts.some(text => text.includes('Security notice') && text.includes('re-anchor'))).toBe(true)
@@ -282,7 +287,7 @@ describe('S6/D9 return checks (listener integration)', () => {
     const agent = agentOf('parent-cleanprobe')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
     expect(contextsOf(result)).toEqual([])
     expect(llm.calls).toHaveLength(1) // the probe lane ran once
     expect(foldProbes(agent.session.snapshotEvents()).at(-1)).toMatchObject({ verdict: 'pass' })
@@ -301,7 +306,7 @@ describe('S6/D9 return checks (listener integration)', () => {
     const agent = agentOf('parent-ccr')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
     expect(contextsOf(result).some(text => text.includes('Security notice'))).toBe(true)
   })
 
@@ -312,7 +317,7 @@ describe('S6/D9 return checks (listener integration)', () => {
     const agent = agentOf('parent-default')
     ctx.permissionRules.setMode(agent, 'default')
 
-    const result = await ctx.tools.execute(exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('subagent_fork', { prompt: 'sweep', description: 'sweep' }, agent))
     expect(llm.calls).toHaveLength(0)
     expect(contextsOf(result)).toEqual([])
   })

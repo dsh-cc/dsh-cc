@@ -3,10 +3,13 @@ import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import ToolRuntime, { type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import PermissionRules, { SESSION_ALLOW_EVENT, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 const testToolSignal = new AbortController().signal
 
@@ -20,6 +23,12 @@ async function mount(config: Config = {}): Promise<Context> {
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
+  // ApprovalService injects `sessionProjections`; without it the plugin does not
+  // activate and every ask degrades to the no-seam deny.
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(PermissionRules, {
     fileEditTools: ['edit'],
@@ -76,7 +85,7 @@ describe('session allowlist × decide() integration', () => {
     const asked: unknown[] = []
     ctx.on('approval/request', async req => { asked.push(req); return 'allowed-once' })
 
-    const askedOnce = await ctx.tools.execute(exec('edit', { file_path: '/outside/x.txt' }, agent))
+    const askedOnce = await executeModelToolFixture(ctx, exec('edit', { file_path: '/outside/x.txt' }, agent))
     // The ask routes to the approval listener, which grants once — the call
     // runs, but the ask demonstrably fired.
     expect(askedOnce.isError).toBe(false)
@@ -85,7 +94,7 @@ describe('session allowlist × decide() integration', () => {
 
     // Grant the whole-tool rule for this session: the next MEDIUM call runs.
     ctx.permissionRules.addSessionAllow(agent, 'edit')
-    const allowed = await ctx.tools.execute(exec('edit', { file_path: '/outside/y.txt' }, agent))
+    const allowed = await executeModelToolFixture(ctx, exec('edit', { file_path: '/outside/y.txt' }, agent))
     expect(allowed.isError).toBe(false)
     expect(text(allowed)).toBe('edited:/outside/y.txt')
     expect(asked).toHaveLength(1)
@@ -116,7 +125,7 @@ describe('session allowlist × decide() integration', () => {
     const agent = agentWithCwd('session-allow-3', '/work')
     ctx.on('approval/request', async () => 'allowed-once')
     ctx.permissionRules.addSessionAllow(agent, 'edit')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '/work/.bashrc' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '/work/.bashrc' }, agent))
     expect(result.isError).toBe(true)
     expect(text(result)).toMatch(/risk classifier/)
   })
@@ -129,7 +138,7 @@ describe('session allowlist × decide() integration', () => {
     ctx.permissionRules.addSessionAllow(agent, 'edit')
     ctx.permissionRules.clearSessionAllows(agent)
 
-    const result = await ctx.tools.execute(exec('edit', { file_path: '/outside/x.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '/outside/x.txt' }, agent))
     expect(result.isError).toBe(false)
     expect(asked).toHaveLength(1)
   })
@@ -142,13 +151,13 @@ describe('session allowlist × decide() integration', () => {
 
     // Without the grant, the rule ask prompts (this also pins the F1-removal
     // behavior at LOW risk — design doc D3).
-    const first = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    const first = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }, agent))
     expect(asked).toHaveLength(1)
     expect(first.isError).toBe(false)
 
     // Grant the rule: the next rule-ask is allowed WITHOUT prompting (D2b).
     ctx.permissionRules.addSessionAllow(agent, 'Bash(ls)')
-    const second = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    const second = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }, agent))
     expect(second.isError).toBe(false)
     expect(text(second)).toBe('ran:ls')
     expect(asked).toHaveLength(1)
@@ -163,7 +172,7 @@ describe('session allowlist × decide() integration', () => {
     const ctxListener = vi.fn(async (req: unknown) => { asked.push(req); return 'allowed-once' })
     ctx.on('approval/request', ctxListener)
     ctx.permissionRules.addSessionAllow(granted, 'edit')
-    const result = await ctx.tools.execute(exec('edit', { file_path: '/outside/x.txt' }, other))
+    const result = await executeModelToolFixture(ctx, exec('edit', { file_path: '/outside/x.txt' }, other))
     expect(result.isError).toBe(false)
     expect(asked).toHaveLength(1)
   })
@@ -185,7 +194,7 @@ describe('WS3 sandbox escalation auto-approval integration', () => {
       reason: 'sandbox escalation: write outside the per-call policy',
     }))
 
-    const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }, agent))
     expect(result.isError).toBe(false)
     expect(text(result)).toBe('ran:ls')
     expect(reachedFallback).not.toHaveBeenCalled()
@@ -208,7 +217,7 @@ describe('WS3 sandbox escalation auto-approval integration', () => {
       reason: 'sandbox escalation: write outside the per-call policy',
     }))
 
-    const result = await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }, agent))
     expect(result.isError).toBe(false)
     expect(reachedFallback).toHaveBeenCalledOnce()
   })
@@ -226,7 +235,7 @@ describe('WS3 sandbox escalation auto-approval integration', () => {
       reason: 'sandbox escalation: write outside the per-call policy',
     }))
 
-    await ctx.tools.execute(exec('Bash', { command: 'ls' }, agent))
+    await executeModelToolFixture(ctx, exec('Bash', { command: 'ls' }, agent))
     expect(reachedFallback).toHaveBeenCalledOnce()
   })
 })

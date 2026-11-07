@@ -30,6 +30,7 @@ import { applyResumePinsPlugin } from '@dsh-cc/subagent-resume-pins'
 import { apply as applyTask } from '@dsh-cc/subagent-task'
 import { apply as applyCommandAgents } from '@dsh-cc/command-agents'
 import { isReleased, isReleasing } from '@dsh-cc/command-agents/release'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const roots: string[] = []
 afterEach(() => {
@@ -85,7 +86,7 @@ describe('cc-shell release-valve composition (T25)', () => {
     const { ctx, parent } = await compose(['hang', textResponse('after release')])
 
     // A hung running child.
-    const start = await ctx.tools.execute({
+    const start = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-1'),
       name: 'subagent_fork',
@@ -105,7 +106,7 @@ describe('cc-shell release-valve composition (T25)', () => {
     }, { timeout: 10_000 })
 
     // release_agent through the tools seam.
-    const release = await ctx.tools.execute({
+    const release = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('call-2'),
       name: 'release_agent',

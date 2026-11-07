@@ -14,7 +14,7 @@ import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import SubagentRuntime, { SubagentRunId } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
-import { defineContentToolFixture } from '@dsh-cc/tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 
 // TIMEOUT-BUDGET: keep byte-identical across spec files.

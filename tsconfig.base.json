@@ -77,6 +77,9 @@
       "@dsh-cc/tools": [
         "./packages/core/tools/src/index.ts"
       ],
+      "@dsh-cc/tools/executor": [
+        "./packages/core/tools/src/cc-executor.ts"
+      ],
       "@dsh-cc/subagent-resume-pins": [
         "./packages/subagent/resume-pins/src/index.ts"
       ],

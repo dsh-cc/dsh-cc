@@ -4,11 +4,14 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture, type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import ToolRuntime, { type ToolExecutionInput, type ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture, executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import PermissionRules, { PERMISSION_SETTINGS_NAMESPACE, foldProbes, type Config } from '@dsh-cc/permission-rules'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 const testToolSignal = new AbortController().signal
 
@@ -80,6 +83,12 @@ async function mount(): Promise<{ ctx: Context; llm: FakeLlm }> {
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
+  // ApprovalService injects `sessionProjections`; without it the plugin does not
+  // activate and every ask degrades to the no-seam deny.
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(MemorySettings)
   await ctx.plugin(FakeRoutes)
@@ -124,7 +133,7 @@ describe('S7 listener × PI probe (integration)', () => {
     const agent = agentOf('probe-flag')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('read', { file_path: '/work/evil.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('read', { file_path: '/work/evil.txt' }, agent))
     const contexts = (result as unknown as { additionalContexts?: { content: ContentBlock[] }[] }).additionalContexts ?? []
     const [warning] = contextTexts(contexts)
     expect(warning).toContain('Security notice')
@@ -140,7 +149,7 @@ describe('S7 listener × PI probe (integration)', () => {
     const agent = agentOf('probe-default')
     ctx.permissionRules.setMode(agent, 'default')
 
-    await ctx.tools.execute(exec('read', { file_path: '/work/x.txt' }, agent))
+    await executeModelToolFixture(ctx, exec('read', { file_path: '/work/x.txt' }, agent))
     expect(llm.calls).toHaveLength(0)
     expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
   })
@@ -151,7 +160,7 @@ describe('S7 listener × PI probe (integration)', () => {
     const agent = agentOf('probe-off')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    await ctx.tools.execute(exec('read', { file_path: '/work/x.txt' }, agent))
+    await executeModelToolFixture(ctx, exec('read', { file_path: '/work/x.txt' }, agent))
     expect(llm.calls).toHaveLength(0)
 expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
   })
@@ -173,7 +182,7 @@ expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
     const agent = agentOf('probe-prepend-crusher')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('read', { file_path: '/work/x.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('read', { file_path: '/work/x.txt' }, agent))
     expect(contextTexts(seenByOuter)).toEqual([
       expect.stringContaining('Security notice'),
     ])
@@ -197,7 +206,7 @@ expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
     const agent = agentOf('probe-default-order')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('read', { file_path: '/work/x.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('read', { file_path: '/work/x.txt' }, agent))
     expect(texts(result)).toEqual(['CCR-REWRITTEN'])
     const contexts = (result as unknown as { additionalContexts?: { content: ContentBlock[] }[] }).additionalContexts ?? []
     expect(contextTexts(contexts)).toEqual([expect.stringContaining('Security notice')])
@@ -211,7 +220,7 @@ expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
     const agent = agentOf('probe-fault')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    const result = await ctx.tools.execute(exec('read', { file_path: '/work/x.txt' }, agent))
+    const result = await executeModelToolFixture(ctx, exec('read', { file_path: '/work/x.txt' }, agent))
     expect(result.isError).toBe(false)
     expect(texts(result)).toEqual(['read:/work/x.txt'])
     expect(foldProbes(agent.session.snapshotEvents()).at(-1)).toMatchObject({ verdict: 'pass', failure: 'error' })
@@ -229,7 +238,7 @@ expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
     const agent = agentOf('probe-todo')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    await ctx.tools.execute(exec('todo_write', {}, agent))
+    await executeModelToolFixture(ctx, exec('todo_write', {}, agent))
     expect(llm.calls).toHaveLength(0)
     expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
   })
@@ -246,11 +255,11 @@ expect(foldProbes(agent.session.snapshotEvents())).toHaveLength(0)
     const agent = agentOf('probe-patterns')
     ctx.permissionRules.setMode(agent, 'auto')
 
-    await ctx.tools.execute(exec('todo_write', {}, agent))
+    await executeModelToolFixture(ctx, exec('todo_write', {}, agent))
     expect(llm.calls).toHaveLength(1)
     // ...and a read result is now OUT of the (replaced) scan set.
     const readCalls = llm.calls.length
-    await ctx.tools.execute(exec('read', { file_path: '/work/x.txt' }, agent))
+    await executeModelToolFixture(ctx, exec('read', { file_path: '/work/x.txt' }, agent))
     expect(llm.calls).toHaveLength(readCalls)
   })
 })

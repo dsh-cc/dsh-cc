@@ -16,6 +16,8 @@ import ToolRuntime from '@dsh-cc/tools'
 import { apply as applyModelRoutes } from '@dsh-cc/model-aliases'
 import { AgentRegistry } from '../src/registry.ts'
 import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const BLESSED = {
   gauge: { provider: 'orchestrix', model: 'llmbox_systemone/laya', protocol: 'systemone' },
@@ -44,6 +46,9 @@ async function mount() {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   const starts: Record<string, unknown>[] = []
   const provider = {
     capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
@@ -81,7 +86,7 @@ async function mount() {
 }
 
 async function callTask(ctx: Context, ws: string, subagentType: string) {
-  return await ctx.tools.execute({
+  return await executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: `call-${subagentType}` as never,
     name: TASK_TOOL,

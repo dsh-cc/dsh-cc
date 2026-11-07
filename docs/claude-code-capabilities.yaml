@@ -3644,7 +3644,7 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "critical deny matrix: patterns × modes × sandbox grants" }
       - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "skips an invalid criticalDeny regex instead of throwing" }
       - { type: test, path: packages/interaction/permission-rules/tests/critical-deny.spec.ts, anchor: "a wildcard/prefix bypassImmune rule still parses and denies under bypass" }
-      - { type: source, path: packages/core/tools/src/runtime-code.ts, anchor: "serviceAsk" }
+      - { type: source, path: packages/core/tools/src/pipeline.ts, anchor: "serviceAsk" }
     deviation:
       kind: downgrade
       summary: >-

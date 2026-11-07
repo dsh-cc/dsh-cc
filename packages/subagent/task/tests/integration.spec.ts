@@ -28,6 +28,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
 import { apply as applyTask } from '../src/index.ts'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const roots: string[] = []
 afterEach(() => {
@@ -151,7 +152,7 @@ function text(result: { content: { type: string; text?: string }[] }): string {
 
 let calls = 0
 function callTool(ctx: Context, name: string, args: unknown, agent: Agent) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++calls}`),
     name,

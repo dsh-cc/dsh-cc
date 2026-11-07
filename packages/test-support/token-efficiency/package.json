@@ -30,6 +30,7 @@
     "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
     "@types/js-yaml": "^4.0.9"
   }
 }

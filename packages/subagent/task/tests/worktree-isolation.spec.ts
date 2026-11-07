@@ -22,6 +22,8 @@ import ToolRuntime from '@dsh-cc/tools'
 import { AgentRegistry } from '../src/registry.ts'
 import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
 import { mountActorContractGate, ActorContractGate } from '../src/actor-contract-gate.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const signal = new AbortController().signal
 
@@ -132,6 +134,9 @@ async function mount(opts: { parentCwdInSubdir?: boolean; definitionBody?: strin
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(ScriptedShell)
   const shell = ctx.shell as ScriptedShell
   shell.script = creationScript(ws)
@@ -185,7 +190,7 @@ async function mount(opts: { parentCwdInSubdir?: boolean; definitionBody?: strin
 
 let callCounter = 0
 async function call(ctx: Context, args: Record<string, unknown>, agent: Agent) {
-  return (await ctx.tools.execute({
+  return (await executeModelToolFixture(ctx, {
     signal,
     callId: `call-${++callCounter}` as never,
     name: TASK_TOOL,

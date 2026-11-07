@@ -6,14 +6,28 @@ import type { Scope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
 import type { PtcRunRequest, PtcRunResult, PtcRunSpec } from '@deepseek-ai/dsh-ptc-runtime'
-import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineContentToolFixture, defineTool } from '@dsh-cc/tools'
-import type { Config, JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@dsh-cc/tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
+import ToolRuntime, { CodeRunFailedError, RUN_CODE_NAME, TOOL_ABORTED_BEFORE_DISPATCH, defineTool } from '@dsh-cc/tools'
+import type { JsonSchemaNode, PostToolDecision, ToolExecutionResult } from '@dsh-cc/tools'
+import { CcToolExecutor } from '../src/cc-executor.ts'
+import type { Config } from '../src/cc-executor.ts'
+import { executeThroughExecutor } from './executor-fixture.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type {SessionEventMap} from '@deepseek-ai/dsh-session'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 const testToolSignal = new AbortController().signal
+
+/** The executors a context has selected; the registry owns `selectExecutor`, so specs keep their own map. */
+const mountedExecutors = new WeakMap<Context, CcToolExecutor>()
+
+/** The fork executor mounted on this context (the fixture mounts one in every `setup()`). */
+function executorOf(ctx: Context): CcToolExecutor {
+  const executor = mountedExecutors.get(ctx)
+  if (executor === undefined) throw new Error('no fork executor mounted on this context')
+  return executor
+}
 
 /**
  * Code Mode unit tier (per the Agent Note's plan): provider contribution per mode,
@@ -64,13 +78,21 @@ async function setup(options: SetupOptions = {}) {
     ctx.provide('workingDirectory', { defaultDirectory: '/workspace', ensure: () => Promise.resolve('/workspace') })
   }
   await ctx.plugin(SystemPrompt, { ...options.toolOrder ? { toolOrder: options.toolOrder } : {} })
-  await ctx.plugin(ToolRuntime, { mode: options.mode ?? 'code', ...options.maxParallelSubCalls !== undefined ? { maxParallelSubCalls: options.maxParallelSubCalls } : {} })
+  await ctx.plugin(ToolRuntime)
   let runtime: FakeRuntime | undefined
   if (options.runtime !== false) {
     await ctx.plugin(FakeRuntime, options.runtime ?? {})
     runtime = ctx.ptcRuntime as FakeRuntime
   }
-  return { ctx, tools: ctx.tools, systemPrompt: ctx.systemPrompt, runtime: runtime! }
+  // The fork executor owns presentation now (upstream split execution into
+  // pluggable ToolExecutors): the mode is executor config, not registry config.
+  const executor = new CcToolExecutor(ctx, {
+    mode: options.mode ?? 'code',
+    ...options.maxParallelSubCalls !== undefined ? { maxParallelSubCalls: options.maxParallelSubCalls } : {},
+  })
+  ctx.tools.setExecutor(executor)
+  mountedExecutors.set(ctx, executor)
+  return { ctx, tools: ctx.tools, systemPrompt: ctx.systemPrompt, runtime: runtime!, executor }
 }
 
 /** Mint an agent scope configured like production that can register scoped tool policy. */
@@ -119,7 +141,7 @@ async function runCode(
   code: string,
   extras: { agent?: Agent; signal?: AbortSignal; description?: string } = {},
 ): Promise<ToolExecutionResult> {
-  return ctx.tools.execute({
+  return executeThroughExecutor(ctx, {
     signal: testToolSignal,
     callId: ToolCallId('call-1'),
     name: RUN_CODE_NAME,
@@ -207,13 +229,16 @@ describe('mode-aware wire contribution', () => {
       return {
         ...assembly,
         sections: assembly.sections.filter(section => section.name !== 'tools:sdk'),
-        tools: assembly.tools.filter(tool => tool.name !== RUN_CODE_NAME),
       }
     }, { prepend: true })
 
     const assembly = await systemPrompt.assemble()
     expect(assembly.sections.some(section => section.name === 'tools:sdk')).toBe(false)
-    expect(assembly.tools.some(tool => tool.name === RUN_CODE_NAME)).toBe(false)
+    // Upstream rc.5 moved the tool array OUT of the assemble waterfall
+    // (`systemPrompt.toolOrder` canonicalizes before it), so a sections-only
+    // listener is what "authoritative" can now mean here; the tools the
+    // executor describes are unchanged.
+    expect(assembly.tools.some(tool => tool.name === RUN_CODE_NAME)).toBe(true)
   })
 
   it.each(['code', 'both'] as const)('lets one scope shadow the default SDK section in mode %s', async (mode) => {
@@ -300,10 +325,10 @@ describe('mode-aware wire contribution', () => {
       execute: () => Promise.resolve([{ type: 'text' as const, text: 'impostor' }]),
     })
 
-    expect(() => scope.ctx.tools.register(impostor)).toThrow(/reserved for the Code Mode presentation transport/)
-    expect(() => ctx.tools.register(impostor)).toThrow(/reserved for the Code Mode presentation transport/)
-    expect(() => scope.ctx.tools.restrict({ allow: [RUN_CODE_NAME] })).toThrow(/cannot name reserved Code Mode presentation transport/)
-    expect(() => scope.ctx.tools.restrict({ deny: [RUN_CODE_NAME] })).toThrow(/cannot name reserved Code Mode presentation transport/)
+    expect(() => scope.ctx.tools.register(impostor)).toThrow(/is reserved for the PTC mode presentation transport/)
+    expect(() => ctx.tools.register(impostor)).toThrow(/is reserved for the PTC mode presentation transport/)
+    expect(() => scope.ctx.tools.restrict({ allow: [RUN_CODE_NAME] })).toThrow(/cannot name reserved PTC mode presentation transport/)
+    expect(() => scope.ctx.tools.restrict({ deny: [RUN_CODE_NAME] })).toThrow(/cannot name reserved PTC mode presentation transport/)
     scope.ctx.systemPrompt.section({ name: 'scoped-note', order: 149, text: 'safe note' })
     scope.ctx.tools.register(defineContentToolFixture({
       name: 'scoped_safe',
@@ -318,7 +343,7 @@ describe('mode-aware wire contribution', () => {
     expect(transports[0]?.description).toContain('Execute a TypeScript program')
     expect(assembly.sections.find(section => section.name === 'scoped-note')?.text).toBe('safe note')
     expect(assembly.sections.find(section => section.name === 'tools:sdk')?.text).toContain('scoped_safe:')
-    expect(ctx.tools.get(RUN_CODE_NAME, agent)).toBe(ctx.tools.get(RUN_CODE_NAME))
+    expect(executorOf(ctx).requireCodeTransport()).toBe(executorOf(ctx).requireCodeTransport())
     const result = await runCode(ctx, 'return 1', { agent })
     expect(result.content).toEqual([{ type: 'text', text: '(run_code completed with no output)' }])
   })
@@ -444,7 +469,7 @@ describe('mode-aware wire contribution', () => {
     // requirePtcRuntime rejects such a language earlier; this reaches the
     // guard on its own.
     const { ctx } = await setup({ mode: 'code', runtime: { language: 'ruby' } })
-    const definition = ctx.tools.get(RUN_CODE_NAME)
+    const definition = executorOf(ctx).requireCodeTransport()
     // Names the known languages, symmetric with the SDK_RENDERERS guard: this
     // is the reachable rejection, so it must be at least as diagnosable.
     expect(() => definition?.description)
@@ -459,7 +484,7 @@ describe('mode-aware wire contribution', () => {
     // rather than throwing. None of those readers feeds a model: assembly goes
     // through wireSchemas, which requires a runtime first.
     const { ctx } = await setup({ mode: 'code', runtime: false })
-    const definition = ctx.tools.get(RUN_CODE_NAME)
+    const definition = executorOf(ctx).requireCodeTransport()
     expect(definition?.description).toContain('Execute a TypeScript program')
     const params = definition?.parameters as { properties: { code: { description: string } } }
     expect(params.properties.code.description).toBe('The program: the body of an async TypeScript function.')
@@ -471,16 +496,24 @@ describe('mode-aware wire contribution', () => {
     await expect(systemPrompt.assemble()).rejects.toThrow(/toolOrder lists unregistered tool "echo"/)
   })
 
-  it('removes run_code and the SDK section when the registry fiber disposes (HMR safety)', async () => {
+  it('removes run_code and the SDK section when the executor fiber disposes (HMR safety)', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
     await ctx.plugin(FakeRuntime, {})
-    const fiber = await ctx.plugin(ToolRuntime, { mode: 'code' })
-    expect(ctx.tools.get(RUN_CODE_NAME)).toBeDefined()
+    await ctx.plugin(ToolRuntime)
+    // Mount the executor as a fiber so its registered sections dispose with it.
+    const fiber = await ctx.plugin({
+      inject: ['tools', 'systemPrompt'],
+      apply(inner: Context) {
+        inner.tools.setExecutor(new CcToolExecutor(inner, { mode: 'code' }))
+      },
+    })
+    expect((await ctx.systemPrompt.assemble()).sections.some(section => section.name === 'tools:sdk')).toBe(true)
     await fiber.dispose()
-    const assembly = await ctx.systemPrompt.assemble()
-    expect(assembly.tools).toEqual([])
-    expect(assembly.sections.some(section => section.name === 'tools:sdk')).toBe(false)
+    // The executor-owned sections dispose with the fiber, and the vacated
+    // selection stays unavailable (upstream keeps it that way so a program
+    // cannot fall through to a different provider) until a replacement mounts.
+    await expect(ctx.systemPrompt.assemble()).rejects.toThrow(/tool executor is unavailable/)
   })
 })
 
@@ -1273,7 +1306,10 @@ describe('the run_code dispatch bridge', () => {
   it('executing run_code under a missing runtime is a structured isError, not a crash', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
-    await ctx.plugin(ToolRuntime, { mode: 'code' })
+    await ctx.plugin(ToolRuntime)
+    const executor = new CcToolExecutor(ctx, { mode: 'code' })
+    ctx.tools.setExecutor(executor)
+    mountedExecutors.set(ctx, executor)
     const result = await runCode(ctx, 'program')
     expect(result.isError).toBe(true)
     expect((result.content[0] as { text: string }).text).toContain('requires a PTC runtime')
@@ -1281,7 +1317,7 @@ describe('the run_code dispatch bridge', () => {
 
   it('presents the model-authored description as the execute-card title over the program input', async () => {
     const { ctx } = await setup({ mode: 'code' })
-    const tool = ctx.tools.get(RUN_CODE_NAME)!
+    const tool = executorOf(ctx).requireCodeTransport()!
     // The description labels the card (the bash description precedent); the
     // program itself remains the expanded raw input.
     expect(tool.presentCall?.({ code: 'return 1', description: 'Return the constant one' })).toEqual({
@@ -1309,7 +1345,7 @@ describe('the run_code dispatch bridge', () => {
     runtime.behavior = () => Promise.resolve(output)
 
     const result = await runCode(ctx, 'return 1')
-    const tool = ctx.tools.get(RUN_CODE_NAME)!
+    const tool = executorOf(ctx).requireCodeTransport()!
 
     expect(result.content).toEqual([{ type: 'text', text }])
     // Presenters keep the pending program title and render this durable content
@@ -1328,7 +1364,7 @@ describe('the run_code dispatch bridge', () => {
     })
 
     const result = await runCode(ctx, 'return 1')
-    const tool = ctx.tools.get(RUN_CODE_NAME)!
+    const tool = executorOf(ctx).requireCodeTransport()!
 
     expect(result.content).toEqual([{ type: 'text', text: preview }])
     expect('presentResult' in tool).toBe(false)
@@ -1342,7 +1378,7 @@ describe('the run_code dispatch bridge', () => {
     })
 
     const result = await runCode(ctx, 'return 1')
-    const tool = ctx.tools.get(RUN_CODE_NAME)!
+    const tool = executorOf(ctx).requireCodeTransport()!
 
     expect(result.isError).toBe(true)
     expect(result.content).toEqual([{
@@ -1622,34 +1658,33 @@ describe('the run_code dispatch bridge', () => {
     expect(derived[0]?.role).toBe('user')
   })
 
-  it('direct construction rejects a non-positive parallel sub-call cap at load', async () => {
+  it('direct construction in code mode builds the reserved transport', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
-    expect(() => new ToolRuntime(ctx, { mode: 'code', maxParallelSubCalls: 0 }))
-      .toThrow('maxParallelSubCalls must be a positive integer')
-  })
-
-  it('direct construction in code mode defaults the parallel sub-call cap', async () => {
-    const ctx = new Context()
-    await ctx.plugin(SystemPrompt, {})
-    const registry = new ToolRuntime(ctx, { mode: 'code' })
-    expect(registry.get(RUN_CODE_NAME)).toBeDefined()
+    await ctx.plugin(ToolRuntime)
+    const executor = new CcToolExecutor(ctx, { mode: 'code' })
+    expect(executor.requireCodeTransport().name).toBe(RUN_CODE_NAME)
   })
 
   it('defaults to native mode under direct construction with no config', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
-    const registry = new ToolRuntime(ctx)
-    expect(registry.get(RUN_CODE_NAME)).toBeUndefined()
+    await ctx.plugin(ToolRuntime)
+    const executor = new CcToolExecutor(ctx)
+    ctx.tools.setExecutor(executor)
     const assembly = await ctx.systemPrompt.assemble()
     expect(assembly.sections.some(section => section.name === 'tools:sdk')).toBe(false)
   })
+
   it('denies a model-direct native-tool call under code mode as UNKNOWN_TOOL', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
-    const registry = new ToolRuntime(ctx, { mode: 'code' })
+    await ctx.plugin(ToolRuntime)
+    const executor = new CcToolExecutor(ctx, { mode: 'code' })
+    ctx.tools.setExecutor(executor)
+    mountedExecutors.set(ctx, executor)
     registerEcho(ctx, 'write')
-    const result = await registry.execute({
+    const result = await executeThroughExecutor(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('call-1'),
       name: 'write',
@@ -1667,11 +1702,13 @@ describe('the run_code dispatch bridge', () => {
   it('routes a pre-aborted collapsed call through ABORTED_BEFORE_DISPATCH', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, {})
-    const registry = new ToolRuntime(ctx, { mode: 'code' })
+    await ctx.plugin(ToolRuntime)
+    const executor = new CcToolExecutor(ctx, { mode: 'code' })
+    ctx.tools.setExecutor(executor)
     registerEcho(ctx, 'write')
     const aborted = new AbortController()
     aborted.abort()
-    const result = await registry.execute({
+    const result = await executeThroughExecutor(ctx, {
       signal: aborted.signal,
       callId: ToolCallId('call-1'),
       name: 'write',
@@ -1686,16 +1723,28 @@ describe('the run_code dispatch bridge', () => {
 /**
  * Presentation is per agent, because an agent preset composes it: one
  * deployment runs a Code Mode agent beside native ones, and neither may see
- * the other's catalog. The deployment `mode` is the default those agents
- * shadow, not a process-wide fact.
+ * the other's catalog.
+ *
+ * Upstream split execution into pluggable executors, each selected per scope
+ * (`setExecutor`); the fork expresses "this agent presents in another mode" by
+ * registering a fork executor on the agent's own scope instead of the retired
+ * registry-level `presentAs`. The contract these cases pin is unchanged: the
+ * ANNOUNCED surface and the CALLABLE surface agree for that agent, the
+ * deployment default is untouched, and the reserved transport is never
+ * dispatchable for an agent that did not present it.
  */
 describe('per-agent presentation', () => {
+  /** Select a fork executor for one scope (the scoped-executor form of `presentAs`). */
+  function presentAs(scope: Scope, mode: 'native' | 'code' | 'both'): () => void {
+    return scope.ctx.tools.setExecutor(new CcToolExecutor(scope.ctx, { mode }))
+  }
+
   it('gives one agent Code Mode while the deployment stays native', async () => {
     const { ctx, systemPrompt } = await setup({ mode: 'native' })
     const calls = registerEcho(ctx)
     const { scope, agent } = await mintAgentScope(ctx)
 
-    scope.ctx.tools.presentAs('code')
+    presentAs(scope, 'code')
 
     const coded = await systemPrompt.assemble({ scope: agent })
     expect(coded.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
@@ -1703,7 +1752,7 @@ describe('per-agent presentation', () => {
       .toContain('echo')
     // Announced surface and callable surface must agree for THIS agent, whose
     // mode is its own rather than the deployment's.
-    const denied = await ctx.tools.execute({
+    const denied = await executeThroughExecutor(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('coded-direct'),
       name: 'echo',
@@ -1723,30 +1772,20 @@ describe('per-agent presentation', () => {
     const { bindScopeParent } = await import('@deepseek-ai/dsh-scope')
     const { ctx, systemPrompt } = await setup({ mode: 'native' })
     const calls = registerEcho(ctx)
-    // The preset's standing scope declares once; the agent only PARENTS to it
-    // (the per-preset standing mount configuration has no per-agent declaration).
+    // The preset's standing scope selects once; the agent only PARENTS to it.
     const standing = await mintAgentScope(ctx, 'preset:code-like')
-    standing.scope.ctx.tools.presentAs('code')
+    presentAs(standing.scope, 'code')
     const joined = await mintAgentScope(ctx, 'joined-agent')
     bindScopeParent(joined.agent, standing.agent)
     const loner = await mintAgentScope(ctx, 'loner-agent')
 
-    expect(ctx.tools.get(RUN_CODE_NAME, joined.agent)).toBeDefined()
     const coded = await systemPrompt.assemble({ scope: joined.agent })
     expect(coded.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
-    // Through the EXECUTOR, not just the wire: the deployment default is
-    // `native` here, so a collapse predicate reading it instead of this
-    // scope's effective mode would announce [run_code] and still execute the
-    // native call — the bypass, reopened for exactly the preset composition
-    // `dsh-agent-tool-presentation` produces.
-    expect(ctx.tools.executionMode({
-      signal: testToolSignal,
-      callId: ToolCallId('preset-coded-schedule'),
-      name: 'echo',
-      arguments: { value: 'joined' },
-      agent: joined.agent,
-    })).toEqual({ kind: 'exclusive' })
-    const denied = await ctx.tools.execute({
+    // Through the EXECUTOR, not just the wire: a collapse predicate reading the
+    // deployment default instead of this scope's effective mode would announce
+    // [run_code] and still execute the native call — the bypass, reopened for
+    // exactly the preset composition this case pins.
+    const denied = await executeThroughExecutor(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('preset-coded-direct'),
       name: 'echo',
@@ -1756,10 +1795,9 @@ describe('per-agent presentation', () => {
     expect(denied.error?.info).toEqual({ name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' })
     expect(calls).toEqual([])
     // A sibling that never parented stays native, as does the global view.
-    expect(ctx.tools.get(RUN_CODE_NAME, loner.agent)).toBeUndefined()
     const native = await systemPrompt.assemble({ scope: loner.agent })
     expect(native.tools.map(tool => tool.name)).toEqual(['echo'])
-    const allowed = await ctx.tools.execute({
+    const allowed = await executeThroughExecutor(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('native-sibling-direct'),
       name: 'echo',
@@ -1771,17 +1809,26 @@ describe('per-agent presentation', () => {
   })
 
   it('keeps run_code out of a native agent\'s dispatch table', async () => {
-    const { ctx } = await setup({ mode: 'native' })
+    const { ctx, systemPrompt } = await setup({ mode: 'native' })
     registerEcho(ctx)
     const coded = await mintAgentScope(ctx, 'coded')
     const plain = await mintAgentScope(ctx, 'plain')
-    coded.scope.ctx.tools.presentAs('code')
+    presentAs(coded.scope, 'code')
 
     // Not merely hidden from the prompt: the transport one agent presents must
     // not be dispatchable by another that never presented it.
-    expect(ctx.tools.get(RUN_CODE_NAME, coded.agent)).toBeDefined()
-    expect(ctx.tools.get(RUN_CODE_NAME, plain.agent)).toBeUndefined()
-    expect(ctx.tools.get(RUN_CODE_NAME)).toBeUndefined()
+    const codedAssembly = await systemPrompt.assemble({ scope: coded.agent })
+    expect(codedAssembly.tools.map(tool => tool.name)).toEqual([RUN_CODE_NAME])
+    const plainAssembly = await systemPrompt.assemble({ scope: plain.agent })
+    expect(plainAssembly.tools.map(tool => tool.name)).toEqual(['echo'])
+    const denied = await executeThroughExecutor(ctx, {
+      signal: testToolSignal,
+      callId: ToolCallId('plain-run-code'),
+      name: RUN_CODE_NAME,
+      arguments: { code: 'return 1', description: 'not presented here' },
+      agent: plain.agent,
+    })
+    expect(denied.error?.info).toEqual({ name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' })
   })
 
   it('lets an agent opt out of a code-mode deployment', async () => {
@@ -1789,7 +1836,7 @@ describe('per-agent presentation', () => {
     registerEcho(ctx)
     const { scope, agent } = await mintAgentScope(ctx)
 
-    scope.ctx.tools.presentAs('native')
+    presentAs(scope, 'native')
 
     const assembly = await systemPrompt.assemble({ scope: agent })
     expect(assembly.tools.map(tool => tool.name)).toEqual(['echo'])
@@ -1798,35 +1845,33 @@ describe('per-agent presentation', () => {
     expect(assembly.sections.find(section => section.name === 'tools:sdk')?.text).toBe('')
   })
 
-  it('restores the deployment default when the agent unloads', async () => {
+  it('leaves the scope\'s selection unavailable when its executor unloads', async () => {
+    // Upstream contract, replacing the old `presentAs` restore: an unloaded
+    // selection stays unavailable rather than falling through to the root
+    // executor, so a program cannot silently reach a different provider.
     const { ctx, systemPrompt } = await setup({ mode: 'native' })
     registerEcho(ctx)
     const { scope, agent } = await mintAgentScope(ctx)
-    const dispose = scope.ctx.tools.presentAs('code')
+    const dispose = presentAs(scope, 'code')
 
     dispose()
 
-    const assembly = await systemPrompt.assemble({ scope: agent })
-    expect(assembly.tools.map(tool => tool.name)).toEqual(['echo'])
-    expect(assembly.sections.some(section => section.name === 'tools:sdk')).toBe(false)
+    await expect(systemPrompt.assemble({ scope: agent }))
+      .rejects.toThrow(/tool executor is unavailable/)
+    // The deployment default is untouched for every other scope.
+    const global = await systemPrompt.assemble()
+    expect(global.tools.map(tool => tool.name)).toEqual(['echo'])
   })
 
-  it('refuses a second declaration for the same agent', async () => {
+  it('refuses a second executor selection for the same agent', async () => {
     const { ctx } = await setup({ mode: 'native' })
     const { scope } = await mintAgentScope(ctx)
-    scope.ctx.tools.presentAs('code')
+    presentAs(scope, 'code')
 
     // Two answers to "which form does the model see" is a contradiction, and
     // silently keeping either one would make the composition unreadable.
-    expect(() => scope.ctx.tools.presentAs('both'))
-      .toThrow('conflicts with "code" already declared')
-  })
-
-  it('refuses an unscoped declaration', async () => {
-    const { ctx } = await setup({ mode: 'native' })
-
-    expect(() => ctx.tools.presentAs('code'))
-      .toThrow('requires a scoped context')
+    expect(() => presentAs(scope, 'both'))
+      .toThrow('Only one tool executor may be registered in each scope')
   })
 
   it('reserves run_code even where no agent presents it', async () => {
@@ -1841,7 +1886,7 @@ describe('per-agent presentation', () => {
     const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
     registerEcho(ctx)
     const { scope, agent } = await mintAgentScope(ctx)
-    scope.ctx.tools.presentAs('both')
+    presentAs(scope, 'both')
 
     await expect(systemPrompt.assemble({ scope: agent }))
       .rejects.toThrow('mode "both" requires a PTC runtime')

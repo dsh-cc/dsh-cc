@@ -1,18 +1,16 @@
-/**
- * Public tool type vocabulary: definitions, results, execution contexts,
- * scheduler contracts, restriction/config shapes, and value projection
- * helpers shared by the registry and its pipeline.
- * @module tool-types
- */
-import type { Agent } from '@deepseek-ai/dsh-agent'
+/** Tool definitions and invocation data shared by registries and executors. @module */
+import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { ToolCallId, ContentBlock, ToolSchema } from '@deepseek-ai/dsh-llm'
-import { deepFreeze } from '@deepseek-ai/dsh-util-values'
-import type {UserMessage} from '@deepseek-ai/dsh-session'
-import type {JsonValue} from '@deepseek-ai/dsh-util-values'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
-import type { ToolCallView, ToolResultView } from './presentation.ts'
-import type { ToolErrorInfo, ToolFailure } from './abort-utils.ts'
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { ScopeKey } from '@deepseek-ai/dsh-scope'
+import type { UserMessage } from '@deepseek-ai/dsh-session'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { JsonSchemaNode } from './json-schema.ts'
+import type { ToolCallView, ToolResultView } from './presentation.ts'
+
+/** Reserved model-facing program transport name. */
+export const RUN_CODE_NAME = 'run_code'
+declare const toolExecutionTokenBrand: unique symbol
 
 /** Tool-owned canonical output contract used after the body returns a JSON value. */
 export interface ToolOutputDefinition {
@@ -20,7 +18,7 @@ export interface ToolOutputDefinition {
   readonly schema: JsonSchemaNode
   /** Pure projection from validated arguments and value to Native/model content. */
   render(args: unknown, value: JsonValue): ContentBlock[]
-  /** Pure replayable presentation projection, computed only for top-level calls. */
+  /** Pure replayable presentation projection for native and nested calls. */
   presentationMeta?(args: unknown, value: JsonValue): JsonValue
 }
 
@@ -31,7 +29,7 @@ export interface ToolDefinition extends ToolSchema {
   /**
    * Run one accepted call and return only its canonical lossless-JSON value.
    * Async work must observe or forward `exec.signal` and settle only after its
-   * owned work reaches quiescence. The registry preserves caller cancellation
+   * owned work reaches quiescence. The executor preserves caller cancellation
    * through around-dispatch signal replacement and does not abandon this
    * promise, but it cannot hard-kill same-process code.
    * @param args - losslessly snapshotted, frozen model arguments.
@@ -40,12 +38,22 @@ export interface ToolDefinition extends ToolSchema {
    */
   execute(args: unknown, exec: ToolRunContext): Promise<unknown>
   /**
-   * Synchronous last-mile transform for model-facing content. The registry
+   * Install execution-prepared content before `tools/post-execute` policies.
+   * The callback is captured when the call starts and runs once for a
+   * normalized outcome entering post-execute. Policy replacements remain
+   * authoritative; pipeline failures that bypass post-execute skip projection.
+   * @param exec - immutable execution identity and arguments.
+   * @param result - normalized result before post-execute policy.
+   * @returns replacement content, or undefined to preserve the renderer output.
+   */
+  projectContent?(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): ContentBlock[] | undefined
+  /**
+   * Synchronous last-mile transform for model-facing content. The executor
    * snapshots this callback when execution starts and invokes it exactly once
    * for every normalized outcome, including pipeline failures that bypass
    * `tools/post-execute`, immediately before lossless materialization.
    * Returning `undefined` preserves the content; every other result field
-   * remains registry-owned. The callback must be total and must not throw.
+   * remains executor-owned. The callback must be total and must not throw.
    * @param exec - immutable execution identity and arguments.
    * @param result - complete normalized outcome before materialization.
    * @returns replacement content, or `undefined` to preserve it.
@@ -93,6 +101,53 @@ export interface ToolDefinition extends ToolSchema {
   presentResult?(args: unknown, result: ToolResult): ToolResultView | undefined
 }
 
+/** Inputs for a tool's step-time activation condition. */
+export interface ToolActivationContext {
+  /** Agent preparing the step. */
+  readonly agent: Agent
+  /** Provider, model, and optional reasoning effort captured for the step. */
+  readonly modelSelection: Readonly<ModelSelection>
+  /** Cancellation of step preparation; asynchronous conditions must observe it. */
+  readonly signal: AbortSignal
+}
+
+/** Lifecycle-owned conditions for a registered tool. */
+export interface ToolRegistrationOptions {
+  /**
+   * Decide whether the step's requests may call the tool. Omission enables
+   * it. False excludes it from both declarations and dispatch; rejection fails
+   * step preparation. Conditions must not mutate registrations or start tool work.
+   * @param context - preparing agent, captured model selection, and cancellation signal.
+   * @returns whether the tool participates in this step.
+   */
+  readonly when?: (context: ToolActivationContext) => boolean | Promise<boolean>
+}
+
+/** One step's admitted registrations, also used by nested PTC calls. */
+export interface ResolvedToolSet {
+  /** Close admission after the step's tool batch settles. */
+  dispose(): void
+  /**
+   * Read admitted registrations that remain visible in their original scope.
+   * @param scope - exact requesting agent; another scope is never admitted.
+   * @returns original definitions excluding removed or restricted registrations.
+   */
+  view(scope: ScopeKey | undefined): ReadonlyMap<string, ToolDefinition>
+}
+
+/** Failure to determine a tool's step-time availability. */
+export class ToolActivationError extends HarnessError {
+  /**
+   * Preserve a condition failure without treating it as normal unavailability.
+   * @param name - tool whose condition rejected.
+   * @param cause - underlying condition failure.
+   */
+  constructor(name: string, cause: unknown) {
+    super(`cannot resolve availability of tool "${name}"`, 'TOOL_ACTIVATION_FAILED', { cause })
+    this.name = 'ToolActivationError'
+  }
+}
+
 /** The completed outcome handed to {@link ToolDefinition.presentResult}. */
 export interface ToolResult {
   /** The final model-facing content (or the rendered error text on failure). */
@@ -100,21 +155,20 @@ export interface ToolResult {
   /** Whether the call failed. */
   isError: boolean
   /**
-   * The tool-private presentation payload projected by its output declaration
-   * and threaded verbatim from the `tool/result` event. Absent when the tool
-   * declared no projector or the call was nested under a composite transport.
+   * The tool-private presentation payload projected by its output declaration.
+   * It is persisted on `tool/result` or `tool/ptc-dispatch` for Host presenters
+   * and Client renderers to narrow independently. Absent when the tool
+   * declared no projector.
    */
   meta?: JsonValue
 }
-
-declare const toolExecutionTokenBrand: unique symbol
 
 /** Opaque call identity that permits correlation without exposing mutable execution state. */
 export type ToolExecutionToken = symbol & { readonly [toolExecutionTokenBrand]: true }
 
 /**
- * Caller-supplied description of one tool call. {@link ToolRuntime.execute}
- * adds the registry-owned token to form a pipeline {@link ToolExecution};
+ * Parsed input to the shared invocation pipeline. The pipeline
+ * adds its own token to form a {@link ToolExecution};
  * callers do not choose that token.
  */
 export interface ToolExecutionInput {
@@ -125,18 +179,22 @@ export interface ToolExecutionInput {
    */
   readonly rootCallId?: ToolCallId
   readonly name: string
+  /** Binding-time tool schema for a PTC inner call; frozen by its producer and never logged. */
+  readonly schema?: ToolSchema
   /** Losslessly JSON-serializable parsed arguments (tools validate their own schema). */
   readonly arguments: unknown
   /** The agent on whose behalf the call runs (set by the agent loop). */
   readonly agent?: Agent
+  /** Step admission shared by Native and PTC dispatch. Conditional tools require it. */
+  readonly toolSet?: ResolvedToolSet
   /**
-   * Opaque token of the enclosing transport execution, when one exists. Code
-   * Mode sets this on SDK sub-dispatches so commit-style observers can wait for
+   * Opaque token of the enclosing transport execution, when one exists. PTC
+   * mode sets this on SDK sub-dispatches so commit-style observers can wait for
    * the outer `run_code` outcome without receiving its live mutable execution.
    * The token also marks the call as a transport sub-dispatch rather than a
-   * model-direct call: under `mode: 'code'`, only calls WITH a parent may
+   * model-direct call: with the PTC executor selected, only calls with a parent may
    * execute a native tool name — a model-direct call (no parent) is denied as
-   * `UNKNOWN_TOOL` before the policy pipeline. See {@link ToolRuntime.execute}.
+   * `UNKNOWN_TOOL` before the policy pipeline.
    */
   readonly parent?: ToolExecutionToken
   /** Required caller-owned cancellation for this invocation. */
@@ -152,13 +210,13 @@ export type ToolExecutionMode =
   | { kind: 'exclusive' }
 
 /**
- * One settled `run_code` sub-dispatch about to be logged, as seen by the
- * `tools/code-dispatch-log` waterfall: the parent execution (session owner,
- * outer call identity), the sub-call identity, and the outcome whose durable
- * copy a listener may reshape. `content` is the RENDERED result projection
- * (what a native `tool/result` would carry) — the program itself received
- * the structured `value` (or just the error message on failure); only the
- * `tool/code-dispatch` event's copy changes.
+ * FORK DRIFT (`tools/code-dispatch-log`): one settled `run_code` sub-dispatch
+ * about to be logged, as seen by the `tools/code-dispatch-log` waterfall: the
+ * parent execution (session owner, outer call identity), the sub-call identity,
+ * and the outcome whose durable copy a listener may reshape. `content` is the
+ * RENDERED result projection (what a native `tool/result` would carry) — the
+ * program itself received the structured `value` (or just the error message on
+ * failure); only the `tool/code-dispatch` event's copy changes.
  */
 export interface CodeDispatchLog {
   /** The outer `run_code` execution. */
@@ -176,23 +234,23 @@ export interface CodeDispatchLog {
 }
 
 /**
- * One pending tool call inside the registry pipeline. Parsed arguments cross
+ * One pending tool call inside the executor pipeline. Parsed arguments cross
  * one lossless-JSON materialization boundary before policy and are deep-frozen;
- * call identity, the caller signal, and the registry-assigned {@link token} are
- * readonly. The registry freezes the complete object before `tools/result`
+ * call identity, the caller signal, and the executor-assigned {@link token} are
+ * readonly. The executor freezes the complete object before `tools/result`
  * observers run.
  */
 export interface ToolExecution extends ToolExecutionInput {
   /** Root model-requested call, resolved for every root and nested execution. */
   readonly rootCallId: ToolCallId
-  /** Registry-assigned identity shared with nested calls only as their opaque `parent` token. */
+  /** Executor-assigned identity shared with nested calls only as their opaque `parent` token. */
   readonly token: ToolExecutionToken
 }
 
 /**
  * Around-dispatch view of a {@link ToolExecution}. A `tools/execute` wrapper
  * may replace the signal for its delegated lifetime, but it cannot remove it.
- * The registry fuses every replacement with the captured caller signal.
+ * The executor fuses every replacement with the captured caller signal.
  */
 export interface ToolDispatchExecution extends Omit<ToolExecution, 'signal'> {
   /** Cancellation signal visible to the next wrapper or tool body. */
@@ -200,7 +258,7 @@ export interface ToolDispatchExecution extends Omit<ToolExecution, 'signal'> {
 }
 
 /**
- * Runtime context handed to a tool implementation after the registry has
+ * Runtime context handed to a tool implementation after the executor has
  * accepted a {@link ToolExecution}. {@link deferContext} attaches context to
  * this execution's own result — a composite tool ferries nested-dispatch
  * context back to the outer result, and a leaf tool may mint a fresh
@@ -226,43 +284,62 @@ export interface ToolRunContext extends ToolExecution {
   concludeTurn(): void
 }
 
-/** Registry-owned live execution object; public pipeline views stay readonly. */
-export type MutableToolRunContext = Omit<ToolRunContext, 'signal'> & { signal: AbortSignal }
+/** Canonical error code for cancellation after a tool body was invoked. */
+export const TOOL_ABORTED = 'ABORTED'
+
+/** Canonical error code for cancellation before a tool body was invoked. */
+export const TOOL_ABORTED_BEFORE_DISPATCH = 'ABORTED_BEFORE_DISPATCH'
+
+/** Structured error metadata for a failed tool call (alongside the model-facing text). */
+export interface ToolErrorInfo {
+  name: string
+  code: string
+  /** Optional raw user-facing detail; durable projections preserve it but model-facing content does not include it. */
+  reason?: string
+}
+
+/** Canonical failure detail; internal routing information remains optional. */
+export interface ToolFailure {
+  /** Human-readable failure message without the Native `Error: ` envelope. */
+  message: string
+  /** Internal error class/code used by policy and durable diagnostics. */
+  info?: ToolErrorInfo
+}
 
 /**
- * Scheduler-only result after ordered pre-execute and guards. A `post-result`
- * still receives post-execute; a `final-result` bypasses it.
- * @internal
+ * Thrown (internally) when the model requests a tool that isn't registered.
+ * Extends {@link HarnessError} (`code: 'UNKNOWN_TOOL'`) so an unknown-tool
+ * failure is as routable as a tool-thrown one — retry/sandbox/replay code can
+ * distinguish it from a tool body's own error.
  */
-export type ScheduledToolPreparation =
-  | { kind: 'dispatch'; exec: ToolRunContext }
-  | { kind: 'post-result'; exec: ToolRunContext; result: ToolExecutionResult }
-  | { kind: 'final-result'; exec: ToolRunContext; result: ToolExecutionResult }
+export class ToolNotFoundError extends HarnessError {
+  /**
+   * @param toolName - the name the caller asked for.
+   * @param reachableFrom - how the model reaches this tool instead, when the
+   *   name IS visible and only the presentation denies calling it directly.
+   *   Omitted for a name that is registered nowhere.
+   */
+  constructor(toolName: string, reachableFrom?: string) {
+    super(
+      reachableFrom === undefined
+        ? `unknown tool "${toolName}"`
+        : `unknown tool "${toolName}": ${reachableFrom}`,
+      'UNKNOWN_TOOL',
+    )
+    this.name = 'ToolNotFoundError'
+  }
+}
 
-/**
- * Scheduler-only dispatch result. A `post-result` still receives post-execute;
- * a `final-result` already matches {@link ToolRuntime.execute} failure semantics.
- * @internal
- */
-export type ScheduledToolDispatch =
-  | { kind: 'post-result'; result: ToolExecutionResult }
-  | { kind: 'final-result'; result: ToolExecutionResult }
+/** Thrown when a tool body or post-policy value violates its declared output. */
+export class ToolOutputError extends HarnessError {
+  /** Schema/value violations in validation order. */
+  readonly violations: string[]
 
-/**
- * Symbol-keyed scheduler view that keeps pre/post policy ordered while
- * overlapping dispatch. Ordinary callers use {@link ToolRuntime.execute};
- * this is not a plugin extension point.
- * @internal
- */
-export interface ToolRuntimeScheduler {
-  /** Materialize input, run the ordered pre-execute/guard gate, and decide what stage follows. */
-  prepare(exec: ToolExecutionInput): Promise<ScheduledToolPreparation>
-  /** Run only the around-dispatch/body stage. */
-  dispatch(exec: ToolRunContext): Promise<ScheduledToolDispatch>
-  /** Run post-execute and definition-owned content finalization, then materialize and notify. */
-  finalize(exec: ToolRunContext, result: ToolExecutionResult): Promise<ToolExecutionResult>
-  /** Run definition-owned content finalization, then materialize and notify without post-execute. */
-  finish(exec: ToolRunContext, result: ToolExecutionResult): ToolExecutionResult
+  constructor(toolName: string, violations: string[]) {
+    super(`tool "${toolName}" returned invalid output: ${violations.join('; ')}`, 'INVALID_TOOL_OUTPUT')
+    this.name = 'ToolOutputError'
+    this.violations = violations
+  }
 }
 
 /** Successful canonical tool execution, including its Native/model projection. */
@@ -298,8 +375,8 @@ export type ToolExecutionResult = ToolExecutionSuccess | ToolExecutionFailure
  * the canonical cancellation result without presenting a policy denial; `ask`
  * runs only after an approval service returns `allowed-once` and otherwise
  * denies; its `reason` is the audited approval reason and its optional
- * `displayReason` is the localized prompt text. Input rewriting is excluded
- * because arguments are already logged and presented.
+ * `displayReason` is the localized prompt text. Input rewriting is excluded because arguments are already logged and
+ * presented.
  */
 export type PreToolDecision =
   | { kind: 'allow' }
@@ -316,66 +393,15 @@ export type PostToolDecision =
   | { kind: 'accept'; value: JsonValue; content?: never; additionalContexts?: UserMessage[] }
   | { kind: 'block'; feedback: ContentBlock[]; additionalContexts?: UserMessage[] }
 
-/** Snapshot and freeze one durable tool-result projection or reject lossy data. */
-export function materializePresentation<T>(candidate: T): T {
-  const detached = snapshotJsonValue(candidate)
-  if (detached === undefined) {
-    throw new TypeError('tool result must be losslessly JSON-serializable')
-  }
-  return deepFreeze(detached)
-}
-
-/** How the registry presents its tools to the model (see {@link Config.mode}). */
-export type ToolPresentationMode = 'native' | 'code' | 'both'
-
-/** Plugin config: how the registered tools are presented to the model. */
-export interface Config {
-  /**
-   * Model presentation. `native` (default) sends every visible schema; `code`
-   * sends only `run_code` plus a generated SDK prompt and collapses the
-   * executor to the same surface (a model-direct call may only name
-   * `run_code`; `run_code` SDK sub-dispatches keep every visible tool); `both`
-   * sends both forms. Code modes require a `ctx.ptcRuntime` whose `language`
-   * has a registered SDK renderer (TypeScript or Python) and fail prompt
-   * assembly when it is absent or has no renderer. Under `code`, native names
-   * in `toolOrder` are invalid.
-   */
-  mode?: ToolPresentationMode
-  /**
-   * Concurrency cap for a `run_code` program's overlapping sub-calls
-   * (default 10, the loop scheduler's own default). Sub-calls follow the
-   * native scheduling contract — only calls whose tools classify
-   * concurrency-safe overlap; exclusive calls form barriers — so `1`
-   * restores strictly serial dispatch. Must be a positive integer.
-   */
-  maxParallelSubCalls?: number
-}
-
 /**
  * Per-scope filter over global tools. Restrictions intersect and do not affect
- * scoped registrations or the reserved Code Mode transport.
+ * scoped registrations or the reserved PTC mode transport.
  */
 export interface ToolRestriction {
   /** Global tool names that stay visible; everything else is removed. */
   readonly allow?: readonly string[]
   /** Global tool names removed from visibility. */
   readonly deny?: readonly string[]
-}
-
-/** One restriction compiled at registration for repeated live-global lookup. */
-export interface CompiledToolRestriction {
-  readonly allow?: ReadonlySet<string>
-  readonly deny?: ReadonlySet<string>
-}
-
-/** One scope's complete registry view, derived in a single layer traversal. */
-export interface ToolView {
-  /** Visible definitions after restrictions, scoped shadowing, and transport insertion. */
-  readonly visible: ReadonlyMap<string, ToolDefinition>
-  /** Pre-restriction capability names used by prompt-order validation. */
-  readonly knownNames: ReadonlySet<string>
-  /** Current global names that a scoped restriction may name. */
-  readonly restrictableNames: ReadonlySet<string>
 }
 
 /**
@@ -387,4 +413,3 @@ export interface ToolView {
  * @returns a final denial reason, or `undefined` to leave the call allowed.
  */
 export type ToolGuard = (execution: Readonly<ToolExecution>) => string | undefined
-

@@ -39,6 +39,7 @@
     "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-skill": "link:../../../../deepseek-harness/packages/skill/skill",
-    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt"
+    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit"
   }
 }

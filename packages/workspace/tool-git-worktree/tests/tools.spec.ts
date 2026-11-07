@@ -23,6 +23,8 @@ import { FileSystem } from '@deepseek-ai/dsh-fs'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import * as ToolGitWorktree from '@dsh-cc/tool-git-worktree'
 import { clearActiveWorktreeSession } from '../src/worktree.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const signal = new AbortController().signal
 
@@ -99,6 +101,9 @@ async function setup() {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(ScriptedShell)
   await ctx.plugin(FakeFs)
   await ctx.plugin(ToolGitWorktree)
@@ -107,7 +112,7 @@ async function setup() {
 
 let callCounter = 0
 function call(ctx: Context, name: string, args: unknown, agent?: Agent) {
-  return ctx.tools.execute({ signal, callId: ToolCallId(`call-${++callCounter}`), name, arguments: args, ...agent ? { agent } : {} })
+  return executeModelToolFixture(ctx, { signal, callId: ToolCallId(`call-${++callCounter}`), name, arguments: args, ...agent ? { agent } : {} })
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -306,6 +311,9 @@ describe('registration and presentation', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(ScriptedShell)
     await ctx.plugin(FakeFs)
     const fiber = await ctx.plugin(ToolGitWorktree)
@@ -340,6 +348,9 @@ describe('registration and presentation', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(ScriptedShell)
     await ctx.plugin(FakeFs)
     await ctx.plugin(ToolGitWorktree, { enableExitWorktree: false })

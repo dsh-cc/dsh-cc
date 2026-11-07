@@ -14,6 +14,7 @@ import type { KvUnit, KvUnitDescriptor, StorageBackend } from '@deepseek-ai/dsh-
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import * as toolSchedule from '@deepseek-ai/dsh-schedule'
 import * as toolScheduleTools from '@deepseek-ai/dsh-tool-schedule'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /** In-memory StorageBackend: per-record maps plus the optional global slot. */
 class MemoryBackend implements StorageBackend {
@@ -99,7 +100,7 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
     // in the MOUNTING scope (0.2.1-rc.5), so its names resolve without an agent
     // — unlike the old host-plane registration the service used to perform.
 
-    const created = await ctx.agents.withInitiator(root.agent, () => ctx.tools.execute({
+    const created = await ctx.agents.withInitiator(root.agent, () => executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-schedule-create'),
       name: 'schedule_create',
@@ -135,7 +136,7 @@ describe('@deepseek-ai/dsh-schedule bundled by cc-shell', () => {
     expect(child.agent.session.header.delegationDepth).toBe(1)
     expect(ctx.tools.get('schedule_list', child.agent)?.name).toBe('schedule_list')
 
-    const refused = await ctx.agents.withInitiator(child.agent, () => ctx.tools.execute({
+    const refused = await ctx.agents.withInitiator(child.agent, () => executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-schedule-child-list'),
       name: 'schedule_list',

@@ -15,6 +15,7 @@ import { defineTool } from '@dsh-cc/tools'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import * as coordinator from '../src/index.ts'
 import { parkParent } from './park-parent.ts'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const testToolSignal = new AbortController().signal
 
@@ -73,7 +74,7 @@ function callTool(
   args: unknown,
   agent: unknown,
 ) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: testToolSignal,
     callId: ToolCallId(`call-${++calls}`),
     name,
@@ -265,7 +266,7 @@ describe('dsh-coordinator named worker routing', () => {
     const { ctx, parent } = await setup([])
     coordinator.installCoordinatorMode(parent, ctx, { enabled: true })
     // Execute without an agent carrier: the coordinator tools require one.
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId('call-x'),
       name: 'worker_tasks',

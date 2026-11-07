@@ -24,6 +24,8 @@ import type {
 import ToolRuntimeCC from '@dsh-cc/tools'
 import * as toolWorkflow from '../src/index.ts'
 import { extractInlineMeta } from '../src/meta-extract.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 const testToolSignal = new AbortController().signal
 
@@ -89,6 +91,9 @@ async function setup(cwd?: string) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntimeCC)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(StubEngine)
   // The tool plugin mounts ccWorkflowRunRegistry itself (idempotence guard:
   // a second mount would re-register the service).
@@ -99,7 +104,7 @@ async function setup(cwd?: string) {
 
 let callCounter = 0
 async function call(ctx: Context, args: unknown, agent?: unknown) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: testToolSignal,
     callId: ToolCallId(`call-${++callCounter}`),
     name: 'workflow',
@@ -173,7 +178,7 @@ describe('workflow tool (fake engine + fake session)', () => {
   it('launches an inline CC-doc-shaped script and returns the documented receipt subset', async () => {
     const { ctx, engine } = await setup()
     const append = vi.fn()
-    const pending = ctx.tools.execute({
+    const pending = executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -212,7 +217,7 @@ describe('workflow tool (fake engine + fake session)', () => {
       const { ctx, engine } = await setup(root)
       const runWith = async (args: unknown, status: 'idle' | 'running' = 'idle') => {
         const append = vi.fn()
-        const pending = ctx.tools.execute({
+        const pending = executeModelToolFixture(ctx, {
           signal: testToolSignal,
           callId: ToolCallId(`call-${++callCounter}`),
           name: 'workflow',
@@ -254,7 +259,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     writeFileSync(join(root, '.claude', 'workflows', 'saved-name.js'), `${META_BLOCK}\nreturn 1\n`)
     const { ctx, engine } = await setup(root)
     const append = vi.fn()
-    const pending = ctx.tools.execute({
+    const pending = executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -273,7 +278,7 @@ describe('workflow tool (fake engine + fake session)', () => {
   it('returns the error-populated no-start receipt (status + error, taskId absent) when the engine rejects', async () => {
     const { ctx, engine } = await setup()
     engine.startError = new Error('invalid meta: meta.phases[0].title must be a non-empty string')
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -289,7 +294,7 @@ describe('workflow tool (fake engine + fake session)', () => {
 
   it('refuses resumeFromRunId with the validateResume-unknown-id refusal and rejects unknown keys', async () => {
     const { ctx } = await setup()
-    const resume = await ctx.tools.execute({
+    const resume = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -300,7 +305,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     expect(textOf(resume as never)).toContain('unknown resumeFromRunId "run-0"')
     expect(textOf(resume as never)).toContain('settled runs this session: (none)')
 
-    const unknown = await ctx.tools.execute({
+    const unknown = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -313,7 +318,7 @@ describe('workflow tool (fake engine + fake session)', () => {
 
   it('errors on the both-meta ambiguity (inline block + meta param; saved file + meta param)', async () => {
     const { ctx } = await setup()
-    const both = await ctx.tools.execute({
+    const both = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -323,7 +328,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     expect(both.isError).toBe(true)
     expect(textOf(both as never)).toContain('mutually exclusive')
 
-    const transitional = await ctx.tools.execute({
+    const transitional = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -335,7 +340,7 @@ describe('workflow tool (fake engine + fake session)', () => {
 
   it('refuses a missing-meta inline script with the CC-form refusal', async () => {
     const { ctx } = await setup()
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -349,7 +354,7 @@ describe('workflow tool (fake engine + fake session)', () => {
 
   it('refuses a second concurrent run naming the in-flight runId', async () => {
     const { ctx, engine } = await setup()
-    const first = ctx.tools.execute({
+    const first = executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -357,7 +362,7 @@ describe('workflow tool (fake engine + fake session)', () => {
       agent: fakeAgent(vi.fn()),
     })
     await vi.waitFor(() => { expect(engine.requests.length).toBe(1) })
-    const second = await ctx.tools.execute({
+    const second = await executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -375,7 +380,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     const { ctx, engine } = await setup()
     const inject = vi.fn()
     const agent = fakeAgent(vi.fn(), { inject, status: 'idle' })
-    const pending = ctx.tools.execute({
+    const pending = executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -396,7 +401,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     const { ctx, engine } = await setup()
     const append = vi.fn()
     const agent = fakeAgent(append)
-    const pending = ctx.tools.execute({
+    const pending = executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -420,7 +425,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     const { ctx, engine } = await setup()
     const followup = vi.fn()
     const agent = fakeAgent(vi.fn(), { followup, status: 'idle' })
-    const pending = ctx.tools.execute({
+    const pending = executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',
@@ -441,7 +446,7 @@ describe('workflow tool (fake engine + fake session)', () => {
     const { ctx, engine } = await setup()
     const inject = vi.fn()
     const agent = fakeAgent(vi.fn(), { inject, status: 'running' })
-    const pending = ctx.tools.execute({
+    const pending = executeModelToolFixture(ctx, {
       signal: testToolSignal,
       callId: ToolCallId(`call-${++callCounter}`),
       name: 'workflow',

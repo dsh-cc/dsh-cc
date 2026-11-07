@@ -12,10 +12,8 @@ import type {} from '@deepseek-ai/dsh-agent-loop'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import {
-  defineContentToolFixture,
-  type ParameterSchemaSpec,
-} from '@deepseek-ai/dsh-tools'
+import type { ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import type { CacheTrajectory } from './trajectory.ts'
 import {
   foldReport,

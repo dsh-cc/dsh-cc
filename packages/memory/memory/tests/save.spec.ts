@@ -13,6 +13,8 @@ import {
 } from '../src/save.ts'
 import { canonicalMemoryRoot, projectSlug } from '../src/paths.ts'
 import type { MemorySection } from '../src/section.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /**
  * The `memory_save` tool over a bare ToolRuntime with the in-memory fs: the
@@ -36,6 +38,9 @@ async function setup(seed: Record<string, string> = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(FakeMemoryFs)
   const fs = ctx.fs as unknown as FakeMemoryFs
   for (const [path, content] of Object.entries(seed)) fs.seed(path, content)
@@ -46,7 +51,7 @@ async function setup(seed: Record<string, string> = {}) {
 
 let callCounter = 0
 function call(ctx: Context, args: unknown, agent?: Agent) {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`call-${++callCounter}`),
     name: MEMORY_SAVE_TOOL,

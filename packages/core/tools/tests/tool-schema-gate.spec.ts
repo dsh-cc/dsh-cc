@@ -31,7 +31,7 @@ import { registerTaskTool } from '../../../subagent/task/src/tool.ts'
 import { registerReleaseAgentTool } from '../../../subagent/task/src/release-agent.ts'
 import { installCoordinatorMode } from '@dsh-cc/coordinator'
 import { syncResources } from '../../../mcp/mcp-client/src/resources.ts'
-import { createRunCodeTool } from '../src/code-mode.ts'
+import { createRunCodeTool } from '../src/cc-executor.ts'
 // Not in tsconfig.base paths — imported via relative src path (see report).
 import { defineHandoffGetTool, defineHandoffPutTool, HandoffLedger, HandoffStore } from '../../../subagent/handoff-store/src/index.ts'
 import ContextCrusher from '../../../context/context-crusher/src/index.ts'
@@ -257,12 +257,9 @@ const TOOL_PACKAGE_MANIFEST: ManifestEntry[] = [
     packageName: '@dsh-cc/tools',
     registerFn: 'createRunCodeTool',
     mount: (seam) => {
-      seam.captured.push(createRunCodeTool({} as never, {
-        requireRuntime: () => { throw new Error('schema gate must not execute code') },
-        peekRuntime: () => undefined,
-        maxParallel: 1,
-        shapeDispatchLog: async () => [],
-      }))
+      // The transport reads the runtime through the context lazily; the gate
+      // never executes code, so an empty context is enough to project schemas.
+      seam.captured.push(createRunCodeTool(fakeContext(seam), {} as never, 1))
     },
   },
 ]
@@ -280,9 +277,8 @@ const TOOL_SOURCE_CALLS: Record<string, number> = {
   'packages/core/tool-structured-output/src/index.ts': 1,
   'packages/core/tool-web-fetch/src/index.ts': 2,
   'packages/core/tool-workflow/src/index.ts': 2,
-  'packages/core/tools/src/code-mode.ts': 1,
-  // Test fixture factory; no model-facing runtime tool.
-  'packages/core/tools/src/testing.ts': 1,
+  'packages/core/tools/src/cc-executor.ts': 1,
+
   'packages/interaction/vwa-argument/src/init-tool.ts': 1,
   'packages/interaction/vwa-argument/src/report-tool.ts': 1,
   'packages/interaction/vwa-argument/src/tools.ts': 10,

@@ -9,6 +9,7 @@ import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import { makeBridgeHarness, textResponse, type BridgeHarness } from './harness.ts'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {

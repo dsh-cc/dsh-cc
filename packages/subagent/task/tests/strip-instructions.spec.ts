@@ -11,6 +11,7 @@ import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
 import { apply, isAgentInstructions, isDelegated, mountStripWorkspaceInstructions } from '../src/index.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 interface FakeInbox {
   nextStep: { id: string; content: unknown; source?: { kind?: string } }[]
@@ -181,6 +182,9 @@ describe('strip workspace instructions on delegated children', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     ctx.provide('subagents', { start: async () => ({ result: Promise.resolve({ stopReason: 'completed' }) }) })
     apply(ctx)
     const inbox = fakeInbox()

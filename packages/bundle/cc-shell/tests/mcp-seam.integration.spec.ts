@@ -17,6 +17,7 @@ import ToolRuntime from '@dsh-cc/tools'
 import type { McpConnectionsService } from '@dsh-cc/mcp-client'
 import * as CcMcpClient from '@dsh-cc/mcp-client'
 import { createPluginMcpSeam } from '../src/mcpSeam.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 // The mcp-client fixture: a real stdio MCP server exposing add/greet/... tools.
 const fixtureServerPath = new URL('../../../../packages/mcp/mcp-client/tests/fixture-server.ts', import.meta.url).pathname
@@ -29,6 +30,9 @@ beforeEach(async () => {
   // 'tools') plus the system prompt it requires.
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   // The registry must outlive a single mcp-client instance (the glue does the
   // same): provide it from a child fiber that is ACTIVE before any instance
   // mounts, so the dispose → re-register cycle keeps one registry.

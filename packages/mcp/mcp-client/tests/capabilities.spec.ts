@@ -7,6 +7,8 @@ import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { promptSkillName, syncPrompts } from '@dsh-cc/mcp-client/src/prompts.ts'
 import { isSkillName } from '@deepseek-ai/dsh-skill'
 import { syncResources, resourcePublicName } from '@dsh-cc/mcp-client/src/resources.ts'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 // ---- Mock MCP Client (tools + resources + prompts) ----
 
@@ -27,6 +29,9 @@ async function mountTools(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   return ctx
 }
 
@@ -61,13 +66,13 @@ describe('syncResources', () => {
     expect(ctx.tools.get('mcp__github__list_mcp_resources')).toBeDefined()
     expect(ctx.tools.get('mcp__github__read_mcp_resource')).toBeDefined()
 
-    const list = await ctx.tools.execute({
+    const list = await executeModelToolFixture(ctx, {
       callId: ToolCallId('c1'), name: 'mcp__github__list_mcp_resources', arguments: {}, signal: new AbortController().signal,
     })
     if (list.isError) throw new Error('list failed')
     expect(list.content[0]).toEqual({ type: 'text', text: 'file:///a — a' })
 
-    const read = await ctx.tools.execute({
+    const read = await executeModelToolFixture(ctx, {
       callId: ToolCallId('c2'), name: 'mcp__github__read_mcp_resource', arguments: { uri: 'file:///a' }, signal: new AbortController().signal,
     })
     if (read.isError) throw new Error('read failed')

@@ -5,6 +5,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import * as WebFetchHttp from '@deepseek-ai/dsh-web-fetch-http'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 function toolNames(ctx: Context): string[] {
   return ctx.tools.schemas().map(s => s.name)
@@ -15,6 +16,9 @@ async function mountWebSeam(): Promise<{ ctx: Context; dispose: () => Promise<vo
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(WebRuntime)
   await ctx.plugin(WebFetchHttp, {
     timeoutMs: 20000,

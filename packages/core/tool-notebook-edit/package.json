@@ -32,13 +32,14 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/dsh-fs": "link:../../../../deepseek-harness/packages/fs/fs",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
-    "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tool-testkit": "link:../../../../deepseek-harness/packages/test-support/tool-testkit",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt"
+    "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

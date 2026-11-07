@@ -21,6 +21,7 @@ import * as GlueModule from '../src/index.ts'
 /** A ZERO-dependency MCP stdio server: newline-delimited JSON-RPC on stdio. */
 const FIXTURE_SERVER = `
 import { createInterface } from 'node:readline'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
 
 const respond = (id, result) => {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n')
@@ -92,6 +93,9 @@ describe('cc-shell glue MCP registry ownership', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
 
     await apply(ctx, { pluginDirs: [], mcpConfigFiles: [mcpJsonPath] })
 
@@ -125,6 +129,9 @@ describe('cc-shell glue MCP registry ownership', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
 
     const savedDshHome = process.env.DSH_HOME
     try {

@@ -8,6 +8,8 @@ import UserQuestionService, {
   type AskUserQuestionRequest,
 } from '@deepseek-ai/dsh-user-questions'
 import * as ToolAskUser from '@deepseek-ai/dsh-tool-ask-user'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 /**
  * cc-shell bundle smoke for the AI-human interaction rows: the
@@ -29,6 +31,9 @@ async function mountAskUser(): Promise<{ ctx: Context; dispose: () => Promise<vo
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(UserQuestionService)
   await ctx.plugin(ToolAskUser)
   return { ctx, dispose: () => ctx.fiber.dispose() }
@@ -69,7 +74,7 @@ describe('cc-shell bundle — ask_user_question rows (dsh-user-questions + dsh-t
     const seen: AskUserQuestionRequest[] = []
     scriptedAnswerer(ctx, seen, { answers: [{ id: 'pkg', selected: ['pnpm'] }] })
 
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-ask-ok'),
       name: 'ask_user_question',
@@ -100,7 +105,7 @@ describe('cc-shell bundle — ask_user_question rows (dsh-user-questions + dsh-t
   it('surfaces NO_PROVIDER as a graceful tool error without crashing the host', async () => {
     const { ctx, dispose } = await mountAskUser()
 
-    const result = await ctx.tools.execute({
+    const result = await executeModelToolFixture(ctx, {
       signal: new AbortController().signal,
       callId: ToolCallId('cc-ask-no-provider'),
       name: 'ask_user_question',
@@ -120,6 +125,9 @@ describe('cc-shell bundle — ask_user_question rows (dsh-user-questions + dsh-t
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(UserQuestionService)
     const fiber = await ctx.plugin(ToolAskUser)
     expect(ctx.tools.get('ask_user_question')).toBeDefined()

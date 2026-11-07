@@ -23,6 +23,8 @@ import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@dsh-cc/tools'
 import * as ToolNotebookEdit from '@dsh-cc/tool-notebook-edit'
+import * as CcToolExecutor from '@dsh-cc/tools/executor'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 
 let callCounter = 0
 
@@ -86,6 +88,9 @@ async function setup(): Promise<{ ctx: Context; dir: string; dispose: () => Prom
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  // Upstream split execution into pluggable executors: a composition that
+  // assembles tools must select one (the fork executor's native mode).
+  await ctx.plugin(CcToolExecutor)
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   await ctx.plugin(ToolNotebookEdit)
   return { ctx, dir, dispose: () => ctx.fiber.dispose() }
@@ -105,7 +110,7 @@ async function call(
   ctx: Context,
   args: Record<string, unknown>,
 ): Promise<{ isError: boolean; value?: unknown; error?: { message?: string; info?: { code?: string } } }> {
-  return ctx.tools.execute({
+  return executeModelToolFixture(ctx, {
     signal: new AbortController().signal,
     callId: ToolCallId(`nb-${++callCounter}`),
     name: 'NotebookEdit',
@@ -144,6 +149,9 @@ describe('NotebookEdit registration', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    // Upstream split execution into pluggable executors: a composition that
+    // assembles tools must select one (the fork executor's native mode).
+    await ctx.plugin(CcToolExecutor)
     await ctx.plugin(LocalFileSystem, { cwd: tempDir() })
     const plugin = await ctx.plugin(ToolNotebookEdit)
     expect(ctx.tools.schemas()).toHaveLength(1)
