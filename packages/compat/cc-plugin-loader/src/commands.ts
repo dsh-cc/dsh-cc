@@ -11,6 +11,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { routeBeforeAdmission } from '@dsh-cc/moa'
 import { parseCcFrontmatter, parseCcFrontmatterDocument } from '@dsh-cc/skill-loader'
 import { basename, extname, join, resolve } from 'node:path'
 import type { CcPluginManifest, CcCommand, PluginFlavor } from './types.ts'
@@ -312,20 +313,29 @@ function renderCommand(pluginRoot: string, entry: CcCommand): {
  */
 export function dispatchCommandPrompt(invocation: CommandInvocationLike, body: string): CommandResult | Promise<CommandResult> {
   const text = body.split('$ARGUMENTS').join(invocation.rawInput)
-  let scheduled: unknown
-  try {
-    scheduled = invocation.agent.followup(createUserMessage({
-      content: [{ type: 'text', text }],
-      source: { kind: 'user' },
-    }))
-  } catch (error) {
-    return { kind: 'error', text: `could not dispatch command prompt: ${String(error)}` }
-  }
-  if (scheduled === null || scheduled === undefined || typeof (scheduled as { then?: unknown }).then !== 'function') {
-    return { kind: 'success' }
-  }
-  return Promise.resolve(scheduled).then(
-    () => ({ kind: 'success' } as const),
-    (error: unknown) => ({ kind: 'error', text: `could not dispatch command prompt: ${String(error)}` }),
+  const opening = createUserMessage({
+    content: [{ type: 'text', text }],
+    source: { kind: 'user' },
+  })
+  // Entry-point admission (D3.2): a plugin/slash command expansion opens a
+  // genuine user turn — it classifies before the followup, so moa routing
+  // never misses this entry point.
+  return Promise.resolve(routeBeforeAdmission(invocation.agent, opening)).then(
+    () => {
+      let scheduled: unknown
+      try {
+        scheduled = invocation.agent.followup(opening)
+      } catch (error) {
+        return { kind: 'error' as const, text: `could not dispatch command prompt: ${String(error)}` }
+      }
+      if (scheduled === null || scheduled === undefined || typeof (scheduled as { then?: unknown }).then !== 'function') {
+        return { kind: 'success' as const }
+      }
+      return Promise.resolve(scheduled).then(
+        () => ({ kind: 'success' } as const),
+        (error: unknown) => ({ kind: 'error' as const, text: `could not dispatch command prompt: ${String(error)}` }),
+      )
+    },
+    (error: unknown) => ({ kind: 'error' as const, text: `could not dispatch command prompt: ${String(error)}` }),
   )
 }

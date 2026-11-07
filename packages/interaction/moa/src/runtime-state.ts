@@ -1,5 +1,6 @@
 /**
- * Shared moa runtime state (effective-model-truth design §5.1/§5.2).
+ * Shared moa runtime state (effective-model-truth design §5.1/§5.2;
+ * harness-0.2.2 provenance-r3-final redesign).
  *
  * Side-effect-free module: importing it NEVER pulls the plugin `apply()`
  * path — `@dsh-cc/moa/sanitizer` (sanitizer.ts) imports this module, and the
@@ -9,19 +10,29 @@
  * undefined / no-op) while the plugin is absent, never throwing.
  *
  * DELIBERATE ASYMMETRY — do not "fix": the published per-step selection is
- * PER-AGENT (each agent's frozen `selection.assembled` snapshot is its own),
- * while the boot pair is PROCESS-GLOBAL first-wins (the arming machine's and
- * the sanitizer's shared baseline is the session's boot selection, one per
- * process). Different lifecycles, different keys (design §3/§5.1/§5.2).
+ * PER-AGENT (each agent's frozen `payload.modelSelection` snapshot is its
+ * own), while the boot pair is PROCESS-GLOBAL first-wins (the arming
+ * machine's and the sanitizer's shared baseline is the session's boot
+ * selection, one per process). Different lifecycles, different keys (design
+ * §3/§5.1/§5.2).
+ *
+ * Provenance (r3-final): arming is signal-driven — the driver's `/model` /
+ * `/effort` writes call {@link noteUserSelection} (which also writes the
+ * routing.jsonl `user-select` sidecar row); moa's own selects call
+ * {@link noteMoaSelection}. The entry-point admission seam reaches the live
+ * router through {@link routeBeforeAdmission} (registered per `apply()` via
+ * `setMoaAdmissionEntry`).
  *
  * @module
  */
 
-import { ArmingMachine, type RequestPair } from './arming.ts'
+import { ArmingMachine, type ProvenanceSelection, type RequestPair } from './arming.ts'
 import { isSubagentAgent } from './agent-scope.ts'
+import { appendJsonl } from '@dsh-cc/sidecar-io'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 
 export type { RequestPair }
+export type { ProvenanceSelection }
 
 /** Field comparison (provider/model) — NEVER object identity (design §3). */
 export function sameFields(a: RequestPair, b: RequestPair): boolean {
@@ -145,6 +156,8 @@ export function resetRuntimeCore(): void {
   lastClaimedTurn = undefined
   turnTier = undefined
   pendingRows.length = 0
+  admissionEntry = undefined
+  tripwireViolations.length = 0
 }
 
 /** First non-undefined pair wins, never overwritten (design §5.2 part 1). */
@@ -180,17 +193,29 @@ export function readPublishedSelection(agent: unknown): RequestPair | undefined 
   return agent !== null && typeof agent === 'object' ? publishedSelection.get(agent) : undefined
 }
 
+/** Bounded tripwire violation log (spec observability + live console warn). */
+const tripwireViolations: string[] = []
+const TRIPWIRE_CAPACITY = 32
+
+/** Tripwire findings so far (newest last); cleared with the runtime core. */
+export function moaTripwireViolations(): readonly string[] {
+  return tripwireViolations
+}
+
 /**
- * The sanctioned observation path (design §5.2 contract): EVERY
- * `observeRequestModel` call MUST go through here — a direct call is a
- * contract violation (the machine's `bootDefault` can only be set via
- * `noteBootPair`, which this performs first). Unconditionally notes the boot
- * baseline, then observes (the machine no-ops itself while disabled).
+ * The sanctioned observation path (r3-final: TRIPWIRE ONLY). Every pre-step
+ * frozen-selection observation goes through here: a non-moa, non-boot pair
+ * reaching a request without a preceding {@link noteUserSelection} is a
+ * bug — recorded and warned, NEVER silently armed/disarmed around (pair
+ * inference retired; explicit signals own arming).
  */
 export function observeLiveSelection(pair: RequestPair | undefined): void {
-  if (pair === undefined || pair.model === undefined) return
-  noteBootPair(pair)
-  arming?.observeRequestModel(pair)
+  if (pair === undefined || pair.model === undefined || arming === undefined) return
+  const violation = arming.observeTripwire(pair)
+  if (violation === undefined) return
+  tripwireViolations.push(violation)
+  if (tripwireViolations.length > TRIPWIRE_CAPACITY) tripwireViolations.shift()
+  console.warn(violation)
 }
 
 /** Structural provider/model view of a resolved config / selection snapshot. */
@@ -202,4 +227,60 @@ export function pairOf(
     ...(source.provider === undefined ? {} : { provider: source.provider as string }),
     model: source.model as string,
   }
+}
+
+/** The admission entry one `apply()` registers so entry-point call sites can
+ * reach the live router (side-effect-free when absent — a moa-less deployment
+ * leaves routing inert). */
+interface MoaAdmissionEntry {
+  routeBeforeAdmission(agent: unknown, opening: UserMessage): Promise<void>
+  /** Routing sidecar accessor for the `user-select` row; absence disables it. */
+  ledgerPath(): string | undefined
+}
+
+let admissionEntry: MoaAdmissionEntry | undefined
+
+/** Register the live admission entry (called by `apply()` in index.ts). */
+export function setMoaAdmissionEntry(entry: MoaAdmissionEntry): void {
+  admissionEntry = entry
+}
+
+/**
+ * The entry-point admission seam (D3.2): every dsh-cc entry point routing a
+ * user turn through `agent.followup` awaits this FIRST on the exact
+ * `UserMessage`. Side-effect-free when moa is unmounted or disarmed.
+ */
+export function routeBeforeAdmission(agent: unknown, opening: UserMessage): Promise<void> {
+  if (admissionEntry === undefined) return Promise.resolve()
+  return admissionEntry.routeBeforeAdmission(agent, opening)
+}
+
+/**
+ * Explicit USER write signal (r3-final provenance / D3.2): the driver's
+ * `/model` AND `/effort` write paths call this with the selection they just
+ * recorded. Updates `userBaseSelection` (effort included), disarms (or
+ * re-arms on the boot pair — `ModelSwitchBack`), drops any still-queued moa
+ * status row (a stale routed row would be a lie), and appends the
+ * routing.jsonl `user-select` sidecar row (best-effort; the resume
+ * rehydration path freshness-checks it against the durable selection).
+ */
+export function noteUserSelection(selection: ProvenanceSelection): void {
+  arming?.noteUserSelection(selection)
+  clearMoaRows()
+  const path = admissionEntry?.ledgerPath()
+  if (path === undefined) return
+  const row: Record<string, unknown> = {
+    type: 'user-select',
+    ts: new Date().toISOString(),
+    provider: selection.provider,
+    model: selection.model,
+    ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+  }
+  void appendJsonl(path, row).catch(() => undefined)
+}
+
+/** Explicit MOA write signal: the router's routing select and the judge's
+ * escalation select call this. NEVER disarms. */
+export function noteMoaSelection(selection: ProvenanceSelection): void {
+  arming?.noteMoaSelection(selection)
 }

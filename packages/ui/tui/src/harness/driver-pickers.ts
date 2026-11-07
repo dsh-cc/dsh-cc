@@ -12,7 +12,6 @@
  * @module @dsh-cc/tui/harness/driver-pickers
  */
 
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { BYPASS_MODE, PERMISSION_MODE_OPTIONS } from '@dsh-cc/command-permissions'
 import {
   moveEffortPickerFocus,
@@ -28,7 +27,7 @@ import {
 import { formatModelCatalog, type CatalogEntry } from '../model-catalog.ts'
 import type { DriverPickersCtx } from './driver-ctx.ts'
 
-/** A single selection route, matching what selection.current holds. */
+/** A single selection route, matching what selection.current() returns. */
 type SelectionRoute = { provider: string; model: string; reasoningEffort?: string }
 
 /**
@@ -59,9 +58,10 @@ export function createPickersSection(rt: DriverPickersCtx): {
   // The arg path (`/model <n|provider/id>`) stays text-based for scripts.
   const openModelPicker = async (): Promise<void> => {
     const catalog = await rt.loadCatalog()
-    const currentRoute = rt.selection.current === undefined
+    const liveRoute = rt.selection.current()
+    const currentRoute = liveRoute === undefined
       ? undefined
-      : { provider: rt.selection.current.provider, model: rt.selection.current.model }
+      : { provider: liveRoute.provider, model: liveRoute.model }
     if (catalog.length === 0) {
       rt.emit(upsertRow(rt.state(), { kind: 'status', text: formatModelCatalog(catalog, currentRoute) }))
       return
@@ -96,19 +96,19 @@ export function createPickersSection(rt: DriverPickersCtx): {
    * flight is never clobbered.
    */
   const applyModelSwitch = async (provider: string, model: string): Promise<void> => {
-    const captured = rt.selection.current
+    const captured = rt.selection.current()
     const carried = captured?.reasoningEffort
     if (captured === undefined || carried === undefined) {
-      rt.selection.current = { provider, model }
+      rt.selection.selectUser({ provider, model })
       rt.emit(upsertRow(rt.state(), { kind: 'status', text: `Model is now ${provider}/${model}.` }))
       return
     }
     const efforts = await rt.resolveEfforts(provider, model)
     if (rt.stalePair(captured)) return
     const supported = efforts?.some(level => level.id === carried) === true
-    rt.selection.current = supported
-      ? { provider, model, reasoningEffort: ReasoningEffortId(carried) }
-      : { provider, model }
+    rt.selection.selectUser(supported
+      ? { provider, model, reasoningEffort: carried }
+      : { provider, model })
     rt.emit(upsertRow(rt.state(), { kind: 'status', text: `Model is now ${provider}/${model}.` }))
     if (!supported) {
       rt.emit(upsertRow(rt.state(), {
@@ -127,7 +127,7 @@ export function createPickersSection(rt: DriverPickersCtx): {
    * levels emit a notice — never a fabricated list.
    */
   const openEffortPicker = async (): Promise<void> => {
-    const route = rt.selection.current
+    const route = rt.selection.current()
     if (route === undefined) {
       rt.emit(upsertRow(rt.state(), { kind: 'status', text: 'No model configured. Use /model first.' }))
       return
@@ -196,7 +196,10 @@ export function createPickersSection(rt: DriverPickersCtx): {
       // BEFORE the synchronous close-emit, then validate+write detached.
       rt.emit(setEffortPicker(rt.state(), undefined))
       if (entry === undefined) return
-      const captured: SelectionRoute | undefined = rt.selection.current
+      const capturedLive = rt.selection.current()
+      const captured: SelectionRoute | undefined = capturedLive === undefined
+        ? undefined
+        : { provider: capturedLive.provider, model: capturedLive.model }
       if (captured === undefined) {
         rt.emit(upsertRow(rt.state(), { kind: 'status', text: 'No model configured. Use /model first.' }))
         return
@@ -206,7 +209,7 @@ export function createPickersSection(rt: DriverPickersCtx): {
       // guard still applies.
       if (entry === 'default') {
         if (rt.stalePair(captured)) return
-        rt.selection.current = { provider: captured.provider, model: captured.model }
+        rt.selection.selectUser({ provider: captured.provider, model: captured.model })
         rt.emit(upsertRow(rt.state(), { kind: 'status', text: 'Reasoning effort reset to the provider default.' }))
         return
       }
@@ -220,11 +223,11 @@ export function createPickersSection(rt: DriverPickersCtx): {
         rt.emit(upsertRow(rt.state(), { kind: 'status', text: `Cannot resolve effort levels for ${captured.model}.` }))
         return
       }
-      rt.selection.current = {
+      rt.selection.selectUser({
         provider: captured.provider,
         model: captured.model,
-        reasoningEffort: ReasoningEffortId(level.id),
-      }
+        reasoningEffort: level.id,
+      })
       rt.emit(upsertRow(rt.state(), { kind: 'status', text: `Reasoning effort is now ${level.name}.` }))
     },
     effortPickerCancel() {
@@ -264,7 +267,7 @@ export function createPickersSection(rt: DriverPickersCtx): {
       return rt.loadCatalog()
     },
     async loadModelEfforts(): Promise<string[]> {
-      const route = rt.selection.current
+      const route = rt.selection.current()
       if (route === undefined) return []
       const efforts = await rt.resolveEfforts(route.provider, route.model)
       if (efforts === undefined) return []

@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -89,7 +90,7 @@ function makeCtx(opts: {
     agents: {
       create: async () => ({
         agent: {
-          options: {},
+          options: {}, model: fakeAgentModel({}),
           session,
           id: 'a-perm',
           status: 'idle',

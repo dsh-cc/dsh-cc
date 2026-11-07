@@ -10,9 +10,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import z from '@deepseek-ai/schemastery'
 import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { DriverModelSelection } from '../state/driver-types.ts'
 import type { TuiState } from '../store.ts'
 import { upsertRow } from '../store.ts'
 import type { ProviderRuntime } from '../provider-command.ts'
@@ -39,7 +39,7 @@ export type OnboardingWiringCtx = {
   emit(next: TuiState): void
   state(): TuiState
   ctx: Context
-  selection: ModelSelectionRef
+  selection: DriverModelSelection
   /** The driver's emit listener set — the wiring rides it as the diff seam. */
   listeners: Set<(state: TuiState) => void>
   /** The `/provider` runtime (driver-run-local); opens the panel/wizard. */
@@ -102,7 +102,7 @@ export function wireOnboarding(rt: OnboardingWiringCtx): OnboardingHandle {
   /** Offer the wizard once: welcome row + provider panel, guarded. */
   const offer = (force = false): void => {
     if (active
-      || (!force && (selection.current !== undefined || readSuppressed()))
+      || (!force && (selection.current() !== undefined || readSuppressed()))
       || !isTTY()) return
     active = true
     opened = false
@@ -121,9 +121,9 @@ export function wireOnboarding(rt: OnboardingWiringCtx): OnboardingHandle {
   // Emit-diff seam: completion (selection appears) and Esc-dismissal (panel
   // closed with still no model) both deactivate the flow.
   let seenEmit = false
-  let lastSelection = selection.current
+  let lastSelection = selection.current()
   listeners.add((_) => {
-    const current = selection.current
+    const current = selection.current()
     const panelOpen = state().providerPanel !== undefined
     if (seenEmit) {
       if (active && panelOpen) opened = true
@@ -157,7 +157,7 @@ export function wireOnboarding(rt: OnboardingWiringCtx): OnboardingHandle {
       // Manual `/onboard` is explicit consent — force past the suppressed
       // read (the cleared flag may not have re-committed yet) but keep the
       // no-model guard so a configured route is never clobbered by the panel.
-      if (active || selection.current !== undefined) return
+      if (active || selection.current() !== undefined) return
       offer(true)
     },
     dispose(): void {},

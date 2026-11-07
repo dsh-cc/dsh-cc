@@ -1,18 +1,22 @@
 /**
  * Integration canary (Staff M1) for the alias-stamped reasoning effort: a real
- * cordis context, the cc-model-aliases routes service mounted (its host
- * `agent/request` overlay listener included), a mock llm adapter, and real
- * in-process child agents driven through the subagent seam. The adapter must
- * observe `config.reasoningEffort` on the stamped child's request — the
- * contract that breaks if the harness ever strips unknown `AgentOptions` keys
- * or changes scope admission for host listeners.
+ * cordis context, the cc-model-aliases routes service mounted (its
+ * `subagent/start` spawn-path stamp listener included), a mock llm adapter,
+ * and real in-process child agents driven through the subagent seam. The
+ * adapter must observe `config.reasoningEffort` on the stamped child's
+ * request — the contract that breaks if the harness ever strips unknown
+ * `AgentOptions` keys or changes scope admission for host listeners.
+ *
+ * Harness-0.2.2 form (D3.6 + the S4 probe): the stamp is applied DURABLY at
+ * child publication (`agent.model.select(stamped)`) — the request-time
+ * overlay is gone (step-fatal upstream). A fork-seed child restores the
+ * parent's explicit header effort through the seeded prefix; the spawn-path
+ * select overrides it with the stamp before the first step.
  *
  * Also pins the nested-child behavior at the 0.1.3 pin: a grandchild spawned
  * WITHOUT agentOptions inherits its same-route parent's route state
  * (provider/model/reasoningEffort — upstream's resolveChildAgentOptions now
- * forwards the parent's route-owned effort); and a same-route fork child MAY
- * restore the parent's explicit header effort from the seed before the
- * overlay wins — accepted, not a new copy path.
+ * forwards the parent's route-owned effort).
  *
  * Pattern follows packages/subagent/coordinator/tests/coordinator.spec.ts.
  */
@@ -28,7 +32,7 @@ import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-j
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { MockAdapter, textResponse } from '@dsh-cc/agent-loop-mock'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
@@ -84,7 +88,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]): Prom
   const adapter = new MockAdapter(script, reasoning)
   ctx.llm.registerAdapter(['mock'], adapter)
   // The routes service mounts no aliases here — what matters is its host
-  // `agent/request` overlay listener being registered by apply().
+  // `subagent/start` stamp listener being registered by apply().
   applyModelAliases(ctx, {})
   const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
   return { ctx, adapter, parent, subagents: ctx.get('subagents') as SubagentsSeam }
@@ -135,24 +139,23 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     expect(adapter.requests[0]).not.toHaveProperty('reasoningEffort')
   })
 
-  it('the overlay beats a restored fork-seed header effort', async () => {
-    const { adapter, parent, subagents } = await setup([
+  it('the spawn-path stamp beats a restored fork-seed header effort (D3.6 regression)', async () => {
+    const { ctx, adapter, parent, subagents } = await setup([
       textResponse('parent turn'),
       textResponse('fork child turn'),
     ])
-    // Give the parent one completed turn whose header carries an explicit
-    // effort: a test-scoped listener stamps 'high' onto the PARENT's requests
-    // only, mirroring an explicit parent-side /effort.
-    const dispose = parent.ctx.on('agent/request', async (payload: unknown, next: () => Promise<Record<string, unknown>>) => {
-      const resolved = await next()
-      return { ...resolved, reasoningEffort: 'high' }
-    })
+    // Give the parent one completed turn whose DURABLE selection carries an
+    // explicit effort — exactly how a /effort write lands under 0.2.2 (the
+    // old step-fatally-rejected agent/request stamp is gone).
+    parent.model.select({ provider: 'mock', model: 'mock', reasoningEffort: ReasoningEffortId('high') })
     parent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } }))
     await parent.whenIdle()
-    dispose()
 
-    // A fork child on the SAME route (mock/mock) restores 'high' from the seed
-    // header — the alias stamp 'max' must win on the wire.
+    // A fork child on the SAME route (mock/mock) inherits the parent's
+    // completed-turn prefix, whose request/header carries 'high' — the S4
+    // probe proved AgentModel.current() reports the restored effort, not the
+    // options stamp. The spawn-path select must apply the alias stamp 'max'
+    // DURABLY before the child's first step.
     const run = await subagents.startActivation({
       provider: 'fork',
       label: 'fork-child',
@@ -165,6 +168,9 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
       signal,
       delivery: 'caller',
     })
+    const child = ctx.agents.get(SessionId(run.childId))
+    // The stamped selection is recorded before the first preStep freeze.
+    expect(child?.model.current()).toMatchObject({ provider: 'mock', model: 'mock', reasoningEffort: 'max' })
     const settled = await run.result
     expect(settled.stopReason).toBe('completed')
     expect(adapter.requests).toHaveLength(2)

@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,7 +13,7 @@ import { rowsToMarkdown } from '@dsh-cc/tui/export-markdown.ts'
  */
 function makeCtx(events: unknown[]) {
   const agent = {
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: { id: 's-export', header: {}, events, snapshotEvents() { return this.events } },
     id: 'agent-s-export',
     status: 'idle',

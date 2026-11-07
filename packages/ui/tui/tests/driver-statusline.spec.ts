@@ -1,3 +1,4 @@
+import { fakeAgentModel, fakeDriverSelection } from './fake-model.ts'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -165,6 +166,7 @@ function makeStatusLineCtx(opts: {
   if (opts.settings !== undefined) services.settings = opts.settings.service
   const makeAgent = (s: { id: string; provider?: string; model?: string; createdAt?: number; cwd?: string; events?: unknown[] }) => ({
     options: s.provider === undefined ? {} : { provider: s.provider, model: s.model },
+    model: fakeAgentModel(s.provider === undefined ? {} : { provider: s.provider, model: s.model as string }),
     session: {
       id: s.id,
       header: {
@@ -936,9 +938,7 @@ describe('createDriver custom statusLine wiring', () => {
     // pinned at the wiring level: drive the emit-diff listener the wiring
     // registers on rt.listeners directly.
     const { ctx, eventHandlers } = makeStatusLineCtx({ projections: makeProjections() })
-    const selection: { current?: { provider?: string; model?: string; reasoningEffort?: string } } = {
-      current: { provider: 'p', model: 'm1' },
-    }
+    const selection = fakeDriverSelection({ provider: 'p', model: 'm1' })
     const current = {
       agent: {
         session: {
@@ -970,12 +970,12 @@ describe('createDriver custom statusLine wiring', () => {
     expect(moaRef.value).toEqual({ tier: 'draft' })
 
     // Effort-only change: same model → the ref survives.
-    selection.current = { provider: 'p', model: 'm1', reasoningEffort: 'high' }
+    selection.selectUser({ provider: 'p', model: 'm1', reasoningEffort: 'high' })
     for (const listener of [...listeners]) listener({})
     expect(moaRef.value).toEqual({ tier: 'draft' })
 
     // Model change: the routed tier is invalidated.
-    selection.current = { provider: 'p', model: 'm2', reasoningEffort: 'high' }
+    selection.selectUser({ provider: 'p', model: 'm2', reasoningEffort: 'high' })
     for (const listener of [...listeners]) listener({})
     expect(moaRef.value).toBeUndefined()
     wiring.dispose()

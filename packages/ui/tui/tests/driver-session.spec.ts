@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -65,6 +66,7 @@ function makeSwitchableCtx(opts: {
     options: s.provider !== undefined && s.model !== undefined
       ? { provider: s.provider, model: s.model }
       : {},
+    model: fakeAgentModel(s.provider !== undefined && s.model !== undefined ? { provider: s.provider, model: s.model } : {}),
     session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',
@@ -242,7 +244,7 @@ describe('createDriver switchSession', () => {
     const newSession = { id: 's-b', events: [], snapshotEvents() { return this.events }, status: 'idle' }
 
     const makeAgent = (s: FakeSession): Record<string, unknown> => ({
-      options: {},
+      options: {}, model: fakeAgentModel({}),
       session: { id: s.id, header: {}, events: s.events ?? [] , snapshotEvents() { return this.events } },
       id: `agent-${s.id}`,
       status: s.status ?? 'idle',
@@ -340,7 +342,7 @@ describe('createDriver switchSession', () => {
       agents: {
         create: async () => ({
           agent: {
-            options: {},
+            options: {}, model: fakeAgentModel({}),
             session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-a',
             status: 'idle',
@@ -351,7 +353,7 @@ describe('createDriver switchSession', () => {
         }),
         resume: async () => ({
           agent: {
-            options: {},
+            options: {}, model: fakeAgentModel({}),
             session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-a',
             status: 'idle',
@@ -912,7 +914,7 @@ describe('createDriver catalog refresh on session switch', () => {
     resumeSessions: Record<string, { id: string; status?: string }>
   }): { ctx: Record<string, unknown> } {
     const makeAgent = (id: string): Record<string, unknown> => ({
-      options: {},
+      options: {}, model: fakeAgentModel({}),
       session: { id, header: { cwd: PROJ_CWD }, events: [], snapshotEvents() { return this.events } },
       id: `agent-${id}`,
       status: 'idle',

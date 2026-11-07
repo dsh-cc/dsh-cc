@@ -109,7 +109,7 @@ export function createDetail(core: ProviderCore): {
         rt.emit(setProviderOverlay(rt.state(), setMessage(backToList(panel), `Route "${route}" is not configured — /provider list shows the configured routes.`)))
         return
       }
-      const warning = rt.selection.current?.provider === route ? REMOVE_CURRENT_WARNING : undefined
+      const warning = rt.selection.current()?.provider === route ? REMOVE_CURRENT_WARNING : undefined
       rt.emit(setProviderOverlay(rt.state(), setMessage(startRemove({ ...panel, phase: 'detail', selected: route }), warning)))
     },
 
@@ -167,7 +167,7 @@ export function createDetail(core: ProviderCore): {
         return
       }
       if (action.id === 'remove') {
-        const warning = rt.selection.current?.provider === route ? REMOVE_CURRENT_WARNING : undefined
+        const warning = rt.selection.current()?.provider === route ? REMOVE_CURRENT_WARNING : undefined
         rt.emit(setProviderOverlay(rt.state(), setMessage(startRemove(panel), warning)))
       }
     },

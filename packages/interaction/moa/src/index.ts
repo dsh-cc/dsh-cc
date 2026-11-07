@@ -1,13 +1,14 @@
 /**
- * moa — tiered cascade routing for the main conversation
- * (design docs/plans/2026-10-09-moa-tiered-cascade-routing.md).
+ * moa — tiered cascade routing of main-conversation entries at the
+ * pre-admission seam (design docs/plans/2026-10-09-moa-tiered-cascade-routing.md;
+ * harness-0.2.2 D3.2).
  *
  * Plain plugin (advisor-watchdog shape): `apply(ctx)` registers the `moa`
  * settings namespace, constructs the core singletons, and wires the routing
- * slice: an `agent/inbox/claimed` capture listener, an observe+splice
- * `agent/pre-step` listener, the `agent/request` override listener, and the
- * `system-prompt/assemble` classification seam (effective-model-truth §5.3).
- * All bail fast when `moa.enabled` is false.
+ * slice: an `agent/inbox/claimed` capture+bind listener, a tripwire-observe +
+ * status-row-splice `agent/pre-step` listener, and the entry-point admission
+ * router exported module-wide (entry points call `routeBeforeAdmission`
+ * BEFORE `agent.followup`). All bail fast when `moa.enabled` is false.
  *
  * @module @dsh-cc/moa
  */
@@ -23,25 +24,35 @@ import { createAcceptanceJudge, type JudgeDeps } from './judge.ts'
 import { createRequestRouter, validateArming, type ArmingValidation, type EnsureArmed, type RouterDeps } from './router.ts'
 import { registerSettings, type MoaSettings } from './settings.ts'
 import {
-  captureClaimed,
   getCapturedOpening,
-  noteClaimedTurn,
   observeLiveSelection,
   readPublishedSelection,
   resetRuntimeCore,
+  setMoaAdmissionEntry,
   setRuntimeCore,
   tierFor,
 } from './runtime-state.ts'
 import { EscalationBookkeeping } from './state.ts'
 
 export { SETTINGS_NAMESPACE, DEFAULT_MOA_SETTINGS, MAX_ESCALATIONS_CEILING, registerSettings, type MoaSettings, type JudgeRouteObject, type JudgeRouteSetting } from './settings.ts'
-export { ArmingMachine, type RequestPair, type DisarmReason } from './arming.ts'
+export { ArmingMachine, type RequestPair, type ProvenanceSelection, type DisarmReason } from './arming.ts'
 export { TIER_ALIASES, TIER_COUNT, resolveTiers, tierAt, nextTierUp, type TierResolution } from './tiers.ts'
 export { DEFAULT_JUDGE_ALIAS, resolveJudgeRoute, resolveContextWindow, normalizeModelId, MOA_MODEL_CONTEXT_WINDOWS, MOA_DEFAULT_CONTEXT_WINDOW, type JudgeRouteResolution } from './judge-route.ts'
 export { MOA_ESCALATION_KIND, isMoaEscalationMessage, EscalationBookkeeping, type EscalationState } from './state.ts'
 export { moaNoticeSource } from './provenance.ts'
-export { CAPTURE_CAPACITY, captureClaimed, getCapturedOpening, moaUnarmedReason, resetRuntimeCore, setRuntimeCore } from './runtime-state.ts'
-export { createRequestRouter, validateArming, textOf, tierRouteVariables, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type RequestPayload, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
+export {
+  CAPTURE_CAPACITY,
+  captureClaimed,
+  getCapturedOpening,
+  moaTripwireViolations,
+  moaUnarmedReason,
+  noteMoaSelection,
+  noteUserSelection,
+  resetRuntimeCore,
+  routeBeforeAdmission,
+  setRuntimeCore,
+} from './runtime-state.ts'
+export { createRequestRouter, validateArming, textOf, tierRouteVariables, ROUTING_QUESTION, type RouterDeps, type RequestRouter, type ArmingValidation, type EnsureArmed, type MoaRouteBackend } from './router.ts'
 export { createAcceptanceJudge, ACCEPT_QUESTION, type AcceptanceJudge, type JudgeDeps } from './judge.ts'
 
 /**
@@ -195,22 +206,27 @@ export function apply(ctx: Context): void {
     // Caller fiber already unloading: the per-firing ensureArmed still runs.
   }
 
-  // Opening capture (effective-model-truth §5.3): synchronous per-message
-  // emit at claim — per turn the LAST claimed message wins (the claim batch
-  // claims pending next-step items first, then the next-turn message).
-  // Subagent-guarded inside the runtime-state writers. `noteClaimedTurn`
-  // tracks the last-claimed turn (AssembleContext has no turn field — the
-  // assemble seam reads it).
-  ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: UserMessage; turn: number }) => {
-    captureClaimed(agent, message, turn)
-    noteClaimedTurn(agent, turn)
-  })
   const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps })
-  // First moa pre-step listener: observe the sanitizer's published FROZEN
-  // selection FIRST (effective-model-truth §5.2 part 2 — before anything
-  // else, subagent-guarded), then the mount-race ensureArmed retry, then the
-  // pending-row splice (the row was queued during this step's assemble, so
-  // delivery lands in the SAME step as the overlay, §5.3).
+  // The entry-point admission seam (D3.2): TUI submits / queued-chip flushes /
+  // slash-command expansions await `routeBeforeAdmission(agent, opening)`
+  // BEFORE their `agent.followup(...)`. Registered module-wide so plain
+  // imports of this package reach the live router; side-effect-free in
+  // moa-less deployments (no entry registered).
+  setMoaAdmissionEntry({
+    routeBeforeAdmission: (agent, opening) => router.routeBeforeAdmission(agent, opening),
+    ledgerPath: () => deps.ledgerPath?.(),
+  })
+  // Claim capture + admission bind + escalation-floor restore (one listener,
+  // per-message emit): the router owns the whole claimed handling now.
+  ctx.on('agent/inbox/claimed', ({ agent, message, turn }: { agent?: unknown; message: UserMessage; turn: number }) => {
+    router.noteClaimed(agent, message, turn)
+  })
+  // The moa pre-step listener: observe the sanitizer's published FROZEN
+  // selection FIRST (r3-final: tripwire only — a non-moa, non-boot pair
+  // without a preceding noteUserSelection is reported, never armed/disarmed
+  // around), then the mount-race ensureArmed retry, then the pending-row
+  // splice (the row was queued at claim-bind, so delivery lands in the SAME
+  // step as the routed selection, §5.3).
   const observePreStep = async (payload: { agent?: unknown }, next: () => Promise<unknown>): Promise<unknown> => {
     if (!isSubagentAgent(payload.agent)) {
       const live = readPublishedSelection(payload.agent)
@@ -220,17 +236,15 @@ export function apply(ctx: Context): void {
     return router.preStepListener(payload as never, next)
   }
   ctx.on('agent/pre-step', observePreStep as never)
-  ctx.on('agent/request', router.listener)
-  // The classification seam (effective-model-truth §5.3): an OUTER
-  // `system-prompt/assemble` listener — plugin-apply registration happens
-  // BEFORE the harness registers its assemble listener at agent creation
-  // (t0 < t1, no prepend), so after `await next()` the harness has already
-  // written variables.provider/model from the live selection.
-  ctx.on('system-prompt/assemble', router.assembleListener as never)
   // Acceptance judge (§3.3/§3.4): capture-only `agent/turn-stopping`
   // listener — capture inputs synchronously, dispatch the judge DETACHED
-  // (never blocks the waterfall; wakes the retry via agent.followup).
-  const judge = createAcceptanceJudge(core, { validation, ensureArmed: tryArm, deps: buildJudgeDeps(ctx, read) })
+  // (never blocks the waterfall; wakes the retry via agent.followup after a
+  // pre-followup tier select, D3.2).
+  const judge = createAcceptanceJudge(core, {
+    validation,
+    ensureArmed: tryArm,
+    deps: { ...buildJudgeDeps(ctx, read), tierSelection: (tier, carried, signal) => router.tierSelection(tier, carried, signal) },
+  })
   ctx.on('agent/turn-stopping', judge.listener as never)
 }
 

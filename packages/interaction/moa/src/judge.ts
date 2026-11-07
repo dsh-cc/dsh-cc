@@ -15,17 +15,18 @@
  * @module
  */
 
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
 import { appendJsonl } from '@dsh-cc/sidecar-io'
 import { capMiddleToTokenBudget, systemoneDecide } from '@dsh-cc/systemone'
 import { resolveJudgeRoute } from './judge-route.ts'
 import { isSubagentAgent } from './agent-scope.ts'
+import { noteMoaSelection } from './runtime-state.ts'
 import { MOA_ESCALATION_KIND } from './state.ts'
 import { ladderSnapshot, nextDistinctTier, TIER_ALIASES, tierAt } from './tiers.ts'
 import type { MoaCore, MoaSettings } from './index.ts'
-import type { ArmingValidation, EnsureArmed } from './router.ts'
+import { tierRouteVariables, type ArmingValidation, type EnsureArmed } from './router.ts'
 
 /** Same crop marker contract as the router (§3.3). */
 const CROP_MARKER = '[…truncated…]'
@@ -54,6 +55,11 @@ export interface JudgeDeps {
   resolveBackend?: ((route: ResolvedRoute) => { baseURL: string; apiKey?: string } | undefined) | undefined
   /** Injectable fetch for `systemoneDecide` (tests). */
   fetchImpl?: (typeof fetch) | undefined
+  /**
+   * The router's effort-validated tier `ModelSelection` computation (withTier's
+   * re-validation, D3.2). Absent in hand-built rigs → the bare tier pair.
+   */
+  tierSelection?: ((tier: number, carriedEffort: string | undefined, signal: AbortSignal) => Promise<ModelSelection | undefined>) | undefined
   /** Escalate rows land here (`<dshHome>/moa/routing.jsonl`). */
   routingLedgerPath?: (() => string | undefined) | undefined
   /** Judge verdict rows land here (`<dshHome>/moa/acceptance.jsonl`). */
@@ -240,6 +246,14 @@ export function createAcceptanceJudge(
       if (event.type === 'request/header' && event.data.reason === 'change') {
         return 'model changed (/model)'
       }
+      // 0.2.2: an explicit /model|/effort write is a DURABLE `model/selection`
+      // event (possibly with no request in between — a bare /model never opens
+      // a turn). moa's own selects post-date this snapshot's watermark (the
+      // escalation select happens AFTER isStale passed), so any selection
+      // event in the window is a user write or an older chain's — both stale.
+      if (event.type === 'model/selection') {
+        return 'model changed (/model)'
+      }
     }
     return undefined
   }
@@ -342,6 +356,25 @@ export function createAcceptanceJudge(
     // followup so an automatic retry chain can be judged turn after turn
     // (§3.3.5 limits 1 and 2); the log writes below are not escalation state.
     release()
+    // D3.2 escalation (§4.2 RetryTurn): the judge selects the tier it already
+    // computed — select BEFORE the followup, so the retry turn's
+    // `preStep`-frozen `model.current()` reads the escalated pair (and a
+    // crash/resume in between restores it from the durable selection, F-3).
+    // The select is recorded as moa's own write (noteMoaSelection — never
+    // disarms). Never a re-classification, by construction. A disarm that
+    // landed mid-flight (explicit /model — §6 precedence) vetoes the
+    // escalation entirely, mirroring the old request-time transition guard.
+    if (!opts.validation.ok || !arming.isArmed()) {
+      await logJudge({ ...base, pAcceptable, acted: false, reason: 'stale: moa disarmed mid-flight' }).catch(() => undefined)
+      return
+    }
+    const toSelection = deps.tierSelection !== undefined
+      ? await deps.tierSelection(toTier, snap.agent.model.current()?.reasoningEffort, new AbortController().signal)
+      : tierRouteVariables(toTier, deps.routes?.())
+    if (toSelection !== undefined) {
+      snap.agent.model.select(toSelection)
+      noteMoaSelection(toSelection)
+    }
     // The typed followup IS the visible escalation status row (§3.5 single
     // row): durable user/message, moa-escalation provenance, form notice —
     // never a raw re-send of the user text with source.kind 'user' (that

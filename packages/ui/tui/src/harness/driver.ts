@@ -7,9 +7,10 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { type Agent, type AgentHandle, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import { type Agent, type AgentHandle } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { installModelSelectionWithSanitizer } from './model-selection-wiring.ts'
+import { createDriverSelectionFace } from './driver-selection-face.ts'
 import { bindPresetResolution } from './preset.ts'
 import { bootBannerRows } from './boot-banner.ts'
 import { createSessionsSection } from './driver-sessions.ts'
@@ -34,16 +35,14 @@ import { createPromoteSection } from './driver-promote.ts'
 import { bindModelCycling } from './model-cycling-binding.ts'
 import type { ProviderRuntime } from '../provider-command.ts'
 
-import type { Driver } from '../state/driver-types.ts'
-export type { Driver } from '../state/driver-types.ts'
 import { createEmitChannel } from './driver-emit.ts'
-import type { DriverConfig } from '../state/driver-types.ts'
+import type { ApprovalAnswerKind, Driver, DriverConfig } from '../state/driver-types.ts'
+export type { Driver } from '../state/driver-types.ts'
 
 import { readResumeTarget, writeResumeTarget } from '../resume-target.ts'
 import { coldCutGlobalHistory, defaultTuiDir } from '../history.ts'
 import { resolveProject } from '../project.ts'
 import { recordProjectSessionId } from '../project-sessions.ts'
-import type { ApprovalAnswerKind } from '../state/driver-types.ts'
 import {
   closeTodoPanel,
   closeUsagePanel,
@@ -96,10 +95,14 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   const { freshPresetId, setupForCreate, setupForResume } = await bindPresetResolution(ctx, {
     configPreset: config.agentPreset,
     showNotice,
-    afterMount: (agentCtx) => installModelSelectionWithSanitizer(agentCtx, selection),
+    afterMount: (agentCtx) => installModelSelectionWithSanitizer(agentCtx),
   })
   const cwd = config.cwd ?? process.cwd()
-  const selection: ModelSelectionRef = { assembled: undefined, current: undefined }
+  // Rebindable holder: switchSession replaces handle/agent in-place so every
+  // event handler and closure reads the LIVE agent at fire time. The selection
+  // face (harness-0.2.2 D3.1) delegates through it (driver-selection-face.ts).
+  let currentMutable: { handle: AgentHandle; agent: Agent } | undefined
+  const selection = createDriverSelectionFace(() => currentMutable)
 
   const agentOptions = config.provider !== undefined && config.model !== undefined
     ? { provider: config.provider, model: config.model }
@@ -165,12 +168,9 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
     showNotice('没有可继续的上一会话，可 /resume 手动选择')
   }
 
-  // Rebindable holder: switchSession replaces handle/agent in-place so every
-  // event handler and closure reads the LIVE agent at fire time.
+  // The rebindable holder's first binding (see the holder's declaration above).
   const current: { handle: AgentHandle; agent: Agent } = { handle, agent: handle.agent }
-  if (current.agent.options.provider !== undefined && current.agent.options.model !== undefined) {
-    selection.current = { provider: current.agent.options.provider, model: current.agent.options.model }
-  }
+  currentMutable = current
   // Deployment default-model service, effort resolution, history binding, and
   // the resume marker now live in the agent section (harness/driver-agent.ts).
   // Per-project input history: prompts and bash commands are bucketed by the
@@ -240,7 +240,7 @@ export async function createDriver(ctx: Context, config: DriverConfig = {}): Pro
   emit(setPermissionMode(state, liveModeWithDefault(ctx)(current.agent)))
 
   // Boot banner before the resume fold; the settled seed upserts label + notice.
-  const modelLabel = selection.current?.model ?? 'default model'
+  const modelLabel = selection.current()?.model ?? 'default model'
   for (const row of bootBannerRows(modelLabel, cwd)) emit(upsertRow(state, row))
 
   // Replay the durable event log so a resumed session shows its prior

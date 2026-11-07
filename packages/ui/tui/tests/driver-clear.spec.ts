@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -58,6 +59,7 @@ function makeClearCtx(opts: {
       : agentOptions ?? {}
     const agent = {
       options,
+      model: fakeAgentModel(options),
       session: { id: s.id, header: s.cwd === undefined ? {} : { cwd: s.cwd }, events: s.events ?? [] , snapshotEvents() { return this.events } },
       id: `agent-${s.id}`,
       status: s.status ?? 'idle',

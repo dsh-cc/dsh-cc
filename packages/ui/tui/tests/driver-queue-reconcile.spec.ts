@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,7 +26,7 @@ interface FakeAgent extends Record<string, unknown> {
 
 function makeFakeAgent(status: string): FakeAgent {
   return {
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: { id: 's-reconcile', header: {}, events: [], snapshotEvents() { return this.events } },
     id: 'a-reconcile',
     status,
@@ -145,6 +146,11 @@ describe('zombie-busy reconciliation (W2)', () => {
     setAgentStatus('idle')
 
     driver.steerQueued()
+
+    // The zombie re-dispatch classifies the batch's first chip BEFORE
+    // dispatching (D3.2 batch serialization) — one settled macrotask later
+    // the chipped followup has landed, FIFO order intact.
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(sentTexts(agent.followup.mock.calls)).toEqual(['queued chip'])
     expect(driver.state.queued).toEqual([])

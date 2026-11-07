@@ -14,10 +14,11 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { TuiState } from '../store.ts'
 import {
   type ContextPressureStateLike,
+  type DriverModelSelection,
   type SessionProjectionsLike,
   type ShellExecutorLike,
   type TokenUsageStateLike,
@@ -53,7 +54,7 @@ export type StatusLineWiringCtx = {
   ctx: Context
   cwd: string
   current: { agent: Agent }
-  selection: ModelSelectionRef
+  selection: DriverModelSelection
   /** The driver's emit listener set — the wiring rides it as the S1 diff seam. */
   listeners: Set<(state: TuiState) => void>
   /** The driver agent section's shared, idempotent boot-seed promise; resolves on seed success or failure (wire defensively anyway — the settled continuation can throw). */
@@ -163,8 +164,8 @@ export function createStatusLineWiring(
     // transcript_path is advertised only while the CC-shape mirror is ready
     // (an unreadable/empty file would yield all-zeros that shadow the stdin
     // fallbacks above — ccstatusline's `??` chain passes zeros through).
-    const model = selection.current?.model
-    const effort = selection.current?.reasoningEffort
+    const model = selection.current()?.model
+    const effort = selection.current()?.reasoningEffort
     return buildStatusLinePayload({
       driverCwd: cwd,
       sessionCwd,
@@ -315,21 +316,27 @@ export function createStatusLineWiring(
 
   // S1 emit-diff seam: fire on permission-mode and model/effort changes by
   // diffing across each emission (fires for every emit path by construction).
+  // The selection face returns a DETACHED object per read, so the diff is by
+  // value (model/effort), never identity.
   let seenEmit = false
   let lastMode: string | undefined
-  let lastSelection: ModelSelectionRef['current']
+  let lastModel: string | undefined
+  let lastEffort: string | undefined
   let lastBranch: string | undefined
   rt.listeners.add((_) => {
     const mode = state().permissionMode
-    const currentSelection = selection.current
+    const current = selection.current()
+    const currentModel = current?.model
+    const currentEffort = current?.reasoningEffort
     const branch = rt.branchRef.value
-    // Moa disarm: a MODEL change (not a reasoning-effort change — the same
-    // ref object is replaced for either) invalidates the routed tier.
-    if (seenEmit && lastSelection?.model !== currentSelection?.model) rt.moaRef.value = undefined
-    if (seenEmit && (mode !== lastMode || currentSelection !== lastSelection || branch !== lastBranch)) fire()
+    // Moa disarm: a MODEL change (not a reasoning-effort change) invalidates
+    // the routed tier.
+    if (seenEmit && lastModel !== currentModel) rt.moaRef.value = undefined
+    if (seenEmit && (mode !== lastMode || currentModel !== lastModel || currentEffort !== lastEffort || branch !== lastBranch)) fire()
     seenEmit = true
     lastMode = mode
-    lastSelection = currentSelection
+    lastModel = currentModel
+    lastEffort = currentEffort
     lastBranch = branch
   })
 

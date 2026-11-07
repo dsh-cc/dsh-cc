@@ -93,8 +93,8 @@ export type ProviderSectionDeps = {
     get(key: string): unknown
     on(event: unknown, handler: unknown): unknown
   }
-  /** Live model selection; `current.provider` backs the current marker. */
-  selection: { current: { provider?: string } | undefined }
+  /** Live model selection face; `current().provider` backs the current marker. */
+  selection: { current(): { provider?: string } | undefined }
 }
 
 /**
@@ -349,7 +349,7 @@ export function createProviderSection(rt: ProviderSectionDeps): ProviderRuntime 
       configured,
       directory,
       credentialStates: states,
-      ...(rt.selection.current?.provider !== undefined ? { currentProvider: rt.selection.current.provider } : {}),
+      ...(rt.selection.current()?.provider !== undefined ? { currentProvider: rt.selection.current()!.provider! } : {}),
     })
   }
 

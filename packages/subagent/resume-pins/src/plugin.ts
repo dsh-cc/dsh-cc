@@ -33,11 +33,12 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-subagent'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
 import { loadAgentsDir, discoverBundledAgents, applyActorContract, gateCandidates, DEFAULT_ACTOR_CONTRACT_MODELS, type AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
 import { evaluateGate, type GateDecision, type GateEnv, type GateResolvedConfig } from './gate.ts'
-import { PinBlockedError, applyPinOverlay } from './overlay.ts'
+import { applyPinnedMaxTokens, pinnedSelectionOf } from './overlay.ts'
 import { definitionFingerprint } from './fingerprint.ts'
 import {
   RESUME_POLICY_NAMESPACE,
@@ -419,24 +420,45 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
     return out
   })
 
-  // §4.8: the request-time overlay — every turn of a pinned child, whatever
-  // resumed it. Miss → passthrough; blocked or corrupt → visible failure
-  // (fail-closed: the corrupt pin file IS the durable blocked marker). The
-  // read is read-through: a file deleted or corrupted out-of-band is never
-  // served from the cache.
+  // D3.5: the pinned provider/model/effort triple is applied DURABLY via
+  // `agent.model.select(...)` in the spawn/resume preparation path — at child
+  // publication (`subagent/start` fires before the first step's
+  // `model.current()` freeze; the pin store is read there anyway). Probe
+  // result (S4, upstream manager.ts coldResume): a resumed continuable
+  // child's AgentOptions ARE rebuilt from the spawn-time descriptor, which
+  // snapshot the pinned route — so this select is redundant-but-harmless for
+  // complete pins and load-bearing for a degraded pin (whose captured tuple
+  // may not have survived into the resumed options). A blocked pin gets no
+  // tuple (the pre-execute gate owns the visible fail-closed deny); a corrupt
+  // or legacy (unpinned) child passes through untouched.
+  ctx.on('subagent/start', (info: { id?: unknown }, _parent?: unknown) => {    try {
+      const id = typeof info?.id === 'string' ? info.id : String(info?.id ?? '')
+      if (id.length === 0) return
+      const pin = safeRead(id)
+      if (pin === undefined || 'kind' in pin) return
+      const selection = pinnedSelectionOf(pin)
+      if (selection === undefined) return
+      const child = (ctx as unknown as { agents?: { get(id: SessionId): { model?: { select(s: unknown): void } } | undefined } })
+        .agents?.get(SessionId(id))
+      if (child?.model === undefined) return
+      child.model.select(selection)
+    } catch {
+      // A selection rewrite failure must never surface into the spawn path —
+      // the pin gate remains the enforcement point.
+    }
+  })
+
+  // D3.5: ONLY `maxTokens` survives on `agent/request` (a legal sampling
+  // control — provider/model/effort rewrites are step-fatal upstream). The
+  // blocked/corrupt fail-closed duty moved to the pre-spawn gate (it denies
+  // before any model call), so this listener never throws. The read is
+  // read-through: a file deleted or corrupted out-of-band is never served
+  // from the cache.
   ctx.on('agent/request', async ({ agent }, next) => {
     const resolved = await next()
     if (agent === undefined) return resolved
     const pin = safeRead(String(agent.id))
-    if (pin === undefined) return resolved
-    if ('kind' in pin) {
-      throw new PinBlockedError(`resume pin for ${String(agent.id)} is unreadable (${pin.reason}); refusing the request`)
-    }
-    try {
-      return applyPinOverlay(resolved as unknown as Record<string, unknown>, pin) as unknown as typeof resolved
-    } catch (error) {
-      if (error instanceof PinBlockedError) throw error
-      return resolved
-    }
+    if (pin === undefined || 'kind' in pin) return resolved
+    return applyPinnedMaxTokens(resolved as unknown as Record<string, unknown>, pin) as unknown as typeof resolved
   })
 }

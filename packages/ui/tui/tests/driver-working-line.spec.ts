@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,7 +26,7 @@ interface FakeAgent extends Record<string, unknown> {
 
 function makeFakeAgent(sessionId: string, status: string): FakeAgent {
   return {
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: { id: sessionId, header: {}, events: [], snapshotEvents() { return this.events } },
     id: `agent-${sessionId}`,
     status,

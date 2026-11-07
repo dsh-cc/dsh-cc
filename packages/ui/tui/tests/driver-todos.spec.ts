@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -41,7 +42,7 @@ function makeTodosCtx(opts: {
 }) {
   const createSession: FakeSession = { id: 's-a', events: [], snapshotEvents() { return this.events }, status: 'idle' }
   const makeAgent = (s: FakeSession): Record<string, unknown> => ({
-    options: {},
+    options: {}, model: fakeAgentModel({}),
     session: { id: s.id, header: {}, events: s.events ?? [] , snapshotEvents() { return this.events } },
     id: `agent-${s.id}`,
     status: s.status ?? 'idle',

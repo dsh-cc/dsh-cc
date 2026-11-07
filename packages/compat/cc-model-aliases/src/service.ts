@@ -17,14 +17,17 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SettingsNamespace, SettingsProvider } from '@dsh-cc/settings-provider'
 import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
-// Type-only: pull in the declaration-merged `agent/request` event so the host
-// overlay listener typechecks. Does not extend AgentOptions.
+// Type-only: pull in the declaration-merged Context `agents` member and the
+// `subagent/start` lifecycle event so the spawn-path listener typechecks.
 import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-subagent'
 import { ConfigAliasesSchema, SettingsAliasesSchema } from './schema.ts'
 import { createModelInspector, createModelResolver, mergeAliasMaps } from './resolver.ts'
-import { overlayStampedEffort, stampedEffortOf } from './effort.ts'
+import { stampedEffortOf } from './effort.ts'
 import { assertChatModel } from './systemone-guard.ts'
 import type { AliasInspection, AliasTarget, DetailedRoute, ResolvedRoute } from './types.ts'
 
@@ -96,16 +99,34 @@ export function apply(ctx: Context, config: Config = {}): void {
   // the upstream provenance form (`/doctor`) available alongside.
   ctx.provide('ccModelRoutes', { resolve: resolver, resolveDetailed, inspect } satisfies ModelRoutes)
 
-  // Host-side effort overlay: a child spawned through an alias whose route
-  // declared `reasoningEffort` carries it on its options as an undeclared
-  // runtime extra key (stamped by the Task tool / plugin-loader). buildRequest
-  // deep-freezes its seed config and may restore an explicit parent /effort
-  // from a fork seed's request/header — the alias contract wins, so overlay
-  // AFTER `next()` with a shallow copy (never in place). Root agents carry no
+  // Spawn-path stamp application (harness-0.2.2 D3.6 — replaces the
+  // request-time stamped-effort overlay, which `agent/request`'s
+  // model-identity guard now rejects step-fatally): a child spawned through
+  // an alias whose route declared `reasoningEffort` carries it on its options
+  // (stamped by the Task tool / plugin-loader). The S4 fork-seed probe proved
+  // restoration still occurs: a fork child inherits the parent's explicit
+  // header effort through the seeded log prefix, so `AgentModel.current()`
+  // reports the RESTORED effort, not the stamp — the alias contract must win,
+  // so the stamp is selected DURABLY at child publication (`subagent/start`
+  // fires before the first step's freeze). Plain spawns need no event: when
+  // the live selection already carries the stamp, `select` is skipped (an
+  // options-only fallback must not gain durable noise). Root agents carry no
   // stamp on options, so this is a no-op for them.
-  ctx.on('agent/request', async ({ agent }, next) => {
-    const resolved = await next()
-    return overlayStampedEffort(resolved, stampedEffortOf(agent.options))
+  ctx.on('subagent/start', (info: { id?: unknown }, _parent?: unknown) => {
+    try {
+      const id = typeof info?.id === 'string' ? info.id : undefined
+      if (id === undefined) return
+      const child = (ctx as unknown as { agents?: { get(id: SessionId): { options?: unknown; model?: { current(): { provider: string; model: string; reasoningEffort?: string } | undefined; select(s: { provider: string; model: string; reasoningEffort: ReasoningEffortId }): void } } | undefined } })
+        .agents?.get(SessionId(id))
+      if (child?.model === undefined) return
+      const stamp = stampedEffortOf(child.options)
+      if (stamp === undefined) return
+      const live = child.model.current()
+      if (live === undefined || live.reasoningEffort === stamp) return
+      child.model.select({ provider: live.provider, model: live.model, reasoningEffort: ReasoningEffortId(stamp) })
+    } catch {
+      // A stamp application failure must never surface into the spawn path.
+    }
   })
 
   // System One chat-path guard (the single boundary): every chat request —

@@ -90,7 +90,7 @@ function makeHarness(opts: {
   const section = createModelCyclingSection({
     readCycleOrder: () => opts.cycleOrder,
     resolveAlias: (alias) => opts.aliases[alias],
-    selection: { current: opts.selection },
+    selection: { current: () => opts.selection },
     // Mirrors the real applyModelSwitch: writes the selection and emits the
     // status-row toast.
     applyModelSwitch: async (provider, model) => {

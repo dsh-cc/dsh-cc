@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -34,7 +35,7 @@ function makeCtx(capture: {
         const agentOpts = (opts as { agentOptions?: Record<string, unknown> })?.agentOptions ?? {}
         return {
           agent: {
-            options: agentOpts,
+            options: agentOpts, model: fakeAgentModel(agentOpts),
             session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-test',
             status: 'idle',
@@ -49,7 +50,7 @@ function makeCtx(capture: {
         const agentOpts = (opts as { agentOptions?: Record<string, unknown> })?.agentOptions ?? {}
         return {
           agent: {
-            options: agentOpts,
+            options: agentOpts, model: fakeAgentModel(agentOpts),
             session: { id: 's-test', header: {}, events: capture.resumeEvents ?? [] , snapshotEvents() { return this.events } },
             id: 'a-test',
             status: capture.resumeStatus ?? 'idle',
@@ -250,7 +251,7 @@ function makeCommandsCtx(commands: {
       agents: {
         create: async () => ({
           agent: {
-            options: {},
+            options: {}, model: fakeAgentModel({}),
             session: { id: 's-test', header: {}, events: [], snapshotEvents() { return this.events } },
             id: 'a-test',
             status: 'idle',

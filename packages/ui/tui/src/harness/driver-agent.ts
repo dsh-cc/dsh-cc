@@ -229,7 +229,7 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
    * resumes.
    */
   const stalePair = (captured: { provider: string; model: string }): boolean => {
-    const live = selection.current
+    const live = selection.current()
     if (live !== undefined && live.provider === captured.provider && live.model === captured.model) {
       return false
     }
@@ -238,18 +238,26 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
   }
 
   /**
-   * Seed `selection.current` from the deployment default when no explicit
-   * provider/model is configured. `currentSelection()` is awaited so a
-   * (duck-typed) async service can defer settlement — the boot seed's
-   * await-late wait seam keys off this promise.
+   * Seed the durable selection from the deployment default when the current
+   * agent has NO resolvable selection (harness-0.2.2 D3.1 precedence):
+   * - a durable recorded selection (`modelSelection.lastUsed`/`pending`)
+   *   always wins — on resume it reflects the last `/model` write;
+   * - explicit creation options resolve through `model.current()` without a
+   *   durable record;
+   * - only when NEITHER exists does the reseed select the deployment default
+   *   (durably — `preStep` throws on an unresolvable selection, and a fresh
+   *   session must gain one before the first turn). `currentSelection()` is
+   *   awaited so a (duck-typed) async service can defer settlement — the boot
+   *   seed's await-late wait seam keys off this promise.
+   *
+   * The `reset` argument is retained for the session-switch call shape; the
+   * precedence rule above IS the reset semantics now (a durable selection is
+   * never clobbered by a reseed).
    */
   const seedDefaultModel = async (reset = false): Promise<void> => {
-    if (reset) selection.current = undefined
-    if (selection.current !== undefined) return
-    if (current.agent.options.provider !== undefined && current.agent.options.model !== undefined) {
-      selection.current = { provider: current.agent.options.provider, model: current.agent.options.model }
-      return
-    }
+    void reset
+    if (selection.current() !== undefined) return
+    if (current.agent.options.provider !== undefined && current.agent.options.model !== undefined) return
     if (agentOptions === undefined) {
       const dep = await agentDefaultModel?.currentSelection()
       if (dep !== undefined) {
@@ -260,9 +268,9 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
             effort = dep.reasoningEffort
           }
         }
-        selection.current = effort === undefined
+        current.agent.model.select(effort === undefined
           ? { provider: dep.provider, model: dep.model }
-          : { provider: dep.provider, model: dep.model, reasoningEffort: ReasoningEffortId(effort) }
+          : { provider: dep.provider, model: dep.model, reasoningEffort: ReasoningEffortId(effort) })
       }
     }
   }
@@ -285,7 +293,7 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
       console.warn('[dsh-cc-tui] default-model seed failed:', error)
     } finally {
       const settled = rt.state()
-      const modelLabel = selection.current?.model ?? 'default model'
+      const modelLabel = selection.current()?.model ?? 'default model'
       const rows = settled.rows.slice()
       const bannerIndex = rows.findIndex(
         existing => existing.kind === 'status' && (existing as { text?: string }).text?.startsWith('dsh cc-mode — '),
@@ -294,7 +302,7 @@ export function createAgentSection(rt: DriverAgentCtx): AgentSection {
         rows[bannerIndex] = { kind: 'status', text: bootBannerText(modelLabel, rt.cwd) }
         rt.emit({ ...settled, rows })
       }
-      if (selection.current === undefined) {
+      if (selection.current() === undefined) {
         rt.emit(upsertRow(rt.state(), { kind: 'status', text: 'No model configured. Pick one with /model.' }))
         rt.onModelMissing?.()
       }

@@ -26,7 +26,8 @@
   "dependencies": {
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/settings-cascade": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^"
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/moa": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",

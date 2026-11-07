@@ -7,6 +7,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { routeBeforeAdmission } from '@dsh-cc/moa'
 import { helpable } from '@dsh-cc/command-usage'
 import { initContent } from './init.ts'
 
@@ -14,11 +15,14 @@ export const name = 'command-init'
 export const inject = ['commands']
 
 /** Execute `/init`: hand the init instruction to the agent as a model turn. */
-function executeInit(invocation: CommandInvocation): CommandResult {
+async function executeInit(invocation: CommandInvocation): Promise<CommandResult> {
   const message = createUserMessage({
     content: [initContent()],
     source: { kind: 'user' },
   })
+  // Entry-point admission (D3.2): the /init expansion opens a genuine user
+  // turn — it classifies before the followup.
+  await routeBeforeAdmission(invocation.agent, message)
   invocation.agent.followup(message)
   return { kind: 'success', text: 'Initializing CLAUDE.md…' }
 }

@@ -634,6 +634,9 @@ importers:
 
   packages/compat/cc-plugin-loader:
     dependencies:
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../../interaction/moa
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../cc-model-aliases
@@ -1114,6 +1117,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../../interaction/command-usage
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../../interaction/moa
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
@@ -1612,6 +1618,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/moa':
+        specifier: workspace:^
+        version: link:../moa
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -3453,6 +3462,9 @@ importers:
       '@deepseek-ai/dsh-session-persistence':
         specifier: link:../../../../deepseek-harness/packages/session/session-persistence
         version: link:../../../../deepseek-harness/packages/session/session-persistence
+      '@deepseek-ai/dsh-subagent':
+        specifier: link:../../../../deepseek-harness/packages/subagent/subagent
+        version: link:../../../../deepseek-harness/packages/subagent/subagent
       '@deepseek-ai/dsh-tools':
         specifier: link:../../../../deepseek-harness/packages/core/tools
         version: link:../../../../deepseek-harness/packages/core/tools

@@ -198,13 +198,14 @@ export function createHudSection(rt: DriverHudCtx) {
         : rows.map(row => truncateToWidth(row, width))
       return `${clipped.join('\n')}\n${formatModeLine(state().permissionMode)}`
     }
-    const effort = selection.current?.reasoningEffort
+    const live = selection.current()
+    const effort = live?.reasoningEffort
     const s = state()
     return formatStatusLine({
       cwd: current.agent.session.header.cwd ?? cwd,
       sessionId: String(current.agent.session.id),
       permissionMode: s.permissionMode,
-      ...selection.current === undefined ? {} : { model: selection.current.model },
+      ...live === undefined ? {} : { model: live.model },
       ...effort === undefined ? {} : { effort },
       ...branchRef.value === undefined ? {} : { branch: branchRef.value },
       ...(() => {

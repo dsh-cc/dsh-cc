@@ -1,35 +1,18 @@
 /**
- * Host-side application of an alias-stamped reasoning effort.
+ * Host-side application of an alias-stamped reasoning effort (harness-0.2.2
+ * D3.6: the stamp is applied DURABLY at child publication — the request-time
+ * overlay is gone, step-fatally rejected upstream).
  *
  * Named CC subagents carry `reasoningEffort` on their child options as an
  * undeclared runtime extra key (stamped by the Task tool / plugin-loader when
- * the spawn's alias resolved with one). `buildRequest` deep-freezes its seed
- * config and the fork may have restored an explicit parent `/effort` from the
- * seed `request/header` — the alias contract must win — so the host
- * `agent/request` listener in the routes service overlays the stamp AFTER
- * `next()` via this helper.
- *
- * The overlay is a shallow copy: assigning onto the resolved config in place
- * throws on the frozen seed or is invisible. Any absent/blank/non-string
- * stamp is a no-op returning the input unchanged.
+ * the spawn's alias resolved with one). A fork-seed child restores an
+ * explicit parent `/effort` through the seeded log prefix (S4 probe:
+ * `AgentModel.current()` reports the restored effort, not the stamp), so the
+ * `subagent/start` listener in the routes service selects the stamp onto the
+ * child's live selection — the alias contract wins.
  *
  * @module @dsh-cc/model-aliases/effort
  */
-
-/**
- * Overlay an alias-stamped reasoning effort onto one resolved request config.
- * @param resolved - the config produced by the `agent/request` waterfall.
- * @param stamped - the effort read off the child agent's options (any type;
- *   only a non-empty string applies).
- * @returns a shallow copy carrying the stamp, or the input unchanged when the
- *   stamp is absent/blank/non-string.
- */
-export function overlayStampedEffort<T extends { reasoningEffort?: unknown }>(resolved: T, stamped: unknown): T {
-  if (typeof stamped !== 'string' || stamped.length === 0) return resolved
-  // Stamp is an opaque adapter spelling; the branded `ReasoningEffortId` on
-  // LlmCallConfig is applied at prepareCall, not here.
-  return { ...resolved, reasoningEffort: stamped } as T
-}
 
 /**
  * Read the effort stamp off a child agent's options. The stamp is an

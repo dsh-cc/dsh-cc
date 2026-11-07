@@ -6,11 +6,13 @@
  */
 
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { routeBeforeAdmission } from '@dsh-cc/moa'
 import { LOCAL_SLASH, parseSlash } from '../slash.ts'
 import { saveHistory } from '../history.ts'
 import {
   clearQueue,
   clearTurn,
+  dequeue,
   enqueue,
   popQueued,
   setBusy,
@@ -38,6 +40,36 @@ const asUserMessage = (text: string) => createUserMessage({
   content: [{ type: 'text', text }],
   source: { kind: 'user' },
 })
+
+/**
+ * Whether `dispatchQueued` will hand this queued line to `agent.followup`
+ * verbatim (a plain prompt or unknown slash), as opposed to the plugin
+ * command seam (which classifies its own expansion at the plugin admission
+ * site). Mirrors dispatchQueued's decision tree exactly.
+ */
+const willRawSend = (rt: DriverQueueCtx, text: string): boolean => {
+  const parsed = parseSlash(text)
+  if (parsed.kind !== 'local') return true
+  if ((LOCAL_SLASH as readonly string[]).includes(parsed.name)) return true
+  const plugins = rt.ctx.get('ccPlugins') as CcPluginsRunLike | undefined
+  return plugins === undefined || typeof plugins.runPluginCommand !== 'function'
+}
+
+/**
+ * The queued-batch admission rule (migration design D3.2): every batch form
+ * (queued-chip flush, zombie re-dispatch) serializes — classify the batch's
+ * FIRST prompt entry only (all queued chips open one turn; later entries are
+ * same-turn continuations) and await it BEFORE dispatching the batch.
+ * Plugin-command chips never raw-send: their expansions classify at their
+ * own admission seam, so they are skipped here. Returns whether an entry
+ * was routed.
+ */
+const routeBatchOpening = async (rt: DriverQueueCtx, texts: readonly string[]): Promise<boolean> => {
+  const firstPrompt = texts.find(text => willRawSend(rt, text))
+  if (firstPrompt === undefined) return false
+  await routeBeforeAdmission(rt.current.agent, asUserMessage(firstPrompt))
+  return true
+}
 
 /**
  * Dispatch one queued outbox entry. A queued plugin command (`/codex:review
@@ -133,18 +165,27 @@ const dispatchQueued = (rt: DriverQueueCtx, text: string, mode: 'followup' | 'st
  *    wakeDriver's idle path reliably starts the next driver.
  */
 const flushQueue = (rt: DriverQueueCtx): void => {
-  const flush = (): void => {
-    const s = rt.state()
-    const pending = [...s.queued]
+  const flush = async (): Promise<void> => {
+    const snapshot = rt.state()
+    const pending = [...snapshot.queued]
     if (pending.length === 0) return
-    rt.emit(clearQueue(s))
+    // Route the batch's first prompt entry BEFORE dispatching any (D3.2 batch
+    // serialization).
+    await routeBatchOpening(rt, pending)
+    // Drop exactly the snapshot prefix: a submit racing the classification
+    // append new chips behind it and they must survive.
+    const now = rt.state()
+    const prefixIntact = pending.every((text, index) => now.queued[index] === text)
+    rt.emit(prefixIntact
+      ? { ...now, queued: now.queued.slice(pending.length) }
+      : pending.reduce((state, text) => dequeue(state, text), now))
     const handedOff = pending.map(text => dispatchQueued(rt, text, 'followup'))
     // Anchor the followup turn only once we know at least one entry was
     // actually handed off: an all-dropped flush (e.g. a plugin command that
     // failed with a notice) must not leave a zombie busy spinner behind.
     void Promise.all(handedOff).then(results => {
       if (!results.some(Boolean)) return
-      rt.emit(setTurnActive(setBusy(rt.state(), true), { startedAt: Date.now(), outputBase: s.hud?.tokens?.output }))
+      rt.emit(setTurnActive(setBusy(rt.state(), true), { startedAt: Date.now(), outputBase: snapshot.hud?.tokens?.output }))
     })
   }
   // Await the agent that ENDED the turn (captured now); dispatchQueued reads
@@ -174,7 +215,10 @@ const steerQueued = (rt: DriverQueueCtx): void => {
   if (s.busy && rt.current.agent.status !== 'running') {
     const zombieChips = [...s.queued]
     rt.emit(clearTurn(clearQueue(setBusy(rt.state(), false))))
-    for (const chip of zombieChips) void dispatchQueued(rt, chip, 'followup')
+    // Batch serialization (D3.2): route the first prompt entry, then dispatch.
+    void routeBatchOpening(rt, zombieChips)
+      .then(() => { for (const chip of zombieChips) void dispatchQueued(rt, chip, 'followup') })
+      .catch((error: unknown) => rt.showNotice(`⚠ Queue dispatch failed: ${error instanceof Error ? error.message : String(error)}`))
     return
   }
   const pending = [...s.queued]
@@ -249,11 +293,11 @@ const submit = async (rt: DriverQueueCtx, text?: string): Promise<void> => {
     // otherwise the line stays ordinary prose.
   }
   // W4 await-late seam: the boot seed (deployment default model) must be
-  // SETTLED before this turn is enqueued or dispatched — the harness
-  // snapshots `selection.current` at the start of prompt assembly
-  // (@deepseek-ai/dsh-agent model-selection.ts `system-prompt/assemble`),
-  // so dispatching earlier would run the turn with an undefined model.
-  // Local `!` shell lines and slash commands above already returned.
+  // SETTLED before this turn is enqueued or dispatched — 0.2.2 freezes the
+  // step's selection from `agent.model.current()` at preStep start, so
+  // dispatching before the seed recorded a default would leave the turn
+  // without a resolvable provider/model. Local `!` shell lines and slash
+  // commands above already returned.
   await rt.waitForModel()
   // Persist the prompt (not slash commands — they are commands, not prompts,
   // and would dilute the recall signal; an unknown slash IS a prompt and
@@ -264,16 +308,20 @@ const submit = async (rt: DriverQueueCtx, text?: string): Promise<void> => {
   rt.setMarkedContent(true)
   rt.persistResumeTarget()
   const s = rt.state()
+  let batchRouted = false
   if (s.busy) {
     // Zombie-busy reconcile: if ground truth says the agent is not running,
     // the busy latch is stale (the event intake died mid-turn) and the chips
     // would strand until a turn/end that can never be seen. Reconcile from
-    // the agent status, re-dispatch the chips FIFO synchronously (NOT via
-    // flushQueue — its whenIdle deferral would let the draft below overtake
-    // them), then fall through to the idle-send path for the new draft.
+    // the agent status, re-dispatch the chips FIFO (NOT via flushQueue — its
+    // whenIdle deferral would let the draft below overtake them), then fall
+    // through to the idle-send path for the new draft. The batch's first
+    // prompt entry opens the turn, so it classifies HERE (D3.2) — the draft
+    // below is a same-turn continuation and skips its own classification.
     if (rt.current.agent.status !== 'running') {
       const zombieChips = [...rt.state().queued]
       rt.emit(clearTurn(clearQueue(setBusy(rt.state(), false))))
+      batchRouted = await routeBatchOpening(rt, zombieChips)
       for (const chip of zombieChips) void dispatchQueued(rt, chip, 'followup')
     } else {
       // Outbox: park the text as a pending chip only. It reaches the agent on
@@ -285,11 +333,14 @@ const submit = async (rt: DriverQueueCtx, text?: string): Promise<void> => {
     }
   }
   // Idle sends bypass the outbox entirely — the row surfaces from the durable
-  // `user/message` event, and a sent text must not stay recallable.
-  rt.current.agent.followup(createUserMessage({
+  // `user/message` event, and a sent text must not stay recallable. The idle
+  // submit is a turn-opening admission (D3.2): route BEFORE the followup.
+  const opening = createUserMessage({
     content: [{ type: 'text', text: draft }],
     source: { kind: 'user' },
-  }))
+  })
+  if (!batchRouted) await routeBeforeAdmission(rt.current.agent, opening)
+  rt.current.agent.followup(opening)
   // Anchor the working line at dispatch: elapsed counts from here, the token
   // delta from the current HUD total (undefined when unseeded — the tokenUsage
   // rebase pins it on the first change).

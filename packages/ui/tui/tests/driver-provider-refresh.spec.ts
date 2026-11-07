@@ -1,3 +1,4 @@
+import { fakeAgentModel } from './fake-model.ts'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -67,7 +68,7 @@ function makeCtx(opts: { settings?: unknown; llm?: unknown; credentials?: unknow
     agents: {
       create: async () => ({
         agent: {
-          options: {},
+          options: {}, model: fakeAgentModel({}),
           session: { id: 's-a', header: {}, events: [], snapshotEvents() { return this.events } },
           id: 'agent-s-a',
           status: 'idle',

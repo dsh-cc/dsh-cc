@@ -16,7 +16,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { createAcceptanceJudge, type JudgeDeps } from '../src/judge.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
-import { captureClaimed, getCapturedOpening, noteClaimedTurn, resetRuntimeCore } from '../src/runtime-state.ts'
+import { captureClaimed, getCapturedOpening, resetRuntimeCore } from '../src/runtime-state.ts'
 import { escalationOpening, GAUGE_ROUTE, routes as tierRoutes, userOpening } from './rig.ts'
 
 const dirs: string[] = []
@@ -40,7 +40,9 @@ interface FakeSession {
 interface UnitRig {
   judge: ReturnType<typeof createAcceptanceJudge>
   session: FakeSession
+  arming: ArmingMachine
   followed: { text: string; source: unknown }[]
+  selectLog: { kind: 'select' | 'followup'; detail: unknown }[]
   acceptStates: string[]
   deferred: { resolve: () => void } | undefined
   routingLedger: string
@@ -126,6 +128,10 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     acceptanceLedgerPath: () => acceptanceLedger,
   }
   const judge = createAcceptanceJudge(core, { validation: { ok: true, ladder: options.ladder }, deps })
+  // D3.2: the escalation path selects BEFORE the followup; the in-memory
+  // recorded selection and the followup share one event log so the test can
+  // assert the select-then-followup ORDER.
+  const selectLog: { kind: 'select' | 'followup'; detail: unknown }[] = []
   const fakeAgent = {
     session: {
       snapshotEvents: () => session.events,
@@ -136,14 +142,23 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
         return session.id
       },
     },
+    model: {
+      current: () => undefined,
+      select: (selection: unknown) => {
+        selectLog.push({ kind: 'select', detail: selection })
+      },
+    },
     followup: (message: { content: { type: string; text?: string }[]; source?: unknown }) => {
+      selectLog.push({ kind: 'followup', detail: message.source })
       followed.push({ text: (message.content ?? []).map((b) => b.text ?? '').join(''), source: message.source })
     },
   }
   return {
     judge,
     session,
+    arming,
     followed,
+    selectLog,
     acceptStates,
     get deferred() {
       return deferred
@@ -154,7 +169,6 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     seed: async (turn, messages) => {
       // The claimed emit is per-message; the LAST claimed message wins (§5.3).
       for (const message of messages) captureClaimed(undefined, message as UserMessage, turn)
-      noteClaimedTurn(undefined, turn)
     },
     stop: (turn) => {
       judge.listener({ agent: fakeAgent, turn, signal: new AbortController().signal } as never)
@@ -204,6 +218,15 @@ describe('moa acceptance judge — unit', () => {
     })
     expect(rig.followed[0].text).toBe('moa: draft → blueprint, first answer rejected by judge')
     expect(rig.bookkeeping.stateFor(0)).toEqual({ tierFloor: 2, retriesUsed: 1 })
+    // D3.2 RetryTurn: the escalated tier is SELECTED (durable) before the
+    // retry followup — the retry turn's freeze reads the escalated pair even
+    // after a crash in between; the select is recorded as moa's own write
+    // (noteMoaSelection — the machine never disarms).
+    expect(rig.selectLog).toEqual([
+      { kind: 'select', detail: { provider: 'mock', model: 'tier-blueprint' } },
+      { kind: 'followup', detail: expect.objectContaining({ kind: 'moa-escalation' }) },
+    ])
+    expect(rig.arming.isArmed()).toBe(true)
     const judgeRows = await readRows<{ type: string; acted: boolean; pAcceptable: number; eligible: boolean; shadow: boolean; originSeq: number }>(rig.acceptanceLedger, 1)
     expect(judgeRows).toEqual([
       expect.objectContaining({ type: 'judge', acted: true, pAcceptable: 0.2, eligible: true, shadow: false, originSeq: 0 }),
@@ -366,6 +389,20 @@ describe('moa acceptance judge — unit', () => {
     rig.session.events.push({ seq: rig.session.events.length, type: 'request/header', data: { reason: 'change', header: { config: { provider: 'mock', model: 'custom' } } } })
     // …and back to the boot default: the 'change' events STAY in the log.
     rig.session.events.push({ seq: rig.session.events.length, type: 'request/header', data: { reason: 'change', header: { config: { provider: 'mock', model: 'mock' } } } })
+    rig.session.seq = rig.session.events.length
+    rig.deferred?.resolve()
+    await flush()
+    expect(rig.followed).toHaveLength(0)
+  }, 30_000)
+
+  it('stale guard (b2): a durable model/selection event (bare /model, no request) discards the verdict (0.2.2 form)', async () => {
+    const rig = makeUnitRig({ holdJudge: true })
+    await rig.seed(1, [userOpening('go')])
+    seedTurn(rig, 1)
+    rig.stop(1)
+    // A /model write under 0.2.2 appends a durable model/selection event —
+    // possibly with NO request in between (a bare /model never opens a turn).
+    rig.session.events.push({ seq: rig.session.events.length, type: 'model/selection', data: { provider: 'mock', model: 'custom' } })
     rig.session.seq = rig.session.events.length
     rig.deferred?.resolve()
     await flush()
