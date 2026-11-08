@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/session-cwd",
   "description": "Session working-directory facade for DeepSeek Harness CC: the harness workingDirectory service owns the session cwd (legacy worktree/entered log hydration), with the getSessionCwd/resolveSessionCwd APIs and a pre-execute workspace boundary guard",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
