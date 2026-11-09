@@ -24,7 +24,6 @@ import {
 import type {
   DeferredEntry,
   DiscoveryCandidate,
-  DiscoveryRouteIdentity,
   DiscoveryScoredItem,
   DiscoverySettings,
 } from '../src/discovery.ts'
@@ -77,11 +76,15 @@ function scored(
 }
 
 /** A deliberately wide route identity: nothing below should be window-limited. */
-const wideRoute: DiscoveryRouteIdentity = {
+const wideRoute = {
+  provider: 'test-provider',
+  model: 'test-model',
+  revision: 'test-revision',
   perRequestTokens: 100000,
   perQuestionTokens: 10000,
   maxQuestions: 256,
-}
+  maxOutputTokens: 4096,
+} as const
 
 /**
  * The documented per-request estimate: serialized state + questions + query,

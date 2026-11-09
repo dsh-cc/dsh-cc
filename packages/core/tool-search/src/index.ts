@@ -34,6 +34,15 @@ import { defineTool } from '@dsh-cc/tools'
 import type { ToolResultView, ToolCallView } from '@dsh-cc/tools'
 // Type-only: brings the `ctx.tools` Context merge into this program.
 import type {} from '@dsh-cc/tools'
+import { DiscoveryCache } from './discovery-cache.ts'
+import { createDiscoveryRuntime } from './discovery-runtime.ts'
+import type { DiscoveryEvaluation, DiscoveryRuntime } from './discovery-runtime.ts'
+import type { DiscoveryHostFace } from './discovery-contract.ts'
+import { DEFAULT_DISCOVERY_SETTINGS, createWarnOnce, registerDiscoverySettings } from './discovery-settings.ts'
+import type { DiscoverySettingsReader } from './discovery-settings.ts'
+import type { DeferredEntry } from './discovery.ts'
+import { scoreStored } from './search-scoring.ts'
+import { composeSearchMessage } from './search-message.ts'
 
 /** The model-facing ToolSearch tool name. */
 export const TOOL_SEARCH_NAME = 'ToolSearch'
@@ -99,44 +108,6 @@ interface StoredDeferred {
 }
 
 /**
- * How much a deferred tool matches a query, summed over query tokens and the
- * weighted name/description/searchHint fields. `name` carries the most weight,
- * `searchHint` next, then `description`; an exact name match is conclusive.
- * Pure and deterministic: used only to rank the candidate set.
- * @param stored - the deferred registration.
- * @param query - the raw ToolSearch query.
- * @returns a non-negative score; `0` means no match.
- */
-function scoreStored(stored: StoredDeferred, query: string): number {
-  const q = query.toLowerCase().trim()
-  if (q.length === 0) return 0
-  const qTokens = tokenize(q)
-  const fields: Array<readonly [string, number]> = [
-    [stored.reg.name.toLowerCase(), 10],
-    [(stored.reg.searchHint ?? '').toLowerCase(), 4],
-    [stored.reg.description.toLowerCase(), 2],
-  ]
-  let total = 0
-  for (const [text, weight] of fields) {
-    if (text.length === 0) continue
-    for (const token of qTokens) {
-      if (token.length === 0) continue
-      if (text.includes(token)) {
-        total += weight
-      } else if (tokenize(text).some(word => word.startsWith(token) || token.startsWith(word))) {
-        total += Math.max(1, Math.floor(weight / 2))
-      }
-    }
-  }
-  return total
-}
-
-/** Lowercase the input and split into alphanumeric tokens, dropping empty ones. */
-function tokenize(value: string): string[] {
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-}
-
-/**
  * Deferred tool registry and the ToolSearch tool.
  *
  * Deferred registrations are host-plane effects: they land in the calling
@@ -161,6 +132,12 @@ export class DeferredToolRegistry extends Service {
   /** Disposer for the lazily-registered ToolSearch tool, once visible. */
   private toolDisposer: (() => void) | undefined
 
+  /** Live `cc-tool-discovery` reader; `undefined` from it means "do not judge". */
+  private readonly readDiscoverySettings: DiscoverySettingsReader
+
+  /** The asynchronous S1-05 judgment (see `discovery-runtime.ts`). */
+  private readonly discovery: DiscoveryRuntime
+
   constructor(ctx: Context) {
     super(ctx, 'toolSearch')
     // The ToolSearch tool itself is never deferred: it is the load path, so it
@@ -169,6 +146,23 @@ export class DeferredToolRegistry extends Service {
     // only the name is reserved here (keeping it restrictable); the real
     // registration happens on the first non-alwaysLoad deferred entry.
     ctx.tools.reserve(TOOL_SEARCH_NAME)
+    // S1-05: the settings namespace registers lazily (absent settings plane ⇒
+    // defaults ⇒ `mode: off`) and the async judgment hangs off this service, so
+    // `search()` and the tool signature stay synchronous.
+    const reporter = createWarnOnce((message) => {
+      try {
+        ctx.logger.warn(message)
+      } catch {
+        // An absent logger must not break a search.
+      }
+    })
+    this.readDiscoverySettings = registerDiscoverySettings(ctx, reporter)
+    this.discovery = createDiscoveryRuntime<ScopeKey | undefined>({
+      readSettings: () => this.readDiscoverySettings(),
+      snapshotEntries: (query, scope) => this.discoveryEntries(query, scope),
+      host: ctx as unknown as DiscoveryHostFace,
+      cache: new DiscoveryCache({ maxEntries: DEFAULT_DISCOVERY_SETTINGS.cacheEntries, ttlMs: DEFAULT_DISCOVERY_SETTINGS.cacheTtlMs }),
+    })
   }
 
   /**
@@ -319,6 +313,64 @@ export class DeferredToolRegistry extends Service {
     }
   }
 
+  /**
+   * Read-only snapshot of every deferred entry a scope can see, as S1-05 step 3
+   * consumes it: registry metadata plus the live permission verdict and score.
+   */
+  private discoveryEntries(query: string, scope?: ScopeKey): DeferredEntry[] {
+    return this.allDeferred(scope).map(stored => ({
+      name: stored.reg.name,
+      description: stored.reg.description,
+      ...stored.reg.searchHint !== undefined ? { searchHint: stored.reg.searchHint } : {},
+      alwaysLoad: stored.alwaysLoad,
+      activated: stored.activated,
+      admitted: this.ctx.tools.isAdmitted(stored.reg.name, scope),
+      lexicalScore: scoreStored(stored, query),
+    }))
+  }
+
+  /**
+   * Run one ToolSearch call: lexical baseline, discovery judgment, activation.
+   * Every non-`selected` outcome (`mode: off`, any fallback, shadow) executes the
+   * original lexical path, so an unconfigured deployment is byte-identical.
+   */
+  private async runSearch(
+    query: string,
+    maxResults: number,
+    hits: readonly DeferredSearchHit[],
+    exec: { agent?: ScopeKey | undefined; signal: AbortSignal },
+  ) {
+    const scope = exec.agent
+    const evaluation: DiscoveryEvaluation = await this.discovery.evaluate({
+      query,
+      maxResults,
+      actor: scope,
+      scope,
+      signal: exec.signal,
+      lexicalNames: hits.map(hit => hit.name),
+    })
+    // Cancellation activates nothing and is never backfilled with lexical hits.
+    if (evaluation.kind === 'cancelled') {
+      return { query, message: `ToolSearch "${query}" was cancelled; nothing was loaded.`, results: [] }
+    }
+    const names = evaluation.kind === 'selected' ? evaluation.names : hits.map(hit => hit.name)
+    // Descriptions come from the lexical hits when present (that is exactly
+    // what the pre-S1-05 path rendered) and from the live entries otherwise.
+    const described = new Map(hits.map(hit => [hit.name, hit.description]))
+    for (const stored of this.allDeferred(scope)) described.set(stored.reg.name, described.get(stored.reg.name) ?? stored.reg.description)
+    const results = names.map((name) => {
+      const outcome = this.activate(name, scope)
+      return {
+        name: outcome.name,
+        description: described.get(name) ?? '',
+        status: outcome.status,
+        ...outcome.status === 'denied' ? { reason: outcome.reason } : {},
+      }
+    })
+    const { total, searchable } = this.poolStats(scope)
+    return { query, message: composeSearchMessage(query, results, total, searchable), results }
+  }
+
   /** The model-facing ToolSearch tool, registered once at construction. */
   private toolDefinition() {
     return defineTool({
@@ -374,25 +426,14 @@ export class DeferredToolRegistry extends Service {
       // Arrow bodies keep `this` bound to the registry service; the schema
       // narrows args to match the parameter spec (`query` required, `max_results`
       // optional).
-      execute: (args, exec) => {
+      execute: async (args, exec) => {
         const scope = exec.agent
         const maxResults = args.max_results ?? 5
         const hits = this.search(args.query, maxResults, scope)
-        const results = hits.map((hit) => {
-          const outcome = this.activate(hit.name, scope)
-          return {
-            name: outcome.name,
-            description: hit.description,
-            status: outcome.status,
-            ...outcome.status === 'denied' ? { reason: outcome.reason } : {},
-          }
-        })
-        const { total, searchable } = this.poolStats(scope)
-        return Promise.resolve({
-          query: args.query,
-          message: composeSearchMessage(args.query, results, total, searchable),
-          results,
-        })
+        // S1-05: the judgment needs a bound agent. Without one the runtime
+        // reports `unavailable` with zero host access, and the lexical hits are
+        // the whole result, exactly as before.
+        return this.runSearch(args.query, maxResults, hits, exec)
       },
       presentCall: (args): ToolCallView =>
         ({ card: 'generic', title: 'Search deferred tools', kind: 'search', rawInput: args.query }),
@@ -400,47 +441,6 @@ export class DeferredToolRegistry extends Service {
         ({ card: 'generic', title: 'Tool search', content: result.content }),
     })
   }
-}
-
-/**
- * Compose the full model-facing ToolSearch outcome, branching on pool state so
- * an empty search never reads as "you lack the capability" — the trap this
- * copy exists to defuse is a model concluding it has no filesystem/shell tools
- * when in fact the deferred pool is simply empty (or already fully loaded).
- */
-function composeSearchMessage(
-  query: string,
-  results: Array<{ name: string; description: string; status: string; reason?: string }>,
-  total: number,
-  searchable: number,
-): string {
-  if (results.length > 0) return renderToolSearchText(query, results)
-  if (total === 0) {
-    return 'No deferred tools are available to you in this session — every tool you can use is already in your function list; call it directly.'
-  }
-  if (searchable === 0) {
-    return 'All deferred tools available to you are already loaded; call them directly.'
-  }
-  return `No deferred tools matched "${query}". This directory lists deferred tools only; tools that registered eagerly (including eager MCP tools) never appear here — they are already in your function list, call them directly.`
-}
-
-/** Compose the model-facing summary of a ToolSearch outcome. */
-function renderToolSearchText(
-  query: string,
-  results: Array<{ name: string; description: string; status: string; reason?: string }>,
-): string {
-  if (results.length === 0) {
-    return `No deferred tools matched "${query}".`
-  }
-  const lines = results.map((result) => {
-    const statusLabel = result.status === 'loaded' ? 'now available'
-      : result.status === 'already-loaded' ? 'already available'
-        : result.status === 'denied' ? 'denied'
-          : 'not found'
-    const tail = result.status === 'denied' && result.reason !== undefined ? ` — ${result.reason}` : ''
-    return `- ${result.name}: ${result.description} (${statusLabel})${tail}`
-  })
-  return `ToolSearch "${query}":\n${lines.join('\n')}`
 }
 
 declare module '@deepseek-ai/cordis' {

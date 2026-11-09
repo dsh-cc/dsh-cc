@@ -17,21 +17,20 @@
  *    "reported once per invalid-settings occurrence" without spamming a warn on
  *    every search.
  *
- * Registration note (scope of this slice): the `registerNamespaceSafe` call
- * itself is not here yet. Importing `@dsh-cc/settings-ns` /
- * `@deepseek-ai/schemastery` from this package requires the manifest amendment
- * the design's § "File responsibilities" table already schedules for
- * `packages/core/tool-search/package.json` (peer+dev dependencies) together
- * with matching `references` entries in this package's `tsconfig.json`;
- * without them `tsc -b packages/core/tool-search` fails on TS2307/TS6059.
- * Everything the runner gate needs — namespace name, defaults table, range
- * validation, single-shot reporting — is dependency-free and lives here, so
- * landing the schema (`z.object` with the same `.min()/.max()` values) and the
- * registration is a self-contained follow-up.
+ * Registration: {@link registerDiscoverySettings} mirrors the table as a
+ * schemastery schema (same `.min()`/`.max()` bounds) and registers the
+ * namespace idempotently through `registerNamespaceSafe`, which defers itself
+ * to `ctx.inject(['settings'])` when the settings plane has not arrived yet —
+ * the repo's lazy precedence, never a boot-time hard dependency.
  *
  * @module @dsh-cc/tool-search/discovery-settings
  */
 
+import type { Context } from '@deepseek-ai/cordis'
+import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import z from '@deepseek-ai/schemastery'
+import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import type { SettingsReader } from '@dsh-cc/settings-ns'
 import type { DiscoverySettings } from './discovery.ts'
 
 export type { DiscoverySettings }
@@ -275,4 +274,93 @@ export function resolveDiscoverySettings(
   if (parsed.ok) return parsed.settings
   reporter?.report(parsed)
   return undefined
+}
+
+/** `z.union([t, z.const(undefined)])`: an absent namespace stays absent. */
+const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) as z<T | undefined>
+
+/**
+ * The design's § "Settings" table as a schemastery shape: raw kebab-case keys
+ * with the same `.min()`/`.max()` bounds {@link parseDiscoverySettings}
+ * enforces. The bounds are mirrored, not moved — schemastery rejects a
+ * malformed user layer at publish time so a typo never reaches a judgment,
+ * while the parse stays the authoritative gate for callers reading a raw
+ * section (integer-ness is not expressible in schemastery).
+ */
+const DiscoverySettingsObject = z.object({
+  mode: z.union([z.const('off'), z.const('shadow'), z.const('active')]).default(DEFAULT_DISCOVERY_SETTINGS.mode),
+  'route-alias': z.string().min(1).default(DEFAULT_DISCOVERY_SETTINGS.routeAlias),
+  'timeout-ms': z.number().min(100).max(5000).default(DEFAULT_DISCOVERY_SETTINGS.timeoutMs),
+  'max-input-tokens': z.number().min(512).max(16384).default(DEFAULT_DISCOVERY_SETTINGS.maxInputTokens),
+  'max-candidates': z.number().min(1).max(128).default(DEFAULT_DISCOVERY_SETTINGS.maxCandidates),
+  'batch-size': z.number().min(1).max(16).default(DEFAULT_DISCOVERY_SETTINGS.batchSize),
+  'max-query-chars': z.number().min(64).max(8192).default(DEFAULT_DISCOVERY_SETTINGS.maxQueryChars),
+  'max-metadata-chars': z.number().min(128).max(8192).default(DEFAULT_DISCOVERY_SETTINGS.maxMetadataChars),
+  'min-relevance-index': z.number().min(0).max(4).default(DEFAULT_DISCOVERY_SETTINGS.minRelevanceIndex),
+  'min-direct-fit': z.number().min(0).max(1).default(DEFAULT_DISCOVERY_SETTINGS.minDirectFit),
+  'max-activations': z.number().min(1).max(20).default(DEFAULT_DISCOVERY_SETTINGS.maxActivations),
+  'cache-entries': z.number().min(0).max(1024).default(DEFAULT_DISCOVERY_SETTINGS.cacheEntries),
+  'cache-ttl-ms': z.number().min(0).max(300000).default(DEFAULT_DISCOVERY_SETTINGS.cacheTtlMs),
+})
+
+/**
+ * Namespace schema, wrapped in the `z.const(undefined)` union (the
+ * `cc-reasoning-fold` / `retry-attendant` convention) so a genuinely absent
+ * namespace never materializes defaults into the cascade; the defaults then
+ * come from {@link DEFAULT_DISCOVERY_SETTINGS} on read.
+ */
+export const DiscoverySettingsSchema: z<Record<string, unknown>> =
+  opt(DiscoverySettingsObject) as unknown as z<Record<string, unknown>>
+
+/** The live reader the wiring layer holds: `undefined` means "do not judge". */
+export type DiscoverySettingsReader = () => DiscoverySettings | undefined
+
+/**
+ * Register the `cc-tool-discovery` namespace and return the live reader.
+ *
+ * Follows the settings-plane discipline: registration is idempotent and
+ * deferred until the settings service exists, an absent or refusing settings
+ * plane reads as the documented defaults (`mode: off`), and an invalid section
+ * is reported ONCE and then reads `undefined` — the caller's "no runner call,
+ * run the lexical path" gate (§ "Settings", § "Lifecycle, cache, and failure
+ * handling").
+ * @param ctx - the mount context; registration effects bind here.
+ * @param reporter - the warn-once sink (`createWarnOnce` over `ctx.logger.warn`).
+ * @returns a per-use reader of the validated camelCase settings.
+ */
+export function registerDiscoverySettings(
+  ctx: Context,
+  reporter?: InvalidSettingsReporter,
+): DiscoverySettingsReader {
+  let read: SettingsReader<Record<string, unknown>>
+  try {
+    read = registerNamespaceSafe<Record<string, unknown>>(
+      ctx,
+      SETTINGS_NAMESPACE as SettingsNamespace,
+      DiscoverySettingsSchema,
+    )
+  } catch {
+    // A settings layer that refuses registration must never break mounting;
+    // absent reads keep the feature off.
+    return () => DEFAULT_DISCOVERY_SETTINGS
+  }
+  return () => {
+    let raw: Record<string, unknown> | undefined
+    try {
+      raw = read()
+    } catch (error) {
+      // The schema rejected the user layer on the settings-ns path: report it
+      // once and refuse to judge instead of throwing into a hot search.
+      reporter?.report({
+        ok: false,
+        problems: [{
+          key: SETTINGS_NAMESPACE,
+          value: error instanceof Error ? error.message : String(error),
+          expected: 'a valid cc-tool-discovery section',
+        }],
+      })
+      return undefined
+    }
+    return resolveDiscoverySettings(raw, reporter)
+  }
 }

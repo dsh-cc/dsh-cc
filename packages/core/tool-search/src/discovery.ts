@@ -158,15 +158,39 @@ const RELEVANCE_CRITERIA: readonly string[] = [
   'Exact: the described capability and stated constraints match the requested operation precisely.',
 ]
 
-/** The route identity fields this layer needs: the runner's request windows. */
+/**
+ * The keyless route identity returned by `identifyRoute` (design § "File
+ * responsibilities": the consumer re-reads it after every await and compares
+ * ALL SEVEN fields, because any of them changing is a different judgment). This
+ * is the single canonical declaration of that shape in the package — the cache
+ * key layer imports it from here rather than restating it.
+ */
 export interface DiscoveryRouteIdentity {
-  /** Input tokens one request may consume, including headroom. */
+  /** Gateway provider name. */
+  readonly provider: string
+  /** Model identifier as the gateway reports it (never compared against an alias). */
+  readonly model: string
+  /** Opaque revision/deployment marker; a bump invalidates old judgments. */
+  readonly revision: string
+  /** Token budget reserved for one discovery request. */
   readonly perRequestTokens: number
-  /** Input tokens one single question may consume. */
+  /** Token budget reserved for one question. */
   readonly perQuestionTokens: number
   /** Questions one request may carry. */
   readonly maxQuestions: number
+  /** Maximum output tokens for one answer. */
+  readonly maxOutputTokens: number
 }
+
+/**
+ * The route's request windows alone: what batch planning measures against.
+ * Structurally a projection of {@link DiscoveryRouteIdentity}, so a full
+ * identity satisfies it.
+ */
+export type DiscoveryRouteWindow = Pick<
+  DiscoveryRouteIdentity,
+  'perRequestTokens' | 'perQuestionTokens' | 'maxQuestions'
+>
 
 /** The batch plan, or the whole-path fallback sentinel. */
 export type BatchPlan =
@@ -322,7 +346,7 @@ type GroupFit = 'fits' | 'split' | 'single'
 function measureGroup(
   group: readonly DiscoveryCandidate[],
   query: string,
-  routeIdentity: DiscoveryRouteIdentity,
+  routeIdentity: DiscoveryRouteWindow,
 ): GroupFit {
   const questions = Object.values(buildQuestions(group))
   const perQuestionOverflows = questions.some(question =>
@@ -375,7 +399,7 @@ function compareCandidateIds(left: string, right: string): number {
 export function planBatches(
   candidates: readonly DiscoveryCandidate[],
   batchSize: number,
-  routeIdentity: DiscoveryRouteIdentity,
+  routeIdentity: DiscoveryRouteWindow,
   query: string = '',
 ): BatchPlan {
   const ordered = [...candidates].sort((left, right) => compareCandidateIds(left.id, right.id))

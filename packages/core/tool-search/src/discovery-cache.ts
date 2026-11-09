@@ -33,6 +33,8 @@
  * @module @dsh-cc/tool-search/discovery-cache
  */
 
+import type { DiscoveryRouteIdentity } from './discovery.ts'
+
 /**
  * Key-format version. Bumping it retires every previously stored entry without
  * having to reason about collisions with an older field order.
@@ -42,25 +44,10 @@ export const DISCOVERY_CACHE_KEY_VERSION = 'tool-discovery-key-v1'
 /**
  * The keyless route identity returned by `identifyRoute` (design
  * § "File responsibilities": the consumer re-reads it after every await and
- * compares all of these fields). Every field participates in the cache key: a
- * provider/model/revision or budget change is a different judgment.
+ * compares all seven fields). One canonical declaration lives in the policy
+ * layer; it is re-exported here so cache-key consumers need a single import.
  */
-export interface DiscoveryRouteIdentity {
-  /** Gateway provider name. */
-  readonly provider: string
-  /** Model identifier as the gateway reports it (never compared against an alias). */
-  readonly model: string
-  /** Opaque revision/deployment marker; a bump invalidates old judgments. */
-  readonly revision: string
-  /** Token budget reserved for one discovery request. */
-  readonly perRequestTokens: number
-  /** Token budget reserved for one question. */
-  readonly perQuestionTokens: number
-  /** Maximum questions the route accepts per request. */
-  readonly maxQuestions: number
-  /** Maximum output tokens for one answer. */
-  readonly maxOutputTokens: number
-}
+export type { DiscoveryRouteIdentity }
 
 /**
  * Every settings threshold that shapes a judgment, camelCase (design §
