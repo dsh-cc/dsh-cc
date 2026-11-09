@@ -3206,12 +3206,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/decision-usage':
-        specifier: workspace:^
-        version: link:../../observability/decision-usage
-      '@dsh-cc/sidecar-io':
-        specifier: workspace:^
-        version: link:../../observability/sidecar-io
 
   packages/session/command-export:
     dependencies:
