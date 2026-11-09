@@ -20,8 +20,18 @@
 #      harness twice; the cache-by-pin-SHA + fallback-build pattern is what
 #      makes the split viable now.
 #   2. The reference repo installs Node + an internal mirror/bnpm by hand;
-#      this workflow uses setup-node's native pnpm cache instead — both
-#      repos' dependencies come entirely from the public npm registry.
+#      this workflow caches the pnpm store explicitly — both repos'
+#      dependencies come entirely from the public npm registry.
+#      `setup-node`'s built-in `cache: pnpm` was tried first and dropped: it
+#      restores on an exact lockfile hash, so every PR that adds or drops a
+#      dependency (a large share of them) starts from an empty store and
+#      re-downloads the whole graph. The store is content-addressed and
+#      additive, so a stale entry is always safe to build on: the key embeds
+#      the lockfile hashes (freshness) and `restore-keys` falls back to the
+#      newest store of the same OS + store layout, which degrades "lockfile
+#      changed" into "download only the new packages". The layout segment
+#      (`v11` today) keeps a pnpm major bump from extracting a foreign store
+#      layout into the new store directory.
 #   3. ~20 packages depend on the sibling repo via
 #      link:../../../../deepseek-harness/... → side-by-side checkouts: the two
 #      `path:` values make the repos siblings, so the link: walk-up of 4
@@ -31,8 +41,17 @@
 #      pipeline). save follows the build step directly (success() gating
 #      keeps half-built artifacts from poisoning the cache, and a
 #      red-test iteration still keeps the already-built cache). node_modules
-#      (1.4G) is never cached — install runs on every run. The artifact glob
-#      is fixed-depth and exactly matches the build:lib output set declared
+#      (1.4G) is never cached — install runs on every run, hardlinking out of
+#      the restored pnpm store. Both caches follow one writer per key *inside
+#      this workflow*: `quality-gates` saves, `unit-tests` restores only, so
+#      the parallel jobs cannot race each other. The pnpm-store key is shared
+#      with formal-design.yml on purpose — cache keys are repo-scoped and both
+#      workflows install from the same lockfiles — so when the two workflows
+#      start a brand-new key at the same time, one of them logs "Failed to
+#      save: Unable to reserve cache"; the other's entry stands and the
+#      conflict is benign (a duplicate store per workflow would cost twice the
+#      storage for no extra hit rate). The artifact glob is fixed-depth and
+#      exactly matches the build:lib output set declared
 #      by the tsdown workspace — no `**`: @actions/glob's `**` follows
 #      symlinks and explodes combinatorially on the pnpm symlink tree (a save
 #      measured 19min without finishing). Harness package depth / tsdown
@@ -199,10 +218,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: |
-            dsh-cc/pnpm-lock.yaml
-            deepseek-harness/pnpm-lock.yaml
+
+      # Pnpm store cache (deviation #2 in the header). The key pins the
+      # lockfile hashes; `restore-keys` falls back to the newest store with
+      # the same OS + store layout, so a dependency change costs only the
+      # newly added packages instead of a full re-download.
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: |
+          dir=$(pnpm store path --silent)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "layout=$(basename "$dir")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the pnpm store
+        id: cache-pnpm-store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-${{ hashFiles('dsh-cc/pnpm-lock.yaml', 'deepseek-harness/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-
 
       - name: Cache harness build outputs (restore)
         id: cache-harness
@@ -249,6 +284,19 @@ jobs:
         env:
           HUSKY: 0
         run: pnpm install --frozen-lockfile
+
+      # Writer for the pnpm-store key inside this workflow (unit-tests
+      # restores only) — the same discipline the harness-lib cache follows,
+      # so the parallel jobs never race for a reservation. formal-design.yml
+      # shares the key: if both workflows start a cold key together, one logs
+      # a benign "Unable to reserve cache". Sits right after both installs, so
+      # every tarball they pulled is in the store by now.
+      - name: Save the pnpm store
+        if: steps.cache-pnpm-store.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-${{ hashFiles('dsh-cc/pnpm-lock.yaml', 'deepseek-harness/pnpm-lock.yaml') }}
 
       # The capability gates (I1–I11, evidence anchors, registry integrity,
       # no generated-artifact drift) depend on js-yaml, so they cannot join
@@ -326,11 +374,12 @@ jobs:
   # ---------------------------------------------------------------------------
   # Unit tests. Runs in parallel with quality-gates (no `needs:`): each job
   # pays its own assembly prefix (harness cache restore + two installs +
-  # tsc). Restore-only here — quality-gates is the single cache writer; the
-  # fallback build below covers cache-miss/evicted runs without ever saving
-  # (no save races by construction). Cold-cache wall time is unchanged vs
-  # the old serial job (both jobs build the harness concurrently); warm runs
-  # drop from sum(quality + tests) to max(quality, tests).
+  # tsc). Restore-only here — quality-gates is the single writer for both
+  # caches (harness lib and pnpm store); the fallback build below covers
+  # cache-miss/evicted runs without ever saving (no save races by
+  # construction). Cold-cache wall time is unchanged vs the old serial job
+  # (both jobs build the harness concurrently); warm runs drop from
+  # sum(quality + tests) to max(quality, tests).
   # ---------------------------------------------------------------------------
   unit-tests:
     runs-on: ubuntu-latest
@@ -357,10 +406,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: |
-            dsh-cc/pnpm-lock.yaml
-            deepseek-harness/pnpm-lock.yaml
+
+      # Pnpm store cache (deviation #2 in the header). The key pins the
+      # lockfile hashes; `restore-keys` falls back to the newest store with
+      # the same OS + store layout, so a dependency change costs only the
+      # newly added packages instead of a full re-download.
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: |
+          dir=$(pnpm store path --silent)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "layout=$(basename "$dir")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the pnpm store
+        id: cache-pnpm-store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-${{ hashFiles('dsh-cc/pnpm-lock.yaml', 'deepseek-harness/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-
 
       - name: Cache harness build outputs (restore)
         id: cache-harness
