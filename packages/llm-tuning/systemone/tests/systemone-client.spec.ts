@@ -32,18 +32,49 @@ describe('systemoneDecide', () => {
     })
   })
 
-  it('drops extra unknown-type answer entries but keeps valid ones', async () => {
+  it('rejects an answer key that was not requested as a whole (no partial consumption)', async () => {
     const body = JSON.stringify({
       model: 'laya-rl-agent',
       answers: {
-        verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.5 }, confidence: 0.05 },
+        verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 }, confidence: 0.05 },
         future: { type: 'quantum', qubits: 3 },
       },
       usage: { input_tokens: 10, output_tokens: 0 },
     })
     const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000, fetchImpl: jsonFetch(200, body) })
-    expect(result.ok).toBe(true)
-    if (result.ok) expect(Object.keys(result.answers)).toEqual(['verdict'])
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: question-set-mismatch' })
+  })
+
+  it('rejects a missing requested answer as a whole', async () => {
+    const twoQuestions: Record<string, SystemOneQuestion> = {
+      ...QUESTIONS,
+      ambiguity: { type: 'choice', instructions: 'Judge scope.', criteria: { specified: 'named', underspecified: 'vague' } },
+    }
+    const body = JSON.stringify({
+      model: 'laya-rl-agent',
+      answers: { verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 } } },
+      usage: { input_tokens: 10, output_tokens: 0 },
+    })
+    const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: twoQuestions, timeoutMs: 1000, fetchImpl: jsonFetch(200, body) })
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: question-set-mismatch' })
+  })
+
+  it('failed request pre-check sends no request at all', async () => {
+    const fetchImpl = vi.fn(async () => new Response(T1_BODY, { status: 200 })) as unknown as typeof fetch
+    // A choice question needs 2..255 options; a single-option set fails the pre-check.
+    const invalid: Record<string, SystemOneQuestion> = {
+      verdict: { type: 'choice', instructions: 'Judge.', criteria: { allow: 'safe' } },
+    }
+    const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: invalid, timeoutMs: 1000, fetchImpl })
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: invalid-request' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('unparseable 200 body => malformed invalid-envelope, not retried', async () => {
+    const fetchImpl = vi.fn(async () => new Response('not json', { status: 200 })) as unknown as typeof fetch
+    const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000, fetchImpl })
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: invalid-envelope' })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
   it('wire-shape: two-question request sends verbatim question names and parses answers by name (client transport/parse contract only)', async () => {
@@ -51,12 +82,13 @@ describe('systemoneDecide', () => {
       ...QUESTIONS,
       ambiguity: { type: 'choice', instructions: 'Judge scope.', criteria: { specified: 'named', underspecified: 'vague' } },
     }
+    // Legal envelope: every request key answered once, distributions summing
+    // to 1 with the chosen option at the maximum.
     const body = JSON.stringify({
       model: 'laya-rl-agent',
       answers: {
-        verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9 }, confidence: 0.8 },
+        verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 }, confidence: 0.8 },
         ambiguity: { type: 'choice', choice: 'underspecified', probabilities: { specified: 0.1, underspecified: 0.9 }, confidence: 0.7 },
-        ambiguitY: { type: 'choice', choice: 'specified', probabilities: { specified: 1 }, confidence: 1 },
       },
       usage: { input_tokens: 20, output_tokens: 0 },
     })
@@ -68,7 +100,6 @@ describe('systemoneDecide', () => {
     if (!result.ok) return
     expect(result.answers.verdict).toMatchObject({ choice: 'allow' })
     expect(result.answers.ambiguity).toMatchObject({ choice: 'underspecified' })
-    expect(result.answers['ambiguitY']).toMatchObject({ choice: 'specified' })
   })
 
   it('400 envelope maps to non-retryable error with status and body prefix', async () => {
@@ -108,15 +139,24 @@ describe('systemoneDecide', () => {
     expect(result).toEqual({ ok: false, failure: 'error', reason: 'ECONNREFUSED' })
   })
 
-  it('200 without answers object => malformed', async () => {
+  it('200 without answers object => malformed question-set-mismatch', async () => {
     const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000, fetchImpl: jsonFetch(200, '{"model":"laya-rl-agent"}') })
-    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone response failed schema validation' })
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: question-set-mismatch' })
   })
 
-  it('200 whose answers are all unknown-type => malformed', async () => {
+  it('200 whose only answer is an unknown type => malformed answer-type-mismatch', async () => {
     const body = JSON.stringify({ model: 'laya-rl-agent', answers: { verdict: { type: 'quantum' } }, usage: { input_tokens: 1, output_tokens: 0 } })
     const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000, fetchImpl: jsonFetch(200, body) })
-    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone response failed schema validation' })
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: answer-type-mismatch' })
+  })
+
+  it('200 without usage => malformed invalid-usage', async () => {
+    const body = JSON.stringify({
+      model: 'laya-rl-agent',
+      answers: { verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 } } },
+    })
+    const result = await systemoneDecide({ baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000, fetchImpl: jsonFetch(200, body) })
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: invalid-usage' })
   })
 
   it('omits Authorization when apiKey absent, sends Bearer when set', async () => {

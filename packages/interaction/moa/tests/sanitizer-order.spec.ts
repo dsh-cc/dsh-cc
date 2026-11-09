@@ -34,7 +34,7 @@ import { installModelSelectionSanitizer } from '../src/sanitizer.ts'
 import { observeLiveSelection, readPublishedSelection, resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
 import { createRequestRouter, type RouterDeps } from '../src/router.ts'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore } from '../src/index.ts'
-import { GAUGE_ROUTE, routes as tierRoutes } from './rig.ts'
+import { argmaxLabel, GAUGE_ROUTE, routes as tierRoutes } from './rig.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -100,7 +100,7 @@ async function setup(options: { script?: Script; sanitizer?: boolean } = {}) {
     return new Response(
       JSON.stringify({
         model: GAUGE_ROUTE.model,
-        answers: { route: { type: 'choice', choice: 'draft', probabilities } },
+        answers: { route: { type: 'choice', choice: argmaxLabel(probabilities), probabilities } },
         usage: { input_tokens: 100, output_tokens: 5 },
       }),
       { status: 200 },

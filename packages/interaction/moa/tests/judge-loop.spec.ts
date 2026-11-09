@@ -116,7 +116,9 @@ async function setupLoop(mainScript: Script, options: LoopOptions = {}): Promise
       heldJudge = { release: () => release() }
       await promise
     }
-    const p = options.pAccept ?? 0.2
+    // Legal Choice envelope: `acceptable` is the argmax (0.6 over 0.4) yet
+    // still below the 0.7 tau, so the canned judge rejects.
+    const p = options.pAccept ?? 0.6
     return new Response(
       JSON.stringify({
         model: GAUGE_ROUTE.model,
@@ -242,7 +244,7 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
     expect(followupIndex).toBeGreaterThan(answerIndex)
     // Ledger rows: judge verdict (acted) + routing escalate row.
     const judgeRows = await pollJsonl<{ type: string; acted: boolean; pAcceptable: number; eligible: boolean }>(rig.acceptanceLedger, 1)
-    expect(judgeRows[0]).toMatchObject({ type: 'judge', acted: true, pAcceptable: 0.2, eligible: true })
+    expect(judgeRows[0]).toMatchObject({ type: 'judge', acted: true, pAcceptable: 0.6, eligible: true })
     const escalateRows = await readJsonl<{ type: string; fromTier: number; toTier: number }>(rig.routingLedger)
     expect(escalateRows[0]).toMatchObject({ type: 'escalate', fromTier: 1, toTier: 2 })
   }, 30_000)

@@ -278,7 +278,13 @@ export function gateVerdict(answer: SystemOneAnswer, opts: { allowThreshold: num
   }
   if (answer.choice === 'allow') {
     const probability = answer.probabilities.allow
-    if (typeof probability === 'number' && probability < opts.allowThreshold) {
+    // Independent guard (design doc §"Independent guard in the permission
+    // function"): a missing or out-of-range allow probability must never fall
+    // through to allow, whatever the client-side validation did.
+    if (!(typeof probability === 'number' && Number.isFinite(probability) && probability >= 0 && probability <= 1)) {
+      return { verdict: 'ask', reason: 'gauge allow probability missing or invalid' }
+    }
+    if (probability < opts.allowThreshold) {
       return {
         verdict: 'ask',
         reason: `gauge allow below threshold (P(allow)=${probability.toFixed(3)}, t=${opts.allowThreshold})`,

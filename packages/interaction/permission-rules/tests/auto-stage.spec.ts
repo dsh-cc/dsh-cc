@@ -1042,13 +1042,20 @@ describe('auto-stage × System One gauge lane (B2b)', () => {
 // Underspec→ASK detector slice (design doc 2026-10-09 §3.4/§5.1/§5.5)
 // ---------------------------------------------------------------------------
 
-const AMB_ALLOW_UNDERSPECIFIED = {
-  model: 'laya-rl-agent',
-  answers: {
+/**
+ * Request-aware underspec envelope: the gateway answers the question set it
+ * was asked, so a flag-off call (verdict only) and a flag-on call (verdict +
+ * ambiguity) both get a legal envelope — every answer key was requested, both
+ * Choice maps sum to 1, each chosen label is the probability maximum.
+ */
+function ambEnvelope(asked: Record<string, unknown>): unknown {
+  const answers: Record<string, unknown> = {
     verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 } },
-    ambiguity: { type: 'choice', choice: 'underspecified' },
-  },
-  usage: { input_tokens: 83, output_tokens: 0 },
+  }
+  if ('ambiguity' in asked) {
+    answers.ambiguity = { type: 'choice', choice: 'underspecified', probabilities: { underspecified: 0.9, specified: 0.1 } }
+  }
+  return { model: 'laya-rl-agent', answers, usage: { input_tokens: 83, output_tokens: 0 } }
 }
 
 /** Minimal session stand-in: taskOf only reads snapshotEvents (fold's userIntent). */
@@ -1069,8 +1076,9 @@ describe('underspec→ASK slice (readSlice + gaugeBuiltRaw)', () => {
 
   function gaugeFetch(bodies: Array<{ questions: unknown }>): typeof fetch {
     return vi.fn(async (_url: unknown, init: { body: string }) => {
-      bodies.push(JSON.parse(init.body) as { questions: unknown })
-      return Response.json(structuredClone(AMB_ALLOW_UNDERSPECIFIED))
+      const body = JSON.parse(init.body) as { questions: Record<string, unknown> }
+      bodies.push(body)
+      return Response.json(ambEnvelope(body.questions))
     }) as unknown as typeof fetch
   }
 

@@ -658,9 +658,9 @@ capabilities:
         pre-admission routing (the phantom-drop rule is retired), and a
         mid-session `/model` disarms moa (explicit user precedence) until
         the selection returns to the boot pair.
-        〔src:ws:packages/interaction/moa/src/router.ts#L160-L168〕
-        〔src:ws:packages/interaction/moa/src/sanitizer.ts#L46-L60〕
-        〔src:ws:packages/interaction/moa/src/arming.ts#L96-L138〕
+        〔src:ws:packages/interaction/moa/README.md#L23-L32〕
+        〔src:ws:packages/interaction/moa/README.md#L39-L46〕
+        〔src:ws:packages/interaction/moa/README.md#L47-L52〕
 
   engine.notebook-edit:
     title: NotebookEdit
@@ -3710,6 +3710,8 @@ capabilities:
       - { type: test, path: packages/interaction/permission-rules/tests/subagent-return-check.spec.ts }
       - { type: test, path: packages/interaction/permission-rules/tests/gauge-stage.spec.ts, anchor: "underspec→ASK: merge rule (§5.2 truth table)" }
       - { type: test, path: packages/interaction/permission-rules/tests/gauge-adapter.spec.ts, anchor: "prepareSystemOneInput ambiguity slot" }
+      - { type: test, path: packages/interaction/permission-rules/tests/gauge-adapter.spec.ts, anchor: "gauge allow probability missing or invalid" }
+      - { type: test, path: packages/llm-tuning/systemone/tests/validation.spec.ts, anchor: "validateSystemOneResponse: choice" }
       - { type: test, path: packages/interaction/permission-rules/tests/listener-auto-stage.spec.ts, anchor: "S6/D9 outbound" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "pipeline: structured_output in auto mode (design §5.2)" }
       - { type: test, path: packages/interaction/permission-rules/tests/structured-output-read-only.spec.ts, anchor: "config caveat (design §4.1)" }
@@ -3971,7 +3973,15 @@ capabilities:
         `ask`. A raw `ask` choice surfaces a non-empty `gauge judged ask`
         reason (probability-annotated) and an unrecognized choice label
         fails closed with its own constant — the modal never shows an empty
-        reason. Audit events gain optional `probabilities`/`confidence`
+        reason. Contract-validation slice (S1-01): the shared
+        `@dsh-cc/systemone` client enforces a strict two-sided contract —
+        request pre-check before any network work (zero fetch on failure),
+        exact question-set and type matching, probability key-set/sum/argmax
+        tolerances, safe-integer usage (never coerced to zero), whole-response
+        rejection on any violation with the fixed
+        `systemone validation: <code>` reason — and the gauge allow branch
+        independently fails closed when `P(allow)` is missing or out of
+        range (`gauge allow probability missing or invalid`). Audit events gain optional `probabilities`/`confidence`
         scalars (digest-only contract intact). CC has no such backend —
         deliberate dsh-cc extension.
         Gauge System One probe slice (2026-09-25, PR-C): the input-layer

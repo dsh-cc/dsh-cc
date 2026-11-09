@@ -42,6 +42,23 @@ export const routes = (): {
 /** Probabilities with `draft` the argmax. */
 export const DRAFT_PROBABILITIES = { sketch: 0.05, draft: 0.7, blueprint: 0.15, masterplan: 0.1 }
 
+/**
+ * The label a legal Choice envelope must carry: the strict System One
+ * validator rejects a chosen option that trails the probability maximum, so a
+ * fixture always derives `choice` from the distribution it serves.
+ */
+export function argmaxLabel(probabilities: Record<string, number>): string {
+  let best = ''
+  let bestProbability = -Infinity
+  for (const [label, probability] of Object.entries(probabilities)) {
+    if (probability > bestProbability) {
+      bestProbability = probability
+      best = label
+    }
+  }
+  return best
+}
+
 /** An AgentModel work-alike for listener-level rigs. */
 export interface FakeAgentModel {
   /** Every recorded durable select, in order. */
@@ -133,10 +150,11 @@ export function makeRig(options: RigOptions = {}): Rig {
     const body = JSON.parse(String(init?.body)) as { state: string; model?: string }
     classifyStates.push(body.state)
     classifyModels.push(body.model ?? '<missing>')
+    const probabilities = options.probabilities ?? DRAFT_PROBABILITIES
     return new Response(
       JSON.stringify({
         model: GAUGE_ROUTE.model,
-        answers: { route: { type: 'choice', choice: 'draft', probabilities: options.probabilities ?? DRAFT_PROBABILITIES } },
+        answers: { route: { type: 'choice', choice: argmaxLabel(probabilities), probabilities } },
         usage: { input_tokens: options.inputTokens ?? 100, output_tokens: 5 },
       }),
       { status: 200 },

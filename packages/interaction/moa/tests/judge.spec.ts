@@ -59,7 +59,11 @@ interface UnitOptions {
   shadow?: boolean
   tau?: number
   maxEscalations?: number
-  /** P(acceptable) the canned judge returns (default 0.2 = reject). */
+  /**
+   * P(acceptable) the canned judge returns (default 0.6 = reject: below the
+   * 0.7 tau). A legal Choice envelope pins `acceptable` at the probability
+   * maximum, so a rejecting fixture sits at 0.6 over `unacceptable` 0.4.
+   */
   pAccept?: number
   /** The tier the judged turn ran on (router's tierFor). */
   tier?: number
@@ -107,7 +111,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
       }
       await held
     }
-    const p = options.pAccept ?? 0.2
+    const p = options.pAccept ?? 0.6
     return new Response(
       JSON.stringify({
         model: GAUGE_ROUTE.model,
@@ -229,7 +233,7 @@ describe('moa acceptance judge — unit', () => {
     expect(rig.arming.isArmed()).toBe(true)
     const judgeRows = await readRows<{ type: string; acted: boolean; pAcceptable: number; eligible: boolean; shadow: boolean; originSeq: number }>(rig.acceptanceLedger, 1)
     expect(judgeRows).toEqual([
-      expect.objectContaining({ type: 'judge', acted: true, pAcceptable: 0.2, eligible: true, shadow: false, originSeq: 0 }),
+      expect.objectContaining({ type: 'judge', acted: true, pAcceptable: 0.6, eligible: true, shadow: false, originSeq: 0 }),
     ])
     const escalateRows = await readRows<{ type: string; originSeq: number; fromTier: number; toTier: number }>(rig.routingLedger, 1)
     expect(escalateRows).toEqual([expect.objectContaining({ type: 'escalate', originSeq: 0, fromTier: 1, toTier: 2 })])
