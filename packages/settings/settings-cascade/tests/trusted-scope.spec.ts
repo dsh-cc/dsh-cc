@@ -21,6 +21,17 @@ const PermissionsSchema = z.object({
   autoMode: z.union([AutoModeSchema, z.const(undefined)]),
 })
 
+// Minimal stand-in for the consumer-owned `systemone-decisions` namespace: the
+// cascade carries the raw section, so the test only needs enough shape to read
+// back which layer's value survived (absence stays `undefined`).
+const DecisionsSchema = z.union([
+  z.object({
+    'max-attempts-per-session': z.union([z.number(), z.const(undefined)]),
+    'max-retries': z.union([z.number(), z.const(undefined)]),
+  }),
+  z.const(undefined),
+])
+
 const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
@@ -172,7 +183,65 @@ describe('trusted-scope autoMode assembly (D12)', () => {
   }, 15000)
 })
 
+describe('trusted-scope generic key assembly', () => {
+  it('a namespace set only in the project/local layers is absent', async () => {
+    const dir = await tempDir()
+    const project = await writeSettings(dir, 'project.json', {
+      'systemone-decisions': { 'max-attempts-per-session': 5 },
+    })
+    const local = await writeSettings(dir, 'local.json', {
+      'systemone-decisions': { 'max-attempts-per-session': 6 },
+    })
+    const ctx = await boot({ projectSettingsPath: project, localSettingsPath: local })
+    expect(decisionsOf(ctx)).toBeUndefined()
+  })
+
+  it('a namespace set in the user layer survives', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      'systemone-decisions': { 'max-attempts-per-session': 7 },
+    })
+    const ctx = await boot({ userSettingsPath: user })
+    expect(decisionsOf(ctx)?.['max-attempts-per-session']).toBe(7)
+  })
+
+  it('the user value wins over a different project value; project never contributes', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      'systemone-decisions': { 'max-attempts-per-session': 7 },
+    })
+    const project = await writeSettings(dir, 'project.json', {
+      'systemone-decisions': { 'max-attempts-per-session': 5, 'max-retries': 2 },
+    })
+    const ctx = await boot({ userSettingsPath: user, projectSettingsPath: project })
+    const decisions = decisionsOf(ctx)
+    expect(decisions?.['max-attempts-per-session']).toBe(7)
+    expect(decisions?.['max-retries']).toBeUndefined()
+  })
+
+  it('flag (explicit --settings) and policy layers count as trusted', async () => {
+    const dir = await tempDir()
+    const flagFile = await writeSettings(dir, 'flag.json', {
+      'systemone-decisions': { 'max-attempts-per-session': 9 },
+    })
+    const policy = await writeSettings(dir, 'policy.json', {
+      'systemone-decisions': { 'max-retries': 2 },
+    })
+    const ctx = await boot({
+      flagSettingsPath: flagFile,
+      policy: { userPath: policy },
+    })
+    const decisions = decisionsOf(ctx)
+    expect(decisions?.['max-attempts-per-session']).toBe(9)
+    expect(decisions?.['max-retries']).toBe(2)
+  })
+})
+
 const scopes = new WeakMap<Context, ReturnType<NonNullable<ReturnType<Context['settings']['register']>>>>()
+
+function decisionsOf(ctx: Context): Record<string, unknown> | undefined {
+  return ctx.settings.register('systemone-decisions' as SettingsNamespace, DecisionsSchema)!.get() as Record<string, unknown> | undefined
+}
 
 function permissionsOf(ctx: Context): Record<string, unknown> {
   let scope = scopes.get(ctx)
