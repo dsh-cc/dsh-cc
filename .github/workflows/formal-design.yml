@@ -10,8 +10,12 @@ permissions:
   contents: read
 
 env:
-  # Keep equal to presubmit.yml; linked workspace dependencies need siblings.
-  DSH_HARNESS_REF: 31cfe2aafead959a4dbd9d8cfaae258eb28a19fd
+  # Must equal presubmit.yml (design record §16.3 item 2): the sibling
+  # checkout exists only to satisfy the link: workspace deps, so a stale pin
+  # here silently tests against a different harness line and forks the pnpm
+  # store cache key. publish.yml derives its pin from presubmit.yml; this
+  # workflow is the one place the value is duplicated by hand.
+  DSH_HARNESS_REF: 2f97f60455605e915b8176d9170cae337bfedcc6 # 0.2.2-rc.1 release commit (keep equal to presubmit.yml)
 
 defaults:
   run:
@@ -22,7 +26,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  formal-design:
+  # The `+` only lives in the display name: job ids accept letters, digits,
+  # `-` and `_`, so the id is `formal-design-tla` while the check reads
+  # `formal-design-tla+`, pairing with `formal-design-lean`.
+  formal-design-tla:
+    name: formal-design-tla+
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -41,13 +49,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: |
-            dsh-cc/pnpm-lock.yaml
-            deepseek-harness/pnpm-lock.yaml
+      # Pnpm store cache, keyed on the lockfiles with a prefix fallback so a
+      # dependency change only downloads the new tarballs (setup-node's
+      # `cache: pnpm` restores on the exact key only — see presubmit.yml
+      # deviation #2). This job is the single writer for the key; the Lean
+      # job restores only.
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: |
+          dir=$(pnpm store path --silent)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "layout=$(basename "$dir")" >> "$GITHUB_OUTPUT"
+      - name: Restore the pnpm store
+        id: cache-pnpm-store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-${{ hashFiles('dsh-cc/pnpm-lock.yaml', 'deepseek-harness/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-
       - name: Install workspace dependencies (no harness build required)
         working-directory: dsh-cc
         run: pnpm install --frozen-lockfile
+      - name: Save the pnpm store
+        if: steps.cache-pnpm-store.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-${{ hashFiles('dsh-cc/pnpm-lock.yaml', 'deepseek-harness/pnpm-lock.yaml') }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -67,15 +96,15 @@ jobs:
         working-directory: dsh-cc
         env:
           FORMAL_DESIGN_CI: '1'
-          FORMAL_DESIGN_ARTIFACTS: ${{ runner.temp }}/formal-design-artifacts
+          FORMAL_DESIGN_ARTIFACTS: ${{ runner.temp }}/formal-design-tla-artifacts
         run: |
           unset TLA2TOOLS_JAR
           pnpm exec vitest run packages/plugin/dsh-cc-agents/tests/formal-design.spec.ts packages/plugin/dsh-cc-agents/tests/formal-design-integration.spec.ts packages/plugin/dsh-cc-agents/tests/package-shape.spec.ts
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: formal-design-diagnostics
-          path: ${{ runner.temp }}/formal-design-artifacts
+          name: formal-design-tla-diagnostics
+          path: ${{ runner.temp }}/formal-design-tla-artifacts
           include-hidden-files: true
           if-no-files-found: warn
 
@@ -98,10 +127,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: |
-            dsh-cc/pnpm-lock.yaml
-            deepseek-harness/pnpm-lock.yaml
+      # Restore-only: the TLA+ job is the single writer for this key.
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: |
+          dir=$(pnpm store path --silent)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "layout=$(basename "$dir")" >> "$GITHUB_OUTPUT"
+      - name: Restore the pnpm store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-${{ hashFiles('dsh-cc/pnpm-lock.yaml', 'deepseek-harness/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-
       - name: Install workspace dependencies (no harness build required)
         working-directory: dsh-cc
         run: pnpm install --frozen-lockfile
