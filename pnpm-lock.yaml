@@ -2866,6 +2866,40 @@ importers:
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
 
+  packages/observability/decision-usage:
+    dependencies:
+      '@dsh-cc/model-aliases':
+        specifier: workspace:^
+        version: link:../../compat/cc-model-aliases
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
+      '@dsh-cc/settings-provider':
+        specifier: workspace:^
+        version: link:../../settings/settings-provider
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../sidecar-io
+      '@dsh-cc/systemone':
+        specifier: workspace:^
+        version: link:../../llm-tuning/systemone
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: link:../../../../deepseek-harness/packages/core/agent
+        version: link:../../../../deepseek-harness/packages/core/agent
+      '@deepseek-ai/dsh-session':
+        specifier: link:../../../../deepseek-harness/packages/core/session
+        version: link:../../../../deepseek-harness/packages/core/session
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/observability/sidecar-io:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -2995,6 +3029,9 @@ importers:
       '@dsh-cc/coordinator':
         specifier: workspace:^
         version: link:../../subagent/coordinator
+      '@dsh-cc/decision-usage':
+        specifier: workspace:^
+        version: link:../../observability/decision-usage
       '@dsh-cc/handoff-store':
         specifier: workspace:^
         version: link:../../subagent/handoff-store
@@ -3138,6 +3175,12 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../../interaction/command-usage
+      '@dsh-cc/decision-usage':
+        specifier: workspace:^
+        version: link:../../observability/decision-usage
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis

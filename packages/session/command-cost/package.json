@@ -21,7 +21,9 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "@dsh-cc/command-usage": "workspace:^"
+    "@dsh-cc/command-usage": "workspace:^",
+    "@dsh-cc/decision-usage": "workspace:^",
+    "@dsh-cc/sidecar-io": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
@@ -38,6 +40,8 @@
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/decision-usage": "workspace:^",
+    "@dsh-cc/sidecar-io": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis"
   },
   "publishConfig": {

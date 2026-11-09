@@ -2,15 +2,28 @@
 
 [English](README.md) | 中文
 
-面向用户的 `/cost` 命令，基于会话 usage 日志实现。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。它会把每条已记录的 `assistant/message` usage 记录，对照最新的 `request/header` 模型路由与 Config 中的部署单价表进行折叠。
+面向用户的 `/cost` 命令，基于会话 usage 日志实现。该插件通过 `ctx.commands` 注册一个全局命令，因此每个已组合的命令适配器都能发现并执行它，无需模型轮次。它会把每条已记录的 `assistant/message` usage 记录，对照最新的 `request/header` 模型路由与 Config 中的部署单价表进行折叠；当该会话存在 SystemOne 决策用量账本时，还会将其合并为一个独立小节。
 
 ## 命令约定
 
 | 输入 | 结果 |
 |---|---|
-| `/cost` | 显示整个会话按模型的 token 用量（未缓存输入、缓存读取输入、缓存写入输入、输出）与估算 USD 成本，以及总计。没有匹配单价列的模型会显示使用量并附带 "no price configured" 标记，而不是报零成本。没有记录到任何 usage 的会话会直接说明。 |
+| `/cost` | 显示整个会话按模型的 token 用量（未缓存输入、缓存读取输入、缓存写入输入、输出）与估算 USD 成本，以及总计。没有匹配单价列的模型会显示使用量并附带 "no price configured" 标记，而不是报零成本。若该会话记录过 SystemOne 决策，随后还会有一个 `SystemOne decisions` 小节，按同样的方式为每个模型的决策用量定价。没有记录到任何 usage 的会话会直接说明。 |
 
 只要有 usage 记录就始终显示用量；只有部署方为模型配置了价格时才估算成本。回答该命令不会发起模型调用，也不消耗任何 token。
+
+## SystemOne 决策
+
+决策运行时（`@dsh-cc/decision-usage`）会为每个会话在 harness home 下写一份 JSONL 账本。`/cost` 在该会话存在账本时读取它，并追加一个 `SystemOne decisions` 小节；没有账本（或宿主没有 harness-home 解析器、或会话没有记录工作目录）时会话就直接不显示该小节——命令绝不会因此失败。
+
+该小节按已定价模型报告：
+
+- `Attempts`：账本计入的尝试租约数。已被持久退款的（`not-dispatched`）尝试不计入。
+- `Confirmed: N input + M output`：以实际用量结算的尝试所对应的 token。输入与输出分别按同一张 `modelTable` 定价，匹配键是该尝试的实际模型（尚无响应时为请求模型）加上 provider。
+- `Reserved upper bound, unconfirmed`：未知或仍未结算的尝试，其预留量单独成行显示。它永远不会计入已确认小计，因为 provider 从未确认这些 token。
+- `Confirmed cost: unpriced (no price column configured)`：未配置价格的模型会显示为未定价，绝不会显示为 `$0`。
+
+只有当每个分桶都已定价、没有预留仍处于未确认状态、且账本完整时，总计才会输出为一个确定的数字。否则报告会打印已确认小计，并说明为何无法确定——账本尾部截断（torn tail）、损坏行、或会话配额被持久冻结都会把该小节标记为 `Incomplete`——绝不会编造一个总计。账本行按 event id 去重，重放的追加只会计费一次。
 
 ## 配置
 
@@ -60,3 +73,4 @@ CC preset（`@dsh-cc/preset-cc`）默认内置了一张覆盖常见 DeepSeek、G
 - **定价层级**：先精确匹配（第一行优先），再按路由前缀的尾段后缀匹配（最长行优先；等长时取第一行），最后是 `'*'` 通配。不带 `provider` 的行会为该模型的所有 provider 前缀变体定价（例如 `deepseek-chat` 行也匹配 `deepseek/deepseek-chat`）；需要 provider 隔离的部署必须在行上设置 `provider`。
 - **起始表是牌价，不是账单**：preset 表反映采集时点的官方公示价，厂商调价后会过期；有议价或内部网关计费的部署必须自行覆盖。
 - **回合进行中没有实时总计**：`/cost` 报告截至最近检查点的持久日志，不包含进行中的用量。
+- **决策账本范围**：只读取发起本次调用的那个会话的决策账本，且只有决策运行时会写入它。遗留的权限与 MOA SystemOne 调用不在决策账本中，两个小节都不会显示；对它们不做任何"完整决策总计"的声明。

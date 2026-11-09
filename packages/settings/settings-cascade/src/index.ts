@@ -30,7 +30,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import { resolveLocalSettingsDir, type LocalRootDeps } from './local-root.ts'
 import { mergeSettingsSection } from './merge.ts'
-import { reassembleTrustedAutoMode } from './trusted-scope.ts'
+import { reassembleTrustedAutoMode, reassembleTrustedKey, TRUSTED_SOURCE_KEYS } from './trusted-scope.ts'
 import { isAccessDenied, isENOENT, isPlainObject, MAX_PERSIST_ATTEMPTS } from './shared-guards.ts'
 import { coerceEnv, type EnvSettings } from './env.ts'
 import { applyOpsToSection, diffSections, readUserText, writeJsonAtomic } from './persist.ts'
@@ -42,6 +42,7 @@ export { applyCcKeyAliases, CC_KEY_ALIASES } from './cc-key-aliases.ts'
 export { runUserSectionEdit, type UserSectionEdit } from './edit-user-section.ts'
 
 export { resolveLocalSettingsDir, type LocalRootDeps, type LocalRootExec, type LocalRootExecResult } from './local-root.ts'
+export { reassembleTrustedKey, TRUSTED_SOURCE_KEYS } from './trusted-scope.ts'
 export { mergeValue, mergeSettingsSection, unionDenyPrecedence } from './merge.ts'
 export { AutoModeSchema, AutoModeClassifierSchema, type AutoMode, type AutoModeClassifier } from './auto-mode.ts'
 export { PermissionsSchema, PERMISSION_MODES, type Permissions, type PermissionMode } from './permissions.ts'
@@ -420,9 +421,11 @@ export class SettingsCascadeProvider extends SettingsProvider {
         {},
       )
 
-    // D12 trusted scope: reassemble permissions.autoMode from trusted layers
+    // D12 trusted scope: reassemble the trusted-only keys from trusted layers
     // (user/flag/policy) only — see ./trusted-scope.ts.
-    reassembleTrustedAutoMode(merged, [user, flag, policy])
+    const trustedLayers = [user, flag, policy]
+    reassembleTrustedAutoMode(merged, trustedLayers)
+    for (const key of TRUSTED_SOURCE_KEYS) reassembleTrustedKey(merged, trustedLayers, key)
 
     // CC camelCase top-level keys alias onto kebab namespaces before the env
     // split / publish, so the shadow mirrors exactly what the seam resolves.
