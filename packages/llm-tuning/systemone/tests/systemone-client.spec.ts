@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { systemoneDecide } from '../src/client.ts'
-import type { SystemOneQuestion } from '../src/client.ts'
+import { SYSTEMONE_OBSERVER_REJECTED_REASON } from '../src/client.ts'
+import type { SystemOneAttemptObserver, SystemOneQuestion } from '../src/client.ts'
 
 // Verbatim T1 probe envelope (2026-09-25-gauge-system-one-probe-evidence.md).
 const T1_BODY = '{"model":"laya-rl-agent","answers":{"verdict":{"type":"choice","choice":"allow","probabilities":{"allow":0.5015,"ask":0.2658,"deny":0.2327},"confidence":0.0555,"action":{"act_probability":1}}},"usage":{"input_tokens":83,"output_tokens":0}}'
@@ -176,5 +177,173 @@ describe('systemoneDecide', () => {
     await systemoneDecide({ baseURL: 'http://127.0.0.1:8080/', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000, fetchImpl })
     const call = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
     expect(call[0]).toBe('http://127.0.0.1:8080/v1/systemone')
+  })
+})
+
+const RATE_LIMITED = '{"error":{"type":"rate_limit_error","message":"slow down"}}'
+
+/** Scripted fetch: each call consumes one entry of the script. */
+function scriptedFetch(script: Array<{ status: number; body: string }>) {
+  const queue = [...script]
+  return vi.fn(async () => {
+    const next = queue.shift() ?? { status: 500, body: 'script exhausted' }
+    return new Response(next.body, { status: next.status })
+  }) as unknown as typeof fetch
+}
+
+/** Fake clock: sleeps resolve instantly and advance the recorded time. */
+function fakeClock() {
+  let now = Date.parse('2026-11-02T00:00:00Z')
+  const waits: number[] = []
+  const clock = {
+    now: () => now,
+    sleep: async (ms: number) => {
+      waits.push(ms)
+      now += ms
+    },
+    random: () => 0,
+  }
+  return { clock, waits }
+}
+
+/**
+ * Observer that records `before:<attempt>` / `after:<attempt>:<in>/<out>|none`
+ * as flat strings, so a test can assert the exact interleaving and whether
+ * usage was reported.
+ */
+function recordingObserver(allow = true) {
+  const events: string[] = []
+  const observer: SystemOneAttemptObserver = {
+    beforeDispatch: async ({ attempt }) => {
+      events.push(`before:${attempt}`)
+      return allow
+    },
+    afterDispatch: async ({ attempt, usage }) => {
+      events.push(`after:${attempt}:${usage === undefined ? 'none' : `${usage.input_tokens}/${usage.output_tokens}`}`)
+    },
+  }
+  return { observer, events }
+}
+
+describe('systemoneDecide attemptObserver', () => {
+  it('429 -> 429 -> success dispatches three times with three before/after pairs (maxRetries: 2)', async () => {
+    const fetchImpl = scriptedFetch([
+      { status: 429, body: RATE_LIMITED },
+      { status: 429, body: RATE_LIMITED },
+      { status: 200, body: T1_BODY },
+    ])
+    const { observer, events } = recordingObserver()
+    const { clock, waits } = fakeClock()
+    const result = await systemoneDecide({
+      baseURL: 'http://gw', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 60_000,
+      maxRetries: 2, attemptObserver: observer, clock, fetchImpl,
+    })
+    expect(result.ok).toBe(true)
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+    // One before/after pair per dispatch; the 429 bodies carry no usage.
+    expect(events).toEqual(['before:0', 'after:0:none', 'before:1', 'after:1:none', 'before:2', 'after:2:83/0'])
+    // random() = 0 → lower edge of each equal-jitter window: 100ms, 200ms.
+    expect(waits).toEqual([100, 200])
+  })
+
+  it('an observer veto ends the run as error with a fixed reason and zero fetch', async () => {
+    const fetchImpl = okFetch()
+    const { observer, events } = recordingObserver(false)
+    const result = await systemoneDecide({
+      baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000,
+      attemptObserver: observer, fetchImpl,
+    })
+    expect(result).toEqual({ ok: false, failure: 'error', reason: SYSTEMONE_OBSERVER_REJECTED_REASON })
+    expect(SYSTEMONE_OBSERVER_REJECTED_REASON).toBe('observer rejected dispatch')
+    expect(fetchImpl).not.toHaveBeenCalled()
+    // A vetoed attempt never reached fetch, so it is never reported as dispatched.
+    expect(events).toEqual(['before:0'])
+  })
+
+  it('a non-ok HTTP status still reports afterDispatch, with no usage', async () => {
+    const body = '{"error":{"type":"invalid_request_error","message":"model must be \\"laya\\""}}'
+    const { observer, events } = recordingObserver()
+    const result = await systemoneDecide({
+      baseURL: 'http://x', model: 'bogus/not-a-model', state: {}, questions: QUESTIONS, timeoutMs: 1000,
+      attemptObserver: observer, fetchImpl: jsonFetch(400, body),
+    })
+    expect(result).toEqual({ ok: false, failure: 'error', reason: `http 400: ${body}` })
+    expect(events).toEqual(['before:0', 'after:0:none'])
+  })
+
+  it('a malformed envelope passes its raw usage to afterDispatch and still returns malformed', async () => {
+    const body = JSON.stringify({
+      model: 'laya-rl-agent',
+      answers: { verdict: { type: 'quantum' } },
+      usage: { input_tokens: 900, output_tokens: 20 },
+    })
+    const { observer, events } = recordingObserver()
+    const result = await systemoneDecide({
+      baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000,
+      attemptObserver: observer, fetchImpl: jsonFetch(200, body),
+    })
+    expect(result).toEqual({ ok: false, failure: 'malformed', reason: 'systemone validation: answer-type-mismatch' })
+    // Lenient usage extraction, not the strict validator: metered-but-malformed
+    // settles at actual usage downstream.
+    expect(events).toEqual(['before:0', 'after:0:900/20'])
+  })
+
+  it('an abort after the fetch was dispatched reports afterDispatch with no usage', async () => {
+    const controller = new AbortController()
+    const fetchImpl = (async () => {
+      controller.abort()
+      return new Response(T1_BODY, { status: 200 })
+    }) as unknown as typeof fetch
+    const { observer, events } = recordingObserver()
+    const result = await systemoneDecide({
+      baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 10_000,
+      signal: controller.signal, attemptObserver: observer, fetchImpl,
+    })
+    expect(result).toEqual({ ok: false, failure: 'cancelled', reason: 'caller aborted the request' })
+    expect(events).toEqual(['before:0', 'after:0:none'])
+  })
+
+  it('maxRetries: 0 keeps a single attempt', async () => {
+    const fetchImpl = scriptedFetch([{ status: 429, body: RATE_LIMITED }, { status: 200, body: T1_BODY }])
+    const { observer, events } = recordingObserver()
+    const { clock, waits } = fakeClock()
+    const result = await systemoneDecide({
+      baseURL: 'http://gw', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 60_000,
+      maxRetries: 0, attemptObserver: observer, clock, fetchImpl,
+    })
+    expect(result).toEqual({ ok: false, failure: 'error', reason: `http 429: ${RATE_LIMITED}` })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(events).toEqual(['before:0', 'after:0:none'])
+    expect(waits).toEqual([])
+  })
+
+  it('a throwing beforeDispatch converts the run to error without fetching', async () => {
+    const fetchImpl = okFetch()
+    const observer: SystemOneAttemptObserver = {
+      beforeDispatch: async () => {
+        throw new Error('reserve failed')
+      },
+      afterDispatch: async () => {},
+    }
+    const result = await systemoneDecide({
+      baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000,
+      attemptObserver: observer, fetchImpl,
+    })
+    expect(result).toEqual({ ok: false, failure: 'error', reason: 'attempt observer failed in beforeDispatch: reserve failed' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('a throwing afterDispatch converts the run to error', async () => {
+    const observer: SystemOneAttemptObserver = {
+      beforeDispatch: async () => true,
+      afterDispatch: async () => {
+        throw new Error('settle failed')
+      },
+    }
+    const result = await systemoneDecide({
+      baseURL: 'http://x', model: 'laya', state: {}, questions: QUESTIONS, timeoutMs: 1000,
+      attemptObserver: observer, fetchImpl: okFetch(),
+    })
+    expect(result).toEqual({ ok: false, failure: 'error', reason: 'attempt observer failed in afterDispatch: settle failed' })
   })
 })

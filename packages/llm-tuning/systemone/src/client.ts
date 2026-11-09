@@ -16,6 +16,17 @@
  * a wait that would reach the per-call `timeoutMs` is not attempted either.
  * Once the budget is spent the last 429 falls through to the ordinary
  * `failure: 'error'` degradation, exactly as before retries existed.
+ * `opts.maxRetries` may narrow the attempt cap (0..2, `0` means a single
+ * attempt); omitting it keeps the legacy `SYSTEMONE_429_MAX_RETRIES`.
+ *
+ * The decision runner brackets every wire attempt with an optional
+ * `attemptObserver`: `beforeDispatch` fires immediately before the fetch (the
+ * runner reserves that attempt's quota there and may veto the dispatch), and
+ * `afterDispatch` fires exactly once for every attempt that reached fetch —
+ * after the body is read and before answer validation, non-ok HTTP statuses
+ * and envelopes that later fail validation included — carrying the raw usage
+ * read leniently from the body (no usage when the body carries none). Without
+ * an observer the call behaves exactly as before.
  *
  * Every call validates strictly on both sides (design doc §"Validation rules"):
  * the request is pre-checked before any network work — an invalid request sends
@@ -56,6 +67,12 @@ const SYSTEMONE_429_BACKOFF_BASE_MS = 200
  * is clamped to this, and the clamped wait must still fit the retry budget.
  */
 export const SYSTEMONE_429_RETRY_AFTER_CAP_MS = 2000
+
+/**
+ * Fixed failure reason of a run whose `attemptObserver` refused the dispatch:
+ * the attempt never reached fetch, so nothing was spent on it.
+ */
+export const SYSTEMONE_OBSERVER_REJECTED_REASON = 'observer rejected dispatch'
 
 /** Injectable timing seams for the 429 retry loop (tests pass fakes). */
 export interface SystemOneRetryClock {
@@ -147,6 +164,69 @@ export type SystemOneResult =
   | { ok: true; model: string; answers: Record<string, SystemOneAnswer>; usage: SystemOneUsage }
   | { ok: false; failure: SystemOneFailure; reason: string }
 
+/**
+ * Per-attempt dispatch hooks for the decision runner. `beforeDispatch` runs
+ * immediately before each fetch call (reserve the attempt's quota, return
+ * `false` to veto the dispatch); `afterDispatch` runs after the response body
+ * is read and before answer validation, for every attempt that reached fetch.
+ * A hook that throws — or a veto — converts the run to `failure: 'error'`.
+ * `attempt` is the zero-based attempt index (`0..maxRetries`), the same key the
+ * runner uses for that attempt's quota permit.
+ */
+export interface SystemOneAttemptObserver {
+  /** Immediate pre-flight for one attempt; `false` keeps it out of fetch. */
+  beforeDispatch(input: { attempt: number; signal: AbortSignal }): Promise<boolean>
+  /** Post-dispatch report for one attempt; `usage` is absent when unreadable. */
+  afterDispatch(input: { attempt: number; usage?: SystemOneUsage }): Promise<void>
+}
+
+/**
+ * Effective 429 retry cap: `opts.maxRetries` clamps into the `0..2` contract
+ * (`0` = a single attempt), an omitted or non-finite value keeps the legacy
+ * {@link SYSTEMONE_429_MAX_RETRIES}. Clamping — never widening — means a bad
+ * caller value cannot extend the retry loop.
+ */
+function resolveMaxRetries(maxRetries: number | undefined): number {
+  if (maxRetries === undefined || !Number.isFinite(maxRetries)) return SYSTEMONE_429_MAX_RETRIES
+  return Math.min(SYSTEMONE_429_MAX_RETRIES, Math.max(0, Math.trunc(maxRetries)))
+}
+
+/**
+ * `JSON.parse` that reports an unparseable body as `undefined` — no valid JSON
+ * body parses to `undefined`, so the sentinel is unambiguous.
+ */
+function tryParseJson(body: string): unknown {
+  try {
+    return JSON.parse(body)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Lenient usage read for `afterDispatch`: the raw `input_tokens` /
+ * `output_tokens` of the parsed body when both are finite numbers, otherwise
+ * `undefined`. Strict validation is deliberately NOT applied here — the
+ * consumer validates — so an envelope that is metered but malformed still
+ * settles at its actual usage downstream.
+ */
+function lenientUsage(parsed: unknown): SystemOneUsage | undefined {
+  if (typeof parsed !== 'object' || parsed === null) return undefined
+  const usage = (parsed as { usage?: unknown }).usage
+  if (typeof usage !== 'object' || usage === null) return undefined
+  const input = (usage as { input_tokens?: unknown }).input_tokens
+  const output = (usage as { output_tokens?: unknown }).output_tokens
+  if (typeof input !== 'number' || typeof output !== 'number') return undefined
+  if (!Number.isFinite(input) || !Number.isFinite(output)) return undefined
+  return { input_tokens: input, output_tokens: output }
+}
+
+/** Fixed-prefix reason for a run an attempt observer turned into `error`. */
+function observerFailure(hook: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error)
+  return `attempt observer failed in ${hook}: ${detail}`
+}
+
 export async function systemoneDecide(opts: {
   baseURL: string
   model: string
@@ -158,6 +238,18 @@ export async function systemoneDecide(opts: {
   fetchImpl?: typeof fetch
   /** Timing seams for the bounded 429 retry (defaults: real clock/timers). */
   clock?: SystemOneRetryClock
+  /**
+   * 429 retries after the first attempt, so at most `1 + maxRetries` wire
+   * requests. `0` means a single attempt. Omitted keeps the legacy
+   * {@link SYSTEMONE_429_MAX_RETRIES}; otherwise the value is clamped into
+   * `0..2`. All existing wait-budget and timeout bounds still apply.
+   */
+  maxRetries?: number
+  /**
+   * Optional per-attempt hooks for the decision runner (quota reserve/settle).
+   * Omitted keeps the legacy behaviour, bit-identical.
+   */
+  attemptObserver?: SystemOneAttemptObserver
 }): Promise<SystemOneResult> {
   // Request pre-check (design doc §"Request pre-check"): an unusable request
   // never reaches the network, so an invalid request means zero fetch calls.
@@ -170,6 +262,8 @@ export async function systemoneDecide(opts: {
   if (!request.ok) {
     return { ok: false, failure: 'malformed', reason: `systemone validation: ${request.code}` }
   }
+  const observer = opts.attemptObserver
+  const maxRetries = resolveMaxRetries(opts.maxRetries)
   const doFetch = opts.fetchImpl ?? fetch
   const now = opts.clock?.now ?? Date.now
   const sleep = opts.clock?.sleep ?? defaultSleep
@@ -186,29 +280,67 @@ export async function systemoneDecide(opts: {
     : timeout.signal
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   if (opts.apiKey !== undefined) headers.authorization = `Bearer ${opts.apiKey}`
+  // `afterDispatch` cut point: exactly once per attempt that reached fetch, so
+  // the runner settles the permit it reserved in `beforeDispatch`. A throwing
+  // observer converts the run to `error` (returned, never swallowed).
+  const reportDispatch = async (attempt: number, usage: SystemOneUsage | undefined): Promise<SystemOneResult | undefined> => {
+    if (observer === undefined) return undefined
+    try {
+      await observer.afterDispatch(usage === undefined ? { attempt } : { attempt, usage })
+      return undefined
+    } catch (error) {
+      return { ok: false, failure: 'error', reason: observerFailure('afterDispatch', error) }
+    }
+  }
   try {
     const url = `${opts.baseURL.replace(/\/$/, '')}/v1/systemone`
     const payload = JSON.stringify({ model: opts.model, state: opts.state, questions: opts.questions })
     const startedAt = now()
     let response: Response
     let body: string
+    let parsed: unknown
     // Caller abort wins first: a mid-flight ESC is host noise, not a lane fault.
     const interrupted = (): SystemOneResult | undefined => {
       if (opts.signal?.aborted === true) return { ok: false, failure: 'cancelled', reason: 'caller aborted the request' }
       if (timeout.signal.aborted) return { ok: false, failure: 'timeout', reason: `timed out after ${opts.timeoutMs}ms` }
       return undefined
     }
-    for (let retry = 0; ; retry++) {
+    for (let attempt = 0; ; attempt++) {
+      // `beforeDispatch` cut point: the runner reserves this attempt's permits
+      // here. A `false` return (or a throw) keeps the attempt out of fetch, so
+      // the whole run ends as `error` and nothing was spent on it.
+      if (observer !== undefined) {
+        let proceed: boolean
+        try {
+          proceed = await observer.beforeDispatch({ attempt, signal })
+        } catch (error) {
+          return { ok: false, failure: 'error', reason: observerFailure('beforeDispatch', error) }
+        }
+        if (!proceed) return { ok: false, failure: 'error', reason: SYSTEMONE_OBSERVER_REJECTED_REASON }
+      }
       response = await doFetch(url, { method: 'POST', headers, body: payload, signal })
       const stopped = interrupted()
-      if (stopped !== undefined) return stopped
+      if (stopped !== undefined) {
+        // The attempt already reached fetch, so a permit is held: report it
+        // once with no usage rather than ending with neither report nor throw
+        // (the runner's finally owns the unknown-usage supplement for a thrown
+        // dispatch).
+        const reported = await reportDispatch(attempt, undefined)
+        return reported ?? stopped
+      }
       body = await response.text()
+      parsed = tryParseJson(body)
+      // Report BEFORE any validation: a non-ok status (429 included) and an
+      // envelope that later fails validation both still settle at the usage
+      // they actually consumed.
+      const reported = await reportDispatch(attempt, lenientUsage(parsed))
+      if (reported !== undefined) return reported
       // Bounded 429 retry: stop when attempts are spent, when the wait would
       // overrun the retry budget, or when it would reach the per-call timeout
       // (sleeping into the timeout would only turn this 429 into 'timeout').
       // The last 429 then degrades below as before.
-      if (response.status !== 429 || retry >= SYSTEMONE_429_MAX_RETRIES) break
-      const delay = retryDelayMs(retry, parseRetryAfterMs(response.headers?.get?.('retry-after'), now()), random)
+      if (response.status !== 429 || attempt >= maxRetries) break
+      const delay = retryDelayMs(attempt, parseRetryAfterMs(response.headers?.get?.('retry-after'), now()), random)
       const elapsed = now() - startedAt
       if (elapsed + delay > SYSTEMONE_429_RETRY_BUDGET_MS) break
       if (elapsed + delay >= opts.timeoutMs) break
@@ -226,10 +358,7 @@ export async function systemoneDecide(opts: {
         reason: `http ${response.status}: ${body.slice(0, 200)}`,
       }
     }
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(body)
-    } catch {
+    if (parsed === undefined) {
       // HTTP success with an unparseable body: an invalid envelope, not a
       // transport error, and never retried.
       return { ok: false, failure: 'malformed', reason: 'systemone validation: invalid-envelope' }
