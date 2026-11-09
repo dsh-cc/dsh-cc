@@ -10,6 +10,12 @@
   "references": [
     {
       "path": "../../interaction/command-usage"
+    },
+    {
+      "path": "../../observability/decision-usage"
+    },
+    {
+      "path": "../../observability/sidecar-io"
     }
   ]
 }
