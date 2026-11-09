@@ -975,6 +975,10 @@ importers:
         version: link:../tools
 
   packages/core/tool-search:
+    dependencies:
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -997,6 +1001,12 @@ importers:
       '@deepseek-ai/dsh-tool-testkit':
         specifier: link:../../../../deepseek-harness/packages/test-support/tool-testkit
         version: link:../../../../deepseek-harness/packages/test-support/tool-testkit
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/settings-provider':
+        specifier: workspace:^
+        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
