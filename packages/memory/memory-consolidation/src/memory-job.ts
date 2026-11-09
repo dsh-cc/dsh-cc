@@ -54,6 +54,25 @@ interface SubagentResultLike {
 /** The job-done outcome: resolves only, per the JobHooks contract. */
 export type JobOutcome = { status: 'completed' } | { status: 'killed' } | { status: 'failed'; detail: string }
 
+/**
+ * The control object {@link startMemoryJob} resolves to, named so callers can
+ * hold it (a test rig, the extraction coordinator's `active` state) without
+ * re-spelling the inline type.
+ *
+ * `done` is the real completion boundary: it resolves only after the reported
+ * batch was validated and written host-side (design
+ * docs/plans/2026-11-02-systemone-04-memory-extraction-gate.md §"The existing
+ * fork also carries the negative verdict"), so a watermark commit must await it
+ * rather than the start call.
+ */
+export interface MemoryJobControl {
+  /** Cancel the fork; the reason is diagnostic only. */
+  abort(reason?: string): void
+  /** True only when the reported writes were validated and persisted. */
+  settled: Promise<boolean>
+  /** The terminal outcome, after the host write-back. */
+  done: Promise<JobOutcome>
+}
 
 /**
  * Over-limit measurement for the entrypoint, identical to the write-side gate
@@ -177,7 +196,7 @@ export async function startMemoryJob(
   label: string,
   prompt: string,
   baselineIndex: string,
-): Promise<{ abort(reason?: string): void; settled: Promise<boolean>; done: Promise<JobOutcome> }> {
+): Promise<MemoryJobControl> {
   const subagents = ctx.get('subagents') as SubagentService | undefined
   if (subagents === undefined) {
     return { abort: () => {}, settled: Promise.resolve(false), done: Promise.resolve({ status: 'failed', detail: 'subagents seam unavailable' }) }
